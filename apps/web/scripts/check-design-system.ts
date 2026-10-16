@@ -77,6 +77,8 @@ const adoptedFiles = [
   'src/app/(main)/groups/[id]/forbidden.tsx',
   'src/components/shortcuts/ShortcutHint.tsx',
   'src/components/shortcuts/ShortcutsSetting.tsx',
+  'src/components/landing/LandingPage.tsx',
+  'src/components/landing/SignInWithGoogleButton.tsx',
 ];
 
 let failed = false;

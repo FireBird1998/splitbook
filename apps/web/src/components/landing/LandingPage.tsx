@@ -1,5 +1,3 @@
-'use client';
-
 import Image from 'next/image';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -8,12 +6,13 @@ import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import GoogleIcon from '@mui/icons-material/Google';
 import BrandLogo from '@/components/layout/BrandLogo';
 import BrandMark from '@/components/layout/BrandMark';
 import { PRODUCT_NAME } from '@/lib/product';
-import { signInWithGoogle } from '@/lib/auth-client';
+import { TOPBAR_HEIGHT } from '@/lib/theme/tokens';
 import type { WhatsLive } from '@/lib/landing/whats-live';
+import SignInWithGoogleButton from './SignInWithGoogleButton';
+import { LANDING_ACTION_HEIGHT, LANDING_HEADLINE, LANDING_PROMISE } from './landing-copy';
 
 /** A section of the page the top bar links to, such as `{ href: '#groups', label: 'Groups' }`. */
 export interface LandingSectionLink {
@@ -29,27 +28,13 @@ interface LandingPageProps {
 /** Google's official badge (play.google.com/intl/en_us/badges), shown unmodified. */
 const PLAY_BADGE = { src: '/badges/google-play-badge-en.png', width: 646, height: 250 };
 /**
- * The badge's artwork has transparent margins: at 78 px tall its visible badge is 52 px tall,
- * with about 12 px clear on each side.
+ * The badge's artwork has transparent margins: at 78 px tall its visible badge is as tall as the
+ * actions beside it, with about 12 px clear on each side.
  */
 const PLAY_BADGE_HEIGHT = 78;
 const PLAY_BADGE_SIDE_MARGIN = 12;
 
-const wrap = { px: { xs: 2, sm: 3 } } as const;
-
-function SignInWithGoogle() {
-  return (
-    <Button
-      variant="contained"
-      size="large"
-      startIcon={<GoogleIcon />}
-      onClick={() => void signInWithGoogle('/dashboard')}
-      sx={{ minHeight: 52, px: 3, fontSize: '1rem' }}
-    >
-      Sign in with Google
-    </Button>
-  );
-}
+const sideGutter = { px: { xs: 2, sm: 3 } } as const;
 
 function GetItOnGooglePlay({ href }: { href: string }) {
   return (
@@ -59,8 +44,8 @@ function GetItOnGooglePlay({ href }: { href: string }) {
       sx={{
         display: 'inline-flex',
         // The artwork's transparent margins sit outside the row, so the visible badge lines up
-        // with the 52 px buttons beside and above it.
-        my: `${-(PLAY_BADGE_HEIGHT - 52) / 2}px`,
+        // with the actions beside and above it.
+        my: `${-(PLAY_BADGE_HEIGHT - LANDING_ACTION_HEIGHT) / 2}px`,
         mx: `${-PLAY_BADGE_SIDE_MARGIN}px`,
         borderRadius: 1,
         '&:focus-visible': { outline: '2px solid', outlineColor: 'focus.main' },
@@ -82,6 +67,24 @@ function GetItOnGooglePlay({ href }: { href: string }) {
   );
 }
 
+/** Sign in with Google, and the store badge when there's a Play listing. */
+function MainActions({ live, center = false }: LandingPageProps & { center?: boolean }) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: center ? 'center' : 'flex-start',
+        gap: 1.5,
+      }}
+    >
+      <SignInWithGoogleButton />
+      {live.playStoreUrl && <GetItOnGooglePlay href={live.playStoreUrl} />}
+    </Box>
+  );
+}
+
 /** The logo, the page's section links (hidden below 900 px), Get the app and Sign in. */
 export function LandingTopBar({
   live,
@@ -95,12 +98,12 @@ export function LandingTopBar({
       component="header"
       sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'surface.elevated' }}
     >
-      <Container maxWidth="lg" sx={wrap}>
+      <Container maxWidth="lg" sx={sideGutter}>
         <Box
           component="nav"
           aria-label={PRODUCT_NAME}
           sx={{
-            minHeight: 68,
+            minHeight: TOPBAR_HEIGHT,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -150,7 +153,7 @@ function Hero({ live }: LandingPageProps) {
       <Container
         maxWidth="lg"
         sx={{
-          ...wrap,
+          ...sideGutter,
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'flex-end',
@@ -159,42 +162,27 @@ function Hero({ live }: LandingPageProps) {
       >
         <Stack spacing={2.5} alignItems="flex-start" sx={{ flex: '1.2 1 520px', minWidth: 0 }}>
           <Typography
+            variant="caption"
             sx={{
               px: 1.5,
               py: 0.75,
               borderRadius: 999,
               bgcolor: 'tint.brand',
               color: 'primary.main',
-              fontSize: '0.8125rem',
               fontWeight: 600,
             }}
           >
             {live.playStoreUrl ? 'Shared expenses · Android and web' : 'Shared expenses'}
           </Typography>
-          <Typography
-            component="h1"
-            sx={{
-              m: 0,
-              fontSize: 'clamp(40px, 5.6vw, 72px)',
-              lineHeight: 1.02,
-              fontWeight: 700,
-              letterSpacing: '-0.035em',
-              color: 'text.primary',
-              textWrap: 'balance',
-            }}
-          >
-            Every shared cost, worked out to the paisa.
+          <Typography variant="display" component="h1" color="text.primary" sx={{ m: 0 }}>
+            {LANDING_HEADLINE}
           </Typography>
         </Stack>
         <Stack spacing={2.5} alignItems="flex-start" sx={{ flex: '1 1 380px', minWidth: 0 }}>
-          <Typography sx={{ fontSize: '1.1875rem', lineHeight: 1.55, color: 'text.secondary' }}>
-            Trips, flats, couples and teams. Add what was paid, split it the way it happened, and{' '}
-            {PRODUCT_NAME} shows who owes whom, then settles it in the fewest payments.
+          <Typography variant="lead" component="p" color="text.secondary">
+            {LANDING_PROMISE}
           </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
-            <SignInWithGoogle />
-            {live.playStoreUrl && <GetItOnGooglePlay href={live.playStoreUrl} />}
-          </Box>
+          <MainActions live={live} />
           {live.assistants.available && (
             <Link
               href="#assistants"
@@ -220,35 +208,17 @@ function Hero({ live }: LandingPageProps) {
 function ClosingCallToAction({ live }: LandingPageProps) {
   return (
     <Box component="section" sx={{ py: { xs: 8, md: 15 } }}>
-      <Container maxWidth="lg" sx={wrap}>
+      <Container maxWidth="lg" sx={sideGutter}>
         <Stack spacing={2.75} alignItems="center" sx={{ textAlign: 'center' }}>
           <Typography
+            variant="displaySmall"
             component="h2"
-            sx={{
-              m: 0,
-              maxWidth: 760,
-              fontSize: 'clamp(32px, 4vw, 52px)',
-              lineHeight: 1.08,
-              fontWeight: 700,
-              letterSpacing: '-0.03em',
-              color: 'text.primary',
-              textWrap: 'balance',
-            }}
+            color="text.primary"
+            sx={{ m: 0, maxWidth: 760 }}
           >
             Start your first Group tonight. Settle it by the weekend.
           </Typography>
-          <Box
-            sx={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: 1.5,
-            }}
-          >
-            <SignInWithGoogle />
-            {live.playStoreUrl && <GetItOnGooglePlay href={live.playStoreUrl} />}
-          </Box>
+          <MainActions live={live} center />
         </Stack>
       </Container>
     </Box>
@@ -260,6 +230,8 @@ function LandingFooter({ live }: LandingPageProps) {
     { label: 'Privacy', href: live.links.privacy },
     { label: 'Terms', href: live.links.terms },
     { label: 'Support', href: live.links.support },
+    // The public guide to connecting ChatGPT, while assistants are available.
+    { label: 'Assistant guide', href: live.assistants.available ? '/connect/chatgpt' : null },
   ].filter((link): link is { label: string; href: string } => link.href !== null);
   return (
     <Box
@@ -269,7 +241,7 @@ function LandingFooter({ live }: LandingPageProps) {
       <Container
         maxWidth="lg"
         sx={{
-          ...wrap,
+          ...sideGutter,
           py: 2.5,
           minHeight: 88,
           display: 'flex',
@@ -286,7 +258,12 @@ function LandingFooter({ live }: LandingPageProps) {
           </Typography>
         </Stack>
         {links.length > 0 && (
-          <Stack component="nav" aria-label="Footer" direction="row" spacing={2.75}>
+          <Stack
+            component="nav"
+            aria-label="Footer"
+            direction="row"
+            sx={{ flexWrap: 'wrap', columnGap: 2.75, rowGap: 1 }}
+          >
             {links.map((link) => (
               <Link
                 key={link.label}
@@ -316,6 +293,7 @@ function LandingFooter({ live }: LandingPageProps) {
 /**
  * The public landing page a signed-out visitor gets at `/` (#443): the top bar, the hero, the
  * closing call to action and the footer, each saying only what `live` says this deployment has.
+ * It renders on the server; only the Sign in with Google button runs in the browser.
  */
 export default function LandingPage({ live }: LandingPageProps) {
   return (

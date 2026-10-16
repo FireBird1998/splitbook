@@ -12,7 +12,7 @@ const PLAY = 'https://play.google.com/store/apps/details?id=com.splitbook.app';
 describe("what's live", () => {
   it('has everything off with no settings', () => {
     expect(whatsLive({})).toEqual({
-      assistants: { available: false, prepare: false },
+      assistants: { available: false, canPrepare: false },
       playStoreUrl: null,
       pricingVisible: false,
       links: { privacy: null, terms: null, support: null },
@@ -22,7 +22,7 @@ describe("what's live", () => {
   it('has assistants available only when the assistant connection is on and configured', () => {
     expect(whatsLive({ ...APP, MCP_ENABLED: 'true' }).assistants).toEqual({
       available: true,
-      prepare: false,
+      canPrepare: false,
     });
     expect(whatsLive({ ...APP, MCP_ENABLED: 'false' }).assistants.available).toBe(false);
     // A misconfigured connection is not live: an app address the connection refuses.
@@ -35,10 +35,14 @@ describe("what's live", () => {
 
   it('lets assistants prepare items only when they are available and To review is on', () => {
     const on = { ...APP, MCP_ENABLED: 'true', PERSISTENT_DRAFTS_ENABLED: 'true' };
-    expect(whatsLive(on).assistants).toEqual({ available: true, prepare: true });
+    expect(whatsLive(on).assistants).toEqual({ available: true, canPrepare: true });
+    // Read exactly as the assistant connection reads it, so the page never promises more.
+    expect(whatsLive({ ...on, PERSISTENT_DRAFTS_ENABLED: ' true' }).assistants.canPrepare).toBe(
+      false,
+    );
     expect(whatsLive({ PERSISTENT_DRAFTS_ENABLED: 'true' }).assistants).toEqual({
       available: false,
-      prepare: false,
+      canPrepare: false,
     });
   });
 

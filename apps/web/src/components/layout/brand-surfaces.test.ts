@@ -34,6 +34,7 @@ const { default: LoginForm } = await import('@/components/auth/LoginForm');
 const { default: LoginPage } = await import('@/app/(auth)/login/page');
 const { default: DemoPersonaPicker } = await import('@/components/demo/DemoPersonaPicker');
 const { default: LandingPage } = await import('@/components/landing/LandingPage');
+const { whatsLive } = await import('@/lib/landing/whats-live');
 const { default: JoinGroupClient } = await import('@/components/join/JoinGroupClient');
 
 afterEach(() => {
@@ -134,12 +135,7 @@ describe('sign in', () => {
 
 describe('the landing page', () => {
   // Everything off: what a deployment shows before any optional capability is live (#444).
-  const live = {
-    assistants: { available: false, prepare: false },
-    playStoreUrl: null,
-    pricingVisible: false,
-    links: { privacy: null, terms: null, support: null },
-  };
+  const live = whatsLive({});
 
   it('leads with the logo linking home, and closes with the decorative mark beside the name', () => {
     for (const mode of MODES) {

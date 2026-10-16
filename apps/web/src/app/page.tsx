@@ -5,10 +5,10 @@ import LandingPage from '@/components/landing/LandingPage';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
 import { isDemoMode } from '@/lib/auth-mode';
 import { whatsLive } from '@/lib/landing/whats-live';
+import { LANDING_HEADLINE, LANDING_PROMISE } from '@/components/landing/landing-copy';
 
-const title = 'Splitbook · Every shared cost, worked out to the paisa';
-const description =
-  'Trips, flats, couples and teams. Add what was paid, split it the way it happened, and Splitbook shows who owes whom, then settles it in the fewest payments.';
+const title = `Splitbook · ${LANDING_HEADLINE.replace(/\.$/, '')}`;
+const description = LANDING_PROMISE;
 
 export const metadata: Metadata = {
   title,

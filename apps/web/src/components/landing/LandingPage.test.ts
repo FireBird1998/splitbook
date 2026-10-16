@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import type { ThemeMode } from '@/lib/theme/tokens';
 import { anchors, brandImages, images, text } from '@/lib/test-utils/markup';
-import type { WhatsLive } from '@/lib/landing/whats-live';
+import { whatsLive, type WhatsLive } from '@/lib/landing/whats-live';
 
 /*
  * #444: the landing page's frame (top bar, hero, closing call to action, footer) as a signed-out
@@ -34,12 +34,8 @@ afterEach(() => {
 
 const MODES = ['light', 'dark'] as const;
 const PLAY = 'https://play.google.com/store/apps/details?id=com.splitbook.app';
-const OFF: WhatsLive = {
-  assistants: { available: false, prepare: false },
-  playStoreUrl: null,
-  pricingVisible: false,
-  links: { privacy: null, terms: null, support: null },
-};
+/** What a deployment has live with no optional settings: nothing. */
+const OFF = whatsLive({});
 
 function render(mode: ThemeMode, live: WhatsLive): string {
   return renderToStaticMarkup(
@@ -104,7 +100,7 @@ describe('the landing page with everything off', () => {
     for (const live of [
       OFF,
       {
-        assistants: { available: true, prepare: true },
+        assistants: { available: true, canPrepare: true },
         playStoreUrl: PLAY,
         pricingVisible: true,
         links: { privacy: '/privacy', terms: '/terms', support: '/support' },
@@ -140,9 +136,16 @@ describe('the landing page with a Google Play listing', () => {
 
 describe('the landing page with assistants available', () => {
   it('links to the assistants section from the hero', () => {
-    const html = render('light', { ...OFF, assistants: { available: true, prepare: false } });
+    const html = render('light', { ...OFF, assistants: { available: true, canPrepare: false } });
     expect(linksTo(html, '#assistants').map((anchor) => anchor.text)).toEqual([
       'Use Claude or ChatGPT? Connect Splitbook',
+    ]);
+  });
+
+  it('links the footer to the guide for connecting ChatGPT', () => {
+    const html = render('light', { ...OFF, assistants: { available: true, canPrepare: false } });
+    expect(linksTo(html, '/connect/chatgpt').map((anchor) => anchor.text)).toEqual([
+      'Assistant guide',
     ]);
   });
 });

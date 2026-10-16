@@ -8,7 +8,8 @@ import { mcpResource } from '@/lib/mcp/config';
  *
  * - Assistants are available when the assistant connection is on and configured
  *   (`MCP_ENABLED`, with an app address it accepts), and can prepare items for To review only
- *   when persistent Drafts are on too (`PERSISTENT_DRAFTS_ENABLED`).
+ *   when persistent Drafts are on too (`PERSISTENT_DRAFTS_ENABLED=true`, read exactly as the
+ *   assistant connection reads it).
  * - The Google Play listing is `NEXT_PUBLIC_PLAY_STORE_URL`, an `https://play.google.com/store/
  *   apps/details?id=…` address; without one, no store badge or "Get the app" shows.
  * - Pricing shows only with `LANDING_PRICING_VISIBLE=true`, until billing exists.
@@ -16,7 +17,7 @@ import { mcpResource } from '@/lib/mcp/config';
  *   names a page here (`/privacy`) or an HTTPS address; Support may also be a `mailto:` address.
  */
 export interface WhatsLive {
-  assistants: { available: boolean; prepare: boolean };
+  assistants: { available: boolean; canPrepare: boolean };
   playStoreUrl: string | null;
   pricingVisible: boolean;
   links: { privacy: string | null; terms: string | null; support: string | null };
@@ -51,7 +52,7 @@ function playStoreUrl(value: string | undefined): string | null {
 }
 
 /** A page on this site, or an HTTPS address (or, where allowed, an email address). */
-function linkTo(value: string | undefined, allowEmail = false): string | null {
+function allowedLink(value: string | undefined, allowEmail = false): string | null {
   const link = value?.trim();
   if (!link) return null;
   if (link.startsWith('/') && !link.startsWith('//')) return link;
@@ -66,13 +67,16 @@ function linkTo(value: string | undefined, allowEmail = false): string | null {
 export function whatsLive(env: WhatsLiveEnv = process.env): WhatsLive {
   const available = assistantsAvailable(env);
   return {
-    assistants: { available, prepare: available && on(env.PERSISTENT_DRAFTS_ENABLED) },
+    assistants: {
+      available,
+      canPrepare: available && env.PERSISTENT_DRAFTS_ENABLED === 'true',
+    },
     playStoreUrl: playStoreUrl(env.NEXT_PUBLIC_PLAY_STORE_URL),
     pricingVisible: on(env.LANDING_PRICING_VISIBLE),
     links: {
-      privacy: linkTo(env.PRIVACY_URL),
-      terms: linkTo(env.TERMS_URL),
-      support: linkTo(env.SUPPORT_URL, true),
+      privacy: allowedLink(env.PRIVACY_URL),
+      terms: allowedLink(env.TERMS_URL),
+      support: allowedLink(env.SUPPORT_URL, true),
     },
   };
 }

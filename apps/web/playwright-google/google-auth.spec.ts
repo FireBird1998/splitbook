@@ -75,6 +75,7 @@ test.describe('google auth mode', () => {
 
     await expect(headline(page)).toBeVisible();
     await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in with Google' }).first()).toBeVisible();
     await expect(
       page.getByRole('link', { name: 'Splitbook home' }).getByRole('img'),
     ).toHaveAttribute('src', '/brand/logo-dark.svg');
