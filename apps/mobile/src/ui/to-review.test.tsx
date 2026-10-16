@@ -436,6 +436,18 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     for (const raw of ['Edit expense details', 'Currency (e.g. INR)', 'Date (YYYY-MM-DD)'])
       expect(text(list)).not.toContain(raw);
   });
+  it('keeps showing an amount whose currency is missing (#435)', async () => {
+    const f = fixture({ unpaid: true });
+    const draft = f.items()[0].draft;
+    delete draft.values!.currency;
+    draft.values!.amount = 1234.5;
+    draft.missingFields = [...(draft.missingFields ?? []), 'currency'];
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    expect(text(list)).toContain('1,234.5');
+    expect(text(list)).toContain('the currency');
+    expect(text(list)).not.toContain('Amount needed');
+  });
   it('names a missing date, amount or description once, in the Needs line (#435)', async () => {
     const f = fixture();
     await signIn(f);

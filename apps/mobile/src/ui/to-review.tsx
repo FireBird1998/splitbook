@@ -73,7 +73,9 @@ function memberMessage(message: string) {
     .replace(/collections?\b/gi, 'items');
 }
 function amountLabel(values?: ExpenseDraftValues) {
-  if (!values?.amount || !values.currency) return 'Amount needed';
+  if (!values?.amount) return 'Amount needed';
+  // Without its currency, the amount still shows; the Needs line asks for the currency.
+  if (!values.currency) return values.amount.toLocaleString('en', { maximumFractionDigits: 3 });
   try {
     return formatCurrency(
       toMajorAmount(parseAmountMinor(values.amount, values.currency), values.currency),
