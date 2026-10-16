@@ -19,6 +19,7 @@ export async function seedToReview(count: number) {
       '/splitbook_w420',
       '/splitbook_w421',
       '/splitbook_w425',
+      '/splitbook_w439',
     ].includes(url.pathname) ||
     !['localhost', '127.0.0.1', 'host.docker.internal'].includes(url.hostname)
   )
@@ -54,7 +55,7 @@ export async function seedToReview(count: number) {
 
 /** Full fictional items for #406's web review journeys; only the guarded demo DB is writable. */
 export async function seedReviewPage(
-  kinds: Array<'ready' | 'missing-payer' | 'duplicate' | 'one-payer-no-category'>,
+  kinds: Array<'ready' | 'missing-payer' | 'missing-tag' | 'duplicate' | 'one-payer-no-category'>,
 ) {
   await seedToReview(0);
   const uri =
@@ -82,6 +83,7 @@ export async function seedReviewPage(
     const records = kinds.map((kind, index) => {
       const v = values(index);
       if (kind === 'missing-payer') delete v.paidBy;
+      if (kind === 'missing-tag') delete v.tagId;
       if (kind === 'duplicate') v.description = 'Review matching meal';
       // As Claude sent it on staging: who paid, but no separate amount and no Category.
       if (kind === 'one-payer-no-category') {

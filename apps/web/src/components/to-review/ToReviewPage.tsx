@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -9,6 +9,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Paper from '@mui/material/Paper';
+import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useSWRConfig } from 'swr';
@@ -18,19 +19,35 @@ import {
   type ReviewItemModel,
   type ReviewRunOutcome,
 } from '@splitbook/shared/to-review';
+import {
+  applyQuickFix,
+  bulkPayerItems,
+  toReviewQuickFixes,
+  type QuickFixFact,
+} from '@splitbook/shared/to-review-quick-fixes';
 import type {
   DraftReview,
   DraftSaveOutcome,
+  ExpenseDraftValues,
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
+import { writeOpenExpense } from '@/components/expenses/expense-list-query';
+import { visuallyHidden } from '@/components/insights/a11y';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { useGroup } from '@/lib/hooks/use-groups';
-import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
+import { RADIUS } from '@/lib/theme/tokens';
 import { TO_REVIEW_KEY, useToReview } from './use-to-review';
 import { webReviewClient, reviewProblem } from './review-client';
 import { ReviewFacts, reviewAmount, reviewSource } from './ReviewDetails';
 import { reviewDate } from '@splitbook/shared/to-review';
 import ToReviewPanel, { type ReviewPanelHandle } from './ToReviewPanel';
+import ReviewRow from './ReviewRow';
+
+/** A change made elsewhere, or an item already gone: skipped, never overwritten. */
+function changedElsewhere(cause: unknown) {
+  const code = (cause as { code?: string } | null)?.code;
+  return code === 'STALE_REVISION' || code === 'DRAFT_NOT_FOUND' || code === 'REVISION_REQUIRED';
+}
 
 type Confirmation = {
   reviews: DraftReview[];
@@ -59,6 +76,14 @@ export default function ToReviewPage({
   const [run, setRun] = useState<Run | null>(null);
   const [summary, setSummary] = useState('');
   const [online, setOnline] = useState(true);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [more, setMore] = useState<Record<string, QuickFixFact[]>>({});
+  const [deleting, setDeleting] = useState<ReviewItemModel | null>(null);
+  const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
+  const [announce, setAnnounce] = useState('');
+  const openRows = useRef(new Map<string, HTMLButtonElement>());
+  // A fixed row moves between sections and remounts; keyboard focus follows it there.
+  const refocus = useRef<string | null>(null);
   const lock = useRef(false);
   const panel = useRef<ReviewPanelHandle>(null);
   const saveReadyButton = useRef<HTMLButtonElement>(null);
@@ -111,6 +136,14 @@ export default function ToReviewPage({
   }, []);
   const model = read.status === 'ready' ? read.value : null;
   const items = model?.items ?? [];
+  useEffect(() => {
+    const id = refocus.current;
+    const row = id ? openRows.current.get(id) : undefined;
+    if (row && !row.disabled) {
+      refocus.current = null;
+      row.focus();
+    }
+  });
   const selected = opened ? (items.find((item) => item.id === opened.id) ?? opened) : null;
   const available =
     checked && online && !!group && !groupError && !failed && read.status === 'ready';
@@ -122,6 +155,132 @@ export default function ToReviewPage({
         .filter((tag) => !tag.isArchived && !tag.isDeleted)
         .map((tag) => ({ id: tag._id, name: tag.name })) ?? [],
   };
+  const quickContext = { viewerId: accountId, members: context.members, tags: context.tags };
+  const quickFor = (item: ReviewItemModel) => toReviewQuickFixes(item, quickContext);
+  const rowsDisabled = busy || pending || !available || !!run || !!selected;
+  const nameOf = (draft: PersistedExpenseDraft) => draft.values?.description || 'Expense to review';
+  /** A chip only fills in its fact; it never saves the Expense. */
+  async function pick(item: ReviewItemModel, fact: QuickFixFact, option: string) {
+    const draft = item.accountItem!.draft;
+    const before = quickFor(item);
+    refocus.current = item.id;
+    await action(async () => {
+      try {
+        await client.replace(draft, applyQuickFix(draft.values ?? {}, fact, option));
+      } finally {
+        await refresh();
+      }
+      const left = before.fixes.some((fix) => fix.fact !== fact) || before.stillNeeds.length > 0;
+      setAnnounce(left ? '' : `${nameOf(draft)} moved to Ready`);
+    });
+  }
+  /** "You for all N": item by item, skipping any changed elsewhere; Undo restores only its own. */
+  async function payAll(candidates: ReviewItemModel[]) {
+    await action(async () => {
+      const kept: Array<{ draft: PersistedExpenseDraft; before: ExpenseDraftValues }> = [];
+      let skipped = 0;
+      try {
+        for (const item of candidates) {
+          const draft = item.accountItem!.draft;
+          try {
+            const next = await client.replace(
+              draft,
+              applyQuickFix(draft.values ?? {}, 'paidBy', accountId),
+            );
+            kept.push({ draft: next, before: draft.values ?? {} });
+          } catch (cause) {
+            if (!changedElsewhere(cause)) throw cause;
+            skipped += 1;
+          }
+        }
+      } finally {
+        await refresh();
+      }
+      const text = `You set as payer on ${kept.length} ${kept.length === 1 ? 'item' : 'items'}`;
+      const left = skipped
+        ? `. ${skipped} changed elsewhere and ${skipped === 1 ? 'was' : 'were'} left as ${skipped === 1 ? 'it was' : 'they were'}.`
+        : '';
+      // The snackbar is announced on its own; the live region would repeat it.
+      setNotice({
+        text: text + left,
+        undo: kept.length
+          ? () =>
+              void action(async () => {
+                setNotice(null);
+                try {
+                  for (const row of kept) {
+                    try {
+                      await client.replace(row.draft, row.before);
+                    } catch (cause) {
+                      if (!changedElsewhere(cause)) throw cause;
+                    }
+                  }
+                } finally {
+                  await refresh();
+                }
+              })
+          : undefined,
+      });
+    });
+  }
+  function closeOpened() {
+    setOpened(null);
+    if (run) {
+      const all = [
+        ...run.outcomes,
+        ...run.ids
+          .slice(run.index)
+          .filter((id) => items.some((item) => item.id === id))
+          .map((id) => ({ id, status: 'skipped' as const })),
+      ];
+      setSummary(`Done for now · ${summarizeReviewRun(all).label}`);
+      setRun(null);
+    }
+  }
+  /** List shortcuts, off while typing, in a menu or dialog, or with a modifier held. */
+  function onListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+    if (
+      event.metaKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      target.closest(
+        'input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"]',
+      )
+    )
+      return;
+    const order = (['ready', 'duplicate', 'needs-details'] as const).flatMap((state) =>
+      items.filter((item) => item.state === state && item.accountItem),
+    );
+    const index = order.findIndex((item) => item.id === cursor);
+    const key = event.key.toLowerCase();
+    if (key === 'arrowdown' || key === 'j' || key === 'arrowup' || key === 'k') {
+      const step = key === 'arrowdown' || key === 'j' ? 1 : -1;
+      const next = order[index < 0 ? 0 : Math.min(order.length - 1, Math.max(0, index + step))];
+      if (!next) return;
+      event.preventDefault();
+      setCursor(next.id);
+      openRows.current.get(next.id)?.focus();
+      return;
+    }
+    const item = order[index];
+    if (!item || rowsDisabled) return;
+    if (/^[1-9]$/.test(key)) {
+      const choices = quickFor(item).fixes.flatMap((fix) =>
+        (more[item.id]?.includes(fix.fact) ? fix.options : fix.visible).map((option) => ({
+          fact: fix.fact,
+          id: option.id,
+        })),
+      );
+      const chosen = choices[Number(key) - 1];
+      if (!chosen) return;
+      event.preventDefault();
+      void pick(item, chosen.fact, chosen.id);
+    } else if (key === 's' && item.state === 'ready') {
+      event.preventDefault();
+      void saveOne(item.accountItem!.draft, false, []);
+    }
+  }
   function finishItem(id: string, status: ReviewRunOutcome['status']) {
     if (!run) {
       if (status === 'saved' || status === 'deleted') setOpened(null);
@@ -221,7 +380,11 @@ export default function ToReviewPage({
       }
     } else if (selected && saved.has(selected.id)) setOpened(null);
   }
-  async function saveOne(draft: PersistedExpenseDraft, acknowledged: boolean) {
+  async function saveOne(
+    draft: PersistedExpenseDraft,
+    acknowledged: boolean,
+    seen = selected?.accountItem?.duplicates ?? [],
+  ) {
     await action(async () => {
       const reviewed = await client.review([draft.id]);
       const review = reviewed[0];
@@ -231,7 +394,7 @@ export default function ToReviewPage({
           'This item changed while you were looking. Review the latest version before saving.',
         );
       }
-      const seenMatches = selected?.accountItem?.duplicates ?? [];
+      const seenMatches = seen;
       const matchIds = (matches: typeof seenMatches) =>
         matches.map((match) => `${match.kind}:${match.id}`).sort();
       if (JSON.stringify(matchIds(review.duplicates)) !== JSON.stringify(matchIds(seenMatches))) {
@@ -335,6 +498,14 @@ export default function ToReviewPage({
             : outcome.status === 'unresolved'
               ? "We didn't hear back, so it may already be saved"
               : `Couldn't save: ${reviewProblem(outcome.message)}`}
+          {outcome.status === 'saved' && (
+            <Button
+              component={Link}
+              href={`/groups/${groupId}/expenses?${writeOpenExpense('', outcome.expenseId)}`}
+            >
+              View
+            </Button>
+          )}
           {outcome.status === 'failed' && items.find((item) => item.id === outcome.id) && (
             <Button
               disabled={busy}
@@ -403,93 +574,115 @@ export default function ToReviewPage({
               gap: 2.5,
               alignItems: 'start',
             }}
+            onKeyDown={(event) => {
+              const target = event.target as HTMLElement;
+              if (event.key !== 'Escape' || !selected || target.closest('input, textarea, select'))
+                return;
+              event.preventDefault();
+              void (async () => {
+                if (!panel.current || (await panel.current.flush())) closeOpened();
+              })();
+            }}
           >
-            <Stack spacing={2}>
+            <Stack spacing={2} onKeyDown={onListKeyDown}>
               {(['ready', 'duplicate', 'needs-details'] as const).map((state) => {
-                const section = items.filter((item) => item.state === state);
+                const section = items.filter((item) => item.state === state && item.accountItem);
+                const label =
+                  state === 'ready'
+                    ? 'Ready'
+                    : state === 'duplicate'
+                      ? 'Check before saving'
+                      : 'Needs details';
+                const payers = state === 'needs-details' ? bulkPayerItems(section) : [];
                 return (
                   !!section.length && (
-                    <Box
-                      component="section"
-                      key={state}
-                      aria-label={
-                        state === 'ready'
-                          ? 'Ready'
-                          : state === 'duplicate'
-                            ? 'Check before saving'
-                            : 'Needs details'
-                      }
-                    >
+                    <Box component="section" key={state} aria-label={label}>
                       <Typography
                         component="h3"
                         variant="subtitle1"
                         fontWeight={600}
                         sx={{ mb: 1 }}
                       >
-                        {state === 'ready'
-                          ? 'Ready'
-                          : state === 'duplicate'
-                            ? 'Check before saving'
-                            : 'Needs details'}
+                        {label}
                       </Typography>
                       <Stack spacing={1}>
+                        {payers.length >= 2 && (
+                          <Stack
+                            direction={{ xs: 'column', sm: 'row' }}
+                            spacing={1}
+                            sx={{
+                              alignItems: { xs: 'stretch', sm: 'center' },
+                              justifyContent: 'space-between',
+                              bgcolor: 'tint.brand',
+                              borderRadius: `${RADIUS.md}px`,
+                              px: 2,
+                              py: 1.5,
+                            }}
+                          >
+                            <Typography>
+                              <Box component="span" sx={{ fontWeight: 600 }}>
+                                Who paid?
+                              </Box>{' '}
+                              {payers.length} items still need a payer.
+                            </Typography>
+                            <Button
+                              variant="outlined"
+                              disabled={rowsDisabled}
+                              onClick={() => void payAll(payers)}
+                              sx={{ bgcolor: 'background.paper', minHeight: { xs: 44, md: 36 } }}
+                            >
+                              You for all {payers.length}
+                            </Button>
+                          </Stack>
+                        )}
                         {section.map((item) => (
-                          <Box
-                            component="button"
-                            type="button"
+                          <ReviewRow
                             key={item.id}
-                            disabled={busy || !!run || !!selected}
-                            aria-expanded={selected?.id === item.id}
-                            aria-controls={
-                              selected?.id === item.id ? 'to-review-expense-panel' : undefined
+                            item={item}
+                            quick={quickFor(item)}
+                            title={
+                              item.accountItem?.draft.values?.description || 'Description missing'
                             }
-                            aria-label={`Review ${item.accountItem?.draft.values?.description || 'expense'}`}
-                            onClick={(event) => {
+                            amount={reviewAmount(item.accountItem?.draft.values)}
+                            meta={`${reviewDate(item.accountItem?.draft.values?.date)} · ${reviewSource(item.accountItem!)}`}
+                            open={selected?.id === item.id}
+                            selected={cursor === item.id && !selected}
+                            disabled={rowsDisabled}
+                            openDisabled={busy || !!run || !!selected}
+                            showAll={new Set(more[item.id] ?? [])}
+                            registerOpen={(element) => {
+                              if (element) openRows.current.set(item.id, element);
+                              else openRows.current.delete(item.id);
+                            }}
+                            onOpen={(event) => {
                               openedFrom.current = event.currentTarget;
                               setOpened(item);
                             }}
-                            sx={{
-                              textAlign: 'left',
-                              font: 'inherit',
-                              cursor: 'pointer',
-                              width: '100%',
-                              minWidth: 0,
-                              color: 'text.primary',
-                              bgcolor: 'background.paper',
-                              border: 1,
-                              borderColor: selected?.id === item.id ? 'primary.main' : 'divider',
-                              borderRadius: `${RADIUS.md}px`,
-                              p: 2,
-                              overflowWrap: 'anywhere',
-                              '&:disabled': { cursor: 'default' },
-                              '&:focus-visible': {
-                                outline: '2px solid',
-                                outlineColor: 'primary.main',
-                              },
-                            }}
-                          >
-                            <Typography fontWeight={600}>
-                              {item.accountItem?.draft.values?.description || 'Description missing'}
-                            </Typography>
-                            <Typography sx={{ fontFamily: FONT_MONO }}>
-                              {reviewAmount(item.accountItem?.draft.values)}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {reviewDate(item.accountItem?.draft.values?.date)} ·{' '}
-                              {reviewSource(item.accountItem!)}
-                            </Typography>
-                            {item.missingFacts.map((fact) => (
-                              <Typography key={fact} variant="body2" color="text.secondary">
-                                {fact.charAt(0).toUpperCase() + fact.slice(1)}?
-                              </Typography>
-                            ))}
-                          </Box>
+                            onFocus={() => setCursor(item.id)}
+                            onPick={(fact, option) => void pick(item, fact, option)}
+                            onMore={(fact) =>
+                              setMore((current) => ({
+                                ...current,
+                                [item.id]: [...(current[item.id] ?? []), fact],
+                              }))
+                            }
+                            onSave={() => void saveOne(item.accountItem!.draft, false, [])}
+                            onDelete={() => setDeleting(item)}
+                          />
                         ))}
                       </Stack>
                     </Box>
                   )
                 );
               })}
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: { xs: 'none', md: 'block' } }}
+              >
+                Keyboard shortcuts: ↑ ↓ or J K move · Enter opens · 1–9 choose · S saves · Esc
+                closes
+              </Typography>
             </Stack>
             {selected && (
               <ToReviewPanel
@@ -505,20 +698,7 @@ export default function ToReviewPage({
                 available={available && items.some((item) => item.id === selected.id) && !pending}
                 savingBlocked={pending || busy}
                 run={run ? `${run.index + 1} of ${run.ids.length}` : undefined}
-                onClose={() => {
-                  setOpened(null);
-                  if (run) {
-                    const all = [
-                      ...run.outcomes,
-                      ...run.ids
-                        .slice(run.index)
-                        .filter((id) => items.some((item) => item.id === id))
-                        .map((id) => ({ id, status: 'skipped' as const })),
-                    ];
-                    setSummary(`Done for now · ${summarizeReviewRun(all).label}`);
-                    setRun(null);
-                  }
-                }}
+                onClose={closeOpened}
                 onNext={() => finishItem(selected.id, 'skipped')}
                 onSave={saveOne}
                 onDelete={(draft) =>
@@ -575,6 +755,7 @@ export default function ToReviewPage({
           </Button>
           <Button
             variant="contained"
+            autoFocus
             disabled={busy || !available || pending}
             onClick={() => confirmation && void action(() => save(confirmation.reviews, []))}
           >
@@ -582,6 +763,51 @@ export default function ToReviewPage({
           </Button>
         </DialogActions>
       </Dialog>
+      <Dialog open={!!deleting} onClose={() => !busy && setDeleting(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete this item?</DialogTitle>
+        <DialogContent>
+          It was never saved, so nothing in {group?.name || 'this Group'} changes. You can&apos;t
+          undo this.
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={busy} onClick={() => setDeleting(null)}>
+            Keep item
+          </Button>
+          <Button
+            color="inherit"
+            sx={{ color: 'status.negative' }}
+            disabled={busy || !available}
+            onClick={() => {
+              const draft = deleting?.accountItem?.draft;
+              if (!draft) return;
+              void action(async () => {
+                await client.discard(draft);
+                await refresh();
+                setDeleting(null);
+                setAnnounce(`${nameOf(draft)} deleted`);
+              });
+            }}
+          >
+            Delete item
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Snackbar
+        open={!!notice}
+        autoHideDuration={8000}
+        onClose={(_, reason) => reason !== 'clickaway' && setNotice(null)}
+        message={notice?.text}
+        action={
+          notice?.undo && (
+            <Button color="inherit" disabled={busy} onClick={notice.undo}>
+              Undo
+            </Button>
+          )
+        }
+      />
+      <Box aria-live="polite" sx={visuallyHidden}>
+        {announce}
+      </Box>
     </Stack>
   );
 }
