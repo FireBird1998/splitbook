@@ -157,6 +157,11 @@ describe('the viewer is "You" in the Group Activity (#442)', () => {
     ).toBe('You added “Dinner”');
   });
 
+  it('makes the viewer, not a namesake, "You" in Home\'s latest changes', () => {
+    expect(activityLineParts(payment('viewer', 'namesake'), 'viewer').actor).toBe('You');
+    expect(activityLineParts(payment('namesake', 'viewer'), 'viewer').actor).toBe('Ankit Das');
+  });
+
   it('says "Paid to you" when the payer has no name, and names a namesake as recorded', () => {
     const toViewer = payment('gone', 'viewer');
     delete (toViewer.metadata as Record<string, unknown>).paidByName;

@@ -376,6 +376,31 @@ describe('an opened Expense’s details', () => {
     expect(text(html)).toMatch(/Edit Delete$/);
   });
 
+  it('calls the viewer "You" in its history by id, beside a member with the same name (#442)', () => {
+    const namesake = { ...ALEX, _id: 'a00000000000000000000009' };
+    const edit = (editedBy: typeof ALEX) => ({
+      editedBy,
+      editedAt: '2026-10-17T10:00:00.000Z',
+      changes: { notes: { old: '', new: 'Router reset' } },
+    });
+    const history = text(
+      render(
+        createElement(ExpenseDetails, {
+          id: 'opened',
+          expense: { ...EXPENSES[2], editHistory: [edit(ALEX), edit(namesake)] },
+          userId: ALEX._id,
+          recurringExpensesEnabled: false,
+          history: 'ready',
+          onRetryHistory: vi.fn(),
+          onEdit: vi.fn(),
+          onDelete: vi.fn(),
+        }),
+      ),
+    );
+    expect(history).toContain('Edited by You');
+    expect(history).toContain(`Edited by ${ALEX.name}`);
+  });
+
   it('offers Try again when its history can’t be loaded', () => {
     expect(text(details(false, 'failed'))).toContain(
       'This Expense’s history could not be loaded. Try again',

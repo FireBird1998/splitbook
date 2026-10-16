@@ -41,10 +41,19 @@ export function groupActivitiesByDay(activities: ActivityLike[]): ActivityDayGro
   return Array.from(groups.values());
 }
 
-/** An event's headline. The viewer, matched by id, is "You" (#442). */
+const words = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
+
+/**
+ * A member as an event names them: "You" when their id is the viewer's (#442), never matched by
+ * name, since two members can share one; otherwise their recorded name, or null without one.
+ */
+function memberLabel(id: unknown, name: unknown, viewerId?: string): string | null {
+  return viewerId && id === viewerId ? 'You' : words(name);
+}
+
+/** An event's headline, with the viewer as "You". */
 export function formatActivityHeadline(activity: ActivityLike, viewerId?: string): string {
-  const actorName =
-    viewerId && activity.actor?._id === viewerId ? 'You' : activity.actor?.name || 'Someone';
+  const actorName = memberLabel(activity.actor?._id, activity.actor?.name, viewerId) ?? 'Someone';
   const meta = activity.metadata || {};
 
   switch (activity.type) {
@@ -79,7 +88,7 @@ export function formatActivityHeadline(activity: ActivityLike, viewerId?: string
   }
 }
 
-/** An event's detail line. The viewer, matched by id, is "You" in a payment (#442). */
+/** An event's detail line, with the viewer as "You" in a Settlement. */
 export function formatActivityDetail(activity: ActivityLike, viewerId?: string): string | null {
   const meta = activity.metadata || {};
 
@@ -95,15 +104,13 @@ export function formatActivityDetail(activity: ActivityLike, viewerId?: string):
   }
 
   if (activity.type === 'settlement_recorded') {
-    const isViewer = (id: unknown) => !!viewerId && id === viewerId;
-    const named = (name: unknown) => (typeof name === 'string' ? name : null);
-    const paidTo = isViewer(meta.paidTo) ? 'You' : named(meta.paidToName);
-    const paidBy = isViewer(meta.paidBy) ? 'You' : named(meta.paidByName);
+    const paidTo = memberLabel(meta.paidTo, meta.paidToName, viewerId);
+    const paidBy = memberLabel(meta.paidBy, meta.paidByName, viewerId);
     if (paidBy && paidTo) {
       return `${paidBy} → ${paidTo}`;
     }
     if (paidTo) {
-      return `Paid to ${isViewer(meta.paidTo) ? 'you' : paidTo}`;
+      return `Paid to ${viewerId && meta.paidTo === viewerId ? 'you' : paidTo}`;
     }
     return null;
   }
@@ -126,16 +133,12 @@ export interface ActivityLineParts {
   subject: string | null;
 }
 
-const words = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export function activityLineParts(activity: ActivityLike, viewerId?: string): ActivityLineParts {
   const meta = activity.metadata || {};
-  const actor =
-    viewerId && activity.actor?._id === viewerId
-      ? 'You'
-      : (words(activity.actor?.name) ?? 'Someone');
+  const actor = memberLabel(activity.actor?._id, activity.actor?.name, viewerId) ?? 'Someone';
   const expense = words(meta.description) ?? 'an Expense';
   const line = (action: string, subject: string | null = null) => ({ actor, action, subject });
 
