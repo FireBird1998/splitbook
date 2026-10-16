@@ -116,6 +116,10 @@ function fixture(
     lostExpense?: boolean;
     mixed?: boolean;
     flag?: boolean;
+    /** An item missing who paid, the split and the Tag, with the server's raw problems. */
+    unpaid?: boolean;
+    /** Reviews carry the server's allocation: who paid and each share. */
+    allocated?: boolean;
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -135,8 +139,41 @@ function fixture(
   let items: DraftReview[] = options.empty
     ? []
     : [review(first), review(second), review(incomplete), duplicate];
+  if (options.unpaid)
+    items = [
+      {
+        ...review({
+          ...row(6, 'Station dinner', 30),
+          values: {
+            description: 'Station dinner',
+            amount: 30,
+            currency: 'INR',
+            date: '2026-10-14',
+          },
+          missingFields: ['paidBy', 'splitMethod', 'splitBetween', 'tagId'],
+        }),
+        problems: [
+          'paidBy: Choose who paid.',
+          'splitMethod: Choose a split method.',
+          'splitBetween: Choose who shared this Expense.',
+          'tagId: Choose a Tag.',
+        ],
+      },
+    ];
   if (options.laterReadyGroup)
     items = [review(incomplete), review({ ...first, groupId: otherGroupId })];
+  if (options.allocated)
+    items = items.map((item) => {
+      const amount = item.draft.values?.amount ?? 0;
+      return {
+        ...item,
+        allocation: {
+          currency: 'INR',
+          paidBy: [{ user: user.id, amount }],
+          splitBetween: [{ user: user.id, amount }],
+        },
+      };
+    });
   let cookie: string | null = null,
     owner: string | null = null;
   let offline = false,
@@ -298,6 +335,7 @@ function fixture(
     addReady: () => {
       items.push(review(row(5, 'Museum', 5)));
     },
+    items: () => items,
     clear: () => {
       items = [];
     },
@@ -385,6 +423,56 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(text(list)).toContain('All caught up');
     expect(button(list, 'Save 0 ready').props.disabled).toBe(true);
   });
+  it('opens a tapped item in the guided review, never a raw editor (#435)', async () => {
+    const f = fixture();
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'Review Fare');
+    const run = f.controller.getSnapshot().toReview.run;
+    expect(run?.items[run.index].item.draft.id).toBe(row(2, '', 1).id);
+    expect(run?.items.map((entry) => entry.item.draft.id).sort()).toEqual(
+      [row(1, '', 1), row(2, '', 1), row(3, '', 1), row(4, '', 1)].map((entry) => entry.id).sort(),
+    );
+    for (const raw of ['Edit expense details', 'Currency (e.g. INR)', 'Date (YYYY-MM-DD)'])
+      expect(text(list)).not.toContain(raw);
+  });
+  it('keeps showing an amount whose currency is missing (#435)', async () => {
+    const f = fixture({ unpaid: true });
+    const draft = f.items()[0].draft;
+    delete draft.values!.currency;
+    draft.values!.amount = 1234.5;
+    draft.missingFields = [...(draft.missingFields ?? []), 'currency'];
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    expect(text(list)).toContain('1,234.5');
+    expect(text(list)).toContain('the currency');
+    expect(text(list)).not.toContain('Amount needed');
+  });
+  it('names a missing date, amount or description once, in the Needs line (#435)', async () => {
+    const f = fixture();
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    expect(text(list)).toContain('Needs the amount, the currency, the date');
+    for (const repeated of ['Amount needed', 'Date needed', 'Description needed'])
+      expect(text(list)).not.toContain(repeated);
+  });
+  it('says what an item needs once, in member words (#435)', async () => {
+    const f = fixture({ unpaid: true });
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    expect(text(list)).toContain('Needs who paid, how to split it, who shared it, the tag');
+    // Said once: no second line repeats a fact the Needs line already names.
+    for (const raw of [
+      'paidBy',
+      'splitMethod',
+      'splitBetween',
+      'tagId',
+      'Choose who paid.',
+      'Who paid?',
+      'The tag?',
+    ])
+      expect(text(list)).not.toContain(raw);
+  });
   it('renders every list section, exact freshly reviewed confirmation, saved and changed outcomes', async () => {
     const f = fixture({ mixed: true });
     f.addReady();
@@ -411,6 +499,34 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(text(list)).toContain('Changed since you checked');
     expect(text(list)).toContain('Couldn’t save: Tag is unavailable');
     expect(f.committed.size).toBe(1);
+  });
+  it('asks about your own amount as "you" (#434)', async () => {
+    const f = fixture({ unpaid: true });
+    f.items()[0].draft.values = {
+      ...f.items()[0].draft.values,
+      paidBy: [{ user: user.id }],
+      splitMethod: 'unequal',
+      splitBetween: [{ user: user.id }],
+    };
+    f.items()[0].problems = [
+      'paidBy.0.amount: Enter the amount paid.',
+      'splitBetween.0.amount: Enter each share.',
+    ];
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    expect(text(list)).toContain('The amount paid by you?');
+    expect(text(list)).toContain('The amount for you?');
+    expect(text(list)).not.toContain('Alex?');
+  });
+  it('says what you paid and share when confirming Save ready (#434)', async () => {
+    const f = fixture({ allocated: true });
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'Save 2 ready');
+    expect(text(list)).toContain('You paid ₹12.34');
+    expect(text(list)).toContain('You share ₹12.34');
+    expect(text(list)).not.toContain('Alex paid');
+    expect(text(list)).not.toContain('Alex shares');
   });
   it('shows lost Save replies and Check again reuses exactly the retained identity', async () => {
     const f = fixture({ lost: true });

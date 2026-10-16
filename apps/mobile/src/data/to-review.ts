@@ -3,7 +3,12 @@ import {
   saveExpenseDraftsSchema,
 } from '@splitbook/shared/validators/expense-draft';
 import { expenseDraftsPath } from '@splitbook/shared/api-paths';
-import { QueryObserver, type QueryClient, type onlineManager } from '@tanstack/query-core';
+import {
+  QueryObserver,
+  type QueryClient,
+  type QueryObserverOptions,
+  type onlineManager,
+} from '@tanstack/query-core';
 import { toReviewPath } from '@splitbook/shared/api-paths';
 import { toReviewKey } from '@splitbook/shared/query-keys';
 import { buildToReview, type DeviceToReviewItem } from '@splitbook/shared/to-review';
@@ -71,6 +76,13 @@ export function mobileToReview(snapshot: MobileSnapshot, now: number, groupId?: 
   );
 }
 
+/** The read without the Groups `leaves` names, its total counted again. */
+const withoutGroups = (read: ToReviewRead, leaves: (groupId: string) => boolean): ToReviewRead => {
+  if (!read.groups.some((group) => leaves(group.groupId))) return read;
+  const groups = read.groups.filter((group) => !leaves(group.groupId));
+  return { total: groups.reduce((total, group) => total + group.count, 0), groups };
+};
+
 /** One account-scoped, memory-only read feeds Home, the banner and the list. No queued writes. */
 export function createToReviewQueries(options: {
   client: QueryClient;
@@ -81,8 +93,11 @@ export function createToReviewQueries(options: {
   publish(state: ToReviewState): void;
   read(path: string, signal: AbortSignal): Promise<unknown>;
   recoveries(): Promise<DeviceToReviewItem[]>;
+  /** A Group this member has lost: no read, however late, shows its items again. */
+  lost(groupId: string): boolean;
 }) {
   let observer: QueryObserver<ToReviewRead> | undefined;
+  let observerOptions: QueryObserverOptions<ToReviewRead> | undefined;
   let stop: (() => void) | undefined;
   let accountId: string | undefined;
   let online = false;
@@ -108,17 +123,32 @@ export function createToReviewQueries(options: {
         });
     }
   };
+  /**
+   * Groups denied to an account, each with the Groups list shown when it was denied: no read,
+   * however late, shows its items again until a newer list lists the Group again.
+   */
+  const denied = new Map<string, MobileSnapshot['groups']['data']>();
+  const deniedKey = (accountId: string | undefined, groupId: string) => `${accountId}:${groupId}`;
+  const lost = (groupId: string) =>
+    options.lost(groupId) || denied.has(deniedKey(options.snapshot().auth.user?.id, groupId));
   const unbind = () => {
     stop?.();
     observer?.destroy();
     stop = undefined;
     observer = undefined;
+    observerOptions = undefined;
     accountId = undefined;
   };
   const bind = () => {
     queued = false;
     if (disposed) return;
     const snapshot = options.snapshot();
+    for (const [key, list] of denied)
+      if (
+        list !== snapshot.groups.data &&
+        snapshot.groups.data.some((group) => key === deniedKey(snapshot.auth.user?.id, group.id))
+      )
+        denied.delete(key);
     const next =
       options.enabled &&
       ['groups', 'group'].includes(snapshot.screen) &&
@@ -140,7 +170,7 @@ export function createToReviewQueries(options: {
     accountId = next;
     online = available;
     const owner = next;
-    observer = new QueryObserver<ToReviewRead>(options.client, {
+    observerOptions = {
       queryKey: toReviewKey({ environment: options.environment, accountId: owner }),
       queryFn: async ({ signal }) => {
         if (
@@ -158,23 +188,41 @@ export function createToReviewQueries(options: {
       gcTime: 0,
       refetchOnReconnect: true,
       refetchOnWindowFocus: true,
-    });
+    };
+    observer = new QueryObserver<ToReviewRead>(options.client, observerOptions);
+    /** The read this observer last showed. A successor query starts empty: while it reads again,
+     * that stays, as it was, instead of an empty "Checking" (#433). */
+    let shown: Pick<ToReviewState, 'status' | 'read' | 'message'> | undefined;
     const project = () => {
       if (accountId !== owner || options.snapshot().auth.user?.id !== owner) return;
       const result = observer!.getCurrentResult();
+      if (available && result.data === undefined && result.isFetching && shown) {
+        options.publish({ ...options.snapshot().toReview, offline: false, ...shown });
+        return;
+      }
+      const read = result.data
+        ? withoutGroups(result.data, lost)
+        : !available
+          ? options.snapshot().toReview.read
+          : { total: 0, groups: [] };
+      const status = result.isFetching
+        ? 'loading'
+        : result.isError
+          ? 'error'
+          : result.data
+            ? 'ready'
+            : 'idle';
+      const message = result.isError ? 'Could not load To review. Try again when connected.' : null;
+      // A read that answered is kept through its reads again; an error or nothing read yet isn't,
+      // so a retry shows that it's checking.
+      if (status === 'ready') shown = { status, read, message };
+      else if (status !== 'loading') shown = undefined;
       options.publish({
         ...options.snapshot().toReview,
         offline: !available,
-        status: result.isFetching
-          ? 'loading'
-          : result.isError
-            ? 'error'
-            : result.data
-              ? 'ready'
-              : 'idle',
-        read:
-          result.data ?? (!available ? options.snapshot().toReview.read : { total: 0, groups: [] }),
-        message: result.isError ? 'Could not load To review. Try again when connected.' : null,
+        status,
+        read,
+        message,
       });
     };
     stop = observer.subscribe(project);
@@ -190,17 +238,21 @@ export function createToReviewQueries(options: {
   const stopOnline = options.online.subscribe(bindLater);
   return {
     bindLater,
+    /**
+     * Home's scope was outdated: its read shares that scope, so its query was replaced. The
+     * observer moves to the successor, which reads again, as Home's own reads do (#433).
+     */
+    rebind() {
+      if (observer && observerOptions) observer.setOptions(observerOptions);
+    },
     lose(groupId: string) {
       const owner = options.snapshot().auth.user?.id;
       if (!owner) return;
+      denied.set(deniedKey(owner, groupId), options.snapshot().groups.data);
       const key = toReviewKey({ environment: options.environment, accountId: owner });
       void options.client.cancelQueries({ queryKey: key, exact: true });
-      const withoutGroup = (read: ToReviewRead) => {
-        const groups = read.groups.filter((group) => group.groupId !== groupId);
-        return { total: groups.reduce((total, group) => total + group.count, 0), groups };
-      };
       const state = options.snapshot().toReview;
-      const read = withoutGroup(state.read);
+      const read = withoutGroups(state.read, (id) => id === groupId);
       options.client.setQueryData(key, read);
       options.publish({
         ...options.snapshot().toReview,
@@ -208,16 +260,20 @@ export function createToReviewQueries(options: {
         recoveries: state.recoveries.filter((item) => item.groupId !== groupId),
       });
     },
+    /** Reads To review again beside this phone's check, never after it: storage can be busy. */
     async refresh() {
       if (!options.enabled) return;
-      await loadRecoveries();
-      if (!options.enabled || !options.online.isOnline() || options.snapshot().offline.active)
-        return;
-      bind();
-      await observer?.refetch();
+      const connected = options.online.isOnline() && !options.snapshot().offline.active;
+      if (connected) bind();
+      await Promise.all([loadRecoveries(), connected ? observer?.refetch() : undefined]);
+    },
+    /** The session ended: nothing about its account's Groups is kept. */
+    reset() {
+      denied.clear();
     },
     stop() {
       disposed = true;
+      denied.clear();
       unbind();
       stopOnline();
     },

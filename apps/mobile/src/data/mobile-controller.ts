@@ -6,7 +6,11 @@ import {
   emptyToReview,
   mobileToReview,
 } from './to-review';
-import { emptySharedDraftCollection, sharedDraftCollection } from './shared-draft-collection';
+import {
+  emptySharedDraftCollection,
+  refetchDraftCollection,
+  sharedDraftCollection,
+} from './shared-draft-collection';
 import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import { focusManager, onlineManager, QueryClient } from '@tanstack/query-core';
@@ -624,6 +628,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     unlistedGroups = new Set();
     confirmation = null;
     lostGroups.clear();
+    toReviewQueries.reset();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
     groupQueries.reset();
@@ -1191,6 +1196,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         groups,
       );
     },
+    lost: (groupId) => lostGroups.has(groupId),
   });
   const listening = [
     homeQueries.listen(focusManager, onlineManager, dependencies.netInfo),
@@ -1321,6 +1327,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     groupQueries.rebind();
     expenseQueries.rebind();
     activityQueries.rebind();
+    toReviewQueries.rebind();
   };
   /** A confirmed Expense or Settlement change affects every page, Month, Balance, Home and Activity view. */
   const ledgerChanged = (groupId: string) =>
@@ -5975,10 +5982,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // only foreground trigger (M1-6): this waits for what it started. A pull or Retry reads it all.
     if (snapshot.screen === 'group' && snapshot.detail.id)
       return reuse ? groupQueries.settle(generation) : openGroup(snapshot.detail.id, false);
-    // A pull or Retry reads Home's Groups list and its figures together (#333); a return to the
-    // foreground has already reached them through TanStack's focus event (M1-6), and waits for
-    // what it started.
-    return homeQueries.settle(generation, { fresh: !reuse });
+    // A pull or Retry reads Home's Groups list and its figures together (#333), and To review with
+    // them (#433); a return to the foreground has already reached them through TanStack's focus
+    // event (M1-6), and waits for what it started.
+    if (reuse) return homeQueries.settle(generation, { fresh: false });
+    await Promise.all([homeQueries.settle(generation, { fresh: true }), toReviewQueries.refresh()]);
   };
   /** A screen showing none of a Group: its saved copies no longer keep the offline banner. */
   const unshowGroup = () => {
@@ -6168,6 +6176,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     };
   };
+  /**
+   * To review read again, with the open Group's items: an item saved or deleted elsewhere then
+   * closes its editor there (#436).
+   */
+  const refreshToReview = async () => {
+    const { groupId } = snapshot.sharedDraftCollection;
+    await Promise.all([
+      toReviewQueries.refresh(),
+      groupId && snapshot.auth.user && !snapshot.offline.active && onlineManager.isOnline()
+        ? refetchDraftCollection(queryClient, account(), groupId)
+        : undefined,
+    ]);
+  };
   const draftCollection = (groupId: string) => {
     const owner = generation;
     return sharedDraftCollection({
@@ -6183,7 +6204,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       publish: (value) => publish({ ...snapshot, sharedDraftCollection: value }),
     });
   };
-  const startReviewRun = async (groupId?: string) => {
+  /** The guided review, from the item the member tapped, when they tapped one (#435). */
+  const startReviewRun = async (groupId?: string, firstDraftId?: string) => {
     if (
       !persistentDrafts ||
       snapshot.auth.status !== 'authenticated' ||
@@ -6202,6 +6224,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ),
     );
     if (!items.length) return;
+    const tapped = items.findIndex((entry) => entry.item.draft.id === firstDraftId);
+    if (tapped > 0) items.unshift(...items.splice(tapped, 1));
     const owner = generation,
       view = route;
     const machine = createReviewRun({
@@ -6211,7 +6235,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         current(owner) && route === view && reviewRun === machine && !!snapshot.toReview.run,
       online: () => !snapshot.offline.active && onlineManager.isOnline(),
       client: sharedDrafts,
-      refresh: () => toReviewQueries.refresh(),
+      refresh: refreshToReview,
     });
     reviewRun = machine;
     publish({
@@ -6491,7 +6515,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openToReview,
     closeToReview,
     toReviewModel: (groupId?: string) => mobileToReview(snapshot, now(), groupId),
-    refreshToReview: () => toReviewQueries.refresh(),
+    refreshToReview,
     keepExpenseAsSharedDraft,
     cancelExpenseClose,
     deleteExpenseAndClose,

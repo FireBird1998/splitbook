@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ActivityEvent } from '../data/activity';
+import { parseActivityPage, type ActivityEvent } from '../data/activity';
 import {
   activityDays,
   dayLabel,
@@ -174,6 +174,85 @@ describe('Activity headlines', () => {
       subject: null,
     });
     expect(line.details.map((detail) => detail.text)).toEqual(['Priya Shah → Sam Chen', '₹200.00']);
+  });
+
+  it('names the signed-in member "You" in what an edit changed (#434)', () => {
+    const namesake = 'a00000000000000000000008';
+    const line = describeActivity(
+      event({
+        type: 'expense_updated',
+        metadata: {
+          description: 'Dinner',
+          changes: {
+            paidBy: {
+              old: [{ user: context.currentUserId, amount: 1200 }],
+              new: [{ user: context.currentUserId, amount: 1500 }],
+            },
+            splitBetween: {
+              old: [
+                { user: context.currentUserId, amount: 600 },
+                { user: namesake, amount: 600 },
+              ],
+              new: [
+                { user: context.currentUserId, amount: 750 },
+                { user: namesake, amount: 750 },
+              ],
+            },
+          },
+        },
+      }),
+      {
+        ...context,
+        members: [
+          { id: context.currentUserId, name: 'Alex Rao' },
+          { id: namesake, name: 'Alex Rao' },
+        ],
+      },
+    );
+    expect(line.changes.map((change) => change.text)).toEqual([
+      'Your payment ₹1,200.00 → ₹1,500.00',
+      'Your share ₹600.00 → ₹750.00',
+      'Alex Rao’s share ₹600.00 → ₹750.00',
+    ]);
+  });
+
+  it('names the signed-in member "You" on either side of a payment, even beside a namesake (#434)', () => {
+    const namesake = 'a00000000000000000000008';
+    // As the server sends it: the payment's people by reference and by name.
+    const payment = (paidBy: string, paidTo: string) =>
+      parseActivityPage(
+        {
+          status: 200,
+          data: {
+            activities: [
+              event({
+                type: 'settlement_recorded',
+                actor: { _id: paidBy, name: 'Alex Rao' },
+                metadata: {
+                  amount: 200,
+                  currency: 'INR',
+                  paidBy,
+                  paidTo,
+                  paidByName: 'Alex Rao',
+                  paidToName: 'Alex Rao',
+                } as ActivityEvent['metadata'],
+              }),
+            ],
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          },
+        },
+        'b00000000000000000000001',
+        1,
+      ).events[0];
+    const read = (line: ActivityLine) => line.details.map((detail) => detail.text);
+    expect(read(describeActivity(payment(namesake, context.currentUserId), context))).toEqual([
+      'Alex Rao → You',
+      '₹200.00',
+    ]);
+    expect(read(describeActivity(payment(context.currentUserId, namesake), context))).toEqual([
+      'You → Alex Rao',
+      '₹200.00',
+    ]);
   });
 });
 

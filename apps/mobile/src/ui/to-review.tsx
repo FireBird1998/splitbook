@@ -1,17 +1,19 @@
 import { ReviewRunOverlay } from './review-run';
-import { draftEditorChanged } from '../data/shared-draft-collection';
 import { useEffect, useMemo } from 'react';
 import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatDate } from '@splitbook/shared/date';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
-import { summarizeReviewRun, type ReviewItemModel } from '@splitbook/shared/to-review';
+import {
+  memberProblems,
+  summarizeReviewRun,
+  type ReviewItemModel,
+} from '@splitbook/shared/to-review';
 import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
 import { BottomSheet, Card, CompactText, Money } from './compact';
 import { Copy } from './primitives';
-import { SharedDraftEditor } from './shared-drafts';
 import { fonts, useTheme } from './theme';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 
@@ -62,7 +64,7 @@ function Button({
   );
 }
 
-/** Backend/editor errors are translated at the presentation boundary, never used as decisions. */
+/** Backend errors are translated at the presentation boundary, never used as decisions. */
 function memberMessage(message: string) {
   return message
     .replace(/drafts?\b/gi, (word) => (word.toLowerCase() === 'drafts' ? 'items' : 'item'))
@@ -71,7 +73,9 @@ function memberMessage(message: string) {
     .replace(/collections?\b/gi, 'items');
 }
 function amountLabel(values?: ExpenseDraftValues) {
-  if (!values?.amount || !values.currency) return 'Amount needed';
+  if (!values?.amount) return 'Amount needed';
+  // Without its currency, the amount still shows; the Needs line asks for the currency.
+  if (!values.currency) return values.amount.toLocaleString('en', { maximumFractionDigits: 3 });
   try {
     return formatCurrency(
       toMajorAmount(parseAmountMinor(values.amount, values.currency), values.currency),
@@ -89,16 +93,25 @@ function sourceLabel(item: ReviewItemModel) {
 }
 function ItemDetails({ item }: { item: ReviewItemModel }) {
   const values = item.accountItem?.draft.values ?? item.deviceItem?.values;
+  // An item in your account says what it needs once, in its Needs line, so a missing fact leaves
+  // its place empty here rather than saying it again (#435).
+  const needs = !!item.accountItem;
   const date =
     values?.date && Number.isFinite(new Date(values.date).getTime())
       ? formatDate(values.date)
-      : 'Date needed';
+      : needs
+        ? null
+        : 'Date needed';
+  const amount = amountLabel(values);
   return (
     <View style={{ gap: 4 }}>
-      <CompactText weight="semibold">{values?.description || 'Description needed'}</CompactText>
-      <Money numberOfLines={0}>{amountLabel(values)}</Money>
+      <CompactText weight="semibold">
+        {values?.description || (needs ? 'Expense to review' : 'Description needed')}
+      </CompactText>
+      {!(needs && amount === 'Amount needed') && <Money numberOfLines={0}>{amount}</Money>}
       <CompactText variant="caption" tone="secondary">
-        {sourceLabel(item)} · {date}
+        {sourceLabel(item)}
+        {date ? ` · ${date}` : ''}
       </CompactText>
       {item.state !== 'on-this-phone' && (
         <CompactText variant="caption" tone={item.state === 'ready' ? 'positive' : 'warning'}>
@@ -349,9 +362,17 @@ export function ToReviewList({
   const groupName =
     own?.groupName ?? (state.detail.id === groupId ? state.detail.data?.name : null) ?? 'Group';
   const disabled = collection.busy || collection.pending || state.offline || unavailable;
+  // An item opens in the guided review, with Add expense's fields and pickers (#435).
   const openItem = (item: ReviewItemModel) => {
-    if (item.accountItem) client.edit(item.accountItem.draft);
+    if (item.accountItem) void controller.startReviewRun(groupId, item.accountItem.draft.id);
   };
+  // Problems ask about the signed-in member as "you" (#434).
+  const names = Object.fromEntries(
+    (collection.context?.group.members ?? []).map((member) => [
+      member.user.id,
+      member.user.id === state.auth.user?.id ? 'you' : member.user.name,
+    ]),
+  );
   const sections = [
     ['ready', 'Ready'],
     ['duplicate', 'Check before saving'],
@@ -360,23 +381,7 @@ export function ToReviewList({
   ] as const;
   const results = summarizeReviewRun(collection.outcomes);
   const close = () => {
-    if (collection.busy) return;
-    if (!draftEditorChanged(collection) || collection.pending) return controller.closeToReview();
-    Alert.alert(
-      'Keep editing?',
-      'Your changes have not been kept yet. Leaving replaces them with the last kept details.',
-      [
-        { text: 'Keep editing', style: 'cancel' },
-        {
-          text: 'Leave without changes',
-          style: 'destructive',
-          onPress: () => {
-            client.closeEditor();
-            controller.closeToReview();
-          },
-        },
-      ],
-    );
+    if (!collection.busy) controller.closeToReview();
   };
   return (
     <Modal visible animationType="slide" onRequestClose={close}>
@@ -453,7 +458,6 @@ export function ToReviewList({
                 disabled={collection.busy || state.offline}
                 onPress={() => void controller.refreshToReview()}
               />
-              <SharedDraftEditor client={client} state={collection} offline={state.offline} />
               {model.counts.total === 0 && state.toReview.status === 'ready' && !state.offline && (
                 <Copy accessibilityRole="header">All caught up</Copy>
               )}
@@ -486,9 +490,9 @@ export function ToReviewList({
                               >
                                 <ItemDetails item={item} />
                               </Pressable>
-                              {item.accountItem?.problems.map((problem, index) => (
-                                <CompactText key={index} tone="warning">
-                                  {memberMessage(problem)}
+                              {memberProblems(item, names).map((problem) => (
+                                <CompactText key={problem} tone="warning">
+                                  {problem}
                                 </CompactText>
                               ))}
                               {item.accountItem?.duplicates.map((duplicate, index) => (
@@ -554,9 +558,13 @@ export function ToReviewList({
                     const allocation = collection.reviews.find(
                       (review) => review.draft.id === item.draft.id,
                     )!.allocation!;
+                    // The signed-in member is "You", as on Add expense (#434).
+                    const isYou = (id: string) => id === state.auth.user?.id;
                     const name = (id: string) =>
-                      collection.context?.group.members.find((member) => member.user.id === id)
-                        ?.user.name ?? 'Group member';
+                      isYou(id)
+                        ? 'You'
+                        : (collection.context?.group.members.find((member) => member.user.id === id)
+                            ?.user.name ?? 'Group member');
                     return (
                       <View style={{ gap: 4 }}>
                         {allocation.paidBy.map((row) => (
@@ -566,7 +574,7 @@ export function ToReviewList({
                         ))}
                         {allocation.splitBetween.map((row) => (
                           <Copy key={`shared:${row.user}`}>
-                            {name(row.user)} shares{' '}
+                            {name(row.user)} {isYou(row.user) ? 'share' : 'shares'}{' '}
                             {formatCurrency(row.amount, allocation.currency)}
                           </Copy>
                         ))}

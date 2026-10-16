@@ -16,7 +16,8 @@ import { useMobileSnapshot, sameSelection } from './use-mobile-snapshot';
 import { BottomSheet, Card, CompactText, Money } from './compact';
 import { Button, Copy } from './primitives';
 import { ExpenseTiles, expenseDateLabel, splitSummary, OptionalDetails } from './expense-form';
-import { DateSheet, gregorianDateFormat } from './date-sheet';
+import { DateSheet } from './date-sheet';
+import { clockTime } from './activity-format';
 import { PayerSheet, paidBySummary } from './payer-sheet';
 import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
@@ -144,6 +145,8 @@ function ReviewRunContent({
   const members =
     state.context?.group.members.map((row) => ({ id: row.user.id, name: row.user.name })) ?? null;
   const name = (id: string) => members?.find((row) => row.id === id)?.name ?? 'Group member';
+  // The signed-in member is "You", as on Add expense (#434).
+  const person = (id: string) => (id === userId ? 'You' : name(id));
   const change = (patch: Partial<ExpenseDraft>) => {
     if (locked) return;
     try {
@@ -200,17 +203,14 @@ function ReviewRunContent({
                 state.changed.before,
                 state.changed.after,
                 Object.fromEntries([
-                  ...(members ?? []).map((member) => [member.id, member.name]),
+                  ...(members ?? []).map((member) => [member.id, person(member.id)]),
                   ...(state.context?.tags ?? []).map((tag) => [tag.id, tag.name]),
                 ]),
               )}
             </Copy>
           )}
           <Copy>
-            {source} · {day}{' '}
-            {gregorianDateFormat({ hour: '2-digit', minute: '2-digit', hour12: false }).format(
-              created,
-            )}
+            {source} · {day} {clockTime(item.draft.createdAt)}
           </Copy>
           <Money numberOfLines={0}>{money(values.amount, values.currency)}</Money>
           <TextInput
@@ -253,7 +253,7 @@ function ReviewRunContent({
             }}
             values={{
               date: expenseDateLabel(form.date, controller.reviewNow()),
-              payers: values.paidBy?.length ? paidBySummary(form, name) : 'Choose',
+              payers: values.paidBy?.length ? paidBySummary(form, person) : 'Choose',
               split: values.splitMethod ? splitSummary(form) : 'Choose',
               tag:
                 state.context?.tags.find((tag) => tag.id === form.tagId)?.name ??
@@ -266,7 +266,8 @@ function ReviewRunContent({
           />
           {state.allocation?.splitBetween.map((row) => (
             <Copy key={row.user}>
-              {name(row.user)} shares {money(row.amount, state.allocation!.currency)}
+              {person(row.user)} {row.user === userId ? 'share' : 'shares'}{' '}
+              {money(row.amount, state.allocation!.currency)}
             </Copy>
           ))}
           {!!missing.length && <Copy accessibilityRole="alert">{reason}</Copy>}

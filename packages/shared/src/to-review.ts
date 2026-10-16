@@ -298,6 +298,12 @@ export function reviewSplitMethod(method?: string): string {
   );
 }
 
+/** A validation problem's path: its field and, for a member's row, the row and the part of it. */
+function problemPath(message: string) {
+  const path = message.match(/^(?:Invalid Draft: )?([a-zA-Z]+)(?:\.(\d+)\.([a-zA-Z]+))?:/);
+  return path ? { field: path[1], index: path[2], part: path[3] } : null;
+}
+
 /** Interpret known validation paths; never forward server prose or unknown paths to members. */
 export function reviewProblem(
   message: string,
@@ -321,9 +327,9 @@ export function reviewProblem(
     'Percentages must add up to 100': 'The percentages must add up to 100%.',
   };
   if (Object.hasOwn(known, message)) return known[message];
-  const path = message.match(/^(?:Invalid Draft: )?([a-zA-Z]+)(?:\.(\d+)\.([a-zA-Z]+))?:/);
+  const path = problemPath(message);
   if (path) {
-    const [, field, index, part] = path;
+    const { field, index, part } = path;
     if ((field === 'paidBy' || field === 'splitBetween') && index !== undefined) {
       const row = values[field]?.[Number(index)];
       const name = row ? (names[row.user] ?? 'this member') : 'this member';
@@ -335,4 +341,24 @@ export function reviewProblem(
     if (fact) return `${fact.charAt(0).toUpperCase()}${fact.slice(1)}?`;
   }
   return 'Check the expense details and try again.';
+}
+
+/**
+ * An item's problems in member words, once each. A problem about a fact the item already says it
+ * needs ("Needs who paid…") is left out, so a missing fact is described once (#435).
+ */
+export function memberProblems(
+  item: ReviewItemModel,
+  names: Readonly<Record<string, string>> = {},
+): string[] {
+  if (!item.accountItem) return [];
+  const { draft, problems } = item.accountItem;
+  const said: string[] = [];
+  for (const problem of problems) {
+    const path = problemPath(problem);
+    if (path && path.index === undefined && item.missingFacts.includes(facts[path.field])) continue;
+    const words = reviewProblem(problem, draft.values, names);
+    if (!said.includes(words)) said.push(words);
+  }
+  return said;
 }

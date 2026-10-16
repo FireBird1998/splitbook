@@ -105,6 +105,128 @@ describe('describeExpenseHistory', () => {
     expect(entries[0].summary).toBe('Alex changed the split');
   });
 
+  it('names the signed-in member "You" in its edits, beside a namesake (#434)', () => {
+    const entries = describeExpenseHistory(
+      record([
+        edit({
+          paidBy: {
+            old: [{ user: alex, amount: 40, amountMinor: 4000 }],
+            new: [
+              { user: alex, amount: 30, amountMinor: 3000 },
+              { user: sam, amount: 10, amountMinor: 1000 },
+            ],
+          },
+          splitBetween: {
+            old: [{ user: alex, amount: 40, amountMinor: 4000 }],
+            new: [
+              { user: alex, amount: 20, amountMinor: 2000 },
+              { user: sam, amount: 20, amountMinor: 2000 },
+            ],
+          },
+        }),
+      ]),
+      [{ id: sam, name: 'Alex' }],
+      [],
+      alex,
+    );
+    expect(flat(entries)).toEqual([
+      'Your payment | €40.00 | €30.00',
+      'Alex’s payment | €0.00 | €10.00',
+      'Your share | €40.00 | €20.00',
+      'Alex’s share | Not included | €20.00',
+    ]);
+    expect(entries[0].summary).toBe('You changed who paid and the split');
+  });
+
+  it('says "who paid" only when the payers or their part of the total changed (#434)', () => {
+    const amount = { amount: { old: 1200, new: 1500 }, amountMinor: { old: 120000, new: 150000 } };
+    const split = {
+      splitBetween: {
+        old: [
+          { user: alex, amount: 600, amountMinor: 60000 },
+          { user: sam, amount: 600, amountMinor: 60000 },
+        ],
+        new: [
+          { user: alex, amount: 750, amountMinor: 75000 },
+          { user: sam, amount: 750, amountMinor: 75000 },
+        ],
+      },
+    };
+    const paid = (old: [string, number][], next: [string, number][]) => ({
+      paidBy: {
+        old: old.map(([user, minor]) => ({ user, amount: minor / 100, amountMinor: minor })),
+        new: next.map(([user, minor]) => ({ user, amount: minor / 100, amountMinor: minor })),
+      },
+    });
+    const summary = (changes: Record<string, unknown>) =>
+      describeExpenseHistory(record([edit(changes)], 'INR'), [], [], alex)[0].summary;
+    // One payer, whose payment followed the new total.
+    expect(summary({ ...amount, ...paid([[alex, 120000]], [[alex, 150000]]), ...split })).toBe(
+      'You changed the amount and the split',
+    );
+    // Two payers, each paying the same part of the new total.
+    expect(
+      summary({
+        ...amount,
+        ...paid(
+          [
+            [alex, 80000],
+            [sam, 40000],
+          ],
+          [
+            [alex, 100000],
+            [sam, 50000],
+          ],
+        ),
+      }),
+    ).toBe('You changed the amount');
+    // The same payers, paying different parts of it.
+    expect(
+      summary({
+        ...amount,
+        ...paid(
+          [
+            [alex, 60000],
+            [sam, 60000],
+          ],
+          [
+            [alex, 100000],
+            [sam, 50000],
+          ],
+        ),
+      }),
+    ).toBe('You changed the amount and who paid');
+    // Someone joined the payers, even for nothing.
+    expect(
+      summary({
+        ...amount,
+        ...paid(
+          [[alex, 120000]],
+          [
+            [alex, 150000],
+            [sam, 0],
+          ],
+        ),
+      }),
+    ).toBe('You changed the amount and who paid');
+    // Someone else paid.
+    expect(summary({ ...amount, ...paid([[alex, 120000]], [[sam, 150000]]) })).toBe(
+      'You changed the amount and who paid',
+    );
+    // The total stayed, so the payments moved between payers.
+    expect(
+      summary(
+        paid(
+          [[alex, 120000]],
+          [
+            [alex, 60000],
+            [sam, 60000],
+          ],
+        ),
+      ),
+    ).toBe('You changed who paid');
+  });
+
   it('lists up to four changed details in the summary', () => {
     const [entry] = describeExpenseHistory(
       record([
@@ -232,7 +354,7 @@ describe('describeExpenseEvents', () => {
     );
     expect(lines(described)).toEqual([
       'Sam Chen changed the amount /  | €32.00 | €40.00',
-      'You changed the split / Alex’s share | €30.00 | €20.00 / Sam Chen’s share | Not included | €20.00',
+      'You changed the split / Your share | €30.00 | €20.00 / Sam Chen’s share | Not included | €20.00',
       'Sam Chen added this Expense',
     ]);
     expect(described.map((entry) => [entry.name, entry.at])).toEqual([
@@ -246,6 +368,28 @@ describe('describeExpenseEvents', () => {
       before: 'Not included',
       money: { before: false, after: true },
     });
+  });
+
+  it('summarises an amount edit whose payer followed the total without "who paid" (#434)', () => {
+    const [entry] = describeExpenseEvents(
+      [
+        event('expense_updated', {
+          changes: {
+            amount: { old: 1200, new: 1500 },
+            amountMinor: { old: 120000, new: 150000 },
+            paidBy: {
+              old: [{ user: alex, amount: 1200, amountMinor: 120000 }],
+              new: [{ user: alex, amount: 1500, amountMinor: 150000 }],
+            },
+          },
+        }),
+      ],
+      record([], 'INR'),
+      { currentUserId: alex },
+    );
+    expect(`${entry.actor} ${entry.action}`).toBe('You changed the amount');
+    // Its line still shows what the payment became.
+    expect(entry.changes.map((change) => change.label)).toEqual(['Amount', 'Your payment']);
   });
 
   it('names anyone the event, Group and Expense don’t as a former member, never by reference', () => {

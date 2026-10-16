@@ -2,8 +2,6 @@ import { buildToReview } from '@splitbook/shared/to-review';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
 import { expenseDraftsKey } from '@splitbook/shared/query-keys';
 import { QueryObserver, type QueryClient } from '@tanstack/query-core';
-import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
-import { draftEntries } from '@splitbook/shared/persistent-draft-editor';
 import type {
   DraftReview,
   DraftSaveOutcome,
@@ -21,9 +19,6 @@ export interface SharedDraftCollectionState {
   ack: string[];
   outcomes: DraftSaveOutcome[];
   outcomeNames: Record<string, string>;
-  editing: PersistedExpenseDraft | 'new' | null;
-  entries: DraftEntries;
-  choice: string | null;
   pending: boolean;
   busy: boolean;
   message: string;
@@ -39,15 +34,23 @@ export const emptySharedDraftCollection = (): SharedDraftCollectionState => ({
   ack: [],
   outcomes: [],
   outcomeNames: {},
-  editing: null,
-  entries: {},
-  choice: null,
   pending: false,
   busy: false,
   message: '',
   confirmation: null,
   resultsVisible: false,
 });
+/** Reads one Group's items again where its collection is open (Refresh items). */
+export const refetchDraftCollection = (
+  queryClient: QueryClient,
+  account: { environment: string; accountId: string },
+  groupId: string,
+) =>
+  queryClient.refetchQueries({
+    queryKey: expenseDraftsKey(account, groupId),
+    exact: true,
+    type: 'active',
+  });
 type Client = ReturnType<typeof draftCollectionClient> & { context(): Promise<ExpenseContext> };
 /** Controller-owned online collection. Only reads enter Query; retained writes remain explicit. */
 export function sharedDraftCollection({
@@ -189,46 +192,12 @@ export function sharedDraftCollection({
       observer.setOptions({ ...observer.options, enabled: online() });
     },
     refresh: () => run(refresh),
-    newDraft() {
-      if (!read().busy) update({ editing: 'new', entries: {}, choice: null });
-    },
-    edit(draft: PersistedExpenseDraft) {
-      if (!read().busy)
-        update({ editing: draft, entries: draftEntries(draft.values), choice: null });
-    },
-    closeEditor() {
-      if (!read().busy) update({ editing: null, choice: null });
-    },
-    choose(key: string | null) {
-      if (!read().busy) update({ choice: key });
-    },
-    enter(key: string, value: string) {
-      if (!read().busy) update({ entries: { ...read().entries, [key]: value }, choice: null });
-    },
     select(id: string) {
       if (!read().busy) update({ selected: toggle(read().selected, id), reviews: [] });
     },
     acknowledge(id: string) {
       if (!read().busy) update({ ack: toggle(read().ack, id) });
     },
-    loadLatest: () =>
-      run(async () => {
-        const editing = read().editing;
-        if (!editing || editing === 'new') return;
-        await refresh();
-        const fresh = read().rows.find((row) => row.id === editing.id);
-        if (!fresh) throw new Error('Draft no longer available');
-        update({ editing: fresh, entries: draftEntries(fresh.values) });
-      }),
-    keep: () =>
-      run(async () => {
-        const { editing, entries } = read();
-        if (!editing) return;
-        if (editing === 'new') await client.create(draftValues(entries));
-        else await client.replace(editing, draftValues(entries));
-        update({ editing: null, reviews: [] });
-        await refresh();
-      }),
     discard: (draft: PersistedExpenseDraft) =>
       run(async () => {
         await client.discard(draft);
@@ -321,13 +290,4 @@ export function sharedDraftCollection({
         await refresh();
       }),
   };
-}
-
-/** Both editor exit paths ask before replacing unsent details. */
-export function draftEditorChanged(state: SharedDraftCollectionState): boolean {
-  if (!state.editing) return false;
-  const initial = draftEntries(state.editing === 'new' ? undefined : state.editing.values);
-  return Object.keys({ ...initial, ...state.entries }).some(
-    (key) => (initial[key] ?? '') !== (state.entries[key] ?? ''),
-  );
 }

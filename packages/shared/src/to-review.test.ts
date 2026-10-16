@@ -3,6 +3,7 @@ import {
   buildToReview,
   describeDraftChange,
   reviewDate,
+  memberProblems,
   reviewProblem,
   reviewSplitMethod,
   summarizeReviewRun,
@@ -374,5 +375,80 @@ describe('review member wording', () => {
     expect(note).toContain('Split by shares');
     expect(note).toContain('Other');
     expect(note).not.toMatch(/\bequal\b|\bother\b/);
+  });
+});
+
+describe('memberProblems (#435)', () => {
+  const alex = 'a00000000000000000000001';
+  const model = (problems: string[], values = {}, missingFields: string[] = []) =>
+    buildToReview(
+      {
+        total: 1,
+        groups: [
+          {
+            groupId: 'b00000000000000000000001',
+            groupName: 'Maple House',
+            count: 1,
+            items: [item(problems, values, missingFields)],
+          },
+        ],
+      },
+      [],
+      new Date('2026-10-16T12:00:00.000Z'),
+    ).items[0];
+  const item = (problems: string[], values = {}, missingFields: string[] = []): ToReviewItem =>
+    ({
+      draft: {
+        id: 'd00000000000000000000001',
+        groupId: 'b00000000000000000000001',
+        revision: 0,
+        state: 'active',
+        preparedBy: { kind: 'member' },
+        changedBy: { kind: 'member' },
+        createdAt: '2026-10-16T00:00:00.000Z',
+        updatedAt: '2026-10-16T00:00:00.000Z',
+        missingFields,
+        values,
+      },
+      review: 'a'.repeat(64),
+      problems,
+      duplicates: [],
+    }) as ToReviewItem;
+
+  it('leaves out a fact the item already says it needs, and never shows field names', () => {
+    expect(
+      memberProblems(
+        model(
+          [
+            'paidBy: Choose who paid.',
+            'splitMethod: Choose a split method.',
+            'splitBetween: Choose who shared this Expense.',
+            'tagId: Choose a Tag.',
+          ],
+          { description: 'Station dinner', amount: 30, currency: 'INR', date: '2026-10-16' },
+          ['paidBy', 'splitMethod', 'splitBetween', 'tagId'],
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it('says a member-level problem in member words, once', () => {
+    const values = {
+      description: 'Station dinner',
+      amount: 30,
+      currency: 'INR',
+      date: '2026-10-16',
+      category: 'other',
+      tagId: 'c00000000000000000000001',
+      paidBy: [{ user: alex }],
+      splitMethod: 'equal',
+      splitBetween: [{ user: alex }],
+    };
+    expect(
+      memberProblems(
+        model(['paidBy.0.amount: Required', 'paidBy.0.amount: Required', 'INVALID_TAG'], values),
+        { [alex]: 'Alex' },
+      ),
+    ).toEqual(['The amount paid by Alex?', 'Choose an available Tag.']);
   });
 });
