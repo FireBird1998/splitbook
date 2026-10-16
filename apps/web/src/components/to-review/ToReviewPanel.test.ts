@@ -1,0 +1,114 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ThemeProvider } from '@mui/material/styles';
+import { SWRConfig } from 'swr';
+import { describe, expect, it, vi } from 'vitest';
+import { buildToReview } from '@splitbook/shared/to-review';
+import type { ToReviewItem } from '@splitbook/shared/to-review-read';
+import { createAppTheme } from '@/lib/theme/createAppTheme';
+import { text } from '@/lib/test-utils/markup';
+import type { WebReviewClient } from './review-client';
+
+const { default: ToReviewPanel } = await import('./ToReviewPanel');
+
+const alex = 'a00000000000000000000001';
+const sam = 'a00000000000000000000002';
+const groupId = 'b00000000000000000000001';
+
+function panel(problems: string[], values: Record<string, unknown>, missingFields: string[]) {
+  const read: ToReviewItem = {
+    draft: {
+      id: 'd00000000000000000000001',
+      groupId,
+      revision: 0,
+      state: 'active',
+      preparedBy: { kind: 'member' },
+      changedBy: { kind: 'member' },
+      createdAt: '2026-10-16T00:00:00.000Z',
+      updatedAt: '2026-10-16T00:00:00.000Z',
+      missingFields,
+      values,
+    },
+    review: 'a'.repeat(64),
+    problems,
+    duplicates: [],
+  } as ToReviewItem;
+  const [item] = buildToReview(
+    {
+      total: 1,
+      groups: [{ groupId, groupName: 'Maple House', count: 1, items: [read] }],
+    },
+    [],
+    new Date('2026-10-16T12:00:00.000Z'),
+  ).items;
+  return text(
+    renderToStaticMarkup(
+      createElement(
+        SWRConfig,
+        { value: { fallback: {}, provider: () => new Map() } },
+        createElement(
+          ThemeProvider,
+          { theme: createAppTheme('light') },
+          createElement(ToReviewPanel, {
+            item,
+            items: [read],
+            context: {
+              members: [
+                { id: alex, name: 'Alex' },
+                { id: sam, name: 'Sam' },
+              ],
+              tags: [],
+            },
+            names: { [alex]: 'Alex', [sam]: 'Sam' },
+            groupName: 'Maple House',
+            client: {} as WebReviewClient,
+            refresh: vi.fn(),
+            available: true,
+            savingBlocked: false,
+            onClose: vi.fn(),
+            onSave: vi.fn(),
+            onDelete: vi.fn(),
+          }),
+        ),
+      ),
+    ),
+  );
+}
+
+describe('an item in the web To review panel (#441)', () => {
+  it('says each missing fact once, in its Needs line, with no repeated problem lines', () => {
+    const shown = panel(
+      [
+        'paidBy: Choose who paid.',
+        'splitMethod: Choose a split method.',
+        'splitBetween: Choose who shared this Expense.',
+        'tagId: Choose a Tag.',
+      ],
+      { description: 'Station dinner', amount: 30, currency: 'INR', date: '2026-10-16' },
+      ['paidBy', 'splitMethod', 'splitBetween', 'tagId'],
+    );
+    // Below the fields: whether changes are kept, the problems, then the Needs line.
+    const below = shown.slice(shown.indexOf('Changes kept in To review'));
+    expect(below).toBe(
+      'Changes kept in To review Still needs who paid, how to split it, who shared it, the tag. Save expense Delete',
+    );
+  });
+
+  it('still says, once, a problem the Needs line doesn’t name', () => {
+    const shown = panel(
+      ['paidBy.0.amount: Enter the amount paid.', 'paidBy.0.amount: Enter the amount paid.'],
+      {
+        description: 'Station dinner',
+        amount: 30,
+        currency: 'INR',
+        date: '2026-10-16',
+        paidBy: [{ user: sam }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }, { user: sam }],
+        tag: 'Food',
+      },
+      [],
+    );
+    expect(shown.split('The amount paid by Sam?')).toHaveLength(2);
+  });
+});

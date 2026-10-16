@@ -451,4 +451,17 @@ describe('memberProblems (#435)', () => {
       ),
     ).toEqual(['The amount paid by Alex?', 'Choose an available Tag.']);
   });
+
+  it('names a row from the values being edited, when given (#441)', () => {
+    const sam = 'a00000000000000000000002';
+    const saved = { paidBy: [{ user: alex }] };
+    const editing = { paidBy: [{ user: sam }] };
+    expect(
+      memberProblems(
+        model(['paidBy.0.amount: Required'], saved),
+        { [alex]: 'Alex', [sam]: 'Sam' },
+        editing,
+      ),
+    ).toEqual(['The amount paid by Sam?']);
+  });
 });
