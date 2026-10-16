@@ -77,6 +77,33 @@ test('You for all sets every missing payer at once, and Undo puts them back', as
     .toHaveLength(0);
 });
 
+test('an unexpected error part-way still offers Undo for the items already set', async ({
+  page,
+}) => {
+  await open(page, ['missing-payer', 'missing-payer']);
+  const drafts = `**/api/groups/${DEMO_GROUP_ID}/drafts/*`;
+  let puts = 0;
+  await page.route(drafts, async (route) => {
+    if (route.request().method() === 'PUT' && ++puts === 2)
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Server error' }),
+      });
+    return route.continue();
+  });
+  await region(page, 'Needs details').getByRole('button', { name: 'You for all 2' }).click();
+  const notice = page.getByRole('alert').filter({ hasText: 'You set as payer on 1 item' });
+  await expect(notice).toBeVisible();
+  await page.unroute(drafts);
+  await notice.getByRole('button', { name: 'Undo' }).click();
+  await expect
+    .poll(async () =>
+      (await rows(page)).filter((row: { values: object }) => 'paidBy' in row.values),
+    )
+    .toHaveLength(0);
+});
+
 test('Tag chips lead with the Tag matching the Category, and More shows every Tag', async ({
   page,
 }) => {

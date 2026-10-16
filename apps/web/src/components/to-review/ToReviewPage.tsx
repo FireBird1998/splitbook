@@ -179,6 +179,8 @@ export default function ToReviewPage({
     await action(async () => {
       const kept: Array<{ draft: PersistedExpenseDraft; before: ExpenseDraftValues }> = [];
       let skipped = 0;
+      // An unexpected failure stops the run, but the items already set still get their Undo.
+      let failure: unknown = null;
       try {
         for (const item of candidates) {
           const draft = item.accountItem!.draft;
@@ -189,7 +191,10 @@ export default function ToReviewPage({
             );
             kept.push({ draft: next, before: draft.values ?? {} });
           } catch (cause) {
-            if (!changedElsewhere(cause)) throw cause;
+            if (!changedElsewhere(cause)) {
+              failure = cause;
+              break;
+            }
             skipped += 1;
           }
         }
@@ -221,6 +226,7 @@ export default function ToReviewPage({
               })
           : undefined,
       });
+      if (failure) throw failure;
     });
   }
   function closeOpened() {
