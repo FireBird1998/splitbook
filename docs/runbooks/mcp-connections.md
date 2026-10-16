@@ -2,7 +2,7 @@
 
 The Next.js app serves connection status, Group discovery/context, Balances and spending tools. Separate Draft permission enables list/create/replace/permanent-discard tools when persistent Drafts are enabled. No assistant save tool exists. See [Draft operations and verification](../qa/mcp-drafts-implementation.md) and [staging connection results](../qa/mcp-staging-2026-10-11.md).
 
-Group context and the item tools list the Category choices. An assistant sets a Category only when the member's words make it clear; an item without one is saved as Other, and a lone payer without an amount paid the whole Expense (#425).
+Group context and the item tools list the Category choices. An assistant sets a Category only when the member's words make it clear; an item without one is saved as Other, and a lone payer without an amount paid the whole Expense (#425). It sets the Group Tag that clearly matches the member's words and asks when none clearly fits, because a Tag is required.
 
 ## Deployment configuration
 
