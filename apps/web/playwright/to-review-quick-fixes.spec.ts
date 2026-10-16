@@ -63,7 +63,9 @@ test('You for all sets every missing payer at once, and Undo puts them back', as
   await open(page, ['missing-payer', 'missing-payer']);
   await region(page, 'Needs details').getByRole('button', { name: 'You for all 2' }).click();
   await expect(region(page, 'Ready')).toContainText('Review meal 2');
-  await expect(page.getByText('You set as payer on 2 items')).toBeVisible();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'You set as payer on 2 items' }),
+  ).toBeVisible();
   for (const row of await rows(page)) expect(row.values.paidBy).toEqual([{ user: alex }]);
 
   await page.getByRole('button', { name: 'Undo' }).click();

@@ -100,7 +100,8 @@ function summarize(values: ExpenseDraftValues, context: QuickFixContext) {
     id === context.viewerId
       ? 'You'
       : (context.members.find((member) => member.id === id)?.name ?? 'A member');
-  const paid = payers.length === 1 ? `${name(payers[0].user)} paid` : `${payers.length} people paid`;
+  const paid =
+    payers.length === 1 ? `${name(payers[0].user)} paid` : `${payers.length} people paid`;
   const tag =
     (values.tagId && context.tags.find((row) => row.id === values.tagId)?.name) || values.tag || '';
   const label = categoryLabel(values);

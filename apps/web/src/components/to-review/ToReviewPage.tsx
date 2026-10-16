@@ -200,7 +200,7 @@ export default function ToReviewPage({
       const left = skipped
         ? `. ${skipped} changed elsewhere and ${skipped === 1 ? 'was' : 'were'} left as ${skipped === 1 ? 'it was' : 'they were'}.`
         : '';
-      setAnnounce(text + left);
+      // The snackbar is announced on its own; the live region would repeat it.
       setNotice({
         text: text + left,
         undo: kept.length

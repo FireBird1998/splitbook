@@ -182,8 +182,9 @@ describe('To review quick fixes', () => {
       item(full),
       item({ ...full, paidBy: [{ user: alex, amount: 600 }, { user: sam }] }, []),
     );
-    expect(bulkPayerItems(items).map((row) => row.accountItem?.draft.values?.description)).toEqual(
-      ['Taxi', 'Fish market'],
-    );
+    expect(bulkPayerItems(items).map((row) => row.accountItem?.draft.values?.description)).toEqual([
+      'Taxi',
+      'Fish market',
+    ]);
   });
 });
