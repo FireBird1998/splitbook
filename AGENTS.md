@@ -1,27 +1,28 @@
-## Learned User Preferences
+# SplitBook
 
-- Prefer implementing from attached plans without editing the plan files themselves.
-- For private-beta UX work, keep Google OAuth available behind `AUTH_MODE` rather than removing it; use switchable demo personas for local product iteration.
-- Private-beta visual direction: hybrid Travel Ledger structure + Calm Finance restraint — one signature itinerary/boarding-pass trip strip; indigo (brand), sky (info), coral (owed), mint (settled); Outfit for UI and IBM Plex Mono for money; design light and dark together via semantic tokens.
-- The repo is an intentional silent fork — do not propose syncing with or comparing against the original source repo.
+A shared-expense ledger in one pnpm workspace: the Next.js web app (`apps/web`), the Expo Android app (`apps/mobile`), framework-free domain code (`packages/shared`) and the local gate (`tools/swarm`). Name domain concepts with the terms in `GLOSSARY.md`.
 
-## Learned Workspace Facts
+## Where to look
 
-- pnpm workspace monorepo (#20, 2026-09-07): the Next.js app is the `apps/web` package `@splitbook/web`; `.env.local` lives in `apps/web/`. Only the workspace-wide scripts (`lint`, `typecheck`, `test`, `test:unit`, `test:integration`, `format`, `format:check`) and the `dev`/`build`/`start` shortcuts exist at the root; every other app script is `pnpm web <script>` (or bare inside `apps/web`), and app binaries are `pnpm web exec <bin>`. New clients go under `apps/*`, shared code under `packages/*`. `src/…` paths in `docs/` and in this file are relative to `apps/web/`. Decision record: `docs/adr/0001-pnpm-workspace-monorepo.md`.
-- `@splitbook/shared` (`packages/shared`, #23, 2026-09-07) holds the types, the Zod validators and every pure domain module, each its own subpath: `money`, `currency`, `date`, `dashboard`, `activity-timeline`, `split-calculation`, `debt-simplifier`, `expense-summary`, `expense-validation`, `settlement-authorization`, `invitation-ownership`, `recurring-due-periods`, `group-themes`, `trip-codes`, `trip-setup`, `escape-regex`, `categories`, `default-tags`, `predefined-items`. It is TypeScript source with a `./*` export map, no build step: import subpaths such as `@splitbook/shared/currency` or `@splitbook/shared/validators/expense`. Nothing in it may import Next, React, MUI, Mongoose, the DB or DOM APIs; keep it that way so the mobile app can consume it unchanged. Decision record: `docs/adr/0002-shared-domain-package.md`.
-- Canonical GitHub repository: private `FireBird1998/splitbook`, with `main` as the default branch and sole source of authority. The repository transfer completed on 2026-08-24; remaining production cutover work is tracked under GitHub issue #3.
-- `main` is fully merged and stable: the duplicate-index fix, `feat/app-hardening`, and `feat/private-beta` were merged on 2026-08-05; GitHub Actions CI (verify + playwright jobs) is green.
-- Feature worktrees: `.worktrees/private-beta` tracks `feat/private-beta`; `.worktrees/app-hardening` tracks `feat/app-hardening`.
-- Authentication is Better Auth (#26, 2026-09-08; ADR 0003): database sessions with a five-minute cookie cache, `src/proxy.ts` with an optimistic session-cookie check, `getAuthUser()` over `auth.api.getSession`, Google gated by `AUTH_ALLOWED_EMAILS` on every sign-in. Databases from the Auth.js era need `pnpm web migrate:auth` once (it also renames the `users.email` index to `users_email_uidx`).
-- `AUTH_MODE=demo` registers the demo persona plugin (`POST /api/auth/demo-persona/sign-in`; Alex, Sam, Priya); seed/reset with `pnpm web demo:seed` / `pnpm web demo:reset`. Demo auth is blocked in production.
-- Standalone private-beta visual prototypes live under `docs/design/private-beta/` (HTML/CSS mockups with light/dark tokens).
-- Local MongoDB is commonly run via Docker (container name often `split-mongo`) on `localhost:27017`.
-- The production data target is a fresh MongoDB Atlas database named `splitbook` with a least-privilege application user; provisioning and cutover are tracked under issue #9. Local development can use Docker container `split-mongo` at `mongodb://localhost:27017/splitbook?directConnection=true`.
-- `mongodb+srv://` (Atlas) URIs must not get `directConnection: true` — `src/lib/mongodb-client.ts` applies it only for non-SRV local URIs; hardcoding it 500s every page.
-- Vercel project `splitbook` (scope `ankit-das-projects`) is connected to `FireBird1998/splitbook`, with `main` as its production branch. The free project blocks deployments whose commit author lacks Vercel project access, so production-triggering commits must be attributed to a connected Vercel member. The project's **Root Directory must be `apps/web`** (a Vercel project setting, not in the repo); Vercel then installs from the workspace root.
-- Google mode requires a normalized `AUTH_ALLOWED_EMAILS` allowlist and fails closed when it is missing or empty. Demo mode does not use this allowlist.
-- Playwright CI runs `next start` (production mode), so the webServer env sets `ALLOW_DEMO_AUTH=true`, `AUTH_RATE_LIMIT_ENABLED=false` (no client IP behind `next start` on loopback) and, for the Google suite, `ALLOW_TEST_ID_TOKEN=true`; without them demo auth fails closed, persona entries share one rate-limit bucket, and the test ID-token verifier is refused.
-- Product direction v4 (docs in `docs/v4/`): the app is not just trips — group category acts as a theme (Trip/Household/Couple/Work/General); Household groups are long-running with month-on-month expense cycles.
+- **Money, saves and saved copies:** read ADR 0004 and ADR 0006 (Android), ADR 0008 (assistant Drafts) in `docs/adr/` before changing an Expense, Settlement, Draft or Group write, or anything a device stores. Review rules live in `CODING_STANDARDS.md`.
+- **Tests:** `docs/testing.md` for the layers and commands. Before pushing, run `pnpm swarm gate`: it mirrors CI's PR checks on a backend of its own (`tools/swarm/README.md`).
+- **UI:** `docs/ui.md` for the design system and visual direction; `docs/design/brand/README.md` for logos, icons, brand colours and size variants (use `assets/brand/` and `tools/brand/`, and verify the generated assets).
+- **Auth:** `docs/auth.md`. **HTTP contract:** `docs/api.md`. **Android client:** `apps/mobile/README.md`. **Product direction:** `docs/v4/`.
+
+## Conventions no config states
+
+- Scripts run per package: `pnpm web <script>`, `pnpm mobile <script>`; app binaries are `pnpm web exec <bin>`.
+- In older docs, a bare `src/…` path means `apps/web/src/…`.
+- Implement from attached plans and leave the plan files as they are.
+- Work only from this repository: it is an intentional silent fork, and the original source is out of scope.
+- Keep Google sign-in available behind `AUTH_MODE`; local product work uses the demo personas (`pnpm web demo:seed`).
+
+## Gotchas
+
+- Draft and To review saves use MongoDB transactions, so their integration and Playwright tests need a replica set. CI starts one per job (`EXPENSE_ACCESS_MONGO_PORT`, `pnpm swarm up --mongo-port`).
+- Give `directConnection: true` to local URIs only; on a `mongodb+srv://` URI it breaks every page (`apps/web/src/lib/mongodb-client.ts`).
+- PR checks run a fast subset. Integration, Playwright and the time-zone matrix run nightly, or on a PR labelled `full-ci`: add it to any PR touching money, auth or data access.
+- Merging to `main` doesn't deploy production (`apps/web/vercel.json`); production deploys are the owner's. The Vercel project's Root Directory is `apps/web` (a dashboard setting), and a deploy's commit author needs access to the Vercel project.
 
 ## Agent skills
 
@@ -36,7 +37,3 @@ The five canonical triage labels are used as-is (`needs-triage`, `needs-info`, `
 ### Domain docs
 
 Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
-
-### Brand assets
-
-For logos, favicons, app icons, brand colors, or logo size variants, read `docs/design/brand/README.md`. Use the canonical sources and exporter in `assets/brand/` and `tools/brand/`; completion includes generated-asset checks and visual verification.
