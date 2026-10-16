@@ -563,9 +563,7 @@ export function buildExpensePatch(draft: ExpenseDraft, context: ExpenseContext):
     ...(draft.description !== original.description ? { description: draft.description } : {}),
     ...(draft.notes !== original.notes ? { notes: draft.notes } : {}),
     ...(draft.category !== original.category ? { category: draft.category } : {}),
-    ...(date !== expenseDay(original.date)
-      ? { date: expenseDate(date) }
-      : {}),
+    ...(date !== expenseDay(original.date) ? { date: expenseDate(date) } : {}),
     ...(tagChanged ? tag : {}),
     ...(financial
       ? {
