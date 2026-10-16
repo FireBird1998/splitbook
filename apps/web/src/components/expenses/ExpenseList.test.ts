@@ -376,18 +376,45 @@ describe('an opened Expense’s details', () => {
     expect(text(html)).toMatch(/Edit Delete$/);
   });
 
-  it('calls the viewer "You" in its history by id, beside a member with the same name (#442)', () => {
+  it('describes each edit in member words, with the viewer as "You" beside a namesake (#442, #454)', () => {
     const namesake = { ...ALEX, _id: 'a00000000000000000000009' };
-    const edit = (editedBy: typeof ALEX) => ({
-      editedBy,
+    const rows = (people: Array<[Person, number]>) =>
+      people.map(([person, minor]) => ({
+        user: person._id,
+        amount: minor / 100,
+        amountMinor: minor,
+      }));
+    // The namesake raised Wi-Fi to ₹1,200.00, paid it themselves, and split it two ways.
+    const repriced = {
+      editedBy: namesake,
       editedAt: '2026-10-17T10:00:00.000Z',
+      changes: {
+        amount: { old: 999, new: 1200 },
+        amountMinor: { old: 99900, new: 120000 },
+        paidBy: { old: rows([[PRIYA, 99900]]), new: rows([[namesake, 120000]]) },
+        splitBetween: {
+          old: rows([
+            [ALEX, 33300],
+            [SAM, 33300],
+            [PRIYA, 33300],
+          ]),
+          new: rows([
+            [ALEX, 60000],
+            [namesake, 60000],
+          ]),
+        },
+      },
+    };
+    const noted = {
+      editedBy: ALEX,
+      editedAt: '2026-10-17T11:00:00.000Z',
       changes: { notes: { old: '', new: 'Router reset' } },
-    });
+    };
     const history = text(
       render(
         createElement(ExpenseDetails, {
           id: 'opened',
-          expense: { ...EXPENSES[2], editHistory: [edit(ALEX), edit(namesake)] },
+          expense: { ...EXPENSES[2], editHistory: [repriced, noted] },
           userId: ALEX._id,
           recurringExpensesEnabled: false,
           history: 'ready',
@@ -397,8 +424,16 @@ describe('an opened Expense’s details', () => {
         }),
       ),
     );
-    expect(history).toContain('Edited by You');
-    expect(history).toContain(`Edited by ${ALEX.name}`);
+    expect(history).toContain('Show edit history (2 edits)');
+    expect(history).toContain('You changed the notes');
+    expect(history).toContain(`${ALEX.name} changed the amount, who paid and split`);
+    expect(history).toContain('₹999.00 → ₹1,200.00');
+    // Newest first, as the side panel lists them.
+    expect(history.indexOf('You changed the notes')).toBeLessThan(
+      history.indexOf(`${ALEX.name} changed the amount`),
+    );
+    // Never a stored row, a minor-unit amount or a field label.
+    expect(history).not.toMatch(/\[object Object\]|99900|120000|Amount:|Paid by:|Split between:/);
   });
 
   it('offers Try again when its history can’t be loaded', () => {

@@ -17,6 +17,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MoneyText from '@/components/common/MoneyText';
 import { formatDateTime } from '@splitbook/shared/date';
 import { getCategory } from '@splitbook/shared/categories';
+import { moneyParticipantId } from '@splitbook/shared/exact-money';
+import { expenseEdits } from '@splitbook/shared/expense-detail';
 
 interface Person {
   _id: string;
@@ -60,28 +62,6 @@ const SPLIT_METHOD_LABELS: Record<string, string> = {
   shares: 'By shares',
 };
 
-const FIELD_LABELS: Record<string, string> = {
-  description: 'Description',
-  amount: 'Amount',
-  amountMinor: 'Amount',
-  currency: 'Currency',
-  category: 'Category',
-  date: 'Date',
-  splitMethod: 'Split method',
-  tag: 'Tag',
-  notes: 'Notes',
-  paidBy: 'Paid by',
-  splitBetween: 'Split between',
-};
-
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'number') return String(value);
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return value.join(', ') || '—';
-  return JSON.stringify(value);
-}
-
 const sectionTitle = {
   fontWeight: 600,
   color: 'text.secondary',
@@ -120,12 +100,20 @@ export default function ExpenseDetails({
   onDelete,
 }: ExpenseDetailsProps) {
   const [showHistory, setShowHistory] = useState(false);
-  const memberName = (person: Person | string | null | undefined) => {
-    if (!person || typeof person === 'string') return person === userId ? 'You' : 'Former member';
-    return person._id === userId ? 'You' : (person.name ?? 'Former member');
+  /** A person by name, with the viewer as "You", matched by id; a former member has none. */
+  const memberName = (person: unknown) => {
+    const personId = moneyParticipantId(person);
+    if (personId && personId === userId) return 'You';
+    return typeof person === 'object' &&
+      person &&
+      'name' in person &&
+      typeof person.name === 'string'
+      ? person.name
+      : 'Former member';
   };
   const category = getCategory(expense.category);
-  const edits = expense.editHistory ?? [];
+  // Each edit as the side panel words it (#454).
+  const edits = expenseEdits(expense);
 
   return (
     <Stack
@@ -156,7 +144,7 @@ export default function ExpenseDetails({
           {expense.paidBy.map((row, index) => (
             <PersonAmount
               key={index}
-              name={memberName(row.user as Person)}
+              name={memberName(row.user)}
               image={typeof row.user === 'object' ? row.user?.image : null}
               amount={row.amount}
               currency={expense.currency}
@@ -173,7 +161,7 @@ export default function ExpenseDetails({
           {expense.splitBetween.map((row, index) => (
             <PersonAmount
               key={index}
-              name={memberName(row.user as Person)}
+              name={memberName(row.user)}
               image={typeof row.user === 'object' ? row.user?.image : null}
               amount={row.amount}
               currency={expense.currency}
@@ -251,25 +239,29 @@ export default function ExpenseDetails({
               <Collapse in={showHistory}>
                 <Stack spacing={1.5} sx={{ mt: 1, borderLeft: 2, borderColor: 'divider', pl: 2 }}>
                   {edits.map((edit, index) => (
-                    <Box key={index}>
+                    <Box key={`${edit.at}-${index}`}>
                       <Typography variant="caption" color="text.secondary">
-                        Edited by <strong>{memberName(edit.editedBy)}</strong> ·{' '}
-                        {formatDateTime(edit.editedAt)}
+                        <strong>{memberName(edit.by)}</strong> {edit.action} ·{' '}
+                        {formatDateTime(edit.at)}
                       </Typography>
-                      <Box component="ul" sx={{ mt: 0.5, mb: 0, pl: 0, listStyle: 'none' }}>
-                        {Object.entries(edit.changes).map(([field, change]) => (
-                          <Typography
-                            component="li"
-                            key={field}
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ display: 'block' }}
+                      {edit.change && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ display: 'block', overflowWrap: 'anywhere' }}
+                        >
+                          <Box
+                            component="span"
+                            sx={
+                              edit.change.kind === 'amount'
+                                ? (theme) => theme.typography.money
+                                : undefined
+                            }
                           >
-                            {FIELD_LABELS[field] ?? field}: {formatValue(change.old)} →{' '}
-                            {formatValue(change.new)}
-                          </Typography>
-                        ))}
-                      </Box>
+                            {edit.change.before} → {edit.change.after}
+                          </Box>
+                        </Typography>
+                      )}
                     </Box>
                   ))}
                 </Stack>
