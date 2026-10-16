@@ -2,64 +2,63 @@ import 'server-only';
 import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
-import { readStoredAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import {
+  moneyParticipantId,
+  readStoredAmountMinor,
+  toMajorAmount,
+} from '@splitbook/shared/exact-money';
+import type { StoredAllocationRow, StoredExpenseSplit } from '@splitbook/shared/expense-detail';
 import { draftObjectId } from '@splitbook/shared/validators/expense-draft';
 import { balanceService } from './balance.service';
 import { expenseService } from './expense.service';
 
 /**
- * A member as assistants see them: id and name only, never an email or photo (#438). The
- * connected member is `you: true`, so "I" resolves even beside a namesake.
+ * Members as assistants see them: id and name only, never an email or photo (#438). The
+ * connected member is `you: true`, so "I" resolves even beside a namesake. A member whose
+ * account is gone has no id and is a "Former member".
  */
-function assistantMember(user: { _id: unknown; name?: string }, actorId: string) {
-  const id = String(user._id);
-  return { id, name: user.name ?? 'Former member', ...(id === actorId ? { you: true } : {}) };
+function assistantMembers(actorId: string) {
+  return (user: unknown) => {
+    const id = moneyParticipantId(user);
+    if (!id) return { id: null, name: 'Former member' };
+    const name = (user as { name?: unknown }).name;
+    return {
+      id,
+      name: typeof name === 'string' ? name : 'Former member',
+      ...(id === actorId ? { you: true } : {}),
+    };
+  };
 }
 
-type PopulatedUser = { _id: unknown; name?: string };
-type RecordedRow = {
-  user: PopulatedUser;
-  amount?: number;
-  amountMinor?: number;
-  percentage?: number;
-  shares?: number;
-};
 /** A recorded Expense as the Group's Expenses read returns it, populated and with its Tag. */
-type RecordedExpense = {
+type RecordedExpense = StoredExpenseSplit & {
   _id: unknown;
   description: string;
-  amount?: number;
-  amountMinor?: number;
-  moneyVersion?: number;
-  currency: string;
   date: Date;
   category?: string;
   tag?: string;
   tagId?: string;
   notes?: string;
-  splitMethod: string;
-  paidBy: RecordedRow[];
-  splitBetween: RecordedRow[];
-  createdBy: PopulatedUser;
+  createdBy: unknown;
 };
 
 /**
  * A recorded Expense as assistants see it, field by field: nothing else the app stores (receipt
- * links, history, retry or outbox fields, emails or photos) reaches a tool reply (#438). Its
- * date is the UTC calendar day the tool's ranges use.
+ * links, history, retry or outbox fields, emails or photos) reaches a tool reply (#438).
  */
-function assistantExpense(expense: RecordedExpense, actorId: string) {
-  const major = (money: { amount?: number; amountMinor?: number }) =>
+function assistantExpense(expense: RecordedExpense, member: ReturnType<typeof assistantMembers>) {
+  const major = (money: { amount: number; amountMinor?: number }) =>
     toMajorAmount(
       readStoredAmountMinor({
-        ...money,
+        amount: money.amount,
+        amountMinor: money.amountMinor,
         currency: expense.currency,
         moneyVersion: expense.moneyVersion,
       }),
       expense.currency,
     );
-  const row = (entry: RecordedRow) => ({
-    member: assistantMember(entry.user, actorId),
+  const row = (entry: StoredAllocationRow) => ({
+    user: member(entry.user),
     amount: major(entry),
     ...(typeof entry.percentage === 'number' ? { percentage: entry.percentage } : {}),
     ...(typeof entry.shares === 'number' ? { shares: entry.shares } : {}),
@@ -69,16 +68,15 @@ function assistantExpense(expense: RecordedExpense, actorId: string) {
     description: expense.description,
     amount: major(expense),
     currency: expense.currency,
-    date: new Date(expense.date).toISOString().slice(0, 10),
-    category: expense.category ?? 'other',
-    tag: expense.tag
-      ? { ...(expense.tagId ? { id: expense.tagId } : {}), name: expense.tag }
-      : null,
+    date: new Date(expense.date).toISOString(),
+    category: expense.category,
+    tag: expense.tag,
+    ...(expense.tagId ? { tagId: expense.tagId } : {}),
     ...(expense.notes ? { notes: expense.notes } : {}),
     splitMethod: expense.splitMethod,
     paidBy: expense.paidBy.map(row),
     splitBetween: expense.splitBetween.map(row),
-    addedBy: assistantMember(expense.createdBy, actorId),
+    createdBy: member(expense.createdBy),
   };
 }
 
@@ -123,9 +121,7 @@ export const assistantLedgerService = {
       id: String(group._id),
       name: group.name,
       currency: group.defaultCurrency,
-      members: group.members.map((member) =>
-        assistantMember(member.user as unknown as { _id: unknown; name?: string }, actorId),
-      ),
+      members: group.members.map((member) => assistantMembers(actorId)(member.user)),
       tags: group.tags
         .filter((tag) => !tag.isArchived && !tag.isDeleted)
         .map((tag) => ({ id: String(tag._id), name: tag.name })),
@@ -136,22 +132,21 @@ export const assistantLedgerService = {
     await requireLedgerMembership(actorId, groupId);
     const read = await balanceService.getGroupBalances(groupId);
     if (!read) throw new Error('FORBIDDEN');
-    const member = (user: { _id: unknown; name?: string }) => assistantMember(user, actorId);
+    const member = assistantMembers(actorId);
+    const bucket = (balances: Pick<typeof read, 'currency' | 'balances' | 'debts'>) => ({
+      currency: balances.currency,
+      balances: balances.balances.map((row) => ({ user: member(row.user), balance: row.balance })),
+      debts: balances.debts.map((debt) => ({
+        from: member(debt.from),
+        to: member(debt.to),
+        amount: debt.amount,
+      })),
+    });
     return {
       balances: {
+        ...bucket(read),
+        byCurrency: read.byCurrency.map(bucket),
         hasMixedCurrencies: read.hasMixedCurrencies,
-        byCurrency: read.byCurrency.map((bucket) => ({
-          currency: bucket.currency,
-          balances: bucket.balances.map((row) => ({
-            member: member(row.user),
-            balance: row.balance,
-          })),
-          debts: bucket.debts.map((debt) => ({
-            from: member(debt.from),
-            to: member(debt.to),
-            amount: debt.amount,
-          })),
-        })),
       },
       context:
         'All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Scheduled recurring Expenses not yet recorded are excluded. This read creates nothing.',
@@ -176,7 +171,7 @@ export const assistantLedgerService = {
     );
     return {
       expenses: result.expenses.map((expense) =>
-        assistantExpense(expense as unknown as RecordedExpense, actorId),
+        assistantExpense(expense as unknown as RecordedExpense, assistantMembers(actorId)),
       ),
       pagination: result.pagination,
       // The canonical UI also has legacy default-currency-only scalar totals. An

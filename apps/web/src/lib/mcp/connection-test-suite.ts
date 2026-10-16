@@ -719,7 +719,10 @@ export function connectionTests(mongo = false) {
       });
 
     type NamesakeGroup = { groupId: string; connectedId: string; namesakeId: string };
-    type ToolReply = { text: string; reply: ReturnType<typeof JSON.parse> };
+    type ToolReply = { text: string; reply: Record<string, unknown> };
+    /** An email or photo key, any email address, or the fixtures' photo and receipt links. */
+    const privateData =
+      /"(email|image)"\s*:|[\w.+-]+@[\w-]+(\.[\w-]+)+|images\.example|receipts\.example/;
     /**
      * A Group shared with a namesake who has a photo, an Expense the namesake paid and a payment
      * to them, worked on through the tools as the connected member (#438).
@@ -803,7 +806,7 @@ export function connectionTests(mongo = false) {
           const text = (result.content as Array<{ text: string }>)[0].text;
           expect(result.isError, text).not.toBe(true);
           // connection_status answers in words; every other tool answers in JSON.
-          return { text, reply: tool === 'connection_status' ? text : JSON.parse(text) };
+          return { text, reply: tool === 'connection_status' ? {} : JSON.parse(text) };
         };
         return await work(call, {
           groupId: String(groupId),
@@ -816,6 +819,9 @@ export function connectionTests(mongo = false) {
         await client.close();
         await db.collection('users').deleteOne({ _id: namesake });
         await db.collection('users').updateOne({ _id: connected!._id }, { $unset: { image: '' } });
+        await db.collection('groups').deleteOne({ _id: groupId });
+        for (const name of ['expenses', 'settlements', 'expensedrafts'])
+          await db.collection(name).deleteMany({ group: groupId });
       }
     }
     /** One ledger tool's reply about the namesake Group. */
@@ -842,7 +848,7 @@ export function connectionTests(mongo = false) {
               },
             ],
           });
-          const [draft] = created.reply.drafts;
+          const [draft] = created.reply.drafts as Array<{ id: string; revision: number }>;
           const replaced = await call('replace_draft', {
             groupId,
             draftId: draft.id,
@@ -873,7 +879,7 @@ export function connectionTests(mongo = false) {
           return calls;
         }, true);
         for (const [tool, { text }] of Object.entries(replies))
-          expect(text, tool).not.toMatch(/email|image|@example\.test|images\.example/);
+          expect(text, tool).not.toMatch(privateData);
       });
 
     if (mongo)
@@ -889,24 +895,42 @@ export function connectionTests(mongo = false) {
       });
 
     if (mongo)
+      it('names a member whose account is gone as a Former member in group_context', async () => {
+        const { reply, connectedId } = await withNamesakeGroup(async (call, group) => {
+          await mongoClient!
+            .db()
+            .collection<{ members: Array<{ user: mongoose.Types.ObjectId; joinedAt: Date }> }>(
+              'groups',
+            )
+            .updateOne(
+              { _id: new mongoose.Types.ObjectId(group.groupId) },
+              { $push: { members: { user: new mongoose.Types.ObjectId(), joinedAt: new Date() } } },
+            );
+          return { ...(await call('group_context', { groupId: group.groupId })), ...group };
+        });
+        expect(reply.members).toEqual(
+          expect.arrayContaining([
+            { id: connectedId, name: 'Synthetic Connection', you: true },
+            { id: null, name: 'Former member' },
+          ]),
+        );
+      });
+
+    if (mongo)
       it('names members in group_balances by id and name only, marking the connected member', async () => {
         const { text, reply, connectedId, namesakeId } = await readNamesakeGroup('group_balances');
-        expect(text).not.toMatch(/email|image|@example\.test|images\.example/);
+        expect(text).not.toMatch(privateData);
         const you = { id: connectedId, name: 'Synthetic Connection', you: true };
         const namesake = { id: namesakeId, name: 'Synthetic Connection' };
-        expect(reply.balances).toEqual({
-          hasMixedCurrencies: false,
-          byCurrency: [
-            {
-              currency: 'INR',
-              balances: expect.arrayContaining([
-                { member: you, balance: -300 },
-                { member: namesake, balance: 300 },
-              ]),
-              debts: [{ from: you, to: namesake, amount: 300 }],
-            },
-          ],
-        });
+        const inr = {
+          currency: 'INR',
+          balances: expect.arrayContaining([
+            { user: you, balance: -300 },
+            { user: namesake, balance: 300 },
+          ]),
+          debts: [{ from: you, to: namesake, amount: 300 }],
+        };
+        expect(reply.balances).toEqual({ ...inr, byCurrency: [inr], hasMixedCurrencies: false });
       });
 
     if (mongo)
@@ -915,7 +939,7 @@ export function connectionTests(mongo = false) {
           from: '2026-10-01',
           to: '2026-10-31',
         });
-        expect(text).not.toMatch(/email|image|@example\.test|images\.example|receipts\.example/);
+        expect(text).not.toMatch(privateData);
         const you = { id: connectedId, name: 'Synthetic Connection', you: true };
         const namesake = { id: namesakeId, name: 'Synthetic Connection' };
         expect(reply.expenses).toEqual([
@@ -924,17 +948,17 @@ export function connectionTests(mongo = false) {
             description: 'Namesake dinner',
             amount: 1000,
             currency: 'INR',
-            date: '2026-10-10',
+            date: '2026-10-10T00:00:00.000Z',
             category: 'food',
-            tag: null,
+            tag: '',
             notes: 'Window table',
             splitMethod: 'equal',
-            paidBy: [{ member: namesake, amount: 1000 }],
+            paidBy: [{ user: namesake, amount: 1000 }],
             splitBetween: [
-              { member: you, amount: 500 },
-              { member: namesake, amount: 500 },
+              { user: you, amount: 500 },
+              { user: namesake, amount: 500 },
             ],
-            addedBy: namesake,
+            createdBy: namesake,
           },
         ]);
       });
