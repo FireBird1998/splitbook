@@ -1924,7 +1924,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const lostGroups = new Set<string>();
   const gainedGroup = (groupId: string) => {
     lostGroups.delete(groupId);
-    toReviewQueries.gain(groupId);
     invalidateReads(
       `group:${groupId}`,
       `ledger:${groupId}`,

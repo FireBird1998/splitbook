@@ -188,31 +188,33 @@ function fixture(options: { groups?: boolean } = {}) {
       return makeController();
     },
     holdDevice: () => {
-      let release!: () => void;
-      deviceHeld = new Promise((resolve) => (release = resolve));
-      return () => {
-        deviceHeld = undefined;
-        release();
-      };
+      const gate = latch();
+      deviceHeld = gate.held;
+      return gate.release;
     },
     deny: () => {
       denied = true;
+      groups = [];
     },
     allow: () => {
       denied = false;
+      groups = [group];
     },
     hold: () => {
-      let release!: () => void;
-      held = new Promise((resolve) => (release = resolve));
-      return () => {
-        held = undefined;
-        release();
-      };
+      const gate = latch();
+      held = gate.held;
+      return gate.release;
     },
     prepare: (count: number) => {
       items = Array.from({ length: count }, (_, index) => item(index + 1));
     },
   };
+}
+/** A reply held until `release`. */
+function latch() {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  return { held, release };
 }
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -255,25 +257,7 @@ describe('To review stays current (#433)', () => {
     });
   });
 
-  it('keeps the count shown while that read is on its way', async () => {
-    const f = fixture({ groups: false });
-    f.prepare(2);
-    await f.controller.signIn('alex');
-    await settle();
-    expect(f.controller.getSnapshot().toReview.read.total).toBe(2);
-    f.prepare(3);
-    const release = f.hold();
-    await create(f);
-    expect(f.controller.getSnapshot().toReview.read.total).toBe(2);
-    release();
-    await settle();
-    expect(f.controller.getSnapshot().toReview).toMatchObject({
-      status: 'ready',
-      read: { total: 3 },
-    });
-  });
-
-  it('never shows a denied Group from a later read, until the member creates or joins it again', async () => {
+  it('never shows a denied Group from a later read, until Home lists it again', async () => {
     const f = fixture();
     f.prepare(2);
     await f.controller.signIn('alex');
@@ -283,14 +267,40 @@ describe('To review stays current (#433)', () => {
     await f.controller.openGroup(groupId);
     await f.controller.back();
     await settle();
-    // The server's read still lists it (a read sent before the denial, or a lagging server).
+    // The server's To review read still lists it (a read sent before the denial, or a lagging server).
     await f.controller.refreshHome();
     await settle();
     expect(f.controller.getSnapshot().toReview.read).toEqual({ total: 0, groups: [] });
+    // Home lists it again only once the member creates or joins it again; so does To review.
     f.allow();
     await create(f);
     await settle();
     expect(f.controller.getSnapshot().toReview.read.total).toBe(2);
+  });
+
+  it('keeps To review as it was, never "Checking", while opening a Group reads it again', async () => {
+    const f = fixture();
+    f.prepare(2);
+    await f.controller.signIn('alex');
+    await settle();
+    expect(f.controller.getSnapshot().toReview).toMatchObject({
+      status: 'ready',
+      read: { total: 2 },
+    });
+    f.prepare(3);
+    const release = f.hold();
+    await f.controller.openGroup(groupId);
+    await settle();
+    expect(f.controller.getSnapshot().toReview).toMatchObject({
+      status: 'ready',
+      read: { total: 2 },
+    });
+    release();
+    await settle();
+    expect(f.controller.getSnapshot().toReview).toMatchObject({
+      status: 'ready',
+      read: { total: 3 },
+    });
   });
 
   it('finishes a To review read started at a cold start when the member opens a Group meanwhile', async () => {
@@ -327,7 +337,7 @@ describe('To review stays current (#433)', () => {
     await refreshing;
   });
 
-  it('Refresh Home reads To review again and shows items an assistant prepared', async () => {
+  it('Refresh Home reads To review again and shows items a Connected assistant prepared', async () => {
     const f = fixture();
     await f.controller.signIn('alex');
     await settle();
