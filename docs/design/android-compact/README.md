@@ -65,7 +65,7 @@ Colours are the shared semantic tokens from `@splitbook/shared/design-tokens`, u
 
 ### Vocabulary
 
-These notes follow the glossary in `CONTEXT.md`:
+These notes follow the glossary in `GLOSSARY.md`:
 
 - A Group's shape is its **Theme** (Household, Trip, Work, Couple or General).
 - **Category** belongs only to Expenses.

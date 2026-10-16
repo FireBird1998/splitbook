@@ -33,7 +33,7 @@ It does not mean the entire application has been migrated.
   contracts, refresh behavior, invitations, and existing user journeys.
 - Preserve Google OAuth, the invite-only access policy, and demo-auth production
   safeguards. This initiative does not fix or reconfigure OAuth credentials.
-- Follow [domain language](../../../CONTEXT.md): a group **Theme** is its product
+- Follow [domain language](../../../GLOSSARY.md): a group **Theme** is its product
   identity, stored in `Group.category`; **Category** classifies expenses. A visual
   theme means the MUI presentation. A Household **Month** remains a reporting lens,
   never a change to balances or the ledger.
