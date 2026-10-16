@@ -415,3 +415,30 @@ describe('To review stays current (#433)', () => {
     });
   });
 });
+
+describe("an open item's editor in To review (#436)", () => {
+  it('closes after Refresh items finds the item saved elsewhere', async () => {
+    const f = fixture();
+    f.prepare(2);
+    await f.controller.signIn('alex');
+    await settle();
+    await f.controller.openToReview(groupId);
+    const items = f.controller.draftCollection(groupId);
+    const close = items.open();
+    try {
+      await settle();
+      const second = f.controller.getSnapshot().sharedDraftCollection.rows[1];
+      items.edit(second);
+      expect(f.controller.getSnapshot().sharedDraftCollection.editing).toMatchObject({
+        id: second.id,
+      });
+      // Saved by the guided review, or on another device: the server no longer lists it.
+      f.prepare(1);
+      await f.controller.refreshToReview();
+      await settle();
+      expect(f.controller.getSnapshot().sharedDraftCollection.editing).toBeNull();
+    } finally {
+      close();
+    }
+  });
+});

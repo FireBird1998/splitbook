@@ -13,7 +13,13 @@ import { focusManager, onlineManager, QueryClient } from '@tanstack/query-core';
 import { savedCopyBudget } from './saved-copy-budget';
 import { inScope, queryOwner, replaceScopedQueries } from './query-owner';
 import { readProvenance } from './read-provenance';
-import { groupKey, groupsKey, homeBalancesKey, type QueryKey } from '@splitbook/shared/query-keys';
+import {
+  expenseDraftsKey,
+  groupKey,
+  groupsKey,
+  homeBalancesKey,
+  type QueryKey,
+} from '@splitbook/shared/query-keys';
 import { activityExpenseId, emptyActivity, emptyExpenseHistory } from './activity';
 import {
   emptySettlement,
@@ -6171,6 +6177,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     };
   };
+  /**
+   * To review read again, with the open Group's items: an item saved or deleted elsewhere then
+   * closes its editor there (#436).
+   */
+  const refreshToReview = async () => {
+    const { groupId } = snapshot.sharedDraftCollection;
+    await Promise.all([
+      toReviewQueries.refresh(),
+      groupId && snapshot.auth.user && !snapshot.offline.active && onlineManager.isOnline()
+        ? queryClient.refetchQueries({
+            queryKey: expenseDraftsKey(account(), groupId),
+            exact: true,
+            type: 'active',
+          })
+        : undefined,
+    ]);
+  };
   const draftCollection = (groupId: string) => {
     const owner = generation;
     return sharedDraftCollection({
@@ -6214,7 +6237,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         current(owner) && route === view && reviewRun === machine && !!snapshot.toReview.run,
       online: () => !snapshot.offline.active && onlineManager.isOnline(),
       client: sharedDrafts,
-      refresh: () => toReviewQueries.refresh(),
+      refresh: refreshToReview,
     });
     reviewRun = machine;
     publish({
@@ -6494,7 +6517,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openToReview,
     closeToReview,
     toReviewModel: (groupId?: string) => mobileToReview(snapshot, now(), groupId),
-    refreshToReview: () => toReviewQueries.refresh(),
+    refreshToReview,
     keepExpenseAsSharedDraft,
     cancelExpenseClose,
     deleteExpenseAndClose,

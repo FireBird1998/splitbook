@@ -48,6 +48,24 @@ export const emptySharedDraftCollection = (): SharedDraftCollectionState => ({
   confirmation: null,
   resultsVisible: false,
 });
+/** Said when an open item's editor closes because the item was saved or deleted (#436). */
+export const draftGoneMessage = 'This item was saved or deleted, so your changes weren’t kept.';
+/**
+ * The editor of an item the server no longer lists closes: it was saved or deleted, here or
+ * elsewhere, so nothing can be kept for it. Unsent changes say they weren't kept.
+ */
+const withoutGoneEditor = (
+  state: SharedDraftCollectionState,
+  rows: PersistedExpenseDraft[],
+): Partial<SharedDraftCollectionState> => {
+  const { editing } = state;
+  if (!editing || editing === 'new' || rows.some((row) => row.id === editing.id)) return {};
+  return {
+    editing: null,
+    choice: null,
+    ...(draftEditorChanged(state) ? { message: draftGoneMessage } : {}),
+  };
+};
 type Client = ReturnType<typeof draftCollectionClient> & { context(): Promise<ExpenseContext> };
 /** Controller-owned online collection. Only reads enter Query; retained writes remain explicit. */
 export function sharedDraftCollection({
@@ -152,7 +170,8 @@ export function sharedDraftCollection({
               : { rows: [], context: null }),
             message: result.error.message,
           });
-        } else if (result.data) update(result.data);
+        } else if (result.data)
+          update({ ...result.data, ...withoutGoneEditor(read(), result.data.rows) });
       });
       void client
         .pending()
@@ -225,7 +244,17 @@ export function sharedDraftCollection({
         const { editing, entries } = read();
         if (!editing) return;
         if (editing === 'new') await client.create(draftValues(entries));
-        else await client.replace(editing, draftValues(entries));
+        else
+          try {
+            await client.replace(editing, draftValues(entries));
+          } catch (error) {
+            if ((error as { status?: number }).status !== 404) throw error;
+            // Saved or deleted meanwhile: there is nothing left to keep these changes in.
+            update({ editing: null, choice: null, reviews: [] });
+            await refresh();
+            update({ message: draftGoneMessage });
+            return;
+          }
         update({ editing: null, reviews: [] });
         await refresh();
       }),
