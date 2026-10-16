@@ -42,11 +42,12 @@ describe('the workspace', () => {
     }
   });
 
-  it('lists tools/swarm but not tools/*, so tools/brand keeps its own npm lockfile', () => {
+  it('lists tools packages by name, never tools/*, so tools/brand keeps its own npm lockfile', () => {
     const workspace = readFileSync(join(repository, 'pnpm-workspace.yaml'), 'utf8');
     const entries = [...workspace.matchAll(/^\s*-\s*['"]?([^'"\s#]+)/gm)].map((match) => match[1]);
     expect(entries).toContain('tools/swarm');
-    expect(entries.filter((entry) => entry?.startsWith('tools/'))).toEqual(['tools/swarm']);
+    const tools = entries.filter((entry) => entry?.startsWith('tools/'));
+    expect(tools.filter((entry) => entry?.includes('*') || entry === 'tools/brand')).toEqual([]);
     expect(existsSync(join(repository, 'tools/brand/package-lock.json'))).toBe(true);
   });
 
