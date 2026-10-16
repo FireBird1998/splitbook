@@ -1,6 +1,7 @@
 import 'server-only';
 import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
+import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { draftObjectId } from '@splitbook/shared/validators/expense-draft';
 import { balanceService } from './balance.service';
 import { expenseService } from './expense.service';
@@ -53,6 +54,7 @@ export const assistantLedgerService = {
       tags: group.tags
         .filter((tag) => !tag.isArchived && !tag.isDeleted)
         .map((tag) => ({ id: String(tag._id), name: tag.name })),
+      categories: EXPENSE_CATEGORIES.map(({ id, label }) => ({ id, label })),
     };
   },
   async balances(actorId: string, groupId: string) {

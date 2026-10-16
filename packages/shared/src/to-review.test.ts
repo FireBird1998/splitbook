@@ -8,7 +8,10 @@ import {
   summarizeReviewRun,
   type DeviceToReviewItem,
 } from './to-review';
-import { persistedExpenseDraftSchema } from './validators/expense-draft';
+import {
+  completeExpenseDraftSchema,
+  persistedExpenseDraftSchema,
+} from './validators/expense-draft';
 import { parseToReviewResponse } from './to-review-read';
 import type { ToReviewItem, ToReviewRead } from './to-review-read';
 import { toReviewHref, toReviewPath } from './api-paths';
@@ -121,6 +124,52 @@ describe('To review model', () => {
       { currency: 'JPY', amountMinor: 123, formatted: '¥123' },
       { currency: 'USD', amountMinor: 30, formatted: '$0.30' },
     ]);
+  });
+  it("makes an assistant's one-payer item without a Category ready, as Add expense would", () => {
+    const dinner = item(1);
+    dinner.draft.preparedBy = { kind: 'assistant', name: 'Claude' };
+    dinner.draft.values = {
+      description: 'Dinner',
+      amount: 1200,
+      currency: 'INR',
+      date: '2026-10-16',
+      tag: 'Food',
+      paidBy: [{ user: member }],
+      splitMethod: 'equal',
+      splitBetween: [{ user: member }],
+    };
+    const model = buildToReview(read([dinner]), [], now);
+    expect(model.items[0]).toMatchObject({ state: 'ready', missingFacts: [], label: 'Ready' });
+    expect(model.ready.label).toBe('Save 1 ready');
+    expect(model.ready.totals).toEqual([
+      { currency: 'INR', amountMinor: 120000, formatted: '₹1,200.00' },
+    ]);
+    expect(completeExpenseDraftSchema.parse(dinner.draft.values)).toMatchObject({
+      category: 'other',
+      paidBy: [{ user: member, amount: 1200 }],
+    });
+  });
+  it('never completes several payers, a mismatched payer, a missing payer or a missing amount', () => {
+    const other = 'b00000000000000000000002';
+    const several = item(1),
+      mismatched = item(2),
+      unpaid = item(3),
+      unpriced = item(4);
+    several.draft.values!.splitBetween = [{ user: member }, { user: other }];
+    several.draft.values!.paidBy = [{ user: member, amount: 0.05 }, { user: other }];
+    mismatched.draft.values!.paidBy = [{ user: member, amount: 0.05 }];
+    delete unpaid.draft.values!.paidBy;
+    unpaid.draft.missingFields = ['paidBy'];
+    delete unpriced.draft.values!.amount;
+    unpriced.draft.values!.paidBy = [{ user: member }];
+    unpriced.draft.missingFields = ['amount'];
+    const model = buildToReview(read([several, mismatched, unpaid, unpriced]), [], now);
+    const facts = Object.fromEntries(model.items.map((item) => [item.id, item.missingFacts]));
+    expect(model.ready.count).toBe(0);
+    expect(facts[several.draft.id]).toEqual(['who paid']);
+    expect(facts[mismatched.draft.id]).toEqual(['the amount']);
+    expect(facts[unpaid.draft.id]).toEqual(['who paid']);
+    expect(facts[unpriced.draft.id]).toEqual(['the amount']);
   });
   it('groups two assistant sources first, ignores member sources, then names needs details', () => {
     const a = item(1),

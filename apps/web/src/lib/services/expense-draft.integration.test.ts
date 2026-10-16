@@ -97,14 +97,12 @@ describe('persistent private expense Drafts', () => {
     expect(created.map((row) => row.values)).toEqual([{ amount: 450 }, {}]);
     expect(await drafts.list(alice, groupId)).toEqual(created);
     expect(await drafts.list(bob, groupId)).toEqual([]);
-    expect(created[0].missingFields).toEqual(expect.arrayContaining(['date', 'tagId', 'category']));
+    expect(created[0].missingFields).toEqual(expect.arrayContaining(['date', 'tagId']));
+    // A missing Category is saved as Other, as in Add expense, so it is never a missing fact.
+    expect(created[0].missingFields).not.toContain('category');
     const reviewed = await drafts.review(alice, groupId, created[0].id);
     expect(reviewed.problems).toEqual(
-      expect.arrayContaining([
-        'date: Choose the Expense date.',
-        'tagId: Choose a Tag.',
-        'category: Choose a Category.',
-      ]),
+      expect.arrayContaining(['date: Choose the Expense date.', 'tagId: Choose a Tag.']),
     );
     expect(reviewed.problems.join(' ')).not.toMatch(/Invalid input|expected date|received Date/);
     expect(await db().collection('expenses').countDocuments()).toBe(0);
@@ -526,20 +524,16 @@ describe('persistent private expense Drafts', () => {
     });
   });
 
-  it('keeps an unspecified Category unresolved until it is explicitly reviewed', async () => {
+  it('saves an unspecified Category as Other, as Add expense does, without rewriting the item', async () => {
     const [complete] = await completeDrafts();
     const values = { ...complete.values };
     delete values.category;
     const row = await drafts.replace(alice, groupId, complete.id, values, complete.revision);
     expect(row.values).not.toHaveProperty('category');
-    expect(row.missingFields).toContain('category');
+    expect(row.missingFields).toEqual([]);
     const review = await drafts.review(alice, groupId, row.id);
-    expect(review.problems.some((problem) => problem.startsWith('category:'))).toBe(true);
-    expect((await drafts.save(alice, groupId, saveCommand(review)))[0].status).toBe('failed');
-    expect(await db().collection('expenses').countDocuments()).toBe(0);
-    await drafts.replace(alice, groupId, row.id, { ...values, category: 'other' }, row.revision);
-    const resolved = await drafts.review(alice, groupId, row.id);
-    expect((await drafts.save(alice, groupId, saveCommand(resolved)))[0].status).toBe('saved');
+    expect(review.problems).toEqual([]);
+    expect((await drafts.save(alice, groupId, saveCommand(review)))[0].status).toBe('saved');
     expect(await db().collection('expenses').findOne({ group })).toMatchObject({
       category: 'other',
     });

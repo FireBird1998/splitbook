@@ -18,6 +18,7 @@ export async function seedToReview(count: number) {
       '/splitbook_w419',
       '/splitbook_w420',
       '/splitbook_w421',
+      '/splitbook_w425',
     ].includes(url.pathname) ||
     !['localhost', '127.0.0.1', 'host.docker.internal'].includes(url.hostname)
   )
@@ -52,7 +53,9 @@ export async function seedToReview(count: number) {
 }
 
 /** Full fictional items for #406's web review journeys; only the guarded demo DB is writable. */
-export async function seedReviewPage(kinds: Array<'ready' | 'missing-payer' | 'duplicate'>) {
+export async function seedReviewPage(
+  kinds: Array<'ready' | 'missing-payer' | 'duplicate' | 'one-payer-no-category'>,
+) {
   await seedToReview(0);
   const uri =
     process.env.TO_REVIEW_TEST_MONGODB_URI ??
@@ -80,6 +83,11 @@ export async function seedReviewPage(kinds: Array<'ready' | 'missing-payer' | 'd
       const v = values(index);
       if (kind === 'missing-payer') delete v.paidBy;
       if (kind === 'duplicate') v.description = 'Review matching meal';
+      // As Claude sent it on staging: who paid, but no separate amount and no Category.
+      if (kind === 'one-payer-no-category') {
+        delete v.category;
+        v.paidBy = [{ user: DEMO_PERSONA_IDS.alex }];
+      }
       return {
         group: new ObjectId(DEMO_GROUP_ID),
         owner: new ObjectId(DEMO_PERSONA_IDS.alex),

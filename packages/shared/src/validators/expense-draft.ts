@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { CATEGORY_IDS, EXPENSE_CATEGORIES } from '../categories';
 import { draftAttributionSchema } from '../draft-attribution';
 import { createExpenseSchema, expenseFields } from './expense';
 
@@ -19,7 +20,13 @@ export const expenseDraftValuesSchema = expenseFields
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .refine((value) => expenseFields.shape.date.safeParse(value).success, 'Invalid calendar date')
       .optional(),
-    category: expenseFields.shape.category.removeDefault().optional(),
+    // The fixed choices are listed so a Connected assistant can see them, not only be refused.
+    category: z
+      .enum(CATEGORY_IDS as [string, ...string[]])
+      .describe(
+        `Category: ${EXPENSE_CATEGORIES.map(({ id, label }) => `${id} = ${label}`).join(', ')}.`,
+      )
+      .optional(),
     paidBy: z
       .array(
         z
@@ -49,10 +56,19 @@ export const expenseDraftValuesSchema = expenseFields
   })
   .strict();
 
-/** Review must not silently turn an unspecified Category into the ordinary form's default. */
-export const completeExpenseDraftSchema = createExpenseSchema.safeExtend({
-  category: expenseFields.shape.category.removeDefault(),
-});
+/**
+ * Completes a Draft exactly as Add expense would, and nothing more: a lone payer with no amount
+ * paid the whole Expense, and a missing Category is Other (it never affects Balances).
+ * Without an Expense amount the parse still fails on the amount alone, never on who paid.
+ */
+export const completeExpenseDraftSchema = z.preprocess((values) => {
+  if (!values || typeof values !== 'object') return values;
+  const draft = values as ExpenseDraftValues;
+  const [payer, ...others] = draft.paidBy ?? [];
+  return payer && !others.length && payer.amount === undefined
+    ? { ...draft, paidBy: [{ ...payer, amount: draft.amount ?? 0 }] }
+    : draft;
+}, createExpenseSchema);
 
 export const createExpenseDraftsSchema = z
   .object({

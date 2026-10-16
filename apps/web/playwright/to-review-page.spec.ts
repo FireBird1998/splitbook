@@ -53,6 +53,68 @@ test('fix a missing payer; edits are kept; Save records exactly the version show
   expect(await rows(page)).toHaveLength(0);
 });
 
+test("Claude's one-payer item without a Category is Ready, shows who paid and Other, and saves", async ({
+  page,
+}, testInfo) => {
+  await open(page, ['one-payer-no-category']);
+  await expect(page.getByRole('region', { name: 'Ready', exact: true })).toContainText(
+    'Review meal 1',
+  );
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const review = panel(page);
+  await expect(review.getByLabel('Paid by', { exact: true })).toHaveText('Alex Rivera');
+  await expect(review.getByLabel('Paid by Alex Rivera', { exact: true })).toHaveCount(0);
+  await expect(review.getByLabel('Category', { exact: true })).toHaveText('Other');
+  await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '130%';
+  });
+  await expectNoSeriousA11yViolations(page, testInfo, 'to-review-one-payer');
+  await review.getByRole('spinbutton', { name: 'Amount', exact: true }).fill('15');
+  await expect
+    .poll(async () => (await rows(page))[0].values.paidBy)
+    .toEqual([{ user: 'a00000000000000000000001', amount: 15 }]);
+  expect((await rows(page))[0].values).not.toHaveProperty('category');
+  await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: 'Save 1 ready?' });
+  await expect(confirm).toContainText('Paid by Alex Rivera');
+  await expect(confirm).toContainText('Total · ₹15.00');
+  await confirm.getByRole('button', { name: 'Confirm save' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
+  expect(await rows(page)).toHaveLength(0);
+});
+
+test("a lone payer's mismatched amount stays editable while it is cleared and retyped", async ({
+  page,
+}) => {
+  await open(page, ['ready']);
+  const [draft] = await rows(page);
+  expect(
+    (
+      await page.request.put(`/api/groups/${DEMO_GROUP_ID}/drafts/${draft.id}`, {
+        headers: { 'X-Splitbook-Revision': String(draft.revision) },
+        data: {
+          values: { ...draft.values, paidBy: [{ user: draft.values.paidBy[0].user, amount: 10 }] },
+        },
+      })
+    ).status(),
+  ).toBe(200);
+  await page.reload();
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const paid = panel(page).getByLabel('Paid by Alex Rivera', { exact: true });
+  await expect(paid).toHaveValue('10');
+  await paid.fill('');
+  await expect(paid).toBeVisible();
+  await paid.fill('12.34');
+  await expect(page.getByRole('region', { name: 'Ready', exact: true })).toContainText(
+    'Review meal 1',
+  );
+  // Choosing one payer again still works: the kept several-payers mode is only a default.
+  await panel(page).getByRole('button', { name: 'Single payer', exact: true }).click();
+  await expect(panel(page).getByLabel('Paid by', { exact: true })).toHaveText('Alex Rivera');
+  await expect(paid).toHaveCount(0);
+});
+
 test('possible duplicate shows the matching Expense and requires the explicit tick', async ({
   page,
 }) => {
@@ -389,7 +451,14 @@ test('payer problems use names; split, Tag and optional detail pickers keep thei
 }) => {
   await open(page, ['ready']);
   const current = (await rows(page))[0];
-  const values = { ...current.values, paidBy: [{ user: 'a00000000000000000000001' }] };
+  // A lone payer without an amount paid it all (#425); with two payers, a missing amount is named.
+  const values = {
+    ...current.values,
+    paidBy: [
+      { user: 'a00000000000000000000001', amount: 6.17 },
+      { user: 'a00000000000000000000002' },
+    ],
+  };
   const changed = await page.request.put(`/api/groups/${DEMO_GROUP_ID}/drafts/${current.id}`, {
     headers: { 'X-Splitbook-Revision': String(current.revision) },
     data: { values },
@@ -398,11 +467,11 @@ test('payer problems use names; split, Tag and optional detail pickers keep thei
   await page.reload();
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const review = panel(page);
-  await expect(review).toContainText('The amount paid by Alex Rivera?');
+  await expect(review).toContainText('The amount paid by Sam Chen?');
   await expect(page.locator('body')).not.toContainText(
     /paidBy\.|splitBetween\.|\(YYYY-MM-DD\)|\(e.g. INR\)/,
   );
-  await review.getByLabel('Paid by Alex Rivera', { exact: true }).fill('12.34');
+  await review.getByLabel('Paid by Sam Chen', { exact: true }).fill('6.17');
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
   await review.getByRole('button', { name: '%', exact: true }).click();
   await review.getByLabel('Percentage for Alex Rivera', { exact: true }).fill('100');
