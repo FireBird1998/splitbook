@@ -32,6 +32,7 @@ import {
   type StoredExpenseSplit,
 } from '@splitbook/shared/expense-detail';
 import { expensePosition, expenseRecordPosition } from '@splitbook/shared/expense-position';
+import ExpenseHistoryMembers from './ExpenseHistoryMembers';
 import { expenseSplitSummary } from '@splitbook/shared/expense-row';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
@@ -812,6 +813,11 @@ function History({
                 {change && ' · '}
                 {formatDateTime(entry.at)}
               </Typography>
+              <ExpenseHistoryMembers
+                members={entry.members}
+                name={(person) => nameOf(person) ?? 'Former member'}
+                userId={userId}
+              />
             </Box>
           </Box>
         );

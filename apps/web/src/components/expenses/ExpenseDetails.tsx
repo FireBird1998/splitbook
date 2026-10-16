@@ -19,6 +19,7 @@ import { formatDateTime } from '@splitbook/shared/date';
 import { getCategory } from '@splitbook/shared/categories';
 import { moneyParticipantId } from '@splitbook/shared/exact-money';
 import { expenseEdits } from '@splitbook/shared/expense-detail';
+import ExpenseHistoryMembers from './ExpenseHistoryMembers';
 
 interface Person {
   _id: string;
@@ -83,6 +84,8 @@ interface ExpenseDetailsProps {
   onRetryHistory: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  /** Members' names by id, for anyone the history names by id alone. */
+  names?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -98,18 +101,20 @@ export default function ExpenseDetails({
   onRetryHistory,
   onEdit,
   onDelete,
+  names = new Map(),
 }: ExpenseDetailsProps) {
   const [showHistory, setShowHistory] = useState(false);
   /** A person by name, with the viewer as "You", matched by id; a former member has none. */
+  /** A person by name, from the record or the Group's members; a former member has none. */
+  const personName = (person: unknown) => {
+    if (typeof person === 'object' && person && 'name' in person && typeof person.name === 'string')
+      return person.name;
+    return names.get(moneyParticipantId(person)) ?? 'Former member';
+  };
+  /** A person by name, with the viewer as "You", matched by id. */
   const memberName = (person: unknown) => {
     const personId = moneyParticipantId(person);
-    if (personId && personId === userId) return 'You';
-    return typeof person === 'object' &&
-      person &&
-      'name' in person &&
-      typeof person.name === 'string'
-      ? person.name
-      : 'Former member';
+    return personId && personId === userId ? 'You' : personName(person);
   };
   const category = getCategory(expense.category);
   // Each edit as the side panel words it (#454).
@@ -262,6 +267,11 @@ export default function ExpenseDetails({
                           </Box>
                         </Typography>
                       )}
+                      <ExpenseHistoryMembers
+                        members={edit.members}
+                        name={personName}
+                        userId={userId}
+                      />
                     </Box>
                   ))}
                 </Stack>

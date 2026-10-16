@@ -2,6 +2,7 @@ import { getCategory } from '@splitbook/shared/categories';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatDateTime } from '@splitbook/shared/date';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
+import { memberMoneyChanges, memberMoneyLabel } from '@splitbook/shared/expense-detail';
 import type { ActivityEvent } from './activity';
 import type { ExpenseRecord } from './expense-record';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
@@ -159,6 +160,7 @@ const changedWhat = (changes: Changes) =>
       .map((field) => nouns[field] ?? 'other details'),
   );
 
+/** Each member whose payment or share changed, by the rule web uses too (#434, #456). */
 function allocation(
   field: 'paidBy' | 'splitBetween',
   change: { old?: unknown; new?: unknown },
@@ -166,35 +168,13 @@ function allocation(
   person: (value: unknown) => string,
   viewer?: string,
 ): ExpenseHistoryChange[] {
-  const amounts = (value: unknown, currency: string) =>
-    new Map(
-      rows(value).map((row, index) => [
-        identity(row.user) ?? `former:${index}`,
-        {
-          // The signed-in member is "Your", even beside someone of the same name (#434).
-          whose: viewer && identity(row.user) === viewer ? 'Your' : `${person(row.user)}’s`,
-          amount: money(row, currency),
-        },
-      ]),
-    );
-  const before = amounts(change.old, currencies.before);
-  const after = amounts(change.new, currencies.after);
   // Someone missing from the split is "Not included", which is a word, not an amount.
-  const absent = (currency: string) => (field === 'paidBy' ? formatCurrency(0, currency) : null);
-  return [...new Set([...after.keys(), ...before.keys()])].flatMap((key) => {
-    const was = before.get(key)?.amount ?? absent(currencies.before);
-    const now = after.get(key)?.amount ?? absent(currencies.after);
-    if (was === now) return [];
-    const { whose } = (after.get(key) ?? before.get(key))!;
-    return [
-      {
-        label: field === 'paidBy' ? `${whose} payment` : `${whose} share`,
-        before: was ?? 'Not included',
-        after: now ?? 'Not included',
-        money: { before: was !== null, after: now !== null },
-      },
-    ];
-  });
+  return memberMoneyChanges(field, change, currencies).map((member) => ({
+    label: memberMoneyLabel(member, person, viewer),
+    before: member.before ?? 'Not included',
+    after: member.after ?? 'Not included',
+    money: { before: member.before !== null, after: member.after !== null },
+  }));
 }
 
 /**

@@ -299,6 +299,68 @@ describe('the side panel with an Expense open', () => {
     expect(history).toContain('AR Alex Rivera added this Expense');
   });
 
+  it('names each member whose payment or share an edit changed, with the viewer as "Your" (#456)', () => {
+    const namesake = { ...ALEX, _id: 'a00000000000000000000009' };
+    const ids = (people: Array<[Person, number]>) =>
+      people.map(([person, minor]) => ({
+        user: person._id,
+        amount: minor / 100,
+        amountMinor: minor,
+      }));
+    // Stored edits name people by id; the Group's members name them.
+    const names = new Map(
+      [ALEX, SAM, PRIYA, namesake].map((person) => [person._id, person.name] as const),
+    );
+    const html = render(
+      createElement(ExpensePanel, {
+        id: 'expense-panel',
+        state: opened(
+          electricity({
+            editHistory: [
+              {
+                editedBy: namesake,
+                editedAt: at(29, 15),
+                changes: {
+                  amount: { old: 2680, new: 2860 },
+                  amountMinor: { old: 268000, new: 286000 },
+                  paidBy: { old: ids([[PRIYA, 268000]]), new: ids([[SAM, 286000]]) },
+                  splitBetween: {
+                    old: ids([
+                      [SAM, 134000],
+                      [ALEX, 134000],
+                    ]),
+                    new: ids([
+                      [SAM, 95333],
+                      [ALEX, 95334],
+                      [PRIYA, 95333],
+                    ]),
+                  },
+                },
+              },
+            ],
+          }),
+        ),
+        userId: ALEX._id,
+        names,
+        onClose: vi.fn(),
+        onRetry: vi.fn(),
+        onEdit: vi.fn(),
+        onDuplicate: vi.fn(),
+        onDelete: vi.fn(),
+      }),
+    );
+    const history = text(html);
+    expect(history).toContain('AR Alex Rivera changed the amount, who paid and split');
+    for (const line of [
+      'Sam Chen’s payment ₹0.00 → ₹2,860.00',
+      'Priya Shah’s payment ₹2,680.00 → ₹0.00',
+      'Sam Chen’s share ₹1,340.00 → ₹953.33',
+      'Your share ₹1,340.00 → ₹953.34',
+      'Priya Shah’s share Not included → ₹953.33',
+    ])
+      expect(history).toContain(line);
+  });
+
   it('says while its history loads, and offers Try again when it can’t be loaded', () => {
     expect(text(panel(opened(electricity(), 'loading')))).toContain(
       'History Edits keep a record Loading its history…',

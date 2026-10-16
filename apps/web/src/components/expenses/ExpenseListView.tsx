@@ -420,6 +420,7 @@ export default function ExpenseListView({
         onRetryHistory={() => void record.mutate()}
         onEdit={() => setEditing(opened)}
         onDelete={() => setDeleting(opened)}
+        names={names}
       />
     );
   };
