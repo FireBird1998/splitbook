@@ -54,10 +54,27 @@ declare module '@mui/material/styles' {
 
   interface TypographyVariants {
     money: React.CSSProperties;
+    /** The landing page headline: 40 px on a phone, up to 72 px. */
+    display: React.CSSProperties;
+    /** A landing page call to action: 32 px on a phone, up to 52 px. */
+    displaySmall: React.CSSProperties;
+    /** The sentence under a landing page headline. */
+    lead: React.CSSProperties;
   }
 
   interface TypographyVariantsOptions {
     money?: React.CSSProperties;
+    display?: React.CSSProperties;
+    displaySmall?: React.CSSProperties;
+    lead?: React.CSSProperties;
+  }
+}
+
+declare module '@mui/material/Typography' {
+  interface TypographyPropsVariantOverrides {
+    display: true;
+    displaySmall: true;
+    lead: true;
   }
 }
 
@@ -131,6 +148,23 @@ export function createAppTheme(mode: ThemeMode): Theme {
       subtitle2: { fontWeight: 600 },
       button: { fontWeight: 600, textTransform: 'none' },
       overline: { fontWeight: 600, letterSpacing: '0.04em', lineHeight: 1.5 },
+      display: {
+        fontFamily: FONT_UI,
+        fontSize: 'clamp(2.5rem, 5.6vw, 4.5rem)',
+        fontWeight: 700,
+        lineHeight: 1.02,
+        letterSpacing: '-0.035em',
+        textWrap: 'balance',
+      },
+      displaySmall: {
+        fontFamily: FONT_UI,
+        fontSize: 'clamp(2rem, 4vw, 3.25rem)',
+        fontWeight: 700,
+        lineHeight: 1.08,
+        letterSpacing: '-0.03em',
+        textWrap: 'balance',
+      },
+      lead: { fontFamily: FONT_UI, fontSize: '1.1875rem', lineHeight: 1.55 },
       money: {
         fontFamily: FONT_MONO,
         fontWeight: 500,

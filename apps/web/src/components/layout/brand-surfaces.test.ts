@@ -34,6 +34,7 @@ const { default: LoginForm } = await import('@/components/auth/LoginForm');
 const { default: LoginPage } = await import('@/app/(auth)/login/page');
 const { default: DemoPersonaPicker } = await import('@/components/demo/DemoPersonaPicker');
 const { default: LandingPage } = await import('@/components/landing/LandingPage');
+const { whatsLive } = await import('@/lib/landing/whats-live');
 const { default: JoinGroupClient } = await import('@/components/join/JoinGroupClient');
 
 afterEach(() => {
@@ -133,31 +134,27 @@ describe('sign in', () => {
 });
 
 describe('the landing page', () => {
+  // Everything off: what a deployment shows before any optional capability is live (#444).
+  const live = whatsLive({});
+
   it('leads with the logo linking home, and closes with the decorative mark beside the name', () => {
     for (const mode of MODES) {
-      const html = render(mode, createElement(LandingPage));
+      const html = render(mode, createElement(LandingPage, { live }));
       expect(brand(html)).toEqual([
         { src: logo(mode), alt: 'Splitbook home', height: '32px' },
         { src: mark(mode), alt: '', height: '24px' },
       ]);
       expect(links(html)[0]).toBe('/');
-      expect(text(html)).toMatch(/Splitbook — shared expenses, settled fairly\.$/);
+      expect(text(html)).toContain('Splitbook · shared expenses, settled fairly.');
     }
   });
 
-  it('draws its features with line icons, not emoji', () => {
-    const html = render('light', createElement(LandingPage));
-    expect(html).not.toMatch(/\p{Extended_Pictographic}/u);
+  it('draws its icons with line icons, not emoji', () => {
+    const html = render('light', createElement(LandingPage, { live }));
+    // ©, ® and ™ are typographic signs, not emoji, though Unicode counts them as pictographs.
+    expect(html).not.toMatch(/(?![©®™])\p{Extended_Pictographic}/u);
     const icons = [...html.matchAll(/<svg\b[^>]*data-testid="(\w+)Icon"/g)].map(([, name]) => name);
-    expect(icons).toEqual([
-      'Google',
-      'GroupsOutlined',
-      'PieChartOutline',
-      'SwapHoriz',
-      'DashboardOutlined',
-      'HistoryOutlined',
-      'TollOutlined',
-    ]);
+    expect(icons).toEqual(['Google', 'Google']);
   });
 });
 
