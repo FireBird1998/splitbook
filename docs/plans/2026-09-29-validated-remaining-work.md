@@ -56,7 +56,7 @@ Do not start now. Its own condition is a verified production cutover followed by
 
 ## Starter prompt for the next agent — recommended first assignment
 
-Work on FireBird1998/splitbook. Start from current verified origin/main in an isolated checkout and read AGENTS.md, CONTEXT.md, the applicable ADRs, issues #65–70 and #73/#77–79. Preserve the user's dirty primary checkout, plans, environment files and persistent MongoDB; no production work is included.
+Work on FireBird1998/splitbook. Start from current verified origin/main in an isolated checkout and read AGENTS.md, GLOSSARY.md, the applicable ADRs, issues #65–70 and #73/#77–79. Preserve the user's dirty primary checkout, plans, environment files and persistent MongoDB; no production work is included.
 
 First reconcile the already-merged Expense implementation #66–70. Read the committed Expense QA report, inspect the current implementation and tests, and check current CI. The local independent review report is additional evidence, not a substitute for the acceptance criteria. Fill any actual verification gaps. Record the accepted commit, commands/results and limitations on the relevant implementation issues and close only those whose criteria are satisfied. Keep parent #65 open and unmodified. Do not bypass #70 while it remains unresolved.
 

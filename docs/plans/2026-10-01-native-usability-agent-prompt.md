@@ -9,7 +9,7 @@ The [parent specification — issue 99](https://github.com/FireBird1998/splitboo
 
 ## Establish the baseline
 
-Read the applicable AGENTS.md, CONTEXT.md and mobile ADR. Inspect the current repository state, active worktrees and issue ownership; preserve unrelated changes and avoid duplicating work already in progress. Use current main as the integration baseline in suitable isolated checkouts. If a necessary fix exists only in another unmerged PR, identify that dependency explicitly rather than silently importing its unrelated changes. Follow the repository's issue-claiming and implementation/review conventions.
+Read the applicable AGENTS.md, GLOSSARY.md and mobile ADR. Inspect the current repository state, active worktrees and issue ownership; preserve unrelated changes and avoid duplicating work already in progress. Use current main as the integration baseline in suitable isolated checkouts. If a necessary fix exists only in another unmerged PR, identify that dependency explicitly rather than silently importing its unrelated changes. Follow the repository's issue-claiming and implementation/review conventions.
 
 The local checkout is `/Users/ankitdas/AnkitPersonalProjech/SplidBook`. For investigation evidence, read these local documents if present:
 

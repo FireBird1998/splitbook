@@ -3,7 +3,7 @@ Implement the approved Splitbook Group-response and ledger-creation follow-up wo
 Repository: /Users/ankitdas/AnkitPersonalProjech/SplidBook
 Canonical tracker: FireBird1998/splitbook (private); main is the authoritative base.
 
-Read AGENTS.md, CONTEXT.md, the relevant ADRs, and these documents before editing:
+Read AGENTS.md, GLOSSARY.md, the relevant ADRs, and these documents before editing:
 
 - /Users/ankitdas/AnkitPersonalProjech/SplidBook/docs/specs/2026-09-28-group-response-consistency.md
 - /Users/ankitdas/AnkitPersonalProjech/SplidBook/docs/specs/2026-09-28-ledger-creation-coordination.md

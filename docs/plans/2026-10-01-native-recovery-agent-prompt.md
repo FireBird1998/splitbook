@@ -8,7 +8,7 @@ Another agent owns issue 100 (required-field corrections) and issue 102 (stable 
 
 These issues are independent in the tracker but may touch the same controller and screens. Work in a separate worktree and branch from current main, after checking existing worktrees, issue ownership and related PRs. Preserve other agents' changes and keep edits narrow. Avoid whole-controller rewrites, broad formatting, form-validation changes, cache migration, new bottom navigation, or design-system replacement. If shared changes become a real dependency, document it rather than copying another agent's unfinished implementation.
 
-Read applicable AGENTS.md, CONTEXT.md and the mobile ADR. The primary checkout is `/Users/ankitdas/AnkitPersonalProjech/SplidBook`. If present, read `docs/qa/2026-09-30-native-usability-audit.md` there for reproduction evidence. Local QA documents may be untracked and absent from a fresh worktree; preserve them. GitHub issue acceptance criteria remain authoritative.
+Read applicable AGENTS.md, GLOSSARY.md and the mobile ADR. The primary checkout is `/Users/ankitdas/AnkitPersonalProjech/SplidBook`. If present, read `docs/qa/2026-09-30-native-usability-audit.md` there for reproduction evidence. Local QA documents may be untracked and absent from a fresh worktree; preserve them. GitHub issue acceptance criteria remain authoritative.
 
 ## Behavior to deliver
 

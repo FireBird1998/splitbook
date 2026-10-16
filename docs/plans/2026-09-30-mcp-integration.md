@@ -25,7 +25,7 @@ The proposed user journey is:
 
 The manual setup and Settings page above are proposed product work. Do not ship a “Connect” button implying one-click installation until each platform's supported install flow has been tested.
 
-Balances are running positions, not monthly balances. A Month filters spending in the viewer's timezone. A Settlement records a payment that already happened; it does not send money. These definitions come from `CONTEXT.md` and must appear consistently in tool descriptions and results.
+Balances are running positions, not monthly balances. A Month filters spending in the viewer's timezone. A Settlement records a payment that already happened; it does not send money. These definitions come from `GLOSSARY.md` and must appear consistently in tool descriptions and results.
 
 ## Alternatives
 
