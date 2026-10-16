@@ -4,14 +4,15 @@ Phase 1 only: what the suite is, what this environment actually ran, and a plan
 to make it production-grade. No test code was changed.
 
 The principles below are Matt Pocock's `tdd` skill (seams, vertical slices,
-no implementation-coupled or tautological tests). The repo already points at
-that skill set; the skill files themselves are not installed. See
+no implementation-coupled or tautological tests). The four skills this plan
+uses are vendored under `.agents/skills/`. See
 [The Matt Pocock skills](#the-matt-pocock-skills).
 
 ## The Matt Pocock skills
 
-There is no `tdd` or test-architecture skill checked into this repo. There is
-no `.cursor/skills`, `.agents/skills`, or `skills/` directory.
+`tdd`, `codebase-design`, `code-review`, and `setup-matt-pocock-skills` are
+checked in under `.agents/skills/`. There is no `.cursor/skills/` directory
+and no separate skill named "test architecture".
 
 What the repo does contain is the wiring that `/setup-matt-pocock-skills`
 writes once per repository:
@@ -53,29 +54,28 @@ What it prescribes, and what this plan follows:
 
 ### Install
 
-The skills need installing into the agent. They do not need committing, and
-`/setup-matt-pocock-skills` should not be run again: the three
-`docs/agents/` files above are already filled in.
-
-For Cursor, from the repo root:
+The owner approved a project install. From the repo root:
 
 ```bash
-npx skills@latest add mattpocock/skills -a cursor
+npx skills@latest add mattpocock/skills -a cursor -y \
+  --skill tdd \
+  --skill codebase-design \
+  --skill setup-matt-pocock-skills \
+  --skill code-review
 ```
 
-When the installer asks which skills to take, include `tdd`,
-`codebase-design` (`tdd` reads its interface vocabulary from there), and
-`setup-matt-pocock-skills` (already applied here; keep the skill available,
-do not re-run it). Add `code-review` if reviewers will use it; `CODING_STANDARDS.md`
-is the file it reads.
+That command (skills CLI 1.7.2) copied the four skills into
+`.agents/skills/` and wrote `skills-lock.json`. Cursor's project path for
+`-a cursor` is `.agents/skills/`; `~/.cursor/skills/` is the global path and
+was not used. `/setup-matt-pocock-skills` was not run afterwards: the three
+`docs/agents/` files above were already filled in.
 
-Update later with `npx skills@latest update`. The editable copies land in the
-agent skill directory the installer chooses (typically `.agents/skills` or
-`.cursor/skills`). Leave them untracked unless the owner wants them vendored.
+The installer reported each skill Safe (Gen) and 0 Socket alerts. Snyk rated
+`code-review` Med Risk and the other three Low Risk. Details:
+https://skills.sh/mattpocock/skills. npm also printed that npm 12.2.0 is
+available; that was not installed.
 
-A self-updating plugin exists for Claude Code, Codex, Copilot, and Gemini
-CLI. Cursor is in the "any other agent" path above, which copies files and
-does not auto-update.
+Update later with `npx skills@latest update -y` from the repo root.
 
 ## How the suite is built
 
@@ -510,8 +510,8 @@ suite; the verifiers need a live backend and should keep a separate command.
 
 ## Out of scope for these streams
 
-- Vendoring the Matt Pocock skills into git. Install them locally with the
-  command above.
+- Installing any Matt Pocock skill beyond the four already in
+  `.agents/skills/`.
 - Rewriting passing controller tests, seed tests, or the golden JSON
   contract tests (`list-before-310.golden.json`, `insights-before-315.golden.json`).
 - Running the 600-test demo suite, the Google suite, the pilot, or the
