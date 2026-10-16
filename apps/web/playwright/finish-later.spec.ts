@@ -49,6 +49,7 @@ async function withDemoDb(run: (db: ReturnType<MongoClient['db']>) => Promise<vo
       'splitbook_w420',
       'splitbook_w421',
       'splitbook_w425',
+      'splitbook_w439',
     ].includes(name)
   )
     throw new Error('Expected fictional demo database');
