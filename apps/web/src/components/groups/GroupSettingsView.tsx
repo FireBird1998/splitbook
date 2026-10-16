@@ -33,18 +33,13 @@ import PersonIcon from '@mui/icons-material/Person';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ShareIcon from '@mui/icons-material/Share';
-import AddIcon from '@mui/icons-material/Add';
-import ArchiveIcon from '@mui/icons-material/Archive';
-import UnarchiveIcon from '@mui/icons-material/Unarchive';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import LabelIcon from '@mui/icons-material/Label';
 import { CURRENCIES, getSortedCurrencies } from '@splitbook/shared/currency';
 import LeaveGroupSection from '@/components/groups/LeaveGroupSection';
+import TagManager from '@/components/groups/TagManager';
 import GroupUnavailable from '@/components/groups/GroupUnavailable';
 import { formatDate } from '@splitbook/shared/date';
 import { useGroup } from '@/lib/hooks/use-groups';
-import { matchWebGroupRead, isWebGroupsRead } from '@/lib/web-query-keys';
+import { isWebGroupsRead } from '@/lib/web-query-keys';
 import ErrorState from '@/components/common/ErrorState';
 import { validateTripDates } from '@splitbook/shared/trip-setup';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
@@ -96,16 +91,6 @@ function GroupSettingsContent({
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteLinkLoading, setInviteLinkLoading] = useState(false);
-
-  const [newTagName, setNewTagName] = useState('');
-  const [tagLoading, setTagLoading] = useState(false);
-  const [tagMenuAnchor, setTagMenuAnchor] = useState<HTMLElement | null>(null);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [deleteTagDialogOpen, setDeleteTagDialogOpen] = useState(false);
-  const [deleteTagError, setDeleteTagError] = useState('');
-  const [renameTagOpen, setRenameTagOpen] = useState(false);
-  const [renameTagName, setRenameTagName] = useState('');
-  const [renameTagError, setRenameTagError] = useState('');
 
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveLoading, setArchiveLoading] = useState(false);
@@ -175,6 +160,7 @@ function GroupSettingsContent({
               Back to Group
             </Button>
           </Box>
+          <TagManager groupId={groupId} accountId={userId} />
           <LeaveGroupSection
             groupId={groupId}
             groupName={group.name}
@@ -326,113 +312,6 @@ function GroupSettingsContent({
   };
 
   const tags = group.tags.filter((tag) => !tag.isDeleted);
-
-  const selectedTagData = tags.find((t) => t._id === selectedTag);
-
-  const handleAddTag = async () => {
-    if (!newTagName.trim()) return;
-    setTagLoading(true);
-    try {
-      const res = await apiFetch(`/api/groups/${groupId}/tags`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newTagName.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setSnackbar({
-          open: true,
-          message: data.error || 'Failed to create tag',
-        });
-      } else {
-        setNewTagName('');
-        mutate();
-        setSnackbar({ open: true, message: 'Tag created' });
-      }
-    } catch {
-      setSnackbar({ open: true, message: 'Failed to create tag' });
-    } finally {
-      setTagLoading(false);
-    }
-  };
-
-  const handleRenameTag = async () => {
-    if (!selectedTag || !renameTagName.trim()) return;
-    setTagLoading(true);
-    setRenameTagError('');
-    try {
-      const res = await apiFetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: renameTagName.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setRenameTagError(data.error || 'Failed to rename tag');
-        return;
-      }
-      await globalMutate(matchWebGroupRead(groupId));
-      setRenameTagOpen(false);
-      setSelectedTag(null);
-      setSnackbar({ open: true, message: 'Tag renamed' });
-    } catch {
-      setRenameTagError('Failed to rename tag');
-    } finally {
-      setTagLoading(false);
-    }
-  };
-
-  const handleToggleArchiveTag = async () => {
-    if (!selectedTag || !selectedTagData) return;
-    setTagLoading(true);
-    try {
-      const res = await apiFetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isArchived: !selectedTagData.isArchived }),
-      });
-      if (!res.ok) {
-        setSnackbar({ open: true, message: await failureMessage(res, 'Failed to update tag') });
-        return;
-      }
-      mutate();
-      setSnackbar({
-        open: true,
-        message: selectedTagData.isArchived ? 'Tag unarchived' : 'Tag archived',
-      });
-    } catch {
-      setSnackbar({ open: true, message: 'Failed to update tag' });
-    } finally {
-      setTagLoading(false);
-      setTagMenuAnchor(null);
-      setSelectedTag(null);
-    }
-  };
-
-  const handleDeleteTag = async () => {
-    if (!selectedTag) return;
-    setTagLoading(true);
-    setDeleteTagError('');
-    try {
-      const res = await apiFetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
-        method: 'DELETE',
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setDeleteTagError(data.error || 'Failed to delete tag');
-      } else {
-        mutate();
-        setSnackbar({ open: true, message: 'Tag deleted' });
-        setDeleteTagDialogOpen(false);
-        setTagMenuAnchor(null);
-        setSelectedTag(null);
-      }
-    } catch {
-      setDeleteTagError('Failed to delete tag');
-    } finally {
-      setTagLoading(false);
-    }
-  };
 
   const selectedMemberData = members.find((m) => m.user._id === selectedMember);
 
@@ -619,236 +498,7 @@ function GroupSettingsContent({
           </Stack>
         </Paper>
 
-        {/* ─── Tags ─────────────────────────────────── */}
-        <Paper variant="outlined" sx={{ p: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 0.5 }}>
-            Tags
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Every expense must have exactly one tag. Archived tags won&apos;t appear in the expense
-            form.
-          </Typography>
-
-          {/* Add tag */}
-          <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-            <TextField
-              placeholder="New tag name..."
-              value={newTagName}
-              onChange={(e) => setNewTagName(e.target.value)}
-              size="small"
-              fullWidth
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddTag();
-              }}
-              slotProps={{ htmlInput: { maxLength: 50 } }}
-            />
-            <Button
-              variant="contained"
-              onClick={handleAddTag}
-              disabled={tagLoading || !newTagName.trim()}
-              startIcon={<AddIcon />}
-              sx={{ minWidth: 100 }}
-            >
-              Add
-            </Button>
-          </Stack>
-
-          {/* Tag list */}
-          {tags.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 3, color: 'text.disabled' }}>
-              <LabelIcon sx={{ fontSize: 40, mb: 1, opacity: 0.4 }} />
-              <Typography variant="body2">No tags yet. Create your first tag above.</Typography>
-            </Box>
-          ) : (
-            <Stack spacing={1}>
-              {tags.map((tag) => (
-                <Stack
-                  key={tag._id}
-                  direction="row"
-                  alignItems="center"
-                  justifyContent="space-between"
-                  sx={{
-                    py: 1,
-                    px: 1.5,
-                    borderRadius: 2,
-                    bgcolor: tag.isArchived ? 'surface.muted' : 'background.paper',
-                    opacity: tag.isArchived ? 0.7 : 1,
-                  }}
-                >
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <LabelIcon
-                      fontSize="small"
-                      sx={{
-                        color: tag.isArchived ? 'text.disabled' : 'primary.main',
-                      }}
-                    />
-                    <Typography
-                      variant="body2"
-                      fontWeight={500}
-                      sx={{
-                        color: tag.isArchived ? 'text.disabled' : 'text.primary',
-                        textDecoration: tag.isArchived ? 'line-through' : 'none',
-                      }}
-                    >
-                      {tag.name}
-                    </Typography>
-                    {tag.isArchived && (
-                      <Chip
-                        label="Archived"
-                        size="small"
-                        sx={{
-                          fontSize: 10,
-                          height: 20,
-                          backgroundColor: (theme) => alpha(theme.palette.text.primary, 0.06),
-                        }}
-                      />
-                    )}
-                  </Stack>
-                  <IconButton
-                    size="small"
-                    aria-label={`Actions for tag ${tag.name}`}
-                    onClick={(e) => {
-                      setSelectedTag(tag._id);
-                      setTagMenuAnchor(e.currentTarget);
-                    }}
-                  >
-                    <MoreVertIcon fontSize="small" />
-                  </IconButton>
-                </Stack>
-              ))}
-            </Stack>
-          )}
-
-          {/* Tag action menu */}
-          <Menu
-            anchorEl={tagMenuAnchor}
-            open={!!tagMenuAnchor}
-            onClose={() => {
-              setTagMenuAnchor(null);
-              setSelectedTag(null);
-            }}
-            slotProps={{ paper: { sx: { minWidth: 180 } } }}
-          >
-            <MuiMenuItem
-              onClick={() => {
-                setRenameTagName(selectedTagData?.name ?? '');
-                setRenameTagError('');
-                setRenameTagOpen(true);
-                setTagMenuAnchor(null);
-              }}
-              disabled={tagLoading}
-            >
-              <ListItemIcon>
-                <EditIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>Rename</ListItemText>
-            </MuiMenuItem>
-            <MuiMenuItem onClick={handleToggleArchiveTag} disabled={tagLoading}>
-              <ListItemIcon>
-                {selectedTagData?.isArchived ? (
-                  <UnarchiveIcon fontSize="small" />
-                ) : (
-                  <ArchiveIcon fontSize="small" />
-                )}
-              </ListItemIcon>
-              <ListItemText>{selectedTagData?.isArchived ? 'Unarchive' : 'Archive'}</ListItemText>
-            </MuiMenuItem>
-            <MuiMenuItem
-              onClick={() => {
-                setDeleteTagError('');
-                setDeleteTagDialogOpen(true);
-                setTagMenuAnchor(null);
-              }}
-              disabled={tagLoading}
-            >
-              <ListItemIcon>
-                <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
-              </ListItemIcon>
-              <ListItemText sx={{ color: 'error.main' }}>Delete</ListItemText>
-            </MuiMenuItem>
-          </Menu>
-        </Paper>
-
-        <Dialog
-          open={renameTagOpen}
-          onClose={() => {
-            if (!tagLoading) setRenameTagOpen(false);
-          }}
-          maxWidth="xs"
-          fullWidth
-        >
-          <DialogTitle>Rename Tag</DialogTitle>
-          <DialogContent>
-            <TextField
-              autoFocus
-              label="Tag name"
-              fullWidth
-              value={renameTagName}
-              onChange={(event) => setRenameTagName(event.target.value)}
-              error={!!renameTagError}
-              helperText={renameTagError || 'Expenses and recurring templates keep this Tag.'}
-              slotProps={{ htmlInput: { maxLength: 50 } }}
-              sx={{ mt: 1 }}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setRenameTagOpen(false)} disabled={tagLoading}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleRenameTag}
-              disabled={tagLoading || !renameTagName.trim()}
-              variant="contained"
-            >
-              Save name
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Delete Tag Confirmation Dialog */}
-        <Dialog
-          open={deleteTagDialogOpen}
-          onClose={() => {
-            setDeleteTagDialogOpen(false);
-            setSelectedTag(null);
-          }}
-          maxWidth="xs"
-          fullWidth
-        >
-          <DialogTitle>Delete Tag</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="text.primary">
-              Are you sure you want to delete the tag{' '}
-              <strong>&ldquo;{selectedTagData?.name}&rdquo;</strong>? This is only possible if no
-              expenses or recurring templates use this tag.
-            </Typography>
-            {deleteTagError && (
-              <Typography variant="body2" color="error.main" sx={{ mt: 1 }}>
-                {deleteTagError}
-              </Typography>
-            )}
-          </DialogContent>
-          <DialogActions sx={{ p: 2 }}>
-            <Button
-              onClick={() => {
-                setDeleteTagDialogOpen(false);
-                setSelectedTag(null);
-              }}
-              color="inherit"
-              disabled={tagLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleDeleteTag}
-              variant="contained"
-              color="error"
-              disabled={tagLoading}
-            >
-              {tagLoading ? <CircularProgress size={20} /> : 'Delete'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <TagManager groupId={groupId} accountId={userId} />
 
         {/* ─── Recurring (Household only, while the product offers it) ── */}
         {recurringExpensesEnabled && theme.recurringExpenses && (

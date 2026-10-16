@@ -16,6 +16,10 @@ _Avoid_: expense type, kind
 A Group-scoped, user-managed label with a stable identity independent of its name. Exactly one is required on each Expense; renaming or retiring a Tag preserves its historical associations.
 _Avoid_: label, expense group
 
+**Archived Tag**:
+A Tag unavailable for new Expense assignments whose identity and historical associations are retained; restoring it makes the same Tag available again.
+_Avoid_: deleted Tag, removed Tag
+
 **Month**:
 One calendar month in the viewer's own time zone, in a Group of any Theme. It is a read-only way of looking at that month's Expenses, never a line drawn in the ledger: it answers "what did August cost us", never "what is owed". An Expense late on 31 August can fall in September for a member in another time zone. When a Month is compared with the months before it, it is never part of its own average.
 _Avoid_: cycle, period, billing month

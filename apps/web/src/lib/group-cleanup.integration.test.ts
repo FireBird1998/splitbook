@@ -126,6 +126,7 @@ describe('read-only orphan Group inventory', () => {
           recurringexpenses: 0,
           invitations: 0,
           expensedrafts: 0,
+          tagactions: 0,
         },
       },
     ]);
@@ -158,6 +159,8 @@ describe('confirmed last-member deletion', () => {
       'activities',
       'recurringexpenses',
       'invitations',
+      'expensedrafts',
+      'tagactions',
     ]) {
       await db
         .collection(name)

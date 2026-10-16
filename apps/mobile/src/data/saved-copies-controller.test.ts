@@ -3,6 +3,7 @@ import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './mobile-controller';
 import { createAccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
+import type { TagCommand } from '@splitbook/shared/tag-management';
 
 // #191: a member's own confirmed or unconfirmed change leaves no saved copy older than it.
 
@@ -90,10 +91,11 @@ const pageOf = (path: string) => {
  * A fictional backend whose ledger version for Maple House rises with every accepted change,
  * and this device's stores, which survive a restart.
  */
-function fixture() {
+function fixture(tagActions = false) {
   const clock = { now: Date.parse(iso) };
   const server = {
     offline: false,
+    tagName: 'Food',
     /** A change reaches the server, but its answer is lost. */
     loseWrites: false,
     /** This device can't remove saved copies. */
@@ -133,7 +135,8 @@ function fixture() {
         })),
   });
   const drafts = memory(),
-    attempts = memory();
+    attempts = memory(),
+    tagRequests = memory();
   const environment = `http://localhost:4138/${Math.random()}`;
   const store = createAccountGroupRecordStore(environment, 'saved');
   const savedQueries = {
@@ -262,7 +265,32 @@ function fixture() {
         status: 200,
         data: { buckets: [{ currency: 'INR', youOwe: 30 + server.ledger, youAreOwed: 12 }] },
       });
-    if (path === maplePath) return json({ status: 200, data: maple });
+    if (path === maplePath)
+      return json({
+        status: 200,
+        data: {
+          ...maple,
+          tags: maple.tags.map((tag) => ({ ...tag, name: server.tagName })),
+        },
+      });
+    if (path === maplePath + '/tag-actions' && method === 'POST') {
+      const command = JSON.parse(String(init.body)) as TagCommand;
+      if (command.intent.action === 'rename') server.tagName = command.intent.name;
+      return json({
+        status: 200,
+        data: {
+          state: 'applied',
+          requestId: command.requestId,
+          receipt: { intent: command.intent, tagId, appliedAt: iso },
+          snapshot: {
+            canManage: true,
+            tags: [
+              { id: tagId, name: server.tagName, revision: 1, isArchived: false, isDeleted: false },
+            ],
+          },
+        },
+      });
+    }
     if (path === `/api/groups/${cabinId}`) return json({ status: 200, data: cabin });
     if (path.startsWith(`${maplePath}/expenses?`)) {
       const { month, page: number } = pageOf(path);
@@ -369,7 +397,10 @@ function fixture() {
       },
       {
         now: () => clock.now,
-        newSubmissionKey: () => `attempt-${String(++keys).padStart(4, '0')}`,
+        newSubmissionKey: () =>
+          tagActions
+            ? '00000000-0000-4000-8000-000000000001'
+            : `attempt-${String(++keys).padStart(4, '0')}`,
         credentials: {
           load: async () => cookie,
           save: async (value) => {
@@ -383,6 +414,7 @@ function fixture() {
         offlineIdentity,
         expenseDrafts: drafts,
         settlementAttempts: attempts,
+        tagRequests,
         accountLocal: {
           owner: {
             load: async () => owner,
@@ -403,7 +435,7 @@ function fixture() {
             },
           },
           untrustedCopies,
-          stores: [savedQueries, offlineIdentity, drafts, attempts, untrustedCopies],
+          stores: [savedQueries, offlineIdentity, drafts, attempts, tagRequests, untrustedCopies],
         },
         fetch: async (url, init) => {
           requests.push({
@@ -498,6 +530,7 @@ function fixture() {
     stallSave,
     drafts,
     attempts,
+    tagRequests,
     requests,
   };
 }
@@ -1196,4 +1229,130 @@ it('records failed confirmed-write cleanup even when its previous journal cannot
   } finally {
     restarted.dispose();
   }
+});
+
+describe('Tag writes and crash-safe saved copies', () => {
+  it.each([false, true])(
+    'retires saved copies before sending and preserves entered Expense data after a crash (storage fails on restart: %s)',
+    async (failInvalidation) => {
+      const f = fixture(true);
+      const controller = await visitEverything(f);
+      await controller.openExpense(mapleId);
+      await controller.updateExpenseDraft({
+        amount: '12',
+        description: 'Lunch by the lake',
+        tagId,
+      });
+      const response = f.hold((path, method) => path.endsWith('/tag-actions') && method === 'POST');
+      const manager = controller.groupTags(mapleId);
+      const sending = manager
+        .submit({ action: 'rename', tagId, expectedRevision: 0, name: 'Meals' })
+        .catch((error: unknown) => error);
+      await response.arrived;
+      try {
+        expect(Object.keys(f.savedOf(mapleId))).toEqual([]);
+        expect(controller.getSnapshot().expense.draft?.description).toBe('Lunch by the lake');
+        controller.dispose();
+        f.server.offline = true;
+        f.server.failInvalidation = failInvalidation;
+        f.server.failJournal = true;
+        const restarted = f.create();
+        try {
+          await restarted.restore();
+          expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+          expect(restarted.getSnapshot().home.data).toBeNull();
+          await restarted.openGroup(mapleId);
+          expect(restarted.getSnapshot().detail.data).toBeNull();
+          await restarted.openExpense(mapleId);
+          expect(restarted.getSnapshot().expense.context).toBeNull();
+          expect(restarted.getSnapshot().expense.draft?.description).toBe('Lunch by the lake');
+          expect(await restarted.groupTags(mapleId).pending()).toMatchObject({
+            requestId: '00000000-0000-4000-8000-000000000001',
+            intent: { action: 'rename', name: 'Meals' },
+          });
+          expect(f.requests.filter(({ method }) => method === 'POST')).toHaveLength(2); // Sign-in + Tag action.
+        } finally {
+          restarted.dispose();
+        }
+      } finally {
+        controller.dispose();
+        response.release();
+        await sending;
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'quarantines persisted old copies at startup from the durable Tag request even with a failed cleanup journal (removal fails: %s)',
+    async (failInvalidation) => {
+      const f = fixture(true);
+      const controller = await visitEverything(f);
+      await controller.openExpense(mapleId);
+      await controller.updateExpenseDraft({
+        amount: '12',
+        description: 'Lunch by the lake',
+        tagId,
+      });
+      // Device boundary: a request persisted before a process death, while old saved rows remain.
+      // It may have reached the server; startup must never infer that from connectivity or receipts.
+      await f.tagRequests.save(alex.id, mapleId, {
+        command: {
+          requestId: '00000000-0000-4000-8000-000000000001',
+          intent: { action: 'rename', tagId, expectedRevision: 0, name: 'Meals' },
+        },
+      });
+      expect(Object.keys(f.savedOf(mapleId))).toContain('Group');
+      controller.dispose();
+      f.server.offline = true;
+      f.server.failInvalidation = failInvalidation;
+      f.server.failJournal = true;
+      const restarted = f.create();
+      try {
+        await restarted.restore();
+        expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+        expect(restarted.getSnapshot().home.data).toBeNull();
+        await restarted.openGroup(mapleId);
+        expect(restarted.getSnapshot().detail.data).toBeNull();
+        await restarted.openExpense(mapleId);
+        expect(restarted.getSnapshot().expense.context).toBeNull();
+        expect(restarted.getSnapshot().expense.draft?.description).toBe('Lunch by the lake');
+        expect(await restarted.groupTags(mapleId).pending()).toMatchObject({
+          intent: { action: 'rename', name: 'Meals' },
+        });
+        expect(
+          f.requests.filter(
+            ({ path, method }) => path.endsWith('/tag-actions') && method === 'POST',
+          ),
+        ).toEqual([]);
+      } finally {
+        restarted.dispose();
+      }
+    },
+  );
+
+  it('sends nothing when old saved copies cannot be removed and retries only the original durable action', async () => {
+    const f = fixture(true);
+    const controller = await visitEverything(f);
+    try {
+      f.server.failInvalidation = true;
+      f.server.failJournal = true;
+      const manager = controller.groupTags(mapleId);
+      await expect(
+        manager.submit({ action: 'rename', tagId, expectedRevision: 0, name: 'Meals' }),
+      ).rejects.toThrow();
+      expect(
+        f.requests.filter(({ path, method }) => path.endsWith('/tag-actions') && method === 'POST'),
+      ).toEqual([]);
+      expect(await manager.pending()).toMatchObject({
+        intent: { action: 'rename', name: 'Meals' },
+      });
+      f.server.failInvalidation = false;
+      expect((await manager.retry()).state).toBe('applied');
+      expect(
+        f.requests.filter(({ path, method }) => path.endsWith('/tag-actions') && method === 'POST'),
+      ).toHaveLength(1);
+    } finally {
+      controller.dispose();
+    }
+  });
 });

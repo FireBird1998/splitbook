@@ -1,3 +1,4 @@
+import type { TagManagerState } from './tag-manager';
 import type { ToReviewState } from './to-review';
 import type { SharedDraftCollectionState } from './shared-draft-collection';
 import type { OfflineIdentityStore } from './offline-cache';
@@ -372,6 +373,7 @@ export interface PendingInvitationStore {
 }
 
 export interface MobileSnapshot {
+  tagManager: TagManagerState;
   sharedDraftCollection: SharedDraftCollectionState;
   toReview: ToReviewState;
   offline: { active: boolean; refreshedAt: number | null; message: string | null };
@@ -609,6 +611,8 @@ export interface MobileDependencies {
    */
   displayFreshnessMs?: number;
   draftRequests?: AccountGroupRecordStore;
+  /** Durable Tag intents; register in accountLocal.stores for account cleanup. */
+  tagRequests?: AccountGroupRecordStore;
   expenseDrafts?: ExpenseDraftStore;
   settlementAttempts?: AccountGroupRecordStore;
   /** Register it in `accountLocal.stores` too, so sign-out and account change remove it. */

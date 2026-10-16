@@ -36,6 +36,10 @@ interface GroupShellProps {
   invite: { onPress: () => void; disabled: boolean; offline: boolean };
   /** Opens Members and Group details. */
   onMembers: () => void;
+  /** Available to the currently known admin, verified again when opened. */
+  onManageTags?: () => void;
+  /** Members can check an earlier action after losing admin permission. */
+  onCheckTagAction?: () => void;
   onRefresh: () => void;
   pull: { refreshing: boolean; onRefresh: () => void };
   /** The destination's scroll view, so returning from an Expense can restore its offset. */
@@ -76,6 +80,8 @@ export function GroupShell({
   progress,
   invite,
   onMembers,
+  onManageTags,
+  onCheckTagAction,
   onRefresh,
   pull,
   scrollRef,
@@ -171,26 +177,56 @@ export function GroupShell({
           onDone={close}
           dismissLabel="Close Group options"
         >
-          <Card>
-            <ListRow
-              leading={<IconTile icon="people-outline" />}
-              title="Members and Group details"
-              onPress={() => {
-                close();
-                onMembers();
-              }}
-            />
-            <Divider inset={66} />
-            <ListRow
-              leading={<IconTile icon="refresh-outline" />}
-              title="Refresh"
-              meta="Check for the latest changes"
-              onPress={() => {
-                close();
-                onRefresh();
-              }}
-            />
-          </Card>
+          {options ? (
+            <Card>
+              {onManageTags && (
+                <>
+                  <ListRow
+                    leading={<IconTile icon="pricetags-outline" />}
+                    title="Manage Tags"
+                    meta="Create, rename, archive or restore"
+                    onPress={() => {
+                      close();
+                      onManageTags();
+                    }}
+                  />
+                  <Divider inset={66} />
+                </>
+              )}
+              {onCheckTagAction && (
+                <>
+                  <ListRow
+                    leading={<IconTile icon="pricetags-outline" />}
+                    title="Check Tag action"
+                    meta="Read the outcome of an earlier action"
+                    onPress={() => {
+                      close();
+                      onCheckTagAction();
+                    }}
+                  />
+                  <Divider inset={66} />
+                </>
+              )}
+              <ListRow
+                leading={<IconTile icon="people-outline" />}
+                title="Members and Group details"
+                onPress={() => {
+                  close();
+                  onMembers();
+                }}
+              />
+              <Divider inset={66} />
+              <ListRow
+                leading={<IconTile icon="refresh-outline" />}
+                title="Refresh"
+                meta="Check for the latest changes"
+                onPress={() => {
+                  close();
+                  onRefresh();
+                }}
+              />
+            </Card>
+          ) : null}
         </BottomSheet>
       ) : null}
     </View>

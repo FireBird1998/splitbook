@@ -12,6 +12,7 @@ export interface IGroupTagDocument {
   name: string;
   isArchived: boolean;
   isDeleted?: boolean;
+  revision?: number;
   createdAt: Date;
 }
 
@@ -52,6 +53,7 @@ const GroupTagSchema = new Schema<IGroupTagDocument>({
   name: { type: String, required: true, trim: true, maxlength: 50 },
   isArchived: { type: Boolean, default: false },
   isDeleted: { type: Boolean, default: false },
+  revision: { type: Number, default: 0, min: 0 },
   createdAt: { type: Date, default: Date.now },
 });
 

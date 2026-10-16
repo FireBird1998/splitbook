@@ -11,9 +11,10 @@ export function lostGroupRecords({
   expenseDrafts,
   settlementAttempts,
   draftRequests,
+  tagRequests,
 }: Pick<
   MobileDependencies,
-  'accountLocal' | 'expenseDrafts' | 'settlementAttempts' | 'draftRequests'
+  'accountLocal' | 'expenseDrafts' | 'settlementAttempts' | 'draftRequests' | 'tagRequests'
 >) {
   const storage = accountLocal?.financialCleanup;
   let pending: z.infer<typeof journal> | null = null;
@@ -30,6 +31,7 @@ export function lostGroupRecords({
   };
   // All callers run inside the strict account queue, including startup recovery.
   const remove = async (accountId: string, groupId: string) => {
+    await tagRequests?.remove(accountId, groupId);
     await draftRequests?.remove(accountId, groupId);
     await expenseDrafts?.remove(accountId, groupId);
     await settlementAttempts?.remove(accountId, groupId);

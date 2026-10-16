@@ -69,7 +69,7 @@ export function TagSheet({
       footer={
         tags?.length ? (
           <CompactText variant="small" tone="secondary">
-            Only this Group’s active Tags are listed. Manage Tags on the web.
+            Only this Group’s active Tags are listed. Group admins can manage Tags in Group options.
           </CompactText>
         ) : undefined
       }
@@ -84,7 +84,8 @@ export function TagSheet({
         <CompactText tone="secondary">Connect to see this Group’s Tags.</CompactText>
       ) : !tags.length ? (
         <CompactText tone="secondary">
-          This Group has no active Tags. Add one on the web, then reopen this draft.
+          This Group has no active Tags. Ask a Group admin to create or restore one in Group
+          options, then reopen this draft.
         </CompactText>
       ) : (
         <>

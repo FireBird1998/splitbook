@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { forgetBrowserSettlementAttempts } from '@/lib/settlement-attempts';
+import { forgetBrowserTagActions } from '@/lib/tag-actions';
 
 /**
  * On the first page load for an account, forget the unconfirmed payments
@@ -12,6 +13,7 @@ import { forgetBrowserSettlementAttempts } from '@/lib/settlement-attempts';
 export default function SettlementAttemptsOwner({ accountId }: { accountId: string }) {
   useEffect(() => {
     forgetBrowserSettlementAttempts({ except: accountId });
+    forgetBrowserTagActions({ except: accountId });
   }, [accountId]);
   return null;
 }

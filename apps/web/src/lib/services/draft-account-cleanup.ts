@@ -14,5 +14,6 @@ export async function removeAccountDrafts(userId: string) {
       .collection('users')
       .updateOne({ _id: owner }, { $set: { draftDeletionPending: true } }, { session });
     await db.collection('expensedrafts').deleteMany({ owner }, { session });
+    await db.collection('tagactions').deleteMany({ actor: owner }, { session });
   });
 }

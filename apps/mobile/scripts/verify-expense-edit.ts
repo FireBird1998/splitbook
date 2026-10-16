@@ -259,7 +259,7 @@ async function run() {
         initial.splitBetween.map((row) => row.amountMinor),
         [334, 333, 333],
       );
-      await alex.request(`${groupPath}/tags/${tagId}`, 'PATCH', { isArchived: true });
+      await alex.changeTag(groupId, { action: 'archive', tagId });
       await controller.editExpense();
       await controller.updateExpenseDraft({ description: 'Metadata correction' });
       await controller.saveExpense();

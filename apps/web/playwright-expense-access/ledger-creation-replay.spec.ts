@@ -1,3 +1,4 @@
+import { tagActionMetadata } from './fixtures';
 import { randomUUID } from 'node:crypto';
 import { MongoClient, ObjectId } from 'mongodb';
 import type { APIRequestContext } from '@playwright/test';
@@ -174,7 +175,9 @@ test('legacy Tag aliases replay after rename, retirement and reassignment with c
 }) => {
   const body = { ...expenseInput(), tag: 'Original legacy tag' };
   await dataOf(
-    await ledger.priya.post(`/api/groups/${ledger.groupB}/tags`, { data: { name: body.tag } }),
+    await ledger.priya.post(`/api/groups/${ledger.groupB}/tags`, {
+      data: { ...(await tagActionMetadata(ledger.priya, ledger.groupB)), name: body.tag },
+    }),
   );
   const headers = keyHeaders();
   const path = `/api/groups/${ledger.groupB}/expenses`;
@@ -187,11 +190,25 @@ test('legacy Tag aliases replay after rename, retirement and reassignment with c
   );
   expect(replacement).toBeDefined();
   const tagPath = `/api/groups/${ledger.groupB}/tags/${rent._id}`;
-  await dataOf(await ledger.priya.patch(tagPath, { data: { name: 'Historical rent' } }));
+  await dataOf(
+    await ledger.priya.patch(tagPath, {
+      data: {
+        ...(await tagActionMetadata(ledger.priya, ledger.groupB, rent._id)),
+        name: 'Historical rent',
+      },
+    }),
+  );
   expect((await dataOf(await ledger.priya.post(path, { data: body, headers }), 201))._id).toBe(
     first._id,
   );
-  await dataOf(await ledger.priya.patch(tagPath, { data: { isArchived: true } }));
+  await dataOf(
+    await ledger.priya.patch(tagPath, {
+      data: {
+        ...(await tagActionMetadata(ledger.priya, ledger.groupB, rent._id)),
+        isArchived: true,
+      },
+    }),
+  );
   expect((await dataOf(await ledger.priya.post(path, { data: body, headers }), 201))._id).toBe(
     first._id,
   );
@@ -203,7 +220,11 @@ test('legacy Tag aliases replay after rename, retirement and reassignment with c
       headers: { 'X-Splitbook-Revision': String(original.revision ?? 0) },
     }),
   );
-  await dataOf(await ledger.priya.delete(tagPath));
+  await dataOf(
+    await ledger.priya.delete(tagPath, {
+      data: await tagActionMetadata(ledger.priya, ledger.groupB, rent._id),
+    }),
+  );
   const current = await dataOf(await ledger.priya.get(endpoint));
   const before = await snapshot(ledger.priya, ledger.groupB);
   // POST replay keeps history actor IDs; GET detail populates those users.

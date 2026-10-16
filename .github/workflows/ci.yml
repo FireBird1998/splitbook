@@ -219,7 +219,8 @@ jobs:
       - name: Authenticated expense access (isolated app and database)
         run: pnpm test:expense-access
         env:
-          # To review saves need transactions: use this job's replica set, not the standalone.
+          # To review saves, and Tag effects with their action receipts, need transactions:
+          # use this job's replica set, not the standalone.
           EXPENSE_ACCESS_MONGO_PORT: 27038
 
       - name: Google sign-in recovery (isolated app and database)
