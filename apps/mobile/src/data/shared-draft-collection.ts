@@ -2,8 +2,6 @@ import { buildToReview } from '@splitbook/shared/to-review';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
 import { expenseDraftsKey } from '@splitbook/shared/query-keys';
 import { QueryObserver, type QueryClient } from '@tanstack/query-core';
-import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
-import { draftEntries } from '@splitbook/shared/persistent-draft-editor';
 import type {
   DraftReview,
   DraftSaveOutcome,
@@ -21,9 +19,6 @@ export interface SharedDraftCollectionState {
   ack: string[];
   outcomes: DraftSaveOutcome[];
   outcomeNames: Record<string, string>;
-  editing: PersistedExpenseDraft | 'new' | null;
-  entries: DraftEntries;
-  choice: string | null;
   pending: boolean;
   busy: boolean;
   message: string;
@@ -39,31 +34,13 @@ export const emptySharedDraftCollection = (): SharedDraftCollectionState => ({
   ack: [],
   outcomes: [],
   outcomeNames: {},
-  editing: null,
-  entries: {},
-  choice: null,
   pending: false,
   busy: false,
   message: '',
   confirmation: null,
   resultsVisible: false,
 });
-/** Said when an open item's editor closes because the item was saved or deleted (#436). */
-export const draftGoneMessage = 'This item was saved or deleted, so your changes weren’t kept.';
-/**
- * The editor of an item the server no longer lists closes: it was saved or deleted, here or
- * elsewhere, so nothing can be kept for it. Unsent changes say they weren't kept.
- */
-const withoutGoneEditor = (
-  state: SharedDraftCollectionState,
-  rows: PersistedExpenseDraft[],
-): Partial<SharedDraftCollectionState> => {
-  const { editing } = state;
-  if (!editing || editing === 'new' || rows.some((row) => row.id === editing.id)) return {};
-  return { ...closedEditor, ...(draftEditorChanged(state) ? { message: draftGoneMessage } : {}) };
-};
-const closedEditor = { editing: null, choice: null } as const;
-/** Reads one Group's items again where its collection is open (Refresh items, the guided review). */
+/** Reads one Group's items again where its collection is open (Refresh items). */
 export const refetchDraftCollection = (
   queryClient: QueryClient,
   account: { environment: string; accountId: string },
@@ -178,8 +155,7 @@ export function sharedDraftCollection({
               : { rows: [], context: null }),
             message: result.error.message,
           });
-        } else if (result.data)
-          update({ ...result.data, ...withoutGoneEditor(read(), result.data.rows) });
+        } else if (result.data) update(result.data);
       });
       void client
         .pending()
@@ -216,66 +192,16 @@ export function sharedDraftCollection({
       observer.setOptions({ ...observer.options, enabled: online() });
     },
     refresh: () => run(refresh),
-    newDraft() {
-      if (!read().busy) update({ editing: 'new', entries: {}, choice: null });
-    },
-    edit(draft: PersistedExpenseDraft) {
-      if (!read().busy)
-        update({ editing: draft, entries: draftEntries(draft.values), choice: null });
-    },
-    closeEditor() {
-      if (!read().busy) update(closedEditor);
-    },
-    choose(key: string | null) {
-      if (!read().busy) update({ choice: key });
-    },
-    enter(key: string, value: string) {
-      if (!read().busy) update({ entries: { ...read().entries, [key]: value }, choice: null });
-    },
     select(id: string) {
       if (!read().busy) update({ selected: toggle(read().selected, id), reviews: [] });
     },
     acknowledge(id: string) {
       if (!read().busy) update({ ack: toggle(read().ack, id) });
     },
-    loadLatest: () =>
-      run(async () => {
-        const editing = read().editing;
-        if (!editing || editing === 'new') return;
-        await refresh();
-        const fresh = read().rows.find((row) => row.id === editing.id);
-        if (!fresh) throw new Error('Draft no longer available');
-        update({ editing: fresh, entries: draftEntries(fresh.values) });
-      }),
-    keep: () =>
-      run(async () => {
-        const { editing, entries } = read();
-        if (!editing) return;
-        if (editing === 'new') await client.create(draftValues(entries));
-        else
-          try {
-            await client.replace(editing, draftValues(entries));
-          } catch (error) {
-            if ((error as { code?: string | null }).code !== 'DRAFT_NOT_FOUND') throw error;
-            // Saved or deleted meanwhile: there is nothing left to keep these changes in.
-            update({ ...closedEditor, reviews: [] });
-            await refresh();
-            update({ message: draftGoneMessage });
-            return;
-          }
-        update({ editing: null, reviews: [] });
-        await refresh();
-      }),
     discard: (draft: PersistedExpenseDraft) =>
       run(async () => {
         await client.discard(draft);
-        const { editing } = read();
-        update({
-          reviews: [],
-          selected: read().selected.filter((id) => id !== draft.id),
-          // Deleted by the member from its own editor: nothing to explain.
-          ...(editing && editing !== 'new' && editing.id === draft.id ? closedEditor : {}),
-        });
+        update({ reviews: [], selected: read().selected.filter((id) => id !== draft.id) });
         await refresh();
       }),
     review: () =>
@@ -364,13 +290,4 @@ export function sharedDraftCollection({
         await refresh();
       }),
   };
-}
-
-/** Both editor exit paths ask before replacing unsent details. */
-export function draftEditorChanged(state: SharedDraftCollectionState): boolean {
-  if (!state.editing) return false;
-  const initial = draftEntries(state.editing === 'new' ? undefined : state.editing.values);
-  return Object.keys({ ...initial, ...state.entries }).some(
-    (key) => (initial[key] ?? '') !== (state.entries[key] ?? ''),
-  );
 }

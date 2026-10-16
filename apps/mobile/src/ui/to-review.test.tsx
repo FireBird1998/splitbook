@@ -116,6 +116,8 @@ function fixture(
     lostExpense?: boolean;
     mixed?: boolean;
     flag?: boolean;
+    /** An item missing who paid, the split and the Tag, with the server's raw problems. */
+    unpaid?: boolean;
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -135,6 +137,27 @@ function fixture(
   let items: DraftReview[] = options.empty
     ? []
     : [review(first), review(second), review(incomplete), duplicate];
+  if (options.unpaid)
+    items = [
+      {
+        ...review({
+          ...row(6, 'Station dinner', 30),
+          values: {
+            description: 'Station dinner',
+            amount: 30,
+            currency: 'INR',
+            date: '2026-10-14',
+          },
+          missingFields: ['paidBy', 'splitMethod', 'splitBetween', 'tagId'],
+        }),
+        problems: [
+          'paidBy: Choose who paid.',
+          'splitMethod: Choose a split method.',
+          'splitBetween: Choose who shared this Expense.',
+          'tagId: Choose a Tag.',
+        ],
+      },
+    ];
   if (options.laterReadyGroup)
     items = [review(incomplete), review({ ...first, groupId: otherGroupId })];
   let cookie: string | null = null,
@@ -384,6 +407,36 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     expect(text(list)).toContain('All caught up');
     expect(button(list, 'Save 0 ready').props.disabled).toBe(true);
+  });
+  it('opens a tapped item in the guided review, never a raw editor (#435)', async () => {
+    const f = fixture();
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'Review Fare');
+    const run = f.controller.getSnapshot().toReview.run;
+    expect(run?.items[run.index].item.draft.id).toBe(row(2, '', 1).id);
+    expect(run?.items.map((entry) => entry.item.draft.id).sort()).toEqual(
+      [row(1, '', 1), row(2, '', 1), row(3, '', 1), row(4, '', 1)].map((entry) => entry.id).sort(),
+    );
+    for (const raw of ['Edit expense details', 'Currency (e.g. INR)', 'Date (YYYY-MM-DD)'])
+      expect(text(list)).not.toContain(raw);
+  });
+  it('says what an item needs once, in member words (#435)', async () => {
+    const f = fixture({ unpaid: true });
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    expect(text(list)).toContain('Needs who paid, how to split it, who shared it, the tag');
+    // Said once: no second line repeats a fact the Needs line already names.
+    for (const raw of [
+      'paidBy',
+      'splitMethod',
+      'splitBetween',
+      'tagId',
+      'Choose who paid.',
+      'Who paid?',
+      'The tag?',
+    ])
+      expect(text(list)).not.toContain(raw);
   });
   it('renders every list section, exact freshly reviewed confirmation, saved and changed outcomes', async () => {
     const f = fixture({ mixed: true });

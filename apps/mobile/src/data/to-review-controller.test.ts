@@ -4,7 +4,6 @@ import type {
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
 import { createMobileController, type MobileController } from './mobile-controller';
-import { draftGoneMessage } from './shared-draft-collection';
 import type { MobileFetch } from './types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 
@@ -465,105 +464,52 @@ describe('To review stays current (#433)', () => {
   });
 });
 
-describe("an open item's editor in To review (#436)", () => {
-  /** Signed in, on a Group's To review with its items read and the first one's editor open. */
-  async function editing(options: { complete?: boolean } = {}) {
+describe("a Group's items in To review stay current (#436, #435)", () => {
+  /** Signed in, on a Group's To review with its items read. */
+  async function listed(options: { complete?: boolean } = {}) {
     const f = fixture();
     f.prepare(2, options.complete);
     await f.controller.signIn('alex');
     await settle();
     await f.controller.openToReview(groupId);
     const items = f.controller.draftCollection(groupId);
-    const close = items.open();
-    closers.push(close);
+    closers.push(items.open());
     await settle();
-    const first = f.controller.getSnapshot().sharedDraftCollection.rows[0];
-    items.edit(first);
-    expect(f.controller.getSnapshot().sharedDraftCollection.editing).toMatchObject({
-      id: first.id,
-    });
-    return {
-      f,
-      items,
-      close,
-      first,
-      collection: () => f.controller.getSnapshot().sharedDraftCollection,
-    };
+    const ids = () => f.controller.getSnapshot().sharedDraftCollection.rows.map((row) => row.id);
+    expect(ids()).toHaveLength(2);
+    return { f, items, ids };
   }
   const closers: (() => void)[] = [];
   afterEach(() => {
     for (const close of closers.splice(0)) close();
   });
 
-  it('closes after the guided review saves the item and Done returns to To review', async () => {
-    const { f, close, first, collection } = await editing({ complete: true });
-    // The guided review shows over the list, which closes its items until Done.
-    close();
-    await f.controller.startReviewRun(groupId);
+  it('Refresh items reads the Group’s items again, so one saved elsewhere goes', async () => {
+    const { f, ids } = await listed();
+    const [first] = ids();
+    f.removeElsewhere(first);
+    await f.controller.refreshToReview();
+    await settle();
+    expect(ids()).not.toContain(first);
+  });
+
+  it('an item saved in the guided review is gone when Done returns to the list', async () => {
+    const { f, ids } = await listed({ complete: true });
+    const [, second] = ids();
+    // Tapping an item opens the guided review at that item (#435).
+    await f.controller.startReviewRun(groupId, second);
+    expect(f.controller.getSnapshot().toReview.run?.items[0].item.draft.id).toBe(second);
     await f.controller.reviewRun()!.save();
     await settle();
     await f.controller.closeReviewRun();
-    closers.push(f.controller.draftCollection(groupId).open());
     await settle();
-    expect(collection().editing).toBeNull();
-    expect(collection().rows.map((row) => row.id)).not.toContain(first.id);
-    expect(collection().message).toBe('');
+    expect(ids()).toEqual([item(1).draft.id]);
   });
 
-  it('closes after Refresh items finds the item saved elsewhere', async () => {
-    const { f, first, collection } = await editing();
-    f.removeElsewhere(first.id);
-    await f.controller.refreshToReview();
-    await settle();
-    expect(collection()).toMatchObject({ editing: null, message: '' });
-  });
-
-  it('says unsent changes were not kept when the item was saved or deleted elsewhere', async () => {
-    const { f, items, first, collection } = await editing();
-    items.enter('description', 'Dinner at the station');
-    f.removeElsewhere(first.id);
-    await f.controller.refreshToReview();
-    await settle();
-    expect(collection()).toMatchObject({ editing: null, message: draftGoneMessage });
-  });
-
-  it('closes, with nothing to explain, when the member deletes the item from its editor', async () => {
-    const { items, first, collection } = await editing();
-    items.enter('description', 'Dinner at the station');
-    await items.discard(first);
-    expect(collection()).toMatchObject({ editing: null, message: '' });
-    expect(collection().rows.map((row) => row.id)).not.toContain(first.id);
-  });
-
-  it('closes and says so when Keep changes for later finds the item gone', async () => {
-    const { f, items, first, collection } = await editing();
-    items.enter('description', 'Dinner at the station');
-    f.removeElsewhere(first.id);
-    await items.keep();
-    expect(collection()).toMatchObject({ editing: null, busy: false, message: draftGoneMessage });
-  });
-
-  it('keeps the editor and its changes open when Keep is refused for another reason', async () => {
-    const { f, items, collection } = await editing();
-    items.enter('description', 'Dinner at the station');
-    f.disableDrafts();
-    await items.keep();
-    expect(collection().editing).not.toBeNull();
-    expect(collection().entries.description).toBe('Dinner at the station');
-  });
-
-  it("keeps a new item's editor, and another item's, open when an item goes", async () => {
-    const { f, items, collection } = await editing();
-    const second = collection().rows[1];
-    items.edit(second);
-    f.removeElsewhere(collection().rows[0].id);
-    await f.controller.refreshToReview();
-    await settle();
-    expect(collection().editing).toMatchObject({ id: second.id });
-    items.closeEditor();
-    items.newDraft();
-    await f.controller.refreshToReview();
-    await settle();
-    expect(collection().editing).toBe('new');
+  it('deleting an item takes it off the list', async () => {
+    const { f, items, ids } = await listed();
+    const [first] = ids();
+    await items.discard(f.controller.getSnapshot().sharedDraftCollection.rows[0]);
+    expect(ids()).not.toContain(first);
   });
 });

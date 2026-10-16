@@ -16,7 +16,8 @@ import { useMobileSnapshot, sameSelection } from './use-mobile-snapshot';
 import { BottomSheet, Card, CompactText, Money } from './compact';
 import { Button, Copy } from './primitives';
 import { ExpenseTiles, expenseDateLabel, splitSummary, OptionalDetails } from './expense-form';
-import { DateSheet, gregorianDateFormat } from './date-sheet';
+import { DateSheet } from './date-sheet';
+import { clockTime } from './activity-format';
 import { PayerSheet, paidBySummary } from './payer-sheet';
 import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
@@ -207,10 +208,7 @@ function ReviewRunContent({
             </Copy>
           )}
           <Copy>
-            {source} · {day}{' '}
-            {gregorianDateFormat({ hour: '2-digit', minute: '2-digit', hour12: false }).format(
-              created,
-            )}
+            {source} · {day} {clockTime(item.draft.createdAt)}
           </Copy>
           <Money numberOfLines={0}>{money(values.amount, values.currency)}</Money>
           <TextInput

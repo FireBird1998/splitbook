@@ -12,6 +12,7 @@ import type { MobileFetch } from '../data/types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 import { setWindow } from '../test-utils/native';
 import { ThemeContext } from './theme';
+import { clockTime } from './activity-format';
 import { ToReviewHomeCard, ToReviewOverlay } from './to-review';
 import { GroupMembers } from './group-members';
 import { ReviewRunOverlay } from './review-run';
@@ -443,6 +444,16 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(text(tree)).toContain('Left for later 0');
     await tap(tree, 'Done');
     expect(tree.toJSON()).toBeNull();
+  });
+  it('says when an item was set aside in the app’s 12-hour time (#435)', async () => {
+    const f = fixture({ member: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const run = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    expect(text(run)).toContain(clockTime(iso));
+    expect(text(run)).not.toMatch(/today \d{2}:\d{2}(?! ?[AP]M)/);
   });
   it('shows ready and missing details, both sources, duplicate details and deliberate acknowledgement', async () => {
     const f = fixture({ member: true });

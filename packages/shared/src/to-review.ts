@@ -336,3 +336,22 @@ export function reviewProblem(
   }
   return 'Check the expense details and try again.';
 }
+
+/**
+ * An item's problems in member words, once each. A problem about a fact the item already says it
+ * needs ("Needs who paid…") is left out, so a missing fact is described once (#435).
+ */
+export function memberProblems(
+  item: ToReviewItem,
+  names: Readonly<Record<string, string>> = {},
+): string[] {
+  const needed = new Set(accountModel(item).missingFacts);
+  const said: string[] = [];
+  for (const problem of item.problems) {
+    const path = problem.match(/^(?:Invalid Draft: )?([a-zA-Z]+)(\.\d+\.[a-zA-Z]+)?:/);
+    if (path && !path[2] && needed.has(facts[path[1]])) continue;
+    const words = reviewProblem(problem, item.draft.values, names);
+    if (!said.includes(words)) said.push(words);
+  }
+  return said;
+}

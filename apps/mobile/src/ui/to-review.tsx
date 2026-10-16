@@ -1,17 +1,19 @@
 import { ReviewRunOverlay } from './review-run';
-import { draftEditorChanged, draftGoneMessage } from '../data/shared-draft-collection';
 import { useEffect, useMemo } from 'react';
 import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatDate } from '@splitbook/shared/date';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
-import { summarizeReviewRun, type ReviewItemModel } from '@splitbook/shared/to-review';
+import {
+  memberProblems,
+  summarizeReviewRun,
+  type ReviewItemModel,
+} from '@splitbook/shared/to-review';
 import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
 import { BottomSheet, Card, CompactText, Money } from './compact';
 import { Copy } from './primitives';
-import { SharedDraftEditor } from './shared-drafts';
 import { fonts, useTheme } from './theme';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 
@@ -349,9 +351,13 @@ export function ToReviewList({
   const groupName =
     own?.groupName ?? (state.detail.id === groupId ? state.detail.data?.name : null) ?? 'Group';
   const disabled = collection.busy || collection.pending || state.offline || unavailable;
+  // An item opens in the guided review, with Add expense's fields and pickers (#435).
   const openItem = (item: ReviewItemModel) => {
-    if (item.accountItem) client.edit(item.accountItem.draft);
+    if (item.accountItem) void controller.startReviewRun(groupId, item.accountItem.draft.id);
   };
+  const names = Object.fromEntries(
+    (collection.context?.group.members ?? []).map((member) => [member.user.id, member.user.name]),
+  );
   const sections = [
     ['ready', 'Ready'],
     ['duplicate', 'Check before saving'],
@@ -360,23 +366,7 @@ export function ToReviewList({
   ] as const;
   const results = summarizeReviewRun(collection.outcomes);
   const close = () => {
-    if (collection.busy) return;
-    if (!draftEditorChanged(collection) || collection.pending) return controller.closeToReview();
-    Alert.alert(
-      'Keep editing?',
-      'Your changes have not been kept yet. Leaving replaces them with the last kept details.',
-      [
-        { text: 'Keep editing', style: 'cancel' },
-        {
-          text: 'Leave without changes',
-          style: 'destructive',
-          onPress: () => {
-            client.closeEditor();
-            controller.closeToReview();
-          },
-        },
-      ],
-    );
+    if (!collection.busy) controller.closeToReview();
   };
   return (
     <Modal visible animationType="slide" onRequestClose={close}>
@@ -411,7 +401,7 @@ export function ToReviewList({
                   />
                 </>
               )}
-              {!!collection.message && collection.message !== draftGoneMessage && (
+              {!!collection.message && (
                 <Copy accessibilityRole="alert">{memberMessage(collection.message)}</Copy>
               )}
               {collection.pending && (
@@ -453,7 +443,6 @@ export function ToReviewList({
                 disabled={collection.busy || state.offline}
                 onPress={() => void controller.refreshToReview()}
               />
-              <SharedDraftEditor client={client} state={collection} offline={state.offline} />
               {model.counts.total === 0 && state.toReview.status === 'ready' && !state.offline && (
                 <Copy accessibilityRole="header">All caught up</Copy>
               )}
@@ -486,11 +475,12 @@ export function ToReviewList({
                               >
                                 <ItemDetails item={item} />
                               </Pressable>
-                              {item.accountItem?.problems.map((problem, index) => (
-                                <CompactText key={index} tone="warning">
-                                  {memberMessage(problem)}
-                                </CompactText>
-                              ))}
+                              {item.accountItem &&
+                                memberProblems(item.accountItem, names).map((problem) => (
+                                  <CompactText key={problem} tone="warning">
+                                    {problem}
+                                  </CompactText>
+                                ))}
                               {item.accountItem?.duplicates.map((duplicate, index) => (
                                 <CompactText key={index} tone="warning">
                                   May match {duplicate.description}
