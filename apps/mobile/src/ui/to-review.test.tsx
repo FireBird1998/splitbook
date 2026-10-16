@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onlineManager, focusManager } from '@tanstack/query-core';
+import { Alert } from 'react-native';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import type {
   DraftReview,
@@ -120,6 +121,10 @@ function fixture(
     unpaid?: boolean;
     /** Reviews carry the server's allocation: who paid and each share. */
     allocated?: boolean;
+    /** The Nth item update answers 500, as an unexpected server failure. */
+    failPut?: number;
+    /** Item updates for these ids answer 409 STALE_REVISION, as if changed elsewhere. */
+    stale?: string[];
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -186,6 +191,8 @@ function fixture(
     reviews: string[][] = [],
     calls: string[] = [];
   const committed = new Set<string>();
+  const puts: Array<{ id: string; revision: string | null; values: Record<string, unknown> }> = [],
+    deletes: string[] = [];
   const fetch: MobileFetch = async (url, init) => {
     const path = new URL(url).pathname;
     calls.push(`${init.method ?? 'GET'} ${path}`);
@@ -251,6 +258,33 @@ function fixture(
       await options.saveHeld;
       if (options.lost && saves.length === 1) throw new Error('Lost committed reply');
       return json({ data: outcomes });
+    }
+    const one = /\/drafts\/(d\d{23})$/.exec(path)?.[1];
+    if (one && (init.method === 'PUT' || init.method === 'DELETE')) {
+      const item = items.find((entry) => entry.draft.id === one);
+      if (!item)
+        return json({ error: 'Draft not found', code: 'DRAFT_NOT_FOUND', status: 404 }, 404);
+      if (init.method === 'DELETE') {
+        deletes.push(one);
+        items = items.filter((entry) => entry !== item);
+        return json({ data: null });
+      }
+      const values = JSON.parse(String(init.body)).values;
+      const revision = new Headers(init.headers).get('X-Splitbook-Revision');
+      puts.push({ id: one, revision, values });
+      if (options.failPut === puts.length) return json({ error: 'Server error', status: 500 }, 500);
+      if (options.stale?.includes(one) || revision !== String(item.draft.revision))
+        return json({ error: 'Stale', code: 'STALE_REVISION', status: 409 }, 409);
+      const present = (field: string) =>
+        field === 'tagId' ? !!(values.tagId || values.tag) : values[field] !== undefined;
+      item.draft = {
+        ...item.draft,
+        values,
+        revision: item.draft.revision + 1,
+        missingFields: (item.draft.missingFields ?? []).filter((field) => !present(field)),
+      };
+      item.problems = item.problems.filter((problem) => !present(problem.split(':')[0]));
+      return json({ data: item.draft });
     }
     if (path.endsWith('/drafts')) return json({ data: items.map((item) => item.draft) });
     if (path.endsWith('/expenses') && init.method === 'POST' && options.lostExpense)
@@ -324,6 +358,8 @@ function fixture(
     saves,
     reviews,
     calls,
+    puts,
+    deletes,
     committed,
     requests,
     deny: () => {
@@ -452,7 +488,8 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     const f = fixture();
     await signIn(f);
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
-    expect(text(list)).toContain('Needs the amount, the currency, the date');
+    // Chips ask who paid and the Tag (#439); the Needs line names the rest, once.
+    expect(text(list)).toContain('Still needs the amount, the currency, the date');
     for (const repeated of ['Amount needed', 'Date needed', 'Description needed'])
       expect(text(list)).not.toContain(repeated);
   });
@@ -460,17 +497,12 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     const f = fixture({ unpaid: true });
     await signIn(f);
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
-    expect(text(list)).toContain('Needs who paid, how to split it, who shared it, the tag');
-    // Said once: no second line repeats a fact the Needs line already names.
-    for (const raw of [
-      'paidBy',
-      'splitMethod',
-      'splitBetween',
-      'tagId',
-      'Choose who paid.',
-      'Who paid?',
-      'The tag?',
-    ])
+    // Each fact is said once: who paid and the Tag as chip questions (#439), the rest in the
+    // Needs line, and no second line repeats either.
+    expect(text(list)).toContain('Still needs how to split it, who shared it');
+    expect(text(list).match(/who paid/gi)).toEqual(['Who paid']);
+    expect(text(list).match(/the tag/gi)).toEqual(['The tag']);
+    for (const raw of ['paidBy', 'splitMethod', 'splitBetween', 'tagId', 'Choose who paid.'])
       expect(text(list)).not.toContain(raw);
   });
   it('renders every list section, exact freshly reviewed confirmation, saved and changed outcomes', async () => {
@@ -798,5 +830,118 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(text(home)).toContain('Continue where you left off');
     expect(text(home)).toContain('Phone groceries');
     expect(f.calls.some((path) => path.includes('/api/user/to-review'))).toBe(false);
+  });
+});
+
+describe('To review quick fixes on Android (#439)', () => {
+  const mode = 'light' as const;
+  const lunch = row(1, '', 1).id;
+  const fare = row(2, '', 1).id;
+  const missingAmount = row(3, '', 1).id;
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+  /** Lunch keeps everything but who paid, as an assistant often prepares it. */
+  function payerMissing(f: ReturnType<typeof fixture>) {
+    const item = f.items().find((entry) => entry.draft.id === lunch)!;
+    delete item.draft.values!.paidBy;
+    item.draft.missingFields = ['paidBy'];
+  }
+  it('a payer chip keeps a lone payer, and Save records only that item with no confirmation', async () => {
+    const f = fixture();
+    payerMissing(f);
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'You, suggested');
+    await settle();
+    expect(f.puts[0]).toMatchObject({ id: lunch, revision: '0' });
+    expect(f.puts[0].values.paidBy).toEqual([{ user: user.id }]);
+    expect(text(list)).toContain('You paid · Split equally · General');
+    await tap(list, 'Save Lunch');
+    await settle();
+    expect(f.reviews.at(-1)).toEqual([lunch]);
+    expect(JSON.parse(f.saves[0]).drafts.map((draft: { id: string }) => draft.id)).toEqual([lunch]);
+    // Saved straight from the row: no Save ready confirmation was opened.
+    expect(f.controller.getSnapshot().sharedDraftCollection.confirmation).toBeNull();
+    expect(f.committed).toEqual(new Set([lunch]));
+  });
+  it('You for all skips an item changed elsewhere, and Undo restores only its own', async () => {
+    const f = fixture({ stale: [missingAmount] });
+    payerMissing(f);
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'You for all 2');
+    await settle();
+    expect(text(list)).toContain(
+      'You set as payer on 1 item. 1 changed elsewhere and was left as it was.',
+    );
+    const item = () => f.items().find((entry) => entry.draft.id === lunch)!;
+    expect(item().draft.values?.paidBy).toEqual([{ user: user.id }]);
+    await tap(list, 'Undo');
+    await settle();
+    expect(item().draft.values).not.toHaveProperty('paidBy');
+    expect(f.puts.at(-1)).toMatchObject({ id: lunch, revision: '1' });
+  });
+  it('an unexpected failure part-way still offers Undo for the payer already set', async () => {
+    const f = fixture({ failPut: 2 });
+    payerMissing(f);
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'You for all 2');
+    await settle();
+    expect(text(list)).toContain('You set as payer on 1 item');
+    await tap(list, 'Undo');
+    await settle();
+    expect(f.items().find((entry) => entry.draft.id === lunch)!.draft.values).not.toHaveProperty(
+      'paidBy',
+    );
+  });
+  it('⋮ offers Open and Delete, and Delete asks first', async () => {
+    const f = fixture();
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'More for Fare');
+    const [title, , choices] = vi.mocked(Alert.alert).mock.lastCall!;
+    expect(title).toBe('Fare');
+    expect(choices!.map((choice) => choice.text)).toEqual(['Cancel', 'Open', 'Delete']);
+    await act(async () => {
+      choices![2].onPress!();
+    });
+    const [confirm, , buttons] = vi.mocked(Alert.alert).mock.lastCall!;
+    expect(confirm).toBe('Delete this item?');
+    expect(f.deletes).toEqual([]);
+    await act(async () => {
+      buttons!.find((choice) => choice.text === 'Delete')!.onPress!();
+    });
+    await settle();
+    expect(f.deletes).toEqual([fare]);
+  });
+  it('More shows every Tag with the Category match suggested, and keeps the Tag identity', async () => {
+    const extra = ['Food', 'Transport', 'Stay', 'Activities'].map((name, index) => ({
+      _id: `c${String(index + 2).padStart(23, '0')}`,
+      name,
+      isArchived: false,
+      createdAt: iso,
+    }));
+    group.tags.push(...extra);
+    try {
+      const f = fixture();
+      const item = f.items().find((entry) => entry.draft.id === lunch)!;
+      item.draft.values = { ...item.draft.values, category: 'food' };
+      delete item.draft.values.tagId;
+      item.draft.missingFields = ['tagId'];
+      await signIn(f);
+      const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+      expect(button(list, 'Food, suggested')).toBeDefined();
+      expect(button(list, 'Activities')).toBeUndefined();
+      await tap(list, 'More Tags for Lunch');
+      expect(text(list)).toContain('Suggested');
+      await tap(list, 'Activities');
+      await settle();
+      expect(f.puts.at(-1)!.values).toMatchObject({ tagId: extra[3]._id });
+    } finally {
+      group.tags.splice(1);
+    }
   });
 });
