@@ -131,7 +131,7 @@ Every pull request runs a ratchet: no render or request count may rise unless th
   - ADR 0002 is widened: shared code also holds query key factories, path builders and response decoders, still with no framework imports;
   - ADR 0003 cited Better Auth's built-in Expo client, which the app does not use; it keeps its own exchange;
   - ADR 0004 is amended in one case, losing access to a Group (see Saved copies).
-- `CONTEXT.md` gains **saved copy**, **draft** and **unconfirmed save**.
+- The glossary (`GLOSSARY.md`, named `CONTEXT.md` until 2026-10-16) gains **saved copy**, **draft** and **unconfirmed save**.
 - Decision issue: #195. Map: #176.
 
 ## Evidence

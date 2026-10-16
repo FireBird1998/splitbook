@@ -118,7 +118,7 @@ Open questions to settle before filing:
 1. **Target assistants and protocol.** Which assistants must work first (Claude desktop or web connectors, ChatGPT, others), and do they speak the current MCP protocol and Client ID Metadata Documents yet? This decides whether older protocol versions or dynamic client registration must be enabled.
 2. **Phase 2 timing.** Ship phase 1 alone to the private beta first, or hold for recording?
 3. **Activity attribution copy.** Showing the assistant's name to the whole Group is proposed; confirm that is wanted.
-4. **Glossary.** This spec introduces **Connected assistant** (added to `CONTEXT.md`). Confirm or rename.
+4. **Glossary.** This spec introduces **Connected assistant** (added to the glossary, now `GLOSSARY.md`). Confirm or rename.
 
 The operations-module step overlaps the "Group response deepening" and "ledger creation/replay coordination" candidates noted as future exploration in the Expense money-edit spec (#65). Coordinate rather than duplicate: this spec needs only the actor-scoped authorization and read path, not a redesign of those contracts.
 
