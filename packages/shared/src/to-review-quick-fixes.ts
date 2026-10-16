@@ -133,3 +133,9 @@ export function bulkPayerItems(items: readonly ReviewItemModel[]): ReviewItemMod
       !item.accountItem.draft.values?.paidBy?.length,
   );
 }
+
+/** A change made elsewhere, or an item already gone: a bulk action skips it, never overwrites it. */
+export function changedElsewhere(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === 'STALE_REVISION' || code === 'DRAFT_NOT_FOUND' || code === 'REVISION_REQUIRED';
+}

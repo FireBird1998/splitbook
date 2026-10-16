@@ -5,6 +5,7 @@ import type { ExpenseDraftValues } from './validators/expense-draft';
 import {
   applyQuickFix,
   bulkPayerItems,
+  changedElsewhere,
   toReviewQuickFixes,
   type QuickFixContext,
 } from './to-review-quick-fixes';
@@ -186,5 +187,12 @@ describe('To review quick fixes', () => {
       'Taxi',
       'Fish market',
     ]);
+  });
+  it('treats a change made elsewhere or an item already gone as skippable, nothing else', () => {
+    const coded = (code: string | null) => Object.assign(new Error('x'), { code });
+    for (const code of ['STALE_REVISION', 'DRAFT_NOT_FOUND', 'REVISION_REQUIRED'])
+      expect(changedElsewhere(coded(code))).toBe(true);
+    for (const error of [coded(null), coded('FORBIDDEN'), new Error('Offline'), null, 'x'])
+      expect(changedElsewhere(error)).toBe(false);
   });
 });
