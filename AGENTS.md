@@ -37,3 +37,10 @@ The five canonical triage labels are used as-is (`needs-triage`, `needs-info`, `
 ### Domain docs
 
 Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Cursor Cloud specific instructions
+
+- Node on the default PATH is 22.23.3. `tools/swarm` refuses anything older than 22.18.
+- Each boot runs `/opt/splitbook/start.sh`. It starts MongoDB 7.0.45 twice: a single-node replica set `rs0` on `127.0.0.1:27017` with test commands enabled (the app and `TEST_MONGODB_URI`), and a standalone `mongod` on `127.0.0.1:27018` (`STANDALONE_TEST_MONGODB_URI`). Login shells export both URIs. `pnpm test` needs both processes; the standalone group-cleanup file throws if `STANDALONE_TEST_MONGODB_URI` is unset.
+- The same script writes `apps/web/.env.local` when it is missing (`AUTH_MODE=demo`, database `splitbook-demo`, `NEXT_PUBLIC_APP_URL=http://localhost:4127`), runs `pnpm web demo:seed`, and leaves `pnpm dev` in the foreground on port 4127. Enter as Alex, Sam, or Priya at http://localhost:4127.
+- Do not run `pnpm build` while that dev server is using `apps/web/.next`.
