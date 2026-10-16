@@ -6203,8 +6203,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       publish: (value) => publish({ ...snapshot, sharedDraftCollection: value }),
     });
   };
-  /** The guided review, from `first` when the member tapped that item (#435). */
-  const startReviewRun = async (groupId?: string, first?: string) => {
+  /** The guided review, from the item the member tapped, when they tapped one (#435). */
+  const startReviewRun = async (groupId?: string, firstDraftId?: string) => {
     if (
       !persistentDrafts ||
       snapshot.auth.status !== 'authenticated' ||
@@ -6223,7 +6223,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ),
     );
     if (!items.length) return;
-    const tapped = items.findIndex((entry) => entry.item.draft.id === first);
+    const tapped = items.findIndex((entry) => entry.item.draft.id === firstDraftId);
     if (tapped > 0) items.unshift(...items.splice(tapped, 1));
     const owner = generation,
       view = route;

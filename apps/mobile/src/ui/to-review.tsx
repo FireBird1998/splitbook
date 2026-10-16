@@ -64,7 +64,7 @@ function Button({
   );
 }
 
-/** Backend/editor errors are translated at the presentation boundary, never used as decisions. */
+/** Backend errors are translated at the presentation boundary, never used as decisions. */
 function memberMessage(message: string) {
   return message
     .replace(/drafts?\b/gi, (word) => (word.toLowerCase() === 'drafts' ? 'items' : 'item'))
@@ -91,16 +91,25 @@ function sourceLabel(item: ReviewItemModel) {
 }
 function ItemDetails({ item }: { item: ReviewItemModel }) {
   const values = item.accountItem?.draft.values ?? item.deviceItem?.values;
+  // An item in your account says what it needs once, in its Needs line, so a missing fact leaves
+  // its place empty here rather than saying it again (#435).
+  const needs = !!item.accountItem;
   const date =
     values?.date && Number.isFinite(new Date(values.date).getTime())
       ? formatDate(values.date)
-      : 'Date needed';
+      : needs
+        ? null
+        : 'Date needed';
+  const amount = amountLabel(values);
   return (
     <View style={{ gap: 4 }}>
-      <CompactText weight="semibold">{values?.description || 'Description needed'}</CompactText>
-      <Money numberOfLines={0}>{amountLabel(values)}</Money>
+      <CompactText weight="semibold">
+        {values?.description || (needs ? 'Expense to review' : 'Description needed')}
+      </CompactText>
+      {!(needs && amount === 'Amount needed') && <Money numberOfLines={0}>{amount}</Money>}
       <CompactText variant="caption" tone="secondary">
-        {sourceLabel(item)} · {date}
+        {sourceLabel(item)}
+        {date ? ` · ${date}` : ''}
       </CompactText>
       {item.state !== 'on-this-phone' && (
         <CompactText variant="caption" tone={item.state === 'ready' ? 'positive' : 'warning'}>
@@ -475,12 +484,11 @@ export function ToReviewList({
                               >
                                 <ItemDetails item={item} />
                               </Pressable>
-                              {item.accountItem &&
-                                memberProblems(item.accountItem, names).map((problem) => (
-                                  <CompactText key={problem} tone="warning">
-                                    {problem}
-                                  </CompactText>
-                                ))}
+                              {memberProblems(item, names).map((problem) => (
+                                <CompactText key={problem} tone="warning">
+                                  {problem}
+                                </CompactText>
+                              ))}
                               {item.accountItem?.duplicates.map((duplicate, index) => (
                                 <CompactText key={index} tone="warning">
                                   May match {duplicate.description}

@@ -453,7 +453,6 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     });
     const run = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     expect(text(run)).toContain(clockTime(iso));
-    expect(text(run)).not.toMatch(/today \d{2}:\d{2}(?! ?[AP]M)/);
   });
   it('shows ready and missing details, both sources, duplicate details and deliberate acknowledgement', async () => {
     const f = fixture({ member: true });

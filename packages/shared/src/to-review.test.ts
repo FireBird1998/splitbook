@@ -380,6 +380,22 @@ describe('review member wording', () => {
 
 describe('memberProblems (#435)', () => {
   const alex = 'a00000000000000000000001';
+  const model = (problems: string[], values = {}, missingFields: string[] = []) =>
+    buildToReview(
+      {
+        total: 1,
+        groups: [
+          {
+            groupId: 'b00000000000000000000001',
+            groupName: 'Maple House',
+            count: 1,
+            items: [item(problems, values, missingFields)],
+          },
+        ],
+      },
+      [],
+      new Date('2026-10-16T12:00:00.000Z'),
+    ).items[0];
   const item = (problems: string[], values = {}, missingFields: string[] = []): ToReviewItem =>
     ({
       draft: {
@@ -402,7 +418,7 @@ describe('memberProblems (#435)', () => {
   it('leaves out a fact the item already says it needs, and never shows field names', () => {
     expect(
       memberProblems(
-        item(
+        model(
           [
             'paidBy: Choose who paid.',
             'splitMethod: Choose a split method.',
@@ -430,7 +446,7 @@ describe('memberProblems (#435)', () => {
     };
     expect(
       memberProblems(
-        item(['paidBy.0.amount: Required', 'paidBy.0.amount: Required', 'INVALID_TAG'], values),
+        model(['paidBy.0.amount: Required', 'paidBy.0.amount: Required', 'INVALID_TAG'], values),
         { [alex]: 'Alex' },
       ),
     ).toEqual(['The amount paid by Alex?', 'Choose an available Tag.']);

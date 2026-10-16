@@ -421,6 +421,14 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     for (const raw of ['Edit expense details', 'Currency (e.g. INR)', 'Date (YYYY-MM-DD)'])
       expect(text(list)).not.toContain(raw);
   });
+  it('names a missing date, amount or description once, in the Needs line (#435)', async () => {
+    const f = fixture();
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    expect(text(list)).toContain('Needs the amount, the currency, the date');
+    for (const repeated of ['Amount needed', 'Date needed', 'Description needed'])
+      expect(text(list)).not.toContain(repeated);
+  });
   it('says what an item needs once, in member words (#435)', async () => {
     const f = fixture({ unpaid: true });
     await signIn(f);
