@@ -5977,10 +5977,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // only foreground trigger (M1-6): this waits for what it started. A pull or Retry reads it all.
     if (snapshot.screen === 'group' && snapshot.detail.id)
       return reuse ? groupQueries.settle(generation) : openGroup(snapshot.detail.id, false);
-    // A pull or Retry reads Home's Groups list and its figures together (#333); a return to the
-    // foreground has already reached them through TanStack's focus event (M1-6), and waits for
-    // what it started.
-    return homeQueries.settle(generation, { fresh: !reuse });
+    // A pull or Retry reads Home's Groups list and its figures together (#333), and To review with
+    // them (#433); a return to the foreground has already reached them through TanStack's focus
+    // event (M1-6), and waits for what it started.
+    if (reuse) return homeQueries.settle(generation, { fresh: false });
+    await Promise.all([homeQueries.settle(generation, { fresh: true }), toReviewQueries.refresh()]);
   };
   /** A screen showing none of a Group: its saved copies no longer keep the offline banner. */
   const unshowGroup = () => {

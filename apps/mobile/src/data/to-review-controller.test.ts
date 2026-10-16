@@ -273,7 +273,7 @@ describe('To review stays current (#433)', () => {
     await f.controller.back();
     await settle();
     // The server's To review read still lists it (a read sent before the denial, or a lagging server).
-    await f.controller.refreshHome();
+    await f.controller.refresh();
     await settle();
     expect(f.controller.getSnapshot().toReview.read).toEqual({ total: 0, groups: [] });
     // Home lists it again only once the member creates or joins it again; so does To review.
@@ -333,7 +333,7 @@ describe('To review stays current (#433)', () => {
     await settle();
     f.prepare(3);
     const release = f.hold();
-    const refreshing = f.controller.refreshHome();
+    const refreshing = f.controller.refresh();
     await settle();
     await f.controller.openGroup(groupId);
     await settle();
@@ -375,7 +375,7 @@ describe('To review stays current (#433)', () => {
     await settle();
     f.prepare(2);
     const release = f.holdDevice();
-    const refreshing = f.controller.refreshHome();
+    const refreshing = f.controller.refresh('pull');
     await settle();
     expect(f.controller.getSnapshot().toReview).toMatchObject({
       status: 'ready',
@@ -385,18 +385,22 @@ describe('To review stays current (#433)', () => {
     await refreshing;
   });
 
-  it('Refresh Home reads To review again and shows items a Connected assistant prepared', async () => {
-    const f = fixture();
-    await f.controller.signIn('alex');
-    await settle();
-    f.prepare(2);
-    await f.controller.refreshHome();
-    await settle();
-    expect(f.controller.getSnapshot().toReview).toMatchObject({
-      status: 'ready',
-      read: { total: 2 },
-    });
-  });
+  // The top bar's Refresh Home is a Retry, and Home's pull-to-refresh a pull.
+  it.each(['retry', 'pull'] as const)(
+    'Refresh Home (%s) reads To review again and shows items a Connected assistant prepared',
+    async (origin) => {
+      const f = fixture();
+      await f.controller.signIn('alex');
+      await settle();
+      f.prepare(2);
+      await f.controller.refresh(origin);
+      await settle();
+      expect(f.controller.getSnapshot().toReview).toMatchObject({
+        status: 'ready',
+        read: { total: 2 },
+      });
+    },
+  );
 
   it('opens a Group To review with its items without a manual refresh', async () => {
     const f = fixture();
