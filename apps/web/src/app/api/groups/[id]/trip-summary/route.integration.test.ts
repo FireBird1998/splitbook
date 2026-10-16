@@ -368,24 +368,18 @@ describe('a member', () => {
     });
   });
 
-  it('reads days in the zone sent, never the server’s, and the Trip’s dates with them', async () => {
+  it('puts each Expense on the day it is dated, whatever the zone sent (#437)', async () => {
     const goa = await createGroup('Goa Friends Trip', [alice, bob]);
     await insertExpense(goa, '2026-09-17T00:00:00Z', { [alice]: 1000 });
-    // 20:00 UTC on 18 September: still the 18th in UTC, already the 19th in Kolkata.
-    await insertExpense(goa, '2026-09-18T20:00:00Z', { [alice]: 4200 });
+    await insertExpense(goa, '2026-09-18T00:00:00Z', { [alice]: 4200 });
 
     const spent = (summary: { days: { spentMinor: number }[] }) =>
       summary.days.map((day) => day.spentMinor);
-    const utc = (await read(goa, 'tz=UTC')).body.data;
-    const kolkata = (await read(goa, 'tz=Asia%2FKolkata')).body.data;
-    const newYork = (await read(goa, 'tz=America%2FNew_York')).body.data;
-
-    expect(spent(utc)).toEqual([1000, 4200, 0, 0]);
-    expect(spent(kolkata)).toEqual([1000, 0, 4200, 0]);
-    // UTC midnight is the evening before in New York: the Trip is 16 to 19 September there,
-    // and its first day's Expense is still on Day 1.
-    expect(newYork.tripDates).toEqual({ start: '2026-09-16', end: '2026-09-19' });
-    expect(spent(newYork)).toEqual([1000, 0, 4200, 0]);
+    for (const tz of ['UTC', 'Asia%2FKolkata', 'America%2FNew_York', 'Pacific%2FKiritimati']) {
+      const summary = (await read(goa, `tz=${tz}`)).body.data;
+      expect(summary.tripDates).toEqual({ start: '2026-09-17', end: '2026-09-20' });
+      expect(spent(summary)).toEqual([1000, 4200, 0, 0]);
+    }
   });
 
   it('counts Expenses outside the Trip’s dates in the whole trip, but not as days', async () => {

@@ -10,6 +10,7 @@ import type { ExpenseDraftValues, DraftReview } from '@splitbook/shared/validato
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { fetchWebExpenseRecord } from '@/lib/web-read';
+import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
 export function reviewSource(item: ToReviewItem) {
   const by = item.draft.preparedBy;
@@ -66,7 +67,8 @@ function ExpenseMatch({
       <Typography fontWeight={600}>{expense?.description ?? description}</Typography>
       {expense ? (
         <Typography variant="body2">
-          {formatCurrency(expense.amount, expense.currency)} · {formatDate(expense.date)} · Added by{' '}
+          {formatCurrency(expense.amount, expense.currency)} ·{' '}
+          {formatDate(expenseLocalDate(expense.date))} · Added by{' '}
           {typeof author === 'object' && author?.name ? author.name : 'a member'}
         </Typography>
       ) : (

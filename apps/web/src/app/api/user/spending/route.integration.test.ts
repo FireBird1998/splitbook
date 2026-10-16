@@ -173,10 +173,9 @@ describe('a member', () => {
     expect(inr.months[5].byGroup).toEqual([{ groupId: kerala, shareMinor: 1 }]);
   });
 
-  it('buckets Months in the zone sent, never the server’s', async () => {
+  it('counts an Expense in the Month it is dated, whatever the zone sent (#437)', async () => {
     const goa = await createGroup('Goa Friends Trip', [alice, bob]);
-    // 20:00 UTC on 31 August: 1 September in Kolkata, still 31 August in New York.
-    await insertExpense(goa, '2026-08-31T20:00:00Z', { [alice]: 4200 });
+    await insertExpense(goa, '2026-09-01T00:00:00Z', { [alice]: 4200 });
 
     const kolkata = (await read('months=2&tz=Asia%2FKolkata')).body.data;
     const newYork = (await read('months=2&tz=America%2FNew_York')).body.data;
@@ -184,7 +183,7 @@ describe('a member', () => {
     expect(kolkata.months).toEqual(['2026-08', '2026-09']);
     expect(shares(kolkata.currencies[0])).toEqual([0, 4200]);
     expect(newYork.months).toEqual(['2026-08', '2026-09']);
-    expect(shares(newYork.currencies[0])).toEqual([4200, 0]);
+    expect(shares(newYork.currencies[0])).toEqual([0, 4200]);
   });
 
   it('ends the window with the current Month in the zone sent', async () => {
@@ -474,22 +473,18 @@ describe('this Month in detail (#308)', () => {
     ]);
   });
 
-  it('is the Month of the zone sent', async () => {
+  it('counts the Expenses dated in this Month, whatever the zone sent (#437)', async () => {
     const goa = await createGroup('Goa Friends Trip', [alice, bob]);
-    // 20:00 UTC on 31 August: 1 September in Kolkata, still 31 August in New York.
-    await insertExpense(goa, '2026-08-31T20:00:00Z', { [alice]: 4200 });
+    await insertExpense(goa, '2026-09-01T00:00:00Z', { [alice]: 4200 });
+    await insertExpense(goa, '2026-08-31T00:00:00Z', { [alice]: 100 });
 
-    const kolkata = (await read('months=2&tz=Asia%2FKolkata')).body.data.thisMonth;
-    const newYork = (await read('months=2&tz=America%2FNew_York')).body.data.thisMonth;
-
-    expect(kolkata.groups[0].spent).toEqual([
-      { currency: 'INR', totalMinor: 4200, expenseCount: 1 },
-    ]);
-    expect(newYork).toEqual({
-      month: '2026-09',
-      byCategory: [],
-      groups: [{ groupId: goa, spent: [] }],
-    });
+    for (const tz of ['Asia%2FKolkata', 'America%2FNew_York']) {
+      const thisMonth = (await read(`months=2&tz=${tz}`)).body.data.thisMonth;
+      expect(thisMonth.month).toBe('2026-09');
+      expect(thisMonth.groups[0].spent).toEqual([
+        { currency: 'INR', totalMinor: 4200, expenseCount: 1 },
+      ]);
+    }
   });
 
   it('covers only the member’s own Groups', async () => {

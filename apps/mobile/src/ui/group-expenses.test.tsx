@@ -65,7 +65,8 @@ const expense = (
     currency: 'INR',
     amount: amountMinor / 100,
     amountMinor,
-    date: new Date(2026, 8, day, 12),
+    // Dated by calendar day, stored at midnight UTC (#437).
+    date: new Date(Date.UTC(2026, 8, day)),
     createdAt: new Date(at),
     updatedAt: new Date(at),
     category: 'food',

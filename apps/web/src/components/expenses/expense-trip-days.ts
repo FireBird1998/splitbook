@@ -21,6 +21,7 @@ import {
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
 import { dayKeyInZone, type Instant } from '@splitbook/shared/zoned-calendar';
 import { tripDayName } from '@/components/trip-summary/trip-days';
+import { expenseDay } from '@splitbook/shared/expense-day';
 
 export interface TripDayTotal {
   currency: string;
@@ -63,8 +64,9 @@ export function tripDayHeadings(
   expenses: readonly Listed[],
   { timeZone, startDate, endDate, currency, now = new Date() }: TripDayOptions,
 ): Map<string, TripDayHeading> {
-  const start = startDate ? dayKeyInZone(startDate, timeZone) : null;
-  const end = endDate ? dayKeyInZone(endDate, timeZone) : null;
+  // A Trip's dates and its Expenses' are calendar days, the same in every zone (#437).
+  const start = startDate ? expenseDay(startDate) : null;
+  const end = endDate ? expenseDay(endDate) : null;
   const dates = {
     start: start && end && end < start ? end : start,
     end: start && end && end < start ? start : end,
@@ -84,7 +86,7 @@ export function tripDayHeadings(
       }));
   };
   for (const expense of expenses) {
-    const day = dayKeyInZone(expense.date, timeZone);
+    const day = expenseDay(expense.date);
     if (!current || current.heading.day !== day) {
       close();
       const heading: TripDayHeading = {

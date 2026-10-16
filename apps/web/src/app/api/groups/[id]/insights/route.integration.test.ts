@@ -290,19 +290,18 @@ describe('a member', () => {
     expect(column(body.data.months, 'spentMinor')).toEqual([700, 0, 0, 0, 0]);
   });
 
-  it('buckets Months in the zone sent, never the server’s', async () => {
+  it('counts an Expense in the Month it is dated, whatever the zone sent (#437)', async () => {
     const maple = await createGroup('Maple House', [alice, bob]);
     await createdIn(maple, '2026-03-02T10:00:00Z');
-    // 20:00 UTC on 31 August: 1 September in Kolkata, still 31 August in New York.
-    await insertExpense(maple, '2026-08-31T20:00:00Z', { [alice]: 4200 });
+    await insertExpense(maple, '2026-09-01T00:00:00Z', { [alice]: 4200 });
 
     const kolkata = (await read(maple, 'month=2026-09&compare=1&tz=Asia%2FKolkata')).body.data;
     const newYork = (await read(maple, 'month=2026-09&compare=1&tz=America%2FNew_York')).body.data;
 
     expect(column(kolkata.months, 'spentMinor')).toEqual([0, 4200]);
-    expect(column(newYork.months, 'spentMinor')).toEqual([4200, 0]);
+    expect(column(newYork.months, 'spentMinor')).toEqual([0, 4200]);
     expect(kolkata.biggestExpense).toMatchObject({ amountMinor: 4200 });
-    expect(newYork.biggestExpense).toBeNull();
+    expect(newYork.biggestExpense).toMatchObject({ amountMinor: 4200 });
   });
 
   it('reads the current Month in the zone sent, and compares six by default', async () => {

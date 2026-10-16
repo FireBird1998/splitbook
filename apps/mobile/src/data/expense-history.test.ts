@@ -279,11 +279,8 @@ describe('describeExpenseHistory', () => {
     const [entry] = describeExpenseHistory(
       record([
         edit({
-          // Stored at local noon, as the app saves dates.
-          date: {
-            old: new Date(2026, 7, 31, 12).toISOString(),
-            new: new Date(2026, 8, 1, 12).toISOString(),
-          },
+          // Stored at midnight UTC, as every Expense date is (#437).
+          date: { old: '2026-08-31T00:00:00.000Z', new: '2026-09-01T00:00:00.000Z' },
           category: { old: 'food', new: 'transport' },
           tagId: { old: 'c00000000000000000000001', new: 'c00000000000000000000002' },
           receiptUrl: { old: null, new: 'https://example.test/receipt.png' },
