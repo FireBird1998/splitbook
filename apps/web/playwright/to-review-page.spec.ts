@@ -109,6 +109,10 @@ test("a lone payer's mismatched amount stays editable while it is cleared and re
   await expect(page.getByRole('region', { name: 'Ready', exact: true })).toContainText(
     'Review meal 1',
   );
+  // Choosing one payer again still works: the kept several-payers mode is only a default.
+  await panel(page).getByRole('button', { name: 'Single payer', exact: true }).click();
+  await expect(panel(page).getByLabel('Paid by', { exact: true })).toHaveText('Alex Rivera');
+  await expect(paid).toHaveCount(0);
 });
 
 test('possible duplicate shows the matching Expense and requires the explicit tick', async ({
