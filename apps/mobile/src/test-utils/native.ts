@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { createElement, type ComponentType, type ReactNode, type Ref } from 'react';
 
 // Stand-ins for React Native, react-native-safe-area-context and Ionicons, mocked for every test
 // file by `./setup.ts`. Components render as host names ('View', 'Pressable', …), so a rendered
@@ -212,6 +213,41 @@ export const reactNative = {
   Pressable: 'Pressable',
   RefreshControl: 'RefreshControl',
   ScrollView: 'ScrollView',
+  // Renders only the public header/cell/footer contract. Native windowing is measured on Android.
+  FlatList: function FlatList<Row>(props: {
+    ref?: Ref<unknown>;
+    data: Row[];
+    keyExtractor: (row: Row) => string;
+    renderItem: (info: { item: Row; index: number }) => ReactNode;
+    CellRendererComponent?: ComponentType<Record<string, unknown>>;
+    ListHeaderComponent?: ReactNode;
+    ListFooterComponent?: ReactNode;
+    ListEmptyComponent?: ReactNode;
+    [key: string]: unknown;
+  }) {
+    const Cell = props.CellRendererComponent ?? 'View';
+    return createElement(
+      'FlatList',
+      props,
+      props.ListHeaderComponent,
+      props.data.length
+        ? props.data.map((item, index) =>
+            createElement(
+              Cell,
+              {
+                key: props.keyExtractor(item),
+                cellKey: props.keyExtractor(item),
+                item,
+                index,
+                onLayout: () => undefined,
+              },
+              props.renderItem({ item, index }),
+            ),
+          )
+        : props.ListEmptyComponent,
+      props.ListFooterComponent,
+    );
+  },
   Share: { share: spies.share },
   StyleSheet: {
     create: <T>(styles: T) => styles,
@@ -240,3 +276,34 @@ export const safeAreaContext = {
 // An icon is a host 'Ionicons' node carrying its name and color. It has no `font` map, which the
 // App spreads into `useFonts`; the App tests replace `expo-font`.
 export const ionicons = { default: 'Ionicons' };
+
+/** Fictional native viewport/ref coordinates for rendered ledger scroll-call tests. */
+export function nativeScrollCoordinates() {
+  const places = new Map<unknown, { top: number; height: number }>();
+  let y = 0;
+  return {
+    places,
+    reset: () => {
+      places.clear();
+      y = 0;
+    },
+    createNodeMock: (node: { type: unknown; props: unknown }) => ({
+      scrollToIndex: () => undefined,
+      scrollToOffset: ({ offset }: { offset: number }) => {
+        y = offset;
+      },
+      getNativeScrollRef: () => ({
+        measureInWindow: (answer: (x: number, y: number, width: number, height: number) => void) =>
+          answer(0, 0, 390, 700),
+      }),
+      measureInWindow: (answer: (x: number, y: number, width: number, height: number) => void) => {
+        const ref =
+          node.props && typeof node.props === 'object' && 'ref' in node.props
+            ? node.props.ref
+            : undefined;
+        const row = places.get(ref);
+        if (row) answer(0, row.top - y, 390, row.height);
+      },
+    }),
+  };
+}

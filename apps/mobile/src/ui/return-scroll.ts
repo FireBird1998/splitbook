@@ -1,6 +1,6 @@
 import type { ScrollAnchor } from '../data/types';
 
-/** Native layouts in the destination's ScrollView content, never saved on the phone. */
+/** Native layouts in the destination’s scrolling content, never saved on the phone. */
 export type RowPlaces = ReadonlyMap<string, { top: number; height: number }>;
 
 /** The first visible row, with the scroll offset measured from its top. */
@@ -29,4 +29,16 @@ export function returnScrollTarget(
   const row = restore.anchor && rows.get(restore.anchor.key);
   const y = row && restore.anchor ? row.top + restore.anchor.offset : restore.y;
   return Math.max(0, Math.min(y, Math.max(0, view.content - view.viewport)));
+}
+
+/** Native FlatList measures variable-height rows; identities select an index, not a guessed height. */
+export function virtualReturnTarget(
+  restore: { y: number; anchor?: ScrollAnchor },
+  items: ReadonlyArray<{ key: string }>,
+  view: { content: number; viewport: number },
+): { kind: 'index'; index: number; viewOffset: number } | { kind: 'offset'; offset: number } {
+  const index = restore.anchor ? items.findIndex(({ key }) => key === restore.anchor!.key) : -1;
+  return index >= 0 && restore.anchor
+    ? { kind: 'index', index, viewOffset: -restore.anchor.offset }
+    : { kind: 'offset', offset: returnScrollTarget(restore, new Map(), view) };
 }

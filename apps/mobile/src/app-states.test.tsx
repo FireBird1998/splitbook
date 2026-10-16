@@ -467,7 +467,13 @@ async function usedBefore(phone: ReturnType<typeof device>) {
 async function start(phone: ReturnType<typeof device>) {
   runtime.controller = phone.controller();
   await act(async () => {
-    screen = create(<App />, { createNodeMock: () => ({ scrollTo: () => undefined }) });
+    screen = create(<App />, {
+      createNodeMock: () => ({
+        scrollTo: () => undefined,
+        scrollToOffset: () => undefined,
+        scrollToIndex: () => undefined,
+      }),
+    });
   });
   const root = () => screen!.root;
   const hosts = (match: (props: Record<string, unknown>) => boolean) =>
@@ -488,7 +494,9 @@ async function start(phone: ReturnType<typeof device>) {
     text,
     /** The visible destination's own content, below the top bar; and everything else. */
     content: () => {
-      const inside = texts(root().findAll((node) => (node.type as unknown) === 'ScrollView')[0]);
+      const inside = texts(
+        root().findAll((node) => ['ScrollView', 'FlatList'].includes(String(node.type)))[0],
+      );
       return {
         inside: strings(inside),
         outside: strings(texts(root()).filter((node) => !inside.includes(node))),
@@ -1639,7 +1647,10 @@ describe('A Group says what is true, without jumps (#219)', () => {
    * as Yoga stacks them (`layoutHeight`). Sheets lie over it and take no room.
    */
   const contentHeight = (fontScale = 1) => {
-    const [scroll] = findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView');
+    const [scroll] = findHosts(
+      screen!.toJSON(),
+      (_props, type) => type === 'ScrollView' || type === 'FlatList',
+    );
     const style = flatten(scroll!.props.contentContainerStyle);
     const children = (scroll!.children ?? []).filter(
       (child): child is ReactTestRendererJSON =>
@@ -1648,13 +1659,16 @@ describe('A Group says what is true, without jumps (#219)', () => {
     const room = 360 - 2 * (style.paddingHorizontal as number);
     return (
       children.reduce((sum, child) => sum + layoutHeight(child, fontScale, room), 0) +
-      (style.gap as number) * Math.max(0, children.length - 1)
+      Number(style.gap ?? 0) * Math.max(0, children.length - 1)
     );
   };
   /** What the scrolling content announces as loading. */
   const busy = () =>
     findHosts(
-      findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!,
+      findHosts(
+        screen!.toJSON(),
+        (_props, type) => type === 'ScrollView' || type === 'FlatList',
+      )[0]!,
       (props) => (props.accessibilityState as { busy?: boolean } | undefined)?.busy === true,
     ).map((node) => node.props.accessibilityLabel);
   /** The icons beside the words `words`: in the row, card or notice that holds them. */
@@ -1690,7 +1704,12 @@ describe('A Group says what is true, without jumps (#219)', () => {
             ? ''
             : (node.children ?? []).map(words).join('');
   const seen = () =>
-    words(findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!);
+    words(
+      findHosts(
+        screen!.toJSON(),
+        (_props, type) => type === 'ScrollView' || type === 'FlatList',
+      )[0]!,
+    );
   /**
    * What the screen's statuses are fading out (#331): text a reader may still see for a moment
    * beside what replaced it.

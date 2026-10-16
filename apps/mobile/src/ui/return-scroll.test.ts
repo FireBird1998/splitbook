@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { returnScrollTarget, visibleRowAnchor } from './return-scroll';
+import { returnScrollTarget, virtualReturnTarget, visibleRowAnchor } from './return-scroll';
 
 // Native row layouts in scroll-content coordinates; no React Native or guessed font heights.
 const rows = new Map([
@@ -69,5 +69,31 @@ describe('returning to a laid-out row (#225)', () => {
     expect(returnScrollTarget({ y: 550, anchor }, grown, { content: 1600, viewport: 600 })).toBe(
       750,
     );
+  });
+});
+
+describe('returning to a virtualized row (#179)', () => {
+  it('finds the anchored identity after a reorder, including a partially visible row', () => {
+    expect(
+      virtualReturnTarget(
+        { y: 1800, anchor: { key: 'rent', offset: 90 } },
+        [{ key: 'day:today' }, { key: 'groceries' }, { key: 'rent' }],
+        { content: 2300, viewport: 600 },
+      ),
+    ).toEqual({ kind: 'index', index: 2, viewOffset: -90 });
+    expect(
+      virtualReturnTarget(
+        { y: 350, anchor: { key: 'rent', offset: -50 } },
+        [{ key: 'day:today' }, { key: 'rent' }],
+        { content: 2300, viewport: 600 },
+      ),
+    ).toEqual({ kind: 'index', index: 1, viewOffset: 50 });
+    expect(
+      virtualReturnTarget(
+        { y: 1800, anchor: { key: 'deleted', offset: 25 } },
+        [{ key: 'day:today' }, { key: 'groceries' }],
+        { content: 1200, viewport: 700 },
+      ),
+    ).toEqual({ kind: 'offset', offset: 500 });
   });
 });

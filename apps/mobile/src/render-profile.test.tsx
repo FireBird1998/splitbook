@@ -128,6 +128,7 @@ vi.mock('./ui/financial-views', async (load) => counting.wrap(await load<Module>
 vi.mock('./ui/group-activity', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-balances', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-expenses', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/group-ledger-list', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-members', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-shell', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-snackbar', async (load) => counting.wrap(await load<Module>()));
@@ -580,7 +581,14 @@ async function renderApp(options?: {
       >
         <App />
       </Profiler>,
-      { createNodeMock: () => ({ scrollTo: () => undefined, focus: () => undefined }) },
+      {
+        createNodeMock: () => ({
+          scrollTo: () => undefined,
+          scrollToIndex: () => undefined,
+          scrollToOffset: () => undefined,
+          focus: () => undefined,
+        }),
+      },
     );
   });
   await settle();
@@ -605,7 +613,11 @@ async function renderApp(options?: {
       settle(
         Promise.resolve(
           root()
-            .find((node) => isHost(node, 'ScrollView') && node.props.refreshControl)
+            .find(
+              (node) =>
+                (isHost(node, 'ScrollView') || isHost(node, 'FlatList')) &&
+                node.props.refreshControl,
+            )
             .props.refreshControl.props.onRefresh(),
         ),
       ),

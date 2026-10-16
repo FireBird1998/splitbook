@@ -12,7 +12,13 @@ import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
-import { backListenerCount, emitAppState, pressBack, setWindow } from './test-utils/native';
+import {
+  backListenerCount,
+  emitAppState,
+  nextFrame,
+  pressBack,
+  setWindow,
+} from './test-utils/native';
 import { GroupExpensesView } from './ui/group-expenses';
 import { GroupActivity } from './ui/group-activity';
 
@@ -23,7 +29,9 @@ const runtime = vi.hoisted(() => ({
   appearance: { mode: 'light', status: 'ready', message: null },
 }));
 // The native ScrollView method the stand-ins lack; `renderApp` records scroll requests with it.
-const native = { scrollTo: vi.fn() };
+const native = { scrollTo: vi.fn(), scrollToIndex: vi.fn(), scrollToOffset: vi.fn() };
+const nativePlaces = new Map<unknown, { key: string; top: number; height: number }>();
+const nativePosition = { y: 0, viewport: 0 };
 vi.mock('react-native-nitro-google-signin', () => ({ GoogleSignInButton: 'GoogleSignInButton' }));
 vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
@@ -290,6 +298,22 @@ function hold() {
 let screen: ReactTestRenderer | null = null;
 const consoleError = console.error;
 beforeEach(() => {
+  nativePlaces.clear();
+  Object.assign(nativePosition, { y: 0, viewport: 0 });
+  native.scrollTo.mockImplementation(({ y }: { y: number }) => {
+    nativePosition.y = y;
+  });
+  native.scrollToOffset.mockImplementation(({ offset }: { offset: number }) => {
+    nativePosition.y = offset;
+  });
+  native.scrollToIndex.mockImplementation(
+    ({ index, viewOffset }: { index: number; viewOffset?: number }) => {
+      const list = screen?.root.findAll((node) => (node.type as unknown) === 'FlatList')[0];
+      const key = list?.props.data[index]?.key;
+      const row = [...nativePlaces.values()].find((row) => row.key === key);
+      if (row) nativePosition.y = row.top - (viewOffset ?? 0);
+    },
+  );
   // Controller snapshots published between act scopes are the behaviour under test.
   vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
     const message = String(args[0]);
@@ -301,12 +325,17 @@ afterEach(() => {
   act(() => screen?.unmount());
   screen = null;
   native.scrollTo.mockClear();
+  native.scrollToIndex.mockClear();
+  native.scrollToOffset.mockClear();
   vi.restoreAllMocks();
 });
 const settle = (pending?: Promise<unknown>) =>
   act(async () => {
     await pending;
-    for (let tick = 0; tick < 10; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
+    for (let tick = 0; tick < 10; tick++) {
+      nextFrame();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
   });
 
 async function renderApp() {
@@ -316,7 +345,27 @@ async function renderApp() {
   await act(async () => {
     // Host stand-ins have no native methods; the Group view's scroll requests are recorded.
     screen = create(<App />, {
-      createNodeMock: () => ({ scrollTo: native.scrollTo, focus: () => undefined }),
+      createNodeMock: (node) => ({
+        scrollTo: native.scrollTo,
+        scrollToIndex: native.scrollToIndex,
+        scrollToOffset: native.scrollToOffset,
+        getNativeScrollRef: () => ({
+          measureInWindow: (
+            answer: (x: number, y: number, width: number, height: number) => void,
+          ) => answer(0, 0, 390, nativePosition.viewport),
+        }),
+        measureInWindow: (
+          answer: (x: number, y: number, width: number, height: number) => void,
+        ) => {
+          const ref =
+            node.props && typeof node.props === 'object' && 'ref' in node.props
+              ? node.props.ref
+              : undefined;
+          const row = nativePlaces.get(ref);
+          answer(0, row ? row.top - nativePosition.y : 0, row ? 390 : 0, row?.height ?? 0);
+        },
+        focus: () => undefined,
+      }),
     });
   });
   await settle();
@@ -333,10 +382,13 @@ async function renderApp() {
         isHost(node, 'Pressable') && String(node.props.accessibilityLabel ?? '').startsWith(label),
     );
   const refreshControl = () =>
-    root().find((node) => isHost(node, 'ScrollView') && node.props.refreshControl).props
-      .refreshControl.props as { refreshing: boolean; onRefresh: () => void };
+    root().find(
+      (node) =>
+        (isHost(node, 'ScrollView') || isHost(node, 'FlatList')) && node.props.refreshControl,
+    ).props.refreshControl.props as { refreshing: boolean; onRefresh: () => void };
   // The visible screen's; a Group's closed options sheet renders its own after it.
-  const scrollView = () => root().findAll((node) => isHost(node, 'ScrollView'))[0];
+  const scrollView = () =>
+    root().findAll((node) => isHost(node, 'ScrollView') || isHost(node, 'FlatList'))[0];
   const progressbars = () =>
     root().findAll(
       (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'progressbar',
@@ -359,20 +411,25 @@ async function renderApp() {
       ),
     /** The member scrolls the visible screen to this offset. */
     scrollTo: (y: number) =>
-      act(() => scrollView().props.onScroll({ nativeEvent: { contentOffset: { y } } })),
+      act(() => {
+        nativePosition.y = y;
+        scrollView().props.onScroll({ nativeEvent: { contentOffset: { y } } });
+      }),
     /**
      * Scrolling stops at this offset: the drag ends there, or the fling after it does. The
      * throttled scroll events may not have reported it (#219).
      */
     scrollEnd: (y: number, by: 'drag' | 'fling') =>
-      act(() =>
+      act(() => {
+        nativePosition.y = y;
         scrollView().props[by === 'drag' ? 'onScrollEndDrag' : 'onMomentumScrollEnd']({
           nativeEvent: { contentOffset: { y } },
-        }),
-      ),
+        });
+      }),
     /** Native layout reports the visible screen's viewport and content heights. */
     layout: (viewport: number, content: number) =>
       act(() => {
+        nativePosition.viewport = viewport;
         scrollView().props.onLayout({ nativeEvent: { layout: { height: viewport } } });
         scrollView().props.onContentSizeChange(390, content);
       }),
@@ -863,9 +920,11 @@ describe('App Group Activity refresh', () => {
     await app.scrollTo(900);
     await settle(app.controller.openActivityEvent('d00000000000000000000001', { scrollY: 900 }));
     native.scrollTo.mockClear();
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
     expect(await app.androidBack()).toBe(true);
     await app.layout(700, 2100);
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 900, animated: false });
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 900, animated: false });
   });
 
   async function onActivity() {
@@ -974,7 +1033,7 @@ describe('App Trip strip', () => {
       'Trip from GOA to TRI, 17 to 20 September, 1 member',
     );
     // Part of the scrolling content, so it scrolls away, and above the Expenses summary.
-    const content = screen!.root.findAll((node) => (node.type as unknown) === 'ScrollView')[0];
+    const content = screen!.root.findAll((node) => (node.type as unknown) === 'FlatList')[0];
     expect(strips(content)).toHaveLength(1);
     const shown = app.text();
     expect(shown.indexOf('17–20 Sep')).toBeGreaterThan(-1);
@@ -1128,7 +1187,7 @@ describe('App return from an Expense', () => {
     expect(app.text()).toContain('August rent');
     expect(app.text()).not.toContain('September groceries');
     await app.layout(700, 1600);
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 420, animated: false });
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 420, animated: false });
 
     // Leaving never discarded the draft: Expenses offers it, and resuming skips the prompt.
     expect(app.text()).toContain('Draft: Kept for later');
@@ -1286,7 +1345,7 @@ describe('App return from an Expense', () => {
     expect(await app.androidBack()).toBe(true);
     expect(app.text()).toContain('Changes in this Group');
     await app.layout(700, 1600);
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 300, animated: false });
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 300, animated: false });
   });
 
   it('settles on the nearest place when the Activity it returns to is shorter', async () => {
@@ -1294,11 +1353,17 @@ describe('App return from an Expense', () => {
     await openFromActivity(app);
     expect(await app.androidBack()).toBe(true);
     await app.layout(700, 800);
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 100, animated: false });
+    act(() => nextFrame());
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 100, animated: false });
     // Activity is shown, so content that grows later doesn't move the member.
     native.scrollTo.mockClear();
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
     await app.layout(700, 1600);
+    act(() => nextFrame());
     expect(native.scrollTo).not.toHaveBeenCalled();
+    expect(native.scrollToOffset).not.toHaveBeenCalled();
+    expect(native.scrollToIndex).not.toHaveBeenCalled();
   });
 
   it('confirms a save in the Month shown without offering another Month', async () => {
@@ -1330,40 +1395,15 @@ describe('App return from an Expense', () => {
   });
 });
 
-/** Native parent-relative coordinates through either of Card's body shapes. */
+/** Fictional native content coordinates: the old row fixture starts after its 281dp header. */
 function layNativeRow(pressed: ReactTestInstance, rowY: number, height = 60) {
-  let node: ReactTestInstance | null = pressed;
-  const places: ReactTestInstance[] = [];
-  while (node && places.length < 4) {
-    if ((node.type as unknown) === 'View' && node.props.onLayout) places.push(node);
-    node = node.parent;
-  }
-  let parent = places[1].parent;
-  while (parent && typeof parent.type !== 'string') parent = parent.parent;
-  const dayY = Number(flatten(parent!.props.style).borderWidth ?? 0);
-  // The fade body is itself laid out inside the Card; direct day children need no intermediate y.
-  if (parent!.props.onLayout) {
-    let card = parent!.parent;
-    while (card && typeof card.type !== 'string') card = card.parent;
-    act(() =>
-      parent!.props.onLayout({
-        nativeEvent: {
-          layout: {
-            y: Number(flatten(card!.props.style).borderWidth ?? 0),
-            height,
-          },
-        },
-      }),
-    );
-  }
-  act(() =>
-    places.forEach((place, index) =>
-      place.props.onLayout({
-        nativeEvent: { layout: { y: [rowY, dayY, 200, 80][index], height } },
-      }),
-    ),
-  );
-  return parent!.type;
+  let cell: ReactTestInstance | null = pressed;
+  while (cell && !((cell.type as unknown) === 'View' && cell.props.onLayout)) cell = cell.parent;
+  if (!cell) throw new Error('The row has no native cell measurement');
+  let record = cell.parent;
+  while (record && !record.props.cellKey) record = record.parent;
+  nativePlaces.set(cell.props.ref, { key: String(record?.props.cellKey), top: rowY + 281, height });
+  act(() => cell!.props.onLayout({ nativeEvent: { layout: { y: rowY + 281, height } } }));
 }
 
 describe('App Expense window (#219)', () => {
@@ -1428,9 +1468,11 @@ describe('App Expense window (#219)', () => {
       gone = true;
       await app.androidBack();
       native.scrollTo.mockClear();
+      native.scrollToIndex.mockClear();
+      native.scrollToOffset.mockClear();
       await app.layout(700, 1200);
       await settle(new Promise((resolve) => setTimeout(resolve, 0)));
-      expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 500, animated: false });
+      expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 500, animated: false });
     },
   );
 
@@ -1454,6 +1496,8 @@ describe('App Expense window (#219)', () => {
       await app.press('Fictional row 5-5');
       await app.androidBack();
       native.scrollTo.mockClear();
+      native.scrollToIndex.mockClear();
+      native.scrollToOffset.mockClear();
       let selection: Promise<unknown> | undefined;
       // Deliver layout and the member's input before yielding to the queued return timer.
       // Awaiting layout first can let that timer scroll before the cancellation under test.
@@ -1463,20 +1507,24 @@ describe('App Expense window (#219)', () => {
         if (choice === 'drag')
           app
             .root()
-            .findAll((node) => (node.type as unknown) === 'ScrollView')[0]
+            .findAll((node) => (node.type as unknown) === 'FlatList')[0]
             .props.onScrollBeginDrag();
         else selection = app.controller.selectMonth('2026-08');
       });
       await settle(selection);
       expect(native.scrollTo).not.toHaveBeenCalled();
+      expect(native.scrollToOffset).not.toHaveBeenCalled();
+      expect(native.scrollToIndex).not.toHaveBeenCalled();
       // Subsequent native layout callbacks cannot resurrect the cancelled return.
       await app.layout(700, 7000);
       await settle(new Promise((resolve) => setTimeout(resolve, 0)));
       expect(native.scrollTo).not.toHaveBeenCalled();
+      expect(native.scrollToOffset).not.toHaveBeenCalled();
+      expect(native.scrollToIndex).not.toHaveBeenCalled();
     },
   );
 
-  it('keeps the same row point when Back changes a faded Card to direct children (#225 coordinate)', async () => {
+  it('keeps the same row point after the first load replaces its placeholder (#225 coordinate)', async () => {
     const app = await renderApp();
     const expenseId = `e${String(5 * 100 + 4).padStart(23, '0')}`;
     const first = hold();
@@ -1499,18 +1547,24 @@ describe('App Expense window (#219)', () => {
     await settle();
     for (let number = 2; number <= 6; number++) await app.press('Load more expenses');
     const layNative = (label: string, rowY: number) => layNativeRow(app.pressable(label), rowY);
-    expect(layNative('Fictional row 5-1,', 4200)).toBe('AnimatedView');
+    layNative('Fictional row 5-1,', 4200);
     layNative('Fictional row 5-5', 4440);
     await app.layout(700, 6500);
     await app.scrollTo(4500);
     await app.press('Fictional row 5-5');
     await app.androidBack();
     native.scrollTo.mockClear();
-    expect(layNative('Fictional row 5-1,', 4500)).toBe('View');
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
+    layNative('Fictional row 5-1,', 4500);
     layNative('Fictional row 5-5', 4740);
     await app.layout(700, 6500);
     await settle(new Promise((resolve) => setTimeout(resolve, 0)));
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 4800, animated: false });
+    expect(native.scrollToIndex).toHaveBeenLastCalledWith({
+      index: 61,
+      viewOffset: -19,
+      animated: false,
+    });
   });
 
   it('returns to the first visible Expense row after layouts above it grow (#225)', async () => {
@@ -1538,12 +1592,79 @@ describe('App Expense window (#219)', () => {
     });
     await app.androidBack();
     native.scrollTo.mockClear();
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
     // The first visible row moved down by 300 dp; Back keeps the same point in that row.
     layReturnRow(app, 'Fictional row 5-1,', 4500);
     layReturnRow(app, 'Fictional row 5-5', 4740);
     await app.layout(700, 6500);
     await settle(new Promise((resolve) => setTimeout(resolve, 0)));
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 4800, animated: false });
+    expect(native.scrollToIndex).toHaveBeenLastCalledWith({
+      index: 61,
+      viewOffset: -19,
+      animated: false,
+    });
+  });
+
+  it('waits for page 3 and the real offscreen cell after an estimated index failure (#179)', async () => {
+    const app = await renderApp();
+    const id = `e${String(3 * 100 + 4).padStart(23, '0')}`;
+    app.use((path) =>
+      path === `/api/groups/${groupId}/expenses/${id}`
+        ? json({
+            status: 200,
+            data: { ...expense(id, 'Fictional row 3-5'), revision: 0, isDeleted: false },
+          })
+        : sixPages(path),
+    );
+    await app.press('Open Maple House');
+    await app.press('Load more expenses');
+    await app.press('Load more expenses');
+    layReturnRow(app, 'Fictional row 3-5', 4200);
+    await app.layout(700, 6500);
+    await app.scrollTo(4500);
+    await app.press('Fictional row 3-5');
+    expect(app.controller.getSnapshot().expense.returnTo?.anchor).toEqual({ key: id, offset: 19 });
+    const held: (() => void)[] = [];
+    app.use((path) =>
+      path.includes('/expenses?')
+        ? new Promise<FetchResponse>((resolve) => held.push(() => resolve(sixPages(path)!)))
+        : undefined,
+    );
+    await app.androidBack();
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
+    await app.layout(700, 6500);
+    await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(native.scrollToIndex).not.toHaveBeenCalled();
+    native.scrollToIndex.mockImplementation(() => {
+      const list = app.root().find((node) => (node.type as unknown) === 'FlatList');
+      list.props.onScrollToIndexFailed({
+        index: 45,
+        highestMeasuredFrameIndex: 7,
+        averageItemLength: 80,
+      });
+    });
+    while (held.length) {
+      held.shift()!();
+      await settle();
+    }
+    await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(native.scrollToIndex).toHaveBeenLastCalledWith({
+      index: 45,
+      viewOffset: -19,
+      animated: false,
+    });
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 3600, animated: false });
+    native.scrollToIndex.mockReset();
+    // The guessed offset did not finish the return. Real layout arrives after a large-text/header change.
+    layReturnRow(app, 'Fictional row 3-5', 4500);
+    await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 4800, animated: false });
+    expect(native.scrollToIndex).not.toHaveBeenCalled();
+    // An immediate second opening must use the restored point, before a throttled native scroll event.
+    await app.press('Fictional row 3-5');
+    expect(app.controller.getSnapshot().expense.returnTo?.anchor).toEqual({ key: id, offset: 19 });
   });
 
   it('keeps the row on screen when the newest page drops: it scrolls from where the slide began', async () => {
@@ -1553,6 +1674,8 @@ describe('App Expense window (#219)', () => {
     for (let number = 2; number <= 5; number += 1) await app.press('Load more expenses');
     await app.scrollTo(5000);
     native.scrollTo.mockClear();
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
     await app.press('Load more expenses');
     expect(app.text()).toContain('Fictional row 6-20');
     expect(app.text()).not.toContain('Fictional row 1-1');
@@ -1560,14 +1683,14 @@ describe('App Expense window (#219)', () => {
     await app.scrollTo(4200);
     const view = screen!.root.findByType(GroupExpensesView);
     act(() => view.props.onShift(-1140));
-    expect(native.scrollTo).toHaveBeenLastCalledWith({
-      y: 5000 - 1140,
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({
+      offset: 5000 - 1140,
       animated: false,
     });
     // Only the slide's own shift starts from there.
     act(() => view.props.onShift(-60));
-    expect(native.scrollTo).toHaveBeenLastCalledWith({
-      y: 5000 - 1140 - 60,
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({
+      offset: 5000 - 1140 - 60,
       animated: false,
     });
   });
@@ -1584,10 +1707,15 @@ describe('App Expense window (#219)', () => {
       await app.scrollTo(4968);
       await app.scrollEnd(5000, by);
       native.scrollTo.mockClear();
+      native.scrollToIndex.mockClear();
+      native.scrollToOffset.mockClear();
       await app.press('Load more expenses');
       const view = screen!.root.findByType(GroupExpensesView);
       act(() => view.props.onShift(-1140));
-      expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000 - 1140, animated: false });
+      expect(native.scrollToOffset).toHaveBeenLastCalledWith({
+        offset: 5000 - 1140,
+        animated: false,
+      });
     },
   );
 
@@ -1599,11 +1727,13 @@ describe('App Expense window (#219)', () => {
     await app.scrollTo(40);
     await app.scrollEnd(60, 'fling');
     native.scrollTo.mockClear();
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
     await app.press('Load newer expenses');
     expect(app.text()).toContain('Fictional row 1-1');
     const view = screen!.root.findByType(GroupExpensesView);
     act(() => view.props.onShift(1140));
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 60 + 1140, animated: false });
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 60 + 1140, animated: false });
   });
 
   // The device recheck of a31f3e8 (#219): an edit at the list's end came back one row short, as the
@@ -1634,6 +1764,8 @@ describe('App Expense window (#219)', () => {
     await settle(app.controller.updateExpenseDraft({ description: 'Fictional row 5-19 r' }));
     holding = true;
     native.scrollTo.mockClear();
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
     const saving = app.controller.saveExpense();
     await settle();
     // Back on Expenses while the window is read again: Load more holds its place, disabled, so
@@ -1645,7 +1777,7 @@ describe('App Expense window (#219)', () => {
       busy: false,
     });
     await app.layout(700, 5700);
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000, animated: false });
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 5000, animated: false });
     holding = false;
     while (held.length) {
       held.shift()!();
@@ -1668,7 +1800,7 @@ describe('App Expense window (#219)', () => {
     await app.press('Fictional row 1-3');
     expect(await app.androidBack()).toBe(true);
     await app.layout(700, 2600);
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 240, animated: false });
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 240, animated: false });
   });
 });
 describe('App Activity window (#222)', () => {
@@ -1731,10 +1863,16 @@ describe('App Activity window (#222)', () => {
     });
     await app.androidBack();
     native.scrollTo.mockClear();
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
     lay(4500);
     await app.layout(700, 6500);
     await settle(new Promise((resolve) => setTimeout(resolve, 0)));
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 4800, animated: false });
+    expect(native.scrollToIndex).toHaveBeenLastCalledWith({
+      index: 65,
+      viewOffset: -19,
+      animated: false,
+    });
   });
 
   it('keeps the event on screen when the newest page drops: it scrolls from where the slide began', async () => {
@@ -1746,6 +1884,8 @@ describe('App Activity window (#222)', () => {
     await app.scrollTo(4968);
     await app.scrollEnd(5000, 'fling');
     native.scrollTo.mockClear();
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
     await app.press('Load older activity');
     expect(app.text()).toContain('Fictional event 6-20');
     expect(app.text()).not.toContain('Fictional event 1-1');
@@ -1754,10 +1894,16 @@ describe('App Activity window (#222)', () => {
     await app.scrollTo(4200);
     const view = screen!.root.findByType(GroupActivity);
     act(() => view.props.onShift(-1140));
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000 - 1140, animated: false });
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({
+      offset: 5000 - 1140,
+      animated: false,
+    });
     // Only the slide's own shift starts from there.
     act(() => view.props.onShift(-60));
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000 - 1140 - 60, animated: false });
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({
+      offset: 5000 - 1140 - 60,
+      animated: false,
+    });
   });
 
   // The device check of 99f96d6 (A15): at the list's end, a foreground past the window with
@@ -1812,13 +1958,22 @@ describe('App Activity window (#222)', () => {
       await app.scrollTo(1700);
       await app.scrollEnd(1700, 'fling');
       const scrollViews = () =>
-        app.root().findAll((node) => (node.type as unknown) === 'ScrollView');
+        app.root().findAll((node) => ['ScrollView', 'FlatList'].includes(node.type as string));
+      const accessibilityContainer = (node: ReactTestInstance) => {
+        let parent: ReactTestInstance | null = node;
+        while (parent && parent.props.importantForAccessibility === undefined)
+          parent = parent.parent;
+        if (!parent) throw new Error('The list has no accessibility container');
+        return parent;
+      };
       const textOf = (node: ReactTestInstance) =>
         node
           .findAll((child) => (child.type as unknown) === 'Text')
           .flatMap((child) => child.children.filter((part) => typeof part === 'string'))
           .join('');
       native.scrollTo.mockClear();
+      native.scrollToIndex.mockClear();
+      native.scrollToOffset.mockClear();
       for (let round = 1; round <= 2; round += 1) {
         await app.press('You recorded a payment');
         const [under, ...others] = scrollViews();
@@ -1831,7 +1986,10 @@ describe('App Activity window (#222)', () => {
         const [place] = findHosts(screen!.toJSON(), (_props, type) => type === 'View').filter(
           (node) =>
             (node.children ?? []).filter(
-              (child) => typeof child !== 'string' && child.type === 'ScrollView',
+              (child) =>
+                typeof child !== 'string' &&
+                (child.type === 'ScrollView' ||
+                  (child.type === 'View' && flatten(child.props.style).flex === 1)),
             ).length === 2,
         );
         expect(flatten(place?.props.style)).toEqual({ flex: 1 });
@@ -1845,7 +2003,9 @@ describe('App Activity window (#222)', () => {
           backgroundColor: expect.any(String),
         });
         // The list stays mounted under it with every row, out of TalkBack's reach.
-        expect(under.props.importantForAccessibility).toBe('no-hide-descendants');
+        expect(accessibilityContainer(under).props.importantForAccessibility).toBe(
+          'no-hide-descendants',
+        );
         expect(textOf(under)).toContain('Fictional event 2-20');
         const backs = app
           .root()
@@ -1858,14 +2018,16 @@ describe('App Activity window (#222)', () => {
         else await settle(Promise.resolve(backs[by === 'the top bar' ? 0 : 1].props.onPress()));
         const [shown, ...rest] = scrollViews();
         expect(rest.some((view) => textOf(view).includes('This records a payment'))).toBe(false);
-        expect(shown.props.importantForAccessibility).toBe('auto');
+        expect(accessibilityContainer(shown).props.importantForAccessibility).toBe('auto');
         expect(textOf(shown)).toContain('Fictional event 2-20');
         // Never shortened or scrolled, it is where the member left it.
         expect(native.scrollTo).not.toHaveBeenCalled();
+        expect(native.scrollToOffset).not.toHaveBeenCalled();
+        expect(native.scrollToIndex).not.toHaveBeenCalled();
       }
       // And the App still knows where that is: a slide moves the view from there.
       act(() => screen!.root.findByType(GroupActivity).props.onShift(10));
-      expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 1710, animated: false });
+      expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 1710, animated: false });
     },
   );
 
@@ -1878,11 +2040,13 @@ describe('App Activity window (#222)', () => {
     await app.scrollTo(40);
     await app.scrollEnd(60, 'drag');
     native.scrollTo.mockClear();
+    native.scrollToIndex.mockClear();
+    native.scrollToOffset.mockClear();
     await app.press('Load newer activity');
     expect(app.text()).toContain('Fictional event 1-1');
     const view = screen!.root.findByType(GroupActivity);
     act(() => view.props.onShift(1140));
-    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 60 + 1140, animated: false });
+    expect(native.scrollToOffset).toHaveBeenLastCalledWith({ offset: 60 + 1140, animated: false });
   });
 });
 describe('App invitation', () => {
@@ -2092,4 +2256,26 @@ it('asks before discarding a lost Group’s unconfirmed payment', async () => {
   await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
   expect(app.payments.size).toBe(0);
   expect(app.controller.getSnapshot().screen).toBe('groups');
+});
+
+describe('the virtualized Group ledger (#179)', () => {
+  it('uses one scrolling list for Expenses and Activity, while Balances keeps its scroll view', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    const lists = () => app.root().findAll((node) => (node.type as unknown) === 'FlatList');
+    expect(lists()).toHaveLength(1);
+    let ancestor = lists()[0].parent;
+    while (ancestor) {
+      expect(ancestor.type).not.toBe('ScrollView');
+      ancestor = ancestor.parent;
+    }
+    expect(app.text().indexOf('Spent')).toBeLessThan(app.text().indexOf('September groceries'));
+    await app.press('Activity');
+    expect(lists()).toHaveLength(1);
+    expect(app.text().indexOf('Changes in this Group')).toBeLessThan(
+      app.text().indexOf('September groceries'),
+    );
+    await app.press('Balances');
+    expect(lists()).toHaveLength(0);
+  });
 });

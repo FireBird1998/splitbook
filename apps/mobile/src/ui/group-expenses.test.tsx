@@ -9,6 +9,7 @@ import type {
 } from '../data/types';
 import { GroupExpensesView } from './group-expenses';
 import { refreshedLabel } from './refresh-feedback';
+import { nextFrame, nativeScrollCoordinates } from '../test-utils/native';
 
 // #116: the Expenses destination's summary, rows, pagination and draft states, rendered.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -157,10 +158,17 @@ const kept = (overrides: Partial<KeptDraft> = {}): KeptDraft => ({
   ...overrides,
 });
 
+const {
+  places: nativePlaces,
+  createNodeMock: nativeMock,
+  reset: resetCoordinates,
+} = nativeScrollCoordinates();
+
 let screen: ReactTestRenderer | null = null;
 afterEach(() => {
   act(() => screen?.unmount());
   screen = null;
+  resetCoordinates();
 });
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
 const text = (root: ReactTestInstance) =>
@@ -441,33 +449,26 @@ describe('Expense rows', () => {
         pagination: { page: first + 4, limit: 20, total: 120, totalPages: 6 },
       });
     const layout = (node: ReactTestInstance, y: number) =>
-      act(() =>
+      act(() => {
+        nativePlaces.set(node.props.ref, { top: y, height: 60 });
         node.props.onLayout({
           nativeEvent: { layout: { x: 0, y, width: 390, height: 60 } },
-        }),
-      );
-    /** The host Views that report the layout of a row, its day and the list, by row number. */
+        });
+      });
+    /** FlatList cells report absolute scroll-content positions, including the list header. */
     const places = (root: ReactTestInstance, number: number) => {
-      const found: ReactTestInstance[] = [];
       let node: ReactTestInstance | null = root.find(
         (candidate) =>
           isHost(candidate, 'Pressable') &&
-          String(candidate.props.accessibilityLabel).startsWith(`Fictional row ${number},`),
+          String(candidate.props.accessibilityLabel).includes(`Fictional row ${number},`),
       );
-      while (node && found.length < 3) {
-        if (isHost(node, 'View') && node.props.onLayout) found.push(node);
-        node = node.parent;
-      }
-      const [row, day, list] = found;
-      return { row, day, list };
+      while (node && !(isHost(node, 'View') && node.props.onLayout)) node = node.parent;
+      if (!node) throw new Error('Missing measured ledger cell');
+      return { row: node };
     };
-    /** Lays the window out as a phone would: the list at `listY`, rows from `first`. */
     const lay = (root: ReactTestInstance, first: number, listY: number) => {
-      const { day, list } = places(root, first * 20 - 19);
-      layout(list, listY);
-      layout(day, 0);
       for (let number = first * 20 - 19; number <= (first + 4) * 20; number += 1)
-        layout(places(root, number).row, 30 + (number - (first * 20 - 19)) * 60);
+        layout(places(root, number).row, listY + 30 + (number - (first * 20 - 19)) * 60);
     };
     const render = (first: number, onShift: (dy: number) => void) => {
       const props = {
@@ -486,12 +487,23 @@ describe('Expense rows', () => {
         onDiscardDraft: vi.fn(),
       };
       act(() => {
-        screen = create(<GroupExpensesView {...props} state={window(first)} />);
+        screen = create(<GroupExpensesView {...props} state={window(first)} />, {
+          createNodeMock: nativeMock,
+        });
       });
       return (next: number) =>
         act(() => screen!.update(<GroupExpensesView {...props} state={window(next)} />));
     };
-    const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    const tick = () =>
+      act(async () => {
+        const list = screen!.root.find((node) => (node.type as unknown) === 'FlatList');
+        list.props.onLayout({ nativeEvent: { layout: { height: 700 } } });
+        list.props.onContentSizeChange(390, 10000);
+        for (let frame = 0; frame < 4; frame++) {
+          nextFrame();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      });
 
     it('keeps the row on screen in its place: the view moves up by the rows that went', async () => {
       const onShift = vi.fn();
@@ -506,7 +518,7 @@ describe('Expense rows', () => {
       // Row 21 was at 200 + 30 + 20 × 60 = 1430; it is now at 260 + 30 = 290.
       expect(onShift).toHaveBeenCalledExactlyOnceWith(290 - 1430);
       // Only the slide's own layout moves the view.
-      layout(places(screen!.root, 21).list, 300);
+      layout(places(screen!.root, 21).row, 330);
       await tick();
       expect(onShift).toHaveBeenCalledOnce();
     });
@@ -647,10 +659,7 @@ describe('Expense rows', () => {
         ),
       );
       // Without Load newer, the list now starts 60 higher.
-      const { row, day, list } = places(screen!.root, 1);
-      layout(list, 200);
-      layout(day, 0);
-      layout(row, 30);
+      layout(places(screen!.root, 1).row, 230);
       await tick();
       expect(onShift).not.toHaveBeenCalled();
     });

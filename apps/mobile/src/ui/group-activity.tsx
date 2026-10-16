@@ -1,6 +1,8 @@
 import { ListDayHeader } from './list-day-header';
 import type { RowPlaces } from './return-scroll';
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { GroupLedgerList, type LedgerScrollProps } from './group-ledger-list';
+import { ledgerItems } from './ledger-items';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { activityExpenseId, type ActivityEvent, type ActivityState } from '../data/activity';
 import {
@@ -28,6 +30,8 @@ import { fonts, useTheme } from './theme';
 type Member = { id: string; name: string };
 
 interface GroupActivityProps {
+  header?: ReactNode;
+  listScroll?: LedgerScrollProps;
   state: ActivityState;
   currentUserId: string;
   /** The Group's currency, for amounts an event doesn't label itself. */
@@ -212,6 +216,8 @@ function ActivityList({
   onShift,
   onRowsLayout,
   onSelect,
+  header,
+  listScroll,
 }: GroupActivityProps) {
   const now = dayKey ? new Date(`${dayKey}T12:00:00`).getTime() : (legacyNow ?? Date.now());
   const theme = useTheme();
@@ -232,81 +238,6 @@ function ActivityList({
     selecting.current = onSelect;
   });
   const select = useCallback((id: string) => selecting.current(id), []);
-  // When the window moves, events above the one on screen go or come: Load older past 5 pages
-  // drops the newest page, and Load newer brings it back above. The view moves by as much as an
-  // event shown on both sides of the move moved, so the event on screen keeps its place (#215).
-  // Where the list, each day and each event lie, as their layouts last said.
-  const places = useRef({
-    origin: 0,
-    list: 0,
-    body: null as number | null,
-    days: new Map<string, number>(),
-    rows: new Map<string, { day: string; y: number; height: number }>(),
-  });
-  const anchor = useRef<{
-    id: string;
-    at: number;
-    timer?: ReturnType<typeof setTimeout>;
-  } | null>(null);
-  const firstPage = state.firstPage ?? 1;
-  const shownFirst = useRef(firstPage);
-  /** The events as last shown: the window's move keeps the first of them still listed. */
-  const shownEvents = useRef(state.events);
-  const top = (id: string) => {
-    const row = places.current.rows.get(id),
-      day = row && places.current.days.get(row.day);
-    return row && day !== undefined && places.current.body !== null
-      ? places.current.list + places.current.body + day + row.y
-      : null;
-  };
-  useLayoutEffect(() => {
-    const moved = firstPage !== shownFirst.current;
-    shownFirst.current = firstPage;
-    if (anchor.current?.timer) clearTimeout(anchor.current.timer);
-    if (!moved) return;
-    // The first event shown before the move that is still listed: the newest one left after a
-    // slide, or the one that was first before Load newer.
-    const listedNow = new Set(state.events.map(({ _id }) => _id));
-    const id = shownEvents.current.find((event) => listedNow.has(event._id))?._id;
-    // Laid out before the move: where it was.
-    const at = id ? top(id) : null;
-    anchor.current = id && at !== null ? { id, at } : null;
-    // Only this commit's move: the layout it leads to moves the view, once.
-  }, [firstPage]);
-  useLayoutEffect(() => {
-    shownEvents.current = state.events;
-  });
-  /** A layout changed: once the move's layouts have all arrived, the view follows its event. */
-  const place = (
-    change:
-      | { origin: number }
-      | { list: number }
-      | { body: number }
-      | { day: string; y: number }
-      | { row: string; day: string; y: number; height: number },
-  ) => {
-    if ('origin' in change) places.current.origin = change.origin;
-    else if ('list' in change) places.current.list = change.list;
-    else if ('body' in change) places.current.body = change.body;
-    else if ('row' in change) places.current.rows.set(change.row, change);
-    else places.current.days.set(change.day, change.y);
-    const rows = new Map<string, { top: number; height: number }>();
-    for (const { _id: key } of state.events) {
-      const at = top(key),
-        row = places.current.rows.get(key);
-      if (at !== null && row)
-        rows.set(key, { top: places.current.origin + at, height: row.height });
-    }
-    onRowsLayout?.(rows);
-    const held = anchor.current;
-    if (!held || held.timer) return;
-    // A layout's events arrive together: the shift waits for all of them.
-    held.timer = setTimeout(() => {
-      if (anchor.current === held) anchor.current = null;
-      const at = top(held.id);
-      if (at !== null && at !== held.at) onShift?.(at - held.at);
-    }, 0);
-  };
   const progress = (label: string) => (
     <View
       accessibilityLiveRegion="polite"
@@ -355,67 +286,101 @@ function ActivityList({
         />
       </>
     );
+  const items = useMemo(
+    () =>
+      ledgerItems(
+        activityDays(state.events, now).map((day) => ({ ...day, rows: day.events })),
+        (event) => event._id,
+      ),
+    [state.events, now],
+  );
+  const renderRow = useCallback(
+    (item: (typeof items)[number]) =>
+      item.kind === 'day' ? (
+        <>
+          {!item.first ? <Divider /> : null}
+          <ListDayHeader label={item.label} />
+        </>
+      ) : (
+        <ActivityRow
+          event={item.row}
+          currentUserId={currentUserId}
+          currency={currency}
+          members={members}
+          disabled={state.status !== 'ready'}
+          onSelect={select}
+        />
+      ),
+    [currentUserId, currency, members, state.status, select],
+  );
   return (
-    // A first load's progress bar is the screen's, under the top bar.
-    <View
-      style={{ gap: 12 }}
-      onLayout={({ nativeEvent }) => place({ origin: nativeEvent.layout.y })}
-    >
-      <SectionHeader
-        title="Changes in this Group"
-        // Under the title: beside it, the time was cut at the screen's edge at 130% text on a
-        // 360dp phone (#222's UI review), and it never moves the events as it changes.
-        below
-        trailing={
-          // When the events shown were read: "Updated" for this session's reads, offline too,
-          // "Saved" only for this phone's copy (#222, as #219). The progress bar says a read runs.
-          // Drawn as part of this list, as Home's balances draw it, so it renders nothing more.
-          state.events.length > 0 && state.refreshedAt !== null ? (
-            readTime({ refreshedAt: state.refreshedAt, restored: state.restored === true, offline })
-          ) : (
-            <CompactText variant="caption" tone="secondary">
-              Newest first
-            </CompactText>
-          )
-        }
-      />
-      {state.status === 'error' && state.unsaved && !state.events.length ? (
-        <NotAvailableOffline
-          compact
-          // True whether it was never saved here, removed by a change or a sign-out, or withheld
-          // (#323): never "hasn't been opened" (#280 item 2). A server's own failure says what
-          // failed instead, offline too: it isn't about what this phone keeps (#222).
-          message="This Group’s activity isn’t saved on this phone. Connect to load it."
-          onRetry={onRetry}
-        />
-      ) : state.status === 'denied' ? (
-        <Banner
-          tone="error"
-          title="This Group isn’t available"
-          message={state.message ?? 'You may no longer be a member of this Group.'}
-        />
-      ) : state.status === 'error' ? (
-        <Banner
-          tone={offline ? 'offline' : 'warning'}
-          title="Couldn’t update Activity"
-          message={
-            state.message ??
-            'Events shown may be out of date. A missing event doesn’t mean a change failed.'
-          }
-        >
-          <CompactButton label="Try again" variant="text" dense onPress={onRetry} />
-        </Banner>
-      ) : null}
-      {newer && onLoadNewer ? pageControl('newer', state.newerStatus ?? 'idle', onLoadNewer) : null}
-      {/* Where the list lies, for the event kept on screen when the window moves (#222). */}
-      <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
-        {/* Activity read empty stays empty while it's read again. */}
-        {loading && state.pagination === null ? (
-          <Card
-            loading="Loading Activity"
-            skeleton={{ avatar: true, heading: true }}
-            onBodyOffset={(body) => place({ body })}
+    <GroupLedgerList
+      {...listScroll}
+      items={items}
+      renderRow={renderRow}
+      firstPage={state.firstPage ?? 1}
+      onShift={onShift}
+      onRowsLayout={onRowsLayout}
+      header={
+        <>
+          {header}
+          <SectionHeader
+            title="Changes in this Group"
+            // Under the title: beside it, the time was cut at the screen's edge at 130% text on a
+            // 360dp phone (#222's UI review), and it never moves the events as it changes.
+            below
+            trailing={
+              // When the events shown were read: "Updated" for this session's reads, offline too,
+              // "Saved" only for this phone's copy (#222, as #219). The progress bar says a read runs.
+              // Drawn as part of this list, as Home's balances draw it, so it renders nothing more.
+              state.events.length > 0 && state.refreshedAt !== null ? (
+                readTime({
+                  refreshedAt: state.refreshedAt,
+                  restored: state.restored === true,
+                  offline,
+                })
+              ) : (
+                <CompactText variant="caption" tone="secondary">
+                  Newest first
+                </CompactText>
+              )
+            }
           />
+          {state.status === 'error' && state.unsaved && !state.events.length ? (
+            <NotAvailableOffline
+              compact
+              // True whether it was never saved here, removed by a change or a sign-out, or withheld
+              // (#323): never "hasn't been opened" (#280 item 2). A server's own failure says what
+              // failed instead, offline too: it isn't about what this phone keeps (#222).
+              message="This Group’s activity isn’t saved on this phone. Connect to load it."
+              onRetry={onRetry}
+            />
+          ) : state.status === 'denied' ? (
+            <Banner
+              tone="error"
+              title="This Group isn’t available"
+              message={state.message ?? 'You may no longer be a member of this Group.'}
+            />
+          ) : state.status === 'error' ? (
+            <Banner
+              tone={offline ? 'offline' : 'warning'}
+              title="Couldn’t update Activity"
+              message={
+                state.message ??
+                'Events shown may be out of date. A missing event doesn’t mean a change failed.'
+              }
+            >
+              <CompactButton label="Try again" variant="text" dense onPress={onRetry} />
+            </Banner>
+          ) : null}
+          {newer && onLoadNewer
+            ? pageControl('newer', state.newerStatus ?? 'idle', onLoadNewer)
+            : null}
+        </>
+      }
+      empty={
+        loading && state.pagination === null ? (
+          <Card loading="Loading Activity" skeleton={{ avatar: true, heading: true }} />
         ) : (state.status === 'ready' || loading) && !state.events.length ? (
           <Card padded>
             <CompactText weight="semibold">No changes yet</CompactText>
@@ -423,45 +388,10 @@ function ActivityList({
               Expenses, payments and member changes in this Group will appear here.
             </CompactText>
           </Card>
-        ) : state.events.length ? (
-          <Card onBodyOffset={(body) => place({ body })}>
-            {activityDays(state.events, now).map((day, index) => (
-              <View
-                key={day.key}
-                onLayout={({ nativeEvent }) => place({ day: day.key, y: nativeEvent.layout.y })}
-              >
-                {index > 0 ? <Divider /> : null}
-                <ListDayHeader label={day.label} />
-                {day.events.map((event) => (
-                  <View
-                    key={event._id}
-                    onLayout={({ nativeEvent }) =>
-                      place({
-                        row: event._id,
-                        day: day.key,
-                        y: nativeEvent.layout.y,
-                        height: nativeEvent.layout.height,
-                      })
-                    }
-                  >
-                    <ActivityRow
-                      event={event}
-                      currentUserId={currentUserId}
-                      currency={currency}
-                      members={members}
-                      // Opened once read: not while they're read again, or after that failed.
-                      disabled={state.status !== 'ready'}
-                      onSelect={select}
-                    />
-                  </View>
-                ))}
-              </View>
-            ))}
-          </Card>
-        ) : null}
-      </View>
-      {more ? pageControl('older', state.moreStatus, onMore) : null}
-    </View>
+        ) : null
+      }
+      footer={more ? pageControl('older', state.moreStatus, onMore) : null}
+    />
   );
 }
 

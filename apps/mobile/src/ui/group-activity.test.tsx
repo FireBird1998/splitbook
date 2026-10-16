@@ -9,7 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyActivity, type ActivityEvent, type ActivityState } from '../data/activity';
 import { flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
-import { setWindow } from '../test-utils/native';
+import { setWindow, nextFrame, nativeScrollCoordinates } from '../test-utils/native';
 import { GroupActivity } from './group-activity';
 import { refreshedLabel } from './refresh-feedback';
 
@@ -51,10 +51,17 @@ const window = (first: number, state: Partial<ActivityState> = {}) =>
     ...state,
   });
 
+const {
+  places: nativePlaces,
+  createNodeMock: nativeMock,
+  reset: resetCoordinates,
+} = nativeScrollCoordinates();
+
 let screen: ReactTestRenderer | null = null;
 afterEach(() => {
   act(() => screen?.unmount());
   screen = null;
+  resetCoordinates();
 });
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
 const text = (root: ReactTestInstance) =>
@@ -89,7 +96,7 @@ function render(props: Partial<Parameters<typeof GroupActivity>[0]> = {}) {
     ...props,
   };
   act(() => {
-    screen = create(<GroupActivity {...all} />);
+    screen = create(<GroupActivity {...all} />, { createNodeMock: nativeMock });
   });
   return {
     root: screen!.root,
@@ -195,33 +202,35 @@ describe('Load older and Load newer (#222, M7-2)', () => {
 
 describe('when the newest page drops (#222, #215)', () => {
   const layout = (node: ReactTestInstance, y: number) =>
-    act(() =>
-      node.props.onLayout({ nativeEvent: { layout: { x: 0, y, width: 390, height: 60 } } }),
-    );
-  /** The host Views that report the layout of an event's row, its day and the list. */
+    act(() => {
+      nativePlaces.set(node.props.ref, { top: y, height: 60 });
+      node.props.onLayout({ nativeEvent: { layout: { x: 0, y, width: 390, height: 60 } } });
+    });
+  /** FlatList cells report absolute scroll-content positions, including the list header. */
   const places = (root: ReactTestInstance, number: number) => {
-    const found: ReactTestInstance[] = [];
     let node: ReactTestInstance | null = root.find(
       (candidate) =>
         isHost(candidate, 'Pressable') &&
         String(candidate.props.accessibilityLabel).includes(`Fictional event ${number},`),
     );
-    while (node && found.length < 3) {
-      if (isHost(node, 'View') && node.props.onLayout) found.push(node);
-      node = node.parent;
-    }
-    const [row, day, list] = found;
-    return { row, day, list };
+    while (node && !(isHost(node, 'View') && node.props.onLayout)) node = node.parent;
+    if (!node) throw new Error('Missing measured ledger cell');
+    return { row: node };
   };
-  /** Lays the window out as a phone would: the list at `listY`, each row 60 high under its day. */
   const lay = (root: ReactTestInstance, first: number, listY: number) => {
-    const { day, list } = places(root, first * 20 - 19);
-    layout(list, listY);
-    layout(day, 0);
     for (let number = first * 20 - 19; number <= (first + 4) * 20; number += 1)
-      layout(places(root, number).row, 30 + (number - (first * 20 - 19)) * 60);
+      layout(places(root, number).row, listY + 30 + (number - (first * 20 - 19)) * 60);
   };
-  const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  const tick = () =>
+    act(async () => {
+      const list = screen!.root.find((node) => (node.type as unknown) === 'FlatList');
+      list.props.onLayout({ nativeEvent: { layout: { height: 700 } } });
+      list.props.onContentSizeChange(390, 10000);
+      for (let frame = 0; frame < 4; frame++) {
+        nextFrame();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    });
 
   it('keeps the event on screen in its place: the view moves up by the events that went', async () => {
     const { root, onShift, update } = render({ state: window(1) });
@@ -235,7 +244,7 @@ describe('when the newest page drops (#222, #215)', () => {
     // Event 21 was at 200 + 30 + 20 × 60 = 1430; it is now at 260 + 30 = 290.
     expect(onShift).toHaveBeenCalledExactlyOnceWith(290 - 1430);
     // Only the slide's own layout moves the view.
-    layout(places(root, 21).list, 300);
+    layout(places(root, 21).row, 330);
     await tick();
     expect(onShift).toHaveBeenCalledOnce();
   });
@@ -261,10 +270,7 @@ describe('when the newest page drops (#222, #215)', () => {
         pagination: { page: 1, limit: 20, total: 120, totalPages: 6 },
       }),
     });
-    const { row, day, list } = places(root, 1);
-    layout(list, 200);
-    layout(day, 0);
-    layout(row, 30);
+    layout(places(root, 1).row, 230);
     await tick();
     expect(onShift).not.toHaveBeenCalled();
   });
@@ -273,7 +279,7 @@ describe('when the newest page drops (#222, #215)', () => {
 // The UI review of 90f5c21 (#222): what a row draws again (D6), the page controls after a failed
 // read, the header at large text, and a server's failure with nothing shown.
 it.each(['direct', 'after a placeholder'])(
-  'records native row coordinates once inside a Card %s (#225 coordinate)',
+  'records native cell coordinates once %s (#225 coordinate)',
   (shape) => {
     const reported = vi.fn<(rows: RowPlaces) => void>();
     const view = render({
@@ -286,30 +292,9 @@ it.each(['direct', 'after a placeholder'])(
     let node: ReactTestInstance | null = pressables(view.root).find((candidate) =>
       String(candidate.props.accessibilityLabel).includes('Fictional event 1,'),
     )!;
-    const places: ReactTestInstance[] = [];
-    while (node && places.length < 4) {
-      if (isHost(node, 'View') && node.props.onLayout) places.push(node);
-      node = node.parent;
-    }
-    let parent = places[1].parent;
-    while (parent && typeof parent.type !== 'string') parent = parent.parent;
-    expect(parent!.type).toBe(shape === 'direct' ? 'View' : 'AnimatedView');
-    if (shape === 'after a placeholder')
-      act(() =>
-        parent!.props.onLayout({
-          nativeEvent: { layout: { y: 1, height: 1500 } },
-        }),
-      );
-    // Native direct days include the Card border; a day under the fade body starts at zero.
-    act(() =>
-      places.forEach((place, index) =>
-        place.props.onLayout({
-          nativeEvent: {
-            layout: { y: [30, shape === 'direct' ? 1 : 0, 200, 80][index], height: 60 },
-          },
-        }),
-      ),
-    );
+    while (node && !(isHost(node, 'View') && node.props.onLayout)) node = node.parent;
+    expect(node).not.toBeNull();
+    act(() => node!.props.onLayout({ nativeEvent: { layout: { y: 311, height: 60 } } }));
     expect(reported.mock.lastCall?.[0].get(events[0]._id)).toEqual({ top: 311, height: 60 });
   },
 );

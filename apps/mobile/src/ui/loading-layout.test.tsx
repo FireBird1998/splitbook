@@ -66,9 +66,15 @@ function heights(element: ReactElement, next: ReactElement, fontScale: number) {
   act(() => {
     renderer = create(element);
   });
-  const before = layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, content);
+  // Canonicalize summation order to a millionth of a dp, well below Yoga's native precision.
+  // This still compares exact heights; splitting one card into native cells adds the same borders.
+  const measured = () =>
+    Math.round(
+      layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, content) * 1_000_000,
+    ) / 1_000_000;
+  const before = measured();
   act(() => renderer!.update(next));
-  const after = layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, content);
+  const after = measured();
   act(() => renderer!.unmount());
   renderer = undefined;
   return { before, after };
@@ -96,12 +102,13 @@ async function arrival(element: ReactElement, next: ReactElement) {
     expect(fade.value.value).toBe(0);
     expect(fade.config).toMatchObject({ toValue: 1, useNativeDriver: true });
     expect(fade.start).toHaveBeenCalledOnce();
-    const [faded] = renderer!.root.findAll(
+    const faded = renderer!.root.findAll(
       (node) =>
         (node.type as unknown) === 'AnimatedView' &&
         flatten(node.props.style).opacity === fade.value,
     );
-    return text(faded!);
+    // A flattened list shares one reveal across its native cells, rather than a parent Card.
+    return faded.map(text).join(' ');
   });
 }
 const scales = [1, 1.3];
@@ -336,11 +343,23 @@ describe('A Group’s Expenses', () => {
     },
     balances: { status: 'ready', data: [], message: null, refreshedAt: at.getTime(), stale: false },
   });
-  const view = (subject: MobileGroup, loading: boolean, month: string | null) => (
+  const view = (
+    subject: MobileGroup,
+    loading: boolean,
+    month: string | null,
+    rows?: MobileExpense[],
+  ) => (
     <GroupExpensesView
       group={subject}
       currentUserId={you}
-      state={state(loading, month)}
+      state={
+        rows
+          ? {
+              ...state(loading, month),
+              expenses: { ...state(loading, month).expenses, data: rows },
+            }
+          : state(loading, month)
+      }
       kept={null}
       savedExpenseId={null}
       now={now}
@@ -359,6 +378,41 @@ describe('A Group’s Expenses', () => {
     expect(faded).toHaveLength(2);
     expect(faded.find((part) => part.includes('Spent'))).toBeDefined();
     expect(faded.find((part) => part.includes('Weekly groceries'))).toBeDefined();
+  });
+
+  it('shares the arrival reveal with remounted and next-page cells without replaying it', async () => {
+    await arrival(view(maple, true, '2026-09'), view(maple, false, '2026-09'));
+    const revealFor = (words: string) => {
+      const [faded] = renderer!.root.findAll(
+        (node) =>
+          (node.type as unknown) === 'AnimatedView' &&
+          node
+            .findAll((child) => (child.type as unknown) === 'Text')
+            .some((child) => child.children.join('').includes(words)),
+      );
+      return faded && flatten(faded.props.style).opacity;
+    };
+    const reveal = revealFor('Weekly groceries');
+    expect(reveal).toBeDefined();
+    const ready = state(false, '2026-09').expenses.data;
+    timing.mockClear();
+    // A cell leaves the native render window and returns alongside a newly loaded page.
+    act(() => renderer!.update(view(maple, false, '2026-09', ready.slice(1))));
+    act(() =>
+      renderer!.update(
+        view(maple, false, '2026-09', [
+          ...ready,
+          expense('e00000000000000000000004', 'Next-page groceries', 42000),
+        ]),
+      ),
+    );
+    expect(revealFor('Weekly groceries')).toBe(reveal);
+    expect(revealFor('Next-page groceries')).toBe(reveal);
+    expect(
+      timing.mock.results
+        .map(({ value }) => value)
+        .filter((animation) => animation.config.duration === motion.reveal),
+    ).toHaveLength(0);
   });
 
   it.each(scales)(
