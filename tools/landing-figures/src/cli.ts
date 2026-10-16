@@ -1,29 +1,37 @@
 // pnpm --filter @splitbook/landing-figures <build | check | preview [dir]>
-//   build    regenerate the figures into the web app
-//   check    fail on stale output, a story that doesn't balance, an edited vendored kit, or any audit
-//            or line-end problem
+//   build    regenerate the figures into the web app, and draw each still that is out of date
+//   check    fail on stale output or stills, a story that doesn't balance, an edited vendored kit,
+//            or any audit, line-end or console problem
 //   preview  write each figure as an interactive page (light and dark) to look at in a browser
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import * as k from './kit.ts';
-import { staleOutputs, vendorDrift, verifyStory } from './check.ts';
-import { OUT_DIR, buildFigures, generatedFiles, type Figure } from './generate.ts';
+import { staleOutputs, stillDrift, vendorDrift, verifyStory } from './check.ts';
+import {
+  OUT_DIR,
+  STILL_SIZE,
+  buildFigures,
+  generatedFiles,
+  stillPath,
+  type Figure,
+} from './generate.ts';
+import { THEMES, cleanConsole, drive, livePage, restPage } from './pages.ts';
+import { drawStills, stillSource } from './stills.ts';
 import { story } from './story.ts';
 
 const HERE = import.meta.dirname;
 const ROOT = resolve(HERE, '../../..');
 const VENDOR = resolve(HERE, '../vendor/anatomy');
-const DRIVE = join(VENDOR, 'scripts/drive.mjs');
-const THEMES = ['light', 'dark'] as const;
-type Theme = (typeof THEMES)[number];
 const BUILD = '`pnpm --filter @splitbook/landing-figures build`';
 
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
 
 function build() {
-  const files = generatedFiles(buildFigures());
+  const figures = buildFigures();
+  const files = generatedFiles(figures);
+  drawStills(figures, ROOT);
   for (const path of staleOutputs(files, ROOT, OUT_DIR)) {
     if (!files.has(path)) rmSync(join(ROOT, path));
   }
@@ -34,56 +42,15 @@ function build() {
   console.log(`wrote ${[...files.keys()].join(', ')}`);
 }
 
-function page(figure: Figure, theme: Theme, plate: string, script?: string) {
-  return k.pageHtml({
-    title: figure.title,
-    theme,
-    body: `<style>${figure.css}</style>${plate}`,
-    script,
-    width: figure.width + 60,
-  });
-}
-
-/** A figure in its card, without the live script: the drawing exactly as the page first paints it. */
-function stillPage(figure: Figure, theme: Theme) {
-  const plate = k.plateHtml({
-    fig: figure.title,
-    title: figure.title,
-    body: `<div class="iso-stage">${figure.svg}</div>`,
-  });
-  return page(figure, theme, plate);
-}
-
-/** The figure with its reference live tour: click, or → / Space / Enter, for the next step. */
-function livePage(figure: Figure, theme: Theme) {
-  const kit = readFileSync(join(VENDOR, 'kit/iso-kit.mjs'), 'utf8').replace(/^export /gm, '');
-  const tour = readFileSync(resolve(HERE, `figures/${figure.id}.tour.js`), 'utf8').replace(
-    '__DATA__',
-    JSON.stringify(figure.tour),
-  );
-  const plate = k.plateHtml({
-    fig: 'Fig',
-    title: figure.title,
-    hint: 'Click or → for the next step',
-    body: `<div class="iso-stage ln-stage fg-stage" tabindex="0" role="group" aria-label="${figure.title}">${figure.svg}<span class="fg-sr" role="status" aria-live="polite" data-status></span></div>`,
-  });
-  return page(figure, theme, plate, kit + tour);
-}
-
 /**
- * Runs the kit's line-end check on a page in headless Chrome with reduced motion, once per pose,
- * pressing → between poses. With reduced motion the live tour opens with every Expense split, and
- * → then shows the finished line, the idle line, and each Expense in turn without animation.
+ * Runs the kit's line-end check on a page with reduced motion, once per pose, pressing → between
+ * poses, and requires a clean console.
  */
 function floatingEnds(file: string, poses: number): { floating: number[]; out: string } {
   const lines = ['lines', null, null, { tolerance: 1 }];
   const actions: unknown[] = [['wait', 1500], lines];
   for (let i = 1; i < poses; i++) actions.push(['key', 'ArrowRight'], ['wait', 300], lines);
-  const run = spawnSync(process.execPath, [DRIVE, file, JSON.stringify(actions), '--reduced'], {
-    encoding: 'utf8',
-    timeout: 120_000,
-  });
-  const out = `${run.stdout}${run.stderr}${run.error ? `\n${run.error.message}` : ''}`;
+  const out = drive(file, actions);
   const floating = [...out.matchAll(/line ends: (\d+) of/g)].map((match) => Number(match[1]));
   return { floating, out };
 }
@@ -96,8 +63,9 @@ function lineEnds(figures: Figure[]): string[] {
       const steps = (figure.tour as { steps: unknown[] }).steps.length;
       for (const theme of THEMES) {
         const pages = [
-          { name: 'at rest', html: stillPage(figure, theme), poses: 1 },
-          // every Expense split, finished, idle, then each Expense before the last
+          { name: 'at rest', html: restPage(figure, theme), poses: 1 },
+          // With reduced motion the tour opens on its still, partway through the last Expense;
+          // → then shows the finished line, the idle line, and each Expense before the last.
           { name: 'live tour', html: livePage(figure, theme), poses: steps + 2 },
         ];
         for (const { name, html, poses } of pages) {
@@ -109,6 +77,7 @@ function lineEnds(figures: Figure[]): string[] {
             problems.push(`${where}: the line-end check did not run.\n${out.trim()}`);
           else if (floating.some(Boolean))
             problems.push(`${where}: ${count(sum(floating), 'line end')} float.\n${out.trim()}`);
+          if (!cleanConsole(out)) problems.push(`${where}: the page logged errors.\n${out.trim()}`);
         }
       }
     }
@@ -118,13 +87,17 @@ function lineEnds(figures: Figure[]): string[] {
   return problems;
 }
 
-const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
-
 function check() {
   const figures = buildFigures();
   const problems: string[] = [];
   const stale = staleOutputs(generatedFiles(figures), ROOT, OUT_DIR);
   if (stale.length) problems.push(`Stale output, run ${BUILD}: ${stale.join(', ')}`);
+  for (const figure of figures)
+    problems.push(
+      ...stillDrift(join(ROOT, stillPath(figure)), STILL_SIZE, stillSource(figure)).map(
+        (problem) => `${problem} Run ${BUILD}.`,
+      ),
+    );
   problems.push(...verifyStory(story()));
   problems.push(...vendorDrift(VENDOR).map((problem) => `vendor/anatomy: ${problem}`));
   for (const figure of figures) {
@@ -140,7 +113,7 @@ function check() {
     process.exitCode = 1;
   } else {
     console.log(
-      `check passed: ${count(figures.length, 'figure')}, output current, story balanced, vendored kit unchanged, audit and line ends clean in light and dark`,
+      `check passed: ${count(figures.length, 'figure')}, output and stills current, story balanced, vendored kit unchanged, audit, line ends and console clean in light and dark`,
     );
   }
 }

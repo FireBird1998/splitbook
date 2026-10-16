@@ -8,6 +8,8 @@ import Typography from '@mui/material/Typography';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import BrandLogo from '@/components/layout/BrandLogo';
 import BrandMark from '@/components/layout/BrandMark';
+import LandingFigure from '@/components/landing-figures/LandingFigure';
+import { splittingLine } from '@/components/landing-figures/generated';
 import { PRODUCT_NAME } from '@/lib/product';
 import { TOPBAR_HEIGHT } from '@/lib/theme/tokens';
 import type { WhatsLive } from '@/lib/landing/whats-live';
@@ -201,6 +203,10 @@ function Hero({ live }: LandingPageProps) {
           )}
         </Stack>
       </Container>
+      {/* Fig 1 at full width under the headline and actions, which paint first. */}
+      <Container maxWidth="lg" sx={{ ...sideGutter, mt: { xs: 4, md: 7 } }}>
+        <LandingFigure figure={splittingLine} />
+      </Container>
     </Box>
   );
 }
@@ -293,7 +299,8 @@ function LandingFooter({ live }: LandingPageProps) {
 /**
  * The public landing page a signed-out visitor gets at `/` (#443): the top bar, the hero, the
  * closing call to action and the footer, each saying only what `live` says this deployment has.
- * It renders on the server; only the Sign in with Google button runs in the browser.
+ * It renders on the server; only the Sign in with Google button and Fig 1's live tour run in the
+ * browser.
  */
 export default function LandingPage({ live }: LandingPageProps) {
   return (

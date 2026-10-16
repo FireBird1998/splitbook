@@ -5,6 +5,7 @@ on:
     paths:
       - 'tools/landing-figures/**'
       - 'apps/web/src/components/landing-figures/generated/**'
+      - 'apps/web/public/landing-figures/**'
       # The shared modules the story model runs on.
       - 'packages/shared/src/currency.ts'
       - 'packages/shared/src/debt-simplifier.ts'
@@ -17,6 +18,7 @@ on:
     paths:
       - 'tools/landing-figures/**'
       - 'apps/web/src/components/landing-figures/generated/**'
+      - 'apps/web/public/landing-figures/**'
       - 'packages/shared/src/currency.ts'
       - 'packages/shared/src/debt-simplifier.ts'
       - 'packages/shared/src/exact-money.ts'
@@ -38,7 +40,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Regenerates every figure and fails on stale output, a story that doesn't balance, an edited
-      # vendored kit, or any anatomy audit or line-end problem. The line-end check runs the
-      # runner's Google Chrome.
+      # Regenerates every figure and fails on stale output or a stale still, a story that doesn't
+      # balance, an edited vendored kit, or any anatomy audit, line-end or page error. The live
+      # pages run in the runner's Google Chrome.
       - run: pnpm --filter @splitbook/landing-figures check

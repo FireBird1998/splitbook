@@ -131,6 +131,10 @@ src/
 │   │   └── BrandMark.tsx
 │   ├── landing/
 │   │   └── LandingPage.tsx         # Public landing page
+│   ├── landing-figures/
+│   │   ├── LandingFigure.tsx       # A figure's plate, server-rendered SVG (Fig 1 in the hero)
+│   │   ├── FigureTour.tsx          # Its theme and live tour, loaded near the screen
+│   │   └── generated/              # Written by tools/landing-figures; never edit
 │   ├── auth/
 │   │   ├── LoginForm.tsx           # Google button
 │   │   └── DemoLoginClient.tsx     # Demo persona sign-in

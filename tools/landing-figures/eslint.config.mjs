@@ -12,22 +12,15 @@ export default defineConfig([
     languageOptions: { globals: { process: 'readonly', console: 'readonly' } },
   },
   {
-    // A figure's live tour runs in the page after the kit is inlined, with its data spliced in for
-    // __DATA__ (see the preview command; the web app's client component takes the same data).
+    // A figure's live tour runs in the browser: the generator bundles it for the web app and the
+    // preview pages.
     files: ['src/figures/*.tour.js'],
     languageOptions: {
       globals: {
-        __DATA__: 'readonly',
-        document: 'readonly',
-        matchMedia: 'readonly',
+        window: 'readonly',
         requestAnimationFrame: 'readonly',
+        cancelAnimationFrame: 'readonly',
         IntersectionObserver: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-        translateAlong: 'readonly',
-        lineOnTop: 'readonly',
-        axisVector: 'readonly',
-        holdStill: 'readonly',
       },
     },
   },

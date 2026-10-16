@@ -36,6 +36,14 @@ async function signInWithIdToken(
 test.describe('google auth mode', () => {
   const headline = (page: Page) =>
     page.getByRole('heading', { level: 1, name: 'Every shared cost, worked out to the paisa.' });
+  /** Fig 1's plate, and its drawing named by its full description (#448). */
+  const fig1 = (page: Page) => page.getByRole('figure', { name: 'The splitting line' });
+  const fig1Drawing = (page: Page) =>
+    fig1(page).getByRole('img', {
+      name: /^A small production line on a bench that splits Expenses\./,
+    });
+  /** The four bins' counters, left to right: You, Priya, Sam and Alex. */
+  const counters = (page: Page) => fig1(page).locator('[data-count]');
 
   test('home page shows the landing page with Google sign-in, not the demo picker', async ({
     page,
@@ -63,6 +71,11 @@ test.describe('google auth mode', () => {
     await expect(footer.locator('img')).toHaveAttribute('alt', '');
     await expect(footer.locator('img')).toHaveAttribute('src', '/brand/mark-indigo.svg');
 
+    // Fig 1 sits under the hero at full width, named by its full description.
+    await expect(fig1Drawing(page)).toBeVisible();
+    await expect(fig1(page)).toContainText('Fig 1');
+    await expect(fig1(page)).toContainText('Bins, left to right: You, Priya, Sam and Alex');
+
     await expectNoSeriousA11yViolations(page, testInfo, 'landing-desktop-light');
   });
 
@@ -79,11 +92,64 @@ test.describe('google auth mode', () => {
     await expect(
       page.getByRole('link', { name: 'Splitbook home' }).getByRole('img'),
     ).toHaveAttribute('src', '/brand/logo-dark.svg');
+    await fig1(page).scrollIntoViewIfNeeded();
+    await expect(fig1Drawing(page)).toBeVisible();
+    // The drawing follows the page into dark: its paper is the kit's dark card.
+    await expect(fig1(page)).toHaveAttribute('data-theme', 'dark');
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
 
     await expectNoSeriousA11yViolations(page, testInfo, 'landing-phone-dark');
+  });
+
+  test('under reduced motion Fig 1 holds its still, and steps with clicks and keys', async ({
+    page,
+  }) => {
+    await page.clock.install();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+
+    // The documented still: Groceries partway through its sort, Sam's ₹1,000 on Sam's counter.
+    await expect(counters(page)).toHaveText(['+900', '+100', '+500', '−500']);
+    await expect(fig1(page)).toContainText('Groceries: each chip to the bin it belongs to');
+
+    const tour = fig1(page).getByRole('group', { name: /^Live tour\./ });
+    await tour.press('ArrowRight');
+    await expect(counters(page)).toHaveText(['+500', '−100', '+300', '−700']);
+    await expect(fig1(page).getByRole('status')).toContainText('All 3 Expenses split.');
+
+    await tour.press('Home');
+    await expect(counters(page)).toHaveText(['0', '0', '0', '0']);
+    await expect(fig1(page)).toContainText('Line idle · 3 Expenses waiting');
+
+    await tour.click();
+    await expect(counters(page)).toHaveText(['+900', '−300', '−300', '−300']);
+    await tour.press(' ');
+    await expect(counters(page)).toHaveText(['+900', '+100', '−500', '−500']);
+    // Nothing moves on its own: five seconds on, the Cab is still settled.
+    await page.clock.runFor(5_000);
+    await expect(counters(page)).toHaveText(['+900', '+100', '−500', '−500']);
+    await expect(fig1(page)).toContainText('Cab ₹600 · Priya paid');
+  });
+
+  test('Fig 1 runs its tour on screen and stops when it leaves', async ({ page }) => {
+    await page.clock.install();
+    await page.setViewportSize({ width: 1280, height: 480 });
+    await page.goto('/');
+    await fig1(page).scrollIntoViewIfNeeded();
+    // On screen, the line starts the story by itself.
+    await expect(fig1(page)).toContainText('Dinner ₹1,200 · You paid', { timeout: 10_000 });
+
+    const drawing = () => fig1Drawing(page).evaluate((svg) => svg.innerHTML);
+    await page.getByRole('contentinfo').scrollIntoViewIfNeeded();
+    await expect(fig1(page)).not.toBeInViewport();
+    const left = await drawing();
+    await page.clock.runFor(3_000);
+    expect(await drawing()).toBe(left);
+
+    await fig1(page).scrollIntoViewIfNeeded();
+    await expect.poll(drawing).not.toBe(left);
   });
 
   test('/login shows the Google sign-in button, not the demo picker', async ({ page }) => {
@@ -195,5 +261,27 @@ test.describe('google auth mode', () => {
     expect(url.searchParams.get('scope')).toContain('openid');
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');
     expect(url.searchParams.get('prompt')).toBe('select_account');
+  });
+});
+
+test.describe('google auth mode without JavaScript', () => {
+  test.use({ javaScriptEnabled: false });
+
+  test('the landing page still shows the headline, the actions and Fig 1', async ({ page }) => {
+    await page.goto('/');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Every shared cost, worked out to the paisa.' }),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in with Google' }).first()).toBeVisible();
+    await expect(
+      page
+        .getByRole('figure', { name: 'The splitting line' })
+        .getByRole('img', { name: /^A small production line on a bench that splits Expenses\./ }),
+    ).toBeVisible();
+    // The drawing at rest, with no live tour to step through.
+    await expect(page.getByRole('figure', { name: 'The splitting line' })).toContainText(
+      'Line idle · 3 Expenses waiting',
+    );
+    await expect(page.getByRole('group', { name: /^Live tour/ })).toHaveCount(0);
   });
 });

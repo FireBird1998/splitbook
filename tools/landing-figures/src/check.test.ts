@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { staleOutputs, vendorDrift, verifyStory } from './check.ts';
+import { staleOutputs, stillDrift, vendorDrift, verifyStory } from './check.ts';
+import { withPngText } from './png.ts';
 import { story } from './story.ts';
 
 describe('verifyStory', () => {
@@ -102,5 +103,48 @@ describe('vendorDrift', () => {
 
   it('passes the vendored Anatomy kit', () => {
     expect(vendorDrift(join(import.meta.dirname, '../vendor/anatomy'))).toEqual([]);
+  });
+});
+
+describe('stillDrift', () => {
+  let dir = '';
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  /** The first bytes of a PNG: its signature and the header chunk with its width and height. */
+  const pngHead = (width: number, height: number) => {
+    const head = Buffer.alloc(33);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(head, 0);
+    head.writeUInt32BE(13, 8);
+    head.write('IHDR', 12, 'latin1');
+    head.writeUInt32BE(width, 16);
+    head.writeUInt32BE(height, 20);
+    return head;
+  };
+
+  const size = { width: 1200, height: 630 };
+
+  it('passes a still of the right size, drawn from the current figure', () => {
+    dir = mkdtempSync(join(tmpdir(), 'landing-still-'));
+    writeFileSync(join(dir, 'fig-light.png'), withPngText(pngHead(1200, 630), 'Source', 'abc'));
+    expect(stillDrift(join(dir, 'fig-light.png'), size, 'abc')).toEqual([]);
+  });
+
+  it('flags a still drawn from another version of the figure, or not stamped', () => {
+    dir = mkdtempSync(join(tmpdir(), 'landing-still-'));
+    writeFileSync(join(dir, 'old.png'), withPngText(pngHead(1200, 630), 'Source', 'abc'));
+    writeFileSync(join(dir, 'plain.png'), pngHead(1200, 630));
+    const stale = 'was drawn from another version of the figure.';
+    expect(stillDrift(join(dir, 'old.png'), size, 'def')).toEqual([`old.png ${stale}`]);
+    expect(stillDrift(join(dir, 'plain.png'), size, 'def')).toEqual([`plain.png ${stale}`]);
+  });
+
+  it('flags a still that is missing, not a PNG, or the wrong size', () => {
+    dir = mkdtempSync(join(tmpdir(), 'landing-still-'));
+    writeFileSync(join(dir, 'small.png'), withPngText(pngHead(1199, 630), 'Source', 'abc'));
+    writeFileSync(join(dir, 'text.png'), 'not an image');
+    expect(stillDrift(join(dir, 'gone.png'), size, 'abc')).toEqual(['gone.png is missing.']);
+    expect(stillDrift(join(dir, 'text.png'), size, 'abc')).toEqual(['text.png is not a PNG.']);
+    expect(stillDrift(join(dir, 'small.png'), size, 'abc')).toEqual([
+      'small.png is 1199 × 630, not 1200 × 630.',
+    ]);
   });
 });

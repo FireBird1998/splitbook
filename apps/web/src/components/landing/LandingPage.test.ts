@@ -4,7 +4,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import type { ThemeMode } from '@/lib/theme/tokens';
-import { anchors, brandImages, images, text } from '@/lib/test-utils/markup';
+import { anchors, brandImages, images, svgImages, text } from '@/lib/test-utils/markup';
 import { whatsLive, type WhatsLive } from '@/lib/landing/whats-live';
 
 /*
@@ -189,6 +189,36 @@ describe('the landing page with legal and support pages', () => {
   });
 });
 
+describe('Fig 1 in the hero', () => {
+  it('shows the splitting line in its plate, named by its full description, in both themes', () => {
+    for (const mode of MODES) {
+      const html = render(mode, OFF);
+      expect(svgImages(html)).toEqual([
+        expect.stringMatching(
+          /^A small production line on a bench that splits Expenses\. .* into the bin of the member it belongs to: You, Priya, Sam and Alex\. Each bin's counter shows that member's balance, and a lamp marks who paid\.$/,
+        ),
+      ]);
+      expect(text(html)).toContain('Fig 1 The splitting line');
+      expect(text(html)).toContain('Line idle · 3 Expenses waiting');
+      for (const key of [
+        'Bins, left to right: You, Priya, Sam and Alex',
+        '+ gets back',
+        '− owes',
+        'Lamp: who paid',
+        'Each Expense is cut into one chip per share, and the counters always add up to zero.',
+      ])
+        expect(text(html)).toContain(key);
+    }
+  });
+
+  it('draws the figure in the page’s theme', () => {
+    for (const mode of MODES)
+      expect([...render(mode, OFF).matchAll(/\sdata-theme="(\w+)"/g)].map((m) => m[1])).toEqual([
+        mode,
+      ]);
+  });
+});
+
 describe('the home page route', () => {
   it('sends a signed-in member to Home', async () => {
     session.user = { id: 'a00000000000000000000001' };
@@ -214,7 +244,20 @@ describe('the home page route', () => {
     expect(metadata).toMatchObject({
       title: 'Splitbook · Every shared cost, worked out to the paisa',
       description: expect.stringContaining('split it the way it happened'),
-      openGraph: { title: 'Splitbook · Every shared cost, worked out to the paisa' },
+      openGraph: {
+        title: 'Splitbook · Every shared cost, worked out to the paisa',
+        // The light still of Fig 1, as the tour holds it under reduced motion.
+        images: [
+          {
+            url: '/landing-figures/splitting-line-light.png',
+            width: 1200,
+            height: 630,
+            alt: expect.stringContaining(
+              'While Groceries ₹1,000, paid by Sam, is being sorted, the bins for You, Priya, Sam and Alex read +900, +100, +500 and −500.',
+            ),
+          },
+        ],
+      },
     });
   });
 });
