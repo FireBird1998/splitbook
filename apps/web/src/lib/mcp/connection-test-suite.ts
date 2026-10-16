@@ -971,6 +971,10 @@ export function connectionTests(mongo = false) {
             expect(tools[name].description).toContain(
               "Choose a Category only when the member's words make it clear; otherwise omit it, and it's saved as Other.",
             );
+            // A Tag is required and has no default, so a clear match is set and anything else is asked.
+            expect(tools[name].description).toContain(
+              "Set the Group Tag that clearly matches the member's words (for example a meal and Food); if none clearly fits, ask the member.",
+            );
           }
           for (const name of ['list_drafts', 'create_drafts', 'replace_draft', 'discard_draft']) {
             expect(tools[name].description).toContain("items in the member's To review");
