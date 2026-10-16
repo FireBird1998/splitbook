@@ -6,6 +6,10 @@ The app uses **Material UI (MUI) v7** exclusively for all styling and components
 
 Light and dark modes are both first-class and are designed together — see [Theme](#theme).
 
+The visual direction is Travel Ledger structure with Calm Finance restraint: one
+signature itinerary (boarding-pass) trip strip, and colour only where it carries
+meaning. The standalone prototypes it grew from are in `docs/design/private-beta/`.
+
 The runtime TypeScript theme is the sole production token authority. Static
 private-beta prototypes are historical references. See the
 [v1 usage and verification guide](design-system/README.md) for the component lab,
