@@ -447,7 +447,14 @@ test('payer problems use names; split, Tag and optional detail pickers keep thei
 }) => {
   await open(page, ['ready']);
   const current = (await rows(page))[0];
-  const values = { ...current.values, paidBy: [{ user: 'a00000000000000000000001' }] };
+  // A lone payer without an amount paid it all (#425); with two payers, a missing amount is named.
+  const values = {
+    ...current.values,
+    paidBy: [
+      { user: 'a00000000000000000000001', amount: 6.17 },
+      { user: 'a00000000000000000000002' },
+    ],
+  };
   const changed = await page.request.put(`/api/groups/${DEMO_GROUP_ID}/drafts/${current.id}`, {
     headers: { 'X-Splitbook-Revision': String(current.revision) },
     data: { values },
@@ -456,11 +463,11 @@ test('payer problems use names; split, Tag and optional detail pickers keep thei
   await page.reload();
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const review = panel(page);
-  await expect(review).toContainText('The amount paid by Alex Rivera?');
+  await expect(review).toContainText('The amount paid by Sam Chen?');
   await expect(page.locator('body')).not.toContainText(
     /paidBy\.|splitBetween\.|\(YYYY-MM-DD\)|\(e.g. INR\)/,
   );
-  await review.getByLabel('Paid by Alex Rivera', { exact: true }).fill('12.34');
+  await review.getByLabel('Paid by Sam Chen', { exact: true }).fill('6.17');
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
   await review.getByRole('button', { name: '%', exact: true }).click();
   await review.getByLabel('Percentage for Alex Rivera', { exact: true }).fill('100');
