@@ -228,6 +228,79 @@ test('a newer read and a stale edit both show the changed facts and author', asy
   expect((await rows(page))[0].values.description).toBe('Review corrected meal');
 });
 
+test('overlapping autosave and navigation share conflict recovery without sending older typing', async ({
+  page,
+}) => {
+  await open(page, ['ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const draft = (await rows(page))[0];
+  const endpoint = `/api/groups/${DEMO_GROUP_ID}/drafts`;
+  const external = await page.request.put(`${endpoint}/${draft.id}`, {
+    headers: { 'X-Splitbook-Revision': String(draft.revision) },
+    data: { values: { ...draft.values, description: 'Review external edit' } },
+  });
+  expect(external.ok()).toBe(true);
+  await page.clock.install();
+  let releaseWrite = () => {},
+    releaseRead = () => {};
+  let writeStarted = () => {},
+    readStarted = () => {};
+  const writeSeen = new Promise<void>((resolve) => {
+    writeStarted = resolve;
+  });
+  const readSeen = new Promise<void>((resolve) => {
+    readStarted = resolve;
+  });
+  const heldWrite = new Promise<void>((resolve) => {
+    releaseWrite = resolve;
+  });
+  const heldRead = new Promise<void>((resolve) => {
+    releaseRead = resolve;
+  });
+  let writes = 0,
+    reads = 0;
+  await page.route(`**${endpoint}/${draft.id}`, async (route) => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    writes++;
+    writeStarted();
+    await heldWrite;
+    await route.fulfill({ status: 409, json: { error: 'Changed elsewhere' } });
+  });
+  await page.route(`**${endpoint}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    reads++;
+    readStarted();
+    await heldRead;
+    await route.continue();
+  });
+  const review = panel(page);
+  try {
+    await review.getByLabel('What was it for?').fill('Older edit');
+    await page.clock.fastForward(600);
+    await writeSeen;
+    await page
+      .getByRole('navigation', { name: 'Main', exact: true })
+      .getByRole('link', { name: 'Home', exact: true })
+      .click();
+    releaseWrite();
+    await readSeen;
+    await review.getByLabel('What was it for?').fill('Typing during recovery');
+    await page.clock.fastForward(600);
+    expect(writes).toBe(1);
+    releaseRead();
+    await expect(review.getByLabel('What was it for?')).toHaveValue('Review external edit');
+    await expect(
+      review.getByRole('status').filter({ hasText: 'Changes kept in To review' }),
+    ).toBeVisible();
+    expect(reads).toBe(1);
+    expect(writes).toBe(1);
+    expect((await rows(page))[0].values.description).toBe('Review external edit');
+  } finally {
+    releaseWrite();
+    releaseRead();
+  }
+});
+
 test('one-at-a-time uses ready first, then missing details and summarizes saved/deleted/skipped', async ({
   page,
 }) => {

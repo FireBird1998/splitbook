@@ -1,3 +1,4 @@
+import { draftEditQueue } from '@splitbook/shared/draft-edit-queue';
 import { buildToReview, type ReviewRunOutcome } from '@splitbook/shared/to-review';
 import type { ToReviewItem, ToReviewRead } from '@splitbook/shared/to-review-read';
 import type {
@@ -36,7 +37,7 @@ export function createReviewRun(options: {
   client(groupId: string): Client;
   refresh(): Promise<void>;
 }) {
-  let queued: ExpenseDraftValues | null = null;
+  let edits: ReturnType<typeof draftEditQueue<ExpenseDraftValues>> | null = null;
   let writing: Promise<void> | undefined;
   const update = (patch: Partial<ReviewRunState>) => {
     const state = options.read();
@@ -166,7 +167,7 @@ export function createReviewRun(options: {
     const reviews = await options.client(selected.groupId).review([selected.item.draft.id]);
     if (!options.current()) return;
     const latest = reviews[0];
-    if (latest && !queued) {
+    if (latest && !edits?.pending) {
       const state = options.read()!;
       update({
         items: state.items.map((row, i) => (i === state.index ? { ...row, item: latest } : row)),
@@ -212,7 +213,26 @@ export function createReviewRun(options: {
         (state.busy && !state.editing)
       )
         return;
-      queued = values;
+      if (!state.editing) {
+        edits = draftEditQueue<ExpenseDraftValues>({
+          current: options.current,
+          canWrite: options.online,
+          replace: (version, next) => options.client(selected.groupId).replace(version, next),
+          kept: (version, pending) => {
+            if (pending) return;
+            const state = options.read()!;
+            update({
+              items: state.items.map((row, i) =>
+                i === state.index ? { ...row, item: { ...row.item, draft: version } } : row,
+              ),
+            });
+          },
+          refresh,
+          refreshAfter: 'drain',
+        });
+      }
+      const queue = edits!;
+      queue.change(values);
       update({
         items: state.items.map((row, i) =>
           i === state.index
@@ -226,55 +246,45 @@ export function createReviewRun(options: {
       const confirmed = selected.item.draft;
       writing = run(async () => {
         update({ editing: true });
-        let version = confirmed;
         try {
-          do {
-            while (queued && options.current() && options.online()) {
-              const next = queued;
-              queued = null;
-              version = await options.client(selected.groupId).replace(version, next);
-              if (!options.current()) return;
-              if (!queued) {
-                const state = options.read()!;
-                update({
-                  items: state.items.map((row, i) =>
-                    i === state.index ? { ...row, item: { ...row.item, draft: version } } : row,
-                  ),
-                });
-              }
-            }
-            await refresh();
-          } while (queued && options.current() && options.online());
-          if (queued) {
-            const latestEntries = queued;
+          let result = await queue.flush(confirmed);
+          // A member can type after queue settlement but before this adapter resumes.
+          while (result.kind === 'kept' && queue.pending && options.current()) {
+            result = await queue.flush(result.draft);
+          }
+          if (!options.current()) return;
+          if (result.kind === 'interrupted') {
             const state = options.read()!;
             update({
-              unkept: latestEntries,
+              unkept: result.input,
               items: state.items.map((row, i) =>
                 i === state.index
-                  ? { ...row, item: { ...row.item, draft: { ...version, values: latestEntries } } }
+                  ? {
+                      ...row,
+                      item: { ...row.item, draft: { ...result.draft, values: result.input } },
+                    }
                   : row,
               ),
               message:
                 'Your latest changes have not been kept. Connect and choose Keep my changes to try again.',
             });
+          } else if (result.kind === 'failed') {
+            const latestEntries =
+              options.read()?.items[options.read()!.index]?.item.draft.values ?? result.input;
+            queue.clear();
+            try {
+              await refresh();
+            } catch {
+              /* Keep the unsent correction visible when reads also fail. */
+            }
+            update({
+              unkept: latestEntries,
+              message:
+                'Your latest changes have not been kept. Check the latest details, then choose Keep my changes to try again.',
+            });
           }
-          queued = null;
-        } catch {
-          const latestEntries =
-            queued ?? options.read()?.items[options.read()!.index]?.item.draft.values ?? null;
-          queued = null;
-          try {
-            await refresh();
-          } catch {
-            /* Keep the unsent correction visible when reads also fail. */
-          }
-          update({
-            unkept: latestEntries,
-            message:
-              'Your latest changes have not been kept. Check the latest details, then choose Keep my changes to try again.',
-          });
         } finally {
+          queue.clear();
           update({ editing: false });
         }
       });

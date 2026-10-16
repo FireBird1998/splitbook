@@ -426,6 +426,33 @@ const { data, isLoading, isValidating, mutate } = useSWR(
 
 ---
 
+## Client write coordination
+
+Android's `apps/mobile/src/data/saved-copy-retirement.ts` owns the affected-query
+knowledge and retirement ordering behind the existing controller interface.
+Ledger writes retire Saved copies after sending unless the server definitively
+refused an invalid request (400 or 422). Tag changes retire their wider set of
+copies before sending and stop if removal fails; after sending they retire again
+to catch reads that completed meanwhile. Account leases and the existing
+untrusted-copy journal retain their roles. Query modules still own their rows,
+late-read protection and display reads. Controller tests exercise these policies,
+including process death, failed storage and lost replies (ADRs 0006 and 0009).
+
+`@splitbook/shared/draft-edit-queue` owns transient Draft-edit ordering for the
+web review editor and Android's review run. A member action stages typing and
+explicitly flushes it; the module coalesces newer typing, threads confirmed
+revisions through successive replacements and waits for post-write reads. It
+never persists or automatically replays edits. The web adapter refreshes after
+each write and can adopt a newer external revision; Android refreshes after a
+burst and retains an unkept correction for explicit retry. Presentation, read
+ownership, navigation, and conflict recovery remain in their respective clients.
+The controller snapshot remains Android's only client-state store; the queue
+holds only transient work. Financial save identity remains in the existing
+Draft collection client. Shared ordering tests cover delayed writes and reads;
+existing web browser and Android controller journeys cover the adapters.
+
+---
+
 ## Environment Variables
 
 ```env
