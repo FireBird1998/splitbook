@@ -5,6 +5,7 @@ import {
   GOOGLE_MODE_TEST_ID_TOKEN_SECRET,
 } from '../playwright.google.config';
 import { signTestIdToken } from '../src/lib/auth/test-id-token';
+import { expectNoSeriousA11yViolations } from '../playwright/fixtures';
 
 const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
 
@@ -33,23 +34,55 @@ async function signInWithIdToken(
 }
 
 test.describe('google auth mode', () => {
-  test('home page shows the marketing landing with Google sign-in, not the demo picker', async ({
+  const headline = (page: Page) =>
+    page.getByRole('heading', { level: 1, name: 'Every shared cost, worked out to the paisa.' });
+
+  test('home page shows the landing page with Google sign-in, not the demo picker', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.goto('/');
 
-    await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
+    await expect(headline(page)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in with Google' }).first()).toBeVisible();
     await expect(page.getByText(/demo persona/i)).toHaveCount(0);
     await expect(page.getByText('Demo mode', { exact: true })).toHaveCount(0);
+
+    // This server has nothing optional live (#444): no store, assistants or legal links.
+    await expect(
+      page.getByRole('link', {
+        name: /Get the app|Google Play|Connect Splitbook|Privacy|Terms|Support/,
+      }),
+    ).toHaveCount(0);
 
     // The brand kit: the logo leads home, and the footer's mark is decorative beside the name.
     const home = page.getByRole('link', { name: 'Splitbook home' });
     await expect(home).toHaveAttribute('href', '/');
     await expect(home.getByRole('img')).toHaveAttribute('src', '/brand/logo-light.svg');
     const footer = page.getByRole('contentinfo');
-    await expect(footer).toHaveText('Splitbook — shared expenses, settled fairly.');
+    await expect(footer).toContainText('Splitbook · shared expenses, settled fairly.');
     await expect(footer.locator('img')).toHaveAttribute('alt', '');
     await expect(footer.locator('img')).toHaveAttribute('src', '/brand/mark-indigo.svg');
+
+    await expectNoSeriousA11yViolations(page, testInfo, 'landing-desktop-light');
+  });
+
+  test('the landing page fits a phone without sideways scroll, in dark', async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto('/');
+
+    await expect(headline(page)).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: 'Splitbook home' }).getByRole('img'),
+    ).toHaveAttribute('src', '/brand/logo-dark.svg');
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+
+    await expectNoSeriousA11yViolations(page, testInfo, 'landing-phone-dark');
   });
 
   test('/login shows the Google sign-in button, not the demo picker', async ({ page }) => {
