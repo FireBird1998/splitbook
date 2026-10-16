@@ -30,9 +30,11 @@ const ACTIVITY_ICONS: Record<string, string> = {
 
 interface ActivityViewProps {
   groupId: string;
+  /** The signed-in member, who is "You" in each event (#442). */
+  viewerId: string;
 }
 
-export default function ActivityView({ groupId }: ActivityViewProps) {
+export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
   const { data, isLoading, error } = useSWR(
     activityPageKey(WEB_QUERY_ACCOUNT, groupId, { page: 1, limit: 50 }),
     fetchWebActivity,
@@ -92,7 +94,7 @@ export default function ActivityView({ groupId }: ActivityViewProps) {
             {group.activities.map((activity) => {
               const type = activity.type;
               const icon = ACTIVITY_ICONS[type] || '📋';
-              const detail = formatActivityDetail(activity);
+              const detail = formatActivityDetail(activity, viewerId);
 
               return (
                 <Box
@@ -112,7 +114,7 @@ export default function ActivityView({ groupId }: ActivityViewProps) {
                   </Typography>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" color="text.primary">
-                      {formatActivityHeadline(activity)}
+                      {formatActivityHeadline(activity, viewerId)}
                       <PreparedBy value={activity.metadata?.preparedBy} inline />
                     </Typography>
                     {detail && (

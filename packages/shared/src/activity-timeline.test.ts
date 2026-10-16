@@ -114,6 +114,64 @@ describe('activity timeline helpers', () => {
   });
 });
 
+describe('the viewer is "You" in the Group Activity (#442)', () => {
+  // Two members share a name, so only the id can tell the viewer apart.
+  const payment = (paidBy: string, paidTo: string) => ({
+    _id: 'payment',
+    type: 'settlement_recorded',
+    createdAt: '2026-10-17T10:00:00.000Z',
+    actor: { _id: paidBy, name: 'Ankit Das' },
+    metadata: {
+      paidBy,
+      paidTo,
+      paidByName: 'Ankit Das',
+      paidToName: 'Ankit Das',
+      amount: 600,
+      currency: 'INR',
+    },
+  });
+
+  it('names the viewer "You" on either side of a payment, matched by id', () => {
+    expect(formatActivityDetail(payment('viewer', 'namesake'), 'viewer')).toBe('You → Ankit Das');
+    expect(formatActivityDetail(payment('namesake', 'viewer'), 'viewer')).toBe('Ankit Das → You');
+  });
+
+  it('starts the viewer\'s own events with "You", matched by id', () => {
+    expect(formatActivityHeadline(payment('viewer', 'namesake'), 'viewer')).toBe(
+      'You recorded ₹600.00',
+    );
+    expect(formatActivityHeadline(payment('namesake', 'viewer'), 'viewer')).toBe(
+      'Ankit Das recorded ₹600.00',
+    );
+    expect(
+      formatActivityHeadline(
+        {
+          _id: 'added',
+          type: 'expense_added',
+          createdAt: '2026-10-17T10:00:00.000Z',
+          actor: { _id: 'viewer', name: 'Ankit Das' },
+          metadata: { description: 'Dinner' },
+        },
+        'viewer',
+      ),
+    ).toBe('You added “Dinner”');
+  });
+
+  it('makes the viewer, not a namesake, "You" in Home\'s latest changes', () => {
+    expect(activityLineParts(payment('viewer', 'namesake'), 'viewer').actor).toBe('You');
+    expect(activityLineParts(payment('namesake', 'viewer'), 'viewer').actor).toBe('Ankit Das');
+  });
+
+  it('says "Paid to you" when the payer has no name, and names a namesake as recorded', () => {
+    const toViewer = payment('gone', 'viewer');
+    delete (toViewer.metadata as Record<string, unknown>).paidByName;
+    expect(formatActivityDetail(toViewer, 'viewer')).toBe('Paid to you');
+    expect(formatActivityDetail(payment('namesake', 'other'), 'viewer')).toBe(
+      'Ankit Das → Ankit Das',
+    );
+  });
+});
+
 describe("Home's latest changes (#309)", () => {
   const priya = { _id: 'a00000000000000000000003', name: 'Priya Shah' };
   const at = '2026-10-06T14:10:00.000Z';
