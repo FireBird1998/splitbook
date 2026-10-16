@@ -19,6 +19,7 @@ import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-dra
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import { focusManager, onlineManager, QueryClient, QueryObserver } from '@tanstack/query-core';
 import { savedCopyBudget } from './saved-copy-budget';
+import { savedCopyRetirement } from './saved-copy-retirement';
 import { inScope, queryOwner, replaceScopedQueries } from './query-owner';
 import { readProvenance } from './read-provenance';
 import {
@@ -109,13 +110,7 @@ import {
 } from './dto';
 import { parseInvitationLink, parseToReviewLink } from './invitation-links';
 import { parseGroupBalances } from './financial-dto';
-import {
-  createHomeQueries,
-  draftSummaries,
-  emptyHome,
-  homePath,
-  type Envelope,
-} from './home-queries';
+import { createHomeQueries, draftSummaries, emptyHome, type Envelope } from './home-queries';
 import { createGroupQueries, emptyExpenses } from './group-queries';
 import { createExpenseQueries } from './expense-queries';
 import { createActivityQueries } from './activity-queries';
@@ -1349,31 +1344,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     toReviewQueries.rebind();
     for (const rebind of tagRebinders) rebind();
   };
-  /** A confirmed Expense or Settlement change affects every page, Month, Balance, Home and Activity view. */
-  const ledgerChanged = (groupId: string) =>
-    invalidateReads(`ledger:${groupId}`, `balances:${groupId}`, 'home');
-  /**
-   * Their saved copies on this device go too, including each record and its history, and Home's
-   * totals (M2-2). The removal is queued ahead of every later save or load of a saved copy, so
-   * none of them sees an older one. A copy that can't be removed is no longer trusted this
-   * session; the member is never signed out for it.
-   */
-  const removeLedgerCopies = async (groupId: string, owner: number) => {
-    const lease = accountStorage(),
-      time = now();
-    if (!lease) return;
-    try {
-      await lease.write(async () => {
-        await groupQueries.forget(lease.accountId, groupId, 'ledger');
-        await expenseQueries.forget(lease.accountId, groupId);
-        await activityQueries.forget(lease.accountId, groupId);
-        await homeQueries.forget(lease.accountId, [homePath]);
-      });
-    } catch (error) {
-      if (current(owner) && !(error instanceof Superseded))
-        untrusted.mark(lease.accountId, [`ledger:${groupId}`, `balances:${groupId}`, 'home'], time);
-    }
-  };
+  const retirement = savedCopyRetirement({
+    lease: accountStorage,
+    current,
+    now,
+    invalidate: invalidateReads,
+    group: groupQueries,
+    expense: expenseQueries,
+    activity: activityQueries,
+    home: homeQueries,
+    untrusted,
+  });
+  const ledgerChanged = retirement.changed;
+  const removeLedgerCopies = retirement.removeLedger;
 
   /** An Expense read answered 404: the Group stays, but every older ledger copy goes. */
   const missingLedger = async (groupId: string, owner: number) => {
@@ -3239,35 +3222,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  /**
-   * A ledger write that may have reached the server, whatever its outcome, makes the
-   * Group's earlier reads obsolete: they are not reused, joined or saved afterwards. Their
-   * saved copies are gone before it returns, unless the server definitely refused this
-   * request (400 or 422) and so changed nothing.
-   */
-  const ledgerWrite = async (
+  const ledgerWrite = (
     groupId: string,
     path: string,
     owner: number,
     options: Omit<RequestOptions, 'signal'>,
-  ) => {
-    let refused = false;
-    try {
-      return await request(path, owner, options);
-    } catch (error) {
-      refused = error instanceof RequestError && [400, 422].includes(error.status);
-      throw error;
-    } finally {
-      if (current(owner)) {
-        ledgerChanged(groupId);
-        if (!refused) {
-          // It may have reached the server: its Balances offer no payment until read again.
-          groupQueries.changed(groupId);
-          await removeLedgerCopies(groupId, owner);
-        }
-      }
-    }
-  };
+  ) => retirement.ledger(groupId, owner, () => request(path, owner, options));
 
   /**
    * After a confirmed change: every affected view reads again; earlier responses cannot return.
@@ -6221,51 +6181,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return value;
       },
       check: (requestId) => tagRequest(tagActionCheckPath(groupId, requestId)),
-      send: async (command) => {
-        online();
-        // The exact intent is already durable. Retire every affected saved copy before the
-        // request can reach the server: the process may end before any response or finally.
-        // A failed removal cannot be replaced by the best-effort distrust journal here.
-        try {
-          await lease.write(async () => {
-            await groupQueries.forget(lease.accountId, groupId, 'group');
-            await groupQueries.forget(lease.accountId, groupId, 'ledger');
-            await expenseQueries.forget(lease.accountId, groupId);
-            await activityQueries.forget(lease.accountId, groupId);
-            await homeQueries.forget(lease.accountId);
-          });
-        } catch {
-          ensure();
-          throw new Error(
-            'Could not clear older saved copies on this device. This try was not sent. Check or retry the original action after storage recovers.',
-          );
-        }
-        online();
-        try {
-          return await tagRequest(path, { method: 'POST', body: command });
-        } finally {
-          if (current(owner)) {
-            invalidateReads(
-              `group:${groupId}`,
-              `ledger:${groupId}`,
-              `balances:${groupId}`,
-              'groups',
-              'home',
-            );
-            groupQueries.changed(groupId);
-            await removeLedgerCopies(groupId, owner);
-            try {
-              await lease.write(async () => {
-                await groupQueries.forget(lease.accountId, groupId, 'group');
-                await homeQueries.forget(lease.accountId);
-              });
-            } catch (error) {
-              if (current(owner) && !(error instanceof Superseded))
-                untrusted.mark(lease.accountId, [`group:${groupId}`, 'groups'], now());
-            }
-          }
-        }
-      },
+      send: (command) =>
+        retirement.tag(groupId, owner, lease, { current: ensure, online }, () =>
+          tagRequest(path, { method: 'POST', body: command }),
+        ),
     });
     return {
       ...client,
