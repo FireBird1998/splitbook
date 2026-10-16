@@ -865,6 +865,15 @@ describe('To review quick fixes on Android (#439)', () => {
     // Saved straight from the row: no Save ready confirmation was opened.
     expect(f.controller.getSnapshot().sharedDraftCollection.confirmation).toBeNull();
     expect(f.committed).toEqual(new Set([lunch]));
+    // "Lunch saved · View": View opens the Expense it became (#439 decision 10).
+    expect(text(list)).toContain('After saving');
+    await tap(list, 'View Lunch');
+    await settle();
+    const after = f.controller.getSnapshot();
+    expect(after.toReview.groupId).toBeNull();
+    expect(after.sharedDraftCollection.resultsVisible).toBe(false);
+    expect(after.screen).toBe('expense');
+    expect(after.expense.requestedExpenseId).toBe(`e${lunch.slice(1)}`);
   });
   it('You for all skips an item changed elsewhere, and Undo restores only its own', async () => {
     const f = fixture({ stale: [missingAmount] });
@@ -873,9 +882,21 @@ describe('To review quick fixes on Android (#439)', () => {
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     await tap(list, 'You for all 2');
     await settle();
-    expect(text(list)).toContain(
-      'You set as payer on 1 item. 1 changed elsewhere and was left as it was.',
+    const result = 'You set as payer on 1 item. 1 changed elsewhere and was left as it was.';
+    expect(text(list)).toContain(result);
+    // Shown at the foot of the screen, not in the list that re-sorts, and announced politely.
+    const [scroll] = list.root.findAll((node) => String(node.type) === 'ScrollView');
+    const words = (node: typeof scroll) =>
+      node
+        .findAll((entry) => String(entry.type) === 'Text')
+        .map((entry) => entry.children.filter((child) => typeof child === 'string').join(''));
+    expect(words(scroll)).not.toContain(result);
+    let notice = list.root.find(
+      (node) => String(node.type) === 'Text' && words(node).includes(result),
     );
+    while (notice.parent && notice.props.accessibilityLiveRegion !== 'polite')
+      notice = notice.parent;
+    expect(notice.props.accessibilityLiveRegion).toBe('polite');
     const item = () => f.items().find((entry) => entry.draft.id === lunch)!;
     expect(item().draft.values?.paidBy).toEqual([{ user: user.id }]);
     await tap(list, 'Undo');

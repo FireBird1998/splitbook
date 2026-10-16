@@ -356,8 +356,9 @@ export function sharedDraftCollection({
           await refresh();
         }
       }),
+    /** Only drops the Undo offer, so it may close while another action runs (its timeout). */
     dismissNotice() {
-      if (!read().busy) update({ notice: null, bulk: [] });
+      update({ notice: null, bulk: [] });
     },
     retry: () =>
       run(async () => {

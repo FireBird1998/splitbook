@@ -19,7 +19,8 @@ import {
 } from '@splitbook/shared/to-review-quick-fixes';
 import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
-import { BottomSheet, Card, CompactText, Money } from './compact';
+import { BottomSheet, Card, CompactText, Money, Snackbar } from './compact';
+import { useDismissAfter } from './group-snackbar';
 import { Copy } from './primitives';
 import { fonts, useTheme } from './theme';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
@@ -548,6 +549,29 @@ function AccountRow({
   );
 }
 
+/**
+ * The bulk payer result where the member is: at the foot of the screen, since the list re-sorts
+ * as items move to Ready. Undo stays for Android's accessibility timeout, as on the web (#439).
+ */
+function PayerNotice({
+  notice,
+  onUndo,
+  onDismiss,
+}: {
+  notice: { text: string; undo: boolean };
+  onUndo(): void;
+  onDismiss(): void;
+}) {
+  useDismissAfter(notice, 8_000, onDismiss);
+  return (
+    <Snackbar
+      message={notice.text}
+      bottom={16}
+      action={notice.undo ? { label: 'Undo', onPress: onUndo } : undefined}
+    />
+  );
+}
+
 export function ToReviewList({
   controller,
   groupId,
@@ -620,7 +644,12 @@ export function ToReviewList({
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}
+          contentContainerStyle={{
+            padding: 16,
+            gap: 16,
+            // Room for the payer notice, so it never covers the last item.
+            paddingBottom: collection.notice ? 112 : 32,
+          }}
         >
           <CompactText accessibilityRole="header" variant="title">
             To review
@@ -693,29 +722,6 @@ export function ToReviewList({
               {model.counts.total === 0 && state.toReview.status === 'ready' && !state.offline && (
                 <Copy accessibilityRole="header">All caught up</Copy>
               )}
-              {collection.notice && (
-                <Card padded>
-                  <View style={{ gap: 10 }}>
-                    <Copy accessibilityLiveRegion="polite">{collection.notice.text}</Copy>
-                    <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }}>
-                      {collection.notice.undo && (
-                        <Button
-                          label="Undo"
-                          secondary
-                          disabled={collection.busy || state.offline}
-                          onPress={() => void client.undoPayAll()}
-                        />
-                      )}
-                      <Button
-                        label="Dismiss"
-                        secondary
-                        disabled={collection.busy}
-                        onPress={() => client.dismissNotice()}
-                      />
-                    </View>
-                  </View>
-                </Card>
-              )}
               {sections.map(([kind, label]) => {
                 const items = model.items.filter((item) => item.state === kind);
                 if (!items.length) return null;
@@ -779,6 +785,13 @@ export function ToReviewList({
             </>
           )}
         </ScrollView>
+        {collection.notice && (
+          <PayerNotice
+            notice={collection.notice}
+            onUndo={() => void client.undoPayAll()}
+            onDismiss={() => client.dismissNotice()}
+          />
+        )}
         {moreFix && (
           <BottomSheet
             visible
@@ -892,20 +905,42 @@ export function ToReviewList({
           dismissible={!collection.busy}
         >
           <View style={{ gap: 12 }}>
-            {collection.outcomes.map((outcome) => (
-              <View key={outcome.id} style={{ gap: 4 }}>
-                <Copy>{collection.outcomeNames[outcome.id] || 'Expense'}</Copy>
-                <CompactText tone={outcome.status === 'saved' ? 'positive' : 'warning'}>
-                  {outcome.status === 'saved'
-                    ? 'Saved'
-                    : outcome.status === 'unresolved'
-                      ? unconfirmedMessage
-                      : /changed|revision|version|stale|conflict/i.test(outcome.message)
-                        ? 'Changed since you checked'
-                        : `Couldn’t save: ${memberMessage(outcome.message)}`}
-                </CompactText>
-              </View>
-            ))}
+            {collection.outcomes.map((outcome) => {
+              const name = collection.outcomeNames[outcome.id] || 'Expense';
+              return (
+                <View
+                  key={outcome.id}
+                  style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}
+                >
+                  <View style={{ flex: 1, minWidth: 160, gap: 4 }}>
+                    <Copy>{name}</Copy>
+                    <CompactText tone={outcome.status === 'saved' ? 'positive' : 'warning'}>
+                      {outcome.status === 'saved'
+                        ? 'Saved'
+                        : outcome.status === 'unresolved'
+                          ? unconfirmedMessage
+                          : /changed|revision|version|stale|conflict/i.test(outcome.message)
+                            ? 'Changed since you checked'
+                            : `Couldn’t save: ${memberMessage(outcome.message)}`}
+                    </CompactText>
+                  </View>
+                  {/* A saved item opens as the Expense it became, as on the web (#439). */}
+                  {outcome.status === 'saved' && (
+                    <Button
+                      label="View"
+                      accessibilityLabel={`View ${name}`}
+                      secondary
+                      disabled={collection.busy}
+                      onPress={() => {
+                        client.closeResults();
+                        controller.closeToReview();
+                        void controller.openExpense(groupId, outcome.expenseId);
+                      }}
+                    />
+                  )}
+                </View>
+              );
+            })}
             {(collection.pending ||
               collection.outcomes.some((outcome) => outcome.status === 'unresolved')) && (
               <Button
