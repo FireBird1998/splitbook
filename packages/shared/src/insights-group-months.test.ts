@@ -385,22 +385,24 @@ describe("a Group's Months", () => {
     }
   });
 
-  it('buckets Months in the viewer’s zone, never the runtime’s', () => {
-    // 20:00 UTC on 31 August: 1 September in Kolkata and Kiritimati, 31 August in New York.
-    const late = [expense(id(1), '2026-08-31T20:00:00Z', { [alex]: 4200 })];
+  it('counts an Expense in the Month it is dated, in every zone (#437)', () => {
+    const first = [expense(id(1), '2026-09-01T00:00:00.000Z', { [alex]: 4200 })];
     const spentIn = (timeZone: string) =>
-      insights(late, { timeZone, compare: 1 }).months.map((month) => month.spentMinor);
-    expect(spentIn('Asia/Kolkata')).toEqual([0, 4200]);
-    expect(spentIn('Pacific/Kiritimati')).toEqual([0, 4200]);
-    expect(spentIn('America/New_York')).toEqual([4200, 0]);
-    expect(spentIn('Pacific/Pago_Pago')).toEqual([4200, 0]);
+      insights(first, { timeZone, compare: 1 }).months.map((month) => month.spentMinor);
+    for (const timeZone of [
+      'Asia/Kolkata',
+      'Pacific/Kiritimati',
+      'America/New_York',
+      'Pacific/Pago_Pago',
+    ])
+      expect(spentIn(timeZone)).toEqual([0, 4200]);
   });
 
   it('keeps a Month’s edges exact across daylight saving (New York)', () => {
-    // March ends in summer time (−04): 03:59 UTC on 1 April is still 31 March.
+    // Summer time starts in March: each Expense stays in the Month it is dated.
     const edges = [
-      expense(id(1), '2026-04-01T03:59:00Z', { [alex]: 100 }),
-      expense(id(2), '2026-04-01T04:00:00Z', { [alex]: 200 }),
+      expense(id(1), '2026-03-31T00:00:00.000Z', { [alex]: 100 }),
+      expense(id(2), '2026-04-01T00:00:00.000Z', { [alex]: 200 }),
     ];
     const result = insights(edges, { timeZone: 'America/New_York', month: '2026-04', compare: 1 });
     expect(result.months.map((month) => [month.month, month.spentMinor])).toEqual([

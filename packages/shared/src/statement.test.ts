@@ -67,8 +67,9 @@ describe('printable statement figures', () => {
       }).currencies[0];
       expect(bucket.payments.map((row) => row.id)).toEqual(['before', 'during', 'edge', 'after']);
       expect(bucket.paymentTotalMinor).toBe(100);
-      const start = dayKeyInZone(tripPayments.startDate!, timeZone);
-      const end = dayKeyInZone(tripPayments.endDate!, timeZone);
+      // A Trip's dates are calendar days (#437); a Payment's day is the viewer's.
+      const start = '2026-09-01';
+      const end = '2026-09-02';
       for (const row of bucket.payments) {
         const day = dayKeyInZone(row.at, timeZone);
         expect(row.outsideTrip).toBe(day < start ? 'before' : day > end ? 'after' : null);
@@ -79,6 +80,18 @@ describe('printable statement figures', () => {
       expect(bucket.payments[3].outsideTrip).toBe('after');
       expect(bucket.people.map((row) => row.balanceMinor)).toEqual([-50, 50]);
       expect(bucket.spentMinor).toBe(101);
+    },
+  );
+
+  it.each(['Pacific/Pago_Pago', 'Pacific/Kiritimati'])(
+    'keeps an Expense dated on a Trip day inside the Trip in %s (#437)',
+    (timeZone) => {
+      const bucket = buildStatement(
+        { ...tripPayments, expenses: [{ ...group.expenses[0], date: '2026-09-01T00:00:00Z' }] },
+        { wholeTrip: true, from: '2026-09-01', to: '2026-09-02', timeZone },
+      ).currencies[0];
+      expect(bucket.expenses.map((row) => row.outsideTrip)).toEqual([null]);
+      expect(bucket).toMatchObject({ beforeTrip: null, afterTrip: null });
     },
   );
 
@@ -221,16 +234,19 @@ describe('a whole trip, by #316’s rule for Expenses outside the Trip’s dates
     expect([total('paidMinor'), total('shareMinor')]).toEqual([63710, 63710]);
   });
 
-  it('reads the days in the viewer’s zone: late on the eve is the first day in Kolkata', () => {
-    const statement = buildStatement(ferry, { timeZone: 'Asia/Kolkata', wholeTrip: true });
-    expect(places(statement)).toEqual({
-      booking: 'before',
-      eve: null,
-      first: null,
-      late: 'after',
-      refund: 'after',
-    });
-  });
+  it.each(['Asia/Kolkata', 'Pacific/Pago_Pago', 'Pacific/Kiritimati'])(
+    'reads Expense and Trip days as calendar days in %s, as in UTC (#437)',
+    (timeZone) => {
+      const statement = buildStatement(ferry, { timeZone, wholeTrip: true });
+      expect(places(statement)).toEqual({
+        booking: 'before',
+        eve: 'before',
+        first: null,
+        late: null,
+        refund: 'after',
+      });
+    },
+  );
 
   it('names the same Expenses, with the same totals, as the Trip summary in any zone', () => {
     const variants: Array<Pick<BackupGroupInput, 'startDate' | 'endDate'>> = [
