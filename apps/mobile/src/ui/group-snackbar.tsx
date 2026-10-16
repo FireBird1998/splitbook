@@ -13,7 +13,7 @@ export function viewMonthLabel(month: string, shown: string | null) {
 }
 
 /** Dismisses a snackbar after Android's accessibility timeout, which can extend `base`. */
-function useDismissAfter(notice: object, base: number, onDismiss: () => void) {
+export function useDismissAfter(notice: object, base: number, onDismiss: () => void) {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let active = true;

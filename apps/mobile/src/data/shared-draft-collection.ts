@@ -1,10 +1,12 @@
 import { buildToReview } from '@splitbook/shared/to-review';
+import { applyQuickFix, changedElsewhere } from '@splitbook/shared/to-review-quick-fixes';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
 import { expenseDraftsKey } from '@splitbook/shared/query-keys';
 import { QueryObserver, type QueryClient } from '@tanstack/query-core';
 import type {
   DraftReview,
   DraftSaveOutcome,
+  ExpenseDraftValues,
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
 import type { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
@@ -24,6 +26,10 @@ export interface SharedDraftCollectionState {
   message: string;
   confirmation: ReturnType<typeof buildToReview>['ready'] | null;
   resultsVisible: boolean;
+  /** The last bulk payer action's result, with Undo while it can still apply (#439). */
+  notice: { text: string; undo: boolean } | null;
+  /** What that Undo restores: each item at the revision the action wrote, with its earlier values. */
+  bulk: Array<{ draft: PersistedExpenseDraft; before: ExpenseDraftValues }>;
 }
 export const emptySharedDraftCollection = (): SharedDraftCollectionState => ({
   groupId: null,
@@ -39,6 +45,8 @@ export const emptySharedDraftCollection = (): SharedDraftCollectionState => ({
   message: '',
   confirmation: null,
   resultsVisible: false,
+  notice: null,
+  bulk: [],
 });
 /** Reads one Group's items again where its collection is open (Refresh items). */
 export const refetchDraftCollection = (
@@ -131,6 +139,32 @@ export function sharedDraftCollection({
       }
       update({ busy: false });
     }
+  };
+  /** Saves exactly these reviewed versions, keeping one retry identity for a lost reply. */
+  const commit = async (reviews: DraftReview[], ack: string[]) => {
+    update({
+      outcomeNames: Object.fromEntries(
+        reviews.map((row) => [row.draft.id, row.draft.values?.description || 'Incomplete Draft']),
+      ),
+    });
+    try {
+      update({ outcomes: await client.save(reviews, ack) });
+    } catch (error) {
+      const pending = !!(await client.pending());
+      update({
+        outcomes: reviews.map(({ draft }) => ({
+          id: draft.id,
+          status: pending ? 'unresolved' : 'failed',
+          message: pending
+            ? "We didn't hear back, so it may already be saved"
+            : error instanceof Error
+              ? error.message
+              : 'Could not save this item.',
+        })),
+      });
+    }
+    update({ reviews: [], selected: [], confirmation: null, resultsVisible: true });
+    await refresh();
   };
   const toggle = (values: string[], id: string) =>
     values.includes(id) ? values.filter((value) => value !== id) : [...values, id];
@@ -245,33 +279,87 @@ export function sharedDraftCollection({
       run(async () => {
         const { reviews, ack } = read();
         if (read().pending || !reviews.length) return;
-        update({
-          outcomeNames: Object.fromEntries(
-            reviews.map((row) => [
-              row.draft.id,
-              row.draft.values?.description || 'Incomplete Draft',
-            ]),
-          ),
-        });
-        try {
-          update({ outcomes: await client.save(reviews, ack) });
-        } catch (error) {
-          const pending = !!(await client.pending());
-          update({
-            outcomes: reviews.map(({ draft }) => ({
-              id: draft.id,
-              status: pending ? 'unresolved' : 'failed',
-              message: pending
-                ? "We didn't hear back, so it may already be saved"
-                : error instanceof Error
-                  ? error.message
-                  : 'Could not save this item.',
-            })),
-          });
-        }
-        update({ reviews: [], selected: [], confirmation: null, resultsVisible: true });
-        await refresh();
+        await commit(reviews, ack);
       }),
+    /** One Ready item from its row: reviewed again, and saved only if nothing changed (#439). */
+    saveOne: (item: ToReviewItem) =>
+      run(async () => {
+        if (read().pending) return;
+        const [reviewed] = await client.review([item.draft.id]);
+        if (
+          !reviewed ||
+          reviewed.draft.revision !== item.draft.revision ||
+          reviewed.problems.length ||
+          reviewed.duplicates.length
+        ) {
+          update({ message: 'This item changed or needs another look. Check it before saving.' });
+          await refresh();
+          return;
+        }
+        await commit([reviewed], []);
+      }),
+    /** A quick fix: keeps one fact on the item; never saves the Expense (#439). */
+    fill: (draft: PersistedExpenseDraft, values: ExpenseDraftValues) =>
+      run(async () => {
+        try {
+          await client.replace(draft, values);
+        } finally {
+          await refresh();
+        }
+      }),
+    /** "You for all N": item by item, skipping any changed elsewhere; Undo restores only its own. */
+    payAll: (drafts: PersistedExpenseDraft[], viewerId: string) =>
+      run(async () => {
+        const bulk: SharedDraftCollectionState['bulk'] = [];
+        let skipped = 0;
+        // An unexpected failure stops the run, but the items already set still get their Undo.
+        let failure: unknown = null;
+        try {
+          for (const draft of drafts) {
+            try {
+              const next = await client.replace(
+                draft,
+                applyQuickFix(draft.values ?? {}, 'paidBy', viewerId),
+              );
+              bulk.push({ draft: next, before: draft.values ?? {} });
+            } catch (error) {
+              if (!changedElsewhere(error)) {
+                failure = error;
+                break;
+              }
+              skipped += 1;
+            }
+          }
+        } finally {
+          await refresh();
+        }
+        const set = `You set as payer on ${bulk.length} ${bulk.length === 1 ? 'item' : 'items'}`;
+        const left = skipped
+          ? `. ${skipped} changed elsewhere and ${skipped === 1 ? 'was' : 'were'} left as ${skipped === 1 ? 'it was' : 'they were'}.`
+          : '';
+        update({ bulk, notice: { text: set + left, undo: bulk.length > 0 } });
+        if (failure) throw failure;
+      }),
+    undoPayAll: () =>
+      run(async () => {
+        const { bulk } = read();
+        update({ bulk: [], notice: null });
+        try {
+          for (const row of bulk) {
+            try {
+              await client.replace(row.draft, row.before);
+            } catch (error) {
+              if (!changedElsewhere(error)) throw error;
+            }
+          }
+        } finally {
+          await refresh();
+        }
+      }),
+    /** Only drops the Undo offer, so it may close while another action runs (its timeout). */
+    dismissNotice() {
+      update({ notice: null, bulk: [] });
+    },
     retry: () =>
       run(async () => {
         const result = await client.retry();
