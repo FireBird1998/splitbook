@@ -213,8 +213,10 @@ export function createToReviewQueries(options: {
             ? 'ready'
             : 'idle';
       const message = result.isError ? 'Could not load To review. Try again when connected.' : null;
-      // Only a read that answered is kept; an error or a first read shows that it's checking.
-      shown = status === 'ready' ? { status, read, message } : undefined;
+      // A read that answered is kept through its reads again; an error or nothing read yet isn't,
+      // so a retry shows that it's checking.
+      if (status === 'ready') shown = { status, read, message };
+      else if (status !== 'loading') shown = undefined;
       options.publish({
         ...options.snapshot().toReview,
         offline: !available,

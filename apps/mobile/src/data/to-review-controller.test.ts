@@ -326,6 +326,28 @@ describe('To review stays current (#433)', () => {
     expect(restarted.getSnapshot().toReview).toMatchObject({ status: 'ready', read: { total: 2 } });
   });
 
+  it('keeps To review as it was when opening a Group outdates a Refresh Home on its way', async () => {
+    const f = fixture();
+    f.prepare(2);
+    await f.controller.signIn('alex');
+    await settle();
+    f.prepare(3);
+    const release = f.hold();
+    const refreshing = f.controller.refreshHome();
+    await settle();
+    await f.controller.openGroup(groupId);
+    await settle();
+    expect(f.controller.getSnapshot().toReview.read.total).toBe(2);
+    expect(f.controller.getSnapshot().toReview.status).not.toBe('idle');
+    release();
+    await refreshing;
+    await settle();
+    expect(f.controller.getSnapshot().toReview).toMatchObject({
+      status: 'ready',
+      read: { total: 3 },
+    });
+  });
+
   it('shows Try again after a failed first read as checking until it answers', async () => {
     const f = fixture();
     f.prepare(2);
