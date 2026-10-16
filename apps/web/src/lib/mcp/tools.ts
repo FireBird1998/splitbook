@@ -58,7 +58,7 @@ export function registerSplitbookTools(
     'group_context',
     {
       description:
-        'Read current member identities, active Tags, the Category choices and currency. Ask the member to resolve ambiguous names; never guess missing expense facts.',
+        'Read current member identities, active Tags, the Category choices and currency. The member you are helping is marked you: true, so "I" and "me" are that member. Ask the member to resolve ambiguous names; never guess missing expense facts.',
       inputSchema: z.object({ groupId: draftObjectId }).strict(),
       annotations: read,
     },

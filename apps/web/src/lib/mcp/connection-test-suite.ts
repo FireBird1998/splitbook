@@ -634,8 +634,8 @@ export function connectionTests(mongo = false) {
             },
           });
           expect(
-            JSON.parse((pageTwo.content as Array<{ text: string }>)[0].text).expenses[0]._id,
-          ).not.toBe(report.expenses[0]._id);
+            JSON.parse((pageTwo.content as Array<{ text: string }>)[0].text).expenses[0].id,
+          ).not.toBe(report.expenses[0].id);
           const granted = await authorizeClient(true, true);
           await draftClient.connect(
             new StreamableHTTPClientTransport(new URL(resource), {
@@ -716,6 +716,227 @@ export function connectionTests(mongo = false) {
           await ledgerClient.close();
           await draftClient.close();
         }
+      });
+
+    type NamesakeGroup = { groupId: string; connectedId: string; namesakeId: string };
+    type ToolReply = { text: string; reply: ReturnType<typeof JSON.parse> };
+    /**
+     * A Group shared with a namesake who has a photo, an Expense the namesake paid and a payment
+     * to them, worked on through the tools as the connected member (#438).
+     */
+    async function withNamesakeGroup<T>(
+      work: (
+        call: (tool: string, args?: Record<string, unknown>) => Promise<ToolReply>,
+        group: NamesakeGroup & { tools: string[] },
+      ) => Promise<T>,
+      drafts = false,
+    ): Promise<T> {
+      exposeTools = true;
+      const db = mongoClient!.db();
+      const connected = await db.collection('users').findOne({ email: 'connection@example.test' });
+      const namesake = new mongoose.Types.ObjectId();
+      const groupId = new mongoose.Types.ObjectId();
+      await db.collection('users').insertOne({
+        _id: namesake,
+        name: 'Synthetic Connection',
+        email: 'namesake@example.test',
+        image: 'https://images.example.test/namesake.png',
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await db
+        .collection('users')
+        .updateOne(
+          { _id: connected!._id },
+          { $set: { image: 'https://images.example.test/connected.png' } },
+        );
+      await db.collection('groups').insertOne({
+        _id: groupId,
+        name: 'Namesake Group',
+        defaultCurrency: 'INR',
+        tags: [],
+        members: [
+          { user: connected!._id, joinedAt: new Date() },
+          { user: namesake, joinedAt: new Date() },
+        ],
+      });
+      await db.collection('expenses').insertOne({
+        group: groupId,
+        description: 'Namesake dinner',
+        currency: 'INR',
+        amount: 1000,
+        date: new Date('2026-10-10T00:00:00.000Z'),
+        paidBy: [{ user: namesake, amount: 1000 }],
+        splitBetween: [
+          { user: connected!._id, amount: 500 },
+          { user: namesake, amount: 500 },
+        ],
+        splitMethod: 'equal',
+        category: 'food',
+        tag: '',
+        notes: 'Window table',
+        receiptUrl: 'https://receipts.example.test/private.png',
+        createdBy: namesake,
+        isDeleted: false,
+        createdAt: new Date(),
+      });
+      await db.collection('settlements').insertOne({
+        group: groupId,
+        paidBy: connected!._id,
+        paidTo: namesake,
+        amount: 200,
+        currency: 'INR',
+        createdBy: connected!._id,
+        createdAt: new Date(),
+      });
+      const grant = drafts ? await authorizeClient(true, true) : await authorizeClient();
+      const client = new Client({ name: 'namesake-test', version: '1' });
+      try {
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(resource), {
+            requestInit: { headers: { Authorization: `Bearer ${grant.access_token}` } },
+          }),
+        );
+        const call = async (tool: string, args: Record<string, unknown> = {}) => {
+          const result = await client.callTool({ name: tool, arguments: args });
+          const text = (result.content as Array<{ text: string }>)[0].text;
+          expect(result.isError, text).not.toBe(true);
+          // connection_status answers in words; every other tool answers in JSON.
+          return { text, reply: tool === 'connection_status' ? text : JSON.parse(text) };
+        };
+        return await work(call, {
+          groupId: String(groupId),
+          connectedId: String(connected!._id),
+          namesakeId: String(namesake),
+          tools: (await client.listTools()).tools.map((tool) => tool.name),
+        });
+      } finally {
+        exposeTools = false;
+        await client.close();
+        await db.collection('users').deleteOne({ _id: namesake });
+        await db.collection('users').updateOne({ _id: connected!._id }, { $unset: { image: '' } });
+      }
+    }
+    /** One ledger tool's reply about the namesake Group. */
+    const readNamesakeGroup = (tool: string, args: Record<string, unknown> = {}) =>
+      withNamesakeGroup(async (call, group) => ({
+        ...(await call(tool, { groupId: group.groupId, ...args })),
+        ...group,
+      }));
+
+    if (mongo)
+      it('never sends an email or photo in any tool reply', async () => {
+        const replies = await withNamesakeGroup(async (call, group) => {
+          const { groupId, connectedId, namesakeId } = group;
+          const created = await call('create_drafts', {
+            groupId,
+            requestKey: 'namesake-drafts',
+            drafts: [
+              {
+                description: 'Namesake taxi',
+                amount: 300,
+                paidBy: [{ user: namesakeId }],
+                splitMethod: 'equal',
+                splitBetween: [{ user: connectedId }, { user: namesakeId }],
+              },
+            ],
+          });
+          const [draft] = created.reply.drafts;
+          const replaced = await call('replace_draft', {
+            groupId,
+            draftId: draft.id,
+            revision: draft.revision,
+            values: { description: 'Namesake taxi home', amount: 300 },
+          });
+          const calls: Record<string, ToolReply> = {
+            connection_status: await call('connection_status'),
+            list_groups: await call('list_groups'),
+            group_context: await call('group_context', { groupId }),
+            group_balances: await call('group_balances', { groupId }),
+            group_spending: await call('group_spending', {
+              groupId,
+              from: '2026-10-01',
+              to: '2026-10-31',
+            }),
+            create_drafts: created,
+            replace_draft: replaced,
+            list_drafts: await call('list_drafts', { groupId }),
+            discard_draft: await call('discard_draft', {
+              groupId,
+              draftId: draft.id,
+              revision: replaced.reply.revision,
+            }),
+          };
+          // A tool added later must be added here, so its reply is checked too.
+          expect(Object.keys(calls).sort()).toEqual([...group.tools].sort());
+          return calls;
+        }, true);
+        for (const [tool, { text }] of Object.entries(replies))
+          expect(text, tool).not.toMatch(/email|image|@example\.test|images\.example/);
+      });
+
+    if (mongo)
+      it('marks the connected member in group_context, even beside a namesake', async () => {
+        const { reply, connectedId, namesakeId } = await readNamesakeGroup('group_context');
+        expect(reply.members).toEqual(
+          expect.arrayContaining([
+            { id: connectedId, name: 'Synthetic Connection', you: true },
+            { id: namesakeId, name: 'Synthetic Connection' },
+          ]),
+        );
+        expect(reply.members).toHaveLength(2);
+      });
+
+    if (mongo)
+      it('names members in group_balances by id and name only, marking the connected member', async () => {
+        const { text, reply, connectedId, namesakeId } = await readNamesakeGroup('group_balances');
+        expect(text).not.toMatch(/email|image|@example\.test|images\.example/);
+        const you = { id: connectedId, name: 'Synthetic Connection', you: true };
+        const namesake = { id: namesakeId, name: 'Synthetic Connection' };
+        expect(reply.balances).toEqual({
+          hasMixedCurrencies: false,
+          byCurrency: [
+            {
+              currency: 'INR',
+              balances: expect.arrayContaining([
+                { member: you, balance: -300 },
+                { member: namesake, balance: 300 },
+              ]),
+              debts: [{ from: you, to: namesake, amount: 300 }],
+            },
+          ],
+        });
+      });
+
+    if (mongo)
+      it('lists Expenses in group_spending from an explicit field list, members by id and name', async () => {
+        const { text, reply, connectedId, namesakeId } = await readNamesakeGroup('group_spending', {
+          from: '2026-10-01',
+          to: '2026-10-31',
+        });
+        expect(text).not.toMatch(/email|image|@example\.test|images\.example|receipts\.example/);
+        const you = { id: connectedId, name: 'Synthetic Connection', you: true };
+        const namesake = { id: namesakeId, name: 'Synthetic Connection' };
+        expect(reply.expenses).toEqual([
+          {
+            id: expect.stringMatching(/^[a-f0-9]{24}$/),
+            description: 'Namesake dinner',
+            amount: 1000,
+            currency: 'INR',
+            date: '2026-10-10',
+            category: 'food',
+            tag: null,
+            notes: 'Window table',
+            splitMethod: 'equal',
+            paidBy: [{ member: namesake, amount: 1000 }],
+            splitBetween: [
+              { member: you, amount: 500 },
+              { member: namesake, amount: 500 },
+            ],
+            addedBy: namesake,
+          },
+        ]);
       });
 
     if (mongo)
