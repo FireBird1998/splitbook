@@ -1,7 +1,9 @@
 import { sameSelection } from './use-mobile-snapshot';
 import { ListDayHeader } from './list-day-header';
 import type { RowPlaces } from './return-scroll';
-import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { GroupLedgerList, type LedgerScrollProps } from './group-ledger-list';
+import { ledgerItems } from './ledger-items';
+import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
@@ -29,6 +31,7 @@ import {
   SummaryStats,
   type SummaryStat,
   useLargeText,
+  useReveal,
 } from './compact';
 import { ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -439,7 +442,11 @@ export const GroupExpensesView = memo(
     onOpenExpense,
     onResumeDraft,
     onDiscardDraft,
+    header,
+    listScroll,
   }: {
+    header?: ReactNode;
+    listScroll?: LedgerScrollProps;
     group: MobileGroup;
     currentUserId: string;
     state: GroupFinancialState;
@@ -484,79 +491,6 @@ export const GroupExpensesView = memo(
       choosing.current = onSelectMonth;
     });
     const choose = useCallback((month: string | null) => choosing.current(month), []);
-    // When the window moves (#219), rows above the one on screen go or come: Load more past 5
-    // pages drops the newest page, and Load newer brings it back above. The view moves by as much
-    // as a row shown on both sides of the change moved, so the row on screen keeps its place.
-    // Where the list, each day and each row lie, as their layouts last said.
-    const places = useRef({
-      origin: 0,
-      list: 0,
-      body: null as number | null,
-      days: new Map<string, number>(),
-      rows: new Map<string, { day: string; y: number; height: number }>(),
-    });
-    const anchor = useRef<{ id: string; at: number; timer?: ReturnType<typeof setTimeout> } | null>(
-      null,
-    );
-    const firstPage = expenses.firstPage ?? 1;
-    const shownFirst = useRef(firstPage);
-    /** The rows as last shown: the window's change keeps the first of them still listed. */
-    const shownRows = useRef(expenses.data);
-    const top = (id: string) => {
-      const row = places.current.rows.get(id),
-        day = row && places.current.days.get(row.day);
-      return row && day !== undefined && places.current.body !== null
-        ? places.current.list + places.current.body + day + row.y
-        : null;
-    };
-    useLayoutEffect(() => {
-      const moved = firstPage !== shownFirst.current;
-      shownFirst.current = firstPage;
-      if (anchor.current?.timer) clearTimeout(anchor.current.timer);
-      if (!moved) return;
-      // The first row shown before the change that is still listed: the newest one left after a
-      // slide, or the one that was first before Load newer.
-      const listedNow = new Set(expenses.data.map(({ id }) => id));
-      const id = shownRows.current.find((row) => listedNow.has(row.id))?.id;
-      // Laid out before the change: where it was.
-      const at = id ? top(id) : null;
-      anchor.current = id && at !== null ? { id, at } : null;
-      // Only this commit's change: the layout it leads to moves the view, once.
-    }, [firstPage]);
-    useLayoutEffect(() => {
-      shownRows.current = expenses.data;
-    });
-    /** A layout changed: once the slide's layouts have all arrived, the view follows its row. */
-    const place = (
-      change:
-        | { origin: number }
-        | { list: number }
-        | { body: number }
-        | { day: string; y: number }
-        | { row: string; day: string; y: number; height: number },
-    ) => {
-      if ('origin' in change) places.current.origin = change.origin;
-      else if ('list' in change) places.current.list = change.list;
-      else if ('body' in change) places.current.body = change.body;
-      else if ('row' in change) places.current.rows.set(change.row, change);
-      else places.current.days.set(change.day, change.y);
-      const rows = new Map<string, { top: number; height: number }>();
-      for (const { id: key } of expenses.data) {
-        const at = top(key),
-          row = places.current.rows.get(key);
-        if (at !== null && row)
-          rows.set(key, { top: places.current.origin + at, height: row.height });
-      }
-      onRowsLayout?.(rows);
-      const held = anchor.current;
-      if (!held || held.timer) return;
-      // A layout's events arrive together: the shift waits for all of them.
-      held.timer = setTimeout(() => {
-        if (anchor.current === held) anchor.current = null;
-        const at = top(held.id);
-        if (at !== null && at !== held.at) onShift?.(at - held.at);
-      }, 0);
-    };
     const household = group.category === 'home';
     // Never show one Month's Expenses under another Month's label.
     const current = expenses.month === state.month;
@@ -575,57 +509,90 @@ export const GroupExpensesView = memo(
     // in place, disabled, while the window is read again, so the rows below it never move (#219).
     const newer = listed && (expenses.firstPage ?? 1) > 1;
 
+    // The virtualized cells replace one logical placeholder: share its reveal, including cells
+    // mounted later by native windowing, without starting another animation for a new page.
+    const reveal = useReveal(!listed && expenses.status !== 'error');
     const scope = state.month ? monthLabel(state.month) : 'all-time';
-    return (
-      <View
-        style={{ gap: 12 }}
-        onLayout={({ nativeEvent }) => place({ origin: nativeEvent.layout.y })}
-      >
-        <ExpenseSummary
-          household={household}
-          month={state.month}
-          summary={summary}
-          currentUserId={currentUserId}
-          refreshedAt={listed ? expenses.refreshedAt : null}
-          restored={expenses.restored === true}
-          // The rows shown are from before a change written here, and being read again.
-          updating={expenses.changed === true && expenses.status === 'loading'}
-          offline={offline}
-          loading={!listed && expenses.status !== 'error'}
-          opening={firstRead}
-          current={currentMonthKey(new Date(now))}
-          onSelectMonth={choose}
-        />
-        {listed ? (
-          <RetainedNotice
-            status={expenses.status}
-            refreshedAt={expenses.refreshedAt}
-            message={expenses.message}
-            subject={`${scope} expenses`}
-            retryLabel="Retry expenses"
-            offline={offline}
-            onRetry={onRefreshExpenses}
+    const items = useMemo(
+      () =>
+        ledgerItems(
+          listed
+            ? expenseDays(expenses.data, now).map((day) => ({ ...day, rows: day.expenses }))
+            : [],
+          (expense) => expense.id,
+        ),
+      [listed, expenses.data, now],
+    );
+    const renderRow = useCallback(
+      (item: (typeof items)[number]) =>
+        item.kind === 'day' ? (
+          <ListDayHeader label={item.label} />
+        ) : (
+          <ExpenseRow
+            expense={item.row}
+            currentUserId={currentUserId}
+            saved={item.row.id === savedExpenseId}
+            onOpen={open}
           />
-        ) : null}
-        {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED !== 'true' &&
-        kept?.groupId === group.id ? (
-          <KeptDraftNotice kept={kept} onResume={onResumeDraft} onDiscard={onDiscardDraft} />
-        ) : null}
-        {newer
-          ? pageControl({
-              which: 'newer',
-              status: expenses.newerStatus ?? 'idle',
-              disabled: expenses.status !== 'ready',
-              message: expenses.newerMessage ?? null,
-              color: theme.brand.main,
-              onPress: onLoadNewer,
-            })
-          : null}
-        {/* Where the list lies, for the row kept on screen when the newest page drops (#219). It
-          wraps every state of the list, so the Card that showed its skeleton stays the Card that
-          fades its rows in. */}
-        <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
-          {!listed ? (
+        ),
+      [currentUserId, savedExpenseId, open],
+    );
+    return (
+      <GroupLedgerList
+        {...listScroll}
+        items={items}
+        renderRow={renderRow}
+        reveal={reveal}
+        firstPage={expenses.firstPage ?? 1}
+        onShift={onShift}
+        onRowsLayout={onRowsLayout}
+        header={
+          <>
+            {header}
+            <ExpenseSummary
+              household={household}
+              month={state.month}
+              summary={summary}
+              currentUserId={currentUserId}
+              refreshedAt={listed ? expenses.refreshedAt : null}
+              restored={expenses.restored === true}
+              // The rows shown are from before a change written here, and being read again.
+              updating={expenses.changed === true && expenses.status === 'loading'}
+              offline={offline}
+              loading={!listed && expenses.status !== 'error'}
+              opening={firstRead}
+              current={currentMonthKey(new Date(now))}
+              onSelectMonth={choose}
+            />
+            {listed ? (
+              <RetainedNotice
+                status={expenses.status}
+                refreshedAt={expenses.refreshedAt}
+                message={expenses.message}
+                subject={`${scope} expenses`}
+                retryLabel="Retry expenses"
+                offline={offline}
+                onRetry={onRefreshExpenses}
+              />
+            ) : null}
+            {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED !== 'true' &&
+            kept?.groupId === group.id ? (
+              <KeptDraftNotice kept={kept} onResume={onResumeDraft} onDiscard={onDiscardDraft} />
+            ) : null}
+            {newer
+              ? pageControl({
+                  which: 'newer',
+                  status: expenses.newerStatus ?? 'idle',
+                  disabled: expenses.status !== 'ready',
+                  message: expenses.newerMessage ?? null,
+                  color: theme.brand.main,
+                  onPress: onLoadNewer,
+                })
+              : null}
+          </>
+        }
+        empty={
+          !listed ? (
             expenses.status === 'error' && offline ? (
               <NotAvailableOffline
                 compact
@@ -647,43 +614,8 @@ export const GroupExpensesView = memo(
                 <CompactButton label="Retry expenses" variant="tonal" onPress={onRefreshExpenses} />
               </View>
             ) : (
-              <Card
-                loading={`Loading ${scope} expenses`}
-                skeleton={{ heading: true }}
-                onBodyOffset={(body) => place({ body })}
-              />
+              <Card loading={`Loading ${scope} expenses`} skeleton={{ heading: true }} />
             )
-          ) : expenses.data.length ? (
-            <Card onBodyOffset={(body) => place({ body })}>
-              {expenseDays(expenses.data, now).map((day) => (
-                <View
-                  key={day.key}
-                  onLayout={({ nativeEvent }) => place({ day: day.key, y: nativeEvent.layout.y })}
-                >
-                  <ListDayHeader label={day.label} />
-                  {day.expenses.map((expense) => (
-                    <View
-                      key={expense.id}
-                      onLayout={({ nativeEvent }) =>
-                        place({
-                          row: expense.id,
-                          day: day.key,
-                          y: nativeEvent.layout.y,
-                          height: nativeEvent.layout.height,
-                        })
-                      }
-                    >
-                      <ExpenseRow
-                        expense={expense}
-                        currentUserId={currentUserId}
-                        saved={expense.id === savedExpenseId}
-                        onOpen={open}
-                      />
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </Card>
           ) : (
             <Card padded>
               <CompactText weight="semibold">
@@ -693,19 +625,21 @@ export const GroupExpensesView = memo(
                 {state.month ? 'Try another Month or All time.' : 'Expenses you add appear here.'}
               </CompactText>
             </Card>
-          )}
-        </View>
-        {more
-          ? pageControl({
-              which: 'more',
-              status: expenses.moreStatus,
-              disabled: expenses.status !== 'ready',
-              message: expenses.moreMessage,
-              color: theme.brand.main,
-              onPress: onLoadMore,
-            })
-          : null}
-      </View>
+          )
+        }
+        footer={
+          more
+            ? pageControl({
+                which: 'more',
+                status: expenses.moreStatus,
+                disabled: expenses.status !== 'ready',
+                message: expenses.moreMessage,
+                color: theme.brand.main,
+                onPress: onLoadMore,
+              })
+            : null
+        }
+      />
     );
   },
   (a, b) =>

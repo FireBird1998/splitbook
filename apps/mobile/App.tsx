@@ -77,6 +77,7 @@ import { GroupSnackbar, HomeSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
 import { groupFields } from './src/data/group-draft';
 import { GroupShell } from './src/ui/group-shell';
+import type { LedgerScrollHandle, LedgerScrollProps } from './src/ui/group-ledger-list';
 import { GroupBalancesView, recordWaitsForDetails, settledIn } from './src/ui/group-balances';
 import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { GroupActivity } from './src/ui/group-activity';
@@ -843,6 +844,7 @@ function GroupScreen() {
       sameSelection(a.feedback, b.feedback),
   );
   const feedback = state.feedback;
+  const theme = useTheme();
   // The top bar keeps the Group's name and actions while it is first read.
   const known = shownGroup(state);
   // Its details couldn't be read, but its Expenses answered, which proves the member belongs
@@ -874,6 +876,7 @@ function GroupScreen() {
   const userId = state.auth.user!.id;
   const eventOpen = state.destination === 'activity' && state.activity.selected !== null;
   const scroll = useRef<ScrollView>(null);
+  const ledgerScroll = useRef<LedgerScrollHandle>(null);
   // The destination's offset, recorded when an Expense opens so returning can restore it.
   const scrollY = useRef(0);
   const viewportHeight = useRef(0);
@@ -907,6 +910,8 @@ function GroupScreen() {
     // Another view: where its window starts is no slide.
     shownFirstPage.current = firstPage;
     slideFrom.current = null;
+    pendingScroll.current = null;
+    ledgerScroll.current?.cancel();
   }
   if (shownFirstPage.current !== firstPage) {
     slideFrom.current = scrollY.current;
@@ -936,6 +941,23 @@ function GroupScreen() {
     const settled =
       (activity ? events.status : status) === 'ready' ||
       (activity ? events.status : status) === 'error';
+    if (shown.destination !== 'balances' && ledgerScroll.current) {
+      // The required page window settles first. Native index failures leave the row return
+      // pending; its real cell layout retries it, including when enlarged text changes heights.
+      if (restore.anchor && !settled) return;
+      const finished = ledgerScroll.current.restore(restore);
+      if (
+        finished &&
+        (restore.anchor || Math.max(0, height - viewportHeight.current) >= restore.y || settled)
+      )
+        pendingScroll.current = null;
+      if (finished)
+        scrollY.current = returnScrollTarget(restore, rowPlaces.current, {
+          content: height,
+          viewport: viewportHeight.current,
+        });
+      return;
+    }
     let places = rowPlaces.current;
     if (restore.anchor) {
       // Rows may still be arriving after Back. A row still listed waits for its native layout;
@@ -986,7 +1008,9 @@ function GroupScreen() {
     const from = slideFrom.current ?? scrollY.current;
     slideFrom.current = null;
     scrollY.current = Math.max(0, from + dy);
-    scroll.current?.scrollTo({ y: scrollY.current, animated: false });
+    const view =
+      controller.getSnapshot().destination === 'balances' ? scroll.current : ledgerScroll.current;
+    view?.scrollTo({ y: scrollY.current, animated: false });
   }, []);
   const openExpense = useCallback(
     (groupId: string, expenseId?: string) =>
@@ -1046,46 +1070,135 @@ function GroupScreen() {
   );
   // Offline, the banner says so; that what's shown was saved on this device, only while some of
   // it is: the Group's details, or the destination's own content (#219, #222, as Home since #332).
-  const notice = unavailable ? null : (
-    <OfflineNotice
-      state={state.offline}
-      savedShown={
-        (!!state.detail.data && state.detail.restored === true) ||
-        (state.destination === 'expenses'
-          ? state.financial.expenses.month === state.financial.month &&
-            state.financial.expenses.restored === true
-          : state.destination === 'balances'
-            ? state.financial.balances.data !== null && state.financial.balances.restored === true
-            : state.activity.restored === true && state.activity.events.length > 0)
-      }
-    />
+  const savedShown =
+    (!!state.detail.data && state.detail.restored === true) ||
+    (state.destination === 'expenses'
+      ? state.financial.expenses.month === state.financial.month &&
+        state.financial.expenses.restored === true
+      : state.destination === 'balances'
+        ? state.financial.balances.data !== null && state.financial.balances.restored === true
+        : state.activity.restored === true && state.activity.events.length > 0);
+  const notice = useMemo(
+    () => (unavailable ? null : <OfflineNotice state={state.offline} savedShown={savedShown} />),
+    [unavailable, state.offline, savedShown],
   );
   /** A failed refresh keeps the whole Group readable, with its time and a retry. */
-  const groupNotice = (shown: MobileGroup) =>
-    state.detail.status === 'error' && !state.detail.data ? (
-      <DetailsNotice
-        subject={shown.name}
-        // Up to date only as the server answered them in this open, never a saved copy.
-        balances={state.financial.balances.answeredThisOpen === true}
-        onRetry={() => void controller.refresh()}
-      />
-    ) : (
-      state.detail.status === 'error' && (
-        <RetainedNotice
-          status="error"
-          refreshedAt={state.detail.refreshedAt}
-          message={state.detail.message}
+  const groupMessage = useMemo(
+    () =>
+      !shown ? null : state.detail.status === 'error' && !state.detail.data ? (
+        <DetailsNotice
           subject={shown.name}
-          retryLabel="Retry Group"
-          offline={state.offline.active}
+          // Up to date only as the server answered them in this open, never a saved copy.
+          balances={state.financial.balances.answeredThisOpen === true}
           onRetry={() => void controller.refresh()}
         />
-      )
-    );
+      ) : (
+        state.detail.status === 'error' && (
+          <RetainedNotice
+            status="error"
+            refreshedAt={state.detail.refreshedAt}
+            message={state.detail.message}
+            subject={shown.name}
+            retryLabel="Retry Group"
+            offline={state.offline.active}
+            onRetry={() => void controller.refresh()}
+          />
+        )
+      ),
+    [
+      shown?.name,
+      state.detail.status,
+      state.detail.data,
+      state.detail.refreshedAt,
+      state.detail.message,
+      state.offline.active,
+      proven && state.financial.balances.answeredThisOpen,
+    ],
+  );
+  const scrollEvents = useMemo<NonNullable<LedgerScrollProps['scroll']>>(
+    () => ({
+      scrollEventThrottle: 100,
+      onScroll: (event) => {
+        scrollY.current = event.nativeEvent.contentOffset.y;
+      },
+      onScrollBeginDrag: () => {
+        pendingScroll.current = null;
+        ledgerScroll.current?.cancel();
+      },
+      // A throttled scroll event can miss the end of a drag or a fling, by up to 100 ms of
+      // scrolling: the offset the view then keeps, after a slide or a return, comes from where
+      // scrolling stopped (#219).
+      onScrollEndDrag: (event) => {
+        scrollY.current = event.nativeEvent.contentOffset.y;
+      },
+      onMomentumScrollEnd: (event) => {
+        scrollY.current = event.nativeEvent.contentOffset.y;
+      },
+      onLayout: (event) => {
+        viewportHeight.current = event.nativeEvent.layout.height;
+      },
+      onContentSizeChange: (_width, height) => {
+        contentHeight.current = height;
+        if (pendingScroll.current?.anchor) scheduleRestore();
+        else restorePendingScroll(height);
+      },
+      refreshControl: (
+        <RefreshControl
+          refreshing={feedback.pull}
+          onRefresh={() => void controller.refresh('pull')}
+          tintColor={theme.brand.main}
+          colors={[theme.brand.main]}
+        />
+      ),
+    }),
+    [feedback.pull, theme.brand.main, scheduleRestore, restorePendingScroll],
+  );
+  const listScroll = useMemo<LedgerScrollProps>(
+    () => ({
+      nativeRef: ledgerScroll,
+      scroll: scrollEvents,
+      floating: floating !== null,
+    }),
+    [scrollEvents, floating !== null],
+  );
+  const activityHeader = useMemo(
+    () => (
+      <>
+        {notice}
+        {groupMessage}
+      </>
+    ),
+    [notice, groupMessage],
+  );
+  const expenseHeader = useMemo(
+    () =>
+      shown ? (
+        <>
+          {/* First in the list, as it was first in the scroll view before (#413). */}
+          {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' &&
+            group &&
+            state.detail.status !== 'denied' && (
+              <ToReviewGroupBanner controller={controller} groupId={group.id} />
+            )}
+          {notice}
+          {groupMessage}
+          {getGroupTheme(shown.category).header === 'strip' ? <TripStrip group={shown} /> : null}
+          {shown.members.length === 1 ? (
+            <CompactText variant="small" tone="secondary">
+              Your Group is ready. Invite someone to start sharing it.
+            </CompactText>
+          ) : null}
+        </>
+      ) : null,
+    [notice, groupMessage, shown, group?.id, state.detail.status],
+  );
   /** Activity's list, or an event of it. */
   const activity = (shown: MobileGroup, activityState: MobileSnapshot['activity']) => (
     <GroupActivity
+      key={scrollKey}
       state={activityState}
+      header={activityHeader}
+      listScroll={listScroll}
       currentUserId={userId}
       currency={shown.defaultCurrency}
       members={activityMembers}
@@ -1111,6 +1224,7 @@ function GroupScreen() {
   return (
     <GroupShell
       group={known}
+      virtualized={showsContent && state.destination !== 'balances'}
       destination={state.destination}
       onDestination={(destination) => void controller.selectDestination(destination)}
       back={{
@@ -1123,7 +1237,7 @@ function GroupScreen() {
         eventOpen && showsContent && shown ? (
           <>
             {notice}
-            {groupNotice(shown)}
+            {groupMessage}
             {activity(shown, state.activity)}
           </>
         ) : null
@@ -1138,32 +1252,7 @@ function GroupScreen() {
       onRefresh={() => void controller.refresh()}
       pull={{ refreshing: feedback.pull, onRefresh: () => void controller.refresh('pull') }}
       scrollRef={scroll}
-      scroll={{
-        scrollEventThrottle: 100,
-        onScroll: (event) => {
-          scrollY.current = event.nativeEvent.contentOffset.y;
-        },
-        onScrollBeginDrag: () => {
-          pendingScroll.current = null;
-        },
-        // A throttled scroll event can miss the end of a drag or a fling, by up to 100 ms of
-        // scrolling: the offset the view then keeps, after a slide or a return, comes from where
-        // scrolling stopped (#219).
-        onScrollEndDrag: (event) => {
-          scrollY.current = event.nativeEvent.contentOffset.y;
-        },
-        onMomentumScrollEnd: (event) => {
-          scrollY.current = event.nativeEvent.contentOffset.y;
-        },
-        onLayout: (event) => {
-          viewportHeight.current = event.nativeEvent.layout.height;
-        },
-        onContentSizeChange: (_width, height) => {
-          contentHeight.current = height;
-          if (pendingScroll.current?.anchor) scheduleRestore();
-          else restorePendingScroll(height);
-        },
-      }}
+      scroll={scrollEvents}
       overlay={
         <>
           {floating ? (
@@ -1186,15 +1275,11 @@ function GroupScreen() {
         </>
       }
     >
+      {/* A Modal over any destination; on Expenses, its banner leads the list's header. */}
       {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && (
-        <>
-          {group && state.destination === 'expenses' && state.detail.status !== 'denied' && (
-            <ToReviewGroupBanner controller={controller} groupId={group.id} />
-          )}
-          <ToReviewOverlay controller={controller} />
-        </>
+        <ToReviewOverlay controller={controller} />
       )}
-      {notice}
+      {showsContent && state.destination !== 'balances' ? null : notice}
       {state.detail.status === 'denied' ? (
         <Notice
           title="This Group isn’t available"
@@ -1223,7 +1308,7 @@ function GroupScreen() {
         />
       ) : (
         <>
-          {groupNotice(shown)}
+          {state.destination === 'balances' ? groupMessage : null}
           {state.destination === 'activity' ? (
             activity(shown, listed)
           ) : state.destination === 'balances' ? (
@@ -1244,15 +1329,10 @@ function GroupScreen() {
             />
           ) : (
             <>
-              {getGroupTheme(shown.category).header === 'strip' ? (
-                <TripStrip group={shown} />
-              ) : null}
-              {shown.members.length === 1 ? (
-                <CompactText variant="small" tone="secondary">
-                  Your Group is ready. Invite someone to start sharing it.
-                </CompactText>
-              ) : null}
               <GroupExpensesView
+                key={scrollKey}
+                header={expenseHeader}
+                listScroll={listScroll}
                 group={shown}
                 currentUserId={userId}
                 state={state.financial}

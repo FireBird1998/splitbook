@@ -1,7 +1,7 @@
 import { GroupExpensesView } from './group-expenses';
 import { GroupActivity } from './group-activity';
 import { GroupMembers } from './group-members';
-import { useSyncExternalStore, type ReactElement } from 'react';
+import { isValidElement, useSyncExternalStore, type ReactElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onlineManager } from '@tanstack/query-core';
@@ -849,7 +849,11 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
         await f.controller.openActivity(groupId);
       });
       const activity = await render(<Activity controller={f.controller} />, mode);
-      expect(JSON.stringify(activity.toJSON())).toContain('prepared by Claude');
+      // What renders: the virtualized list's host also carries its header as an element prop.
+      const rendered = JSON.stringify(activity.toJSON(), (_key, value: unknown) =>
+        isValidElement(value) ? undefined : value,
+      );
+      expect(rendered).toContain('prepared by Claude');
       expect(
         activity.root
           .findAll((node) => String(node.type) === 'Pressable')

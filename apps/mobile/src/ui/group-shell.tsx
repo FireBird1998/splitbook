@@ -61,6 +61,8 @@ interface GroupShellProps {
   cover?: ReactNode;
   /** A floating action shows over the content, which leaves room to scroll clear of it. */
   floating?: boolean;
+  /** Expenses and Activity supply their own virtualized scroll container. */
+  virtualized?: boolean;
   children: ReactNode;
 }
 
@@ -84,6 +86,7 @@ export function GroupShell({
   cover,
   floating = false,
   children,
+  virtualized = false,
 }: GroupShellProps) {
   const theme = useTheme();
   const [options, setOptions] = useState(false);
@@ -125,27 +128,37 @@ export function GroupShell({
       {/* The content's place: a cover fills it exactly. Never measured, since the content's own
           layout is its pull-to-refresh wrapper's on Android, not this column's. */}
       <View style={{ flex: 1 }}>
-        <ScrollView
-          // Each destination starts at its own top.
-          key={destination}
-          ref={scrollRef}
-          {...scroll}
-          // Under a cover it keeps its content and its offset, out of TalkBack's reach.
-          importantForAccessibility={cover ? 'no-hide-descendants' : 'auto'}
-          accessibilityElementsHidden={!!cover}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={content}
-          refreshControl={
-            <RefreshControl
-              refreshing={pull.refreshing}
-              onRefresh={pull.onRefresh}
-              tintColor={theme.brand.main}
-              colors={[theme.brand.main]}
-            />
-          }
-        >
-          {children}
-        </ScrollView>
+        {virtualized ? (
+          <View
+            style={{ flex: 1 }}
+            importantForAccessibility={cover ? 'no-hide-descendants' : 'auto'}
+            accessibilityElementsHidden={!!cover}
+          >
+            {children}
+          </View>
+        ) : (
+          <ScrollView
+            // Each destination starts at its own top.
+            key={destination}
+            ref={scrollRef}
+            {...scroll}
+            // Under a cover it keeps its content and its offset, out of TalkBack's reach.
+            importantForAccessibility={cover ? 'no-hide-descendants' : 'auto'}
+            accessibilityElementsHidden={!!cover}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={content}
+            refreshControl={
+              <RefreshControl
+                refreshing={pull.refreshing}
+                onRefresh={pull.onRefresh}
+                tintColor={theme.brand.main}
+                colors={[theme.brand.main]}
+              />
+            }
+          >
+            {children}
+          </ScrollView>
+        )}
         {cover ? (
           <ScrollView
             // From its own top, over the content, which stays as it was underneath.
