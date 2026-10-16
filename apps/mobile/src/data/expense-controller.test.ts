@@ -1,5 +1,6 @@
 import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { inTimeZone } from '../test-utils/time-zone';
 import { toDateParam } from '@splitbook/shared/date';
 import { gatewayReply, hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
 import { savedQueriesIn } from '../test-utils/saved-queries';
@@ -1227,6 +1228,60 @@ describe('native Expense creation and editing', () => {
       { method: 'PATCH', revision: '3', body: { description: 'Corrected dinner' } },
     ]);
     expect(controller.getSnapshot().expense.status).toBe('saved');
+  });
+
+  describe('an Expense is dated by calendar day, in any zone (#437)', () => {
+    it.each(['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'Asia/Kolkata'])(
+      'Add expense stores the chosen day at midnight UTC in %s',
+      (zone) =>
+        inTimeZone(zone, async () => {
+          const sent: unknown[] = [];
+          const { controller } = setup((path, init) => {
+            if (path.endsWith('/expenses') && init.method === 'POST')
+              sent.push(JSON.parse(String(init.body)).date);
+            return undefined;
+          });
+          await controller.signIn('alex');
+          await controller.openExpense(groupId);
+          await controller.updateExpenseDraft({
+            description: 'Dinner',
+            amount: '12',
+            tagId,
+            date: '2026-09-27',
+          });
+          await controller.saveExpense();
+          expect(sent).toEqual(['2026-09-27T00:00:00.000Z']);
+        }),
+    );
+
+    it.each(['Pacific/Pago_Pago', 'Pacific/Kiritimati'])(
+      'Edit expense shows the stored day and stores a new one at midnight UTC in %s',
+      (zone) =>
+        inTimeZone(zone, async () => {
+          const writes: unknown[] = [];
+          const stored = { ...savedExpense, date: '2026-09-28T00:00:00.000Z' };
+          const { controller } = setup((path, init) => {
+            if (path.endsWith(`/${expenseId}`)) {
+              if (init.method === 'PATCH') {
+                const body = JSON.parse(String(init.body));
+                writes.push(body);
+                return Promise.resolve(
+                  json({ data: { ...stored, ...body, revision: 4 }, status: 200 }),
+                );
+              }
+              return Promise.resolve(json({ data: stored, status: 200 }));
+            }
+          });
+          await controller.signIn('alex');
+          await controller.openExpense(groupId, expenseId);
+          await controller.editExpense();
+          expect(controller.getSnapshot().expense.draft?.date).toBe('2026-09-28');
+          await controller.updateExpenseDraft({ date: '2026-09-29' });
+          await controller.saveExpense();
+          expect(writes).toEqual([{ date: '2026-09-29T00:00:00.000Z' }]);
+          expect(controller.getSnapshot().expense.status).toBe('saved');
+        }),
+    );
   });
 
   it('keeps a saved payer of 0 while the payers are unchanged, so a metadata edit sends no money', async () => {

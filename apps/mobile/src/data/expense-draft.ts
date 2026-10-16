@@ -4,7 +4,7 @@ import {
   keepSavedPayers,
   readExpenseMoney,
 } from '@splitbook/shared/expense-money-edit';
-import { toDateParam } from '@splitbook/shared/date';
+import { expenseDate, expenseDay } from '@splitbook/shared/expense-day';
 import {
   createExpenseSchema,
   updateExpenseSchema,
@@ -444,7 +444,7 @@ export function buildExpenseBody(draft: ExpenseDraft, context: ExpenseContext): 
     amount,
     currency: draft.currency,
     category: draft.category,
-    date: new Date(`${date}T12:00:00`),
+    date: expenseDate(date),
     paidBy,
     splitBetween,
     splitMethod: draft.splitMethod,
@@ -470,7 +470,7 @@ export function draftFromExpense(original: ExpenseRecord): ExpenseDraft {
     amount: String(money.amount),
     currency: original.currency,
     description: original.description,
-    date: toDateParam(new Date(original.date)),
+    date: expenseDay(original.date),
     category: original.category,
     notes: original.notes,
     tagId: original.tagId ?? '',
@@ -563,8 +563,8 @@ export function buildExpensePatch(draft: ExpenseDraft, context: ExpenseContext):
     ...(draft.description !== original.description ? { description: draft.description } : {}),
     ...(draft.notes !== original.notes ? { notes: draft.notes } : {}),
     ...(draft.category !== original.category ? { category: draft.category } : {}),
-    ...(date !== toDateParam(new Date(original.date))
-      ? { date: new Date(`${date}T12:00:00`) }
+    ...(date !== expenseDay(original.date)
+      ? { date: expenseDate(date) }
       : {}),
     ...(tagChanged ? tag : {}),
     ...(financial

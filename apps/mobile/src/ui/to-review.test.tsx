@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { inTimeZone } from '../test-utils/time-zone';
 import { onlineManager, focusManager } from '@tanstack/query-core';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import type {
@@ -414,6 +415,18 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     await tap(home, 'Review 4, one at a time');
     expect(f.controller.getSnapshot().toReview.run?.items[0].groupId).toBe(groupId);
   });
+  it('shows an item’s day as it is, in a zone behind UTC (#437)', () =>
+    inTimeZone('Pacific/Pago_Pago', async () => {
+      const f = fixture();
+      await signIn(f);
+      const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+      // Dated 14 Oct, as the test clock's today is there too, never the day before.
+      expect(text(list)).toContain('Prepared by Claude · Today');
+      expect(text(list)).not.toContain('Yesterday');
+      await tap(list, 'Save 2 ready');
+      expect(text(list)).toContain('Save ready expenses?');
+      expect(text(list)).not.toContain('Yesterday');
+    }));
   it('hides an empty Home card and renders the empty list', async () => {
     const f = fixture({ empty: true });
     await signIn(f);

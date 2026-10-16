@@ -23,6 +23,7 @@ import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
 import { useTheme } from './theme';
 import { reviewedItemsLine } from './review-run-copy';
+import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
 function money(amount: number | undefined, currency: string | undefined) {
   if (amount === undefined || !currency) return 'Amount needed';
@@ -287,7 +288,8 @@ function ReviewRunContent({
                     .map((expense) => (
                       <View key={expense._id}>
                         <Copy>
-                          {formatDate(expense.date)} · {money(expense.amount, expense.currency)}
+                          {formatDate(expenseLocalDate(expense.date))} ·{' '}
+                          {money(expense.amount, expense.currency)}
                         </Copy>
                         <Copy>
                           Added by{' '}

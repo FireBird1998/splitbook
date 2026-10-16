@@ -16,6 +16,7 @@ import { BottomSheet, Card, CompactText, Money } from './compact';
 import { Copy } from './primitives';
 import { fonts, useTheme } from './theme';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
+import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
 const offlineMessage =
   "You're offline. What Claude prepared and what you set aside show up when you're back online";
@@ -98,7 +99,7 @@ function ItemDetails({ item }: { item: ReviewItemModel }) {
   const needs = !!item.accountItem;
   const date =
     values?.date && Number.isFinite(new Date(values.date).getTime())
-      ? formatDate(values.date)
+      ? formatDate(expenseLocalDate(values.date))
       : needs
         ? null
         : 'Date needed';
@@ -551,7 +552,9 @@ export function ToReviewList({
                     ? `Prepared by ${item.draft.preparedBy.name}`
                     : 'Set aside by you'}
                 </CompactText>
-                {item.draft.values?.date && <Copy>{formatDate(item.draft.values.date)}</Copy>}
+                {item.draft.values?.date && (
+                  <Copy>{formatDate(expenseLocalDate(item.draft.values.date))}</Copy>
+                )}
                 {collection.reviews.find((review) => review.draft.id === item.draft.id)
                   ?.allocation &&
                   (() => {
