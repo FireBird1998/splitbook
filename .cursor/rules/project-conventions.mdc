@@ -1,46 +1,20 @@
 ---
-description: Project architecture and coding conventions for the Splitbook app
+description: SplitBook conventions every change follows
 alwaysApply: true
 ---
 
-# Splitbook Project Conventions
+# SplitBook conventions
 
-## Repository layout
+Read `AGENTS.md` first: it points at the docs, ADRs and gotchas for each area. Review rules live in `CODING_STANDARDS.md`, and domain terms in `GLOSSARY.md`.
 
-- pnpm workspace: the Next.js app is `apps/web` (package `@splitbook/web`); every path below is relative to it. Root scripts are only `lint`, `typecheck`, `test`, `test:unit`, `test:integration`, `format`, `format:check` plus the `dev`/`build`/`start` shortcuts; run any other app script as `pnpm web <script>`.
+## Web API (`apps/web`)
 
-## Tech Stack
+- A route handler authenticates with `getAuthUser()`, validates with a Zod schema from `@splitbook/shared/validators/*`, calls a module in `src/lib/services/`, and answers through the helpers in `src/lib/utils/api-response.ts` (`{ data }` on success, `{ error, code }` on failure).
+- Mongoose models live in `src/lib/models/`; the path alias `@/*` maps to `apps/web/src/*`.
+- Client reads use SWR; shared read hooks live in `src/lib/hooks/`.
 
-- Next.js 16 (App Router) + TypeScript + React 19
-- MUI v7 (Material UI) + Emotion — sole styling system, no Tailwind
-- MongoDB + Mongoose v9 — database
-- Better Auth — Google OAuth (allowlisted) + demo persona plugin, database sessions; `src/proxy.ts` protects routes
-- SWR — client-side data fetching (used directly in components, no custom hooks layer)
-- Zod v4 — request validation
+## Data model
 
-## Architecture
-
-- **API routes**: RESTful, nested under group — `/api/groups/[id]/expenses`
-- **Services**: Business logic in `src/lib/services/`, never in route handlers
-- **Models**: Mongoose models in `src/lib/models/`
-- **Validators**: Zod schemas come from the shared package, `@splitbook/shared/validators/*`
-- **Components**: Feature-scoped in `src/components/{feature}/`
-- **Types**: Shared interfaces come from `@splitbook/shared/types`
-- **Path alias**: `@/*` maps to `src/*`
-- **Shared package**: `@splitbook/shared` (`packages/shared`) owns the types, the Zod validators and all pure domain logic; import subpaths (`@splitbook/shared/currency`, `@splitbook/shared/validators/expense`). Nothing in it may import Next, React, MUI, Mongoose, the DB or DOM APIs.
-
-## Data Model Notes
-
-- Expense uses `tag` (singular string, required) — not an array
-- Group has embedded `tags` subdocument array (group-scoped tag management)
-- Expenses use soft delete (`isDeleted` flag) — never hard delete
-- Dates stored as UTC, displayed in user's timezone
-
-## API Pattern
-
-Every API route handler follows: auth check → Zod validation → service call → JSON response.
-Response format: `{ data: T }` on success, `{ error: string }` on failure.
-
-## Navbar
-
-The navbar uses `position: "fixed"` with a 56px spacer below it in the main layout. The sidebar starts at `top: 56`. Keep these values in sync when modifying layout.
+- An Expense is soft-deleted (`isDeleted`), and it keeps its Tag by stable `tagId` beside the Tag's name.
+- A Group embeds its Tags as subdocuments.
+- Pure domain logic (money, splits, dates, decoders) lives in `@splitbook/shared`, imported by subpath, so web and Android compute it the same way.

@@ -1,13 +1,13 @@
 ---
-description: Use pnpm as the package manager — never npm or yarn
+description: pnpm workspace commands for installing and running scripts
 alwaysApply: true
 ---
 
-# Package Manager: pnpm
+# Package manager: pnpm
 
-This project uses **pnpm** exclusively.
+Use pnpm (pinned in the root `package.json`) for every install and script. The lockfile is `pnpm-lock.yaml`.
 
-- Install packages: `pnpm add <pkg>` / `pnpm add -D <pkg>`
-- Run scripts: `pnpm run <script>` or `pnpm <script>`
-- Install all deps: `pnpm install`
-- Never use `npm` or `yarn` commands
+- Workspace-wide scripts run from the root: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm format:check`.
+- Package scripts go through their shortcut: `pnpm web <script>`, `pnpm mobile <script>`, `pnpm swarm <command>`.
+- Add a dependency to the package that uses it: `pnpm --filter <package> add <dep>`.
+- `tools/brand` is the one exception: it keeps its own npm lockfile and CI job.
