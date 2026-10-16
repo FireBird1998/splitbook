@@ -301,6 +301,8 @@ describe('the side panel with an Expense open', () => {
 
   it('names each member whose payment or share an edit changed, with the viewer as "Your" (#456)', () => {
     const namesake = { ...ALEX, _id: 'a00000000000000000000009' };
+    // Someone the Group no longer names: their account is gone.
+    const gone = { ...SAM, _id: 'a00000000000000000000008', name: '' };
     const ids = (people: Array<[Person, number]>) =>
       people.map(([person, minor]) => ({
         user: person._id,
@@ -326,13 +328,15 @@ describe('the side panel with an Expense open', () => {
                   paidBy: { old: ids([[PRIYA, 268000]]), new: ids([[SAM, 286000]]) },
                   splitBetween: {
                     old: ids([
-                      [SAM, 134000],
-                      [ALEX, 134000],
+                      [SAM, 100000],
+                      [ALEX, 100000],
+                      [gone, 68000],
                     ]),
                     new: ids([
-                      [SAM, 95333],
-                      [ALEX, 95334],
-                      [PRIYA, 95333],
+                      [SAM, 71500],
+                      [ALEX, 71500],
+                      [PRIYA, 71500],
+                      [namesake, 71500],
                     ]),
                   },
                 },
@@ -354,9 +358,12 @@ describe('the side panel with an Expense open', () => {
     for (const line of [
       'Sam Chen’s payment ₹0.00 → ₹2,860.00',
       'Priya Shah’s payment ₹2,680.00 → ₹0.00',
-      'Sam Chen’s share ₹1,340.00 → ₹953.33',
-      'Your share ₹1,340.00 → ₹953.34',
-      'Priya Shah’s share Not included → ₹953.33',
+      'Sam Chen’s share ₹1,000.00 → ₹715.00',
+      'Your share ₹1,000.00 → ₹715.00',
+      'Priya Shah’s share Not included → ₹715.00',
+      // The namesake keeps their own name; only the viewer, matched by id, is "Your".
+      'Alex Rivera’s share Not included → ₹715.00',
+      'Former member’s share ₹680.00 → Not included',
     ])
       expect(history).toContain(line);
   });

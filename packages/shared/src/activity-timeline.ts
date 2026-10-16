@@ -171,7 +171,7 @@ export interface ActivityAmount {
 }
 
 /** Exact minor units when recorded, otherwise the recorded major amount. */
-function recordedMoney(
+export function recordedMoney(
   value: { amount?: unknown; amountMinor?: unknown },
   currency: string | null,
 ): string | null {

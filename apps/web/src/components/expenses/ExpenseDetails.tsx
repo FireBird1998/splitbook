@@ -18,7 +18,7 @@ import MoneyText from '@/components/common/MoneyText';
 import { formatDateTime } from '@splitbook/shared/date';
 import { getCategory } from '@splitbook/shared/categories';
 import { moneyParticipantId } from '@splitbook/shared/exact-money';
-import { expenseEdits } from '@splitbook/shared/expense-detail';
+import { expenseEdits, FORMER_MEMBER } from '@splitbook/shared/expense-detail';
 import ExpenseHistoryMembers from './ExpenseHistoryMembers';
 
 interface Person {
@@ -104,15 +104,14 @@ export default function ExpenseDetails({
   names = new Map(),
 }: ExpenseDetailsProps) {
   const [showHistory, setShowHistory] = useState(false);
-  /** A person by name, with the viewer as "You", matched by id; a former member has none. */
-  /** A person by name, from the record or the Group's members; a former member has none. */
+  /** A person by name, from the record or the Group's members; never "You". */
   const personName = (person: unknown) => {
     if (typeof person === 'object' && person && 'name' in person && typeof person.name === 'string')
       return person.name;
-    return names.get(moneyParticipantId(person)) ?? 'Former member';
+    return names.get(moneyParticipantId(person)) ?? FORMER_MEMBER;
   };
-  /** A person by name, with the viewer as "You", matched by id. */
-  const memberName = (person: unknown) => {
+  /** A person by name, or "You" for the viewer, matched by id. */
+  const youOrName = (person: unknown) => {
     const personId = moneyParticipantId(person);
     return personId && personId === userId ? 'You' : personName(person);
   };
@@ -149,7 +148,7 @@ export default function ExpenseDetails({
           {expense.paidBy.map((row, index) => (
             <PersonAmount
               key={index}
-              name={memberName(row.user)}
+              name={youOrName(row.user)}
               image={typeof row.user === 'object' ? row.user?.image : null}
               amount={row.amount}
               currency={expense.currency}
@@ -166,7 +165,7 @@ export default function ExpenseDetails({
           {expense.splitBetween.map((row, index) => (
             <PersonAmount
               key={index}
-              name={memberName(row.user)}
+              name={youOrName(row.user)}
               image={typeof row.user === 'object' ? row.user?.image : null}
               amount={row.amount}
               currency={expense.currency}
@@ -211,7 +210,7 @@ export default function ExpenseDetails({
       <Box>
         {expense.createdBy && expense.createdAt && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            Added by <strong>{memberName(expense.createdBy)}</strong> ·{' '}
+            Added by <strong>{youOrName(expense.createdBy)}</strong> ·{' '}
             {formatDateTime(expense.createdAt)}
           </Typography>
         )}
@@ -246,7 +245,7 @@ export default function ExpenseDetails({
                   {edits.map((edit, index) => (
                     <Box key={`${edit.at}-${index}`}>
                       <Typography variant="caption" color="text.secondary">
-                        <strong>{memberName(edit.by)}</strong> {edit.action} ·{' '}
+                        <strong>{youOrName(edit.by)}</strong> {edit.action} ·{' '}
                         {formatDateTime(edit.at)}
                       </Typography>
                       {edit.change && (
@@ -269,7 +268,7 @@ export default function ExpenseDetails({
                       )}
                       <ExpenseHistoryMembers
                         members={edit.members}
-                        name={personName}
+                        nameOf={personName}
                         userId={userId}
                       />
                     </Box>

@@ -1,19 +1,23 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { memberMoneyLabel, type MemberMoneyChange } from '@splitbook/shared/expense-detail';
+import {
+  memberMoneyLabel,
+  NOT_INCLUDED,
+  type MemberMoneyChange,
+} from '@splitbook/shared/expense-detail';
 
 interface ExpenseHistoryMembersProps {
   /** The members whose payment or share one edit changed. */
   members: MemberMoneyChange[];
   /** A member's name from their reference, or "Former member"; never "You". */
-  name: (person: unknown) => string;
+  nameOf: (person: unknown) => string;
   /** The viewer, whose payment or share is "Your". */
   userId: string;
 }
 
 function Amount({ value }: { value: string | null }) {
   // Someone outside the split has no share: a word, not an amount.
-  if (value === null) return <>Not included</>;
+  if (value === null) return <>{NOT_INCLUDED}</>;
   return (
     <Box component="span" sx={(theme) => theme.typography.money}>
       {value}
@@ -27,7 +31,7 @@ function Amount({ value }: { value: string | null }) {
  */
 export default function ExpenseHistoryMembers({
   members,
-  name,
+  nameOf,
   userId,
 }: ExpenseHistoryMembersProps) {
   if (members.length === 0) return null;
@@ -41,7 +45,7 @@ export default function ExpenseHistoryMembers({
           color="text.secondary"
           sx={{ display: 'block', overflowWrap: 'anywhere' }}
         >
-          {memberMoneyLabel(member, name, userId)} <Amount value={member.before} /> →{' '}
+          {memberMoneyLabel(member, nameOf, userId)} <Amount value={member.before} /> →{' '}
           <Amount value={member.after} />
         </Typography>
       ))}

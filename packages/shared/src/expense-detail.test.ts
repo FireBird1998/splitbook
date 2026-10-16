@@ -253,6 +253,8 @@ describe('an Expense’s history', () => {
       })),
     });
 
+  const row = (user: unknown, minor: number) => ({ user, amount: minor / 100, amountMinor: minor });
+
   it('lists the edits newest first, then who added it', () => {
     const entries = history(
       { amount: { old: 2680, new: 2860 }, amountMinor: { old: 268000, new: 286000 } },
@@ -310,11 +312,6 @@ describe('an Expense’s history', () => {
   });
 
   it('lists each member whose payment or share changed, with the amounts before and after (#456)', () => {
-    const row = (user: unknown, minor: number) => ({
-      user,
-      amount: minor / 100,
-      amountMinor: minor,
-    });
     // Wi-Fi went from ₹999.00 paid by Priya and shared three ways to ₹1,200.00 paid by Sam and
     // shared by you and Sam; nobody's amount left the record unexplained.
     const [entry] = history({
@@ -337,11 +334,6 @@ describe('an Expense’s history', () => {
   });
 
   it('lists no members for an amount the same payers and shares only followed', () => {
-    const row = (user: unknown, minor: number) => ({
-      user,
-      amount: minor / 100,
-      amountMinor: minor,
-    });
     const [entry] = history({
       amount: { old: 90, new: 120 },
       paidBy: { old: [row(sam._id, 9000)], new: [row(sam._id, 12000)] },
@@ -365,6 +357,74 @@ describe('an Expense’s history', () => {
       'Alex Rivera’s payment',
     );
     expect(memberMoneyLabel(change(null, 'share'), nameOf, you._id)).toBe('Former member’s share');
+  });
+
+  it('counts money moved between the same people with a new amount as who paid and the split', () => {
+    const [entry] = history({
+      amount: { old: 10, new: 12 },
+      amountMinor: { old: 1000, new: 1200 },
+      paidBy: {
+        old: [row(sam._id, 500), row(priya._id, 500)],
+        new: [row(sam._id, 200), row(priya._id, 1000)],
+      },
+      splitBetween: {
+        old: [row(sam._id, 500), row(priya._id, 500)],
+        new: [row(sam._id, 200), row(priya._id, 1000)],
+      },
+    });
+    expect(entry.action).toBe('changed the amount, who paid and split');
+    expect(entry.members).toEqual([
+      { person: sam._id, part: 'payment', before: '₹5.00', after: '₹2.00' },
+      { person: priya._id, part: 'payment', before: '₹5.00', after: '₹10.00' },
+      { person: sam._id, part: 'share', before: '₹5.00', after: '₹2.00' },
+      { person: priya._id, part: 'share', before: '₹5.00', after: '₹10.00' },
+    ]);
+  });
+
+  it('says "changed who paid" when only the payers changed', () => {
+    const [entry] = history({
+      paidBy: { old: [row(sam._id, 9000)], new: [row(priya._id, 9000)] },
+    });
+    expect(entry.action).toBe('changed who paid');
+  });
+
+  it('shows an edit made before a currency change in the currency it had then', () => {
+    const entries = expenseHistory({
+      currency: 'INR',
+      createdAt: at(1),
+      editHistory: [
+        {
+          editedBy: sam,
+          editedAt: at(2),
+          changes: {
+            amount: { old: 10, new: 12 },
+            amountMinor: { old: 1000, new: 1200 },
+            paidBy: { old: [row(sam._id, 1000)], new: [row(priya._id, 1200)] },
+          },
+        },
+        { editedBy: priya, editedAt: at(3), changes: { currency: { old: 'USD', new: 'INR' } } },
+      ],
+    });
+    expect(entries[1]).toMatchObject({
+      change: { kind: 'amount', before: '$10.00', after: '$12.00' },
+      members: [
+        { person: priya._id, part: 'payment', before: '$0.00', after: '$12.00' },
+        { person: sam._id, part: 'payment', before: '$10.00', after: '$0.00' },
+      ],
+    });
+  });
+
+  it('keeps rows without a member id apart, as former members', () => {
+    const [entry] = history({
+      splitBetween: {
+        old: [row({ name: 'Gone' }, 500), row({ name: 'Also gone' }, 500)],
+        new: [row({ name: 'Gone' }, 400), row({ name: 'Also gone' }, 600)],
+      },
+    });
+    expect(entry.members.map((member) => [member.before, member.after])).toEqual([
+      ['₹5.00', '₹4.00'],
+      ['₹5.00', '₹6.00'],
+    ]);
   });
 
   it('is only who added it when nothing was edited', () => {
