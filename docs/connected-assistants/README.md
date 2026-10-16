@@ -19,6 +19,6 @@ A **Connected assistant** is an AI assistant, such as Claude, ChatGPT, Claude Co
 - **Decision record:** [ADR 0005](../adr/0005-mcp-server-in-web-app.md), revised 2026-10-04.
 - **Product spec:** [Splitbook MCP server](../specs/2026-10-01-mcp-server.md), with the 2026-10-04 amendments at the top.
 - **Backend design:** [MCP backend design](../specs/2026-10-01-mcp-backend-design.md), with the 2026-10-04 amendments at the top.
-- **Glossary:** [CONTEXT.md](../../CONTEXT.md) defines Connected assistant, Excluded Group, Assistant rule and Paid.
+- **Glossary:** [GLOSSARY.md](../../GLOSSARY.md) defines Connected assistant, Excluded Group, Assistant rule and Paid.
 - **Screens:** the [design canvas](https://claude.ai/artifact/R73Hkvu43SAkDqWDoKLMN9), page "Connected assistants (MCP)". It is private to the owner. Boards for ideas that were deferred or dropped are marked on the canvas.
 - **Other product notes:** [Receipt reading (backlog)](../research/receipt-reading-backlog.md).
