@@ -350,14 +350,16 @@ export function reviewProblem(
 export function memberProblems(
   item: ReviewItemModel,
   names: Readonly<Record<string, string>> = {},
+  /** The values the member is editing, which name the rows a problem points at (#441). */
+  values: ExpenseDraftValues | undefined = item.accountItem?.draft.values,
 ): string[] {
   if (!item.accountItem) return [];
-  const { draft, problems } = item.accountItem;
+  const { problems } = item.accountItem;
   const said: string[] = [];
   for (const problem of problems) {
     const path = problemPath(problem);
     if (path && path.index === undefined && item.missingFacts.includes(facts[path.field])) continue;
-    const words = reviewProblem(problem, draft.values, names);
+    const words = reviewProblem(problem, values, names);
     if (!said.includes(words)) said.push(words);
   }
   return said;

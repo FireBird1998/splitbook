@@ -16,12 +16,12 @@ import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { type DraftContext } from '@splitbook/shared/persistent-draft-editor';
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
-import type { ReviewItemModel } from '@splitbook/shared/to-review';
+import { memberProblems, type ReviewItemModel } from '@splitbook/shared/to-review';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
 import { RADIUS } from '@/lib/theme/tokens';
 import { useReviewEditor } from './use-review-editor';
 import { ReviewMatches, reviewSource } from './ReviewDetails';
-import { reviewProblem, type WebReviewClient } from './review-client';
+import type { WebReviewClient } from './review-client';
 
 export type ReviewPanelHandle = { flush: () => Promise<boolean>; focus: () => void };
 
@@ -188,9 +188,10 @@ export default function ToReviewPanel({
               ? 'Changes not kept yet'
               : 'Keeping your changes…'}
         </Typography>
-        {item.accountItem!.problems.map((problem, index) => (
-          <Typography key={index} variant="body2" color="text.secondary">
-            {reviewProblem(problem, editor.draft.values, names)}
+        {/* A fact the Needs line names isn't said again; any other problem is said once (#441). */}
+        {memberProblems(item, names, editor.draft.values).map((problem) => (
+          <Typography key={problem} variant="body2" color="text.secondary">
+            {problem}
           </Typography>
         ))}
         {duplicate && (
