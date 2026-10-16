@@ -916,6 +916,102 @@ export function connectionTests(mongo = false) {
       });
 
     if (mongo)
+      it('shows assistants the Category choices, how to prepare a Ready item, and To review words', async () => {
+        exposeTools = true;
+        const db = mongoClient!.db();
+        const user = await db.collection('users').findOne({ email: 'connection@example.test' });
+        const groupId = new mongoose.Types.ObjectId();
+        await db.collection('groups').insertOne({
+          _id: groupId,
+          name: 'Category choices',
+          defaultCurrency: 'INR',
+          tags: [],
+          members: [{ user: user!._id, joinedAt: new Date() }],
+        });
+        const grant = await authorizeClient(true, true);
+        const client = new Client({ name: 'category-choices-test', version: '1' });
+        const payload = (result: Awaited<ReturnType<Client['callTool']>>) =>
+          (result.content as Array<{ text: string }>)[0].text;
+        try {
+          await client.connect(
+            new StreamableHTTPClientTransport(new URL(resource), {
+              requestInit: { headers: { Authorization: `Bearer ${grant.access_token}` } },
+            }),
+          );
+          const tools = Object.fromEntries(
+            (await client.listTools()).tools.map((tool) => [tool.name, tool]),
+          );
+          const ids = [
+            'food',
+            'transport',
+            'accommodation',
+            'travel',
+            'entertainment',
+            'shopping',
+            'housing',
+            'health',
+            'education',
+            'other',
+          ];
+          type Schema = { properties: Record<string, Schema>; items: Schema };
+          const created = tools.create_drafts.inputSchema as unknown as Schema;
+          const replaced = tools.replace_draft.inputSchema as unknown as Schema;
+          for (const category of [
+            created.properties.drafts.items.properties.category,
+            replaced.properties.values.properties.category,
+          ]) {
+            expect(category).toMatchObject({ enum: ids });
+            expect(JSON.stringify(category)).toContain('food = Food & Drink');
+            expect(JSON.stringify(category)).toContain('other = Other');
+          }
+          for (const name of ['create_drafts', 'replace_draft']) {
+            expect(tools[name].description).toContain(
+              'For one payer, give who paid; they paid the whole amount. For several payers, give each amount.',
+            );
+            expect(tools[name].description).toContain(
+              "Choose a Category only when the member's words make it clear; otherwise omit it, and it's saved as Other.",
+            );
+          }
+          for (const name of ['list_drafts', 'create_drafts', 'replace_draft', 'discard_draft']) {
+            expect(tools[name].description).toContain("items in the member's To review");
+            expect(tools[name].description).toContain('never call them drafts');
+          }
+          const context = JSON.parse(
+            payload(
+              await client.callTool({
+                name: 'group_context',
+                arguments: { groupId: String(groupId) },
+              }),
+            ),
+          );
+          expect(context.categories).toHaveLength(ids.length);
+          expect(context.categories).toContainEqual({ id: 'food', label: 'Food & Drink' });
+          const create = (category: string, requestKey: string) =>
+            client.callTool({
+              name: 'create_drafts',
+              arguments: {
+                groupId: String(groupId),
+                requestKey,
+                drafts: [{ description: 'Dinner', category }],
+              },
+            });
+          const food = await create('food', 'category-choice-food');
+          expect(food.isError).not.toBe(true);
+          expect(JSON.parse(payload(food)).drafts[0].values.category).toBe('food');
+          const unknown = await create('snacks', 'category-choice-unknown');
+          expect(unknown.isError).toBe(true);
+          expect(payload(unknown)).toMatch(/category/);
+          expect(await db.collection('expensedrafts').countDocuments({ group: groupId })).toBe(1);
+        } finally {
+          exposeTools = false;
+          await client.close();
+          const restored = await authorizeClient();
+          token = restored.access_token;
+          refreshToken = restored.refresh_token;
+        }
+      });
+
+    if (mongo)
       it("makes Claude's staging item ready and saves it with the payer paying the whole amount", async () => {
         exposeTools = true;
         const db = mongoClient!.db();

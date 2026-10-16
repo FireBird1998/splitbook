@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { CATEGORY_IDS, EXPENSE_CATEGORIES } from '../categories';
 import { draftAttributionSchema } from '../draft-attribution';
 import { createExpenseSchema, expenseFields } from './expense';
 
@@ -19,7 +20,13 @@ export const expenseDraftValuesSchema = expenseFields
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .refine((value) => expenseFields.shape.date.safeParse(value).success, 'Invalid calendar date')
       .optional(),
-    category: expenseFields.shape.category.removeDefault().optional(),
+    // The fixed choices are listed so a Connected assistant can see them, not only be refused.
+    category: z
+      .enum(CATEGORY_IDS as [string, ...string[]])
+      .describe(
+        `Category: ${EXPENSE_CATEGORIES.map(({ id, label }) => `${id} = ${label}`).join(', ')}.`,
+      )
+      .optional(),
     paidBy: z
       .array(
         z
