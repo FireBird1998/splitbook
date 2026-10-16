@@ -11,6 +11,7 @@ export const groupOwnedCollections = [
   'invitations',
   // Append only: in-progress cleanup receipts persist the numeric collection index.
   'expensedrafts',
+  'tagactions',
 ] as const;
 export type GroupOwnedCollection = (typeof groupOwnedCollections)[number];
 export type GroupRecordCounts = Record<GroupOwnedCollection, number>;
@@ -94,6 +95,7 @@ export async function inventoryOrphanGroups(
         recurringexpenses: 0,
         invitations: 0,
         expensedrafts: 0,
+        tagactions: 0,
       };
       counts[collection] = row.count;
       missing.set(id, counts);
@@ -119,6 +121,7 @@ const recordCountsSchema = z
     recurringexpenses: z.number().int().nonnegative(),
     invitations: z.number().int().nonnegative(),
     expensedrafts: z.number().int().nonnegative().default(0),
+    tagactions: z.number().int().nonnegative().default(0),
   })
   .strict();
 const selectedGroupSchema = z

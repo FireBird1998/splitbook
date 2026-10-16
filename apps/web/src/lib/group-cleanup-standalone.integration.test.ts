@@ -78,3 +78,34 @@ it('refuses destructive consent before removing membership and preserves ordinar
   expect((await inventoryOrphanGroups(mongoose.connection.db!, 'test')).groups).toEqual([]);
   expect(await mongoose.connection.db!.collection('groupdeletions').countDocuments()).toBe(0);
 });
+
+it('serves Tag reads but refuses changes that cannot commit an atomic receipt on standalone Mongo', async () => {
+  const { GET, POST } = await import('@/app/api/groups/[id]/tag-actions/route');
+  const { GET: check } = await import('@/app/api/groups/[id]/tag-actions/[requestId]/route');
+  const { randomUUID } = await import('node:crypto');
+  const group = await groupService.create(
+    {
+      name: 'Fictional standalone Tags',
+      category: 'trip',
+      defaultCurrency: 'INR',
+      alternateCurrencies: [],
+    },
+    session.userId,
+  );
+  const id = String(group._id);
+  const context = { params: Promise.resolve({ id }) };
+  const before = await (await GET(new Request('http://localhost'), context)).json();
+  const command = { requestId: randomUUID(), intent: { action: 'create', name: 'Villa' } };
+  const response = await POST(
+    new Request('http://localhost', { method: 'POST', body: JSON.stringify(command) }),
+    context,
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ code: 'TAG_TRANSACTIONS_REQUIRED' });
+  expect(await (await GET(new Request('http://localhost'), context)).json()).toEqual(before);
+  const checked = await check(new Request('http://localhost'), {
+    params: Promise.resolve({ id, requestId: command.requestId }),
+  });
+  expect(checked.status).toBe(200);
+  expect(await checked.json()).toMatchObject({ data: { state: 'not-applied' } });
+});

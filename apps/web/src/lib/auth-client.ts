@@ -7,6 +7,7 @@ import { createAuthClient } from 'better-auth/react';
 import { demoPersonaClient } from '@/lib/auth/demo-persona-client';
 import { leaveExpectedAccount } from '@/lib/utils/api-fetch';
 import { forgetBrowserSettlementAttempts } from '@/lib/settlement-attempts';
+import { forgetBrowserTagActions } from '@/lib/tag-actions';
 
 export const authClient = createAuthClient({
   plugins: [demoPersonaClient()],
@@ -44,6 +45,9 @@ export async function signOutToHome() {
   const result = await authClient.signOut();
   // Unconfirmed payments are account-local data: none outlives the session (#198).
   // A sign-out that failed (offline, say) leaves the member signed in, so they stay.
-  if (!result?.error) forgetBrowserSettlementAttempts();
+  if (!result?.error) {
+    forgetBrowserSettlementAttempts();
+    forgetBrowserTagActions();
+  }
   window.location.assign('/');
 }

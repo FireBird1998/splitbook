@@ -1,3 +1,4 @@
+import { TagManager } from './src/ui/tag-manager';
 import { ToReviewHomeCard, ToReviewGroupBanner, ToReviewOverlay } from './src/ui/to-review';
 import { NotAvailableOffline, OfflineNotice } from './src/ui/offline-notice';
 import {
@@ -6,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
   type RefObject,
 } from 'react';
@@ -817,6 +819,7 @@ const unlistedGroup = (id: string): MobileGroup => ({
 
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen() {
+  const [tagsOpen, setTagsOpen] = useState(false);
   const state = useMobileSnapshot(
     controller,
     (snapshot) => ({
@@ -1134,6 +1137,16 @@ function GroupScreen() {
         disabled: state.share.status === 'loading' || !known,
         offline: state.offline.active,
       }}
+      onManageTags={
+        known?.members.some((member) => member.user.id === userId && member.role === 'admin')
+          ? () => setTagsOpen(true)
+          : undefined
+      }
+      onCheckTagAction={
+        known?.members.some((member) => member.user.id === userId && member.role !== 'admin')
+          ? () => setTagsOpen(true)
+          : undefined
+      }
       onMembers={() => controller.openMembers(origin())}
       onRefresh={() => void controller.refresh()}
       pull={{ refreshing: feedback.pull, onRefresh: () => void controller.refresh('pull') }}
@@ -1186,6 +1199,22 @@ function GroupScreen() {
         </>
       }
     >
+      {group && tagsOpen && (
+        <TagManager
+          key={userId + group.id}
+          controller={controller}
+          groupId={group.id}
+          accountId={userId}
+          recoveryOnly={
+            !group.members.some((member) => member.user.id === userId && member.role === 'admin')
+          }
+          offline={state.offline.active}
+          onClose={() => {
+            setTagsOpen(false);
+            void controller.refresh();
+          }}
+        />
+      )}
       {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && (
         <>
           {group && state.destination === 'expenses' && state.detail.status !== 'denied' && (

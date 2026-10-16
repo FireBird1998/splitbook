@@ -132,7 +132,25 @@ function backend() {
   let cookie: string | null = null;
   let account: string | null = null;
   const drafts = new Map<string, unknown>();
-  const device = { failDraftWrites: false, failDraftRemoval: false };
+  const device = {
+    failDraftWrites: false,
+    failDraftRemoval: false,
+    submissionKey: 'native-app-test-0001',
+  };
+  const tagRecords = new Map<string, unknown>();
+  const tagRequests = {
+    load: async (accountId: string, id: string) =>
+      structuredClone(tagRecords.get(accountId + id) ?? null),
+    save: async (accountId: string, id: string, value: unknown) => {
+      tagRecords.set(accountId + id, structuredClone(value));
+    },
+    remove: async (accountId: string, id: string) => {
+      tagRecords.delete(accountId + id);
+    },
+    clear: async () => {
+      tagRecords.clear();
+    },
+  };
   const payments = new Map<string, unknown>();
   const settlementAttempts = {
     load: async (accountId: string, id: string) =>
@@ -161,101 +179,113 @@ function backend() {
   };
   const clock = { now: new Date(2026, 8, 27, 12).getTime() };
   let handler: Handler = () => undefined;
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
-    },
-    {
-      now: () => clock.now,
-      settlementAttempts,
-      expenseDrafts: {
-        load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
-        save: async (accountId, id, value) => {
-          if (device.failDraftWrites) throw new Error('Device storage full');
-          drafts.set(`${accountId}:${id}`, structuredClone(value));
-        },
-        remove: async (accountId, id) => {
-          if (device.failDraftRemoval) throw new Error('Device storage failed');
-          drafts.delete(`${accountId}:${id}`);
-        },
-        clear: async () => drafts.clear(),
-        list: async (accountId) =>
-          [...drafts]
-            .filter(([key]) => key.startsWith(`${accountId}:`))
-            .map(([key, value]) => ({ groupId: key.split(':')[1], value: structuredClone(value) })),
+  const boot = () =>
+    createMobileController(
+      {
+        apiBaseUrl: 'http://localhost:4138',
+        authOrigin: 'http://localhost:4138',
+        developmentPersonaEnabled: true,
       },
-      accountLocal: {
-        owner: {
-          load: async () => account,
+      {
+        now: () => clock.now,
+        settlementAttempts,
+        tagRequests,
+        expenseDrafts: {
+          load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
+          save: async (accountId, id, value) => {
+            if (device.failDraftWrites) throw new Error('Device storage full');
+            drafts.set(`${accountId}:${id}`, structuredClone(value));
+          },
+          remove: async (accountId, id) => {
+            if (device.failDraftRemoval) throw new Error('Device storage failed');
+            drafts.delete(`${accountId}:${id}`);
+          },
+          clear: async () => drafts.clear(),
+          list: async (accountId) =>
+            [...drafts]
+              .filter(([key]) => key.startsWith(`${accountId}:`))
+              .map(([key, value]) => ({
+                groupId: key.split(':')[1],
+                value: structuredClone(value),
+              })),
+        },
+        accountLocal: {
+          owner: {
+            load: async () => account,
+            save: async (value) => {
+              account = value;
+            },
+            clear: async () => {
+              account = null;
+            },
+          },
+          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
+          stores: [groupCreations, settlementAttempts, tagRequests],
+        },
+        groupCreations,
+        newSubmissionKey: () => device.submissionKey,
+        credentials: {
+          load: async () => cookie,
           save: async (value) => {
-            account = value;
+            cookie = value;
           },
           clear: async () => {
-            account = null;
+            cookie = null;
           },
         },
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [groupCreations, settlementAttempts],
-      },
-      groupCreations,
-      newSubmissionKey: () => 'native-app-test-0001',
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
+        fetch: async (url, init) => {
+          const path = new URL(url).pathname + new URL(url).search;
+          const override = handler(path, init);
+          if (override) return override;
+          if (path.endsWith('/sign-in'))
+            return new Response(JSON.stringify({ user }), {
+              headers: {
+                'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly',
+              },
+            });
+          if (path.endsWith('/get-session'))
+            return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
+          if (path === '/api/groups') return json({ data: [group], status: 200 });
+          if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
+          if (path === '/api/user/balances')
+            return json({
+              data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] },
+              status: 200,
+            });
+          if (path.includes('/expenses?')) {
+            const from = new URL(path, 'http://local').searchParams.get('dateFrom');
+            return json(
+              page(from === getLocalMonthIsoRange('2026-08').dateFrom ? [august] : [september]),
+            );
+          }
+          if (path.startsWith(`/api/groups/${groupId}/activity?`)) return json(activityPage);
+          if (path === `/api/groups/${groupId}/balances`)
+            return json({
+              data: {
+                currency: 'INR',
+                balances: [],
+                debts: [],
+                byCurrency: [
+                  {
+                    currency: 'INR',
+                    balances: [{ user: person, balance: -30 }],
+                    debts: [{ from: person, to: alex, amount: 30 }],
+                  },
+                ],
+              },
+              status: 200,
+            });
+          return json({}, 404);
         },
-        clear: async () => {
-          cookie = null;
-        },
       },
-      fetch: async (url, init) => {
-        const path = new URL(url).pathname + new URL(url).search;
-        const override = handler(path, init);
-        if (override) return override;
-        if (path.endsWith('/sign-in'))
-          return new Response(JSON.stringify({ user }), {
-            headers: { 'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly' },
-          });
-        if (path.endsWith('/get-session'))
-          return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
-        if (path === '/api/groups') return json({ data: [group], status: 200 });
-        if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
-        if (path === '/api/user/balances')
-          return json({
-            data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] },
-            status: 200,
-          });
-        if (path.includes('/expenses?')) {
-          const from = new URL(path, 'http://local').searchParams.get('dateFrom');
-          return json(
-            page(from === getLocalMonthIsoRange('2026-08').dateFrom ? [august] : [september]),
-          );
-        }
-        if (path.startsWith(`/api/groups/${groupId}/activity?`)) return json(activityPage);
-        if (path === `/api/groups/${groupId}/balances`)
-          return json({
-            data: {
-              currency: 'INR',
-              balances: [],
-              debts: [],
-              byCurrency: [
-                {
-                  currency: 'INR',
-                  balances: [{ user: person, balance: -30 }],
-                  debts: [{ from: person, to: alex, amount: 30 }],
-                },
-              ],
-            },
-            status: 200,
-          });
-        return json({}, 404);
-      },
-    },
-  );
+    );
+  const controller = boot();
   return {
     controller,
+    restart: () => {
+      controller.dispose();
+      return boot();
+    },
     clock,
     creations,
     device,
@@ -2092,4 +2122,402 @@ it('asks before discarding a lost Group’s unconfirmed payment', async () => {
   await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
   expect(app.payments.size).toBe(0);
   expect(app.controller.getSnapshot().screen).toBe('groups');
+});
+
+describe('Android Group Tag management', () => {
+  it('opens from admin Group options, creates a Tag and confirms its receipt', async () => {
+    const app = await renderApp();
+    app.device.submissionKey = '00000000-0000-4000-8000-000000000001';
+    let tags = [
+      {
+        id: 'c00000000000000000000001',
+        name: 'Shared',
+        revision: 0,
+        isArchived: false,
+        isDeleted: false,
+      },
+    ];
+    const sent: unknown[] = [];
+    app.use((path, init) => {
+      if (path === '/api/groups/' + groupId)
+        return json({
+          status: 200,
+          data: { ...group, members: [{ ...group.members[0], role: 'admin' }] },
+        });
+      if (path === '/api/groups/' + groupId + '/tag-actions') {
+        if (init.method === 'POST') {
+          const command = JSON.parse(String(init.body));
+          sent.push(command);
+          const tagId = 'c00000000000000000000002';
+          tags = [
+            ...tags,
+            {
+              id: tagId,
+              name: command.intent.name,
+              revision: 0,
+              isArchived: false,
+              isDeleted: false,
+            },
+          ];
+          return json({
+            data: {
+              state: 'applied',
+              requestId: command.requestId,
+              receipt: { intent: command.intent, tagId, appliedAt: iso },
+              snapshot: { canManage: true, tags },
+            },
+          });
+        }
+        return json({ data: { canManage: true, tags } });
+      }
+    });
+    await settle(app.controller.openGroup(groupId));
+    act(() => app.pressable('Group options').props.onPress());
+    await settle();
+    act(() => app.pressable('Manage Tags').props.onPress());
+    await settle();
+    act(() => app.pressable('New Tag').props.onPress());
+    act(() =>
+      app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.onChangeText('Villa'),
+    );
+    act(() => app.pressable('Create Tag').props.onPress());
+    await settle();
+    expect(sent).toEqual([
+      { requestId: app.device.submissionKey, intent: { action: 'create', name: 'Villa' } },
+    ]);
+    expect(app.text()).toContain('Confirmed earlier action');
+    expect(app.text()).toContain('Villa');
+    app.controller.dispose();
+  });
+});
+
+async function tagApp(
+  initialTags: {
+    id: string;
+    name: string;
+    revision: number;
+    isArchived: boolean;
+    isDeleted: boolean;
+  }[],
+) {
+  const app = await renderApp();
+  app.device.submissionKey = '00000000-0000-4000-8000-000000000001';
+  const server = {
+    tags: initialTags,
+    submitted: [] as {
+      requestId: string;
+      intent: { action: string; name?: string; tagId?: string; expectedRevision?: number };
+    }[],
+    stale: false,
+    lastActive: false,
+  };
+  app.use((path, init) => {
+    if (path === '/api/groups/' + groupId)
+      return json({
+        status: 200,
+        data: { ...group, members: [{ ...group.members[0], role: 'admin' }] },
+      });
+    if (path === '/api/groups/' + groupId + '/tag-actions') {
+      if (init.method === 'POST') {
+        const command = JSON.parse(String(init.body));
+        server.submitted.push(command);
+        if (server.lastActive)
+          return json(
+            {
+              code: 'LAST_ACTIVE_TAG',
+              error: 'Create or restore another active Tag first.',
+              snapshot: { canManage: true, tags: server.tags },
+            },
+            409,
+          );
+        if (server.stale) {
+          server.stale = false;
+          server.tags = server.tags.map((tag) => ({ ...tag, name: 'Lodge', revision: 1 }));
+          app.device.submissionKey = '00000000-0000-4000-8000-000000000002';
+          return json(
+            {
+              code: 'TAG_CHANGED',
+              error: 'This Tag changed. Review its current state.',
+              snapshot: { canManage: true, tags: server.tags },
+            },
+            409,
+          );
+        }
+        const tagId = command.intent.tagId ?? 'c00000000000000000000002';
+        server.tags = server.tags.map((tag) =>
+          tag.id === tagId
+            ? {
+                ...tag,
+                name: command.intent.name ?? tag.name,
+                isArchived: command.intent.action === 'restore' ? false : tag.isArchived,
+                revision: tag.revision + 1,
+              }
+            : tag,
+        );
+        return json({
+          data: {
+            state: 'applied',
+            requestId: command.requestId,
+            receipt: { intent: command.intent, tagId, appliedAt: iso },
+            snapshot: { canManage: true, tags: server.tags },
+          },
+        });
+      }
+      return json({ data: { canManage: true, tags: server.tags } });
+    }
+  });
+  await settle(app.controller.openGroup(groupId));
+  act(() => app.pressable('Group options').props.onPress());
+  await settle();
+  act(() => app.pressable('Manage Tags').props.onPress());
+  await settle();
+  return { ...app, server };
+}
+
+describe('Android Tag correction and close behavior', () => {
+  it('preserves stale rename text and requires explicit review before a new request', async () => {
+    const app = await tagApp([
+      {
+        id: 'c00000000000000000000001',
+        name: 'Shared',
+        revision: 0,
+        isArchived: false,
+        isDeleted: false,
+      },
+    ]);
+    app.server.stale = true;
+    act(() => app.pressable('Rename Shared').props.onPress());
+    act(() =>
+      app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.onChangeText('Villa'),
+    );
+    act(() => app.pressable('Save Tag name').props.onPress());
+    await settle();
+    expect(app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.value).toBe('Villa');
+    expect(app.text()).toContain('Lodge');
+    expect(app.pressable('Save Tag name').props.disabled).toBe(true);
+    act(() => app.pressable('Review latest Tag state').props.onPress());
+    await settle();
+    expect(app.server.submitted).toHaveLength(1);
+    act(() => app.pressable('Save Tag name').props.onPress());
+    await settle();
+    expect(app.server.submitted).toEqual([
+      {
+        requestId: '00000000-0000-4000-8000-000000000001',
+        intent: {
+          action: 'rename',
+          tagId: 'c00000000000000000000001',
+          expectedRevision: 0,
+          name: 'Villa',
+        },
+      },
+      {
+        requestId: '00000000-0000-4000-8000-000000000002',
+        intent: {
+          action: 'rename',
+          tagId: 'c00000000000000000000001',
+          expectedRevision: 1,
+          name: 'Villa',
+        },
+      },
+    ]);
+    app.controller.dispose();
+  });
+
+  it('offers explicit Restore for an archived duplicate without submitting a create', async () => {
+    const app = await tagApp([
+      {
+        id: 'c00000000000000000000001',
+        name: 'Villa',
+        revision: 3,
+        isArchived: true,
+        isDeleted: false,
+      },
+    ]);
+    act(() => app.pressable('New Tag').props.onPress());
+    act(() =>
+      app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.onChangeText('villa'),
+    );
+    act(() => app.pressable('Create Tag').props.onPress());
+    await settle();
+    expect(app.server.submitted).toEqual([]);
+    expect(app.text()).toContain('Archived Tag');
+    act(() => app.pressable('Restore Villa').props.onPress());
+    await settle();
+    expect(app.server.submitted).toEqual([
+      {
+        requestId: '00000000-0000-4000-8000-000000000001',
+        intent: { action: 'restore', tagId: 'c00000000000000000000001', expectedRevision: 3 },
+      },
+    ]);
+    app.controller.dispose();
+  });
+
+  it('asks before discarding unsubmitted name text, including Android modal Back', async () => {
+    const app = await tagApp([]);
+    act(() => app.pressable('New Tag').props.onPress());
+    act(() =>
+      app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.onChangeText('Villa'),
+    );
+    const modal = app
+      .root()
+      .findAll((node) => (node.type as unknown) === 'Modal')
+      .find((node) => node.props.visible && node.props.animationType === 'slide');
+    act(() => modal!.props.onRequestClose());
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Discard Tag name?',
+      expect.any(String),
+      expect.arrayContaining([
+        expect.objectContaining({ text: 'Keep editing' }),
+        expect.objectContaining({ text: 'Discard name' }),
+      ]),
+    );
+    expect(app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.value).toBe('Villa');
+    expect(app.server.submitted).toEqual([]);
+    const buttons = vi.mocked(Alert.alert).mock.calls.at(-1)![2]!;
+    act(() => buttons.find((button) => button.text === 'Discard name')!.onPress!());
+    await settle();
+    expect(app.text()).not.toContain('Changes need a connection.');
+    act(() => app.pressable('Group options').props.onPress());
+    act(() => app.pressable('Manage Tags').props.onPress());
+    await settle();
+    act(() => app.pressable('New Tag').props.onPress());
+    expect(app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.value).toBe('');
+    app.controller.dispose();
+  });
+});
+
+describe('Tag permissions and archive review in App', () => {
+  it('does not offer management to a regular member', async () => {
+    const app = await renderApp();
+    await settle(app.controller.openGroup(groupId));
+    act(() => app.pressable('Group options').props.onPress());
+    await settle();
+    expect(
+      app
+        .root()
+        .findAll(
+          (node) =>
+            (node.type as unknown) === 'Pressable' &&
+            node.props.accessibilityLabel === 'Manage Tags',
+        ),
+    ).toEqual([]);
+    app.controller.dispose();
+  });
+
+  it('explains archive effects before confirmation and shows a last-active rejection', async () => {
+    const app = await tagApp([
+      {
+        id: 'c00000000000000000000001',
+        name: 'Shared',
+        revision: 0,
+        isArchived: false,
+        isDeleted: false,
+      },
+    ]);
+    app.server.lastActive = true;
+    act(() => app.pressable('Archive Shared').props.onPress());
+    expect(app.server.submitted).toEqual([]);
+    expect(app.text()).toContain('Saved Expenses keep this Tag and their history.');
+    expect(app.text()).toContain('Unfinished Drafts need an active Tag before saving.');
+    expect(
+      app
+        .root()
+        .findAll(
+          (node) =>
+            (node.type as unknown) === 'Pressable' &&
+            String(node.props.accessibilityLabel).startsWith('Delete'),
+        ),
+    ).toEqual([]);
+    act(() => app.pressable('Confirm archive Tag').props.onPress());
+    await settle();
+    expect(app.server.submitted).toEqual([
+      {
+        requestId: '00000000-0000-4000-8000-000000000001',
+        intent: { action: 'archive', tagId: 'c00000000000000000000001', expectedRevision: 0 },
+      },
+    ]);
+    expect(app.text()).toContain('Create or restore another active Tag first.');
+    expect(app.pressable('Confirm archive Tag').props.disabled).toBe(true);
+    app.controller.dispose();
+  });
+});
+
+it('lets a demoted member Check their original action after a restart without enabling Tag writes', async () => {
+  const app = await renderApp();
+  app.device.submissionKey = '00000000-0000-4000-8000-000000000001';
+  let admin = true;
+  let receipt: unknown;
+  let posts = 0;
+  const tagId = 'c00000000000000000000002';
+  const tags = [
+    { id: tagId, name: 'Renamed later', revision: 1, isArchived: false, isDeleted: false },
+  ];
+  app.use((path, init) => {
+    if (path === '/api/groups/' + groupId)
+      return json({
+        status: 200,
+        data: { ...group, members: [{ ...group.members[0], role: admin ? 'admin' : 'member' }] },
+      });
+    if (path === '/api/groups/' + groupId + '/tag-actions') {
+      if (init.method === 'POST') {
+        posts++;
+        const command = JSON.parse(String(init.body));
+        receipt = {
+          state: 'applied',
+          requestId: command.requestId,
+          receipt: { intent: command.intent, tagId, appliedAt: iso },
+        };
+        return Promise.reject(new TypeError('Controlled lost reply'));
+      }
+      return json({ data: { canManage: admin, tags } });
+    }
+    if (path === '/api/groups/' + groupId + '/tag-actions/' + app.device.submissionKey)
+      return json({ data: { ...Object(receipt), snapshot: { canManage: admin, tags } } });
+  });
+  await settle(app.controller.openGroup(groupId));
+  act(() => app.pressable('Group options').props.onPress());
+  act(() => app.pressable('Manage Tags').props.onPress());
+  await settle();
+  act(() => app.pressable('New Tag').props.onPress());
+  act(() => app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.onChangeText('Villa'));
+  act(() => app.pressable('Create Tag').props.onPress());
+  await settle();
+  act(() => app.pressable('Close Manage Tags').props.onPress());
+  await settle();
+  act(() => screen!.unmount());
+  admin = false;
+  const restarted = app.restart();
+  runtime.controller = restarted;
+  await restarted.restore();
+  await act(async () => {
+    screen = create(<App />);
+  });
+  await settle(restarted.openGroup(groupId));
+  act(() => app.pressable('Group options').props.onPress());
+  expect(
+    app
+      .root()
+      .findAll(
+        (node) =>
+          (node.type as unknown) === 'Pressable' && node.props.accessibilityLabel === 'Manage Tags',
+      ),
+  ).toEqual([]);
+  act(() => app.pressable('Check Tag action').props.onPress());
+  await settle();
+  expect(app.pressable('Retry original action').props.disabled).toBe(true);
+  expect(
+    app
+      .root()
+      .findAll(
+        (node) =>
+          (node.type as unknown) === 'Pressable' && node.props.accessibilityLabel === 'New Tag',
+      ),
+  ).toEqual([]);
+  act(() => app.pressable('Check action').props.onPress());
+  await settle();
+  expect(posts).toBe(1);
+  expect(app.text()).toContain('Confirmed earlier action');
+  expect(app.text()).toContain('Renamed later');
+  expect(restarted.getSnapshot().detail.data?.id).toBe(groupId);
+  restarted.dispose();
 });

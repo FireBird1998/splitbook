@@ -194,11 +194,8 @@ async function setup(options: Options) {
       .data.inviteCode;
     await sam.request(`/api/join/${code}`, 'POST', undefined, 201);
     const tagName = `${options.prefix} timing`;
-    const tagId = z
-      .object({ data: z.object({ tags: z.array(z.object({ _id: id, name: z.string() })) }) })
-      .parse(await alex.request(`/api/groups/${groupId}/tags`, 'POST', { name: tagName }))
-      .data.tags.find((tag) => tag.name === tagName)?._id;
-    assert.ok(tagId);
+    const tagId = (await alex.changeTag(groupId, { action: 'create', name: tagName })).receipt
+      .tagId;
     Date.now = () => platformNow() + skew;
     return {
       alex,

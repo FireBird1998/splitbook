@@ -4,6 +4,12 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { readSessionCookie } from '../src/data/cookies';
 import { localOrigin } from './verification-origin';
+import { tagActionResultSchema, tagSnapshotSchema } from '@splitbook/shared/tag-management';
+
+type FixtureTagAction =
+  | { action: 'create'; name: string }
+  | { action: 'rename'; tagId: string; name: string }
+  | { action: 'archive' | 'restore' | 'delete'; tagId: string };
 
 export const alexId = 'a00000000000000000000001';
 export const samId = 'a00000000000000000000002';
@@ -122,6 +128,23 @@ export class FixtureActor {
     );
   }
 
+  /** Fixture setup explicitly reviews current state before submitting a fresh action. */
+  async changeTag(groupId: string, action: FixtureTagAction) {
+    const path = `/api/groups/${groupId}/tag-actions`;
+    const snapshot = z.object({ data: tagSnapshotSchema }).parse(await this.request(path)).data;
+    const tag =
+      action.action === 'create' ? null : snapshot.tags.find((tag) => tag.id === action.tagId);
+    if (action.action !== 'create') assert.ok(tag, 'The fictional Tag must exist before editing.');
+    const intent =
+      action.action === 'create' ? action : { ...action, expectedRevision: tag!.revision };
+    const result = z
+      .object({ data: tagActionResultSchema })
+      .parse(await this.request(path, 'POST', { requestId: randomUUID(), intent })).data;
+    assert.equal(result.state, 'applied');
+    if (result.state !== 'applied') throw new Error('The fixture Tag change was not applied.');
+    return result;
+  }
+
   async close() {
     for (const cookie of this.cookies) {
       const response = await fetch(`${this.origin}/api/auth/sign-out`, {
@@ -229,13 +252,10 @@ export async function createFinancialFixtures(
       await sam.request(`/api/join/${invite.data.inviteCode}`, 'POST', undefined, 201);
     }
     const groupIds = fixtureManifestSchema.shape.groups.parse(groups);
-    const tagged = groupResponse.parse(
-      await alex.request(`/api/groups/${groupIds.household}/tags`, 'POST', {
-        name: 'QA51 month boundary',
-      }),
-    ).data;
-    const boundaryTag = tagged.tags.find((tag) => tag.name === 'QA51 month boundary');
-    assert.ok(boundaryTag, 'The public Tag request did not create the fictional Tag.');
+    const boundaryTag = await alex.changeTag(groupIds.household, {
+      action: 'create',
+      name: 'QA51 month boundary',
+    });
 
     const expense = async (
       key: GroupKey,
@@ -256,7 +276,7 @@ export async function createFinancialFixtures(
             amount,
             currency: definitions[key].currency,
             category: 'other',
-            ...(key === 'household' ? { tagId: boundaryTag._id } : { tag: 'General' }),
+            ...(key === 'household' ? { tagId: boundaryTag.receipt.tagId } : { tag: 'General' }),
             date: date.toISOString(),
             paidBy: [{ user: paidBy, amount }],
             splitMethod: 'equal',

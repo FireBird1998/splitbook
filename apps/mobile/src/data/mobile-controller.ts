@@ -1,3 +1,7 @@
+import { tagActionsPath, tagActionCheckPath } from '@splitbook/shared/api-paths';
+import { tagSnapshotSchema, type TagSnapshot } from '@splitbook/shared/tag-management';
+import { emptyTagManager, tagManager } from './tag-manager';
+import { tagManagement } from './tag-management';
 import { createReviewRun } from './review-run';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
 import {
@@ -13,11 +17,17 @@ import {
 } from './shared-draft-collection';
 import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
-import { focusManager, onlineManager, QueryClient } from '@tanstack/query-core';
+import { focusManager, onlineManager, QueryClient, QueryObserver } from '@tanstack/query-core';
 import { savedCopyBudget } from './saved-copy-budget';
 import { inScope, queryOwner, replaceScopedQueries } from './query-owner';
 import { readProvenance } from './read-provenance';
-import { groupKey, groupsKey, homeBalancesKey, type QueryKey } from '@splitbook/shared/query-keys';
+import {
+  groupKey,
+  groupsKey,
+  homeBalancesKey,
+  tagActionsKey,
+  type QueryKey,
+} from '@splitbook/shared/query-keys';
 import { activityExpenseId, emptyActivity, emptyExpenseHistory } from './activity';
 import {
   emptySettlement,
@@ -296,6 +306,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
   return {
     auth,
     sharedDraftCollection: emptySharedDraftCollection(),
+    tagManager: emptyTagManager(),
     toReview: emptyToReview(),
     offline: { active: false, refreshedAt: null, message: null },
     pull: null,
@@ -394,6 +405,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let pendingReviewGroup: string | null = null;
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
+  const tagRebinders = new Set<() => void>();
   let snapshot: MobileSnapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
   let cookie: string | null = null;
   /**
@@ -629,6 +641,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     confirmation = null;
     lostGroups.clear();
     toReviewQueries.reset();
+    tagOwners.clear();
+    tagFlights.clear();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
     groupQueries.reset();
@@ -994,7 +1008,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     onExpired: failSession,
     // Today's denial purge: its reads, saved copies and content on screen go.
     onGroupDenied: (groupId, status, owner, path) =>
-      forgetGroup(groupId, status, owner, path === `/api/groups/${groupId}`),
+      forgetGroup(
+        groupId,
+        status,
+        owner,
+        path === `/api/groups/${groupId}` || path.includes('/tag-actions'),
+      ),
     // Balances and Home follow every read of a Group or its Expenses (M1-5, AMEND-1); an Expense
     // list read also leaves their saved copies from before it unshown (#191).
     onLedgerRead: (groupId, owner, expenses) => {
@@ -1328,6 +1347,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     expenseQueries.rebind();
     activityQueries.rebind();
     toReviewQueries.rebind();
+    for (const rebind of tagRebinders) rebind();
   };
   /** A confirmed Expense or Settlement change affects every page, Month, Balance, Home and Activity view. */
   const ledgerChanged = (groupId: string) =>
@@ -1887,6 +1907,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...snapshot,
       groups: { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) },
       home: emptyHome(),
+      tagManager: snapshot.tagManager.groupId === id ? emptyTagManager() : snapshot.tagManager,
       detail:
         snapshot.detail.id === id
           ? {
@@ -1988,6 +2009,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           dependencies.expenseDrafts,
           dependencies.settlementAttempts,
           dependencies.draftRequests,
+          dependencies.tagRequests,
         ]) {
           const keys = records?.keys
             ? await records.keys(lease.accountId)
@@ -2023,6 +2045,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     (snapshot.screen === 'settlement' && snapshot.settlement.groupId === groupId);
   const forgetGroup = (groupId: string, status: number, owner: number, financialRefusal = true) => {
     if (!current(owner)) return Promise.resolve();
+    tagOwners.delete(groupId);
     if (financialRefusal) {
       lostGroups.add(groupId);
       if (snapshot.screen === 'expense' && snapshot.expense.groupId === groupId)
@@ -6085,6 +6108,197 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
+  const manageTags = (groupId: string) => {
+    const owner = generation;
+    let client: ReturnType<typeof groupTags> | undefined;
+    return tagManager({
+      client: () => (client ??= groupTags(groupId)),
+      groupId,
+      current: () => current(owner),
+      read: () => snapshot.tagManager,
+      publish: (value) => publish({ ...snapshot, tagManager: value }),
+    });
+  };
+  const tagOwners = new Map<string, object>();
+  const tagFlights = new Map<string, { active: boolean }>();
+  const groupTags = (groupId: string) => {
+    objectId.parse(groupId);
+    const owner = generation;
+    const lease = accountStorage();
+    const storage = dependencies.tagRequests;
+    if (!lease || !storage)
+      throw new Error('Tag recovery storage is unavailable. Restart to try again.');
+    const token = tagOwners.get(groupId) ?? {};
+    tagOwners.set(groupId, token);
+    const busy = tagFlights.get(groupId) ?? { active: false };
+    tagFlights.set(groupId, busy);
+    const ensure = () => {
+      assertCurrent(owner);
+      if (tagOwners.get(groupId) !== token || financialCleanup.blocked(lease.accountId, groupId))
+        throw new Superseded();
+    };
+    const online = () => {
+      ensure();
+      if (snapshot.offline.active || !onlineManager.isOnline())
+        throw new Error('Tag changes need a connection. Connect, then check or retry explicitly.');
+    };
+    const path = tagActionsPath(groupId);
+    const tagRequest = async (target: string, options?: RequestOptions) => {
+      try {
+        return await request(target, owner, options);
+      } catch (error) {
+        if (!(error instanceof RequestError) || error.status !== 403 || error.code !== null)
+          throw error;
+        // A Tag-role refusal with an unreadable body says nothing about Group membership.
+        // Ask the Group itself, bypassing display freshness; its denial performs normal cleanup.
+        try {
+          const group = parseGroup(await request(`/api/groups/${groupId}`, owner));
+          ensure();
+          if (
+            group.id !== groupId ||
+            !group.members.some((member) => member.user.id === lease.accountId)
+          ) {
+            await forgetGroup(groupId, 403, owner);
+            throw new Superseded();
+          }
+        } catch (membershipError) {
+          if (
+            membershipError instanceof Superseded ||
+            (membershipError instanceof RequestError && [403, 404].includes(membershipError.status))
+          )
+            throw membershipError;
+          // A failed membership check preserves the Group until access can be established.
+        }
+        throw new RequestError(
+          'Tag permissions could not be confirmed. Your Group information is kept; refresh Tags to check again.',
+          403,
+          'TAG_PERMISSION_UNCONFIRMED',
+        );
+      }
+    };
+    const at = account();
+    const queryKey = tagActionsKey(at, groupId);
+    const options = {
+      queryKey,
+      queryFn: ({ signal }: { signal: AbortSignal }) => {
+        ensure();
+        return tagRequest(path, { signal });
+      },
+      staleTime: 0,
+      retry: false,
+      networkMode: 'always' as const,
+      refetchOnReconnect: 'always' as const,
+      refetchOnWindowFocus: 'always' as const,
+    };
+    const client = tagManagement({
+      current: ensure,
+      online,
+      busy,
+      key: () => {
+        if (!dependencies.newSubmissionKey) throw new Error('Tag recovery is unavailable.');
+        return dependencies.newSubmissionKey();
+      },
+      load: () =>
+        lease.write(() => {
+          ensure();
+          return storage.load(lease.accountId, groupId);
+        }),
+      save: (record) =>
+        lease.write(() => {
+          ensure();
+          return storage.save(lease.accountId, groupId, record);
+        }),
+      remove: () =>
+        lease.write(() => {
+          ensure();
+          return storage.remove(lease.accountId, groupId);
+        }),
+      read: async () => {
+        const owns = queryOwner(queryClient, queryKey);
+        const value = await queryClient.fetchQuery(options);
+        ensure();
+        if (!owns()) throw new Superseded();
+        return value;
+      },
+      check: (requestId) => tagRequest(tagActionCheckPath(groupId, requestId)),
+      send: async (command) => {
+        online();
+        // The exact intent is already durable. Retire every affected saved copy before the
+        // request can reach the server: the process may end before any response or finally.
+        // A failed removal cannot be replaced by the best-effort distrust journal here.
+        try {
+          await lease.write(async () => {
+            await groupQueries.forget(lease.accountId, groupId, 'group');
+            await groupQueries.forget(lease.accountId, groupId, 'ledger');
+            await expenseQueries.forget(lease.accountId, groupId);
+            await activityQueries.forget(lease.accountId, groupId);
+            await homeQueries.forget(lease.accountId);
+          });
+        } catch {
+          ensure();
+          throw new Error(
+            'Could not clear older saved copies on this device. This try was not sent. Check or retry the original action after storage recovers.',
+          );
+        }
+        online();
+        try {
+          return await tagRequest(path, { method: 'POST', body: command });
+        } finally {
+          if (current(owner)) {
+            invalidateReads(
+              `group:${groupId}`,
+              `ledger:${groupId}`,
+              `balances:${groupId}`,
+              'groups',
+              'home',
+            );
+            groupQueries.changed(groupId);
+            await removeLedgerCopies(groupId, owner);
+            try {
+              await lease.write(async () => {
+                await groupQueries.forget(lease.accountId, groupId, 'group');
+                await homeQueries.forget(lease.accountId);
+              });
+            } catch (error) {
+              if (current(owner) && !(error instanceof Superseded))
+                untrusted.mark(lease.accountId, [`group:${groupId}`, 'groups'], now());
+            }
+          }
+        }
+      },
+    });
+    return {
+      ...client,
+      watch(onSnapshot: (snapshot: TagSnapshot) => void, onError: (error: unknown) => void) {
+        const observer = new QueryObserver(queryClient, options);
+        const rebind = () => {
+          try {
+            ensure();
+            observer.setOptions(options);
+          } catch {
+            stop();
+          }
+        };
+        const unsubscribe = observer.subscribe((result) => {
+          try {
+            ensure();
+            if (result.error) onError(result.error);
+            else if (result.data) onSnapshot(tagSnapshotSchema.parse(Object(result.data).data));
+          } catch (error) {
+            onError(error);
+          }
+        });
+        const stop = () => {
+          unsubscribe();
+          observer.destroy();
+          tagRebinders.delete(rebind);
+        };
+        tagRebinders.add(rebind);
+        return stop;
+      },
+    };
+  };
+
   let reviewRun: ReturnType<typeof createReviewRun> | null = null;
   const sharedDrafts = (groupId: string) => {
     const owner = generation;
@@ -6516,6 +6730,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     closeToReview,
     toReviewModel: (groupId?: string) => mobileToReview(snapshot, now(), groupId),
     refreshToReview,
+    manageTags,
+    groupTags,
     keepExpenseAsSharedDraft,
     cancelExpenseClose,
     deleteExpenseAndClose,

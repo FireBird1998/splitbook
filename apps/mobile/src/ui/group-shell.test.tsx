@@ -188,6 +188,41 @@ describe('Group shell', () => {
     expect(room(shell().root)).toBeLessThan(covered);
   });
 
+  it.each([
+    ['admin', 'Manage Tags, Create, rename, archive or restore'],
+    ['member', 'Check Tag action, Read the outcome of an earlier action'],
+  ] as const)('mounts the %s Tag option only while Group options are open', (role, label) => {
+    const action = vi.fn();
+    const { root, props } = shell(
+      role === 'admin' ? { onManageTags: action } : { onCheckTagAction: action },
+    );
+    const sheet = () => root.find((node) => isHost(node, 'Modal'));
+    const expectClosed = () => {
+      expect(sheet().props.visible).toBe(false);
+      expect(byRole(root, 'button', label)).toEqual([]);
+      expect(byRole(root, 'button', 'Members and Group details')).toEqual([]);
+    };
+    expectClosed();
+    // Ordinary Group updates must not mount its closed options content.
+    act(() =>
+      renderer!.update(
+        <GroupShell {...props} progress="Refreshing Group">
+          {null}
+        </GroupShell>,
+      ),
+    );
+    expectClosed();
+    press(one(byRole(root, 'button', 'Group options')));
+    expect(sheet().props.visible).toBe(true);
+    press(one(byRole(sheet(), 'button', label)));
+    expect(action).toHaveBeenCalledOnce();
+    expectClosed();
+    press(one(byRole(root, 'button', 'Group options')));
+    one(byRole(sheet(), 'button', label));
+    act(() => sheet().props.onRequestClose());
+    expectClosed();
+  });
+
   it('opens Group options with Members and Group details and Refresh', () => {
     const { root, props } = shell();
     const sheet = () => root.find((node) => isHost(node, 'Modal'));

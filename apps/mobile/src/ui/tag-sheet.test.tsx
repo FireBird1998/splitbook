@@ -131,7 +131,7 @@ describe('Tag sheet', () => {
       value: '',
     });
     expect(text(root)).toContain(
-      'Only this Group’s active Tags are listed. Manage Tags on the web.',
+      'Only this Group’s active Tags are listed. Group admins can manage Tags in Group options.',
     );
   });
 
@@ -172,10 +172,10 @@ describe('Tag sheet', () => {
     expect(locked.onChoose).not.toHaveBeenCalled();
   });
 
-  it('explains that a Tag must be added on the web when the Group has none active', () => {
+  it('explains that an admin must create or restore a Tag when the Group has none active', () => {
     const root = render(<TagSheet {...props({ tags: [], tagId: '' })} />);
     expect(text(root)).toContain(
-      'This Group has no active Tags. Add one on the web, then reopen this draft.',
+      'This Group has no active Tags. Ask a Group admin to create or restore one in Group options, then reopen this draft.',
     );
     expect(labelled(root, 'Search Tags')).toEqual([]);
     expect(radios(root)).toEqual([]);
@@ -287,10 +287,10 @@ describe('Tag in the Expense form', () => {
     expect(text(openTags(root))).toContain(kept);
   });
 
-  it('explains in the sheet, not the form, that a Group without active Tags needs one added on the web', () => {
+  it('explains in the sheet, not the form, that a Group without active Tags needs an admin to create or restore one', () => {
     const root = form(editor({}, [tag(party, 'Party supplies', { isArchived: true })]));
     const explanation =
-      'This Group has no active Tags. Add one on the web, then reopen this draft.';
+      'This Group has no active Tags. Ask a Group admin to create or restore one in Group options, then reopen this draft.';
     expect(text(body(root))).not.toContain(explanation);
     const sheet = openTags(root);
     expect(text(sheet)).toContain(explanation);

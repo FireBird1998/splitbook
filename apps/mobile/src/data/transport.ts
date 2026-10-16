@@ -73,6 +73,8 @@ export class RequestError extends Error {
     readonly serverMessage: string | null = null,
     /** Given only where the status, code and `networkFailure` don't already say it. */
     kind?: FailureKind,
+    /** Parsed response data for endpoint-specific corrections (for example a Tag snapshot). */
+    readonly details?: unknown,
   ) {
     super(message);
     this.kind = kind ?? failureKind(status, code, networkFailure);
@@ -373,6 +375,7 @@ export function createTransport({
         // The path decides the denial purge, never the failure's kind: a 404 under a Group's
         // Expenses is access-denied too, but purges nothing.
         const deniedGroup = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(path)?.[1];
+        const tagAction = /^\/api\/groups\/[a-f\d]{24}\/tag-actions(?:\/|$)/i.test(path);
         const denied =
           (response.status === 403 ||
             (response.status === 404 && path === `/api/groups/${deniedGroup}`)) &&
@@ -390,7 +393,7 @@ export function createTransport({
             ]).finally(() => endWait())
           : await reading;
         if (ownsGroup && !ownsGroup()) throw new Superseded();
-        if (denied) await onGroupDenied(denied, response.status, owner, path);
+
         const message =
           response.status === 403 || response.status === 404
             ? groupRefused(response.status)
@@ -404,6 +407,12 @@ export function createTransport({
           typeof details.code === 'string'
             ? details.code
             : null;
+        // Tag management can reject only the admin role while membership remains valid.
+        // An unreadable denial body cannot distinguish that from membership loss; keep the
+        // Group until its own read confirms access. Other endpoints retain prompt eviction.
+        const membershipDenied =
+          denied && (!tagAction || (code !== null && code !== 'TAG_ADMIN_REQUIRED'));
+        if (membershipDenied && denied) await onGroupDenied(denied, response.status, owner, path);
         const serverMessage =
           details &&
           typeof details === 'object' &&
@@ -420,7 +429,17 @@ export function createTransport({
         // SplitBook's own errors carry a code, so a gateway answered: SplitBook wasn't reached.
         if (gatewayStatuses.includes(response.status) && code === null)
           throw unreachable(aborted === 'timeout' ? 'timeout' : 'network');
-        throw new RequestError(message, response.status, code, false, serverMessage);
+        throw new RequestError(
+          code === 'TAG_ADMIN_REQUIRED'
+            ? 'Only Group admins can manage Tags. Your Group is still available.'
+            : message,
+          response.status,
+          code,
+          false,
+          serverMessage,
+          undefined,
+          details,
+        );
       }
       reading = true;
       const body = await response.json();

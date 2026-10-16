@@ -41,6 +41,9 @@ const group = (groupId: string) => `/api/groups/${segment(groupId)}`;
 export const groupsPath = () => '/api/groups';
 export const groupPath = (groupId: string) => group(groupId);
 export const expenseDraftsPath = (groupId: string) => `${group(groupId)}/drafts`;
+export const tagActionsPath = (groupId: string) => `${group(groupId)}/tag-actions`;
+export const tagActionCheckPath = (groupId: string, requestId: string) =>
+  `${tagActionsPath(groupId)}/${segment(requestId)}`;
 export const groupBalancesPath = (groupId: string) => `${group(groupId)}/balances`;
 
 /**

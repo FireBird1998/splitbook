@@ -21,10 +21,11 @@ export function untrustedCopies({
   savedQueries: rows,
   expenseDrafts,
   settlementAttempts,
+  tagRequests,
   now = Date.now,
 }: Pick<
   MobileDependencies,
-  'accountLocal' | 'savedQueries' | 'expenseDrafts' | 'settlementAttempts' | 'now'
+  'accountLocal' | 'savedQueries' | 'expenseDrafts' | 'settlementAttempts' | 'tagRequests' | 'now'
 >) {
   const record = accountLocal?.untrustedCopies,
     untrusted = new Map<string, number>();
@@ -139,6 +140,17 @@ export function untrustedCopies({
         } catch {
           // An unreadable payment stays available to its existing recovery UI.
         }
+      }
+      // A persisted Tag request is itself durable crash evidence, including when the
+      // response was lost or a concurrent read saved an older copy after the pre-send purge.
+      // Keep the request and entered Expense data; quarantine only derived display copies.
+      const tagGroups = tagRequests?.keys
+        ? await tagRequests.keys(accountId)
+        : ((await tagRequests?.list?.(accountId)) ?? []).map(({ groupId }) => groupId);
+      for (const groupId of tagGroups) {
+        addGroup(groupId);
+        scopes.add(`group:${groupId}`);
+        scopes.add('groups');
       }
       if (scopes.size) mark(accountId, [...scopes], time);
       await drop(

@@ -6,6 +6,7 @@ import {
   isWebAccountGroupsRead,
 } from '@/lib/web-query-keys';
 import { forgetBrowserGroupSettlementAttempts } from '@/lib/settlement-attempts';
+import { forgetBrowserGroupTagActions } from '@/lib/tag-actions';
 
 /**
  * Losing access to a Group (removed, or the Group deleted) removes what the
@@ -71,7 +72,10 @@ function forgetGroup(groupId: string, accountId: string | null) {
     revalidate: false,
   });
   void mutate(isWebAccountGroupsRead, undefined);
-  if (accountId) void forgetBrowserGroupSettlementAttempts(accountId, groupId);
+  if (accountId) {
+    void forgetBrowserGroupSettlementAttempts(accountId, groupId);
+    forgetBrowserGroupTagActions(accountId, groupId);
+  }
 }
 
 /**

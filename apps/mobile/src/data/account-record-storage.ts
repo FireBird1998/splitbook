@@ -36,13 +36,21 @@ export type FindableRecordStore = Omit<AccountGroupRecordStore, 'keys' | 'list'>
  */
 export function createAccountGroupRecordStore(
   environment: string,
-  kind: 'draft-request' | 'expense' | 'settlement' | 'saved' | 'group-creation' | 'sign-out',
+  kind:
+    | 'tag-request'
+    | 'draft-request'
+    | 'expense'
+    | 'settlement'
+    | 'saved'
+    | 'group-creation'
+    | 'sign-out',
 ): AccountGroupRecordStore & Required<Pick<AccountGroupRecordStore, 'keys' | 'list'>> {
   const {
     file,
     table,
     column = 'group_id',
   } = {
+    'tag-request': { file: 'splitbook-tag-requests.db', table: 'tag_requests' },
     'draft-request': { file: 'splitbook-draft-requests.db', table: 'draft_requests' },
     expense: { file: 'splitbook-drafts.db', table: 'expense_drafts' },
     settlement: { file: 'splitbook-settlements.db', table: 'settlement_attempts' },

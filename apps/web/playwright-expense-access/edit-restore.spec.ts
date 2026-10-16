@@ -1,3 +1,4 @@
+import { tagActionMetadata } from './fixtures';
 import {
   test,
   expect,
@@ -147,7 +148,10 @@ test('an unchanged archived Tag remains editable', async ({ ledger }) => {
   const tag = group.tags.find((item: { name: string }) => item.name === 'Rent');
   await dataOf(
     await ledger.priya.patch(`/api/groups/${ledger.groupB}/tags/${tag._id}`, {
-      data: { isArchived: true },
+      data: {
+        ...(await tagActionMetadata(ledger.priya, ledger.groupB, tag._id)),
+        isArchived: true,
+      },
     }),
   );
   const updated = await dataOf(

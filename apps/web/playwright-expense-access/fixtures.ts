@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   test as base,
   expect,
@@ -65,6 +66,15 @@ export const expensePath = (group: string, expense: string) =>
 export async function expenseRevisionHeaders(actor: APIRequestContext, path: string) {
   const expense = await dataOf(await actor.get(path));
   return { 'X-Splitbook-Revision': String(expense.revision ?? 0) };
+}
+
+/** Fixture actions explicitly review the current Tag version and retain a request identity. */
+export async function tagActionMetadata(actor: APIRequestContext, groupId: string, tagId?: string) {
+  if (!tagId) return { requestId: randomUUID() };
+  const current = await dataOf(await actor.get(`/api/groups/${groupId}/tag-actions`));
+  const tag = current.tags.find((candidate: { id: string }) => candidate.id === tagId);
+  expect(tag, 'Fixture Tag must still exist').toBeDefined();
+  return { requestId: randomUUID(), expectedRevision: tag.revision };
 }
 
 export type Ledger = {

@@ -1,3 +1,4 @@
+import { tagActionMetadata } from './fixtures';
 import { MongoClient, ObjectId } from 'mongodb';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
@@ -28,7 +29,10 @@ async function refreshGroupTags(page: Page, ledger: Ledger) {
   const rent = group.tags.find((tag: { name: string }) => tag.name === 'Rent');
   await dataOf(
     await ledger.priya.patch(`${path}/tags/${rent._id}`, {
-      data: { name: 'Updated housing Tag' },
+      data: {
+        ...(await tagActionMetadata(ledger.priya, ledger.groupB, rent._id)),
+        name: 'Updated housing Tag',
+      },
     }),
   );
   // Drive the actual SWR background refresh, then wait for the new Tag to render.

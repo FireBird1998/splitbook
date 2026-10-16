@@ -77,12 +77,8 @@ async function seed(): Promise<Manifest> {
       .parse(await alex.request(`/api/groups/${group._id}/invite-link`, 'POST', {}, 201));
     await sam.request(`/api/join/${invite.data.inviteCode}`, 'POST', undefined, 201);
     await priya.request(`/api/join/${invite.data.inviteCode}`, 'POST', undefined, 201);
-    const tagged = groupSchema.parse(
-      await alex.request(`/api/groups/${group._id}/tags`, 'POST', { name: 'Shared meal' }),
-    ).data;
-    const tag = tagged.tags.find((item) => item.name === 'Shared meal');
-    assert.ok(tag);
-    return manifestSchema.parse({ ...provisional, tagId: tag._id });
+    const tagged = await alex.changeTag(group._id, { action: 'create', name: 'Shared meal' });
+    return manifestSchema.parse({ ...provisional, tagId: tagged.receipt.tagId });
   } catch (error) {
     await archive(provisional);
     throw error;
@@ -231,7 +227,9 @@ async function verify(manifest: Manifest) {
         );
       assert.equal(rejected.code, code);
     }
-    await alex.request(`/api/groups/${manifest.groupId}/tags/${manifest.tagId}`, 'PATCH', {
+    await alex.changeTag(manifest.groupId, {
+      action: 'rename',
+      tagId: manifest.tagId,
       name: 'Renamed meal',
     });
     await controller.updateExpenseDraft({ amount: '10.00' });
@@ -247,8 +245,9 @@ async function verify(manifest: Manifest) {
     assert.equal(submissions.length, 0, 'Foreground refresh submitted automatically.');
     await controller.saveExpense();
     assert.equal(controller.getSnapshot().expense.status, 'uncertain');
-    await alex.request(`/api/groups/${manifest.groupId}/tags/${manifest.tagId}`, 'PATCH', {
-      isArchived: true,
+    await alex.changeTag(manifest.groupId, {
+      action: 'archive',
+      tagId: manifest.tagId,
     });
     controller = create();
     await controller.restore();
@@ -301,8 +300,9 @@ async function verify(manifest: Manifest) {
       ).length,
       1,
     );
-    await alex.request(`/api/groups/${manifest.groupId}/tags/${manifest.tagId}`, 'PATCH', {
-      isArchived: false,
+    await alex.changeTag(manifest.groupId, {
+      action: 'restore',
+      tagId: manifest.tagId,
     });
     // This separate actor changed the Group on the server. Refresh what this phone knows
     // before starting the split cases: a new form reuses recently verified context (#366).

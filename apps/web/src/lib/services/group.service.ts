@@ -16,7 +16,7 @@ import { recurringExpenseService } from './recurring-expense.service';
 import { buildDefaultGroupTags } from '@splitbook/shared/default-tags';
 import type { CreateGroupInput, UpdateGroupInput } from '@splitbook/shared/validators/group';
 import crypto from 'crypto';
-import { escapeRegex } from '@splitbook/shared/escape-regex';
+import { tagManagementService } from './tag-management.service';
 import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import Settlement from '@/lib/models/Settlement';
@@ -417,211 +417,52 @@ export class GroupService {
 
   // ─── Tag Management ─────────────────────────────────
 
-  /**
-   * Add a new tag to the group. Only admins can do this.
-   * Tag names must be unique (case-insensitive) within a group.
-   * Uses atomic $push to avoid Mongoose change-tracking issues.
-   */
+  /** Internal adapters retain the existing fixture interface; HTTP callers must supply commands. */
   async addTag(groupId: string, name: string, userId: string) {
-    await connectDB();
-
-    const group = await Group.findById(groupId).lean();
-    if (!group) return null;
-
-    // Check admin permission
-    const member = group.members.find((m) => m.user.toString() === userId);
-    if (!member || member.role !== 'admin') {
-      throw new Error('FORBIDDEN');
-    }
-
-    // Check for duplicate tag name (case-insensitive)
-    const normalised = name.trim().toLowerCase();
-    if (!normalised || name.trim().length > 50) throw new Error('INVALID_TAG');
-    const exists = (group.tags || []).some(
-      (t) => !t.isDeleted && t.name.toLowerCase() === normalised,
-    );
-    if (exists) {
-      throw new Error('TAG_EXISTS');
-    }
-
-    // Atomic $push directly to MongoDB
-    const updated = await withGroupMutation(groupId, async () =>
-      Group.findOneAndUpdate(
-        {
-          _id: groupId,
-          members: { $elemMatch: { user: userId, role: 'admin' } },
-          tags: {
-            $not: {
-              $elemMatch: {
-                name: new RegExp(`^${escapeRegex(name.trim())}$`, 'i'),
-                isDeleted: { $ne: true },
-              },
-            },
-          },
-        },
-        {
-          $push: {
-            tags: {
-              name: name.trim(),
-              isArchived: false,
-              createdAt: new Date(),
-            },
-          },
-        },
-        { returnDocument: 'after' },
-      ).populate('members.user', 'name email image'),
-    );
-
-    if (!updated) throw new Error('TAG_EXISTS');
-    return updated;
+    await tagManagementService.submit(groupId, userId, {
+      requestId: crypto.randomUUID(),
+      intent: { action: 'create', name: name.trim() },
+    });
+    return Group.findById(groupId).populate('members.user', 'name email image');
   }
 
-  /**
-   * Update a tag (archive/unarchive or rename). Only admins can do this.
-   * Uses positional $ operator for atomic subdocument update.
-   */
   async updateTag(
     groupId: string,
     tagId: string,
     data: { name?: string; isArchived?: boolean },
     userId: string,
   ) {
-    await connectDB();
-
-    const group = await Group.findById(groupId).lean();
-    if (!group) return null;
-
-    // Check admin permission
-    const member = group.members.find((m) => m.user.toString() === userId);
-    if (!member || member.role !== 'admin') {
-      throw new Error('FORBIDDEN');
-    }
-
-    const tag = (group.tags || []).find((t) => t._id.toString() === tagId && !t.isDeleted);
+    const current = await tagManagementService.snapshot(groupId, userId);
+    const tag = current.tags.find((candidate) => candidate.id === tagId && !candidate.isDeleted);
     if (!tag) return null;
-
-    // If renaming, check uniqueness
-    if (data.name !== undefined) {
-      const normalised = data.name.trim().toLowerCase();
-      if (!normalised || data.name.trim().length > 50) throw new Error('INVALID_TAG');
-      const duplicate = (group.tags || []).some(
-        (t) => !t.isDeleted && t._id.toString() !== tagId && t.name.toLowerCase() === normalised,
-      );
-      if (duplicate) {
-        throw new Error('TAG_EXISTS');
-      }
-      // Preserve unambiguous pre-migration references before changing display text.
-      // No monetary values, timestamps or audit history are rewritten.
-      if (data.name.trim() !== tag.name) {
-        const legacy = { group: group._id, tagId: null, tag: tag.name };
-        if (group.tags.filter((candidate) => candidate.name === tag.name).length !== 1) {
-          const [legacyExpense, legacyTemplate] = await Promise.all([
-            Expense.exists(legacy),
-            RecurringExpense.exists(legacy),
-          ]);
-          if (legacyExpense || legacyTemplate) throw new Error('AMBIGUOUS_TAG');
-        } else {
-          await withGroupMutation(groupId, async (session) => {
-            await Expense.collection.updateMany(legacy, { $set: { tagId: tag._id } }, { session });
-            await RecurringExpense.collection.updateMany(
-              legacy,
-              { $set: { tagId: tag._id } },
-              { session },
-            );
-          });
-        }
-      }
-    }
-
-    // Build $set for the matched array element
-    const setFields: Record<string, unknown> = {};
-    if (data.name !== undefined) setFields['tags.$[tag].name'] = data.name.trim();
-    if (data.isArchived !== undefined) setFields['tags.$[tag].isArchived'] = data.isArchived;
-
-    const noDuplicate =
-      data.name === undefined
-        ? {}
+    if ((data.name !== undefined) === (data.isArchived !== undefined))
+      throw new Error('INVALID_TAG');
+    const intent =
+      data.name !== undefined
+        ? {
+            action: 'rename' as const,
+            tagId,
+            expectedRevision: tag.revision,
+            name: data.name.trim(),
+          }
         : {
-            tags: {
-              $not: {
-                $elemMatch: {
-                  _id: { $ne: tag._id },
-                  name: new RegExp(`^${escapeRegex(data.name.trim())}$`, 'i'),
-                  isDeleted: { $ne: true },
-                },
-              },
-            },
+            action: data.isArchived ? ('archive' as const) : ('restore' as const),
+            tagId,
+            expectedRevision: tag.revision,
           };
-
-    const updated = await withGroupMutation(groupId, async () =>
-      Group.findOneAndUpdate(
-        {
-          _id: groupId,
-          members: { $elemMatch: { user: userId, role: 'admin' } },
-          $and: [
-            { tags: { $elemMatch: { _id: tag._id, name: tag.name, isDeleted: { $ne: true } } } },
-            noDuplicate,
-          ],
-        },
-        { $set: setFields },
-        { returnDocument: 'after', arrayFilters: [{ 'tag._id': tag._id }] },
-      ).populate('members.user', 'name email image'),
-    );
-
-    if (!updated) throw new Error('TAG_CHANGED');
-    return updated;
+    await tagManagementService.submit(groupId, userId, { requestId: crypto.randomUUID(), intent });
+    return Group.findById(groupId).populate('members.user', 'name email image');
   }
 
-  /**
-   * Retire an unused Tag, retaining its identity for in-flight historical writes.
-   * Expenses (including deleted ones) and recurring templates block deletion.
-   * Only admins can do this.
-   */
   async deleteTag(groupId: string, tagId: string, userId: string) {
-    await connectDB();
-
-    const group = await Group.findById(groupId).lean();
-    if (!group) return null;
-
-    // Check admin permission
-    const member = group.members.find((m) => m.user.toString() === userId);
-    if (!member || member.role !== 'admin') {
-      throw new Error('FORBIDDEN');
-    }
-
-    const tag = (group.tags || []).find((t) => t._id.toString() === tagId && !t.isDeleted);
+    const current = await tagManagementService.snapshot(groupId, userId);
+    const tag = current.tags.find((candidate) => candidate.id === tagId && !candidate.isDeleted);
     if (!tag) return null;
-
-    // Check if any expenses use this tag
-    const reference = {
-      group: groupId,
-      $or: [{ tagId: tag._id }, { tagId: null, tag: tag.name }],
-    };
-    const [expenseCount, templateCount] = await Promise.all([
-      Expense.countDocuments(reference),
-      RecurringExpense.countDocuments(reference),
-    ]);
-    const usageCount = expenseCount + templateCount;
-
-    if (usageCount > 0) {
-      throw new Error(`TAG_IN_USE:${expenseCount}:${templateCount}`);
-    }
-
-    // Retain identity even if a write admitted before deletion finishes later.
-    // Such a write keeps a readable historical Tag; subsequent selection fails.
-    const updated = await withGroupMutation(groupId, async () =>
-      Group.findOneAndUpdate(
-        {
-          _id: groupId,
-          members: { $elemMatch: { user: userId, role: 'admin' } },
-          'tags._id': tagId,
-        },
-        { $set: { 'tags.$.isDeleted': true, 'tags.$.isArchived': true } },
-        { returnDocument: 'after' },
-      ).populate('members.user', 'name email image'),
-    );
-
-    return updated;
+    await tagManagementService.submit(groupId, userId, {
+      requestId: crypto.randomUUID(),
+      intent: { action: 'delete', tagId, expectedRevision: tag.revision },
+    });
+    return Group.findById(groupId).populate('members.user', 'name email image');
   }
 
   /**
