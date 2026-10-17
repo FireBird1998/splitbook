@@ -161,3 +161,27 @@ test('keyboard: J moves, a number picks, S saves and Esc closes the panel', asyn
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
 });
+
+test('after S saves a row, focus moves to the next row, else the one before, else All caught up', async ({
+  page,
+}, testInfo) => {
+  test.skip(isPhone(testInfo), 'Keyboard shortcuts are for computers');
+  await open(page, ['ready', 'ready', 'ready']);
+  const saved = page.getByRole('alert').filter({ hasText: 'Expense saved' });
+  await openRow(page, 'Review meal 1').focus();
+  await page.keyboard.press('s');
+  await expect(openRow(page, 'Review meal 1')).toHaveCount(0);
+  await expect(openRow(page, 'Review meal 2')).toBeFocused();
+  // J and K keep working from there.
+  await page.keyboard.press('j');
+  await expect(openRow(page, 'Review meal 3')).toBeFocused();
+  // The last row saved: focus goes to the one before it.
+  await page.keyboard.press('s');
+  await expect(openRow(page, 'Review meal 3')).toHaveCount(0);
+  await expect(openRow(page, 'Review meal 2')).toBeFocused();
+  await expect(saved).toBeVisible();
+  // Nothing left: focus goes to the list's empty state.
+  await page.keyboard.press('s');
+  await expect(page.getByRole('heading', { name: 'All caught up' })).toBeFocused();
+  expect(await rows(page)).toHaveLength(0);
+});
