@@ -5,6 +5,7 @@ import type { CurrencyBalanceBucket, HomeSuggestedPayment } from '@splitbook/sha
 import {
   DEMO_GROUP_ID,
   DEMO_TRIP_NAME,
+  MONEY_JOURNEY,
   enterAsPersona,
   expectThemeApplied,
   openAddExpense,
@@ -21,10 +22,12 @@ import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
  * seeded demo database: Alex creates a trip, Sam settles with Alex on the
  * seeded trip, Priya verifies her (unaffected) balance.
  *
- * Every project (desktop/mobile × light/dark) runs the same journeys, so
- * assertions on mutable balances are relative to what the journey observed.
- * Home's figures and suggested payments are checked against the balances read (#306),
- * since the Household's recurring bills follow the run date.
+ * The journeys that write (Alex's new trip, its Expense and its edit, Sam's payment) are
+ * money journeys, run once, in desktop-light (#475). The others run in every project
+ * (desktop/mobile × light/dark), after whatever ran before them, so assertions on mutable
+ * balances are relative to what the journey observed. Home's figures and suggested payments
+ * are checked against the balances read (#306), since the Household's recurring bills follow
+ * the run date.
  */
 
 test.describe.configure({ mode: 'serial' });
@@ -140,31 +143,35 @@ test('alex: Needs you → Record opens the payment’s Group on its Balances, wi
   await reviewScreenshot(page, testInfo, 'alex-needs-you-record');
 });
 
-test('alex: creates a trip that is ready for a first expense', async ({ page }, testInfo) => {
-  await enterAsPersona(page, 'alex');
+test(
+  'alex: creates a trip that is ready for a first expense',
+  MONEY_JOURNEY,
+  async ({ page }, testInfo) => {
+    await enterAsPersona(page, 'alex');
 
-  qaTripName = `Playwright QA Trip ${testInfo.project.name}`;
-  await page.goto('/groups/new');
-  await page.getByLabel('Trip name').fill(qaTripName);
-  await page.getByRole('button', { name: 'Create trip' }).click();
+    qaTripName = `Playwright QA Trip ${testInfo.project.name}`;
+    await page.goto('/groups/new');
+    await page.getByLabel('Trip name').fill(qaTripName);
+    await page.getByRole('button', { name: 'Create trip' }).click();
 
-  // A new Group opens on its Expenses tab (#305).
-  await page.waitForURL((url) => /^\/groups\/[a-f0-9]{24}\/expenses$/.test(url.pathname));
-  qaTripUrl = new URL(page.url()).pathname;
+    // A new Group opens on its Expenses tab (#305).
+    await page.waitForURL((url) => /^\/groups\/[a-f0-9]{24}\/expenses$/.test(url.pathname));
+    qaTripUrl = new URL(page.url()).pathname;
 
-  // The header and the trip strip show the new trip; checklist guides the first expense.
-  await expect(
-    page.getByRole('main').getByRole('heading', { level: 1, name: qaTripName }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('main').getByRole('region', { name: new RegExp(`^${qaTripName} trip,`) }),
-  ).toBeVisible();
-  await expect(page.getByText('Get this trip going')).toBeVisible();
+    // The header and the trip strip show the new trip; checklist guides the first expense.
+    await expect(
+      page.getByRole('main').getByRole('heading', { level: 1, name: qaTripName }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('main').getByRole('region', { name: new RegExp(`^${qaTripName} trip,`) }),
+    ).toBeVisible();
+    await expect(page.getByText('Get this trip going')).toBeVisible();
 
-  await reviewScreenshot(page, testInfo, 'alex-new-trip');
-});
+    await reviewScreenshot(page, testInfo, 'alex-new-trip');
+  },
+);
 
-test('alex: adds an expense to the new trip', async ({ page }) => {
+test('alex: adds an expense to the new trip', MONEY_JOURNEY, async ({ page }) => {
   await enterAsPersona(page, 'alex');
   await page.goto(qaTripUrl);
 
@@ -181,7 +188,7 @@ test('alex: adds an expense to the new trip', async ({ page }) => {
   await expect(expenseItem(page, 'QA Dinner').item).toContainText('₹120.00');
 });
 
-test('alex: edits the expense and sees the update', async ({ page }) => {
+test('alex: edits the expense and sees the update', MONEY_JOURNEY, async ({ page }) => {
   await enterAsPersona(page, 'alex');
   await page.goto(qaTripUrl);
 
@@ -199,9 +206,7 @@ test('alex: edits the expense and sees the update', async ({ page }) => {
   await expect(expenseItem(page, 'QA Dinner — updated').item).toContainText('₹240.00');
 });
 
-test('sam: switches persona and records a payment on Balances; balances update', async ({
-  page,
-}, testInfo) => {
+test('sam: switches persona and Home shows what Sam owes', async ({ page }, testInfo) => {
   await enterAsPersona(page, 'alex');
   await switchPersona(page, 'sam');
 
@@ -209,45 +214,54 @@ test('sam: switches persona and records a payment on Balances; balances update',
   await expect(balancesCard(page).getByText('You owe', { exact: true })).toBeVisible();
   await expectHomeMatchesBalancesRead(page);
   await reviewScreenshot(page, testInfo, 'sam-dashboard');
-
-  await page.goto(`/groups/${DEMO_GROUP_ID}`);
-  await page
-    .getByRole('navigation', { name: `${DEMO_TRIP_NAME} sections` })
-    .getByRole('link', { name: 'Balances' })
-    .click();
-
-  // Sam is a party to exactly one open debt, so exactly one Record on Settle up.
-  const settleUp = page.getByRole('region', { name: 'Settle up', exact: true });
-  const recordButton = page.getByRole('button', { name: /^Record .*payment to/ });
-  const settleButton = settleUp.getByRole('button', { name: /^Record .*payment to/ });
-  await expect(settleButton).toHaveCount(1);
-  const debtRow = settleUp.getByRole('listitem').filter({ has: recordButton });
-  const debtBefore = parseMoneyText((await debtRow.textContent()) ?? '');
-
-  // Record fills in Record payment, on the page itself (#312).
-  await settleButton.click();
-  const form = page.getByRole('region', { name: 'Record payment', exact: true });
-  const amount = form.getByRole('textbox', { name: 'Amount paid' });
-  await expect(amount).toBeFocused();
-  await amount.fill('100');
-  await form.getByRole('button', { name: /^Record payment/ }).click();
-  await expect(form.getByRole('status').filter({ hasText: 'Payment recorded.' })).toBeVisible();
-
-  // The open debt shrinks by exactly the settled amount. The app formats
-  // amounts with en-US grouping (see formatCurrency).
-  const expected = (debtBefore - 100).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  await expect(settleUp.getByText(`₹${expected}`, { exact: true })).toBeVisible();
-
-  // Payments gains the new entry at the top, recorded by Sam.
-  const newest = page.getByRole('table', { name: 'Payments' }).getByRole('row').nth(1);
-  await expect(newest).toContainText('₹100.00');
-  await expect(newest).toContainText('You');
-
-  await reviewScreenshot(page, testInfo, 'sam-after-settlement');
 });
+
+test(
+  'sam: records a payment on Balances; balances update',
+  MONEY_JOURNEY,
+  async ({ page }, testInfo) => {
+    await enterAsPersona(page, 'alex');
+    await switchPersona(page, 'sam');
+
+    await page.goto(`/groups/${DEMO_GROUP_ID}`);
+    await page
+      .getByRole('navigation', { name: `${DEMO_TRIP_NAME} sections` })
+      .getByRole('link', { name: 'Balances' })
+      .click();
+
+    // Sam is a party to exactly one open debt, so exactly one Record on Settle up.
+    const settleUp = page.getByRole('region', { name: 'Settle up', exact: true });
+    const recordButton = page.getByRole('button', { name: /^Record .*payment to/ });
+    const settleButton = settleUp.getByRole('button', { name: /^Record .*payment to/ });
+    await expect(settleButton).toHaveCount(1);
+    const debtRow = settleUp.getByRole('listitem').filter({ has: recordButton });
+    const debtBefore = parseMoneyText((await debtRow.textContent()) ?? '');
+
+    // Record fills in Record payment, on the page itself (#312).
+    await settleButton.click();
+    const form = page.getByRole('region', { name: 'Record payment', exact: true });
+    const amount = form.getByRole('textbox', { name: 'Amount paid' });
+    await expect(amount).toBeFocused();
+    await amount.fill('100');
+    await form.getByRole('button', { name: /^Record payment/ }).click();
+    await expect(form.getByRole('status').filter({ hasText: 'Payment recorded.' })).toBeVisible();
+
+    // The open debt shrinks by exactly the settled amount. The app formats
+    // amounts with en-US grouping (see formatCurrency).
+    const expected = (debtBefore - 100).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    await expect(settleUp.getByText(`₹${expected}`, { exact: true })).toBeVisible();
+
+    // Payments gains the new entry at the top, recorded by Sam.
+    const newest = page.getByRole('table', { name: 'Payments' }).getByRole('row').nth(1);
+    await expect(newest).toContainText('₹100.00');
+    await expect(newest).toContainText('You');
+
+    await reviewScreenshot(page, testInfo, 'sam-after-settlement');
+  },
+);
 
 test('priya: switches persona and verifies her seeded balance', async ({ page }, testInfo) => {
   await enterAsPersona(page, 'alex');

@@ -2,6 +2,7 @@ import { expect, test, type Page, type Response, type TestInfo } from '@playwrig
 import {
   DEMO_GROUP_ID,
   DEMO_TRIP_NAME,
+  MONEY_JOURNEY,
   addExpenseButton,
   enterAsPersona,
   expectNoSeriousA11yViolations,
@@ -20,6 +21,9 @@ import {
  * Other specs check the seeded balances exactly, in whatever order the tests run. So every
  * Expense here goes to a Group the test creates for Alex alone: no seeded Group changes, and
  * no persona's balance moves. The refresh is shown with that Group's own figures.
+ *
+ * Saving is a money journey, run once (#475). The button, the chooser and the form's layout,
+ * theme and axe checks run in every project and save nothing.
  */
 
 /** A Household of Alex's own, named for this test, project and run. */
@@ -77,14 +81,11 @@ interface SaveExpense {
   rereads: string[];
 }
 
-test('from Home: choose a Group, add the Expense, and stay on Home with a confirmation', async ({
+test('the top bar’s Add expense fits the screen, and its Group chooser is accessible', async ({
   page,
 }, testInfo) => {
   await enterAsPersona(page, 'alex');
   await expectThemeApplied(page, testInfo);
-  const group = await createOwnGroup(page, testInfo, 'from Home');
-  await page.reload();
-  const main = page.getByRole('main');
 
   const button = addExpenseButton(page);
   await expect(button).toBeVisible();
@@ -100,107 +101,128 @@ test('from Home: choose a Group, add the Expense, and stay on Home with a confir
     await expect(button.getByText('Add expense')).toBeVisible();
   }
 
-  // The Group's row in Home's Groups table (#308), before the Expense: nothing spent this
-  // Month (a table column on a desktop; a phone's row shows the balance and last change), and
-  // the Group's own creation as its last change.
-  const groupsCard = main.getByRole('region', { name: 'Groups' });
-  const row = isPhone(testInfo)
-    ? groupsCard.getByRole('listitem').filter({ hasText: group.name })
-    : groupsCard.locator('tbody tr').filter({ hasText: group.name });
-  if (!isPhone(testInfo)) await expect(row.getByRole('cell').nth(1)).toHaveText('₹0.00');
-  await expect(row.locator('time')).toHaveText(/^Today, /);
-  const createdAt = await row.locator('time').getAttribute('datetime');
-
+  // Outside a Group it asks which Group first. Closing it adds nothing.
   const chooser = chooserDialog(page);
   await openAddExpense(page, chooser);
   await expect(chooser).toHaveAccessibleDescription('Pick the Group this expense belongs to.');
-  const groups = chooser.getByRole('list', { name: 'Your Groups' });
   await expect(
-    groups.getByRole('button', { name: new RegExp(`^${DEMO_TRIP_NAME} `) }),
+    chooser
+      .getByRole('list', { name: 'Your Groups' })
+      .getByRole('button', { name: new RegExp(`^${DEMO_TRIP_NAME} `) }),
   ).toBeVisible();
-  const choice = groups.getByRole('button', { name: new RegExp(`^${group.name} `) });
-  await expect(choice).toBeVisible();
   await expectNoSeriousA11yViolations(page, testInfo, 'add-expense-chooser');
   await reviewScreenshot(page, testInfo, 'add-expense-chooser');
-
-  await choice.click();
+  await page.keyboard.press('Escape');
   await expect(chooser).toHaveCount(0);
-  const form = formDialog(page);
-  await expect(form).toBeVisible();
-  // The form names the Group it adds to.
-  await expect(form.getByText(group.name, { exact: true })).toBeVisible();
-
-  const description = `Top bar lunch ${testInfo.project.name}`;
-  // The account's Groups, balances and spending, which Home's Groups table (and the sidebar)
-  // shows.
-  await saveExpense(page, {
-    groupId: group.id,
-    description,
-    amount: '90',
-    rereads: ['/api/groups', '/api/user/balances', '/api/user/spending'],
-  });
-
-  // Still on Home, told where the Expense went, and back on the button.
-  expect(new URL(page.url()).pathname).toBe('/dashboard');
-  await expect(page.getByRole('alert').filter({ hasText: 'Expense added to' })).toHaveText(
-    `Expense added to ${group.name}`,
-  );
-  await expect(button).toBeFocused();
-  // The Group's row on Home now counts the Expense, and its last change is the Expense: today,
-  // and later than the Group's creation.
-  if (!isPhone(testInfo)) await expect(row.getByRole('cell').nth(1)).toHaveText('₹90.00');
-  await expect(row.locator('time')).toHaveText(/^Today, /);
-  await expect
-    .poll(async () => (await row.locator('time').getAttribute('datetime'))! > createdAt!)
-    .toBe(true);
-
-  // The Expense is in the Group: its row, or its card on a phone (#310).
-  await page.goto(`/groups/${group.id}`);
-  await expect(expenseItem(page, description).item).toContainText('₹90.00');
 });
 
-test('inside a Group: the form opens for that Group, with no chooser', async ({
-  page,
-}, testInfo) => {
-  await enterAsPersona(page, 'alex');
-  const group = await createOwnGroup(page, testInfo, 'in a Group');
-  const expensesTab = `/groups/${group.id}/expenses`;
-  await page.goto(expensesTab);
-  const main = page.getByRole('main');
-  await expect(main.getByText(group.name).first()).toBeVisible();
-  await expect(main.getByText('No expenses yet')).toBeVisible();
+test(
+  'from Home: choose a Group, add the Expense, and stay on Home with a confirmation',
+  MONEY_JOURNEY,
+  async ({ page }, testInfo) => {
+    await enterAsPersona(page, 'alex');
+    const group = await createOwnGroup(page, testInfo, 'from Home');
+    await page.reload();
+    const main = page.getByRole('main');
+    const button = addExpenseButton(page);
 
-  const form = await openAddExpense(page);
-  await expect(chooserDialog(page)).toHaveCount(0);
-  await expect(form.getByText(group.name, { exact: true })).toBeVisible();
-  await reviewScreenshot(page, testInfo, 'add-expense-in-group');
+    // The Group's row in Home's Groups table (#308), before the Expense: nothing spent this
+    // Month, and the Group's own creation as its last change.
+    const row = main
+      .getByRole('region', { name: 'Groups' })
+      .locator('tbody tr')
+      .filter({ hasText: group.name });
+    await expect(row.getByRole('cell').nth(1)).toHaveText('₹0.00');
+    await expect(row.locator('time')).toHaveText(/^Today, /);
+    const createdAt = await row.locator('time').getAttribute('datetime');
 
-  const description = `Top bar taxi ${testInfo.project.name}`;
-  // The Group page's own reads; on desktop also the account's balances, for the sidebar.
-  await saveExpense(page, {
-    groupId: group.id,
-    description,
-    amount: '240',
-    rereads: [
-      `/api/groups/${group.id}/expenses`,
-      `/api/groups/${group.id}/balances`,
-      ...(isPhone(testInfo) ? [] : ['/api/user/balances']),
-    ],
-  });
+    const chooser = chooserDialog(page);
+    await openAddExpense(page, chooser);
+    const choice = chooser
+      .getByRole('list', { name: 'Your Groups' })
+      .getByRole('button', { name: new RegExp(`^${group.name} `) });
+    await expect(choice).toBeVisible();
 
-  expect(new URL(page.url()).pathname).toBe(expensesTab);
-  await expect(page.getByRole('alert').filter({ hasText: 'Expense added to' })).toHaveText(
-    `Expense added to ${group.name}`,
-  );
-  // The Group's own list refreshes with the new Expense: its row, or its card on a phone (#310).
-  await expect(expenseItem(page, description).item).toContainText('₹240.00');
-  await expect(main.getByText('No expenses yet')).toHaveCount(0);
-});
+    await choice.click();
+    await expect(chooser).toHaveCount(0);
+    const form = formDialog(page);
+    await expect(form).toBeVisible();
+    // The form names the Group it adds to.
+    await expect(form.getByText(group.name, { exact: true })).toBeVisible();
+
+    const description = `Top bar lunch ${testInfo.project.name}`;
+    // The account's Groups, balances and spending, which Home's Groups table (and the sidebar)
+    // shows.
+    await saveExpense(page, {
+      groupId: group.id,
+      description,
+      amount: '90',
+      rereads: ['/api/groups', '/api/user/balances', '/api/user/spending'],
+    });
+
+    // Still on Home, told where the Expense went, and back on the button.
+    expect(new URL(page.url()).pathname).toBe('/dashboard');
+    await expect(page.getByRole('alert').filter({ hasText: 'Expense added to' })).toHaveText(
+      `Expense added to ${group.name}`,
+    );
+    await expect(button).toBeFocused();
+    // The Group's row on Home now counts the Expense, and its last change is the Expense: today,
+    // and later than the Group's creation.
+    await expect(row.getByRole('cell').nth(1)).toHaveText('₹90.00');
+    await expect(row.locator('time')).toHaveText(/^Today, /);
+    await expect
+      .poll(async () => (await row.locator('time').getAttribute('datetime'))! > createdAt!)
+      .toBe(true);
+
+    // The Expense is in the Group: its row (#310).
+    await page.goto(`/groups/${group.id}`);
+    await expect(expenseItem(page, description).item).toContainText('₹90.00');
+  },
+);
+
+test(
+  'inside a Group: the form opens for that Group, with no chooser',
+  MONEY_JOURNEY,
+  async ({ page }, testInfo) => {
+    await enterAsPersona(page, 'alex');
+    const group = await createOwnGroup(page, testInfo, 'in a Group');
+    const expensesTab = `/groups/${group.id}/expenses`;
+    await page.goto(expensesTab);
+    const main = page.getByRole('main');
+    await expect(main.getByText(group.name).first()).toBeVisible();
+    await expect(main.getByText('No expenses yet')).toBeVisible();
+
+    const form = await openAddExpense(page);
+    await expect(chooserDialog(page)).toHaveCount(0);
+    await expect(form.getByText(group.name, { exact: true })).toBeVisible();
+
+    const description = `Top bar taxi ${testInfo.project.name}`;
+    // The Group page's own reads, and the account's balances, for the sidebar.
+    await saveExpense(page, {
+      groupId: group.id,
+      description,
+      amount: '240',
+      rereads: [
+        `/api/groups/${group.id}/expenses`,
+        `/api/groups/${group.id}/balances`,
+        '/api/user/balances',
+      ],
+    });
+
+    expect(new URL(page.url()).pathname).toBe(expensesTab);
+    await expect(page.getByRole('alert').filter({ hasText: 'Expense added to' })).toHaveText(
+      `Expense added to ${group.name}`,
+    );
+    // The Group's own list refreshes with the new Expense: its row (#310).
+    await expect(expenseItem(page, description).item).toContainText('₹240.00');
+    await expect(main.getByText('No expenses yet')).toHaveCount(0);
+  },
+);
 
 // Opens and closes the seeded trip's forms without saving: nothing is written.
 test('on every tab of a Group and on its settings, the form opens for that Group', async ({
   page,
-}) => {
+}, testInfo) => {
   await enterAsPersona(page, 'alex');
   for (const path of ['expenses', 'balances', 'activity', 'members', 'settings']) {
     await page.goto(`/groups/${DEMO_GROUP_ID}/${path}`);
@@ -209,6 +231,7 @@ test('on every tab of a Group and on its settings, the form opens for that Group
     const form = await openAddExpense(page);
     await expect(chooserDialog(page), path).toHaveCount(0);
     await expect(form.getByText(DEMO_TRIP_NAME, { exact: true }), path).toBeVisible();
+    if (path === 'expenses') await reviewScreenshot(page, testInfo, 'add-expense-in-group');
     await page.keyboard.press('Escape');
     await expect(form, path).toHaveCount(0);
     expect(new URL(page.url()).pathname).toBe(`/groups/${DEMO_GROUP_ID}/${path}`);

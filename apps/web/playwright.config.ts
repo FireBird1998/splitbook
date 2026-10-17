@@ -8,12 +8,17 @@ import { defineConfig, devices } from '@playwright/test';
  * - Four projects cover desktop/mobile × light/dark. The app derives its
  *   initial theme from `prefers-color-scheme`, so `colorScheme` emulation
  *   drives the theme per project.
- * - Journeys share one demo database, so the suite is fully serial
- *   (workers: 1) — each project's run starts from the same seeded baseline
- *   and must not assume exact mutable balances.
+ * - Money journeys (tagged `@money`, see `MONEY_JOURNEY` in playwright/fixtures.ts) record an
+ *   Expense or a payment, which doesn't change with the theme, so they run in desktop-light
+ *   only (#475). Theme, axe and layout checks run in all four projects.
+ * - Journeys share one demo database, seeded once in global setup, so the suite is fully
+ *   serial (workers: 1): a test runs after whatever earlier tests wrote, and must not assume
+ *   exact mutable balances.
  */
 
 const PORT = 3100;
+/** The three projects other than desktop-light leave the money journeys out. */
+const WITHOUT_MONEY_JOURNEYS = { grepInvert: /@money/ };
 const baseURL = `http://localhost:${PORT}`;
 const DEMO_MONGODB_URI = 'mongodb://127.0.0.1:27017/splitbook-demo?directConnection=true';
 
@@ -45,6 +50,7 @@ export default defineConfig({
     },
     {
       name: 'desktop-dark',
+      ...WITHOUT_MONEY_JOURNEYS,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -53,6 +59,7 @@ export default defineConfig({
     },
     {
       name: 'mobile-light',
+      ...WITHOUT_MONEY_JOURNEYS,
       // Chromium with mobile emulation (390×844) — WebKit is not required for
       // responsive verification and keeps local/CI browser installs light.
       use: {
@@ -66,6 +73,7 @@ export default defineConfig({
     },
     {
       name: 'mobile-dark',
+      ...WITHOUT_MONEY_JOURNEYS,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 390, height: 844 },

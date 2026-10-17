@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { DEMO_HOUSEHOLD_ID, DEMO_PERSONA_IDS, DEMO_WORK_GROUP_ID } from '../src/lib/demo-personas';
 import {
+  MONEY_JOURNEY,
   enterAsPersona,
   expectNoSeriousA11yViolations,
   expectThemeApplied,
@@ -14,6 +15,9 @@ import {
  * against the same database, so the journeys record small amounts and read the figures off
  * the page rather than assume them: the Household keeps its suggested payments, and the Goa
  * trip, which other journeys check, is left alone.
+ *
+ * Recording a payment is a money journey, run once (#475). The form's checks, its theme and
+ * axe run in every project and record nothing.
  */
 
 const { sam, priya } = DEMO_PERSONA_IDS;
@@ -42,51 +46,52 @@ async function openBalances(page: Page, groupId: string) {
   };
 }
 
-test('a suggested payment’s Record fills the form in, and the payment lands in Payments', async ({
-  page,
-}, testInfo) => {
-  await enterAsPersona(page, 'alex');
-  const tab = await openBalances(page, DEMO_HOUSEHOLD_ID);
-  await expectThemeApplied(page, testInfo);
+test(
+  'a suggested payment’s Record fills the form in, and the payment lands in Payments',
+  MONEY_JOURNEY,
+  async ({ page }, testInfo) => {
+    await enterAsPersona(page, 'alex');
+    const tab = await openBalances(page, DEMO_HOUSEHOLD_ID);
 
-  const row = tab.settleUp.getByRole('listitem').filter({ hasText: 'You pay Priya Shah' });
-  const owed = parseMoneyText((await row.textContent()) ?? '');
-  await row.getByRole('button', { name: 'Record your payment to Priya Shah' }).click();
+    const row = tab.settleUp.getByRole('listitem').filter({ hasText: 'You pay Priya Shah' });
+    const owed = parseMoneyText((await row.textContent()) ?? '');
+    await row.getByRole('button', { name: 'Record your payment to Priya Shah' }).click();
 
-  // The form takes the pair and the suggested amount, and focus moves to the amount.
-  await expect(tab.amount).toBeFocused();
-  await expect(tab.from).toHaveValue(DEMO_PERSONA_IDS.alex);
-  await expect(tab.to).toHaveValue(priya);
-  await expect(tab.amount).toHaveValue(owed.toFixed(2));
-  await expect(tab.form.getByRole('button', { name: /^Suggested / })).toHaveText(
-    `Suggested ${rupees(owed)}`,
-  );
-  await expect(row).toContainText('In the form');
-  await expect(tab.after).toContainText('You are settled up');
-  await expect(tab.form).toContainText(
-    'Either of you can record it. Priya will see it in Activity.',
-  );
-  await expect(tab.record).toHaveText(`Record payment ${rupees(owed)}`);
+    // The form takes the pair and the suggested amount, and focus moves to the amount.
+    await expect(tab.amount).toBeFocused();
+    await expect(tab.from).toHaveValue(DEMO_PERSONA_IDS.alex);
+    await expect(tab.to).toHaveValue(priya);
+    await expect(tab.amount).toHaveValue(owed.toFixed(2));
+    await expect(tab.form.getByRole('button', { name: /^Suggested / })).toHaveText(
+      `Suggested ${rupees(owed)}`,
+    );
+    await expect(row).toContainText('In the form');
+    await expect(tab.after).toContainText('You are settled up');
+    await expect(tab.form).toContainText(
+      'Either of you can record it. Priya will see it in Activity.',
+    );
+    await expect(tab.record).toHaveText(`Record payment ${rupees(owed)}`);
 
-  // A part of it: the positions after follow the amount.
-  await tab.amount.fill('1');
-  await expect(tab.after).toContainText(`You owe ${rupees(owed - 1)}`);
-  await tab.note.fill(`Part payment (${testInfo.project.name})`);
-  await tab.record.click();
-  await expect(tab.form.getByRole('status')).toHaveText(
-    'Payment recorded. You paid Priya Shah ₹1.00.',
-  );
+    // A part of it: the positions after follow the amount.
+    await tab.amount.fill('1');
+    await expect(tab.after).toContainText(`You owe ${rupees(owed - 1)}`);
+    await tab.note.fill(`Part payment (${testInfo.project.name})`);
+    await tab.record.click();
+    await expect(tab.form.getByRole('status')).toHaveText(
+      'Payment recorded. You paid Priya Shah ₹1.00.',
+    );
 
-  // The form starts afresh, the debt falls by exactly that, and Payments lists it first.
-  await expect(tab.amount).toHaveValue('');
-  await expect(row).toContainText(rupees(owed - 1));
-  const newest = tab.payments.getByRole('row').nth(1).getByRole('cell');
-  await expect(newest.nth(1)).toHaveAccessibleName('You to Priya Shah');
-  await expect(newest.nth(2)).toHaveText('₹1.00');
-  await expect(newest.nth(3)).toHaveText(`Part payment (${testInfo.project.name})`);
-  await expect(newest.nth(4)).toHaveText('You');
-  await expect(tab.payments).not.toContainText('@');
-});
+    // The form starts afresh, the debt falls by exactly that, and Payments lists it first.
+    await expect(tab.amount).toHaveValue('');
+    await expect(row).toContainText(rupees(owed - 1));
+    const newest = tab.payments.getByRole('row').nth(1).getByRole('cell');
+    await expect(newest.nth(1)).toHaveAccessibleName('You to Priya Shah');
+    await expect(newest.nth(2)).toHaveText('₹1.00');
+    await expect(newest.nth(3)).toHaveText(`Part payment (${testInfo.project.name})`);
+    await expect(newest.nth(4)).toHaveText('You');
+    await expect(tab.payments).not.toContainText('@');
+  },
+);
 
 test('a payment from a blank form that nobody suggested needs the explicit tick', async ({
   page,
@@ -114,15 +119,29 @@ test('a payment from a blank form that nobody suggested needs the explicit tick'
   await tab.meantMore.check();
   await expect(tab.record).toBeEnabled();
   await expect(tab.record).toHaveText('Record payment ₹5.00');
-  await tab.record.click();
-  await expect(tab.form.getByRole('status')).toHaveText(
-    'Payment recorded. You paid Sam Chen ₹5.00.',
-  );
-  const newest = tab.payments.getByRole('row').nth(1).getByRole('cell');
-  await expect(newest.nth(1)).toHaveAccessibleName('You to Sam Chen');
-  await expect(newest.nth(2)).toHaveText('₹5.00');
-  await expect(newest.nth(3)).toHaveAccessibleName('No note');
+  // Recording it is a money journey, run once: the next test.
 });
+
+test(
+  'a payment nobody suggested is recorded once ticked, with no note',
+  MONEY_JOURNEY,
+  async ({ page }) => {
+    await enterAsPersona(page, 'alex');
+    const tab = await openBalances(page, DEMO_WORK_GROUP_ID);
+    await tab.to.selectOption({ label: 'Sam Chen' });
+    await tab.amount.fill('5');
+    await tab.meantMore.check();
+    await expect(tab.record).toHaveText('Record payment ₹5.00');
+    await tab.record.click();
+    await expect(tab.form.getByRole('status')).toHaveText(
+      'Payment recorded. You paid Sam Chen ₹5.00.',
+    );
+    const newest = tab.payments.getByRole('row').nth(1).getByRole('cell');
+    await expect(newest.nth(1)).toHaveAccessibleName('You to Sam Chen');
+    await expect(newest.nth(2)).toHaveText('₹5.00');
+    await expect(newest.nth(3)).toHaveAccessibleName('No note');
+  },
+);
 
 test('paying more than suggested warns, and Record waits for the tick', async ({
   page,
@@ -196,6 +215,7 @@ test('only a pair that includes the member can be recorded', async ({ page }, te
 test('the Balances tab with Record payment is accessible', async ({ page }, testInfo) => {
   await enterAsPersona(page, 'alex');
   const tab = await openBalances(page, DEMO_HOUSEHOLD_ID);
+  await expectThemeApplied(page, testInfo);
   await expect(tab.payments).toBeVisible();
   await expect(page.getByRole('region', { name: 'All-time balance' })).toContainText('You owe');
   await expectNoSeriousA11yViolations(page, testInfo, 'record-payment');
