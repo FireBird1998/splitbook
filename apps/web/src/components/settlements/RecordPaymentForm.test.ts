@@ -192,6 +192,30 @@ describe('a new payment', () => {
     expect(record(html)).toEqual({ text: 'Record payment', disabled: true });
   });
 
+  it('says why it won’t take an amount, in a message announced politely (#514)', () => {
+    /** The amount's message: its live region's setting and its words. */
+    const message = (html: string) => {
+      const region = /<p\b([^>]*\sid="record-payment-amount-error"[^>]*)>([\s\S]*?)<\/p>/.exec(
+        html,
+      );
+      return region && { live: /\saria-live="polite"/.test(region[1]), text: text(region[2]) };
+    };
+    for (const [amount, reason] of [
+      ['0', 'Enter an amount above ₹0.00.'],
+      ['-5', 'Enter an amount above ₹0.00.'],
+      ['1.234', 'Use at most 2 decimal places.'],
+      ['20000000', 'Enter at most ₹10,000,000.00.'],
+      ['10,50', 'Enter an amount like 1,060.00.'],
+    ]) {
+      const { html } = render({ to: SAM, amount });
+      expect(message(html), amount).toEqual({ live: true, text: reason });
+      expect(field(html, 'record-payment-amount').invalid).toBe(true);
+      expect(record(html)?.disabled).toBe(true);
+    }
+    // The region is there before any message, so the first one is announced too.
+    expect(message(render({ to: SAM, amount: '100' }).html)).toEqual({ live: true, text: '' });
+  });
+
   it('keeps a note to 500 characters', () => {
     const { html, text: shown } = render({ to: SAM, amount: '100', note: 'x'.repeat(501) });
     expect(shown).toContain('Keep the note to 500 characters (501 now).');

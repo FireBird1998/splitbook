@@ -80,6 +80,22 @@ describe('readPaymentAmount', () => {
     }
   });
 
+  it('says a negative amount must be above zero, as zero itself does (#514)', () => {
+    for (const typed of ['-5', '−5', '-0.50', '- 1,060.00'])
+      expect(readPaymentAmount(typed, 'INR')).toEqual({
+        status: 'invalid',
+        message: 'Enter an amount above ₹0.00.',
+      });
+    expect(readPaymentAmount('-5', 'USD')).toEqual({
+      status: 'invalid',
+      message: 'Enter an amount above $0.00.',
+    });
+    expect(readPaymentAmount('-ten', 'INR')).toEqual({
+      status: 'invalid',
+      message: 'Enter an amount like 1,060.00.',
+    });
+  });
+
   it('refuses more decimal places than the currency has', () => {
     expect(readPaymentAmount('10.005', 'INR')).toEqual({
       status: 'invalid',

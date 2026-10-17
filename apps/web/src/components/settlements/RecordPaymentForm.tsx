@@ -594,75 +594,85 @@ export default function RecordPaymentForm({
               </Button>
             )}
           </Box>
-          <InputBase
-            inputRef={amountField}
-            value={amountText}
-            onChange={(event) => {
-              setAmount(event.target.value);
-              setAmountTyped(true);
-              setAck(false);
-              setShowOutcome(false);
-            }}
-            startAdornment={
-              <Box
-                component="span"
-                role="img"
-                aria-label={currencyLabel(shown?.currency ?? currency)}
-                sx={(theme) => ({
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <InputBase
+              inputRef={amountField}
+              value={amountText}
+              onChange={(event) => {
+                setAmount(event.target.value);
+                setAmountTyped(true);
+                setAck(false);
+                setShowOutcome(false);
+              }}
+              startAdornment={
+                <Box
+                  component="span"
+                  role="img"
+                  aria-label={currencyLabel(shown?.currency ?? currency)}
+                  sx={(theme) => ({
+                    ...theme.typography.money,
+                    flex: 'none',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    color: 'text.secondary',
+                    bgcolor: 'surface.muted',
+                    borderRadius: '8px',
+                    px: 1.125,
+                    py: 0.625,
+                    mr: 1.25,
+                  })}
+                >
+                  {shown?.currency ?? currency}
+                </Box>
+              }
+              inputProps={{
+                id: 'record-payment-amount',
+                inputMode: 'decimal',
+                autoComplete: 'off',
+                readOnly,
+                'aria-invalid': amountError ? 'true' : 'false',
+                'aria-describedby': amountError ? 'record-payment-amount-error' : undefined,
+              }}
+              sx={(theme) => ({
+                minHeight: 60,
+                border: 1,
+                borderColor: amountError ? 'status.negative' : 'border.strong',
+                boxShadow: amountError
+                  ? `inset 0 0 0 1px ${theme.palette.status.negative}`
+                  : 'none',
+                borderRadius: '12px',
+                bgcolor: readOnly ? 'surface.muted' : 'background.paper',
+                color: 'text.primary',
+                pl: 1.25,
+                pr: 1.75,
+                '&.Mui-focused': {
+                  borderColor: 'focus.main',
+                  boxShadow: `0 0 0 3px ${theme.palette.focus.ring}`,
+                },
+                '& input:focus-visible': { outline: 'none', boxShadow: 'none' },
+                '& input': {
                   ...theme.typography.money,
-                  flex: 'none',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  color: 'text.secondary',
-                  bgcolor: 'surface.muted',
-                  borderRadius: '8px',
-                  px: 1.125,
-                  py: 0.625,
-                  mr: 1.25,
-                })}
-              >
-                {shown?.currency ?? currency}
-              </Box>
-            }
-            inputProps={{
-              id: 'record-payment-amount',
-              inputMode: 'decimal',
-              autoComplete: 'off',
-              readOnly,
-              'aria-invalid': amountError ? 'true' : 'false',
-              'aria-describedby': amountError ? 'record-payment-amount-error' : undefined,
-            }}
-            sx={(theme) => ({
-              minHeight: 60,
-              border: 1,
-              borderColor: amountError ? 'status.negative' : 'border.strong',
-              boxShadow: amountError ? `inset 0 0 0 1px ${theme.palette.status.negative}` : 'none',
-              borderRadius: '12px',
-              bgcolor: readOnly ? 'surface.muted' : 'background.paper',
-              color: 'text.primary',
-              pl: 1.25,
-              pr: 1.75,
-              '&.Mui-focused': {
-                borderColor: 'focus.main',
-                boxShadow: `0 0 0 3px ${theme.palette.focus.ring}`,
-              },
-              '& input:focus-visible': { outline: 'none', boxShadow: 'none' },
-              '& input': {
-                ...theme.typography.money,
-                fontSize: '1.625rem',
-                letterSpacing: '-0.03em',
-                py: 1,
-              },
-            })}
-          />
-          {amountError && (
+                  fontSize: '1.625rem',
+                  letterSpacing: '-0.03em',
+                  py: 1,
+                },
+              })}
+            />
+            {/* Always present, so even its first message is announced, and polite, so it never
+                interrupts typing (#514). */}
             <Typography
               id="record-payment-amount-error"
-              sx={{ m: 0, fontSize: '0.75rem', color: 'status.negative' }}
+              aria-live="polite"
+              sx={{
+                m: 0,
+                mt: amountError ? 0.75 : 0,
+                fontSize: '0.75rem',
+                color: 'status.negative',
+              }}
             >
               {amountError}
             </Typography>
-          )}
+          </Box>
         </Box>
 
         {check?.overpayment && (
