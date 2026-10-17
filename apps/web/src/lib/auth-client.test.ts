@@ -68,7 +68,7 @@ describe('signOutToHome', () => {
     assign.mockImplementation(() => (keptOnLeaving = attemptsKept()));
     const { signOutToHome } = await import('./auth-client');
 
-    await signOutToHome();
+    expect(await signOutToHome()).toBe('leaving');
 
     expect(keptDuringSignOut).toBe(1);
     expect(keptOnLeaving).toBe(0);
@@ -79,16 +79,17 @@ describe('signOutToHome', () => {
     signOut.mockResolvedValue({ data: null, error: { status: 500, statusText: 'Server error' } });
     const { signOutToHome } = await import('./auth-client');
 
-    await signOutToHome();
+    expect(await signOutToHome()).toBe('leaving');
 
     expect(attemptsKept()).toBe(1);
   });
 
-  it('keeps them when the sign-out cannot reach the server', async () => {
+  it('keeps them, and the page, when the sign-out cannot reach the server (#536)', async () => {
     signOut.mockRejectedValue(new TypeError('Failed to fetch'));
     const { signOutToHome } = await import('./auth-client');
 
-    await expect(signOutToHome()).rejects.toThrow('Failed to fetch');
+    // Not left: the caller tells the member, with nothing thrown for the page to miss.
+    expect(await signOutToHome()).toBe('unreachable');
 
     expect(attemptsKept()).toBe(1);
     expect(assign).not.toHaveBeenCalled();

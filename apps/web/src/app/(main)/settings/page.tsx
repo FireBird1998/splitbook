@@ -17,7 +17,8 @@ import { CURRENCIES, CURRENCY_CODES } from '@splitbook/shared/currency';
 import { updateProfileSchema } from '@splitbook/shared/validators/profile';
 import ConnectionsSetting from '@/components/mcp/ConnectionsSetting';
 import ShortcutsSetting from '@/components/shortcuts/ShortcutsSetting';
-import { authClient, signOutToHome } from '@/lib/auth-client';
+import { authClient } from '@/lib/auth-client';
+import { SignOutNotice, useSignOut } from '@/components/layout/sign-out';
 import { apiFetch } from '@/lib/utils/api-fetch';
 
 export default function SettingsPage() {
@@ -26,6 +27,7 @@ export default function SettingsPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('INR');
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState('');
+  const { signOut, unreachable, dismiss } = useSignOut();
   const [error, setError] = useState('');
   const [nameError, setNameError] = useState('');
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -220,13 +222,14 @@ export default function SettingsPage() {
             color="error"
             sx={{ color: 'status.negative', borderColor: 'status.negative' }}
             startIcon={<LogoutIcon />}
-            onClick={() => void signOutToHome()}
+            onClick={signOut}
           >
             Sign Out
           </Button>
         </Stack>
       </Paper>
 
+      <SignOutNotice unreachable={unreachable} onClose={dismiss} />
       <Snackbar
         open={!!snackbar}
         autoHideDuration={3000}

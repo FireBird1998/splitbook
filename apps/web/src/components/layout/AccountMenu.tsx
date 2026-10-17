@@ -11,7 +11,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { signOutToHome } from '@/lib/auth-client';
+import { SignOutNotice, useSignOut } from './sign-out';
 import { SETTINGS_HREF } from './shell-nav';
 
 export interface ShellUser {
@@ -42,6 +42,7 @@ interface AccountMenuProps {
  */
 export default function AccountMenu({ user, onNavigate }: AccountMenuProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const { signOut, unreachable, dismiss } = useSignOut();
   const open = Boolean(anchorEl);
   const name = user.name || user.email || 'Account';
 
@@ -132,7 +133,7 @@ export default function AccountMenu({ user, onNavigate }: AccountMenuProps) {
         <MenuItem
           onClick={() => {
             setAnchorEl(null);
-            void signOutToHome();
+            signOut();
           }}
         >
           <ListItemIcon>
@@ -141,6 +142,7 @@ export default function AccountMenu({ user, onNavigate }: AccountMenuProps) {
           Sign Out
         </MenuItem>
       </Menu>
+      <SignOutNotice unreachable={unreachable} onClose={dismiss} />
     </>
   );
 }
