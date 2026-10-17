@@ -10,6 +10,7 @@ import { mcpResource } from '@/lib/mcp/config';
  *   (`MCP_ENABLED`, with an app address it accepts), and can prepare items for To review only
  *   when persistent Drafts are on too (`PERSISTENT_DRAFTS_ENABLED=true`, read exactly as the
  *   assistant connection reads it).
+ * - To review, and Finish later with it, is live when persistent Drafts are on (#446).
  * - The Google Play listing is `NEXT_PUBLIC_PLAY_STORE_URL`, an `https://play.google.com/store/
  *   apps/details?id=…` address; without one, no store badge or "Get the app" shows.
  * - Pricing shows only with `LANDING_PRICING_VISIBLE=true`, until billing exists.
@@ -18,6 +19,7 @@ import { mcpResource } from '@/lib/mcp/config';
  */
 export interface WhatsLive {
   assistants: { available: boolean; canPrepare: boolean };
+  toReview: boolean;
   playStoreUrl: string | null;
   pricingVisible: boolean;
   links: { privacy: string | null; terms: string | null; support: string | null };
@@ -66,11 +68,10 @@ function allowedLink(value: string | undefined, allowEmail = false): string | nu
 
 export function whatsLive(env: WhatsLiveEnv = process.env): WhatsLive {
   const available = assistantsAvailable(env);
+  const toReview = env.PERSISTENT_DRAFTS_ENABLED === 'true';
   return {
-    assistants: {
-      available,
-      canPrepare: available && env.PERSISTENT_DRAFTS_ENABLED === 'true',
-    },
+    assistants: { available, canPrepare: available && toReview },
+    toReview,
     playStoreUrl: playStoreUrl(env.NEXT_PUBLIC_PLAY_STORE_URL),
     pricingVisible: on(env.LANDING_PRICING_VISIBLE),
     links: {

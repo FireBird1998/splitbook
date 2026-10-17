@@ -55,6 +55,20 @@ test.describe('google auth mode', () => {
     await expect(page.getByText(/demo persona/i)).toHaveCount(0);
     await expect(page.getByText('Demo mode', { exact: true })).toHaveCount(0);
 
+    // The content sections between the hero and the closing call to action (#446). With no
+    // Play listing, the web card stands alone.
+    for (const name of [
+      'Not just trips. Every kind of shared money.',
+      'Split it the way it actually happened.',
+      'Your Groups on a bigger screen.',
+      'Why you can trust it',
+    ])
+      await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeAttached();
+    await expect(page.getByRole('region', { name: 'Why you can trust it' })).toContainText(
+      'Exact money',
+    );
+    await expect(page.getByText('Android', { exact: false })).toHaveCount(0);
+
     // This server has nothing optional live (#444): no store, assistants, pricing (#447) or
     // legal links.
     await expect(

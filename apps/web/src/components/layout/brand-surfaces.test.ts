@@ -154,7 +154,31 @@ describe('the landing page', () => {
     // ©, ® and ™ are typographic signs, not emoji, though Unicode counts them as pictographs.
     expect(html).not.toMatch(/(?![©®™])\p{Extended_Pictographic}/u);
     const icons = [...html.matchAll(/<svg\b[^>]*data-testid="(\w+)Icon"/g)].map(([, name]) => name);
-    expect(icons).toEqual(['Google', 'Google']);
+    expect(icons).toEqual([
+      'Google',
+      // The content sections (#446): every Theme, the Trip strip's plane, splitting, the web
+      // card and its Sign in, and trust.
+      'LuggageOutlined',
+      'FlightOutlined',
+      'HomeOutlined',
+      'FavoriteBorderOutlined',
+      'WorkOutlineOutlined',
+      'PeopleOutlined',
+      'CallSplitOutlined',
+      'PaymentsOutlined',
+      'CheckCircleOutline',
+      'CurrencyExchangeOutlined',
+      'CheckCircleOutline',
+      'LaptopOutlined',
+      'SearchOutlined',
+      'InsertChartOutlined',
+      'FileDownloadOutlined',
+      'Google',
+      'CalculateOutlined',
+      'HistoryOutlined',
+      'LockOutlined',
+      'Google',
+    ]);
   });
 });
 
