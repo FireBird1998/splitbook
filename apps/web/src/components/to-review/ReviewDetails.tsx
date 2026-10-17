@@ -16,23 +16,28 @@ export function reviewSource(item: ToReviewItem) {
   const by = item.draft.preparedBy;
   return by.kind === 'assistant' ? `From ${by.name}` : 'You set this aside';
 }
-export function reviewAmount(values: ExpenseDraftValues = {}) {
-  return values.amount !== undefined && values.currency
-    ? formatCurrency(values.amount, values.currency)
+/** An item without a currency is in its Group's, as on Add expense (#512). */
+export function reviewAmount(values: ExpenseDraftValues = {}, groupCurrency?: string) {
+  const currency = values.currency || groupCurrency;
+  return values.amount !== undefined && currency
+    ? formatCurrency(values.amount, currency)
     : 'Amount missing';
 }
 export function ReviewFacts({
   item,
   names,
+  currency,
 }: {
   item: ToReviewItem | DraftReview;
   names: Readonly<Record<string, string>>;
+  /** The Group's currency. */
+  currency?: string;
 }) {
   const v = item.draft.values ?? {};
   return (
     <Box sx={{ overflowWrap: 'anywhere' }}>
       <Typography fontWeight={600}>
-        {v.description || 'Description missing'} · {reviewAmount(v)}
+        {v.description || 'Description missing'} · {reviewAmount(v, currency)}
       </Typography>
       <Typography variant="body2" color="text.secondary">
         {reviewDate(v.date)} · {reviewSource(item)}
@@ -85,10 +90,13 @@ export function ReviewMatches({
   item,
   items,
   names,
+  currency,
 }: {
   item: ToReviewItem;
   items: ToReviewItem[];
   names: Readonly<Record<string, string>>;
+  /** The Group's currency. */
+  currency?: string;
 }) {
   return (
     <Box
@@ -108,6 +116,7 @@ export function ReviewMatches({
               <ReviewFacts
                 item={items.find((other) => other.draft.id === match.id)!}
                 names={names}
+                currency={currency}
               />
             ) : (
               <Typography>{match.description} · Another item in To review</Typography>

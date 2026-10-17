@@ -8,9 +8,10 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
-import type { ReviewItemModel } from '@splitbook/shared/to-review';
+import { reviewDate, type ReviewItemModel } from '@splitbook/shared/to-review';
 import type { ItemQuickFixes, QuickFixFact } from '@splitbook/shared/to-review-quick-fixes';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
+import { reviewAmount, reviewSource } from './ReviewDetails';
 
 const chip = {
   minHeight: { xs: 44, md: 36 },
@@ -48,9 +49,7 @@ const keyHint = {
 export default function ReviewRow({
   item,
   quick,
-  title,
-  amount,
-  meta,
+  currency,
   open,
   selected,
   disabled,
@@ -66,9 +65,8 @@ export default function ReviewRow({
 }: {
   item: ReviewItemModel;
   quick: ItemQuickFixes;
-  title: string;
-  amount: string;
-  meta: string;
+  /** The Group's currency, which an item without its own is in (#512). */
+  currency?: string;
   open: boolean;
   selected: boolean;
   /** Quick fixes, Save and Delete: off while busy, offline or another item is open. */
@@ -85,6 +83,12 @@ export default function ReviewRow({
   onDelete: () => void;
 }) {
   const [menu, setMenu] = useState<HTMLElement | null>(null);
+  // A missing fact is said once, in the Needs line, so its place here stays empty (#512).
+  const values = item.accountItem?.draft.values ?? {};
+  const title = values.description || 'Expense to review';
+  const meta = [values.date && reviewDate(values.date), reviewSource(item.accountItem!)]
+    .filter(Boolean)
+    .join(' · ');
   const groups = quick.fixes.map((fix) => ({
     fix,
     options: showAll.has(fix.fact) ? fix.options : fix.visible,
@@ -159,7 +163,11 @@ export default function ReviewRow({
             </Typography>
           )}
         </Box>
-        <Typography sx={{ fontFamily: FONT_MONO, flexShrink: 0, pt: 0.25 }}>{amount}</Typography>
+        {values.amount !== undefined && (
+          <Typography sx={{ fontFamily: FONT_MONO, flexShrink: 0, pt: 0.25 }}>
+            {reviewAmount(values, currency)}
+          </Typography>
+        )}
         {item.state === 'ready' && (
           <Button
             variant="outlined"

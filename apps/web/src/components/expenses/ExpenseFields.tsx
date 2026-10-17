@@ -51,6 +51,8 @@ export interface ExpenseFieldsProps {
   groupCategory?: GroupCategory;
   isEditMode: boolean;
   review?: boolean;
+  /** In review, the Group's currency: the field offers only it, and a different one the item has. */
+  groupCurrency?: string;
   currentTag?: string | null;
   currentTagId?: string | null;
   previewAmount: (id: string) => string;
@@ -69,6 +71,7 @@ export default function ExpenseFields({
   currentTagId,
   previewAmount,
   review = false,
+  groupCurrency,
 }: ExpenseFieldsProps) {
   const {
     description,
@@ -87,6 +90,19 @@ export default function ExpenseFields({
   } = values;
   const groupNoun = getGroupTheme(groupCategory ?? 'other').nouns.singular;
   const groupNounTitle = groupNoun.charAt(0).toUpperCase() + groupNoun.slice(1);
+  // Add expense locks the Group's currency. To review does too, unless the item has another one,
+  // which the member can only change to the Group's (#512).
+  const currencyCodes = !review
+    ? [currency]
+    : groupCurrency
+      ? [...new Set([currency, groupCurrency])]
+      : CURRENCIES.map((option) => option.code);
+  let currencyHelp = isEditMode ? 'Expense currency' : `${groupNounTitle} currency`;
+  if (review && groupCurrency)
+    currencyHelp =
+      currency === groupCurrency
+        ? `${groupNounTitle} currency`
+        : `This ${groupNoun} uses ${groupCurrency}`;
   const [showSplitOptions, setShowSplitOptions] = useState(isEditMode);
   const [showMoreOptions, setShowMoreOptions] = useState(isEditMode);
   // ─── Derived Values ────────────────────────────────
@@ -311,18 +327,16 @@ export default function ExpenseFields({
           label="Currency"
           value={currency}
           size="small"
-          disabled={!review}
+          disabled={currencyCodes.length < 2}
           onChange={(event) => edit({ currency: event.target.value })}
-          helperText={isEditMode ? 'Expense currency' : `${groupNounTitle} currency`}
+          helperText={currencyHelp}
           sx={{ width: review ? '100%' : { xs: '100%', sm: 120 } }}
         >
-          {(review ? CURRENCIES : CURRENCIES.filter((option) => option.code === currency)).map(
-            (option) => (
-              <MenuItem key={option.code} value={option.code}>
-                {option.flag} {option.code}
-              </MenuItem>
-            ),
-          )}
+          {CURRENCIES.filter((option) => currencyCodes.includes(option.code)).map((option) => (
+            <MenuItem key={option.code} value={option.code}>
+              {option.flag} {option.code}
+            </MenuItem>
+          ))}
         </TextField>
         <TextField
           label="Date"

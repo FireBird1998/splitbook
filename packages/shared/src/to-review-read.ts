@@ -14,6 +14,8 @@ const toReviewReadSchema = z.looseObject({
     z.looseObject({
       groupId: identity,
       groupName: z.string(),
+      /** The Group's Expense currency, which a Draft without one takes (#512). */
+      currency: z.string().optional(),
       count: z.number().int().nonnegative(),
       items: z.array(toReviewItemSchema),
     }),

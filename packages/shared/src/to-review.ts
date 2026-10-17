@@ -7,6 +7,7 @@ import { parseAmountMinor, sumMinorAmounts, toMajorAmount } from './exact-money'
 import {
   completeExpenseDraftSchema,
   missingDraftFields,
+  withGroupCurrency,
   type ExpenseDraftValues,
 } from './validators/expense-draft';
 import type { ToReviewItem, ToReviewRead } from './to-review-read';
@@ -98,8 +99,8 @@ function unmetNeed(
     : { need: 'a whole-number amount', sentence: 'The amount must be a whole number.' };
 }
 
-function accountModel(item: ToReviewItem): ReviewItemModel {
-  const values = item.draft.values ?? {};
+function accountModel(item: ToReviewItem, groupCurrency?: string): ReviewItemModel {
+  const values = withGroupCurrency(item.draft.values, groupCurrency);
   const parsed = completeExpenseDraftSchema.safeParse(values);
   const issues = parsed.success ? [] : parsed.error.issues;
   const missing = missingDraftFields(values, issues, item.draft.missingFields ?? []);
@@ -172,7 +173,9 @@ export function buildToReview(
   deviceItems: readonly DeviceToReviewItem[],
   now: Date,
 ) {
-  const items: ReviewItemModel[] = read.groups.flatMap((group) => group.items.map(accountModel));
+  const items: ReviewItemModel[] = read.groups.flatMap((group) =>
+    group.items.map((item) => accountModel(item, group.currency)),
+  );
   items.push(
     ...deviceItems.map((item) => ({
       id: item.id,
@@ -192,6 +195,7 @@ export function buildToReview(
       a.id.localeCompare(b.id),
   );
   const names = new Map(read.groups.map((group) => [group.groupId, group.groupName]));
+  const currencies = new Map(read.groups.map((group) => [group.groupId, group.currency]));
   for (const item of deviceItems)
     if (!names.has(item.groupId)) names.set(item.groupId, item.groupName);
   const groups = [...names]
@@ -200,6 +204,7 @@ export function buildToReview(
       return {
         groupId,
         groupName,
+        currency: currencies.get(groupId),
         items: own,
         counts: counts(own),
         sourceSummary: toReviewSourceSummary(own),
@@ -212,7 +217,9 @@ export function buildToReview(
   );
   const amounts = new Map<string, number[]>();
   for (const item of ready) {
-    const values = completeExpenseDraftSchema.parse(item.draft.values);
+    const values = completeExpenseDraftSchema.parse(
+      withGroupCurrency(item.draft.values, currencies.get(item.draft.groupId)),
+    );
     const list = amounts.get(values.currency) ?? [];
     list.push(parseAmountMinor(values.amount, values.currency));
     amounts.set(values.currency, list);

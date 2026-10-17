@@ -110,6 +110,11 @@ describe('GET /api/user/to-review', () => {
         { groupId: flat, groupName: 'Lakeview Flat', count: 1, drafts: flatDrafts },
       ],
     });
+    // Each Group names its currency, which a Draft without one takes (#512).
+    expect(listed.body.data.groups.map((group: { currency: string }) => group.currency)).toEqual([
+      'INR',
+      'INR',
+    ]);
   });
 
   it('shows Alex none of the Drafts Sam keeps in Alex’s Group', async () => {

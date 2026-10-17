@@ -197,7 +197,12 @@ export default function ToReviewPanel({
         ))}
         {duplicate && (
           <>
-            <ReviewMatches item={item.accountItem!} items={items} names={names} />
+            <ReviewMatches
+              item={item.accountItem!}
+              items={items}
+              names={names}
+              currency={context.currency}
+            />
             <FormControlLabel
               control={
                 <Checkbox

@@ -25,6 +25,7 @@ import { PayerSheet, paidBySummary } from './payer-sheet';
 import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
 import { useTheme } from './theme';
+import { CurrencyBadge } from './expense-inputs';
 import { reviewedItemsLine } from './review-run-copy';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
@@ -124,8 +125,13 @@ function ReviewRunContent({
   }
   const { item, groupId, groupName } = selected;
   const values = item.draft.values ?? {};
+  // An item without a currency is in its Group's, as on Add expense (#512).
+  const groupCurrency = state.context?.group.defaultCurrency;
   const model = buildToReview(
-    { total: 1, groups: [{ groupId, groupName, count: 1, items: [item] }] },
+    {
+      total: 1,
+      groups: [{ groupId, groupName, currency: groupCurrency, count: 1, items: [item] }],
+    },
     [],
     new Date(controller.reviewNow()),
   ).items[0];
@@ -216,19 +222,30 @@ function ReviewRunContent({
           <Copy>
             {source} · {day} {clockTime(item.draft.createdAt)}
           </Copy>
-          <Money numberOfLines={0}>{money(values.amount, values.currency)}</Money>
-          <TextInput
-            key={`amount:${state.changed?.after.revision ?? 0}`}
-            accessibilityLabel="Amount"
-            value={typedAmount ?? form.amount}
-            editable={!locked}
-            keyboardType="decimal-pad"
-            onChangeText={(amount) => {
-              setTypedAmount(amount);
-              change({ amount });
-            }}
-            style={{ color: theme.text, padding: 12, borderColor: theme.border, borderWidth: 1 }}
-          />
+          <Money numberOfLines={0}>{money(values.amount, values.currency || groupCurrency)}</Money>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {groupCurrency && (values.currency ?? groupCurrency) === groupCurrency && (
+              <CurrencyBadge currency={groupCurrency} recorded={false} />
+            )}
+            <TextInput
+              key={`amount:${state.changed?.after.revision ?? 0}`}
+              accessibilityLabel="Amount"
+              value={typedAmount ?? form.amount}
+              editable={!locked}
+              keyboardType="decimal-pad"
+              onChangeText={(amount) => {
+                setTypedAmount(amount);
+                change({ amount });
+              }}
+              style={{
+                flex: 1,
+                color: theme.text,
+                padding: 12,
+                borderColor: theme.border,
+                borderWidth: 1,
+              }}
+            />
+          </View>
           <TextInput
             key={`description:${state.changed?.after.revision ?? 0}`}
             accessibilityLabel="Description"
@@ -237,11 +254,12 @@ function ReviewRunContent({
             onChangeText={(description) => change({ description })}
             style={{ color: theme.text, padding: 12, borderColor: theme.border, borderWidth: 1 }}
           />
-          {!values.currency && (
+          {/* Another currency can only change to the Group's. */}
+          {groupCurrency && values.currency && values.currency !== groupCurrency && (
             <Button
-              label={`Use ${form.currency} as currency`}
+              label={`Use ${groupCurrency}, the Group’s currency`}
               disabled={locked}
-              onPress={() => change({ currency: form.currency })}
+              onPress={() => change({ currency: groupCurrency })}
             />
           )}
           <OptionalDetails draft={form} locked={locked} onChange={change} />
