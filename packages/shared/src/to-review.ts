@@ -4,7 +4,11 @@ import { formatDate } from './date';
 import { toDateParam } from './date';
 import { formatCurrency } from './currency';
 import { parseAmountMinor, sumMinorAmounts, toMajorAmount } from './exact-money';
-import { completeExpenseDraftSchema, type ExpenseDraftValues } from './validators/expense-draft';
+import {
+  completeExpenseDraftSchema,
+  missingDraftFields,
+  type ExpenseDraftValues,
+} from './validators/expense-draft';
 import type { ToReviewItem, ToReviewRead } from './to-review-read';
 
 export type ToReviewState = 'ready' | 'duplicate' | 'needs-details' | 'on-this-phone';
@@ -44,13 +48,59 @@ const labels: Record<ToReviewState, string> = {
   'needs-details': 'Needs details',
   'on-this-phone': 'On this phone',
 };
+/** What an item needs when its split, payers or percentages don't add up (#506). */
+export const SPLIT_TOTAL_NEED = 'the split to add up to the total';
+export const PAID_TOTAL_NEED = 'the amounts paid to add up to the total';
+export const PERCENTAGE_TOTAL_NEED = 'the percentages to add up to 100%';
+
+/**
+ * What an item needs when a fact it has is wrong rather than missing (#506): worded to follow
+ * "Needs", and as a sentence for the problem on its own. Without it, a split that doesn't add up
+ * read as a missing amount, and a member could change the total to match the shares.
+ */
+function unmetNeed(reason: string): { need: string; sentence: string } | undefined {
+  if (reason === 'Split amounts must add up to the expense amount')
+    return {
+      need: SPLIT_TOTAL_NEED,
+      sentence: 'The split must add up to the total.',
+    };
+  if (reason === 'Payer amounts must add up to the expense amount')
+    return {
+      need: PAID_TOTAL_NEED,
+      sentence: 'The amounts paid must add up to the total.',
+    };
+  if (reason === 'Percentages must add up to 100')
+    return {
+      need: PERCENTAGE_TOTAL_NEED,
+      sentence: 'The percentages must add up to 100%.',
+    };
+  const decimals = reason.match(/^Amount supports at most (\d+) decimal places$/);
+  if (!decimals) return undefined;
+  if (decimals[1] === '0')
+    return { need: 'a whole-number amount', sentence: 'The amount must be a whole number.' };
+  const places = decimals[1] === '1' ? '1 decimal place' : `${decimals[1]} decimal places`;
+  return {
+    need: `an amount with at most ${places}`,
+    sentence: `The amount can have at most ${places}.`,
+  };
+}
+
 function accountModel(item: ToReviewItem): ReviewItemModel {
-  const parsed = completeExpenseDraftSchema.safeParse(item.draft.values);
-  const fields = [
-    ...(item.draft.missingFields ?? []),
-    ...(parsed.success ? [] : parsed.error.issues.map((issue) => String(issue.path[0] ?? ''))),
+  const values = item.draft.values ?? {};
+  const parsed = completeExpenseDraftSchema.safeParse(values);
+  const issues = parsed.success ? [] : parsed.error.issues;
+  const missing = missingDraftFields(values, issues, item.draft.missingFields ?? []);
+  // A fact that is there but wrong reads as what it needs, or as the fact for a reason without
+  // member words.
+  const wrong = issues
+    .filter((issue) => !missing.includes(String(issue.path[0] ?? 'expense')))
+    .map((issue) => unmetNeed(issue.message)?.need ?? facts[String(issue.path[0])]);
+  const missingFacts = [
+    ...new Set([
+      ...missing.map((field) => facts[field] ?? 'the expense details'),
+      ...wrong.map((need) => need ?? 'the expense details'),
+    ]),
   ];
-  const missingFacts = [...new Set(fields.map((field) => facts[field] ?? 'the expense details'))];
   if (item.problems.length && !missingFacts.length) missingFacts.push('the expense details');
   const state = missingFacts.length
     ? 'needs-details'
@@ -304,6 +354,11 @@ function problemPath(message: string) {
   return path ? { field: path[1], index: path[2], part: path[3] } : null;
 }
 
+/** A validation problem's reason, without the path in front of it. */
+function problemReason(message: string) {
+  return message.replace(/^(?:Invalid Draft: )?[a-zA-Z]+(?:\.\d+\.[a-zA-Z]+)?: /, '');
+}
+
 /** Interpret known validation paths; never forward server prose or unknown paths to members. */
 export function reviewProblem(
   message: string,
@@ -318,13 +373,14 @@ export function reviewProblem(
     'Could not confirm this action. Check your connection and try again.',
   ];
   if (memberMessages.includes(message)) return message;
+  const unmet = unmetNeed(problemReason(message));
+  if (unmet) return unmet.sentence;
   const known: Record<string, string> = {
     INVALID_MEMBERS: 'Choose current Group members for who paid and who shared it.',
     INVALID_TAG: 'Choose an available Tag.',
     CURRENCY_MISMATCH: 'Choose the Group currency.',
     STALE_REVISION: 'This item changed. Check the latest version before saving.',
     'Each person can appear only once': 'Choose each member only once.',
-    'Percentages must add up to 100': 'The percentages must add up to 100%.',
   };
   if (Object.hasOwn(known, message)) return known[message];
   const path = problemPath(message);
@@ -359,6 +415,9 @@ export function memberProblems(
   for (const problem of problems) {
     const path = problemPath(problem);
     if (path && path.index === undefined && item.missingFacts.includes(facts[path.field])) continue;
+    // A wrong fact the Needs line already names (#506).
+    const unmet = unmetNeed(problemReason(problem));
+    if (unmet && item.missingFacts.includes(unmet.need)) continue;
     const words = reviewProblem(problem, values, names);
     if (!said.includes(words)) said.push(words);
   }

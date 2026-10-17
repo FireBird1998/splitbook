@@ -601,6 +601,31 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     ))
       expect(node.props.accessibilityLabel).toBeTruthy();
   });
+  it('names a split that does not add up, not a missing amount (#506)', async () => {
+    const f = fixture({ one: true });
+    // ₹12.34 split exactly as ₹10, as the server sent it before #506: the reason at the amount.
+    const item = f.items()[0];
+    item.draft.values = {
+      ...item.draft.values,
+      splitMethod: 'exact',
+      splitBetween: [{ user: user.id, amount: 10 }],
+    };
+    item.draft.missingFields = ['amount'];
+    item.problems = ['amount: Split amounts must add up to the expense amount'];
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+
+    expect(text(tree)).toContain(
+      'One thing left before you can save: the split to add up to the total',
+    );
+    expect(text(tree)).toContain('Must add up to the total');
+    expect(text(tree)).not.toContain('the amount');
+    expect(text(tree)).not.toContain('Choose who shared it and how');
+    expect(button(tree, 'Save expense').props.disabled).toBe(true);
+  });
   it('shows the shared change note from a newer read, and never saves an unseen version', async () => {
     const f = fixture({ one: true });
     await signIn(f);

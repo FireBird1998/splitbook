@@ -5,6 +5,9 @@ import {
   buildToReview,
   summarizeReviewRun,
   describeDraftChange,
+  PAID_TOTAL_NEED,
+  PERCENTAGE_TOTAL_NEED,
+  SPLIT_TOTAL_NEED,
 } from '@splitbook/shared/to-review';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
@@ -246,10 +249,20 @@ function ReviewRunContent({
             locked={locked}
             errors={{
               date: missing.includes('the date') ? 'Choose a date' : undefined,
-              payers: missing.includes('who paid') ? 'Who paid? · Choose' : undefined,
-              split: missing.some((f) => /split|shared/.test(f))
-                ? 'Choose who shared it and how'
-                : undefined,
+              payers: missing.includes('who paid')
+                ? 'Who paid? · Choose'
+                : missing.includes(PAID_TOTAL_NEED)
+                  ? 'Must add up to the total'
+                  : undefined,
+              // A split that is there but doesn't add up says so, not "Choose" (#506).
+              split:
+                missing.includes('who shared it') || missing.includes('how to split it')
+                  ? 'Choose who shared it and how'
+                  : missing.includes(SPLIT_TOTAL_NEED)
+                    ? 'Must add up to the total'
+                    : missing.includes(PERCENTAGE_TOTAL_NEED)
+                      ? 'Must add up to 100%'
+                      : undefined,
               tag: missing.includes('the tag') ? 'Choose a Tag' : undefined,
             }}
             values={{
