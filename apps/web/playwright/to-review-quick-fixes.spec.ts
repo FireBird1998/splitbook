@@ -175,6 +175,10 @@ test('after S saves a row, focus moves to the next row, else the one before, els
   // J and K keep working from there.
   await page.keyboard.press('j');
   await expect(openRow(page, 'Review meal 3')).toBeFocused();
+  await page.keyboard.press('k');
+  await expect(openRow(page, 'Review meal 2')).toBeFocused();
+  await page.keyboard.press('j');
+  await expect(openRow(page, 'Review meal 3')).toBeFocused();
   // The last row saved: focus goes to the one before it.
   await page.keyboard.press('s');
   await expect(openRow(page, 'Review meal 3')).toHaveCount(0);
@@ -184,4 +188,24 @@ test('after S saves a row, focus moves to the next row, else the one before, els
   await page.keyboard.press('s');
   await expect(page.getByRole('heading', { name: 'All caught up' })).toBeFocused();
   expect(await rows(page)).toHaveLength(0);
+});
+
+test('when S cannot save a row, focus stays on it and J still works', async ({
+  page,
+}, testInfo) => {
+  test.skip(isPhone(testInfo), 'Keyboard shortcuts are for computers');
+  await open(page, ['ready', 'ready']);
+  await page.route(`**${root.replace('/groups', '/api/groups')}/drafts/save`, (route) =>
+    route.fulfill({ status: 503, json: { error: 'Service unavailable' } }),
+  );
+  const failed = page.waitForResponse(
+    (response) => response.url().endsWith('/drafts/save') && response.status() === 503,
+  );
+  await openRow(page, 'Review meal 1').focus();
+  await page.keyboard.press('s');
+  await failed;
+  await expect(openRow(page, 'Review meal 1')).toBeFocused();
+  await page.keyboard.press('j');
+  await expect(openRow(page, 'Review meal 2')).toBeFocused();
+  expect(await rows(page)).toHaveLength(2);
 });

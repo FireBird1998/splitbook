@@ -592,8 +592,8 @@ export default function ExpenseFields({
               <ToggleButton value="equal" sx={{ textTransform: 'none', fontSize: 12 }}>
                 Equal
               </ToggleButton>
-              {/* To review keeps an item's stored method: Add expense saves unequal, an
-                  assistant sends exact, and both are Unequal (#508). */}
+              {/* To review keeps an item's stored method: Add expense saves unequal, a
+                  Connected assistant sends exact, and both are Unequal (#508). */}
               <ToggleButton
                 value={review && splitMethod !== 'unequal' ? 'exact' : 'unequal'}
                 sx={{ textTransform: 'none', fontSize: 12 }}

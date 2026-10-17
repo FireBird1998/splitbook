@@ -79,7 +79,7 @@ export default function ToReviewPage({
   // A fixed row moves between sections and remounts; keyboard focus follows it there.
   const refocus = useRef<string | null>(null);
   /** A row S is saving, and the rows after and before it to move focus to once it's gone (#508). */
-  const savingFrom = useRef<{ id: string; after: string[]; before: string[] } | null>(null);
+  const focusAfterSave = useRef<{ id: string; after: string[]; before: string[] } | null>(null);
   const caughtUp = useRef<HTMLHeadingElement>(null);
   const lock = useRef(false);
   const panel = useRef<ReviewPanelHandle>(null);
@@ -136,14 +136,17 @@ export default function ToReviewPage({
   // The Group's currency as the read names it, which the model already applied (#512).
   const currency = model?.groups[0]?.currency;
   useEffect(() => {
-    const from = savingFrom.current;
+    const from = focusAfterSave.current;
     if (!from || busy) return;
-    savingFrom.current = null;
-    // A row that's still listed wasn't saved, and keeps focus.
-    if (items.some((item) => item.id === from.id)) return;
-    const next = [...from.after, ...from.before].find((id) => items.some((item) => item.id === id));
-    if (next) refocus.current = next;
-    else caughtUp.current?.focus();
+    focusAfterSave.current = null;
+    const listed = (id: string) => items.some((item) => item.id === id);
+    // A row that's still listed wasn't saved. Saving disabled it, so focus returns to it.
+    if (listed(from.id)) refocus.current = from.id;
+    else {
+      const next = [...from.after, ...from.before].find(listed);
+      if (next) refocus.current = next;
+      else (caughtUp.current ?? heading.current)?.focus();
+    }
   });
   useEffect(() => {
     const id = refocus.current;
@@ -295,7 +298,7 @@ export default function ToReviewPage({
     } else if (key === 's' && item.state === 'ready') {
       event.preventDefault();
       const ids = order.map(({ id }) => id);
-      savingFrom.current = {
+      focusAfterSave.current = {
         id: item.id,
         after: ids.slice(index + 1),
         before: ids.slice(0, index).reverse(),
