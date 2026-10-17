@@ -17,6 +17,7 @@ import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { toDateParam } from '@splitbook/shared/date';
 import { formatCurrency } from '@splitbook/shared/currency';
+import { readAmountEntry } from '@splitbook/shared/amount-entry';
 import {
   ExpenseDraft,
   type SavedDraftExpense,
@@ -107,6 +108,8 @@ function ExpenseDraftDialog({
         ),
   );
   const { description, amount, currency, tag } = draft.values;
+  // The field says why it can't take the amount; Save waits for one it can (#528).
+  const amountUnreadable = readAmountEntry(amount, currency).status === 'invalid';
   const { error, conflict, loading, invalidStoredMoney } = draft;
   const expense = draft.base;
   const isEditMode = !!expense;
@@ -306,6 +309,7 @@ function ExpenseDraftDialog({
             invalidStoredMoney ||
             !description.trim() ||
             !amount ||
+            amountUnreadable ||
             !tag
           }
           sx={{
