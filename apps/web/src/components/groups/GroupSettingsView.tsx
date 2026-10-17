@@ -550,7 +550,9 @@ function GroupSettingsContent({
                       />
                     </Stack>
                     <Typography variant="caption" color="text.disabled">
-                      {m.user.email} · Joined {formatDate(m.joinedAt)}
+                      {[m.user.email, `Joined ${formatDate(m.joinedAt)}`]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </Typography>
                   </Box>
                 </Stack>

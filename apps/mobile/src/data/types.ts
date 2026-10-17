@@ -22,6 +22,14 @@ export interface SessionUser {
   image: string | null;
 }
 
+/** A Group's member: their email only reaches the Group's admin, and each member their own (#517). */
+export interface GroupMemberUser {
+  id: string;
+  name: string;
+  email: string | null;
+  image: string | null;
+}
+
 export interface MobileGroup {
   id: string;
   name: string;
@@ -29,7 +37,7 @@ export interface MobileGroup {
   category: GroupCategory;
   defaultCurrency: string;
   members: Array<{
-    user: SessionUser;
+    user: GroupMemberUser;
     role: 'admin' | 'member';
     joinedAt: Date;
   }>;
