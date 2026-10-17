@@ -27,6 +27,7 @@ export default function LandingSection({
   id,
   elevated = false,
   eyebrow,
+  eyebrowColor = 'primary.main',
   title,
   hiddenTitle = false,
   intro,
@@ -35,6 +36,8 @@ export default function LandingSection({
   id?: string;
   elevated?: boolean;
   eyebrow?: string;
+  /** The eyebrow's colour: the brand's, or a status tone for a section that has one. */
+  eyebrowColor?: string;
   title: string;
   hiddenTitle?: boolean;
   intro?: string;
@@ -62,7 +65,7 @@ export default function LandingSection({
       <Container maxWidth="lg" sx={LANDING_GUTTER}>
         <Stack spacing={1.5} sx={{ mb: hiddenTitle ? 0 : { xs: 4, md: 6 }, maxWidth: 760 }}>
           {eyebrow && (
-            <Typography variant="overline" color="primary.main" sx={{ fontWeight: 600 }}>
+            <Typography variant="overline" color={eyebrowColor} sx={{ fontWeight: 600 }}>
               {eyebrow}
             </Typography>
           )}

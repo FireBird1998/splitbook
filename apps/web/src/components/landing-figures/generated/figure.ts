@@ -17,7 +17,7 @@ export interface LandingFigure {
   readout: string;
   /** The legend under the plate: each key's mark and words. */
   legend: {
-    mark: 'bin' | 'positive' | 'negative' | 'lamp' | 'cord' | 'pay' | 'coin';
+    mark: 'bin' | 'positive' | 'negative' | 'lamp' | 'cord' | 'pay' | 'coin' | 'lever' | 'tag' | 'read';
     label: string;
   }[];
   caption: string;
@@ -29,6 +29,8 @@ export interface LandingFigure {
   headline?: string;
   /** The payments a settle-up figure carries, by member name, in currency (Fig 3). */
   payments?: { from: string; to: string; amountMinor: number }[];
+  /** The items an assistant prepares for To review, between members by name, in currency (Fig 2). */
+  prepared?: { title: string; amountMinor: number; between: string[] }[];
   currency?: string;
 }
 

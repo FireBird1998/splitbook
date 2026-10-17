@@ -2,7 +2,7 @@
 
 The drawings on the public landing page (#443) are isometric figures of small machines, made with the vendored Anatomy kit (`vendor/anatomy`, MIT, see its `PROVENANCE.md`). This package draws them at build time and writes them into the web app as generated modules (`apps/web/src/components/landing-figures/generated/`), so the page renders a real SVG with no runtime dependency on the kit.
 
-Every number a figure shows comes from `src/story.ts`, which runs the story through `@splitbook/shared`: the exact-money split cuts each Expense and each member's chips, the balance calculation gives the counters, and the debt simplifier gives the payments. The debts between pairs of members (Fig 3's grey cords) have no shared function: the story nets them from the shared split's shares, and `check` proves that paying them would clear the shared balances. The figures can't drift from the product's money rules.
+Every number a figure shows comes from `src/story.ts`, which runs the story through `@splitbook/shared`: the exact-money split cuts each Expense and each member's chips, the balance calculation gives the counters, the debt simplifier gives the payments, and the same equal split cuts the items Fig 2's assistant prepares. The debts between pairs of members (Fig 3's grey cords) have no shared function: the story nets them from the shared split's shares, and `check` proves that paying them would clear the shared balances. The figures can't drift from the product's money rules.
 
 ## Commands
 
@@ -21,7 +21,7 @@ pnpm --filter @splitbook/landing-figures test      # the story and check unit te
 
 - **Stale output:** the generated modules differ from a fresh build. Run `build` and commit the result.
 - **Stale output** also covers a file left in the generated folder that the build no longer writes. `build` removes it.
-- **A story that doesn't balance:** a member's chips don't add up to their share, the counters don't sum to zero after every Expense, or the payments leave a balance unsettled.
+- **A story that doesn't balance:** a member's chips don't add up to their share, the counters don't sum to zero after every Expense, or the payments leave a balance unsettled. Fig 2 fails it too when a prepared item's chips don't add up to its amount.
 - **A missing or stale still:** a figure's light still is missing, isn't a PNG, isn't 1200 × 630, or was drawn from another version of the figure (its stamp differs). `check` doesn't redraw it or compare pixels, because Chrome's pixels differ from machine to machine.
 - **An edited vendored kit:** a file in `vendor/anatomy` differs from the bytes `MANIFEST.sha256` pins, or isn't listed there.
 - **Audit problems:** the kit's audit finds clearance, depth-order, support or other faults in a figure's geometry.
@@ -29,12 +29,13 @@ pnpm --filter @splitbook/landing-figures test      # the story and check unit te
 
 ## Figures
 
-| Figure                     | Module                            | Shows                                                                                                                                                                                                      |
-| -------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fig 1, the splitting line  | `src/figures/splitting-line.mjs`  | Each Expense is a bar of chips, one per share. A saw cuts it, and pushers send each chip into its member's bin. The counters always add up to zero.                                                        |
-| Fig 3, the netting station | `src/figures/netting-station.mjs` | Four tills, and a pegboard whose grey cords are the five debts the Expenses left. A cabinet replaces them with the three payments, and a magnet shuttle carries ₹100 coins until every counter reads zero. |
+| Figure                     | Module                            | Shows                                                                                                                                                                                                                                                 |
+| -------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fig 1, the splitting line  | `src/figures/splitting-line.mjs`  | Each Expense is a bar of chips, one per share. A saw cuts it, and pushers send each chip into its member's bin. The counters always add up to zero.                                                                                                   |
+| Fig 2, the To review rack  | `src/figures/to-review-rack.mjs`  | The assistant's terminal sends the items it prepares as tagged bars down a tube into a rack. Only the member's lever lets the bottom bar out onto the conveyor into the line: Dinner is saved, and Cab waits. A thin read line lets it read Balances. |
+| Fig 3, the netting station | `src/figures/netting-station.mjs` | Four tills, and a pegboard whose grey cords are the five debts the Expenses left. A cabinet replaces them with the three payments, and a magnet shuttle carries ₹100 coins until every counter reads zero.                                            |
 
-Each figure module exports a function of the story that returns its SVG at rest, its own styles, the words around it (readout, legend, caption, the still's description), the data its live tour animates, how many poses its tour shows under reduced motion, and the audit recorder. Fig 3 (and the figures after it) build on `src/figures/common.mjs`: the projection, the recorder, solids, screens, tubes and the bench they stand on.
+Each figure module exports a function of the story that returns its SVG at rest, its own styles, the words around it (readout, legend, caption, the still's description), the data its live tour animates, how many poses its tour shows under reduced motion, and the audit recorder. Figs 2 and 3 build on `src/figures/common.mjs`: the projection, the recorder, solids, screens, tubes and the bench they stand on.
 
 `<id>.tour.js` is the figure's live tour: `playTour(root, data)` runs it on a plate already in the page and returns a function that stops it. Each figure's tour supplies only its scene (how its story moves, steps, starts over and holds its still); `src/figures/tour.js` runs every scene the same way, only inside `root`:
 

@@ -3,5 +3,6 @@
 /** Each figure's live tour, loaded on demand; `play` returns a function that stops it. */
 export const tours: Record<string, () => Promise<{ play(root: HTMLElement): () => void }>> = {
   'splitting-line': () => import('./splitting-line-tour.js'),
+  'to-review-rack': () => import('./to-review-rack-tour.js'),
   'netting-station': () => import('./netting-station-tour.js'),
 };
