@@ -13,7 +13,7 @@ the work that followed it. When a file count below drifts, the commands still ho
 | Android                 | `apps/mobile/src`, `apps/mobile/scripts`                                      | 94            | Vitest and react-test-renderer, no database                       | `pnpm mobile test`                                                          | PR checks, time-zone matrix, verify |
 | Android HTTP verifiers  | `apps/mobile/scripts/verify-*.ts`                                             | 11            | a backend of the run's own (`pnpm swarm up`)                      | `pnpm mobile verify:all`                                                    | PR checks                           |
 | Tooling                 | `tools/swarm`, `tools/landing-figures`                                        | 6 and 3       | Vitest                                                            | `pnpm --filter @splitbook/swarm test`                                       | PR checks, time-zone matrix, verify |
-| Expense access          | `apps/web/playwright-expense-access/`                                         | 28 specs      | Playwright, HTTP and Chromium, an isolated app and database       | `pnpm web test:expense-access`                                              | verify                              |
+| Expense access          | `apps/web/playwright-expense-access/`                                         | 29 specs      | Playwright, HTTP and Chromium, an isolated app and database       | `pnpm web test:expense-access`                                              | verify                              |
 | Google sign-in recovery | `apps/web/playwright-auth-recovery/`                                          | 1 spec        | Playwright, an isolated app in Google mode                        | `pnpm web exec playwright test --config playwright.auth-recovery.config.ts` | verify                              |
 | Browser journeys        | `apps/web/playwright/`                                                        | 26 specs      | Playwright, four theme projects, the seeded `splitbook-demo`      | `pnpm web test:e2e`                                                         | playwright                          |
 | Google sign-in journeys | `apps/web/playwright-google/`                                                 | 1 spec        | Playwright, `AUTH_MODE=google`                                    | `pnpm web test:e2e:google`                                                  | playwright                          |
@@ -150,20 +150,38 @@ run (#470):
 
 ## Authenticated expense requests
 
-`pnpm web test:expense-access` runs `playwright.expense-access.config.ts`: 28 specs of real HTTP
+`pnpm web test:expense-access` runs `playwright.expense-access.config.ts`: 29 specs of real HTTP
 requests and Chromium journeys through Better Auth, the route adapters and MongoDB. Each persona
 signs in through `POST /api/auth/demo-persona/sign-in` and keeps the session cookie. The suite
 covers reads, edits, soft deletion and restoration across disjoint and overlapping Groups, for
 outsiders, revoked members with still-valid sessions and anonymous callers; the export, the
 statement, insights and the trip summary reads; settlement attempts, a lost create reply
 retried once from the form (`retry-ui.spec.ts`) and from Quick add (`quick-add-retry.spec.ts`),
-To review's lost-reply recovery, Tags, the profile, stale tabs and account switches. Denied
-writes are checked through later authorized requests, not database queries or mocked helpers.
+To review's lost-reply recovery, Tags, the profile, stale tabs and account switches, and Sign Out
+with reads still running on the page it leaves (`sign-out.spec.ts`, #476). Denied writes are
+checked through later authorized requests, not database queries or mocked helpers.
 
-It runs on one worker. Its MongoDB is `127.0.0.1:27017` unless `EXPENSE_ACCESS_MONGO_PORT`
-names another loopback port; To review saves and Tag actions need transactions, so give it a
-replica set (CI uses verify's on 27038). With `CI` set it serves a production build of the
-snapshot, otherwise `next dev`.
+It runs as two projects, against one isolated app and database per run (#476):
+
+- **http** (`delete`, `edit-restore`, `export`, `insights-read`, `read` and `statement`)
+  runs fully parallel. Its tests write nothing straight into the database, read nothing
+  account-wide and check nothing about Sam's profile, and each works only on the Groups its ledger
+  fixture makes, by id.
+- **browser** runs everything else on one worker: the browser specs, and the HTTP specs that read
+  Sam's balances across all his Groups (`ledger-money`), write legacy states straight into the
+  database (`ledger-creation-replay`, `group-read-compatibility`) or check Sam's name while
+  `profile-settings` changes it (`trip-summary-read`). It is listed first, so its one worker
+  starts at once and the http tests fill the other three beside it. Their writes are self-only
+  splits, membership changes and edited descriptions, so no figure a browser test compares
+  moves, and no Home or Groups list is capped, so their extra Groups crowd nothing out.
+
+Its MongoDB is `127.0.0.1:27017` unless `EXPENSE_ACCESS_MONGO_PORT` names another loopback port;
+To review saves and Tag actions need transactions, so give it a replica set (CI uses verify's on
+27038). With `CI` set it serves a production build of the snapshot, otherwise `next dev`. On `next dev`, global setup first requests the pages the suite
+opens and the reads they make first (the landing and sign-in pages signed out, the rest signed in
+as a persona), so no route compiles while a test waits on it. That warm-up runs for demo-mode
+apps only: the Google sign-in recovery suite reuses the isolated app in Google mode, which has no
+persona sign-in.
 
 Isolation is deliberately stricter than the browser journeys':
 
