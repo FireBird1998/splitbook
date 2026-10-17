@@ -10,7 +10,7 @@
   "scripts": {
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --coverage",
+    "test": "vitest run",
     "test:unit": "vitest run --coverage"
   },
   "dependencies": {
