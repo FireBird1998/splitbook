@@ -309,6 +309,21 @@ export function parseExpenseAmountMinor(amount: string | number, currency: strin
 }
 
 /** Validate a complete merged command, never a PATCH fragment. */
+/**
+ * Runs one step of an Expense's allocation, naming the input field a refusal from it is about
+ * (#506): who paid, who shared it, or one of their rows. Without it, a split that doesn't add up
+ * was filed under the Expense amount, and To review asked for the amount.
+ */
+function namingField<T>(field: ReadonlyArray<string | number>, step: () => T): T {
+  try {
+    return step();
+  } catch (error) {
+    if (error instanceof MoneyValidationError && !error.field)
+      throw new MoneyValidationError(error.code, error.message, field);
+    throw error;
+  }
+}
+
 export function normalizeExpenseMoney<P extends MoneyPayerInput, S extends MoneySplitInput>(input: {
   amount: string | number;
   currency: string;
@@ -324,18 +339,21 @@ export function normalizeExpenseMoney<P extends MoneyPayerInput, S extends Money
       'At least one payer and participant are required',
     );
   }
-  assertUniqueMoneyParticipants(input.paidBy);
-  assertUniqueMoneyParticipants(input.splitBetween);
-  const paidBy = input.paidBy.map((payer) => {
-    const minor = parseAmountMinor(payer.amount, currency);
-    if (minor < 0)
-      throw new MoneyValidationError('INVALID_PAYER_AMOUNT', 'Payer amounts cannot be negative');
-    return { ...payer, amount: toMajorAmount(minor, currency), amountMinor: minor };
-  });
+  namingField(['paidBy'], () => assertUniqueMoneyParticipants(input.paidBy));
+  namingField(['splitBetween'], () => assertUniqueMoneyParticipants(input.splitBetween));
+  const paidBy = input.paidBy.map((payer, index) =>
+    namingField(['paidBy', index, 'amount'], () => {
+      const minor = parseAmountMinor(payer.amount, currency);
+      if (minor < 0)
+        throw new MoneyValidationError('INVALID_PAYER_AMOUNT', 'Payer amounts cannot be negative');
+      return { ...payer, amount: toMajorAmount(minor, currency), amountMinor: minor };
+    }),
+  );
   if (sumMinorAmounts(paidBy.map((payer) => payer.amountMinor)) !== amountMinor) {
     throw new MoneyValidationError(
       'PAYER_TOTAL_MISMATCH',
       'Payer amounts must add up to the expense amount',
+      ['paidBy'],
     );
   }
   const splitInput = input.splitBetween.map((participant, index) => {
@@ -344,14 +362,20 @@ export function normalizeExpenseMoney<P extends MoneyPayerInput, S extends Money
     // Named for its row, so a save points at that person's share, not the Expense amount.
     if (participant.amount === undefined)
       throw missingSplitAmount(['splitBetween', index, 'amount']);
-    return { ...participant, amountMinor: parseAmountMinor(participant.amount, currency) };
-  });
-  const splitBetween = calculateSplitAmountsMinor(input.splitMethod, amountMinor, splitInput).map(
-    (participant) => ({
+    const amount = participant.amount;
+    return {
       ...participant,
-      amount: toMajorAmount(participant.amountMinor, currency),
-    }),
-  );
+      amountMinor: namingField(['splitBetween', index, 'amount'], () =>
+        parseAmountMinor(amount, currency),
+      ),
+    };
+  });
+  const splitBetween = namingField(['splitBetween'], () =>
+    calculateSplitAmountsMinor(input.splitMethod, amountMinor, splitInput),
+  ).map((participant) => ({
+    ...participant,
+    amount: toMajorAmount(participant.amountMinor, currency),
+  }));
   return {
     moneyVersion: MONEY_VERSION,
     currency,

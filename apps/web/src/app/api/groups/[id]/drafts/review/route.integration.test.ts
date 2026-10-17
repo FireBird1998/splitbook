@@ -178,7 +178,7 @@ describe('POST /api/groups/[id]/drafts/review', () => {
     ]);
   });
 
-  it('lists a present amount as wrong, not missing, when the split does not add up (#506)', async () => {
+  it('names a split that does not add up at the split, not the amount (#506)', async () => {
     const { groupId, foodTagId } = await emptyTrip();
     const samCookie = await signIn('sam');
     // ₹1,000 split 300 / 300: the amount is there, the split is short by ₹400.
@@ -194,10 +194,11 @@ describe('POST /api/groups/[id]/drafts/review', () => {
     const reviewed = await reviewDrafts(groupId, samCookie, [draftId]);
 
     expect(reviewed.status).toBe(200);
+    // problems and missingFields agree, and neither puts it on the amount, which is there.
     expect(reviewed.body.data[0].problems).toEqual([
-      'amount: Split amounts must add up to the expense amount',
+      'splitBetween: Split amounts must add up to the expense amount',
     ]);
-    expect(reviewed.body.data[0].draft.missingFields).toEqual([]);
+    expect(reviewed.body.data[0].draft.missingFields).toEqual(['splitBetween']);
   });
 
   it('does not let Alex review the Draft Sam keeps', async () => {

@@ -520,3 +520,90 @@ describe('where a money refusal points (#497)', () => {
     expect(moneyErrorPath(new Error('not money'))).toEqual(['amount']);
   });
 });
+
+describe('where an allocation refusal points (#506)', () => {
+  const refusal = (input: Partial<Parameters<typeof normalizeExpenseMoney>[0]>) => {
+    try {
+      normalizeExpenseMoney({
+        amount: 100,
+        currency: 'INR',
+        paidBy: [{ user: 'a', amount: 100 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: 'a' }, { user: 'b' }],
+        ...input,
+      });
+    } catch (error) {
+      return error;
+    }
+    throw new Error('expected a refusal');
+  };
+
+  it.each([
+    [
+      'payers that do not add up, at who paid',
+      {
+        amount: 200,
+        paidBy: [
+          { user: 'a', amount: 150 },
+          { user: 'b', amount: 100 },
+        ],
+      },
+      'PAYER_TOTAL_MISMATCH',
+      ['paidBy'],
+    ],
+    [
+      'a split that does not add up, at who shared it',
+      {
+        splitMethod: 'unequal' as const,
+        splitBetween: [
+          { user: 'a', amount: 30 },
+          { user: 'b', amount: 30 },
+        ],
+      },
+      'SPLIT_TOTAL_MISMATCH',
+      ['splitBetween'],
+    ],
+    [
+      'percentages that do not add up, at who shared it',
+      {
+        splitMethod: 'percentage' as const,
+        splitBetween: [
+          { user: 'a', percentage: 50 },
+          { user: 'b', percentage: 30 },
+        ],
+      },
+      'PERCENTAGE_TOTAL_MISMATCH',
+      ['splitBetween'],
+    ],
+    [
+      'a share with too many decimals, at its row',
+      {
+        splitMethod: 'exact' as const,
+        splitBetween: [
+          { user: 'a', amount: 33.333 },
+          { user: 'b', amount: 66.667 },
+        ],
+      },
+      'INVALID_MONEY_PRECISION',
+      ['splitBetween', 0, 'amount'],
+    ],
+    [
+      'a payer amount with too many decimals, at its row',
+      { paidBy: [{ user: 'a', amount: 99.995 }] },
+      'INVALID_MONEY_PRECISION',
+      ['paidBy', 0, 'amount'],
+    ],
+  ])('points %s', (_case, input, code, field) => {
+    const error = refusal(input);
+
+    expect(error).toMatchObject({ code });
+    expect(moneyErrorPath(error)).toEqual(field);
+  });
+
+  it('still points a total with too many decimals at the amount', () => {
+    const error = refusal({ amount: 10.555, paidBy: [{ user: 'a', amount: 10.555 }] });
+
+    expect(error).toMatchObject({ message: 'Amount supports at most 2 decimal places' });
+    expect(moneyErrorPath(error)).toEqual(['amount']);
+  });
+});

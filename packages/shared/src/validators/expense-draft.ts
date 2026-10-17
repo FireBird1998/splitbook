@@ -87,10 +87,11 @@ function hasValue(value: unknown): boolean {
 }
 
 /**
- * The facts a Draft is missing, from the save schema's issues and any fields already reported
- * missing (#506). A fact with no value is missing, and so is a member row with a part left out
+ * The facts a Draft is missing, from the save schema's issues and any fields reported as needing
+ * attention (#506). A fact with no value is missing, and so is a member row with a part left out
  * (who paid, who shared it). A value that is there but wrong, such as a split that doesn't add
- * up to the amount, is not missing: the issue says what is wrong with it instead.
+ * up to the amount or a share with too many decimals, is not missing: the issue says what is
+ * wrong with it instead.
  */
 export function missingDraftFields(
   values: ExpenseDraftValues,
@@ -99,8 +100,15 @@ export function missingDraftFields(
 ): string[] {
   const value = (field: string) => values[field as keyof ExpenseDraftValues];
   const fromIssues = issues.flatMap((issue) => {
-    const field = String(issue.path[0] ?? 'expense');
-    return issue.path.length === 1 && hasValue(value(field)) ? [] : [field];
+    const [first, index, part] = issue.path;
+    const field = String(first ?? 'expense');
+    if (issue.path.length === 1) return hasValue(value(field)) ? [] : [field];
+    if (issue.path.length === 3) {
+      const row = (value(field) as Array<Record<string, unknown>> | undefined)?.[Number(index)];
+      const entered = row?.[String(part)];
+      return entered !== undefined && entered !== null && entered !== '' ? [] : [field];
+    }
+    return [field];
   });
   const stillMissing = reported.filter(
     (field) => fromIssues.includes(field) || !hasValue(value(field)),

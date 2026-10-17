@@ -493,82 +493,72 @@ describe('memberProblems (#435)', () => {
 });
 
 describe('a fact that is there but wrong (#506)', () => {
-  const alex = 'a00000000000000000000001';
-  const sam = 'a00000000000000000000002';
-  const priya = 'a00000000000000000000003';
+  const sam = 'b00000000000000000000002';
+  const priya = 'b00000000000000000000003';
+  const names = { [member]: 'Alex', [sam]: 'Sam', [priya]: 'Priya' };
   const groceries = {
     description: 'Groceries',
     amount: 100,
-    currency: 'INR',
-    date: '2026-10-16',
+    currency: 'USD',
     category: 'other',
-    tagId: 'c00000000000000000000001',
-    paidBy: [{ user: alex, amount: 100 }],
+    date: '2026-10-14',
+    tag: 'Travel',
+    paidBy: [{ user: member, amount: 100 }],
     splitMethod: 'equal',
-    splitBetween: [{ user: alex }, { user: sam }, { user: priya }],
+    splitBetween: [{ user: member }, { user: sam }, { user: priya }],
   };
-  /** What a Draft review sends today: the reason at `amount`, and the amount listed as missing. */
-  const reviewed = (values: object, reason: string) =>
-    buildToReview(
-      {
-        total: 1,
-        groups: [
-          {
-            groupId: 'b00000000000000000000001',
-            groupName: 'Maple House',
-            count: 1,
-            items: [
-              {
-                draft: {
-                  id: 'd00000000000000000000001',
-                  groupId: 'b00000000000000000000001',
-                  revision: 0,
-                  state: 'active',
-                  preparedBy: { kind: 'member' },
-                  changedBy: { kind: 'member' },
-                  createdAt: '2026-10-16T00:00:00.000Z',
-                  updatedAt: '2026-10-16T00:00:00.000Z',
-                  missingFields: ['amount'],
-                  values,
-                },
-                review: 'a'.repeat(64),
-                problems: [`amount: ${reason}`],
-                duplicates: [],
-              } as ToReviewItem,
-            ],
+  /** An item as a Draft review sends it: each problem at its field, which missingFields names. */
+  const reviewed = (
+    values: object,
+    problem: string,
+    preparedBy: ToReviewItem['draft']['preparedBy'] = { kind: 'member' },
+  ) => {
+    const base = item(1);
+    const field = problem.split(/[.:]/)[0];
+    return buildToReview(
+      read([
+        {
+          ...base,
+          draft: {
+            ...base.draft,
+            preparedBy,
+            missingFields: [field],
+            values,
           },
-        ],
-      },
+          problems: [problem],
+        },
+      ]),
       [],
-      new Date('2026-10-16T12:00:00.000Z'),
+      now,
     ).items[0];
+  };
 
   it.each([
     [
-      'a ₹100 split 30 / 30 / 30',
+      'a $100 split 30 / 30 / 30',
       {
         ...groceries,
         splitMethod: 'unequal',
         splitBetween: [
-          { user: alex, amount: 30 },
+          { user: member, amount: 30 },
           { user: sam, amount: 30 },
           { user: priya, amount: 30 },
         ],
       },
-      'Split amounts must add up to the expense amount',
+      'splitBetween: Split amounts must add up to the expense amount',
       'the split to add up to the total',
     ],
     [
-      'a ₹200 paid 150 + 100',
+      'a $200 paid 150 + 100',
       {
         ...groceries,
         amount: 200,
         paidBy: [
-          { user: alex, amount: 150 },
+          { user: member, amount: 150 },
           { user: sam, amount: 100 },
         ],
       },
-      'Payer amounts must add up to the expense amount',
+      'paidBy: Payer amounts must add up to the expense amount',
       'the amounts paid to add up to the total',
     ],
     [
@@ -577,44 +567,93 @@ describe('a fact that is there but wrong (#506)', () => {
         ...groceries,
         splitMethod: 'percentage',
         splitBetween: [
-          { user: alex, percentage: 50 },
+          { user: member, percentage: 50 },
           { user: sam, percentage: 30 },
         ],
       },
-      'Percentages must add up to 100',
+      'splitBetween: Percentages must add up to 100',
       'the percentages to add up to 100%',
     ],
     [
-      'an amount of ₹10.555',
-      { ...groceries, amount: 10.555, paidBy: [{ user: alex }] },
-      'Amount supports at most 2 decimal places',
+      'an amount of $10.555',
+      { ...groceries, amount: 10.555, paidBy: [{ user: member }] },
+      'amount: Amount supports at most 2 decimal places',
       'an amount with at most 2 decimal places',
     ],
-  ])('names what %s needs, not the amount', (_case, values, reason, need) => {
-    const item = reviewed(values, reason);
+  ])('names what %s needs, not the amount', (_case, values, problem, need) => {
+    const model = reviewed(values, problem);
 
-    expect(item.missingFacts).toEqual([need]);
-    expect(item.label).toBe(`Needs ${need}`);
+    expect(model.missingFacts).toEqual([need]);
+    expect(model.unknownFacts).toEqual([]);
+    expect(model.label).toBe(`Needs ${need}`);
     // The Needs line already says it, so it isn't said twice.
-    expect(memberProblems(item)).toEqual([]);
+    expect(memberProblems(model, names)).toEqual([]);
+  });
+
+  it('names the share with too many decimals, and whose it is', () => {
+    const model = reviewed(
+      {
+        ...groceries,
+        splitMethod: 'exact',
+        splitBetween: [
+          { user: member, amount: 33.333 },
+          { user: sam, amount: 33.333 },
+          { user: priya, amount: 33.334 },
+        ],
+      },
+      'splitBetween.0.amount: Amount supports at most 2 decimal places',
+    );
+
+    expect(model.missingFacts).toEqual(['shares with at most 2 decimal places']);
+    expect(memberProblems(model, names)).toEqual([
+      'The amount for Alex can have at most 2 decimal places.',
+    ]);
+  });
+
+  it('reads the same from a server that still filed the reason at the amount', () => {
+    const model = reviewed(
+      {
+        ...groceries,
+        splitMethod: 'unequal',
+        splitBetween: [
+          { user: member, amount: 30 },
+          { user: sam, amount: 30 },
+          { user: priya, amount: 30 },
+        ],
+      },
+      'amount: Split amounts must add up to the expense amount',
+    );
+
+    expect(model.missingFacts).toEqual(['the split to add up to the total']);
+    expect(memberProblems(model, names)).toEqual([]);
+  });
+
+  it('does not say an assistant left out a fact that is only wrong', () => {
+    const model = reviewed(
+      { ...groceries, amount: 10.555, paidBy: [{ user: member }] },
+      'amount: Amount supports at most 2 decimal places',
+      { kind: 'assistant', name: 'Claude' },
+    );
+
+    expect(model.unknownFacts).toEqual([]);
   });
 
   it('still says a missing amount, once (#458)', () => {
     const withoutAmount = Object.fromEntries(
       Object.entries(groceries).filter(([key]) => key !== 'amount'),
     );
-    const item = reviewed(withoutAmount, 'Enter the Expense amount.');
+    const model = reviewed(withoutAmount, 'amount: Enter the Expense amount.');
 
-    expect(item.missingFacts).toEqual(['the amount']);
-    expect(memberProblems(item)).toEqual([]);
+    expect([model.missingFacts, model.unknownFacts]).toEqual([['the amount'], ['the amount']]);
+    expect(memberProblems(model, names)).toEqual([]);
   });
 
   it('says each reason in member words wherever a problem is shown alone', () => {
     expect(
       [
-        'amount: Split amounts must add up to the expense amount',
-        'amount: Payer amounts must add up to the expense amount',
-        'amount: Percentages must add up to 100',
+        'splitBetween: Split amounts must add up to the expense amount',
+        'paidBy: Payer amounts must add up to the expense amount',
+        'splitBetween: Percentages must add up to 100',
         'amount: Amount supports at most 2 decimal places',
         'Invalid Draft: amount: Amount supports at most 0 decimal places',
       ].map((problem) => reviewProblem(problem)),

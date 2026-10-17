@@ -25,7 +25,14 @@ export interface ReviewItemModel {
   groupId: string;
   createdAt: string;
   state: ToReviewState;
+  /**
+   * What the item still needs before it can be saved, in words that follow "Needs": a fact it
+   * has no value for ("the date"), or one that is there but wrong ("the split to add up to the
+   * total", #506).
+   */
   missingFacts: string[];
+  /** The facts it has no value for at all, which an assistant may have left to the member. */
+  unknownFacts: string[];
   label: string;
   accountItem?: ToReviewItem;
   deviceItem?: DeviceToReviewItem;
@@ -53,36 +60,42 @@ export const SPLIT_TOTAL_NEED = 'the split to add up to the total';
 export const PAID_TOTAL_NEED = 'the amounts paid to add up to the total';
 export const PERCENTAGE_TOTAL_NEED = 'the percentages to add up to 100%';
 
+const DECIMALS = /^Amount supports at most (\d+) decimal places$/;
+
 /**
  * What an item needs when a fact it has is wrong rather than missing (#506): worded to follow
  * "Needs", and as a sentence for the problem on its own. Without it, a split that doesn't add up
- * read as a missing amount, and a member could change the total to match the shares.
+ * read as a missing amount, and a member could change the total to match the shares. The field
+ * says whose decimals are wrong: the total, the shares or the amounts paid.
  */
-function unmetNeed(reason: string): { need: string; sentence: string } | undefined {
+function unmetNeed(
+  reason: string,
+  field = 'amount',
+): { need: string; sentence: string } | undefined {
   if (reason === 'Split amounts must add up to the expense amount')
-    return {
-      need: SPLIT_TOTAL_NEED,
-      sentence: 'The split must add up to the total.',
-    };
+    return { need: SPLIT_TOTAL_NEED, sentence: 'The split must add up to the total.' };
   if (reason === 'Payer amounts must add up to the expense amount')
-    return {
-      need: PAID_TOTAL_NEED,
-      sentence: 'The amounts paid must add up to the total.',
-    };
+    return { need: PAID_TOTAL_NEED, sentence: 'The amounts paid must add up to the total.' };
   if (reason === 'Percentages must add up to 100')
-    return {
-      need: PERCENTAGE_TOTAL_NEED,
-      sentence: 'The percentages must add up to 100%.',
-    };
-  const decimals = reason.match(/^Amount supports at most (\d+) decimal places$/);
+    return { need: PERCENTAGE_TOTAL_NEED, sentence: 'The percentages must add up to 100%.' };
+  const decimals = reason.match(DECIMALS);
   if (!decimals) return undefined;
-  if (decimals[1] === '0')
-    return { need: 'a whole-number amount', sentence: 'The amount must be a whole number.' };
-  const places = decimals[1] === '1' ? '1 decimal place' : `${decimals[1]} decimal places`;
-  return {
-    need: `an amount with at most ${places}`,
-    sentence: `The amount can have at most ${places}.`,
-  };
+  const places = decimals[1] === '0' ? undefined : `at most ${decimals[1]} decimal places`;
+  if (field === 'splitBetween')
+    return {
+      need: places ? `shares with ${places}` : 'whole-number shares',
+      sentence: places ? `Each share can have ${places}.` : 'Each share must be a whole number.',
+    };
+  if (field === 'paidBy')
+    return {
+      need: places ? `amounts paid with ${places}` : 'whole-number amounts paid',
+      sentence: places
+        ? `Each amount paid can have ${places}.`
+        : 'Each amount paid must be a whole number.',
+    };
+  return places
+    ? { need: `an amount with ${places}`, sentence: `The amount can have ${places}.` }
+    : { need: 'a whole-number amount', sentence: 'The amount must be a whole number.' };
 }
 
 function accountModel(item: ToReviewItem): ReviewItemModel {
@@ -90,17 +103,18 @@ function accountModel(item: ToReviewItem): ReviewItemModel {
   const parsed = completeExpenseDraftSchema.safeParse(values);
   const issues = parsed.success ? [] : parsed.error.issues;
   const missing = missingDraftFields(values, issues, item.draft.missingFields ?? []);
+  const unknownFacts = [...new Set(missing.map((field) => facts[field] ?? 'the expense details'))];
   // A fact that is there but wrong reads as what it needs, or as the fact for a reason without
   // member words.
-  const wrong = issues
+  const needs = issues
     .filter((issue) => !missing.includes(String(issue.path[0] ?? 'expense')))
-    .map((issue) => unmetNeed(issue.message)?.need ?? facts[String(issue.path[0])]);
-  const missingFacts = [
-    ...new Set([
-      ...missing.map((field) => facts[field] ?? 'the expense details'),
-      ...wrong.map((need) => need ?? 'the expense details'),
-    ]),
-  ];
+    .map(
+      (issue) =>
+        unmetNeed(issue.message, String(issue.path[0]))?.need ??
+        facts[String(issue.path[0])] ??
+        'the expense details',
+    );
+  const missingFacts = [...new Set([...unknownFacts, ...needs])];
   if (item.problems.length && !missingFacts.length) missingFacts.push('the expense details');
   const state = missingFacts.length
     ? 'needs-details'
@@ -113,6 +127,7 @@ function accountModel(item: ToReviewItem): ReviewItemModel {
     createdAt: item.draft.createdAt,
     state,
     missingFacts,
+    unknownFacts,
     label: missingFacts.length ? `Needs ${missingFacts.join(', ')}` : labels[state],
     accountItem: item,
   };
@@ -165,6 +180,7 @@ export function buildToReview(
       createdAt: item.createdAt,
       state: 'on-this-phone' as const,
       missingFacts: [],
+      unknownFacts: [],
       label: labels['on-this-phone'],
       deviceItem: item,
     })),
@@ -350,13 +366,10 @@ export function reviewSplitMethod(method?: string): string {
 
 /** A validation problem's path: its field and, for a member's row, the row and the part of it. */
 function problemPath(message: string) {
-  const path = message.match(/^(?:Invalid Draft: )?([a-zA-Z]+)(?:\.(\d+)\.([a-zA-Z]+))?:/);
-  return path ? { field: path[1], index: path[2], part: path[3] } : null;
-}
-
-/** A validation problem's reason, without the path in front of it. */
-function problemReason(message: string) {
-  return message.replace(/^(?:Invalid Draft: )?[a-zA-Z]+(?:\.\d+\.[a-zA-Z]+)?: /, '');
+  const path = message.match(/^(?:Invalid Draft: )?([a-zA-Z]+)(?:\.(\d+)\.([a-zA-Z]+))?: ?/);
+  return path
+    ? { field: path[1], index: path[2], part: path[3], reason: message.slice(path[0].length) }
+    : null;
 }
 
 /** Interpret known validation paths; never forward server prose or unknown paths to members. */
@@ -373,7 +386,10 @@ export function reviewProblem(
     'Could not confirm this action. Check your connection and try again.',
   ];
   if (memberMessages.includes(message)) return message;
-  const unmet = unmetNeed(problemReason(message));
+  const path = problemPath(message);
+  const reason = path?.reason ?? message;
+  // A row's decimals are said for that member below.
+  const unmet = path?.index === undefined && unmetNeed(reason, path?.field);
   if (unmet) return unmet.sentence;
   const known: Record<string, string> = {
     INVALID_MEMBERS: 'Choose current Group members for who paid and who shared it.',
@@ -382,14 +398,19 @@ export function reviewProblem(
     STALE_REVISION: 'This item changed. Check the latest version before saving.',
     'Each person can appear only once': 'Choose each member only once.',
   };
-  if (Object.hasOwn(known, message)) return known[message];
-  const path = problemPath(message);
+  if (Object.hasOwn(known, reason)) return known[reason];
   if (path) {
     const { field, index, part } = path;
     if ((field === 'paidBy' || field === 'splitBetween') && index !== undefined) {
       const row = values[field]?.[Number(index)];
       const name = row ? (names[row.user] ?? 'this member') : 'this member';
-      if (field === 'paidBy' && part === 'amount') return `The amount paid by ${name}?`;
+      const digits = reason.match(DECIMALS)?.[1];
+      const limit =
+        digits === '0' ? 'must be a whole number' : `can have at most ${digits} decimal places`;
+      if (field === 'paidBy' && part === 'amount')
+        return digits ? `The amount paid by ${name} ${limit}.` : `The amount paid by ${name}?`;
+      if (field === 'splitBetween' && part === 'amount' && digits)
+        return `The amount for ${name} ${limit}.`;
       if (field === 'splitBetween' && ['amount', 'percentage', 'shares'].includes(part))
         return `The ${part} for ${name}?`;
     }
@@ -415,8 +436,8 @@ export function memberProblems(
   for (const problem of problems) {
     const path = problemPath(problem);
     if (path && path.index === undefined && item.missingFacts.includes(facts[path.field])) continue;
-    // A wrong fact the Needs line already names (#506).
-    const unmet = unmetNeed(problemReason(problem));
+    // A wrong fact the Needs line already names (#506); a member's row is still named below.
+    const unmet = path && path.index === undefined && unmetNeed(path.reason, path.field);
     if (unmet && item.missingFacts.includes(unmet.need)) continue;
     const words = reviewProblem(problem, values, names);
     if (!said.includes(words)) said.push(words);

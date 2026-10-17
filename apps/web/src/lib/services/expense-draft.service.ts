@@ -12,7 +12,6 @@ import Expense from '@/lib/models/Expense';
 import {
   saveExpenseDraftsSchema,
   completeExpenseDraftSchema,
-  missingDraftFields,
   type DraftReview,
   type DraftSaveOutcome,
 } from '@splitbook/shared/validators/expense-draft';
@@ -159,8 +158,9 @@ function draftValidation(values: ExpenseDraftValues = {}) {
   return {
     parsed,
     problems,
-    // A value that is there but wrong (a split that doesn't add up to the amount) isn't missing (#506).
-    missingFields: missingDraftFields(values, issues, [...missingKeys]),
+    missingFields: [
+      ...new Set([...missingKeys, ...issues.map((issue) => String(issue.path[0] ?? 'expense'))]),
+    ],
   };
 }
 
