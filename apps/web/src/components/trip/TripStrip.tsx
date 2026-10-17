@@ -270,11 +270,11 @@ export default function TripStrip({
         </Box>
       </Box>
 
-      {/* Stub: its grid column fits the balance, between these widths. */}
+      {/* Stub: its grid column fits the balance, however large; words wrap within 180 px. */}
       <Box
         sx={{
           minWidth: 120,
-          maxWidth: 180,
+          maxWidth: signed ? 'none' : 180,
           p: 2,
           display: 'flex',
           flexDirection: 'column',
