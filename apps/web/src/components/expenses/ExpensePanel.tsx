@@ -27,6 +27,7 @@ import {
   expenseHistory,
   expenseLeftover,
   expenseShareRows,
+  FORMER_MEMBER,
   leftoverNote,
   type RecordedEdit,
   type StoredExpenseSplit,
@@ -34,6 +35,7 @@ import {
 import { expensePosition, expenseRecordPosition } from '@splitbook/shared/expense-position';
 import { expenseSplitSummary } from '@splitbook/shared/expense-row';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import ExpenseHistoryMembers from './ExpenseHistoryMembers';
 
 /** An Expense as the list or its own read returns it; history comes from its own read. */
 export interface PanelExpense extends StoredExpenseSplit {
@@ -812,6 +814,11 @@ function History({
                 {change && ' · '}
                 {formatDateTime(entry.at)}
               </Typography>
+              <ExpenseHistoryMembers
+                members={entry.members}
+                nameOf={(person) => nameOf(person) ?? FORMER_MEMBER}
+                userId={userId}
+              />
             </Box>
           </Box>
         );

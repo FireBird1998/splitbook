@@ -6,6 +6,7 @@ import {
   expenseShareRows,
   leftoverNote,
   listNames,
+  memberMoneyLabel,
   nextRecurringDate,
   ordinal,
   repeatsLabel,
@@ -252,20 +253,23 @@ describe('an Expense’s history', () => {
       })),
     });
 
+  const row = (user: unknown, minor: number) => ({ user, amount: minor / 100, amountMinor: minor });
+
   it('lists the edits newest first, then who added it', () => {
     const entries = history(
       { amount: { old: 2680, new: 2860 }, amountMinor: { old: 268000, new: 286000 } },
       { notes: { old: '', new: 'August–September meter cycle' } },
     );
     expect(entries).toEqual([
-      { by: you, at: at(3), action: 'changed the notes', change: null },
+      { by: you, at: at(3), action: 'changed the notes', change: null, members: [] },
       {
         by: priya,
         at: at(2),
         action: 'changed the amount',
         change: { kind: 'amount', before: '₹2,680.00', after: '₹2,860.00' },
+        members: [],
       },
-      { by: sam, at: at(1), action: 'added this Expense', change: null },
+      { by: sam, at: at(1), action: 'added this Expense', change: null, members: [] },
     ]);
   });
 
@@ -307,9 +311,125 @@ describe('an Expense’s history', () => {
     );
   });
 
+  it('lists each member whose payment or share changed, with the amounts before and after (#456)', () => {
+    // Wi-Fi went from ₹999.00 paid by Priya and shared three ways to ₹1,200.00 paid by Sam and
+    // shared by you and Sam; nobody's amount left the record unexplained.
+    const [entry] = history({
+      amount: { old: 999, new: 1200 },
+      amountMinor: { old: 99900, new: 120000 },
+      paidBy: { old: [row(priya._id, 99900)], new: [row(sam._id, 120000)] },
+      splitBetween: {
+        old: [row(you._id, 33300), row(sam._id, 33300), row(priya._id, 33300)],
+        new: [row(you._id, 60000), row(sam._id, 60000)],
+      },
+    });
+    expect(entry.action).toBe('changed the amount, who paid and split');
+    expect(entry.members).toEqual([
+      { person: sam._id, part: 'payment', before: '₹0.00', after: '₹1,200.00' },
+      { person: priya._id, part: 'payment', before: '₹999.00', after: '₹0.00' },
+      { person: you._id, part: 'share', before: '₹333.00', after: '₹600.00' },
+      { person: sam._id, part: 'share', before: '₹333.00', after: '₹600.00' },
+      { person: priya._id, part: 'share', before: '₹333.00', after: null },
+    ]);
+  });
+
+  it('lists no members for an amount the same payers and shares only followed', () => {
+    const [entry] = history({
+      amount: { old: 90, new: 120 },
+      paidBy: { old: [row(sam._id, 9000)], new: [row(sam._id, 12000)] },
+      splitBetween: { old: [row(sam._id, 9000)], new: [row(sam._id, 12000)] },
+    });
+    expect(entry).toMatchObject({ action: 'changed the amount', members: [] });
+  });
+
+  it('names a member’s payment or share, with the viewer as "Your" by id beside a namesake', () => {
+    const namesake = { ...you, _id: 'a00000000000000000000009' };
+    const nameOf = (person: unknown) =>
+      (person as { name?: string } | null)?.name ?? 'Former member';
+    const change = (person: unknown, part: 'payment' | 'share') => ({
+      person,
+      part,
+      before: '₹0.00',
+      after: '₹1.00',
+    });
+    expect(memberMoneyLabel(change(you, 'share'), nameOf, you._id)).toBe('Your share');
+    expect(memberMoneyLabel(change(namesake, 'payment'), nameOf, you._id)).toBe(
+      'Alex Rivera’s payment',
+    );
+    expect(memberMoneyLabel(change(null, 'share'), nameOf, you._id)).toBe('Former member’s share');
+  });
+
+  it('counts money moved between the same people with a new amount as who paid and the split', () => {
+    const [entry] = history({
+      amount: { old: 10, new: 12 },
+      amountMinor: { old: 1000, new: 1200 },
+      paidBy: {
+        old: [row(sam._id, 500), row(priya._id, 500)],
+        new: [row(sam._id, 200), row(priya._id, 1000)],
+      },
+      splitBetween: {
+        old: [row(sam._id, 500), row(priya._id, 500)],
+        new: [row(sam._id, 200), row(priya._id, 1000)],
+      },
+    });
+    expect(entry.action).toBe('changed the amount, who paid and split');
+    expect(entry.members).toEqual([
+      { person: sam._id, part: 'payment', before: '₹5.00', after: '₹2.00' },
+      { person: priya._id, part: 'payment', before: '₹5.00', after: '₹10.00' },
+      { person: sam._id, part: 'share', before: '₹5.00', after: '₹2.00' },
+      { person: priya._id, part: 'share', before: '₹5.00', after: '₹10.00' },
+    ]);
+  });
+
+  it('says "changed who paid" when only the payers changed', () => {
+    const [entry] = history({
+      paidBy: { old: [row(sam._id, 9000)], new: [row(priya._id, 9000)] },
+    });
+    expect(entry.action).toBe('changed who paid');
+  });
+
+  it('shows an edit made before a currency change in the currency it had then', () => {
+    const entries = expenseHistory({
+      currency: 'INR',
+      createdAt: at(1),
+      editHistory: [
+        {
+          editedBy: sam,
+          editedAt: at(2),
+          changes: {
+            amount: { old: 10, new: 12 },
+            amountMinor: { old: 1000, new: 1200 },
+            paidBy: { old: [row(sam._id, 1000)], new: [row(priya._id, 1200)] },
+          },
+        },
+        { editedBy: priya, editedAt: at(3), changes: { currency: { old: 'USD', new: 'INR' } } },
+      ],
+    });
+    expect(entries[1]).toMatchObject({
+      change: { kind: 'amount', before: '$10.00', after: '$12.00' },
+      members: [
+        { person: priya._id, part: 'payment', before: '$0.00', after: '$12.00' },
+        { person: sam._id, part: 'payment', before: '$10.00', after: '$0.00' },
+      ],
+    });
+  });
+
+  it('keeps rows without a member id apart, as former members', () => {
+    const [entry] = history({
+      splitBetween: {
+        old: [row({ name: 'Gone' }, 500), row({ name: 'Also gone' }, 500)],
+        new: [row({ name: 'Gone' }, 400), row({ name: 'Also gone' }, 600)],
+      },
+    });
+    expect(entry.members.map((member) => [member.before, member.after])).toEqual([
+      ['₹5.00', '₹4.00'],
+      ['₹5.00', '₹6.00'],
+    ]);
+  });
+
   it('is only who added it when nothing was edited', () => {
     expect(expenseHistory({ currency: 'INR', createdAt: at(1) })).toEqual([
-      { by: null, at: at(1), action: 'added this Expense', change: null },
+      { by: null, at: at(1), action: 'added this Expense', change: null, members: [] },
     ]);
   });
 });

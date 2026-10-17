@@ -1,7 +1,12 @@
 import { getCategory } from '@splitbook/shared/categories';
-import { formatCurrency } from '@splitbook/shared/currency';
 import { formatDateTime } from '@splitbook/shared/date';
-import { toMajorAmount } from '@splitbook/shared/exact-money';
+import {
+  allocationFollowedAmount,
+  memberMoneyChanges,
+  memberMoneyLabel,
+  NOT_INCLUDED,
+} from '@splitbook/shared/expense-detail';
+import { recordedMoney } from '@splitbook/shared/activity-timeline';
 import type { ActivityEvent } from './activity';
 import type { ExpenseRecord } from './expense-record';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
@@ -64,29 +69,14 @@ const nouns: Record<string, string> = {
   receiptUrl: 'the receipt',
 };
 
-type Row = Record<string, unknown>;
 const text = (value: unknown) => (typeof value === 'string' ? value : '');
 const quoted = (value: unknown) => (text(value).trim() ? `“${text(value).trim()}”` : 'None');
-const rows = (value: unknown): Row[] =>
-  Array.isArray(value) ? value.filter((row): row is Row => !!row && typeof row === 'object') : [];
 const identity = (value: unknown): string | null =>
   typeof value === 'string'
     ? value
     : value && typeof value === 'object' && '_id' in value
       ? String(value._id)
       : null;
-
-function money(row: Row, currency: string): string | null {
-  try {
-    if (typeof row.amountMinor === 'number')
-      return formatCurrency(toMajorAmount(row.amountMinor, currency), currency);
-  } catch {
-    // Legacy rows fall back to their recorded major amount.
-  }
-  return typeof row.amount === 'number' && Number.isFinite(row.amount)
-    ? formatCurrency(row.amount, currency)
-    : null;
-}
 
 /** The day an Expense is dated, as every viewer sees it (#437). */
 function day(value: unknown) {
@@ -111,54 +101,15 @@ function list(items: string[]) {
 const changedFields = (changes: Record<string, unknown>) =>
   Object.keys(changes).filter((field) => field !== 'moneyVersion');
 type Changes = Record<string, { old?: unknown; new?: unknown }>;
-/** A row's amount in minor units where recorded, else its major amount. */
-const rowAmount = (row: Row) =>
-  typeof row.amountMinor === 'number'
-    ? row.amountMinor
-    : typeof row.amount === 'number'
-      ? row.amount
-      : null;
-/**
- * The same payers each paid the same part of a changed total, so only the amount changed: a
- * lone payer's payment follows the total (#434). Rounding may move a payment by under one unit.
- */
-function paymentsFollowedAmount(changes: Changes) {
-  const minor = typeof changes.amountMinor?.old === 'number';
-  const total = minor ? changes.amountMinor : changes.amount;
-  const was = total?.old,
-    now = total?.new;
-  if (typeof was !== 'number' || typeof now !== 'number' || was <= 0) return false;
-  const payments = (value: unknown) =>
-    new Map(
-      rows(value).map((row) => [
-        identity(row.user),
-        minor && typeof row.amountMinor !== 'number' ? null : rowAmount(row),
-      ]),
-    );
-  const before = payments(changes.paidBy?.old),
-    after = payments(changes.paidBy?.new);
-  return (
-    before.size > 0 &&
-    before.size === after.size &&
-    [...before].every(([user, paid]) => {
-      const paying = after.get(user);
-      return (
-        user !== null &&
-        paid != null &&
-        paying != null &&
-        Math.abs(paying * was - paid * now) < (minor ? was : was / 100)
-      );
-    })
-  );
-}
 /** "the amount and the date": what an edit changed, as a member would say it. */
 const changedWhat = (changes: Changes) =>
   list(
     changedFields(changes)
-      .filter((field) => field !== 'paidBy' || !paymentsFollowedAmount(changes))
+      .filter((field) => field !== 'paidBy' || !allocationFollowedAmount(changes, 'paidBy'))
       .map((field) => nouns[field] ?? 'other details'),
   );
 
+/** Each member whose payment or share changed, by the rule web uses too (#434, #456). */
 function allocation(
   field: 'paidBy' | 'splitBetween',
   change: { old?: unknown; new?: unknown },
@@ -166,35 +117,13 @@ function allocation(
   person: (value: unknown) => string,
   viewer?: string,
 ): ExpenseHistoryChange[] {
-  const amounts = (value: unknown, currency: string) =>
-    new Map(
-      rows(value).map((row, index) => [
-        identity(row.user) ?? `former:${index}`,
-        {
-          // The signed-in member is "Your", even beside someone of the same name (#434).
-          whose: viewer && identity(row.user) === viewer ? 'Your' : `${person(row.user)}’s`,
-          amount: money(row, currency),
-        },
-      ]),
-    );
-  const before = amounts(change.old, currencies.before);
-  const after = amounts(change.new, currencies.after);
   // Someone missing from the split is "Not included", which is a word, not an amount.
-  const absent = (currency: string) => (field === 'paidBy' ? formatCurrency(0, currency) : null);
-  return [...new Set([...after.keys(), ...before.keys()])].flatMap((key) => {
-    const was = before.get(key)?.amount ?? absent(currencies.before);
-    const now = after.get(key)?.amount ?? absent(currencies.after);
-    if (was === now) return [];
-    const { whose } = (after.get(key) ?? before.get(key))!;
-    return [
-      {
-        label: field === 'paidBy' ? `${whose} payment` : `${whose} share`,
-        before: was ?? 'Not included',
-        after: now ?? 'Not included',
-        money: { before: was !== null, after: now !== null },
-      },
-    ];
-  });
+  return memberMoneyChanges(field, change, currencies).map((member) => ({
+    label: memberMoneyLabel(member, person, viewer),
+    before: member.before ?? NOT_INCLUDED,
+    after: member.after ?? NOT_INCLUDED,
+    money: { before: member.before !== null, after: member.after !== null },
+  }));
 }
 
 /**
@@ -234,8 +163,8 @@ export function describeExpenseChanges(
         return [
           {
             label: 'Amount',
-            before: money({ amountMinor: change.old }, currencies.before) ?? undefined,
-            after: money({ amountMinor: change.new }, currencies.after) ?? undefined,
+            before: recordedMoney({ amountMinor: change.old }, currencies.before) ?? undefined,
+            after: recordedMoney({ amountMinor: change.new }, currencies.after) ?? undefined,
             money: { before: true, after: true },
           },
         ];
@@ -254,8 +183,8 @@ export function describeExpenseChanges(
         return [
           {
             label: 'Amount',
-            before: money({ amount: change.old }, currencies.before) ?? undefined,
-            after: money({ amount: change.new }, currencies.after) ?? undefined,
+            before: recordedMoney({ amount: change.old }, currencies.before) ?? undefined,
+            after: recordedMoney({ amount: change.new }, currencies.after) ?? undefined,
             money: { before: true, after: true },
           },
         ];

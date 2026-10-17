@@ -374,7 +374,7 @@ describe('an opened Expense’s details', () => {
     expect(text(html)).toMatch(/Edit Delete$/);
   });
 
-  it('describes each edit in member words, with the viewer as "You" beside a namesake (#442, #454)', () => {
+  it('describes each edit in member words, with the viewer as "You" beside a namesake (#442, #454, #456)', () => {
     const namesake = { ...ALEX, _id: 'a00000000000000000000009' };
     const rows = (people: Array<[Person, number]>) =>
       people.map(([person, minor]) => ({
@@ -414,6 +414,10 @@ describe('an opened Expense’s details', () => {
           id: 'opened',
           expense: { ...EXPENSES[2], editHistory: [repriced, noted] },
           userId: ALEX._id,
+          // Stored edits name people by id; the Group's members name them.
+          names: new Map(
+            [ALEX, SAM, PRIYA, namesake].map((person) => [person._id, person.name] as const),
+          ),
           recurringExpensesEnabled: false,
           history: 'ready',
           onRetryHistory: vi.fn(),
@@ -426,6 +430,16 @@ describe('an opened Expense’s details', () => {
     expect(history).toContain('You changed the notes');
     expect(history).toContain(`${ALEX.name} changed the amount, who paid and split`);
     expect(history).toContain('₹999.00 → ₹1,200.00');
+    // Each member whose payment or share changed, the viewer as "Your" beside the namesake.
+    for (const line of [
+      `${ALEX.name}’s payment ₹0.00 → ₹1,200.00`,
+      'Priya Shah’s payment ₹999.00 → ₹0.00',
+      'Your share ₹333.00 → ₹600.00',
+      `${ALEX.name}’s share Not included → ₹600.00`,
+      'Sam Chen’s share ₹333.00 → Not included',
+      'Priya Shah’s share ₹333.00 → Not included',
+    ])
+      expect(history).toContain(line);
     // Newest first, as the side panel lists them.
     expect(history.indexOf('You changed the notes')).toBeLessThan(
       history.indexOf(`${ALEX.name} changed the amount`),

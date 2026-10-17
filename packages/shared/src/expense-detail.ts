@@ -6,7 +6,7 @@
  * out rather than shown wrong.
  */
 import { format } from 'date-fns';
-import { formatActivityAmount } from './activity-timeline';
+import { formatActivityAmount, recordedMoney } from './activity-timeline';
 import { formatCurrency } from './currency';
 import {
   calculateSplitAmountsMinor,
@@ -230,6 +230,67 @@ export interface ExpenseHistoryEntry {
    * failing that, the description (“Rent” → “Flat rent”).
    */
   change: { kind: 'amount' | 'description'; before: string; after: string } | null;
+  /** Each member whose payment or share the edit changed, when it changed who paid or the split. */
+  members: MemberMoneyChange[];
+}
+
+/** One member's payment or share that an edit changed (#456). */
+export interface MemberMoneyChange {
+  /** Whose: the stored member reference, populated, an id, or null for a former member. */
+  person: unknown;
+  part: 'payment' | 'share';
+  /** The amount before and after, in the edit's currencies; a share is null outside the split. */
+  before: string | null;
+  after: string | null;
+}
+
+/** "Not included": someone outside the split has no share, a word rather than an amount. */
+export const NOT_INCLUDED = 'Not included';
+/** Someone an Expense names whose account, or place in the Group, is gone. */
+export const FORMER_MEMBER = 'Former member';
+
+/**
+ * The members whose payment (`paidBy`) or share (`splitBetween`) one edit changed, with the
+ * amounts before and after. Someone who paid nothing paid ₹0.00; someone outside the split has
+ * no share, which reads "Not included". Anyone whose amount didn't change is left out. The same
+ * rule names these changes on web and Android (#434, #456).
+ */
+export function memberMoneyChanges(
+  field: 'paidBy' | 'splitBetween',
+  change: { old?: unknown; new?: unknown },
+  currencies: { before: string; after: string },
+): MemberMoneyChange[] {
+  const part = field === 'paidBy' ? 'payment' : 'share';
+  const amounts = (value: unknown, currency: string) =>
+    new Map(
+      rowsOf(value).map((row, index) => [
+        memberId(row.user) ?? `former:${index}`,
+        { person: row.user ?? null, amount: recordedMoney(row, currency) },
+      ]),
+    );
+  const before = amounts(change.old, currencies.before);
+  const after = amounts(change.new, currencies.after);
+  const absent = (currency: string) => (part === 'payment' ? formatCurrency(0, currency) : null);
+  return [...new Set([...after.keys(), ...before.keys()])].flatMap((key) => {
+    const was = before.get(key)?.amount ?? absent(currencies.before);
+    const now = after.get(key)?.amount ?? absent(currencies.after);
+    if (was === now) return [];
+    const { person } = (after.get(key) ?? before.get(key))!;
+    return [{ person, part, before: was, after: now }];
+  });
+}
+
+/**
+ * "Your share" or "Alex Rivera’s payment": whose change it is, with the viewer as "Your",
+ * matched by member id so a namesake is never mistaken for them.
+ */
+export function memberMoneyLabel(
+  change: MemberMoneyChange,
+  name: (person: unknown) => string,
+  viewer?: string,
+): string {
+  const whose = viewer && memberId(change.person) === viewer ? 'Your' : `${name(change.person)}’s`;
+  return `${whose} ${change.part}`;
 }
 
 /** What an edit can change, as the history words it, in the order it lists them. */
@@ -246,25 +307,76 @@ const FIELDS: ReadonlyArray<[word: string, keys: readonly string[]]> = [
   ['receipt', ['receiptUrl']],
 ];
 
-type Rows = Array<{ user?: unknown; percentage?: unknown; shares?: unknown }>;
-const rowsOf = (value: unknown): Rows => (Array.isArray(value) ? value : []);
+type AllocationRow = Record<string, unknown>;
+/** A recorded payer or share list's rows, skipping anything that isn't one. */
+const rowsOf = (value: unknown): AllocationRow[] =>
+  Array.isArray(value)
+    ? value.filter((row): row is AllocationRow => !!row && typeof row === 'object')
+    : [];
+/** A member reference's id, populated or not; null for a former member's missing reference. */
+const memberId = (value: unknown): string | null =>
+  typeof value === 'string'
+    ? value
+    : value && typeof value === 'object' && '_id' in value
+      ? String(value._id)
+      : null;
 const peopleOf = (value: unknown) =>
   JSON.stringify(
     rowsOf(value)
-      .map((row) => moneyParticipantId(row?.user))
+      .map((row) => moneyParticipantId(row.user))
       .sort(),
   );
 const weightsOf = (value: unknown) =>
   JSON.stringify(
     rowsOf(value)
-      .map((row) => [moneyParticipantId(row?.user), row?.percentage ?? null, row?.shares ?? null])
+      .map((row) => [moneyParticipantId(row.user), row.percentage ?? null, row.shares ?? null])
       .sort(),
   );
 
 /**
+ * Whether one edit's payer or share rows only followed its new total: the same people, each
+ * with the same part of it, give or take under one unit of rounding (#434). A lone payer's
+ * payment always follows the total.
+ */
+export function allocationFollowedAmount(
+  changes: RecordedEdit['changes'],
+  field: 'paidBy' | 'splitBetween',
+): boolean {
+  const minor = typeof changes.amountMinor?.old === 'number';
+  const total = minor ? changes.amountMinor : changes.amount;
+  const was = total?.old,
+    now = total?.new;
+  if (typeof was !== 'number' || typeof now !== 'number' || was <= 0) return false;
+  const amountOf = (row: AllocationRow) =>
+    typeof row.amountMinor === 'number'
+      ? row.amountMinor
+      : minor || typeof row.amount !== 'number'
+        ? null
+        : row.amount;
+  const parts = (value: unknown) =>
+    new Map(rowsOf(value).map((row) => [memberId(row.user), amountOf(row)]));
+  const before = parts(changes[field]?.old),
+    after = parts(changes[field]?.new);
+  return (
+    before.size > 0 &&
+    before.size === after.size &&
+    [...before].every(([user, paid]) => {
+      const paying = after.get(user);
+      return (
+        user !== null &&
+        paid != null &&
+        paying != null &&
+        Math.abs(paying * was - paid * now) < (minor ? was : was / 100)
+      );
+    })
+  );
+}
+
+/**
  * The fields an edit changed, in words. A changed amount rewrites every payer and share row, so
  * those count as "who paid" or "split" only when the people, the method or the percentages or
- * shares changed, or when the rows changed while the amount didn't.
+ * shares changed, when money moved other than with the new total, or when the rows changed
+ * while the amount didn't.
  */
 function changedFields(changes: RecordedEdit['changes']): string[] {
   const has = (key: string) => key in changes;
@@ -276,7 +388,8 @@ function changedFields(changes: RecordedEdit['changes']): string[] {
     has(key) &&
     (!amountChanged ||
       peopleOf(changes[key].old) !== peopleOf(changes[key].new) ||
-      also(changes[key].old, changes[key].new));
+      also(changes[key].old, changes[key].new) ||
+      !allocationFollowedAmount(changes, key));
   return FIELDS.filter(([word, keys]) => {
     if (word === 'who paid') return rowsChanged('paidBy', () => false);
     if (word === 'split')
@@ -288,22 +401,47 @@ function changedFields(changes: RecordedEdit['changes']): string[] {
   }).map(([word]) => word);
 }
 
-/** "changed the amount", "changed the amount and notes", "changed the date, Tag and notes". */
+/**
+ * "changed the amount", "changed the amount and notes", "changed the date, Tag and notes", or
+ * "changed who paid" when that comes first.
+ */
 function changedAction(fields: string[]): string {
-  return fields.length ? `changed the ${listNames(fields)}` : 'edited this Expense';
+  if (!fields.length) return 'edited this Expense';
+  return fields[0] === 'who paid'
+    ? `changed ${listNames(fields)}`
+    : `changed the ${listNames(fields)}`;
 }
 
 const quoted = (value: unknown) => (typeof value === 'string' ? `“${value}”` : null);
 
 /**
- * An Expense's recorded edits, newest first, each with what it changed and, for the amount or
- * description, what it was before and after.
+ * An Expense's recorded edits, newest first, each with what it changed; for the amount or
+ * description, what it was before and after; and when it changed who paid or the split, each
+ * member whose payment or share changed, in the currency the Expense had at the time.
  */
 export function expenseEdits(
   expense: Pick<ExpenseHistorySource, 'currency' | 'editHistory'>,
 ): ExpenseHistoryEntry[] {
-  const edits = (expense.editHistory ?? []).map((edit): ExpenseHistoryEntry => {
+  let currencyAfter = expense.currency;
+  const currencyOf = (value: unknown) => (typeof value === 'string' && value ? value : null);
+  return [...(expense.editHistory ?? [])].reverse().map((edit): ExpenseHistoryEntry => {
     const fields = changedFields(edit.changes);
+    // Newest first, each edit's currency is what the next one started from.
+    const editedTo = currencyOf(edit.changes.currency?.new) ?? currencyAfter;
+    const currencies = {
+      before: currencyOf(edit.changes.currency?.old) ?? editedTo,
+      after: editedTo,
+    };
+    currencyAfter = currencies.before;
+    const { paidBy, splitBetween } = edit.changes;
+    const members = [
+      ...(fields.includes('who paid') && paidBy
+        ? memberMoneyChanges('paidBy', paidBy, currencies)
+        : []),
+      ...(fields.includes('split') && splitBetween
+        ? memberMoneyChanges('splitBetween', splitBetween, currencies)
+        : []),
+    ];
     const amount = formatActivityAmount(
       {
         _id: '',
@@ -311,7 +449,7 @@ export function expenseEdits(
         createdAt: edit.editedAt,
         metadata: { changes: edit.changes },
       },
-      expense.currency,
+      currencies.after,
     );
     const description = edit.changes.description;
     const before = quoted(description?.old);
@@ -325,9 +463,9 @@ export function expenseEdits(
         : before && after
           ? { kind: 'description', before, after }
           : null,
+      members,
     };
   });
-  return edits.reverse();
 }
 
 /** An Expense's history, newest first: its recorded edits, then who added it. */
@@ -339,6 +477,7 @@ export function expenseHistory(expense: ExpenseHistorySource): ExpenseHistoryEnt
       at: expense.createdAt,
       action: 'added this Expense',
       change: null,
+      members: [],
     },
   ];
 }
