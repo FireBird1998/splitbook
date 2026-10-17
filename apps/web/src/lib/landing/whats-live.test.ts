@@ -13,6 +13,7 @@ describe("what's live", () => {
   it('has everything off with no settings', () => {
     expect(whatsLive({})).toEqual({
       assistants: { available: false, canPrepare: false },
+      toReview: false,
       playStoreUrl: null,
       pricingVisible: false,
       links: { privacy: null, terms: null, support: null },
@@ -44,6 +45,12 @@ describe("what's live", () => {
       available: false,
       canPrepare: false,
     });
+  });
+
+  it('has To review live only when persistent Drafts are on, read exactly (#446)', () => {
+    expect(whatsLive({ PERSISTENT_DRAFTS_ENABLED: 'true' }).toReview).toBe(true);
+    expect(whatsLive({ PERSISTENT_DRAFTS_ENABLED: ' true' }).toReview).toBe(false);
+    expect(whatsLive({ PERSISTENT_DRAFTS_ENABLED: 'false' }).toReview).toBe(false);
   });
 
   it('takes a Google Play listing address, and ignores anything else', () => {

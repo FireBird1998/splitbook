@@ -86,8 +86,8 @@ describe('the landing page with everything off', () => {
       expect(text(html)).toContain(
         'Trips, flats, couples and teams. Add what was paid, split it the way it happened, and Splitbook shows who owes whom, then settles it in the fewest payments.',
       );
-      // Once in the hero and once in the closing call to action.
-      expect(text(html).match(/Sign in with Google/g)).toHaveLength(2);
+      // In the hero, on the web card (#446) and in the closing call to action.
+      expect(text(html).match(/Sign in with Google/g)).toHaveLength(3);
       expect(text(html)).toContain('Start your first Group tonight. Settle it by the weekend.');
       expect(linksTo(html, '/login').map((anchor) => anchor.text)).toEqual(['Sign in']);
     }
@@ -114,7 +114,12 @@ describe('the landing page with everything off', () => {
   it('offers no store link, assistants link, pricing or legal links', () => {
     for (const mode of MODES) {
       const html = render(mode, OFF);
-      expect(anchors(html).map((anchor) => anchor.href)).toEqual(['/', '/login']);
+      expect(anchors(html).map((anchor) => anchor.href)).toEqual([
+        '/',
+        '#how',
+        '#groups',
+        '/login',
+      ]);
       expect(images(html).map((image) => image.src)).not.toContain(
         '/badges/google-play-badge-en.png',
       );
@@ -129,6 +134,7 @@ describe('the landing page with everything off', () => {
       OFF,
       {
         assistants: { available: true, canPrepare: true },
+        toReview: true,
         playStoreUrl: PLAY,
         pricingVisible: true,
         links: { privacy: '/privacy', terms: '/terms', support: '/support' },
@@ -147,13 +153,14 @@ describe('the landing page with a Google Play listing', () => {
     for (const mode of MODES) {
       const html = render(mode, live);
       const store = linksTo(html, PLAY);
-      // The top bar's Get the app, then the badge in the hero and in the closing call to action.
-      expect(store.map((anchor) => anchor.text)).toEqual(['Get the app', '', '']);
+      // The top bar's Get the app, then the badge in the hero, on the Android card (#446) and in
+      // the closing call to action.
+      expect(store.map((anchor) => anchor.text)).toEqual(['Get the app', '', '', '']);
       expect(
         images(html)
           .filter((image) => image.src === '/badges/google-play-badge-en.png')
           .map((image) => image.alt),
-      ).toEqual(['Get it on Google Play', 'Get it on Google Play']);
+      ).toEqual(['Get it on Google Play', 'Get it on Google Play', 'Get it on Google Play']);
       expect(text(html)).toContain('Shared expenses · Android and web');
       expect(text(html)).toContain(
         'Google Play and the Google Play logo are trademarks of Google LLC.',
@@ -213,7 +220,8 @@ describe('the landing page’s pricing (#447)', () => {
       expect(html).not.toContain('id="pricing"');
       expect(linksTo(html, '#pricing')).toEqual([]);
       expect(plans(html)).toEqual([]);
-      expect(text(html)).not.toContain('₹');
+      // No price: the page's other amounts are the content sections' (#446).
+      expect(text(html)).not.toMatch(/₹29|₹199|Free for a few Groups/);
     }
   });
 
@@ -257,9 +265,11 @@ describe('the landing page’s pricing (#447)', () => {
     expect(
       anchors(html)
         .map(({ href, text: label }) => [href, label])
-        .slice(0, 3),
+        .slice(0, 5),
     ).toEqual([
       ['/', ''],
+      ['#how', 'How it works'],
+      ['#groups', 'Groups'],
       ['#pricing', 'Pricing'],
       ['/login', 'Sign in'],
     ]);
@@ -351,5 +361,144 @@ describe('the home page route', () => {
         ],
       },
     });
+  });
+});
+
+/** The CSS a rendered element's classes get, from the styles the render emits. */
+function moneyStyled(html: string, amount: string): boolean[] {
+  const rules = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('');
+  return [...html.matchAll(/<span class="([^"]*)"[^>]*>([^<]*)<\/span>/g)]
+    .filter(([, , content]) => content === amount)
+    .map(([, classes]) =>
+      classes
+        .split(/\s+/)
+        .some((name) =>
+          new RegExp(`\\.${name}\\{[^}]*font-variant-numeric:tabular-nums`).test(rules),
+        ),
+    );
+}
+
+const headings = (html: string, level: number) =>
+  [...html.matchAll(new RegExp(`<h${level}\\b[^>]*>([\\s\\S]*?)</h${level}>`, 'g'))].map(
+    ([, inner]) => text(inner),
+  );
+
+describe('the content sections (#446)', () => {
+  it('come in order between the hero and the closing call to action, in both themes', () => {
+    for (const mode of MODES)
+      expect(headings(render(mode, OFF), 2)).toEqual([
+        'Not just trips. Every kind of shared money.',
+        'Split it the way it actually happened.',
+        'Your Groups on a bigger screen.',
+        'Why you can trust it',
+        'Start your first Group tonight. Settle it by the weekend.',
+      ]);
+  });
+
+  it('show every Theme with its tagline, the strip once on the Trip card, Trip days and Month totals', () => {
+    for (const mode of MODES) {
+      const html = render(mode, OFF);
+      expect(headings(html, 3).slice(0, 5)).toEqual([
+        'Trip',
+        'Household',
+        'Couple',
+        'Work',
+        'General',
+      ]);
+      const shown = text(html);
+      for (const sentence of [
+        'A getaway with a crew: travel, stays and shared meals, from the first day to the last.',
+        'A boarding-pass header, a setup checklist and a date range, with Expenses grouped by Trip day.',
+        'A long-running home ledger: rent, groceries and utilities.',
+        'Month-by-month totals and a running balance.',
+        'Shared spending for two: dinners, gifts and everyday costs.',
+        'Team and project expenses: travel, meals and supplies.',
+        'Any shared pool of money: Sunday football, a club, a gift fund.',
+      ])
+        expect(shown).toContain(sentence);
+      expect(shown.match(/A clean shared ledger with a running balance\./g)).toHaveLength(3);
+      // The boarding-pass strip, once on the page.
+      expect(html.match(/aria-label="Goa Weekend[^"]*"/g)).toHaveLength(1);
+      for (const day of ['Day 1', 'Day 2', 'Day 3']) expect(shown).toContain(day);
+      for (const amount of [
+        '₹6,420.00',
+        '₹2,800.00',
+        '₹3,150.00',
+        '₹21,860.00',
+        '₹23,540.00',
+        '₹17,920.00',
+      ])
+        expect(moneyStyled(html, amount)).toEqual([true]);
+    }
+  });
+
+  it('say how an Expense splits, exactly, beside the Groceries card worked out by Splitbook’s split', () => {
+    for (const mode of MODES) {
+      const html = render(mode, OFF);
+      const shown = text(html);
+      for (const sentence of [
+        'Equally, by shares, by percent or exact amounts, between everyone or just the people who were there.',
+        'More than one payer? Say who paid what, and the split still adds up.',
+        'Every paisa lands somewhere. ₹1,000 between three is ₹333.34 + ₹333.33 + ₹333.33, never ₹999.99.',
+        'A Group can use its main currency and up to two more, and balances never add currencies together.',
+      ])
+        expect(shown).toContain(sentence);
+      expect(shown).toMatch(/Groceries.*Paid by Sam.*Split by shares/);
+      // Shares 2:1:1:1 of ₹1,000: You ₹400, and ₹200 each for Priya, Sam and Alex.
+      for (const [name, shares] of [
+        ['You', '2 shares'],
+        ['Priya', '1 share'],
+        ['Sam', '1 share'],
+        ['Alex', '1 share'],
+      ])
+        expect(shown).toContain(`${name} ${shares}`);
+      expect(moneyStyled(html, '₹400.00')).toEqual([true]);
+      expect(moneyStyled(html, '₹200.00')).toEqual([true, true, true]);
+      // The total, and what the shares add up to.
+      expect(moneyStyled(html, '₹1,000.00')).toEqual([true, true]);
+    }
+  });
+
+  it('show the web card everywhere, and the Android card only with a Play listing', () => {
+    const off = text(render('light', OFF));
+    for (const sentence of [
+      'Search every Expense across your Groups.',
+      'Charts of spending by Month, with the current Month in focus.',
+      'Export to CSV, keep a backup, or print a statement.',
+    ])
+      expect(off).toContain(sentence);
+    expect(off).not.toMatch(/Android|Add an Expense in a few taps/);
+
+    for (const mode of MODES) {
+      const html = render(mode, { ...OFF, playStoreUrl: PLAY });
+      expect(headings(html, 2)).toContain('One account on your phone and your laptop.');
+      const shown = text(html);
+      for (const sentence of [
+        'Same Groups, same balances. Add on the bus, review at your desk.',
+        'Add an Expense in a few taps, wherever you paid.',
+        'No signal? Your saved copy of each Group stays readable.',
+        'Home shows what you owe and are owed in every currency.',
+      ])
+        expect(shown).toContain(sentence);
+      // Finish later is To review's, said only where To review is live.
+      expect(shown).not.toMatch(/Finish later|To review/);
+      expect(headings(html, 3)).toEqual(expect.arrayContaining(['Android', 'Web']));
+    }
+    expect(text(render('light', { ...OFF, playStoreUrl: PLAY, toReview: true }))).toContain(
+      'No signal? Your saved copy of each Group stays readable, and Finish later keeps a half-done Expense in To review.',
+    );
+  });
+
+  it('say why the money can be trusted', () => {
+    const shown = text(render('dark', OFF));
+    for (const sentence of [
+      'Exact money',
+      'Amounts are stored as whole paise or cents, never rounded floats, and every split adds up to the Expense.',
+      'Every change in Activity',
+      'Edits, deletions and payments are logged, so the Group can always see what changed and who changed it.',
+      'Private by default',
+      'Only the people in a Group see it. You sign in with Google; there is no password to leak.',
+    ])
+      expect(shown).toContain(sentence);
   });
 });

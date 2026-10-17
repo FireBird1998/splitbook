@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import Box from '@mui/material/Box';
+import FlightOutlinedIcon from '@mui/icons-material/FlightOutlined';
 import { deriveTripCodes } from '@splitbook/shared/trip-codes';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
 import { formatCurrency } from '@splitbook/shared/currency';
@@ -231,7 +232,17 @@ export default function TripStrip({
               letterSpacing: '0.12em',
             }}
           >
-            ···· ✈ ····
+            ····
+            {/* A line icon, as the design system draws every icon, never an emoji (#446). */}
+            <FlightOutlinedIcon
+              sx={{
+                fontSize: '1em',
+                mx: 0.5,
+                verticalAlign: '-0.125em',
+                transform: 'rotate(90deg)',
+              }}
+            />
+            ····
           </Box>
           <span>{to}</span>
         </Box>

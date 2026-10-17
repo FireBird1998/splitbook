@@ -15,6 +15,10 @@ import { TOPBAR_HEIGHT } from '@/lib/theme/tokens';
 import type { WhatsLive } from '@/lib/landing/whats-live';
 import LandingPricing, { pricingSections } from './LandingPricing';
 import SignInWithGoogleButton from './SignInWithGoogleButton';
+import LandingApps from './LandingApps';
+import LandingGroups from './LandingGroups';
+import LandingSplit from './LandingSplit';
+import LandingTrust from './LandingTrust';
 import { LANDING_ACTION_HEIGHT, LANDING_HEADLINE, LANDING_PROMISE } from './landing-copy';
 
 /** A section of the page the top bar links to, such as `{ href: '#groups', label: 'Groups' }`. */
@@ -306,9 +310,23 @@ function LandingFooter({ live }: LandingPageProps) {
 export default function LandingPage({ live }: LandingPageProps) {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <LandingTopBar live={live} sections={pricingSections(live)} />
+      <LandingTopBar
+        live={live}
+        sections={[
+          { href: '#how', label: 'How it works' },
+          { href: '#groups', label: 'Groups' },
+          ...pricingSections(live),
+        ]}
+      />
       <Box component="main">
         <Hero live={live} />
+        <LandingGroups />
+        <LandingSplit />
+        <LandingApps
+          live={live}
+          storeBadge={live.playStoreUrl && <GetItOnGooglePlay href={live.playStoreUrl} />}
+        />
+        <LandingTrust />
         <LandingPricing live={live} />
         <ClosingCallToAction live={live} />
       </Box>
