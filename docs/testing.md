@@ -16,7 +16,7 @@ the work that followed it. When a file count below drifts, the commands still ho
 | Expense access          | `apps/web/playwright-expense-access/`                                         | 29 specs      | Playwright, HTTP and Chromium, an isolated app and database       | `pnpm web test:expense-access`                                              | verify                              |
 | Google sign-in recovery | `apps/web/playwright-auth-recovery/`                                          | 1 spec        | Playwright, an isolated app in Google mode                        | `pnpm web exec playwright test --config playwright.auth-recovery.config.ts` | verify                              |
 | Browser journeys        | `apps/web/playwright/`                                                        | 26 specs      | Playwright, four theme projects, the seeded `splitbook-demo`      | `pnpm web test:e2e`                                                         | playwright                          |
-| Google sign-in journeys | `apps/web/playwright-google/`                                                 | 1 spec        | Playwright, `AUTH_MODE=google`                                    | `pnpm web test:e2e:google`                                                  | playwright                          |
+| Google sign-in journeys | `apps/web/playwright-google/`                                                 | 2 specs       | Playwright, `AUTH_MODE=google`                                    | `pnpm web test:e2e:google`, then `pnpm web test:e2e:google:assistants`      | playwright                          |
 | Component lab and pilot | `playwright-design-system/`, `playwright-pilot/`, `playwright-production-ui/` | 1, 4, 1 specs | Playwright; in CI the lab and pilot use a Linux browser container | `pnpm web test:design-system`, `test:pilot`, `test:production-ui`           | playwright                          |
 
 Three Playwright configs are not CI steps: `playwright.auth-production.config.ts` (production
@@ -315,7 +315,8 @@ skipped when `main`'s commit already passed it.
   output and the backend log.
 - **playwright** (about 30 minutes, 23 of them the browser journeys): install, Chromium, a
   replica set on 27017 for the demo database, a build with persistent Drafts on, `pnpm web
-test:e2e` (`next start` on 3100), then a default build for `pnpm web test:e2e:google`, the
+test:e2e` (`next start` on 3100), then a default build for `pnpm web test:e2e:google` and
+  `pnpm web test:e2e:google:assistants` (#450), the
   component lab and the pilot's behaviour, accessibility and visual comparisons (both in a Linux
   Playwright browser container, so screenshots match their baselines), and the production lab
   exclusion. It uploads the report and the review screenshots.
@@ -358,4 +359,8 @@ Where the safety net is, and where it is thin:
   the redirect to Google and asserts its parameters, then proves the approved and denied outcomes
   through Better Auth's ID-token sign-in endpoint with locally signed tokens
   (`AUTH_TEST_ID_TOKEN_SECRET`). Google is never contacted, and only the approved test identity
-  is stored.
+  is stored. Assistants are off there: `playwright.google-assistants.config.ts` runs the
+  same app on 3102 with them live and preparing items (`MCP_ENABLED`,
+  `PERSISTENT_DRAFTS_ENABLED`), for the landing page's Connected assistants section and Fig 2,
+  as the Connect ChatGPT suite does. Next allows one dev server per folder, so run the two one
+  after the other.

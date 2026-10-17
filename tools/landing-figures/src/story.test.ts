@@ -47,4 +47,21 @@ describe('the landing story', () => {
       expect(Object.values(step.after).reduce((a, b) => a + b, 0)).toBe(0);
     }
   });
+
+  it('prepares Dinner at Thalassa ₹2,400 between three and Cab to the airport ₹600 between two for To review', () => {
+    expect(
+      story().prepared.map(({ title, saved, chips }) => ({
+        title,
+        saved,
+        chips: chips.map((c) => `${c.to}:${c.amountMinor}`),
+      })),
+    ).toEqual([
+      {
+        title: 'Dinner at Thalassa',
+        saved: true,
+        chips: ['you:80000', 'priya:80000', 'sam:80000'],
+      },
+      { title: 'Cab to the airport', saved: false, chips: ['you:30000', 'priya:30000'] },
+    ]);
+  });
 });

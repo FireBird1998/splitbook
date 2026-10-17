@@ -1,7 +1,8 @@
 // The story every landing figure tells, computed with the app's own money code: the same split,
-// balance and simplify functions the web and Android clients use. The debts between pairs of
-// members (Fig 3's grey cords) have no shared function; they are netted here from the shared
-// split's shares, and check proves that paying them would clear the shared balances.
+// balance and simplify functions the web and Android clients use, and the same equal split for the
+// items Fig 2's assistant prepares. The debts between pairs of members (Fig 3's grey cords) have
+// no shared function; they are netted here from the shared split's shares, and check proves that
+// paying them would clear the shared balances.
 import {
   MONEY_VERSION,
   calculateSplitAmountsMinor,
@@ -134,6 +135,35 @@ function debtsOf(steps: Array<{ paidBy: MemberId; split: Split }>) {
   return debts;
 }
 
+/** An item an assistant prepares for To review (Fig 2), split equally between the people it names. */
+interface Prepared {
+  title: string;
+  /** Its name on the machines' small screens. */
+  short: string;
+  amountMinor: number;
+  between: MemberId[];
+  /** Whether the member saves it in the tour; the other waits in To review. */
+  saved: boolean;
+}
+
+/** What Claude prepares from one chat message on Fig 2: the member saves Dinner, and Cab waits. */
+export const PREPARED: readonly Prepared[] = [
+  {
+    title: 'Dinner at Thalassa',
+    short: 'Dinner',
+    amountMinor: 240000,
+    between: ['you', 'priya', 'sam'],
+    saved: true,
+  },
+  {
+    title: 'Cab to the airport',
+    short: 'Cab',
+    amountMinor: 60000,
+    between: ['you', 'priya'],
+    saved: false,
+  },
+];
+
 export function story() {
   const done: Array<{ paidBy: MemberId; amountMinor: number; split: Split }> = [];
   const steps = EXPENSES.map((expense) => {
@@ -155,5 +185,21 @@ export function story() {
       amountMinor,
     }),
   );
-  return { currency: CURRENCY, members: MEMBERS, steps, debts: debtsOf(steps), transfers };
+  // Each prepared item is a bar of one chip per person, as the app's equal split shares it.
+  const prepared = PREPARED.map((item) => ({
+    ...item,
+    chips: calculateSplitAmountsMinor(
+      'equal',
+      item.amountMinor,
+      item.between.map((user) => ({ user })),
+    ).map(({ user, amountMinor }) => ({ to: user, amountMinor })),
+  }));
+  return {
+    currency: CURRENCY,
+    members: MEMBERS,
+    steps,
+    debts: debtsOf(steps),
+    transfers,
+    prepared,
+  };
 }

@@ -135,11 +135,12 @@ src/
 │   │   ├── LandingGroups.tsx       # Every kind of Group
 │   │   ├── LandingSplit.tsx        # How an Expense splits
 │   │   ├── LandingSettleUp.tsx     # Settle up: Fig 3 and the three payments
+│   │   ├── LandingAssistants.tsx   # Connected assistants, as what's live allows: Fig 2
 │   │   ├── LandingApps.tsx         # Android and web
 │   │   ├── LandingTrust.tsx        # Why you can trust it
 │   │   └── LandingPricing.tsx      # Pricing, behind its setting
 │   ├── landing-figures/
-│   │   ├── LandingFigure.tsx       # A figure's plate, server-rendered SVG (Fig 1, Fig 3)
+│   │   ├── LandingFigure.tsx       # A figure's plate, server-rendered SVG (Figs 1–3)
 │   │   ├── FigureTour.tsx          # Its theme and live tour, loaded near the screen
 │   │   └── generated/              # Written by tools/landing-figures; never edit
 │   ├── auth/

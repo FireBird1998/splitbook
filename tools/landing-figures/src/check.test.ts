@@ -58,6 +58,17 @@ describe('verifyStory', () => {
       'Settling up leaves Priya at −₹100.00 and Sam at +₹100.00.',
     ]);
   });
+
+  it("flags a prepared item whose chips don't add up to its amount", () => {
+    const s = story();
+    const [dinner, cab] = s.prepared;
+    const chips = dinner!.chips.map((chip, i) =>
+      i === 0 ? { ...chip, amountMinor: chip.amountMinor - 100 } : chip,
+    );
+    expect(verifyStory({ ...s, prepared: [{ ...dinner!, chips }, cab!] })).toEqual([
+      "Dinner at Thalassa's chips add up to ₹2,399.00, not ₹2,400.00.",
+    ]);
+  });
 });
 
 describe('staleOutputs', () => {

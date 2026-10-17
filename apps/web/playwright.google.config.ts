@@ -13,6 +13,10 @@ import { defineConfig, devices } from '@playwright/test';
  * Kept separate from the demo-mode suite (playwright.config.ts), which owns
  * port 3100 and the seeded splitbook-demo database. This suite uses its own
  * splitbook-google-e2e database, dropped by global setup before each run.
+ *
+ * Assistants are off on this server, so its landing page has no Connected
+ * assistants section. playwright.google-assistants.config.ts runs the same
+ * app with them live (#450), as the Connect ChatGPT suite does.
  */
 
 const PORT = 3101;
@@ -42,6 +46,7 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop-light',
+      testIgnore: 'landing-assistants.spec.ts',
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

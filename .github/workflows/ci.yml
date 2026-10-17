@@ -606,6 +606,11 @@ jobs:
       - name: Run Google OAuth journeys (google mode, intercepted redirect and ID-token sign-in)
         run: pnpm test:e2e:google
 
+      # The same build with Connected assistants live and preparing items: the landing page's
+      # assistants section and Fig 2 (#450).
+      - name: Run the landing page with assistants live (google mode)
+        run: pnpm test:e2e:google:assistants
+
       - name: Start reproducible Linux visual-test browser
         run: |
           docker run --name splitbook-design-browser --platform linux/amd64 --rm -d --init \

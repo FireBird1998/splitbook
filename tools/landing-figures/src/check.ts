@@ -68,6 +68,14 @@ export function verifyStory(s: Story): string[] {
         `Settling up leaves ${andList(unsettled.map((m) => `${m.name} at ${signed(m.left)}`))}.`,
       );
   }
+  // Fig 2's bars: every chip of a prepared item adds up to what the assistant prepared.
+  for (const item of s.prepared) {
+    const chips = sumMinorAmounts(item.chips.map((chip) => chip.amountMinor));
+    if (chips !== item.amountMinor)
+      problems.push(
+        `${item.title}'s chips add up to ${money(chips)}, not ${money(item.amountMinor)}.`,
+      );
+  }
   return problems;
 }
 

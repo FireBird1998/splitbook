@@ -172,14 +172,18 @@ describe('the landing page with a Google Play listing', () => {
 describe('the landing page with assistants available', () => {
   it('links to the assistants section from the hero', () => {
     const html = render('light', { ...OFF, assistants: { available: true, canPrepare: false } });
+    // The top bar's link to the section (#450), then the hero's.
     expect(linksTo(html, '#assistants').map((anchor) => anchor.text)).toEqual([
+      'Assistants',
       'Use Claude or ChatGPT? Connect Splitbook',
     ]);
   });
 
   it('links the footer to the guide for connecting ChatGPT', () => {
     const html = render('light', { ...OFF, assistants: { available: true, canPrepare: false } });
+    // The section's own link to the guide (#450), then the footer's.
     expect(linksTo(html, '/connect/chatgpt').map((anchor) => anchor.text)).toEqual([
+      'How to connect ChatGPT',
       'Assistant guide',
     ]);
   });
@@ -315,7 +319,12 @@ describe('Fig 1 in the hero', () => {
 
   it('draws the figures in the page’s theme', () => {
     for (const mode of MODES) {
-      const html = render(mode, OFF);
+      // With assistants preparing items, Fig 2 is on the page too (#450).
+      const html = render(mode, {
+        ...OFF,
+        assistants: { available: true, canPrepare: true },
+        toReview: true,
+      });
       // One themed plate per figure on the page, each in the page's theme.
       expect([...html.matchAll(/\sdata-theme="(\w+)"/g)].map((m) => m[1])).toEqual(
         svgImages(html).map(() => mode),
@@ -354,6 +363,125 @@ describe('the Settle up section', () => {
       [...html.matchAll(/<section\b[^>]*\sid="(\w+)"/g)].map((m) => m[1]);
     const ids = order(render('light', OFF));
     expect(ids.indexOf('settle')).toBe(ids.indexOf('how') + 1);
+  });
+});
+
+describe('the Connected assistants section (#450)', () => {
+  const READING = { ...OFF, assistants: { available: true, canPrepare: false } };
+  const PREPARING = { ...OFF, assistants: { available: true, canPrepare: true }, toReview: true };
+  const ids = (html: string) => [...html.matchAll(/<section\b[^>]*\sid="(\w+)"/g)].map((m) => m[1]);
+  const steps = (html: string) =>
+    [...section(html, 'assistants').matchAll(/<ol\b[^>]*>([\s\S]*?)<\/ol>/g)].flatMap(([, list]) =>
+      [...list.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map(([, step]) => text(step)),
+    );
+  /** The section's words as read, without the space text() leaves before punctuation after a tag. */
+  const said = (html: string) => text(html).replace(/\s+([.,:])/g, '$1');
+  /** Anything the section says about preparing items, which only a preparing deployment may say. */
+  const TO_REVIEW_CLAIM =
+    /To review|prepar|Tell it what you spent|You save, never|review and save/i;
+
+  it('is absent, and nothing links to it, while assistants aren’t available', () => {
+    for (const mode of MODES) {
+      const html = render(mode, OFF);
+      expect(ids(html)).not.toContain('assistants');
+      expect(linksTo(html, '#assistants')).toEqual([]);
+      expect(text(html)).not.toMatch(/Talk to your Groups|Connected assistants|Fig 2/);
+      expect(svgImages(html)).not.toContainEqual(expect.stringMatching(/To review rack/));
+    }
+  });
+
+  it('covers connecting and reading only while assistants can’t prepare items, in both themes', () => {
+    for (const mode of MODES) {
+      const html = render(mode, READING);
+      const own = section(html, 'assistants');
+      expect(own).toMatch(/<h2\b[^>]*>Talk to your Groups in Claude or ChatGPT\.<\/h2>/);
+      expect(text(own)).toContain(
+        'Connect your Splitbook account once and ask what you owe. Your money only moves when you say so.',
+      );
+      expect(steps(html)).toEqual([
+        '1 Add Splitbook as a connector',
+        '2 Sign in and approve',
+        '3 Ask about your Groups',
+      ]);
+      // A chat that asks about money, answered from the Settle up section's own payments.
+      expect(said(own)).toContain(
+        'You: Who still owes me for Goa? Claude: In Goa Weekend, Alex owes you ₹500.00.',
+      );
+      expect(moneyStyled(own, '₹500.00')).toEqual([true]);
+      expect(headings(own, 3)).toEqual(['Ask about your money', 'Stay in control']);
+      expect(text(own)).toContain(
+        '“Who still owes me for Goa?” It reads your Groups, their members, Tags, Balances and spending, as you.',
+      );
+      expect(text(own)).toContain('Disconnect any time in Settings.');
+      expect(text(own)).not.toMatch(TO_REVIEW_CLAIM);
+      expect(text(own)).not.toMatch(/email/i);
+      expect(svgImages(own)).toEqual([]);
+      expect(linksTo(own, '/connect/chatgpt').map((anchor) => anchor.text)).toEqual([
+        'How to connect ChatGPT',
+      ]);
+    }
+  });
+
+  it('adds review and save, a prepared item, its two statements and Fig 2 while assistants can prepare items, in both themes', () => {
+    for (const mode of MODES) {
+      const html = render(mode, PREPARING);
+      const own = section(html, 'assistants');
+      expect(text(own)).toContain(
+        'Connect your Splitbook account once. Ask what you owe, or say what you spent and let the assistant prepare it for To review. Your money only moves when you say so.',
+      );
+      expect(steps(html)).toEqual([
+        '1 Add Splitbook as a connector',
+        '2 Sign in and approve',
+        '3 Ask, or tell it what you spent',
+        '4 Review and save',
+      ]);
+      expect(said(own)).toContain(
+        'You: Add dinner at Thalassa, ₹2,400. I paid, split with Priya and Sam. Claude: Added 1 to To review in Goa Weekend: Dinner at Thalassa, ₹2,400.00, paid by you, split equally between 3, Tag Food. Open To review to save it.',
+      );
+      expect(moneyStyled(own, '₹2,400.00')).toEqual([true]);
+      expect(headings(own, 3)).toEqual([
+        'Ask about your money',
+        'Tell it what you spent',
+        'You save, never the assistant',
+        'Stay in control',
+      ]);
+      for (const sentence of [
+        'With a separate OK, which starts switched off, it prepares up to 10 items at a time in To review.',
+        // #443 story 23: nothing reaches Balances until the member saves it.
+        'You check each item and save it yourself: nothing reaches Balances until you do. A saved Expense shows “prepared by Claude” to the Group.',
+        'Disconnect any time in Settings.',
+      ])
+        expect(text(own)).toContain(sentence);
+      expect(text(own)).not.toMatch(/email/i);
+      expect(svgImages(own)).toEqual([
+        expect.stringMatching(
+          /^A To review rack on a bench\. .* stacked one on another: Dinner at Thalassa, ₹2,400 between You, Priya and Sam, and Cab to the airport, ₹600 between You and Priya\. .* The member saves Dinner at Thalassa, and Cab to the airport waits in the rack\. The tube never reaches the conveyor\.$/,
+        ),
+      ]);
+      for (const words of [
+        'Fig 2 The To review rack',
+        // At rest it shows its still: Dinner saved, Cab waiting.
+        'Cab to the airport ₹600 waits in To review · nothing moves until you save it',
+        'Your lever: the only way a bar leaves the rack',
+        'Bars with a blue tag: items an assistant prepared',
+        'The thin read line lets it see Balances; the tube ends at the rack, never at the line',
+        'Dinner at Thalassa ₹2,400 between You, Priya and Sam (three ₹800 chips) and Cab to the airport ₹600 between You and Priya (two ₹300 chips).',
+      ])
+        expect(text(own)).toContain(words);
+    }
+  });
+
+  it('comes after Settle up and before Android and web, linked from the top bar', () => {
+    for (const live of [READING, PREPARING]) {
+      const html = render('light', live);
+      const order = ids(html);
+      expect(order.indexOf('assistants')).toBe(order.indexOf('settle') + 1);
+      expect(order.indexOf('app')).toBe(order.indexOf('assistants') + 1);
+      expect(linksTo(html, '#assistants').map((anchor) => anchor.text)).toEqual([
+        'Assistants',
+        'Use Claude or ChatGPT? Connect Splitbook',
+      ]);
+    }
   });
 });
 
