@@ -15,6 +15,26 @@ async function open(page: Page, kinds: Parameters<typeof seedReviewPage>[0]) {
   await enterAsPersona(page, 'alex');
   await page.goto(`${root}/review`);
 }
+/** To review's refresh interval (use-to-review.ts). */
+const REFRESH_MS = 30_000;
+
+/**
+ * Open To review on a page clock that runs normally, so a test can run it past the next refresh
+ * instead of waiting the 30 s out (#483). The clock is installed before the page loads, so the
+ * refresh timer is on it.
+ */
+async function openOnClock(page: Page, kinds: Parameters<typeof seedReviewPage>[0]) {
+  await page.clock.install();
+  await open(page, kinds);
+}
+
+/**
+ * The next refresh, now: 30 s pass on the page clock, and every timer due in them fires in order,
+ * as with the page open that long. (A jump that fires each due timer once can miss the refresh a
+ * one-at-a-time run arms.)
+ */
+const nextRefresh = (page: Page) => page.clock.runFor(REFRESH_MS);
+
 async function rows(page: Page) {
   const response = await page.request.get(`/api/groups/${DEMO_GROUP_ID}/drafts`);
   expect(response.ok()).toBe(true);
@@ -195,7 +215,7 @@ test('delete asks first, removes only the unsaved item and leaves the ledger unc
 });
 
 test('a newer read and a stale edit both show the changed facts and author', async ({ page }) => {
-  await open(page, ['ready']);
+  await openOnClock(page, ['ready']);
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const review = panel(page);
   const draft = (await rows(page))[0];
@@ -209,9 +229,8 @@ test('a newer read and a stale edit both show the changed facts and author', asy
       },
     },
   });
-  await expect(review.getByRole('spinbutton', { name: /^Amount/ })).toHaveValue('15', {
-    timeout: 40_000,
-  });
+  await nextRefresh(page);
+  await expect(review.getByRole('spinbutton', { name: /^Amount/ })).toHaveValue('15');
   await expect(review.getByRole('status').first()).toContainText(
     'You on another device changed the amount a moment ago: ₹12.34 → ₹15.00',
   );
@@ -387,7 +406,7 @@ test('the last member is told To review items are deleted with the Group', async
 test('polling an in-flight autosave keeps typing entered after that submission', async ({
   page,
 }) => {
-  await open(page, ['ready']);
+  await openOnClock(page, ['ready']);
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const draft = (await rows(page))[0];
   let release: () => void = () => {};
@@ -414,8 +433,8 @@ test('polling an in-flight autosave keeps typing entered after that submission',
     await review.getByLabel('What was it for?').fill('Review newer typing');
     const polled = page.waitForResponse(
       (response) => new URL(response.url()).pathname === '/api/user/to-review' && response.ok(),
-      { timeout: 40_000 },
     );
+    await nextRefresh(page);
     await polled;
     await expect(review.getByLabel('What was it for?')).toHaveValue('Review newer typing');
     await expect(review).not.toContainText('You on another device');
@@ -431,7 +450,7 @@ test('polling an in-flight autosave keeps typing entered after that submission',
 test('a run advances past an item removed on another device and still reaches its summary', async ({
   page,
 }) => {
-  await open(page, ['ready', 'ready', 'ready']);
+  await openOnClock(page, ['ready', 'ready', 'ready']);
   await page.getByRole('button', { name: 'Review one at a time' }).click();
   const upcoming = (await rows(page)).find(
     (row: { values: { description: string } }) => row.values.description === 'Review meal 2',
@@ -440,9 +459,9 @@ test('a run advances past an item removed on another device and still reaches it
     headers: { 'X-Splitbook-Revision': String(upcoming.revision) },
   });
   expect(removed.status()).toBe(200);
+  await nextRefresh(page);
   await expect(page.getByRole('button', { name: 'Review Review meal 2', exact: true })).toHaveCount(
     0,
-    { timeout: 40_000 },
   );
   await panel(page).getByRole('button', { name: 'Next', exact: true }).click();
   await expect(panel(page).getByLabel('What was it for?')).toHaveValue('Review meal 3');
