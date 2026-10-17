@@ -79,6 +79,50 @@ export function verifyStory(s: Story): string[] {
   return problems;
 }
 
+/**
+ * A tour's counters in a frame it drew, in whole rupees: what each reads and where it is heading.
+ * The sampler keeps a frame only when its readings changed, so `frame` counts every frame drawn.
+ */
+export interface CounterFrame {
+  frame: number;
+  shown: number[];
+  target: number[];
+}
+
+/** How many of a tour's counter problems check names before it counts the rest. */
+const NAMED_PROBLEMS = 3;
+
+/**
+ * What is wrong with the counters a tour drew, frame by frame: a frame whose counters don't add up
+ * to zero, or a counter that passes where it is heading. Each counter must read somewhere between
+ * its last frame and its target. Empty when every frame a visitor could read is true.
+ */
+export function counterProblems(frames: CounterFrame[], names: readonly string[]): string[] {
+  if (!frames.length) return ['The tour drew no counters.'];
+  const signed = (rupees: number) =>
+    rupees === 0 ? '0' : `${rupees > 0 ? '+' : '−'}${Math.abs(rupees)}`;
+  const problems: string[] = [];
+  frames.forEach(({ frame, shown, target }, f) => {
+    const total = shown.reduce((a, b) => a + b, 0);
+    if (total !== 0)
+      problems.push(
+        `In frame ${frame} the counters add up to ${signed(total)}, not 0: ${shown.map(signed).join(', ')}.`,
+      );
+    const last = frames[f - 1]?.shown ?? shown;
+    shown.forEach((value, i) => {
+      const from = last[i] ?? value;
+      const to = target[i] ?? value;
+      if (value < Math.min(from, to) || value > Math.max(from, to))
+        problems.push(
+          `In frame ${frame} ${names[i] ?? `counter ${i + 1}`}'s counter reads ${signed(value)}, past where it is heading (${signed(to)}).`,
+        );
+    });
+  });
+  return problems.length > NAMED_PROBLEMS
+    ? [...problems.slice(0, NAMED_PROBLEMS), `And ${problems.length - NAMED_PROBLEMS} more.`]
+    : problems;
+}
+
 const filesUnder = (dir: string): string[] =>
   readdirSync(dir, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile())
