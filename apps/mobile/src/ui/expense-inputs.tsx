@@ -179,17 +179,9 @@ export function DescriptionField({
     paddingHorizontal: 0,
     opacity: locked ? 0.65 : 1,
   };
-  const label = (text: string, error?: string) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <CompactText variant="small" tone={error ? 'negative' : 'secondary'}>
-        {text}
-      </CompactText>
-      <FieldMarker kind="required" />
-    </View>
-  );
   return (
     <View ref={section('description')} style={{ gap: 6 }}>
-      {label('Description', errors.description)}
+      <RequiredFieldLabel text="Description" invalid={!!errors.description} />
       <View>
         <TextInput
           ref={descriptionRef}

@@ -4,6 +4,9 @@ import {
   describeDraftChange,
   reviewDate,
   memberProblems,
+  needsAmount,
+  PAID_TOTAL_NEED,
+  SPLIT_TOTAL_NEED,
   reviewProblem,
   reviewSplitMethod,
   summarizeReviewRun,
@@ -772,5 +775,24 @@ describe('the Group currency (#512)', () => {
 
   it('still asks for it when the read names no Group currency', () => {
     expect(inGroup(taxiWithoutCurrency).missingFacts).toEqual(['the currency']);
+  });
+});
+
+describe('whether To review asks for an item’s amount (#524)', () => {
+  it('asks when the amount is missing or has more decimal places than its currency', () => {
+    expect(needsAmount(['the amount'])).toBe(true);
+    expect(needsAmount(['an amount with at most 2 decimal places'])).toBe(true);
+    expect(needsAmount(['a whole-number amount'])).toBe(true);
+  });
+
+  it('does not ask for a split, payers or other facts that mention amounts', () => {
+    expect(
+      needsAmount([
+        SPLIT_TOTAL_NEED,
+        PAID_TOTAL_NEED,
+        'amounts paid with at most 2 decimal places',
+      ]),
+    ).toBe(false);
+    expect(needsAmount(['what it was for', 'the date'])).toBe(false);
   });
 });

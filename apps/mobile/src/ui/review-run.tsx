@@ -5,6 +5,7 @@ import {
   buildToReview,
   summarizeReviewRun,
   describeDraftChange,
+  needsAmount,
   PAID_TOTAL_NEED,
   PERCENTAGE_TOTAL_NEED,
   SPLIT_TOTAL_NEED,
@@ -226,7 +227,7 @@ function ReviewRunContent({
           <Money numberOfLines={0}>{money(values.amount, values.currency || groupCurrency)}</Money>
           {/* Labelled as Add expense labels them, so a filled box still says what it is (#524). */}
           <View style={{ gap: 6 }}>
-            <RequiredFieldLabel text="Amount" invalid={missing.includes('the amount')} />
+            <RequiredFieldLabel text="Amount" invalid={needsAmount(missing)} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               {groupCurrency && (values.currency || groupCurrency) === groupCurrency && (
                 <CurrencyBadge currency={groupCurrency} recorded={false} />
