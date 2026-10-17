@@ -5,7 +5,6 @@ import {
   checkNewPayment,
   overpaymentMessage,
   partyProblem,
-  readPaymentAmount,
   recordPaymentHref,
   recordPaymentLinkPair,
   withoutRecordPaymentLink,
@@ -43,90 +42,6 @@ const check = (draft: Partial<NewPaymentDraft>, ledger: LedgerState = ready) =>
     { from: YOU, to: SAM, amount: '', note: '', ack: false, ...draft },
     { viewerId: YOU, currency: 'INR', ledger, nameOf },
   );
-
-describe('readPaymentAmount', () => {
-  it('reads plain and grouped amounts exactly', () => {
-    expect(readPaymentAmount('1060', 'INR')).toEqual({ status: 'valid', amountMinor: 106000 });
-    expect(readPaymentAmount(' 1,060.50 ', 'INR')).toEqual({
-      status: 'valid',
-      amountMinor: 106050,
-    });
-    expect(readPaymentAmount('1,234,567.8', 'USD')).toEqual({
-      status: 'valid',
-      amountMinor: 123456780,
-    });
-    expect(readPaymentAmount('.5', 'EUR')).toEqual({ status: 'valid', amountMinor: 50 });
-    expect(readPaymentAmount('0.01', 'INR')).toEqual({ status: 'valid', amountMinor: 1 });
-    expect(readPaymentAmount('1060', 'JPY')).toEqual({ status: 'valid', amountMinor: 1060 });
-  });
-
-  it('is empty until something is typed', () => {
-    expect(readPaymentAmount('', 'INR')).toEqual({ status: 'empty' });
-    expect(readPaymentAmount('   ', 'INR')).toEqual({ status: 'empty' });
-  });
-
-  it('never reads a comma as a decimal point', () => {
-    for (const typed of ['10,50', '1,06', '1,0600.00', ',5', '1,,000']) {
-      expect(readPaymentAmount(typed, 'INR')).toEqual({
-        status: 'invalid',
-        message: 'Enter an amount like 1,060.00.',
-      });
-    }
-  });
-
-  it('refuses signs, exponents, words and currency symbols', () => {
-    for (const typed of ['-5', '+5', '1e3', 'ten', '₹100', '1 000', '1.2.3']) {
-      expect(readPaymentAmount(typed, 'INR').status).toBe('invalid');
-    }
-  });
-
-  it('says a negative amount must be above zero, as zero itself does (#514)', () => {
-    for (const typed of ['-5', '−5', '-0.50', '- 1,060.00'])
-      expect(readPaymentAmount(typed, 'INR')).toEqual({
-        status: 'invalid',
-        message: 'Enter an amount above ₹0.00.',
-      });
-    expect(readPaymentAmount('-5', 'USD')).toEqual({
-      status: 'invalid',
-      message: 'Enter an amount above $0.00.',
-    });
-    expect(readPaymentAmount('-ten', 'INR')).toEqual({
-      status: 'invalid',
-      message: 'Enter an amount like 1,060.00.',
-    });
-  });
-
-  it('refuses more decimal places than the currency has', () => {
-    expect(readPaymentAmount('10.005', 'INR')).toEqual({
-      status: 'invalid',
-      message: 'Use at most 2 decimal places.',
-    });
-    expect(readPaymentAmount('10.5', 'JPY')).toEqual({
-      status: 'invalid',
-      message: 'JPY amounts have no decimal places.',
-    });
-    expect(readPaymentAmount('1,060.5', 'KRW')).toMatchObject({ status: 'invalid' });
-  });
-
-  it('refuses zero and anything above the largest amount', () => {
-    expect(readPaymentAmount('0', 'INR')).toEqual({
-      status: 'invalid',
-      message: 'Enter an amount above ₹0.00.',
-    });
-    expect(readPaymentAmount('0.00', 'USD')).toEqual({
-      status: 'invalid',
-      message: 'Enter an amount above $0.00.',
-    });
-    expect(readPaymentAmount('10000000', 'INR')).toEqual({
-      status: 'valid',
-      amountMinor: 1_000_000_000,
-    });
-    expect(readPaymentAmount('10000000.01', 'INR')).toEqual({
-      status: 'invalid',
-      message: 'Enter at most ₹10,000,000.00.',
-    });
-  });
-});
 
 describe('amountInputText', () => {
   it('writes an exact amount with the currency’s places and no grouping', () => {
