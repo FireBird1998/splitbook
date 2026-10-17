@@ -252,6 +252,46 @@ describe('balance integrity integration', () => {
     ]);
   });
 
+  it('does not call one currency mixed on Home, though it is not the Group default', async () => {
+    const groupId = await createTrip('USD', alice, 'NYC');
+    await groupService.addMember(groupId, bob);
+    // Legacy EUR expense written directly, bypassing single-currency validation
+    await Expense.create({
+      group: new mongoose.Types.ObjectId(groupId),
+      description: 'Legacy euro museum tickets',
+      amount: 12,
+      currency: 'EUR',
+      category: 'entertainment',
+      date: new Date('2026-07-19T12:00:00.000Z'),
+      paidBy: [{ user: new mongoose.Types.ObjectId(alice), amount: 12 }],
+      splitMethod: 'equal',
+      splitBetween: [{ user: new mongoose.Types.ObjectId(bob), amount: 12 }],
+      tag: 'General',
+      createdBy: new mongoose.Types.ObjectId(alice),
+    });
+
+    const result = await balanceService.getUserBalances(alice);
+
+    expect(result.hasMixedCurrencies).toBe(false);
+    expect(result.buckets).toEqual([{ currency: 'EUR', youOwe: 0, youAreOwed: 12, net: 12 }]);
+    expect(result.groups).toMatchObject([
+      {
+        name: 'NYC',
+        hasMixedCurrencies: false,
+        balances: [
+          {
+            currency: 'EUR',
+            balance: 12,
+            settlement: { counterpartyId: bob, counterpartyName: 'Bob Tester', amount: 12 },
+          },
+        ],
+      },
+    ]);
+    // The Group's own Balances still flag euros in a dollar Group: any currency other than its
+    // default, not only more than one currency in use.
+    expect((await balanceService.getGroupBalances(groupId))!.hasMixedCurrencies).toBe(true);
+  });
+
   it('excludes archived trips from dashboard balances', async () => {
     const groupId = await createTrip();
     await groupService.addMember(groupId, bob);
