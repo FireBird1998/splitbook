@@ -8,6 +8,16 @@ describe('the landing story', () => {
     expect(steps.at(-1)?.after).toEqual({ you: 50000, priya: -10000, sam: 30000, alex: -70000 });
   });
 
+  it('leaves five debts between the four, each pair netted to one cord', () => {
+    expect(story().debts).toEqual([
+      { from: 'priya', to: 'you', amountMinor: 30000 },
+      { from: 'you', to: 'sam', amountMinor: 10000 },
+      { from: 'alex', to: 'you', amountMinor: 30000 },
+      { from: 'alex', to: 'priya', amountMinor: 20000 },
+      { from: 'alex', to: 'sam', amountMinor: 20000 },
+    ]);
+  });
+
   it('settles up in three payments that clear every balance', () => {
     const { steps, transfers } = story();
     expect(transfers).toEqual([

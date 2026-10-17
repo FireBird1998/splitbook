@@ -3,6 +3,7 @@
 import {
   MONEY_VERSION,
   calculateSplitAmountsMinor,
+  sumMinorAmounts,
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
 import { calculateNetBalancesMinor, simplifyDebtsMinor } from '@splitbook/shared/debt-simplifier';
@@ -100,6 +101,27 @@ function balancesAfter(expenses: Array<{ paidBy: MemberId; amountMinor: number; 
   return balances;
 }
 
+// The debts the Expenses leave before anyone settles up: each person owes each payer their share,
+// and what two people owe each other nets to one debt between them (one cord on Fig 3's board).
+function debtsOf(steps: Array<{ paidBy: MemberId; split: Split }>) {
+  const owed = new Map<string, number>();
+  for (const step of steps)
+    for (const part of step.split) {
+      if (part.user === step.paidBy) continue;
+      const key = `${part.user}>${step.paidBy}`;
+      owed.set(key, sumMinorAmounts([owed.get(key) ?? 0, part.amountMinor]));
+    }
+  const debts: Array<{ from: MemberId; to: MemberId; amountMinor: number }> = [];
+  MEMBERS.forEach((a, i) =>
+    MEMBERS.slice(i + 1).forEach((b) => {
+      const net = (owed.get(`${a.id}>${b.id}`) ?? 0) - (owed.get(`${b.id}>${a.id}`) ?? 0);
+      if (net > 0) debts.push({ from: a.id, to: b.id, amountMinor: net });
+      if (net < 0) debts.push({ from: b.id, to: a.id, amountMinor: -net });
+    }),
+  );
+  return debts;
+}
+
 export function story() {
   const done: Array<{ paidBy: MemberId; amountMinor: number; split: Split }> = [];
   const steps = EXPENSES.map((expense) => {
@@ -119,5 +141,5 @@ export function story() {
     to: to as MemberId,
     amountMinor,
   }));
-  return { currency: CURRENCY, members: MEMBERS, steps, transfers };
+  return { currency: CURRENCY, members: MEMBERS, steps, debts: debtsOf(steps), transfers };
 }
