@@ -36,10 +36,11 @@ describe('the app fonts (#502)', () => {
 
   it('are Outfit and IBM Plex Mono, under the variables the design system reads', () => {
     expect([...new Set(fontCalls.map(family))]).toEqual(['Outfit', 'IBM Plex Mono']);
-    expect(fontCalls.map((call) => call.variable).filter(Boolean)).toEqual([
-      '--font-outfit',
-      '--font-plex-mono',
-    ]);
+    // The variables name the families themselves, so webpack and Turbopack read them alike.
+    const fontsCss = readFileSync(path.join(APP, 'fonts.css'), 'utf8');
+    expect(fontsCss).toContain("--font-outfit: 'Outfit', 'Outfit Fallback';");
+    expect(fontsCss).toContain("--font-plex-mono: 'IBM Plex Mono', 'IBM Plex Mono Fallback';");
+    expect(fontCalls.map((call) => call.variable).filter(Boolean)).toEqual([]);
   });
 
   it('load from files in the repository, so a build never fetches them from Google', () => {

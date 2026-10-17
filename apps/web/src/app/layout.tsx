@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import './fonts.css';
+import './fonts';
 import ThemeProvider from '@/providers/ThemeProvider';
 import { PRODUCT_NAME, THEME_STORAGE_KEY } from '@/lib/product';
-import { outfit, plexMono } from './fonts';
 
 export const metadata: Metadata = {
   title: {
@@ -37,7 +38,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${outfit.variable} ${plexMono.variable}`}>
+      <body>
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
