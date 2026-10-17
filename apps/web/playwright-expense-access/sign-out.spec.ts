@@ -31,6 +31,17 @@ async function signOutElsewhere(page: Page) {
 }
 
 /**
+ * Run the page clock 31 s at a time until `done`. The Groups list arms its 30 s refresh only once
+ * its last read has settled, so a single jump can land before the timer exists.
+ */
+async function runClockUntil(page: Page, done: () => boolean) {
+  await expect(async () => {
+    if (!done()) await page.clock.runFor(31_000);
+    expect(done()).toBe(true);
+  }).toPass({ timeout: 10_000 });
+}
+
+/**
  * Start the Groups list's next refresh (every 30 s) and keep it in flight, unanswered, so the
  * test decides when and how it answers.
  */
@@ -40,8 +51,7 @@ async function holdNextGroupsRefresh(page: Page) {
     if (held || route.request().method() !== 'GET') return route.fallback();
     held = route;
   });
-  await page.clock.runFor(31_000);
-  await expect.poll(() => held !== undefined).toBe(true);
+  await runClockUntil(page, () => held !== undefined);
   return held!;
 }
 
@@ -97,8 +107,10 @@ test('a session ended elsewhere still sends the tab to sign in, back to the page
   await enterAsSam(page, ledger, '/groups');
   // Signed out from another tab of this browser: its cookie is gone here too.
   await signOutElsewhere(page);
-  await page.clock.runFor(31_000);
-  await expect(page).toHaveURL(appURL('/login?callbackUrl=%2Fgroups'));
+  // A read answering 401, or the session check reloading the page, sends it to sign in.
+  const signIn = appURL('/login?callbackUrl=%2Fgroups');
+  await runClockUntil(page, () => page.url() === signIn);
+  await expect(page).toHaveURL(signIn);
 });
 
 test('a Sign Out that cannot reach the server keeps the tab, and a later ended session still goes to sign in', async ({
@@ -119,6 +131,8 @@ test('a Sign Out that cannot reach the server keeps the tab, and a later ended s
 
   // Signed out from another tab later: this tab is no longer leaving, so it goes to sign in.
   await signOutElsewhere(page);
-  await page.clock.runFor(31_000);
-  await expect(page).toHaveURL(appURL('/login?callbackUrl=%2Fgroups'));
+  // A read answering 401, or the session check reloading the page, sends it to sign in.
+  const signIn = appURL('/login?callbackUrl=%2Fgroups');
+  await runClockUntil(page, () => page.url() === signIn);
+  await expect(page).toHaveURL(signIn);
 });
