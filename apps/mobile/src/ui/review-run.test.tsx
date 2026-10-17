@@ -731,6 +731,50 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       release();
     }
   });
+  it('keeps newer typing on screen when the reply to an earlier correction arrives', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    const releases: (() => void)[] = [];
+    const held = () => new Promise<void>((resolve) => releases.push(resolve));
+    const input = () =>
+      tree.root.findAll(
+        (node) =>
+          String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Description',
+      )[0];
+    const puts = () => f.calls.filter((call) => call.startsWith('PUT')).length;
+    f.holdPut(held());
+    try {
+      await act(async () => {
+        input().props.onChangeText('First correction');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await act(async () => {
+        input().props.onChangeText('Later correction');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(puts()).toBe(1);
+      // The later correction's write is held as well, so only the first reply lands.
+      f.holdPut(held());
+      await act(async () => {
+        releases[0]();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(puts()).toBe(2);
+      expect(input().props.value).toBe('Later correction');
+      await act(async () => {
+        releases[1]();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+      expect(f.items()[0].draft.values!.description).toBe('Later correction');
+      expect(input().props.value).toBe('Later correction');
+    } finally {
+      for (const release of releases) release();
+    }
+  });
   it('shows and acknowledges a newly found duplicate even when the version has not changed', async () => {
     const f = fixture({ one: true });
     await signIn(f);
