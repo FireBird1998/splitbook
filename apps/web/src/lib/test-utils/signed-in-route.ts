@@ -28,6 +28,24 @@ const requestScope = { headers: new Headers() };
 /** The `next/headers` stand-in each test file installs with `vi.mock`. */
 export const nextHeaders = { headers: async () => requestScope.headers };
 
+/** Work a route scheduled with `after()`, which `callRoute` runs once the response is ready. */
+const afterResponse: (() => unknown)[] = [];
+
+/**
+ * The `next/server` stand-in for a route that schedules work with `after()`, which also needs a
+ * request scope. It keeps the rest of the module, `NextResponse` included:
+ *
+ *   vi.mock('next/server', async (original) => (await import('@/lib/test-utils/signed-in-route')).nextServer(original));
+ */
+export async function nextServer(original: () => Promise<typeof import('next/server')>) {
+  return {
+    ...(await original()),
+    after: (task: Promise<unknown> | (() => unknown)) => {
+      afterResponse.push(typeof task === 'function' ? task : () => task);
+    },
+  };
+}
+
 let auth: typeof import('@/lib/auth').auth | null = null;
 
 /** Turn demo sign-in on, connect the file's database, then load Better Auth on it. */
@@ -106,5 +124,7 @@ export async function callRoute<Params>(
   });
   requestScope.headers = request.headers;
   const response = await handler(request, { params: Promise.resolve(params as Params) });
-  return { status: response.status, body: await response.json() };
+  const answer = { status: response.status, body: await response.json() };
+  for (const task of afterResponse.splice(0)) await task();
+  return answer;
 }
