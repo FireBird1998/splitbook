@@ -748,46 +748,59 @@ test('when keeping the last ready item makes it incomplete, focus returns to its
 });
 
 /** Reach To review from the Group's Expenses, so Back is the app's own navigation (#500). */
-async function openFromExpenses(page: Page, kinds: Parameters<typeof seedReviewPage>[0]) {
-  await seedReviewPage(kinds);
-  await enterAsPersona(page, 'alex');
-  await page.goto(`${root}/expenses`);
+async function reviewFromExpenses(page: Page) {
   await page
     .getByRole('region', { name: 'To review', exact: true })
     .getByRole('link', { name: 'Review', exact: true })
     .click();
   await page.waitForURL(`**${root}/review`);
 }
+async function openFromExpenses(page: Page, kinds: Parameters<typeof seedReviewPage>[0]) {
+  await seedReviewPage(kinds);
+  await enterAsPersona(page, 'alex');
+  await page.goto(`${root}/expenses`);
+  await reviewFromExpenses(page);
+}
+
+/**
+ * Hold the reply to the first autosave of this Draft after the server has applied it. `applied`
+ * resolves once the write is applied; `release` lets its reply through.
+ */
+async function holdFirstWrite(page: Page, draftId: string) {
+  let release = () => {};
+  let markApplied = () => {};
+  const applied = new Promise<void>((resolve) => {
+    markApplied = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let holding = true;
+  await page.route(`**/api/groups/${DEMO_GROUP_ID}/drafts/${draftId}`, async (route) => {
+    if (route.request().method() !== 'PUT' || !holding) return route.continue();
+    holding = false;
+    const result = await route.fetch();
+    markApplied();
+    await held;
+    await route.fulfill({ response: result });
+  });
+  return { applied, release };
+}
 
 test('typing entered during an autosave is still kept after Back', async ({ page }) => {
   await openFromExpenses(page, ['ready']);
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const draft = (await rows(page))[0];
-  let release = () => {};
-  let committed = () => {};
-  const applied = new Promise<void>((resolve) => {
-    committed = resolve;
-  });
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  let writes = 0;
-  await page.route(`**/api/groups/${DEMO_GROUP_ID}/drafts/${draft.id}`, async (route) => {
-    if (route.request().method() !== 'PUT' || ++writes !== 1) return route.continue();
-    const result = await route.fetch();
-    committed();
-    await held;
-    await route.fulfill({ response: result });
-  });
+  const write = await holdFirstWrite(page, draft.id);
   const review = panel(page);
   try {
     await review.getByLabel('What was it for?').fill('Review first edit');
-    await applied;
+    await write.applied;
     await review.getByLabel('What was it for?').fill('Review newer typing');
     await page.goBack();
     await page.waitForURL(`**${root}/expenses`);
   } finally {
-    release();
+    write.release();
   }
   await expect
     .poll(async () => (await rows(page))[0].values.description)
@@ -816,32 +829,24 @@ test('typing for an item removed elsewhere is not sent after Back, and no error 
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const draft = (await rows(page))[0];
   const endpoint = `/api/groups/${DEMO_GROUP_ID}/drafts`;
-  let release = () => {};
-  let committed = () => {};
-  const applied = new Promise<void>((resolve) => {
-    committed = resolve;
-  });
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
   let writes = 0;
   page.on('request', (request) => {
     if (request.method() === 'PUT' && new URL(request.url()).pathname === `${endpoint}/${draft.id}`)
       writes++;
   });
-  let holding = true;
-  await page.route(`**${endpoint}/${draft.id}`, async (route) => {
-    if (route.request().method() !== 'PUT' || !holding) return route.continue();
-    holding = false;
-    const result = await route.fetch();
-    committed();
-    await held;
-    await route.fulfill({ response: result });
-  });
+  const write = await holdFirstWrite(page, draft.id);
   const review = panel(page);
+  // After the held reply, leaving either writes the newer typing or first finds the item gone.
+  const next = page.waitForRequest((request) => {
+    const path = new URL(request.url()).pathname;
+    return (
+      (request.method() === 'PUT' && path === `${endpoint}/${draft.id}` && writes > 1) ||
+      (request.method() === 'GET' && path === endpoint)
+    );
+  });
   try {
     await review.getByLabel('What was it for?').fill('Review first edit');
-    await applied;
+    await write.applied;
     await review.getByLabel('What was it for?').fill('Review typing for a removed item');
     const kept = (await rows(page))[0];
     const removed = await page.request.delete(`${endpoint}/${draft.id}`, {
@@ -851,17 +856,16 @@ test('typing for an item removed elsewhere is not sent after Back, and no error 
     await page.goBack();
     await page.waitForURL(`**${root}/expenses`);
   } finally {
-    release();
+    write.release();
   }
-  // After the held reply, leaving either writes the newer typing or first finds the item gone.
-  const next = await page.waitForRequest((request) => {
-    const path = new URL(request.url()).pathname;
-    return (
-      (request.method() === 'PUT' && path === `${endpoint}/${draft.id}`) ||
-      (request.method() === 'GET' && path === endpoint)
-    );
-  });
-  expect(next.method()).toBe('GET');
+  expect((await next).method()).toBe('GET');
+  await (await next).response();
+  // Coming back to To review takes several round trips; any write would have gone out first.
+  await page.goForward();
+  await page.waitForURL(`**${root}/review`);
+  await expect(page.getByRole('button', { name: 'Review Review meal 1', exact: true })).toHaveCount(
+    0,
+  );
   expect(writes).toBe(1);
   await expect(page.locator('body')).not.toContainText(/not kept|no longer in To review/);
 });
@@ -886,10 +890,7 @@ test('typing that could not be kept after Back is pointed out when the item open
   await page.waitForURL(`**${root}/expenses`);
   await failed;
   expect((await rows(page))[0].values.description).toBe('Review meal 1');
-  await page
-    .getByRole('region', { name: 'To review', exact: true })
-    .getByRole('link', { name: 'Review', exact: true })
-    .click();
+  await reviewFromExpenses(page);
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   await expect(panel(page)).toContainText(
     "Your last change to this item wasn't kept. Check it and make the change again.",

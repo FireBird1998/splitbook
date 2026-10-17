@@ -10,12 +10,17 @@ import {
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
 import type { WebReviewClient } from './review-client';
 
-/** The item left To review elsewhere, so the typing for it is obsolete. */
+/** The Draft left To review elsewhere, so typing for it is obsolete and is never sent. */
 class RemovedElsewhere extends Error {}
+const removedElsewhere = (cause: unknown) =>
+  cause instanceof RemovedElsewhere || (cause as { status?: number } | null)?.status === 404;
 
-/** Items whose typing couldn't be kept after their editor closed, told when they open again. */
-const UNKEPT = "Your last change to this item wasn't kept. Check it and make the change again.";
-const unkept = new Set<string>();
+/** Drafts whose typing couldn't be kept after their editor closed; said when one opens again. */
+const UNKEPT_NOTE =
+  "Your last change to this item wasn't kept. Check it and make the change again.";
+const unkeptDraftIds = new Set<string>();
+/** Drafts with an editor open now, which shows their latest state itself. */
+const openDraftIds = new Set<string>();
 
 /** Serializes kept edits. A save/navigation must flush typing before using the shown version. */
 export function useReviewEditor(
@@ -27,13 +32,17 @@ export function useReviewEditor(
   const [draft, setDraft] = useState(initial);
   const [entries, setEntries] = useState(() => draftEntries(initial.values));
   const [status, setStatus] = useState<'kept' | 'changed' | 'keeping' | 'failed'>('kept');
-  const [note, setNote] = useState(() => (unkept.has(initial.id) ? UNKEPT : ''));
+  const [note, setNote] = useState(() => (unkeptDraftIds.has(initial.id) ? UNKEPT_NOTE : ''));
   const [error, setError] = useState('');
   const current = useRef(initial);
   const input = useRef(entries);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const live = useRef(true);
-  /** Closed without a member flush (such as Back) while typing was unsent: keep sending it (#500). */
+  /**
+   * Closed without a member flush (such as Back) while typing was unsent: keep sending it, as
+   * Close would (#500). It is the member's own typing, sent once as its autosave would have been,
+   * not a write resumed later.
+   */
   const leaving = useRef(false);
   const namesRef = useRef(names);
   const adapter = useRef({ client, refresh });
@@ -69,7 +78,7 @@ export function useReviewEditor(
       current: () => live.current || leaving.current,
       canWrite: () => live.current || leaving.current,
       replace: async (before, submitted) => {
-        // After the editor closes, nothing is sent for an item removed elsewhere (#500).
+        // After the editor closes, nothing is sent for a Draft removed elsewhere (#500).
         if (
           !live.current &&
           !(await adapter.current.client.list()).some(({ id }) => id === before.id)
@@ -116,24 +125,28 @@ export function useReviewEditor(
     if (!edits().receive(initial)) adopt(initial, true);
   }, [initial, edits, adopt]);
   useEffect(() => {
+    const id = current.current.id;
     live.current = true;
     leaving.current = false;
+    openDraftIds.add(id);
+    unkeptDraftIds.delete(id);
     return () => {
       live.current = false;
+      openDraftIds.delete(id);
       if (timer.current) clearTimeout(timer.current);
       const queue = edits();
       if (!queue.pending && !queue.writing) return;
       leaving.current = true;
-      const id = current.current.id;
       void queue.flush(current.current).then((result) => {
-        if (result.kind === 'kept') return;
-        if (result.kind !== 'failed' || !(result.cause instanceof RemovedElsewhere)) unkept.add(id);
+        if (result.kind === 'kept') unkeptDraftIds.delete(id);
+        else if (
+          !openDraftIds.has(id) &&
+          !(result.kind === 'failed' && removedElsewhere(result.cause))
+        )
+          unkeptDraftIds.add(id);
       });
     };
   }, [edits]);
-  useEffect(() => {
-    unkept.delete(initial.id);
-  }, [initial.id]);
   async function flush(): Promise<boolean> {
     if (timer.current) clearTimeout(timer.current);
     if (!edits().pending && !edits().writing) return true;
