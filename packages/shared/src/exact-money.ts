@@ -308,7 +308,6 @@ export function parseExpenseAmountMinor(amount: string | number, currency: strin
   return amountMinor;
 }
 
-/** Validate a complete merged command, never a PATCH fragment. */
 /**
  * Runs one step of an Expense's allocation, naming the input field a refusal from it is about
  * (#506): who paid, who shared it, or one of their rows. Without it, a split that doesn't add up
@@ -324,6 +323,7 @@ function namingField<T>(field: ReadonlyArray<string | number>, step: () => T): T
   }
 }
 
+/** Validate a complete merged command, never a PATCH fragment. */
 export function normalizeExpenseMoney<P extends MoneyPayerInput, S extends MoneySplitInput>(input: {
   amount: string | number;
   currency: string;
