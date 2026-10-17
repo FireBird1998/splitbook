@@ -7,6 +7,8 @@ import {
   serverError,
   validationError,
   error,
+  readJson,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { z } from 'zod/v4';
@@ -24,8 +26,8 @@ export async function PATCH(
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id, userId: targetUserId } = await params;
-    const body = await req.json();
+    const { id, userId: targetUserId } = await routeIds(params);
+    const body = await readJson(req);
     const parsed = updateMemberSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 
@@ -55,7 +57,7 @@ export async function DELETE(
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id, userId: targetUserId } = await params;
+    const { id, userId: targetUserId } = await routeIds(params);
 
     const result = await groupService.removeMember(id, targetUserId, user.id!);
     if (!result) return notFound('Group');

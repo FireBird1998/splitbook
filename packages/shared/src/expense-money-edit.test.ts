@@ -140,3 +140,32 @@ it.each([
   );
   expect(result.money.splitBetween.map((row) => row.amountMinor)).toEqual([1, 2]);
 });
+
+it('names the row of a payer or share with more decimals than the currency has (#546)', () => {
+  const refusal = (change: Parameters<typeof decideExpenseMoneyEdit>[1]) => {
+    try {
+      decideExpenseMoneyEdit({ ...historical, splitMethod: 'exact' }, change);
+    } catch (error) {
+      return error;
+    }
+    throw new Error('The edit was not refused');
+  };
+  const precision = {
+    code: 'INVALID_MONEY_PRECISION',
+    message: 'Amount supports at most 2 decimal places',
+  };
+  expect(refusal({ paidBy: [{ user: 'a', amount: '0.031' }] })).toMatchObject({
+    ...precision,
+    field: ['paidBy', 0, 'amount'],
+  });
+  expect(
+    refusal({
+      splitBetween: [
+        { user: 'a', amount: 0.01 },
+        { user: 'b', amount: 0.019 },
+      ],
+    }),
+  ).toMatchObject({ ...precision, field: ['splitBetween', 1, 'amount'] });
+  // The total's own decimals stay at the amount, as on a create.
+  expect(refusal({ amount: '0.031' })).toMatchObject({ ...precision, field: undefined });
+});

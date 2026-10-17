@@ -6,6 +6,7 @@ import {
   success,
   serverError,
   validationError,
+  readJson,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { createGroupSchema } from '@splitbook/shared/validators/group';
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const body = await req.json();
+    const body = await readJson(req);
     const parsed = createGroupSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 

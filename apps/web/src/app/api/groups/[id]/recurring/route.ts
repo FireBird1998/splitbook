@@ -7,6 +7,8 @@ import {
   serverError,
   validationError,
   error,
+  readJson,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
@@ -39,8 +41,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!user) return unauthorized();
     assertRecurringExpensesOn();
 
-    const { id } = await params;
-    const body = await req.json();
+    const { id } = await routeIds(params);
+    const body = await readJson(req);
     const parsed = createRecurringExpenseSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 
@@ -61,7 +63,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
+    const { id } = await routeIds(params);
 
     const isMember = await groupService.isMember(id, user.id!);
     if (!isMember) return forbidden();

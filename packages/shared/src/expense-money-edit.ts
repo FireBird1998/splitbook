@@ -60,6 +60,20 @@ export function readExpenseMoney(stored: StoredExpenseMoney) {
   });
 }
 
+/**
+ * A row's amount as `definition()` compares it. The stored side always parses, having come
+ * through `readExpenseMoney`, so an edited amount that doesn't, such as one with more decimals
+ * than the currency has, always reads as a money change, which `normalizeExpenseMoney` then
+ * refuses at its row, as on a new Expense (#546).
+ */
+function rowAmount(amount: string | number, currency: string): number | string {
+  try {
+    return parseAmountMinor(amount, currency);
+  } catch {
+    return `unreadable:${amount}`;
+  }
+}
+
 function definition(input: ExpenseMoneyInput) {
   const byUser = (a: { user: string }, b: { user: string }) => a.user.localeCompare(b.user);
   return JSON.stringify({
@@ -69,7 +83,7 @@ function definition(input: ExpenseMoneyInput) {
     paidBy: input.paidBy
       .map((row) => ({
         user: moneyParticipantId(row.user),
-        amount: parseAmountMinor(row.amount, input.currency),
+        amount: rowAmount(row.amount, input.currency),
       }))
       .sort(byUser),
     splitBetween: input.splitBetween
@@ -77,8 +91,7 @@ function definition(input: ExpenseMoneyInput) {
         user: moneyParticipantId(row.user),
         ...(input.splitMethod === 'exact' || input.splitMethod === 'unequal'
           ? {
-              amount:
-                row.amount === undefined ? undefined : parseAmountMinor(row.amount, input.currency),
+              amount: row.amount === undefined ? undefined : rowAmount(row.amount, input.currency),
             }
           : input.splitMethod === 'percentage'
             ? { percentage: row.percentage }

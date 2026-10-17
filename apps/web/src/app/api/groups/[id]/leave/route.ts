@@ -11,6 +11,7 @@ import {
   forbidden,
   serverError,
   error,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { groupService, LeaveBlockedError } from '@/lib/services/group.service';
 
@@ -33,7 +34,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
+    const { id } = await routeIds(params);
     const body: unknown = await req.json().catch(() => null);
     const acknowledgement =
       typeof body === 'object' &&

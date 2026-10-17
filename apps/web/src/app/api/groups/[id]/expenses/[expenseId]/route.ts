@@ -7,6 +7,8 @@ import {
   serverError,
   validationError,
   error,
+  readJson,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
@@ -28,7 +30,7 @@ export async function GET(
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id, expenseId } = await params;
+    const { id, expenseId } = await routeIds(params);
 
     const expense = await expenseService.getById({ actorId: user.id!, groupId: id, expenseId });
     if (!expense) return notFound('Expense');
@@ -49,13 +51,13 @@ export async function PATCH(
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id, expenseId } = await params;
+    const { id, expenseId } = await routeIds(params);
 
     // Preserve forbidden-before-invalid-body response ordering. The expense
     // module independently enforces access; this preflight is not its guard.
     if (!(await groupService.isMember(id, user.id!))) return forbidden();
 
-    const body = await req.json();
+    const body = await readJson(req);
     const parsed = updateExpenseSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 
@@ -86,7 +88,7 @@ export async function DELETE(
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id, expenseId } = await params;
+    const { id, expenseId } = await routeIds(params);
 
     const expense = await expenseService.delete(
       { actorId: user.id!, groupId: id, expenseId },

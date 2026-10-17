@@ -55,7 +55,7 @@ export default function ToReviewPage({
   accountId: string;
   groupId: string;
 }) {
-  const { read, retry, failed, reload } = useToReview(groupId);
+  const { read, unreadable, failure, retry, failed, reload } = useToReview(groupId);
   const { data: group, error: groupError } = useGroup(accountId, groupId);
   const { mutate } = useSWRConfig();
   const client = useMemo(() => webReviewClient(accountId, groupId), [accountId, groupId]);
@@ -451,9 +451,18 @@ export default function ToReviewPage({
         Only you can see these. Nothing here changes Balances until you save it.
       </Typography>
       {error && <Alert severity="warning">{error}</Alert>}
-      {(groupError || read.status === 'error' || failed) && (
+      {(groupError || failure) && (
         <Alert severity="warning" action={<Button onClick={retry}>Try again</Button>}>
-          Could not verify To review. Connect to the internet and try again.
+          {groupError || failure === 'connection'
+            ? 'Could not verify To review. Connect to the internet and try again.'
+            : 'Could not load To review. Try again.'}
+        </Alert>
+      )}
+      {read.status === 'ready' && unreadable > 0 && (
+        <Alert severity="info">
+          {unreadable === 1
+            ? '1 item couldn’t be shown.'
+            : `${unreadable} items couldn’t be shown.`}
         </Alert>
       )}
       {!online && (

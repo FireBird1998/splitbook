@@ -44,6 +44,48 @@ test.afterEach(async () => {
   await cleanupReviewPage();
 });
 
+test('leaves out an item it can’t read, says so, and shows the rest (#513)', async ({ page }) => {
+  // The first item arrives in a shape no client can read, as an old or migrated Draft might.
+  await page.route('**/api/user/to-review', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const [first] = body.data.groups[0].items;
+    first.draft.revision = 'two';
+    await route.fulfill({ response, json: body });
+  });
+  await open(page, ['ready', 'ready']);
+  await expect(
+    page.getByRole('alert').filter({ hasText: '1 item couldn’t be shown.' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Review Review meal \d$/ })).toHaveCount(1);
+  await expect(page.locator('body')).not.toContainText('Could not verify To review');
+});
+
+test('says why To review couldn’t be read, and asks to connect only when the connection failed (#513)', async ({
+  page,
+}) => {
+  await open(page, ['ready']);
+  await expect(
+    page.getByRole('button', { name: 'Review Review meal 1', exact: true }),
+  ).toBeVisible();
+  await page.route('**/api/user/to-review', (route) =>
+    route.fulfill({ status: 500, json: { error: 'Internal server error', status: 500 } }),
+  );
+  await page.reload();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Could not load To review. Try again.' }),
+  ).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('Connect to the internet and try again.');
+  await page.unroute('**/api/user/to-review');
+  await page.route('**/api/user/to-review', (route) => route.abort('internetdisconnected'));
+  await page.reload();
+  await expect(
+    page
+      .getByRole('alert')
+      .filter({ hasText: 'Could not verify To review. Connect to the internet and try again.' }),
+  ).toBeVisible();
+});
+
 test('fix a missing payer; edits are kept; Save records exactly the version shown', async ({
   page,
 }) => {

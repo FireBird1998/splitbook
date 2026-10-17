@@ -102,7 +102,7 @@ export async function signIn(persona: DemoPersonaKey): Promise<string> {
     .join('; ');
 }
 
-export interface RouteCall<Params> {
+export type RouteCall<Params> = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** The request path, such as `/api/groups/<id>/settlements`. */
   path: string;
@@ -110,9 +110,12 @@ export interface RouteCall<Params> {
   params?: Params;
   /** The cookies from `signIn`, or `''` for a request without a session. */
   cookie: string;
-  body?: unknown;
   headers?: Record<string, string>;
-}
+} & (
+  | { body?: unknown; rawBody?: never }
+  /** A body sent as it is, such as text that isn't JSON (#539). */
+  | { body?: never; rawBody: string }
+);
 
 /** The issues of a 422 VALIDATION_ERROR, which travel as the serialized Zod error's message. */
 export function validationIssues(body: { details: { message: string } }): unknown[] {
@@ -122,12 +125,12 @@ export function validationIssues(body: { details: { message: string } }): unknow
 /** Call a route handler with a request carrying the session cookie, as Next would. */
 export async function callRoute<Params>(
   handler: (request: Request, context: { params: Promise<Params> }) => Promise<Response>,
-  { method, path, params, cookie, body, headers }: RouteCall<Params>,
+  { method, path, params, cookie, body, rawBody, headers }: RouteCall<Params>,
 ) {
   const request = new Request(`${APP_URL}${path}`, {
     method,
     headers: { cookie, 'content-type': 'application/json', ...headers },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? rawBody : JSON.stringify(body),
   });
   requestScope.headers = request.headers;
   const response = await handler(request, { params: Promise.resolve(params as Params) });

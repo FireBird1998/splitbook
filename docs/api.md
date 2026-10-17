@@ -24,10 +24,14 @@ an expired session.
 Pages still redirect to `/login?callbackUrl=…`. The web client's SWR `fetcher`
 sends a 401 to `/login` with the current page as `callbackUrl`.
 
-**Common status codes:** `401` unauthenticated (from a route's own `getAuthUser`
+**Common status codes:** `400` input the route can't read: an id in the path
+that isn't one (`INVALID_ID`) or a required body that isn't JSON
+(`INVALID_JSON`), `401` unauthenticated (from a route's own `getAuthUser`
 guard), `403` not a group member or not an admin, `404` not found, `422` Zod
 validation failure or a service invariant (`CURRENCY_MISMATCH`, `INVALID_TAG`,
-`INVALID_MEMBERS`, …).
+`INVALID_MEMBERS`, …). The Draft routes answer an id that isn't one with `422`
+`VALIDATION_ERROR`, and the Tag routes answer both with `400`
+`INVALID_TAG_COMMAND`.
 
 ---
 
@@ -638,9 +642,23 @@ future periods only** — expenses already generated are ordinary expenses and a
 never rewritten. Resuming a paused template skips the on-hold window rather than
 backfilling it.
 
+**Revision.** Send the `revision` the template was read with in
+`X-Splitbook-Revision`; a template stored before revisions has none, so send
+`0`. An edit, pause or resume answers the template with its `revision` one
+higher. A revision that is no longer current answers **409** `STALE_REVISION`,
+and a missing or malformed one **428** `REVISION_REQUIRED`; neither changes the
+template. Older clients that send the revision only in `If-Match` are still
+read; when both headers are sent, `X-Splitbook-Revision` decides. Don't send
+`If-Match` yourself: a host may treat it as an HTTP precondition and answer 412
+after the change was saved ([ledger migration](operations/ledger-migration.md)).
+
 ### DELETE /api/groups/[id]/recurring/[recurringId]
 
 Hard-deletes the template. Expenses it already generated are never touched.
+
+Send the template's current `revision` in `X-Splitbook-Revision`, as for PATCH:
+a stale revision answers **409** `STALE_REVISION`, a missing or malformed one
+**428** `REVISION_REQUIRED`, and the template stays.
 
 ### Generation semantics
 

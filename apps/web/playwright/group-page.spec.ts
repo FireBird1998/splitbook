@@ -86,6 +86,52 @@ test('the header shows the Group’s icon, name, Theme, members, currency, Invit
   await reviewScreenshot(page, testInfo, 'group-header');
 });
 
+test('the Trip strip shows its balance on one line, sign and amount together, within the stub', async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== 'desktop-light',
+    'It sets its own widths; the theme changes nothing here.',
+  );
+  // The seeded balance, then the largest ones a Trip can hold, set in the Balances read (#510).
+  let balance: number | null = null;
+  await page.route(`**/api/groups/${DEMO_GROUP_ID}/balances`, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    if (balance !== null)
+      for (const row of body.data.balances)
+        if (row.user.name === 'Alex Rivera') row.balance = balance;
+    await route.fulfill({ response, json: body });
+  });
+  await enterAsPersona(page, 'alex');
+  for (const [amount, text] of [
+    [null, /^[+−]₹[\d,]+\.\d{2}$/],
+    [1_000_000, '+₹1,000,000.00'],
+    [-10_000_000, '−₹10,000,000.00'],
+  ] as const) {
+    balance = amount;
+    for (const width of [1440, 360]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(GROUP);
+      const strip = page
+        .getByRole('main')
+        .getByRole('region', { name: new RegExp(`^${DEMO_TRIP_NAME} trip,`) });
+      const shownBalance = strip.getByText(text, { exact: true });
+      await expect(shownBalance).toBeVisible();
+      const shown = await shownBalance.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return {
+          lines: new Set([...range.getClientRects()].map((line) => Math.round(line.top))).size,
+          // Its box is as wide as the text, so nothing spills out of the stub.
+          fits: range.getBoundingClientRect().right <= element.getBoundingClientRect().right + 0.5,
+        };
+      });
+      expect(shown, `${amount ?? 'seeded'} at ${width} px`).toEqual({ lines: 1, fits: true });
+    }
+  }
+});
+
 test('each tab is a link with its own address; Back, Forward and reload land on the right tab', async ({
   page,
 }) => {
