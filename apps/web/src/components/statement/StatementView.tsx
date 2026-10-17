@@ -14,6 +14,7 @@ import MoneyText from '@/components/common/MoneyText';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { getSemanticTokens } from '@/lib/theme/tokens';
 import { zonedTimestamp } from '@splitbook/shared/export-csv';
+import { categoryLabel } from '@splitbook/shared/categories';
 import type { OutsideTrip, Statement } from '@splitbook/shared/statement';
 
 const light = getSemanticTokens('light');
@@ -204,7 +205,7 @@ export default function StatementView({ statement }: { statement: Statement }) {
                 <TableCell component="th" scope="row">
                   {row.description}
                   <Typography variant="caption" component="div">
-                    {row.category} · {row.tag}
+                    {categoryLabel(row.category)} · {row.tag}
                   </Typography>
                 </TableCell>
                 <TableCell>

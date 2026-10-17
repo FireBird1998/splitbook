@@ -22,3 +22,6 @@ export const CATEGORY_IDS = EXPENSE_CATEGORIES.map((c) => c.id);
 export function getCategory(id: string): ExpenseCategory | undefined {
   return EXPENSE_CATEGORIES.find((c) => c.id === id);
 }
+
+/** The name a Category is shown by, or its stored key when this build doesn't know it. */
+export const categoryLabel = (id: string) => getCategory(id)?.label ?? id;

@@ -18,13 +18,19 @@ import { zonedTimestamp } from '@splitbook/shared/export-csv';
 const ALEX = 'a00000000000000000000001';
 const SAM = 'a00000000000000000000002';
 
-function expense(id: string, day: string, description: string, minor: number) {
+function expense(
+  id: string,
+  day: string,
+  description: string,
+  minor: number,
+  [category, tag] = ['transport', 'Transport'],
+) {
   return {
     id,
     date: `${day}T00:00:00.000Z`,
     description,
-    category: 'transport',
-    tag: 'Transport',
+    category,
+    tag,
     currency: 'INR',
     amountMinor: minor,
     splitMethod: 'equal',
@@ -51,7 +57,7 @@ const TRIP: BackupGroupInput = {
   tags: [],
   expenses: [
     expense('e1', '2026-08-30', 'Ferry tickets, booked early', 60000),
-    expense('e2', '2026-09-18', 'Island guesthouse', 120000),
+    expense('e2', '2026-09-18', 'Island guesthouse', 120000, ['food', 'Food']),
     expense('e3', '2026-09-22', 'Late taxi refund share', 4000),
   ],
   settlements: [
@@ -98,6 +104,12 @@ describe('a whole-trip statement', () => {
     expect(page).toContain('2026-09-18 Island guesthouse');
     expect(page).toContain('2026-09-22 After the trip Late taxi refund share');
     expect(page).not.toMatch(/\bYou\b/);
+  });
+
+  it('names each Expense’s Category as the Expense panel and CSV do, beside its Tag (#509)', () => {
+    const page = render(true);
+    expect(page).toContain('2026-09-18 Island guesthouse Food & Drink · Food');
+    expect(page).toContain('Ferry tickets, booked early Transport · Transport');
   });
 
   it('names nothing outside the Trip’s dates in a statement for a period', () => {
