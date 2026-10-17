@@ -217,3 +217,11 @@ describe('simplifyDebts', () => {
     expect(transactions).toEqual([{ from: 'B', to: 'A', amount: 50 }]);
   });
 });
+
+describe('balances’ paths the suite missed (#471)', () => {
+  it('refuses a payment in another currency', () => {
+    expect(() =>
+      calculateNetBalances([], [{ paidBy: 'A', paidTo: 'B', amount: 5, currency: 'EUR' }], 'INR'),
+    ).toThrow(expect.objectContaining({ code: 'CURRENCY_MISMATCH' }));
+  });
+});

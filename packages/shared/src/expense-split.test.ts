@@ -351,3 +351,63 @@ describe('split preview', () => {
     expect(preview.status).toEqual({ kind: 'adds-up', leftover: null });
   });
 });
+
+describe('leftover and breakdown paths the suite missed (#471)', () => {
+  it('reads a percentage left out as 0 when explaining the leftover', () => {
+    // 1,000 paise at 50% and 50%, with a third person at no percentage: nothing is rounded.
+    expect(
+      splitLeftover('percentage', {
+        amountMinor: 1000,
+        splitBetween: [
+          { user: you, amountMinor: 500, percentage: 50 },
+          { user: sam, amountMinor: 500, percentage: 50 },
+          { user: priya, amountMinor: 0 },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it('reads shares left out as 0, and gives the leftover paisa to the person who got it', () => {
+    // 1,000 paise by shares 1:2 is 333.33… and 666.66…: 334 + 666, so you got the extra paisa.
+    expect(
+      splitLeftover('shares', {
+        amountMinor: 1000,
+        splitBetween: [
+          { user: you, amountMinor: 334, shares: 1 },
+          { user: sam, amountMinor: 666, shares: 2 },
+          { user: priya, amountMinor: 0 },
+        ],
+      }),
+    ).toEqual({ amountMinor: 1, users: [you] });
+  });
+
+  it('explains nothing when no one has a share', () => {
+    expect(
+      splitLeftover('shares', {
+        amountMinor: 1000,
+        splitBetween: [
+          { user: you, amountMinor: 0, shares: 0 },
+          { user: sam, amountMinor: 0 },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it('says why amounts that add up were still refused', () => {
+    // ₹10 as ₹6 and ₹4 adds up, but the money rules refuse it for another reason.
+    const refuse = (): never => {
+      throw new Error('Choose current Group members');
+    };
+    expect(
+      splitBreakdown(
+        entries({
+          amount: '10',
+          splitMethod: 'exact',
+          splitValues: { [you]: '6', [sam]: '4' },
+          participantIds: [you, sam],
+        }),
+        refuse,
+      ).status,
+    ).toEqual({ kind: 'problem', reason: 'refused', message: 'Choose current Group members' });
+  });
+});
