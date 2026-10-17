@@ -34,6 +34,7 @@ import {
   assertRecurringExpensesOn,
   recurringExpensesEnabled,
 } from '@/lib/recurring-expenses-switch';
+import { PERSON_FIELDS } from './person-fields';
 
 type TemplateData = {
   description: string;
@@ -180,9 +181,9 @@ export class RecurringExpenseService {
     await connectDB();
     const group = await Group.findById(groupId).select('tags').lean();
     const templates = await RecurringExpense.find({ group: groupId })
-      .populate('paidBy.user', 'name email image')
-      .populate('splitBetween.user', 'name email image')
-      .populate('createdBy', 'name email image')
+      .populate('paidBy.user', PERSON_FIELDS)
+      .populate('splitBetween.user', PERSON_FIELDS)
+      .populate('createdBy', PERSON_FIELDS)
       .sort({ createdAt: -1 })
       .lean();
     return templates.map((template) => ({

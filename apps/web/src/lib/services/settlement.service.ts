@@ -19,6 +19,7 @@ import {
 import { lockLedgerCurrency } from '@/lib/ledger-currency';
 import User from '@/lib/models/User';
 import { Types } from 'mongoose';
+import { PERSON_FIELDS } from './person-fields';
 
 export class SettlementService {
   /**
@@ -58,9 +59,9 @@ export class SettlementService {
       assertCreateReplay(replay.creationRequest!, command);
       await activityService.publishPending('settlements', replay._id, replay.pendingActivity);
       return replay.populate([
-        { path: 'paidBy', select: 'name email image' },
-        { path: 'paidTo', select: 'name email image' },
-        { path: 'createdBy', select: 'name email image' },
+        { path: 'paidBy', select: PERSON_FIELDS },
+        { path: 'paidTo', select: PERSON_FIELDS },
+        { path: 'createdBy', select: PERSON_FIELDS },
       ]);
     }
     assertGroupCurrency(group.defaultCurrency, data.currency);
@@ -113,9 +114,9 @@ export class SettlementService {
             existing.pendingActivity,
           );
           return existing.populate([
-            { path: 'paidBy', select: 'name email image' },
-            { path: 'paidTo', select: 'name email image' },
-            { path: 'createdBy', select: 'name email image' },
+            { path: 'paidBy', select: PERSON_FIELDS },
+            { path: 'paidTo', select: PERSON_FIELDS },
+            { path: 'createdBy', select: PERSON_FIELDS },
           ]);
         }
       }
@@ -125,9 +126,9 @@ export class SettlementService {
     // Attempt recoverable publication before response preparation can fail after commit.
     await activityService.publishPending('settlements', settlement._id, settlement.pendingActivity);
     return settlement.populate([
-      { path: 'paidBy', select: 'name email image' },
-      { path: 'paidTo', select: 'name email image' },
-      { path: 'createdBy', select: 'name email image' },
+      { path: 'paidBy', select: PERSON_FIELDS },
+      { path: 'paidTo', select: PERSON_FIELDS },
+      { path: 'createdBy', select: PERSON_FIELDS },
     ]);
   }
 
@@ -138,9 +139,9 @@ export class SettlementService {
     await connectDB();
     return Settlement.find({ group: groupId })
       .sort({ createdAt: -1 })
-      .populate('paidBy', 'name email image')
-      .populate('paidTo', 'name email image')
-      .populate('createdBy', 'name email image')
+      .populate('paidBy', PERSON_FIELDS)
+      .populate('paidTo', PERSON_FIELDS)
+      .populate('createdBy', PERSON_FIELDS)
       .lean();
   }
 }

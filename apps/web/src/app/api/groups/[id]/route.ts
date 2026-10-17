@@ -10,6 +10,7 @@ import {
   routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
+import { isGroupAdmin, withMemberEmails } from '@/lib/group-member-emails';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { updateGroupSchema } from '@splitbook/shared/validators/group';
 
@@ -34,7 +35,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // non-Household themes and when nothing is due).
     await recurringExpenseService.generateDueExpenses(id);
 
-    return success(group);
+    // Its admin gets every member's address, for Settings; any other member only their own (#517).
+    return success(
+      await withMemberEmails(
+        group,
+        { id: user.id!, email: user.email },
+        isGroupAdmin(group, user.id!),
+      ),
+    );
   } catch (err) {
     return serverError(err);
   }

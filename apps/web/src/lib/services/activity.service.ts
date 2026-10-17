@@ -4,6 +4,7 @@ import Activity from '@/lib/models/Activity';
 import mongoose, { Types } from 'mongoose';
 import { fingerprintCreateCommand, type IPendingActivity } from '@/lib/financial-write';
 import type { ActivityType } from '@splitbook/shared/types';
+import { PERSON_FIELDS } from './person-fields';
 
 export type ActivitySource = 'expenses' | 'settlements';
 
@@ -267,7 +268,7 @@ export class ActivityService {
         .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('actor', 'name email image')
+        .populate('actor', PERSON_FIELDS)
         .lean(),
       Activity.countDocuments(filter),
     ]);
