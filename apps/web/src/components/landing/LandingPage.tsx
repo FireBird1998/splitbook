@@ -18,6 +18,7 @@ import SignInWithGoogleButton from './SignInWithGoogleButton';
 import LandingApps from './LandingApps';
 import LandingGroups from './LandingGroups';
 import LandingSplit from './LandingSplit';
+import LandingSettleUp from './LandingSettleUp';
 import LandingTrust from './LandingTrust';
 import { LANDING_ACTION_HEIGHT, LANDING_HEADLINE, LANDING_PROMISE } from './landing-copy';
 
@@ -322,6 +323,7 @@ export default function LandingPage({ live }: LandingPageProps) {
         <Hero live={live} />
         <LandingGroups />
         <LandingSplit />
+        <LandingSettleUp />
         <LandingApps
           live={live}
           storeBadge={live.playStoreUrl && <GetItOnGooglePlay href={live.playStoreUrl} />}
