@@ -638,9 +638,23 @@ future periods only** — expenses already generated are ordinary expenses and a
 never rewritten. Resuming a paused template skips the on-hold window rather than
 backfilling it.
 
+**Revision.** Send the `revision` the template was read with in
+`X-Splitbook-Revision`; a template stored before revisions has none, so send
+`0`. An edit, pause or resume answers the template with its `revision` one
+higher. A revision that is no longer current answers **409** `STALE_REVISION`,
+and a missing or malformed one **428** `REVISION_REQUIRED`; neither changes the
+template. Older clients that send the revision only in `If-Match` are still
+read; when both headers are sent, `X-Splitbook-Revision` decides. Don't send
+`If-Match` yourself: a host may treat it as an HTTP precondition and answer 412
+after the change was saved ([ledger migration](operations/ledger-migration.md)).
+
 ### DELETE /api/groups/[id]/recurring/[recurringId]
 
 Hard-deletes the template. Expenses it already generated are never touched.
+
+Send the template's current `revision` in `X-Splitbook-Revision`, as for PATCH:
+a stale revision answers **409** `STALE_REVISION`, a missing or malformed one
+**428** `REVISION_REQUIRED`, and the template stays.
 
 ### Generation semantics
 
