@@ -25,8 +25,13 @@ for (const name of verifiers) {
 }
 
 console.log('');
+// A failure names the command that reruns it alone; its own report, above, says what it saw (#478).
 for (const { name, passed, seconds } of results) {
-  console.log(`${passed ? 'PASS' : 'FAIL'} ${name} (${seconds} s)`);
+  console.log(
+    passed
+      ? `PASS ${name} (${seconds} s)`
+      : `FAIL ${name} (${seconds} s) · rerun: pnpm --filter @splitbook/mobile run ${name}`,
+  );
 }
 const failed = results.filter((result) => !result.passed).length;
 console.log(
