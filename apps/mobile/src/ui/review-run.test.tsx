@@ -796,3 +796,63 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     }
   });
 });
+
+// Native input can arrive while the final read and edit promises settle. Exercise nearby
+// orderings through the public controller, including its handoff from the shared edit queue.
+it.each(Array.from({ length: 6 }, (_, index) => index))(
+  'keeps a correction arriving as review refresh settles (microtask offset %i)',
+  async (offset) => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const machine = f.controller.reviewRun()!;
+    let matches = f.controller.getSnapshot().toReview.run!.matches;
+    let scheduled = false;
+    let editingWhenDelivered = false;
+    let deliver!: () => void;
+    const delivered = new Promise<void>((resolve) => {
+      deliver = resolve;
+    });
+    const stop = f.controller.subscribe(() => {
+      const run = f.controller.getSnapshot().toReview.run;
+      if (!run || scheduled) return;
+      const refreshedMatches = run.matches !== matches;
+      matches = run.matches;
+      if (!run.editing || run.items[0].item.draft.revision !== 1 || !refreshedMatches) return;
+      scheduled = true;
+      let task = () => {
+        editingWhenDelivered = f.controller.getSnapshot().toReview.run!.editing;
+        void machine.change({ ...run.items[0].item.draft.values, description: 'Late correction' });
+        deliver();
+      };
+      for (let index = 0; index < offset; index++) {
+        const next = task;
+        task = () => queueMicrotask(next);
+      }
+      queueMicrotask(task);
+    });
+    try {
+      await act(async () => {
+        const first = machine.change({
+          ...f.items()[0].draft.values,
+          description: 'First correction',
+        });
+        await delivered;
+        await first;
+        await machine.finishEditing();
+      });
+      expect(scheduled).toBe(true);
+      expect(editingWhenDelivered).toBe(true);
+      expect(f.items()[0].draft.values!.description).toBe('Late correction');
+      expect(f.items()[0].draft.revision).toBe(2);
+      expect(f.controller.getSnapshot().toReview.run!.items[0].item.draft.values!.description).toBe(
+        'Late correction',
+      );
+      expect(f.calls.filter((call) => call.startsWith('PUT'))).toHaveLength(2);
+    } finally {
+      stop();
+    }
+  },
+);

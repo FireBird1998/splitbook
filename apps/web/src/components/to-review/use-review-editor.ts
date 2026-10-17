@@ -1,7 +1,12 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { draftEditQueue } from '@splitbook/shared/draft-edit-queue';
 import { describeDraftChange } from '@splitbook/shared/to-review';
-import { draftEntries, draftValues } from '@splitbook/shared/persistent-draft-editor';
+import {
+  draftEntries,
+  draftValues,
+  type DraftEntries,
+} from '@splitbook/shared/persistent-draft-editor';
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
 import type { WebReviewClient } from './review-client';
 
@@ -19,78 +24,53 @@ export function useReviewEditor(
   const [error, setError] = useState('');
   const current = useRef(initial);
   const input = useRef(entries);
-  const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inFlight = useRef<Promise<boolean> | null>(null);
   const live = useRef(true);
-  const deferred = useRef<PersistedExpenseDraft | null>(null);
   const namesRef = useRef(names);
+  const adapter = useRef({ client, refresh });
+  useEffect(() => {
+    adapter.current = { client, refresh };
+  }, [client, refresh]);
+  const editQueue = useRef<ReturnType<typeof draftEditQueue<DraftEntries>> | null>(null);
   useEffect(() => {
     namesRef.current = names;
   }, [names]);
-  function adopt(next: PersistedExpenseDraft, announce: boolean) {
+  const adopt = useCallback((next: PersistedExpenseDraft, announce: boolean) => {
     if (!live.current) return;
     if (announce) setNote(describeDraftChange(current.current, next, namesRef.current));
     current.current = next;
     input.current = draftEntries(next.values);
-    dirty.current = false;
+    editQueue.current?.clear();
     setDraft(next);
     setEntries(input.current);
     setStatus('kept');
     setError('');
-  }
-  // The cross-Group read owns freshness. An external change replaces unsent text with a visible note.
-  useEffect(() => {
-    if (initial.revision <= current.current.revision) return;
-    // A poll can see this tab's committed write before its reply arrives. Preserve typing
-    // made after that submission until the reply tells us whether this version is ours.
-    if (inFlight.current) {
-      if (!deferred.current || initial.revision > deferred.current.revision)
-        deferred.current = initial;
-    } else adopt(initial, true);
-  }, [initial]);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-      if (timer.current) clearTimeout(timer.current);
-    };
   }, []);
-  async function reloadChanged() {
-    const latest = (await client.list()).find((row) => row.id === current.current.id);
+  const reloadChanged = useCallback(async () => {
+    const latest = (await adapter.current.client.list()).find(
+      (row) => row.id === current.current.id,
+    );
     if (!latest) throw new Error('This item is no longer in To review.');
     adopt(latest, true);
-    await refresh();
-  }
-  async function flush(): Promise<boolean> {
-    if (timer.current) clearTimeout(timer.current);
-    if (inFlight.current) {
-      if (!(await inFlight.current)) return false;
-      return dirty.current ? flush() : true;
-    }
-    if (!dirty.current) return true;
-    const before = current.current;
-    const submitted = input.current;
-    setStatus('keeping');
-    setError('');
-    const work = (async () => {
-      try {
-        const kept = await client.replace(before, draftValues(submitted));
-        if (current.current.revision > kept.revision) return false;
+    await adapter.current.refresh();
+  }, [adopt]);
+  // Construct on first use in an effect or member action, never by reading refs in render.
+  const edits = useCallback(() => {
+    editQueue.current ??= draftEditQueue<DraftEntries>({
+      current: () => live.current,
+      canWrite: () => live.current,
+      replace: (before, submitted) =>
+        adapter.current.client.replace(before, draftValues(submitted)),
+      kept: (kept, pending) => {
         current.current = kept;
-        const observed = deferred.current;
-        deferred.current = null;
-        if (observed && observed.revision > kept.revision) {
-          adopt(observed, true);
-          return false;
+        if (live.current) {
+          setDraft(kept);
+          setStatus(pending ? 'changed' : 'kept');
         }
-        if (live.current) setDraft(kept);
-        dirty.current = input.current !== submitted;
-        if (live.current) setStatus(dirty.current ? 'changed' : 'kept');
-        await refresh();
-        return true;
-      } catch (cause) {
-        deferred.current = null;
+      },
+      refresh: () => adapter.current.refresh(),
+      refreshAfter: 'write',
+      recover: async ({ cause }) => {
         if ((cause as { status?: number }).status === 409) {
           try {
             await reloadChanged();
@@ -106,25 +86,48 @@ export function useReviewEditor(
             'This change is not kept yet. Check your connection and try again before leaving.',
           );
         }
-        return false;
+        return current.current;
+      },
+    });
+    return editQueue.current;
+  }, [reloadChanged]);
+  // The cross-Group read owns freshness. An external change replaces unsent text with a visible note.
+  useEffect(() => {
+    if (initial.revision <= current.current.revision) return;
+    // A poll can see this tab's committed write before its reply arrives. Preserve typing
+    // made after that submission until the reply tells us whether this version is ours.
+    if (!edits().receive(initial)) adopt(initial, true);
+  }, [initial, edits, adopt]);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+  async function flush(): Promise<boolean> {
+    if (timer.current) clearTimeout(timer.current);
+    if (!edits().pending && !edits().writing) return true;
+    if (!edits().writing) {
+      setStatus('keeping');
+      setError('');
+    }
+    const result = await edits().flush(current.current);
+    if (result.kind === 'changed') {
+      // A poll may already have adopted a newer revision after the queue settled.
+      if (current.current.revision < result.draft.revision) {
+        if (current.current.revision < result.before.revision) current.current = result.before;
+        adopt(result.draft, true);
       }
-    })();
-    inFlight.current = work;
-    const ok = await work;
-    inFlight.current = null;
-    // refresh() may deliver an external version while this operation is still settling.
-    const observed = deferred.current;
-    deferred.current = null;
-    if (observed && observed.revision > current.current.revision) {
-      adopt(observed, true);
       return false;
     }
-    if (ok && dirty.current) return flush();
-    return ok;
+    // Typing can arrive after queue settlement but before this consumer resumes.
+    if (result.kind === 'kept' && (edits().pending || edits().writing)) return flush();
+    return result.kind === 'kept';
   }
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (!dirty.current && !inFlight.current) return;
+      if (!edits().pending && !edits().writing) return;
       event.preventDefault();
     };
     const navigate = (event: MouseEvent) => {
@@ -137,7 +140,7 @@ export function useReviewEditor(
         event.shiftKey ||
         event.altKey ||
         event.button !== 0 ||
-        (!dirty.current && !inFlight.current)
+        (!edits().pending && !edits().writing)
       )
         return;
       event.preventDefault();
@@ -155,7 +158,7 @@ export function useReviewEditor(
   });
   function change(changes: Record<string, string>) {
     input.current = { ...input.current, ...changes };
-    dirty.current = true;
+    edits().change(input.current);
     setEntries(input.current);
     setStatus('changed');
     setError('');
