@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { createMobileController, currentMonthKey, type MobileFetch } from '../src/data';
 import { decodeStoredSession } from '../src/data/cookies';
 import { localOrigin } from './verification-origin';
+import { observe, reportVerifierFailure } from './verify-report';
 
 const alexId = 'a00000000000000000000001';
 const samId = 'a00000000000000000000002';
@@ -56,7 +57,9 @@ async function verify() {
     const transport: MobileFetch = async (url, init) => {
       requests += 1;
       const target = new URL(url);
-      assert.ok(target.origin === apiBaseUrl, 'A request attempted to leave the local backend.');
+      observe(target.origin === apiBaseUrl, 'A request attempted to leave the local backend.', {
+        host: target.hostname,
+      });
       sent.push(`${init.method ?? 'GET'} ${target.pathname}`);
       const creating = init.method === 'POST' && target.pathname === '/api/groups';
       const joining = init.method === 'POST' && target.pathname.startsWith('/api/join/');
@@ -71,7 +74,9 @@ async function verify() {
         resendCreate = false;
         const lost = await fetch(url, { ...init, redirect: 'error' });
         await lost.arrayBuffer();
-        assert.ok(lost.status === 201, 'The first create before the resend did not commit.');
+        observe(lost.status === 201, 'The first create before the resend did not commit.', {
+          status: lost.status,
+        });
         createPosts += 1;
         createKeys.push(new Headers(init.headers).get('Idempotency-Key'));
       }
@@ -192,8 +197,8 @@ async function verify() {
       async authorized(path: string, method = 'GET') {
         // The saved session is the cookie and, once verified, its account (#200).
         const session = cookie && decodeStoredSession(cookie, apiBaseUrl.startsWith('https:'));
-        assert.ok(session, 'The authorized read or cleanup has no session.');
-        assert.ok(path.startsWith('/api/'), 'Only local API requests are permitted.');
+        observe(session, 'The authorized read or cleanup has no session.', { path });
+        observe(path.startsWith('/api/'), 'Only local API requests are permitted.', { path });
         return fetch(`${apiBaseUrl}${path}`, {
           method,
           headers: { Cookie: session.cookie, Origin: apiBaseUrl, Accept: 'application/json' },
@@ -209,7 +214,9 @@ async function verify() {
   const sam = makeActor();
   const discoverOwnGroups = async () => {
     const response = await alex.authorized('/api/groups');
-    assert.ok(response.status === 200, 'Could not read Groups for this run.');
+    observe(response.status === 200, 'Could not read Groups for this run.', {
+      status: response.status,
+    });
     return groupList
       .parse(await response.json())
       .data.filter(
@@ -222,7 +229,9 @@ async function verify() {
 
   try {
     await alex.controller.signIn('alex');
-    assert.ok(alex.controller.getSnapshot().auth.user?.id === alexId, 'Alex did not sign in.');
+    observe(alex.controller.getSnapshot().auth.user?.id === alexId, 'Alex did not sign in.', {
+      user: alex.controller.getSnapshot().auth.user?.id ?? null,
+    });
     ownNames.add(householdName);
     alex.controller.startCreate();
     alex.controller.updateCreation({
@@ -237,31 +246,41 @@ async function verify() {
     await alex.controller.createGroup();
     const ownGroups = await discoverOwnGroups();
     const household = ownGroups.find((group) => group.name === householdName);
-    assert.ok(household, 'The created Household was absent from an authorized read.');
-    assert.ok(
+    observe(household, 'The created Household was absent from an authorized read.', {
+      found: false,
+      groups: ownGroups.map((group) => group.name),
+    });
+    observe(
       ownGroups.filter((group) => group.name === householdName).length === 1,
       'Creation saved more than one Household.',
+      { named: ownGroups.filter((group) => group.name === householdName).length },
     );
     // Nothing opens it again: a confirmed create opens the Group the way Home does (#189).
     const opened = alex.controller.getSnapshot();
     const created = opened.detail;
-    assert.ok(
+    observe(
       opened.screen === 'group' && created.status === 'ready' && created.data?.id === household._id,
       'Created Group detail did not open.',
+      { screen: opened.screen, status: created.status, id: created.data?.id ?? null },
     );
-    assert.ok(
+    observe(
       created.data.category === 'home' && created.data.defaultCurrency === 'INR',
       'Theme or currency did not persist.',
+      { category: created.data.category, currency: created.data.defaultCurrency },
     );
-    assert.ok(
+    observe(
       created.data.startDate === null && created.data.endDate === null,
       'Household unexpectedly acquired Trip dates.',
+      { startDate: created.data.startDate, endDate: created.data.endDate },
     );
-    assert.ok(
+    observe(
       created.data.members.length === 1 &&
         created.data.members[0].user.id === alexId &&
         created.data.members[0].role === 'admin',
       'The creator was not the sole initial admin.',
+      {
+        members: created.data.members.map((member) => ({ id: member.user.id, role: member.role })),
+      },
     );
     checks.push('Household creation and authorized persisted read-back');
     const householdPath = `/api/groups/${household._id}`;
@@ -279,7 +298,7 @@ async function verify() {
       'The created Household was not read, then its Expenses, then its Balances, then the Groups list.',
     );
     const { financial } = opened;
-    assert.ok(
+    observe(
       financial.groupId === household._id &&
         financial.month === currentMonthKey() &&
         financial.expenses.month === financial.month &&
@@ -287,91 +306,126 @@ async function verify() {
         financial.expenses.data.length === 0 &&
         financial.balances.status === 'ready',
       'The created Household did not open on the current Month with its Expenses and Balances.',
+      {
+        groupId: financial.groupId,
+        month: financial.month,
+        expensesMonth: financial.expenses.month,
+        expenses: financial.expenses.status,
+        rows: financial.expenses.data.length,
+        balances: financial.balances.status,
+      },
     );
     checks.push(
       'A created Household opens on the current Month with its Expenses and Balances read, with no openGroup',
     );
 
     const invitationUrl = await alex.controller.loadInviteLink();
-    assert.ok(invitationUrl, 'No invitation link was returned.');
+    observe(invitationUrl, 'No invitation link was returned.', { invitationUrl });
     const invitation = new URL(invitationUrl);
-    assert.ok(
+    observe(
       invitation.origin === apiBaseUrl && /^\/join\/[a-f\d]{8}$/.test(invitation.pathname),
       'The invitation was not a canonical local web link.',
+      {
+        local: invitation.origin === apiBaseUrl,
+        joinPath: /^\/join\/[a-f\d]{8}$/.test(invitation.pathname),
+      },
     );
     const generations = alex.invitePosts;
-    assert.ok(
+    observe(
       (await alex.controller.loadInviteLink()) === invitationUrl &&
         alex.invitePosts === generations,
       'Reading the current invite unexpectedly rotated it.',
+      { invitePosts: alex.invitePosts, generations },
     );
     checks.push('Canonical invite link and reuse without rotation');
     await alex.controller.signOut();
 
     await sam.controller.restore();
     await sam.controller.openInvitation(invitationUrl);
-    assert.ok(
+    observe(
       sam.controller.getSnapshot().invitation.preview?.id === household._id,
       'Anonymous invitation preview did not load.',
+      { preview: sam.controller.getSnapshot().invitation.preview?.id ?? null },
     );
-    assert.ok(
+    observe(
       sam.controller.getSnapshot().auth.status === 'signed-out' && sam.joinPosts === 0,
       'Opening a public preview changed membership or authentication.',
+      { status: sam.controller.getSnapshot().auth.status, joinPosts: sam.joinPosts },
     );
-    assert.ok(sam.pendingCode, 'The invitation destination was not retained.');
+    observe(sam.pendingCode, 'The invitation destination was not retained.', {
+      pendingCode: sam.pendingCode ?? null,
+    });
     sam.restart();
     await sam.controller.restore();
-    assert.ok(
+    observe(
       sam.controller.getSnapshot().invitation.preview?.id === household._id,
       'The pending invitation did not survive a controller restart.',
+      { preview: sam.controller.getSnapshot().invitation.preview?.id ?? null },
     );
     await sam.controller.signIn('sam');
-    assert.ok(sam.controller.getSnapshot().auth.user?.id === samId, 'Sam did not sign in.');
-    assert.ok(
+    observe(sam.controller.getSnapshot().auth.user?.id === samId, 'Sam did not sign in.', {
+      user: sam.controller.getSnapshot().auth.user?.id ?? null,
+    });
+    observe(
       sam.controller.getSnapshot().invitation.preview?.id === household._id,
       'Sign-in lost the pending invitation.',
+      { preview: sam.controller.getSnapshot().invitation.preview?.id ?? null },
     );
-    assert.ok(sam.joinPosts === 0, 'Sign-in automatically joined the Group.');
-    assert.ok(
-      (await sam.authorized(`/api/groups/${household._id}`)).status === 403,
+    observe(sam.joinPosts === 0, 'Sign-in automatically joined the Group.', {
+      joinPosts: sam.joinPosts,
+    });
+    const beforeJoining = (await sam.authorized(`/api/groups/${household._id}`)).status;
+    observe(
+      beforeJoining === 403,
       'Preview or sign-in granted membership before explicit joining.',
+      { status: beforeJoining },
     );
     await sam.controller.joinInvitation();
     await sam.controller.openGroup(household._id);
     const joined = sam.controller.getSnapshot().detail;
-    assert.ok(
+    observe(
       joined.status === 'ready' &&
         joined.data !== null &&
         joined.data.members.some((member) => member.user.id === samId),
       'Explicit joining did not grant authorized Group access.',
+      {
+        status: joined.status,
+        members: joined.data?.members.map((member) => member.user.id) ?? null,
+      },
     );
-    assert.ok(joined.data.members.length === 2, 'Joining produced an unexpected member count.');
+    observe(joined.data.members.length === 2, 'Joining produced an unexpected member count.', {
+      members: joined.data.members.length,
+    });
     checks.push('Public preview, restart/auth continuation, and explicit joining');
 
     await sam.controller.openInvitation(invitationUrl);
     await sam.controller.joinInvitation();
     await sam.controller.openGroup(household._id);
-    assert.ok(
+    observe(
       sam.controller.getSnapshot().detail.data?.members.length === 2,
       'Reopening an invitation duplicated membership.',
+      { members: sam.controller.getSnapshot().detail.data?.members.length ?? null },
     );
     await alex.controller.signIn('alex');
     await alex.controller.openGroup(household._id);
-    assert.ok(
+    observe(
       alex.controller.getSnapshot().detail.data?.members.length === 2,
       'The creator could not read the joined member.',
+      { members: alex.controller.getSnapshot().detail.data?.members.length ?? null },
     );
     checks.push('Existing-member reopening and both personas reading the same Group');
 
     const beforeRejectedLink = sam.requests;
     await sam.controller.openInvitation('https://unsupported.example.invalid/join/00000000');
-    assert.ok(
+    observe(
       sam.requests === beforeRejectedLink,
       'An unsupported invite origin reached the transport.',
+      { requests: sam.requests - beforeRejectedLink },
     );
-    assert.ok(
+    observe(
       sam.controller.getSnapshot().invitation.status === 'invalid',
       'An unsupported invite origin was not rejected.',
+      { status: sam.controller.getSnapshot().invitation.status },
     );
     let unavailableUrl: string | null = null;
     for (const code of ['00000000', 'ffffffff', '11111111']) {
@@ -385,11 +439,14 @@ async function verify() {
         break;
       }
     }
-    assert.ok(unavailableUrl, 'The unavailable-link fixture candidates unexpectedly exist.');
+    observe(unavailableUrl, 'The unavailable-link fixture candidates unexpectedly exist.', {
+      unavailableUrl,
+    });
     await sam.controller.openInvitation(unavailableUrl);
-    assert.ok(
+    observe(
       sam.controller.getSnapshot().invitation.status === 'invalid',
       'An invalid or expired invitation did not show the unavailable state.',
+      { status: sam.controller.getSnapshot().invitation.status },
     );
     checks.push('Unsupported origins rejected before fetch and unavailable invite recovery');
 
@@ -407,20 +464,23 @@ async function verify() {
     alex.loseNextCreateResponse();
     await alex.controller.createGroup();
     const uncertain = alex.controller.getSnapshot().creation;
-    assert.ok(
+    observe(
       uncertain.status === 'uncertain' && uncertain.draft.name === uncertainName,
       'A lost create response did not retain an uncertain form.',
+      { status: uncertain.status, name: uncertain.draft.name },
     );
     await alex.controller.createGroup();
-    assert.ok(
+    observe(
       alex.createPosts === beforeUncertainCreate + 1,
       'The unresolved Group create was submitted again.',
+      { createPosts: alex.createPosts - beforeUncertainCreate },
     );
     const afterResponseLoss = await discoverOwnGroups();
     const reconciled = afterResponseLoss.filter((group) => group.name === uncertainName);
-    assert.ok(
+    observe(
       reconciled.length === 1,
       'Authorized Group reads did not find exactly one committed Group.',
+      { committed: reconciled.length },
     );
     checks.push(
       'Committed create response loss, retained input, blocked resubmit, and read reconciliation',
@@ -430,23 +490,36 @@ async function verify() {
     alex.controller.resumeCreationAfterCheck();
     await alex.controller.createGroup();
     const retried = alex.controller.getSnapshot();
-    assert.ok(
+    observe(
       alex.createPosts === beforeUncertainCreate + 2 &&
         alex.createKeys.at(-1) === alex.createKeys.at(-2) &&
         retried.screen === 'group' &&
         retried.detail.data?.id === reconciled[0]._id,
       'An explicit retry did not return the Group its lost response created.',
+      {
+        createPosts: alex.createPosts - beforeUncertainCreate,
+        keys: alex.createKeys.slice(-2),
+        screen: retried.screen,
+        opened: retried.detail.data?.id ?? null,
+        committed: reconciled[0]?._id,
+      },
     );
-    assert.ok(
-      (await discoverOwnGroups()).filter((group) => group.name === uncertainName).length === 1,
-      'An explicit retry of a committed create saved a second Group.',
-    );
-    const listedOnce = () =>
+    const retriedSaved = (await discoverOwnGroups()).filter(
+      (group) => group.name === uncertainName,
+    ).length;
+    observe(retriedSaved === 1, 'An explicit retry of a committed create saved a second Group.', {
+      saved: retriedSaved,
+    });
+    const timesListed = () =>
       alex.controller.getSnapshot().groups.data.filter((group) => group.id === reconciled[0]._id)
-        .length === 1;
-    assert.ok(listedOnce(), 'An explicit retry listed the returned Group twice.');
+        .length;
+    observe(timesListed() === 1, 'An explicit retry listed the returned Group twice.', {
+      listed: timesListed(),
+    });
     await alex.controller.back();
-    assert.ok(listedOnce(), 'Returning to Groups listed the retried Group twice.');
+    observe(timesListed() === 1, 'Returning to Groups listed the retried Group twice.', {
+      listed: timesListed(),
+    });
     checks.push('Explicit retry of a committed create returns the same Group, listed once');
 
     ownNames.add(resendName);
@@ -464,16 +537,18 @@ async function verify() {
     await alex.controller.createGroup();
     const resent = await discoverOwnGroups();
     const resentGroups = resent.filter((group) => group.name === resendName);
-    assert.ok(
+    observe(
       alex.createPosts === beforeResend + 2 &&
         alex.createKeys.at(-1) !== null &&
         alex.createKeys.at(-1) === alex.createKeys.at(-2),
       'The resent create did not carry the same Idempotency-Key twice.',
+      { createPosts: alex.createPosts - beforeResend, keys: alex.createKeys.slice(-2) },
     );
-    assert.ok(
+    observe(
       resentGroups.length === 1 &&
         alex.controller.getSnapshot().detail.data?.id === resentGroups[0]._id,
       'A transport-level resend of Group creation saved a second Group.',
+      { saved: resentGroups.length, opened: alex.controller.getSnapshot().detail.data?.id ?? null },
     );
     checks.push('Transport-level resend of a committed create saves one Group');
 
@@ -495,26 +570,34 @@ async function verify() {
     alex.restart();
     await alex.controller.restore();
     const reopened = alex.controller.getSnapshot().creation;
-    assert.ok(
+    observe(
       reopened.status === 'uncertain' && reopened.draft.name === restartName,
       'A restart lost the Group being created.',
+      { status: reopened.status, name: reopened.draft.name },
     );
-    assert.ok(alex.createPosts === beforeRestart + 1, 'Restoring sent the Group create again.');
+    observe(alex.createPosts === beforeRestart + 1, 'Restoring sent the Group create again.', {
+      createPosts: alex.createPosts - beforeRestart,
+    });
     alex.controller.resumeCreationAfterCheck();
     await alex.controller.createGroup();
     const restartedGroups = (await discoverOwnGroups()).filter(
       (group) => group.name === restartName,
     );
-    assert.ok(
+    observe(
       alex.createPosts === beforeRestart + 2 &&
         alex.createKeys.at(-1) !== null &&
         alex.createKeys.at(-1) === alex.createKeys.at(-2),
       'The resubmit after a restart did not reuse the stored Idempotency-Key.',
+      { createPosts: alex.createPosts - beforeRestart, keys: alex.createKeys.slice(-2) },
     );
-    assert.ok(
+    observe(
       restartedGroups.length === 1 &&
         alex.controller.getSnapshot().detail.data?.id === restartedGroups[0]._id,
       'A resubmit after a restart saved a second Group.',
+      {
+        saved: restartedGroups.length,
+        opened: alex.controller.getSnapshot().detail.data?.id ?? null,
+      },
     );
     checks.push('A Group being created survives a restart, and its resubmit saves one Group');
 
@@ -522,14 +605,16 @@ async function verify() {
     const beforeLostInvite = alex.invitePosts;
     alex.loseNextInviteResponse();
     await alex.controller.loadInviteLink();
-    assert.ok(
+    observe(
       alex.invitePosts === beforeLostInvite + 1,
       'Invite generation was not attempted once.',
+      { invitePosts: alex.invitePosts - beforeLostInvite },
     );
     const recoveredUrl = await alex.controller.loadInviteLink();
-    assert.ok(
+    observe(
       recoveredUrl && alex.invitePosts === beforeLostInvite + 1,
       'Lost invite generation was not recovered by reading the existing link.',
+      { recovered: Boolean(recoveredUrl), invitePosts: alex.invitePosts - beforeLostInvite },
     );
     checks.push('Committed invite-generation response loss recovered without another generation');
   } finally {
@@ -541,15 +626,18 @@ async function verify() {
         // creator id, and admin membership are all required before archiving.
         for (const group of await discoverOwnGroups()) {
           const response = await alex.authorized(`/api/groups/${group._id}`, 'DELETE');
-          assert.ok(
+          observe(
             response.status === 200,
             'Cleanup could not archive a Group created by this run.',
+            { status: response.status },
           );
           archivedCount += 1;
         }
-        assert.ok(
-          (await discoverOwnGroups()).length === 0,
+        const remaining = await discoverOwnGroups();
+        observe(
+          remaining.length === 0,
           'A Group created by this run remained in active Groups after cleanup.',
+          { remaining: remaining.map((group) => group.name) },
         );
       }
     } finally {
@@ -564,11 +652,9 @@ async function verify() {
   for (const check of checks) console.log(`- ${check}`);
 }
 
-void verify().catch((error: unknown) => {
-  console.error(
-    error instanceof assert.AssertionError
-      ? `FAIL: ${error.message}`
-      : 'FAIL: the local Group journey could not complete. Check the isolated backend and cleanup state.',
-  );
-  process.exitCode = 1;
-});
+void verify().catch((error: unknown) =>
+  reportVerifierFailure(
+    error,
+    'the local Group journey could not complete. Check the isolated backend and cleanup state.',
+  ),
+);

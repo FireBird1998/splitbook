@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { createMobileController } from '../src/data';
 import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
+import { observe, present, reportVerifierFailure } from './verify-report';
 
 async function run() {
   const origin = localOrigin(),
@@ -142,14 +143,17 @@ async function run() {
     await controller.selectMonth('2026-08');
     await controller.openActivity(groupId);
     const activity = controller.getSnapshot().activity.events.length;
-    assert.ok(activity > 0);
+    observe(activity > 0, 'Activity loaded no events to keep for offline.', { events: activity });
     controller.dispose();
     offline = true;
     controller = create();
     await controller.restore();
     assert.equal(controller.getSnapshot().auth.status, 'authenticated');
     assert.equal(controller.getSnapshot().home.status, 'ready');
-    assert.ok(controller.getSnapshot().offline.refreshedAt);
+    present(
+      controller.getSnapshot().offline.refreshedAt,
+      'The restored offline session said nothing about when it was last updated.',
+    );
     await controller.openGroup(groupId);
     await controller.selectMonth('2026-08');
     assert.equal(controller.getSnapshot().financial.expenses.status, 'ready');
@@ -227,7 +231,9 @@ async function run() {
     await controller.signIn('alex');
     await controller.openGroup(groupId);
     await controller.selectMonth('2026-08');
-    assert.ok(descriptions().includes('Lakeside dinner'));
+    observe(descriptions().includes('Lakeside dinner'), 'The August list lacked Lakeside dinner.', {
+      descriptions: descriptions(),
+    });
     await controller.openExpense(groupId, expenseId);
     assert.equal(controller.getSnapshot().expense.draft?.description, 'Lakeside dinner');
     await controller.editExpense();
@@ -252,8 +258,12 @@ async function run() {
       if (expenses.status === 'error') assert.equal(expenses.message, notSaved);
       else {
         assert.equal(expenses.status, 'ready');
-        assert.ok(descriptions().includes('Lakeside dinner, edited'));
-        assert.ok(!descriptions().includes('Lakeside dinner'));
+        observe(
+          descriptions().includes('Lakeside dinner, edited') &&
+            !descriptions().includes('Lakeside dinner'),
+          'The saved copy did not show the edited Expense in place of the old one.',
+          { descriptions: descriptions() },
+        );
       }
     };
     offline = true;
@@ -274,7 +284,4 @@ async function run() {
     await rm(directory, { recursive: true, force: true });
   }
 }
-void run().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'Offline verification failed');
-  process.exitCode = 1;
-});
+void run().catch((error: unknown) => reportVerifierFailure(error));

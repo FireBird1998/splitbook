@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { createMobileController, type MobileFetch } from '../src/data';
 import { FixtureActor, alexId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
+import { observe, present, reportVerifierFailure } from './verify-report';
 
 const origin = localOrigin();
 const id = z.string().regex(/^[a-f\d]{24}$/);
@@ -37,13 +38,14 @@ const priya = new FixtureActor();
 
 async function archive(manifest: Manifest) {
   const group = groupSchema.parse(await alex.request(`/api/groups/${manifest.groupId}`)).data;
-  assert.ok(
+  observe(
     group._id === manifest.groupId &&
       group.name === groupName(manifest.runId) &&
       group.description === description(manifest.runId) &&
       group.createdBy === alexId &&
       group.members.some((member) => member.user._id === alexId && member.role === 'admin'),
     'Refusing cleanup of a Group outside this fictional run.',
+    { id: group._id, name: group.name, createdBy: group.createdBy },
   );
   await alex.request(`/api/groups/${manifest.groupId}`, 'DELETE');
 }
@@ -381,7 +383,7 @@ async function verify(manifest: Manifest) {
         })
         .parse(await alex.request(`/api/groups/${manifest.groupId}/expenses`)).data.expenses;
       const expense = saved.find((row) => row._id === receiptId);
-      assert.ok(expense);
+      present(expense, `The saved ${entry.method} Expense was not listed.`);
       assert.equal(expense.splitMethod, entry.method);
       assert.equal(expense.amountMinor, 1000);
       assert.deepEqual(
@@ -433,7 +435,7 @@ async function main() {
   try {
     const [mode, file] = process.argv.slice(2);
     if (mode === '--cleanup-fixtures') {
-      assert.ok(file && isAbsolute(file));
+      observe(file && isAbsolute(file), 'Cleanup needs an absolute manifest path.', { file });
       await archive(manifestSchema.parse(JSON.parse(await readFile(file, 'utf8'))));
       console.log('Archived the verified QA53 fictional Group.');
     } else {
@@ -441,7 +443,7 @@ async function main() {
       await priya.signIn('priya');
       const manifest = await seed();
       if (mode === '--seed-fixtures') {
-        assert.ok(file && isAbsolute(file));
+        observe(file && isAbsolute(file), 'Seeding needs an absolute manifest path.', { file });
         await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`);
         console.log(`Created fictional native fixture ${groupName(manifest.runId)}.`);
       } else {
@@ -456,7 +458,4 @@ async function main() {
     await Promise.all([alex.close(), sam.close(), priya.close()]);
   }
 }
-void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'Verification failed');
-  process.exitCode = 1;
-});
+void main().catch((error: unknown) => reportVerifierFailure(error));

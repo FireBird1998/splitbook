@@ -12,6 +12,7 @@ import { createMobileController, type MobileFetch } from '../src/data';
 import { parseExpenseRecord } from '../src/data/expense-record';
 import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
+import { observe, reportVerifierFailure } from './verify-report';
 
 async function run() {
   const origin = localOrigin();
@@ -276,7 +277,9 @@ async function run() {
         [334, 333, 333],
       );
       assert.equal(current.tagId, tagId);
-      assert.ok(current.editHistory.length);
+      observe(current.editHistory.length > 0, 'The edit left no history.', {
+        history: current.editHistory.length,
+      });
       assert.deepEqual(JSON.parse(writes[0].body), { description: 'Metadata correction' });
       console.log(
         'PASS: metadata edit/read-back preserves money, currency, date, archived Tag and history.',
@@ -426,7 +429,4 @@ async function run() {
     await rm(directory, { recursive: true, force: true });
   }
 }
-void run().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'Verification failed');
-  process.exitCode = 1;
-});
+void run().catch((error: unknown) => reportVerifierFailure(error));

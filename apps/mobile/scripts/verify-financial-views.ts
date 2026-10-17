@@ -21,6 +21,7 @@ import {
   type FinancialFixtures,
 } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
+import { observe, reportVerifierFailure } from './verify-report';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -32,16 +33,23 @@ function deferred<T>() {
 
 function assertCleared(controller: MobileController) {
   const state = controller.getSnapshot();
-  assert.ok(
+  observe(
     state.auth.status === 'signed-out' && state.auth.user === null,
     'Sign-out retained an account.',
+    { status: state.auth.status, user: state.auth.user?.id ?? null },
   );
-  assert.ok(
+  observe(
     state.home.data === null &&
       state.financial.groupId === null &&
       state.financial.expenses.data.length === 0 &&
       state.financial.balances.data === null,
     'Sign-out or a late response retained financial content.',
+    {
+      home: state.home.data,
+      groupId: state.financial.groupId,
+      expenses: state.financial.expenses.data.length,
+      balances: state.financial.balances.data,
+    },
   );
 }
 
@@ -59,21 +67,23 @@ async function verifyController(
   const transport: MobileFetch = async (url, init) => {
     const target = new URL(url);
     assert.equal(target.origin, origin, 'A controller request attempted a nonlocal target.');
-    assert.ok(
+    observe(
       !init.method ||
         init.method === 'GET' ||
         (init.method === 'POST' &&
           ['/api/auth/demo-persona/sign-in', '/api/auth/sign-out'].includes(target.pathname)),
       'The financial read verifier attempted a ledger write.',
+      { method: init.method ?? 'GET', path: target.pathname },
     );
     const delaying =
       holdExpenseRead && target.pathname === `/api/groups/${fixtures.groups.household}/expenses`;
     if (delaying) holdExpenseRead = false;
     const response = await fetch(url, { ...init, redirect: 'error' });
     if (!delaying) return response;
-    assert.ok(
+    observe(
       response.ok && init.signal,
       'The real delayed expense response was not successful or cancellable.',
+      { status: response.status, cancellable: Boolean(init.signal) },
     );
     const completed = new Response(await response.arrayBuffer(), {
       status: response.status,
@@ -109,7 +119,10 @@ async function verifyController(
     );
     await controller.refreshHome();
     const home = controller.getSnapshot().home;
-    assert.ok(home.status === 'ready' && home.data, 'The controller did not load Home balances.');
+    observe(home.status === 'ready' && home.data, 'The controller did not load Home balances.', {
+      status: home.status,
+      currencies: home.data?.map((item) => item.currency),
+    });
     for (const [currency, payable, receivable] of [
       ['INR', 30, 50],
       ['EUR', 12.34, 5.67],
@@ -118,7 +131,10 @@ async function verifyController(
       const bucket: HomeCurrencyBalance | undefined = home.data.find(
         (item) => item.currency === currency,
       );
-      assert.ok(bucket, 'Home omitted a fixture currency.');
+      observe(bucket, 'Home omitted a fixture currency.', {
+        currency,
+        currencies: home.data.map((item) => item.currency),
+      });
       assert.equal(
         bucket.youOwe,
         Number(((before?.youOwe ?? 0) + payable).toFixed(2)),
@@ -138,42 +154,60 @@ async function verifyController(
       [fixtures.groups.eurReceivable, 'EUR', 5.67],
     ] as const) {
       const group = observed.groups.find((item) => item.groupId === groupId);
-      assert.ok(
+      observe(
         group?.balances.length === 1 &&
           group.balances[0].currency === currency &&
           group.balances[0].balance === amount,
         'A fixture Group did not produce its literal expected obligation.',
+        { groupId, balances: group?.balances },
       );
     }
 
     await controller.openGroup(fixtures.groups.household);
     const household = controller.getSnapshot().detail.data;
-    assert.ok(
+    observe(
       household?.category === 'home' && household.startDate === null && household.endDate === null,
       'Household acquired Trip dates or the wrong theme.',
+      {
+        category: household?.category,
+        startDate: household?.startDate,
+        endDate: household?.endDate,
+      },
     );
     const balance = controller.getSnapshot().financial.balances;
-    assert.ok(balance.status === 'ready' && balance.data, 'Running balances did not load.');
+    observe(balance.status === 'ready' && balance.data, 'Running balances did not load.', {
+      status: balance.status,
+      buckets: balance.data?.length,
+    });
     const inr = balance.data.find((bucket) => bucket.currency === 'INR');
-    assert.ok(
+    observe(
       inr?.balances.find((row) => row.user.id === samId)?.balance === -30 &&
         inr.debts.some(
           (debt) => debt.from.id === samId && debt.to.id === alexId && debt.amount === 30,
         ),
       'The Household running balance did not match the entire ledger.',
+      {
+        sam: inr?.balances.find((row) => row.user.id === samId)?.balance,
+        debts: inr?.debts.map((debt) => ({
+          from: debt.from.id,
+          to: debt.to.id,
+          amount: debt.amount,
+        })),
+      },
     );
     const running = JSON.stringify(balance.data);
 
     await controller.selectMonth(fixtures.month);
     let expenses = controller.getSnapshot().financial.expenses;
-    assert.ok(
+    observe(
       expenses.status === 'ready' &&
         expenses.pagination?.total === 22 &&
         expenses.pagination.totalPages === 2 &&
         expenses.data.length === 20,
       'The selected Month did not paginate its 22 matching expenses.',
+      { status: expenses.status, pagination: expenses.pagination, rows: expenses.data.length },
     );
-    assert.ok(
+    observe(
       expenses.summary?.count === 22 &&
         expenses.summary.totalsByCurrency.length === 1 &&
         expenses.summary.totalsByCurrency[0].currency === 'INR' &&
@@ -181,11 +215,12 @@ async function verifyController(
         expenses.summary.userOwes === 25 &&
         expenses.summary.userGetsBack === 0,
       'The Month summary did not describe the full expense window separately from running debt.',
+      { summary: expenses.summary },
     );
     await controller.loadMoreExpenses();
     expenses = controller.getSnapshot().financial.expenses;
     const expected = [fixtures.expenses.start, ...fixtures.expenses.middle, fixtures.expenses.end];
-    assert.ok(
+    observe(
       expenses.data.length === 22 &&
         new Set(expenses.data.map((expense) => expense.id)).size === 22 &&
         expected.every((expenseId) => expenses.data.some((expense) => expense.id === expenseId)) &&
@@ -193,8 +228,9 @@ async function verifyController(
           [fixtures.expenses.before, fixtures.expenses.after].includes(expense.id),
         ),
       'Pagination duplicated rows or the Month’s calendar days included the wrong records.',
+      { rows: expenses.data.length, ids: expenses.data.map((expense) => expense.id) },
     );
-    assert.ok(
+    observe(
       expenses.data.every(
         (expense, index, rows) =>
           expense.groupId === fixtures.groups.household &&
@@ -210,6 +246,18 @@ async function verifyController(
           (index === 0 || rows[index - 1].date.getTime() >= expense.date.getTime()),
       ),
       'Expense money, Tag identity, member attribution, dates, or order did not survive the wire boundary.',
+      {
+        rows: expenses.data.map((expense) => ({
+          groupId: expense.groupId,
+          currency: expense.currency,
+          amountMinor: expense.amountMinor,
+          amount: expense.amount,
+          date: expense.date,
+          tag: expense.tag,
+          paidBy: expense.paidBy[0]?.user.name,
+          split: expense.splitBetween[0]?.user.name,
+        })),
+      },
     );
     assert.equal(
       JSON.stringify(controller.getSnapshot().financial.balances.data),
@@ -219,13 +267,14 @@ async function verifyController(
 
     await controller.selectMonth('2000-01');
     expenses = controller.getSnapshot().financial.expenses;
-    assert.ok(
+    observe(
       expenses.status === 'ready' &&
         expenses.data.length === 0 &&
         expenses.summary?.count === 0 &&
         expenses.summary.totalsByCurrency.length === 0 &&
         expenses.summary.userOwes === 0,
       'An empty past Month was not an understandable empty result.',
+      { status: expenses.status, rows: expenses.data.length, summary: expenses.summary },
     );
     assert.equal(
       JSON.stringify(controller.getSnapshot().financial.balances.data),
@@ -246,10 +295,14 @@ async function verifyController(
     );
     // A refresh reads the loaded pages again, and keeps them (#219, M1-3).
     await controller.refreshExpenses();
-    assert.ok(
+    observe(
       controller.getSnapshot().financial.expenses.data.length === 24 &&
         controller.getSnapshot().financial.expenses.pagination?.page === 2,
       'Refresh did not read the loaded pages again.',
+      {
+        rows: controller.getSnapshot().financial.expenses.data.length,
+        page: controller.getSnapshot().financial.expenses.pagination?.page,
+      },
     );
     await controller.refreshBalances();
     assert.equal(
@@ -260,27 +313,44 @@ async function verifyController(
 
     await controller.openGroup(fixtures.groups.inrReceivable);
     const trip = controller.getSnapshot().detail.data;
-    assert.ok(
+    observe(
       trip?.category === 'trip' &&
         trip.startDate instanceof Date &&
         trip.endDate instanceof Date &&
         controller.getSnapshot().financial.month === null,
       'Trip itinerary dates or all-time expense mode were lost.',
+      {
+        category: trip?.category,
+        startDate: trip?.startDate,
+        endDate: trip?.endDate,
+        month: controller.getSnapshot().financial.month,
+      },
     );
     await controller.openGroup(fixtures.groups.eurPayable);
-    assert.ok(
+    observe(
       controller.getSnapshot().financial.expenses.data[0]?.amountMinor === 1234 &&
         controller.getSnapshot().financial.expenses.data[0]?.currency === 'EUR',
       'EUR exact money was not read independently.',
+      {
+        first: controller.getSnapshot().financial.expenses.data[0] && {
+          amountMinor: controller.getSnapshot().financial.expenses.data[0].amountMinor,
+          currency: controller.getSnapshot().financial.expenses.data[0].currency,
+        },
+      },
     );
 
     // Existing isolated private Group: a real denied read must clear the prior ledger.
     await controller.openGroup('a00000000000000000000030');
-    assert.ok(
+    observe(
       controller.getSnapshot().detail.status === 'denied' &&
         controller.getSnapshot().financial.expenses.data.length === 0 &&
         controller.getSnapshot().financial.balances.data === null,
       'Denied Group access retained previous financial data.',
+      {
+        detail: controller.getSnapshot().detail.status,
+        rows: controller.getSnapshot().financial.expenses.data.length,
+        balances: controller.getSnapshot().financial.balances.data,
+      },
     );
     await controller.openGroup(fixtures.groups.household);
     holdExpenseRead = true;
@@ -293,7 +363,9 @@ async function verifyController(
       }),
     ]);
     await controller.signOut();
-    assert.ok(signal.aborted, 'Sign-out did not abort the pending expense request.');
+    observe(signal.aborted, 'Sign-out did not abort the pending expense request.', {
+      aborted: signal.aborted,
+    });
     assertCleared(controller);
     release.resolve();
     await pending;
@@ -308,10 +380,14 @@ async function verifyController(
       alexId,
       'The next account did not authenticate.',
     );
-    assert.ok(
+    observe(
       controller.getSnapshot().financial.groupId === null &&
         controller.getSnapshot().financial.expenses.data.length === 0,
       'The next account received the prior account’s open ledger.',
+      {
+        groupId: controller.getSnapshot().financial.groupId,
+        rows: controller.getSnapshot().financial.expenses.data.length,
+      },
     );
     console.log(
       'PASS: separate INR/EUR Home obligations, exact expense reads, calendar-day Month boundaries, pagination, empty Month, unchanged running balances, Trip dates, refresh, denied access, late-response logout, restart, and account isolation.',
@@ -329,20 +405,23 @@ async function verifyController(
         redirect: 'error',
         signal: AbortSignal.timeout(20_000),
       });
-      assert.ok(response.ok, 'Could not revoke a verifier-owned session.');
+      observe(response.ok, 'Could not revoke a verifier-owned session.', {
+        status: response.status,
+      });
     }
   }
 }
 
 async function main() {
   const [mode, manifestPath, ...extra] = process.argv.slice(2);
-  assert.ok(
+  observe(
     !mode ||
       (['--seed-fixtures', '--keep-fixtures', '--cleanup-fixtures'].includes(mode) &&
         manifestPath &&
         isAbsolute(manifestPath) &&
         extra.length === 0),
     'Use no arguments, or --seed-fixtures/--keep-fixtures/--cleanup-fixtures with an absolute manifest path.',
+    { mode, manifestPath, extra },
   );
   const alex = new FixtureActor();
   const sam = new FixtureActor();
@@ -380,19 +459,18 @@ async function main() {
       if (fixtures && !retained) await archiveFinancialFixtures(alex, fixtures);
     } finally {
       const cleanup = await Promise.allSettled([alex.close(), sam.close()]);
-      assert.ok(
+      observe(
         cleanup.every((result) => result.status === 'fulfilled'),
         'Could not revoke every fixture-owned session.',
+        { results: cleanup.map((result) => result.status) },
       );
     }
   }
 }
 
-void main().catch((error: unknown) => {
-  console.error(
-    error instanceof assert.AssertionError
-      ? `FAIL: ${error.message}`
-      : 'FAIL: financial verification could not complete. Check the isolated backend and fixture manifest; no credentials or responses were logged.',
-  );
-  process.exitCode = 1;
-});
+void main().catch((error: unknown) =>
+  reportVerifierFailure(
+    error,
+    'financial verification could not complete. Check the isolated backend and fixture manifest; no credentials or responses were logged.',
+  ),
+);

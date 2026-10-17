@@ -10,6 +10,7 @@ import {
 import { createMobileController } from '../src/data';
 import { FixtureActor, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
+import { reportVerifierFailure } from './verify-report';
 
 /** The same memory survives two controllers, as device stores survive a process restart. */
 async function verifyAndroidRestart(
@@ -367,7 +368,4 @@ async function main() {
     }
   }
 }
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+void main().catch((error: unknown) => reportVerifierFailure(error));
