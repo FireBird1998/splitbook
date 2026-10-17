@@ -34,6 +34,14 @@ export interface IntegrationTestDb {
   teardown: () => Promise<void>;
 }
 
+/**
+ * Force a checkpoint, which closes the files of databases dropped before it while the test
+ * server keeps no snapshot history (`integration-global-setup.ts`, #470).
+ */
+async function forceCheckpoint(db: mongoose.mongo.Db): Promise<void> {
+  await db.admin().command({ fsync: 1 });
+}
+
 function withDatabaseName(baseUri: string, dbName: string): string {
   const url = new URL(baseUri);
   url.pathname = `/${dbName}`;
@@ -80,7 +88,10 @@ export function integrationTestDb(fileKey: string): IntegrationTestDb {
     },
     teardown: async () => {
       const db = mongoose.connection.db;
-      if (db) await db.dropDatabase();
+      if (db) {
+        await db.dropDatabase();
+        await forceCheckpoint(db);
+      }
       await mongoose.disconnect();
     },
   };
