@@ -153,6 +153,13 @@ jobs:
         working-directory: .
         run: pnpm lint
 
+      # Before any step starts Next (#490). The web tsconfig includes .next/dev/types, which a
+      # running dev server rewrites as it compiles routes; tsc once read it mid-write. Here, as
+      # in PR checks, no .next exists yet.
+      - name: Typecheck (workspace)
+        working-directory: .
+        run: pnpm typecheck
+
       - name: Adopted design-system style policy
         run: pnpm check:design-system
 
@@ -210,10 +217,6 @@ jobs:
             sleep 1
           done
           pnpm web test:group-cleanup-http
-
-      - name: Typecheck (workspace)
-        working-directory: .
-        run: pnpm typecheck
 
       - name: Install Chromium for authenticated browser checks
         run: pnpm exec playwright install --with-deps chromium
@@ -389,18 +392,23 @@ jobs:
       # One replica set serves the web integration suite, then the mobile verifiers' backend.
       # Test commands let the integration suite's Group-cleanup tests set failpoints; each
       # test turns its own off, and the suite finishes before the backend starts.
+      # Both test servers start at mongod's default soft file limit (nofile 1024), so a change
+      # that makes the suite leak open files again fails here (#484, #470); the step prints
+      # the limit mongod got.
       - name: Start the test replica set (web integration suite and mobile verifiers)
         id: mongo
         if: steps.changes.outputs.docs_only != 'true'
         shell: bash
         run: |
           docker run --name splitbook-mobile-ci --detach --publish 127.0.0.1:27039:27039 \
+            --ulimit nofile=1024:1024 \
             mongo:7.0.39 mongod --replSet mobileTest --bind_ip_all --port 27039 \
             --setParameter enableTestCommands=1
           for attempt in $(seq 1 30); do
             if docker exec splitbook-mobile-ci mongosh --port 27039 --quiet --eval 'db.adminCommand({ping:1})' > /dev/null; then break; fi
             sleep 1
           done
+          docker exec splitbook-mobile-ci grep 'Max open files' /proc/1/limits
           docker exec splitbook-mobile-ci mongosh --port 27039 --quiet --eval 'rs.initiate({_id:"mobileTest",members:[{_id:0,host:"127.0.0.1:27039"}]})'
           for attempt in $(seq 1 30); do
             if docker exec splitbook-mobile-ci mongosh --port 27039 --quiet --eval 'if (!db.hello().isWritablePrimary) quit(1)' > /dev/null; then exit 0; fi
@@ -418,9 +426,13 @@ jobs:
         shell: bash
         run: |
           docker run --name splitbook-standalone-ci --detach --publish 127.0.0.1:27040:27040 \
+            --ulimit nofile=1024:1024 \
             mongo:7.0.39 mongod --bind_ip_all --port 27040
           for attempt in $(seq 1 30); do
-            if docker exec splitbook-standalone-ci mongosh --port 27040 --quiet --eval 'db.adminCommand({ping:1})' > /dev/null; then exit 0; fi
+            if docker exec splitbook-standalone-ci mongosh --port 27040 --quiet --eval 'db.adminCommand({ping:1})' > /dev/null; then
+              docker exec splitbook-standalone-ci grep 'Max open files' /proc/1/limits
+              exit 0
+            fi
             sleep 1
           done
           docker logs splitbook-standalone-ci
