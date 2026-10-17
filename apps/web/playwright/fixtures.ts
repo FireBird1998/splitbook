@@ -23,6 +23,14 @@ export async function enterAsPersona(page: Page, persona: PersonaKey): Promise<v
   await expect(page.getByRole('heading', { name: 'Home', level: 1, exact: true })).toBeVisible();
 }
 
+/**
+ * A money journey (#475): it records an Expense or a payment and checks what that changes.
+ * That doesn't depend on the theme or the screen size, so it runs once, in desktop-light. It
+ * checks no theme, axe or phone layout: those belong in a test without this tag, which runs in
+ * all four projects and writes nothing.
+ */
+export const MONEY_JOURNEY = { tag: '@money' } as const;
+
 /** Whether the project runs at phone width, where the sidebar is a drawer. */
 export function isPhone(testInfo: TestInfo): boolean {
   return testInfo.project.name.startsWith('mobile-');
