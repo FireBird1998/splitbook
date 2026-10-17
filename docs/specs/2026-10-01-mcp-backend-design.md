@@ -6,6 +6,27 @@
 **Product spec:** [Splitbook MCP server](2026-10-01-mcp-server.md).
 **Baseline:** `main` at `6159385`. Recheck the checkout before implementation; the route inventory in §2 goes stale quickly.
 
+## Amendments, 2026-10-04
+
+The owner's [decisions](../connected-assistants/decisions.md) change this design. They win where the sections below disagree.
+
+- **Phase 1 only for now.** §7 (preview and record) is deferred. Phase 1 gains four insight tools (§6.3), computed by a new pure module in `@splitbook/shared`. See [Tools and insights](../connected-assistants/tools-and-insights.md).
+- **Reachable Groups in `ledgerFor(actor)`.** For an assistant actor, a Group is reachable only if three things hold:
+  - the actor is a member;
+  - the Group is not one of that connection's Excluded Groups;
+  - the Group's Assistant rule is Allowed.
+
+  Unreachable Groups return the same not-found result as an unknown id, and list reads omit them.
+
+- **New data.**
+  - A per-connection record keyed by the OAuth consent, holding Excluded Group ids and the last-used time.
+  - A Group-level Assistant rule (Allowed by default).
+  - A member-level opt-in switch for the private beta.
+- **Token semantics (§4.4).** Every call checks that the consent still exists, so disconnecting is immediate. Connections idle for 90 days expire by refusing refresh or removing the consent.
+- **Clients (§4.1).** Client ID Metadata Documents only; dynamic client registration stays off.
+- **Output (§6.4).** Members are returned by name and id, never email.
+- **Open checks.** [Research notes](../connected-assistants/research.md#open-research) list what to verify against `@better-auth/mcp` before building.
+
 ## 1. Verdict: no new backend
 
 Splitbook already has a backend: the Next.js app in `apps/web`. It serves the web UI, the HTTP API the Android client uses, Better Auth, and the Mongoose services over MongoDB, deployed as Vercel functions. The MCP server becomes one more route in that app.
