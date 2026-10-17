@@ -533,6 +533,27 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(f.saves).toHaveLength(1);
     expect(text(tree)).toContain('Saved 1');
   });
+  it('labels Amount and Description above their boxes as Add expense does (#524)', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    for (const name of ['Amount', 'Description']) {
+      const input = tree.root.find(
+        (node) => String(node.type) === 'TextInput' && node.props.accessibilityLabel === name,
+      );
+      // The field around the box starts with its visible label and Required mark (Amount's box
+      // sits in a row with the Group's currency, #512).
+      let field = input.parent!;
+      const shown = () =>
+        field.findAll((node) => String(node.type) === 'Text').map((node) => node.children.join(''));
+      while (!shown().includes(name)) field = field.parent!;
+      expect(shown().slice(0, 2), name).toEqual([name, 'Required']);
+    }
+  });
+
   it('shows "Paid by: You" when the signed-in member paid, as Add expense does (#434)', async () => {
     const f = fixture({ one: true });
     await signIn(f);

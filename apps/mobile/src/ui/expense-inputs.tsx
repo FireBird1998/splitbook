@@ -38,7 +38,8 @@ export function NotesField({
     />
   );
 }
-const RequiredFieldLabel = memo(function RequiredFieldLabel({
+/** A field's visible name with its Required mark, red while the field has a problem. */
+export const RequiredFieldLabel = memo(function RequiredFieldLabel({
   text,
   invalid,
 }: {
