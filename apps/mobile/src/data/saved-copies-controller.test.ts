@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { onlineManager } from '@tanstack/query-core';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { createMobileController } from './mobile-controller';
 import { createAccountGroupRecordStore } from './account-record-storage';
@@ -12,6 +13,8 @@ const device = vi.hoisted(() => ({
   records: new Map<string, unknown>(),
   /** The next write of an environment's saved copies is held part-way, as on a slow disk. */
   stall: null as null | { environment: string; arrive: () => void; released: Promise<void> },
+  /** The next removal of an environment's saved copies is held part-way, as on a slow disk. */
+  removal: null as null | { environment: string; arrive: () => void; released: Promise<void> },
 }));
 vi.mock('./account-record-storage', () => ({
   createAccountGroupRecordStore: (environment: string, kind: string) => {
@@ -30,6 +33,12 @@ vi.mock('./account-record-storage', () => ({
         device.records.set(key(accountId, id), structuredClone(value));
       },
       remove: async (accountId: string, id: string) => {
+        const removal = device.removal;
+        if (kind === 'saved' && removal?.environment === environment) {
+          device.removal = null;
+          removal.arrive();
+          await removal.released;
+        }
         device.records.delete(key(accountId, id));
       },
       clear: async () => {
@@ -103,8 +112,9 @@ function fixture(tagActions = false) {
     failJournal: false,
     failJournalReads: 0,
     missingExpense: false,
-    /** The server refuses every change as invalid (422) and changes nothing. */
+    /** The server refuses every change, as invalid (422) unless `refusal` says otherwise. */
     refuse: false,
+    refusal: 422 as 400 | 409 | 422,
     ledger: 0,
     dinner: { description: 'Dinner', revision: 3, isDeleted: false },
   };
@@ -325,7 +335,12 @@ function fixture(tagActions = false) {
       method !== 'GET' &&
       (path === dinnerPath || path === `${maplePath}/settlements`)
     )
-      return json({ error: 'Validation error', code: 'VALIDATION_ERROR', status: 422 }, 422);
+      return server.refusal === 409
+        ? json({ error: 'Changed elsewhere', code: 'STALE_REVISION', status: 409 }, 409)
+        : json(
+            { error: 'Validation error', code: 'VALIDATION_ERROR', status: server.refusal },
+            server.refusal,
+          );
     if (path === dinnerPath && (method === 'PATCH' || method === 'DELETE')) {
       server.ledger += 1;
       server.dinner.revision += 1;
@@ -483,6 +498,15 @@ function fixture(tagActions = false) {
     return { arrived, release };
   };
 
+  /** Holds the next removal of this device's saved copies part-way, until released. */
+  const stallRemoval = () => {
+    let arrive!: () => void, release!: () => void;
+    const arrived = new Promise<void>((resolve) => (arrive = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    device.removal = { environment, arrive, released };
+    return { arrived, release };
+  };
+
   /** This device's saved copies for Alex, by path: the older document's, then the persister's rows. */
   const saved = (): Record<string, { refreshedAt: number; value: unknown }> => ({
     ...Object.fromEntries(
@@ -528,6 +552,7 @@ function fixture(tagActions = false) {
     savedOf,
     hold,
     stallSave,
+    stallRemoval,
     drafts,
     attempts,
     tagRequests,
@@ -848,6 +873,59 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
       expect(JSON.stringify(f.saved())).toBe(before);
     },
   );
+
+  it.each(['a payment', 'an Expense edit'] as const)(
+    'keeps every saved copy as it was when the server refuses %s as a bad request (400)',
+    async (change) => {
+      const f = fixture();
+      const controller = await visitEverything(f);
+      if (change === 'a payment') {
+        await controller.openGroup(mapleId, true, 'balances');
+        await controller.openRecordPayment(alex.id, sam.id, 'INR');
+      } else {
+        await controller.openExpense(mapleId, dinnerId);
+        await controller.editExpense();
+        await controller.updateExpenseDraft({ description: 'Lake dinner' });
+      }
+      const before = JSON.stringify(f.saved());
+      f.server.refuse = true;
+      f.server.refusal = 400;
+      if (change === 'a payment') await controller.recordSettlement();
+      else await controller.saveExpense();
+
+      // It was sent and refused, so nothing changed on the server and nothing saved is removed.
+      expect(
+        f.calls.filter(
+          (call) =>
+            (call.method === 'POST' && call.path.endsWith('/settlements')) ||
+            call.method === 'PATCH',
+        ),
+      ).toHaveLength(1);
+      expect(f.server.ledger).toBe(0);
+      expect(JSON.stringify(f.saved())).toBe(before);
+    },
+  );
+
+  it('removes Maple House’s ledger copies and Home’s figures when an Expense edit meets a newer one (409)', async () => {
+    const f = fixture();
+    const controller = await visitEverything(f);
+    const cabinCopies = f.savedOf(cabinId);
+    await controller.openExpense(mapleId, dinnerId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Lake dinner' });
+    f.server.refuse = true;
+    f.server.refusal = 409;
+    await controller.saveExpense();
+
+    // Nothing changed on the server, and the member compares the two versions.
+    expect(f.server.ledger).toBe(0);
+    expect(controller.getSnapshot().expense.status).toBe('conflict');
+    // Every Maple House copy that could be older than the Expense goes, as after a change.
+    expect(Object.keys(f.savedOf(mapleId))).toEqual(['Group']);
+    expect(Object.keys(f.saved())).not.toContain('/api/user/balances');
+    expect(Object.keys(f.saved())).toContain('/api/groups');
+    expect(f.savedOf(cabinId)).toEqual(cabinCopies);
+  });
 
   it('keeps what was read after an unconfirmed payment when its retry is refused, and nothing from before it', async () => {
     const f = fixture();
@@ -1329,6 +1407,182 @@ describe('Tag writes and crash-safe saved copies', () => {
       }
     },
   );
+
+  it('removes the Groups list and Home’s figures from this device before a Tag change is sent', async () => {
+    const f = fixture(true);
+    const controller = await visitEverything(f);
+    const cabinCopies = f.savedOf(cabinId);
+    const response = f.hold((path, method) => path.endsWith('/tag-actions') && method === 'POST');
+    const sending = controller
+      .groupTags(mapleId)
+      .submit({ action: 'rename', tagId, expectedRevision: 0, name: 'Meals' });
+    await response.arrived;
+    try {
+      // Were the app to end now, Cabin Weekend's copies would be all this device keeps.
+      expect(
+        Object.keys(f.saved()).filter((path) => !path.startsWith(`/api/groups/${cabinId}`)),
+      ).toEqual([]);
+      expect(f.savedOf(cabinId)).toEqual(cabinCopies);
+    } finally {
+      response.release();
+      await sending;
+      controller.dispose();
+    }
+  });
+
+  it.each([false, true])(
+    'shows nothing read while a Tag change was being sent once it is answered, even after a restart (removal fails: %s)',
+    async (removalFails) => {
+      const f = fixture(true);
+      const controller = await visitEverything(f);
+      // Past the display freshness window, so opening Maple House reads it again (#222, M1-6).
+      f.clock.now += 31_000;
+      const groupRead = f.hold(
+        (path, method) => path === `/api/groups/${mapleId}` && method === 'GET',
+      );
+      const pageRead = f.hold((path) => path.startsWith(`/api/groups/${mapleId}/expenses?`));
+      const opening = controller.openGroup(mapleId);
+      await groupRead.arrived;
+      // Maple House was read before the rename, and its answers land while the rename is sent.
+      const response = f.hold((path, method) => path.endsWith('/tag-actions') && method === 'POST');
+      const manager = controller.groupTags(mapleId);
+      const sending = manager.submit({
+        action: 'rename',
+        tagId,
+        expectedRevision: 0,
+        name: 'Meals',
+      });
+      await response.arrived;
+      groupRead.release();
+      await pageRead.arrived;
+      pageRead.release();
+      await opening;
+      await settle();
+      expect(Object.keys(f.savedOf(mapleId)).sort()).toEqual([
+        'Balances',
+        'Expenses 2026-09 page 1',
+        'Group',
+      ]);
+      // The rename is answered and acknowledged, and the app ends before Maple House is read again.
+      const rereads = [
+        f.hold((path, method) => path === `/api/groups/${mapleId}` && method === 'GET'),
+        f.hold((path) => path.startsWith(`/api/groups/${mapleId}/expenses?`)),
+        f.hold((path) => path === `/api/groups/${mapleId}/balances`),
+      ];
+      f.server.failInvalidation = removalFails;
+      response.release();
+      try {
+        expect(await sending).toMatchObject({ state: 'applied' });
+        await manager.acknowledge();
+        expect(await manager.pending()).toBeNull();
+        await settle();
+        controller.dispose();
+        f.server.offline = true;
+        f.server.failInvalidation = false;
+        const restarted = f.create();
+        try {
+          await restarted.restore();
+          await restarted.openGroup(mapleId);
+          // Nothing read before the rename shows: not the Group with its Tags, nor its Expenses.
+          expect(restarted.getSnapshot().detail).toMatchObject({ data: null, message: notSaved });
+          expect(restarted.getSnapshot().financial.expenses.data).toEqual([]);
+        } finally {
+          restarted.dispose();
+        }
+      } finally {
+        for (const read of rereads) read.release();
+        controller.dispose();
+      }
+    },
+  );
+
+  it('removes an Activity copy that was still being written when a Tag change was answered', async () => {
+    const f = fixture(true);
+    const controller = await visitEverything(f);
+    await controller.openGroup(mapleId);
+    // Past the display freshness window, so Activity is read again when shown (#222, M1-6).
+    f.clock.now += 31_000;
+    const activity = f.hold((path) => path.startsWith(`/api/groups/${mapleId}/activity?page=`));
+    const reading = controller.openActivity(mapleId);
+    await activity.arrived;
+    const response = f.hold((path, method) => path.endsWith('/tag-actions') && method === 'POST');
+    const manager = controller.groupTags(mapleId);
+    const sending = manager.submit({ action: 'rename', tagId, expectedRevision: 0, name: 'Meals' });
+    await response.arrived;
+    // Activity's answer from before the rename lands while the rename is being sent, and this
+    // device is still writing it when the rename is answered.
+    const write = f.stallSave();
+    activity.release();
+    await write.arrived;
+    const reread = f.hold((path) => path.startsWith(`/api/groups/${mapleId}/activity?page=`));
+    response.release();
+    try {
+      expect(await sending).toMatchObject({ state: 'applied' });
+      await manager.acknowledge();
+      write.release();
+      await reading;
+      await settle();
+      // Nothing records the rename was ever pending, so a restart would show what is left here.
+      expect(await manager.pending()).toBeNull();
+      expect(Object.keys(f.savedOf(mapleId))).not.toContain('Activity');
+    } finally {
+      write.release();
+      reread.release();
+      controller.dispose();
+    }
+  });
+
+  it('offers the new Tag name in an Expense form opened right after a rename', async () => {
+    const f = fixture(true);
+    const controller = await visitEverything(f);
+    try {
+      await controller.openExpense(mapleId);
+      expect(controller.getSnapshot().expense.context?.tags.map((tag) => tag.name)).toEqual([
+        'Food',
+      ]);
+      await controller.back();
+      const manager = controller.groupTags(mapleId);
+      expect(
+        await manager.submit({ action: 'rename', tagId, expectedRevision: 0, name: 'Meals' }),
+      ).toMatchObject({ state: 'applied' });
+      await manager.acknowledge();
+      await controller.openExpense(mapleId);
+      expect(controller.getSnapshot().expense.context?.tags.map((tag) => tag.name)).toEqual([
+        'Meals',
+      ]);
+    } finally {
+      controller.dispose();
+    }
+  });
+
+  it('sends nothing when the connection drops while older saved copies are being removed', async () => {
+    const f = fixture(true);
+    const controller = await visitEverything(f);
+    try {
+      const removal = f.stallRemoval();
+      const manager = controller.groupTags(mapleId);
+      const sending = manager
+        .submit({ action: 'rename', tagId, expectedRevision: 0, name: 'Meals' })
+        .catch((error: unknown) => error);
+      await removal.arrived;
+      onlineManager.setOnline(false);
+      removal.release();
+      expect(await sending).toMatchObject({
+        message: 'Tag changes need a connection. Connect, then check or retry explicitly.',
+      });
+      expect(
+        f.requests.filter(({ path, method }) => path.endsWith('/tag-actions') && method === 'POST'),
+      ).toEqual([]);
+      expect(f.server.tagName).toBe('Food');
+      // The original action stays on this device for an explicit retry.
+      expect(await manager.pending()).toMatchObject({
+        intent: { action: 'rename', name: 'Meals' },
+      });
+    } finally {
+      onlineManager.setOnline(true);
+      controller.dispose();
+    }
+  });
 
   it('sends nothing when old saved copies cannot be removed and retries only the original durable action', async () => {
     const f = fixture(true);
