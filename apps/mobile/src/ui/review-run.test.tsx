@@ -572,6 +572,17 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(text(tree)).toContain('You ₹12.34');
     expect(text(tree)).not.toMatch(/Alex (shares|₹)/);
   });
+  it('shows an amount with too many decimals as entered in its header (#537)', async () => {
+    const f = fixture({ one: true });
+    f.items()[0].draft.values!.amount = 10.555;
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    expect(text(tree)).toContain('₹10.555');
+    for (const shown of ['₹10.56', 'Amount needed']) expect(text(tree)).not.toContain(shown);
+  });
   it('keeps a correction with the existing payer sheet and labels every control', async () => {
     const f = fixture({ one: true });
     delete f.items()[0].draft.values!.paidBy;

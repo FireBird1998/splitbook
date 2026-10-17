@@ -2,9 +2,8 @@ import { ReviewRunOverlay } from './review-run';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { formatCurrency } from '@splitbook/shared/currency';
+import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import { formatDate } from '@splitbook/shared/date';
-import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import {
   memberProblems,
   summarizeReviewRun,
@@ -85,15 +84,9 @@ function memberMessage(message: string) {
 function amountLabel(values?: ExpenseDraftValues, groupCurrency?: string) {
   if (!values?.amount) return 'Amount needed';
   const currency = values.currency || groupCurrency;
-  if (!currency) return values.amount.toLocaleString('en', { maximumFractionDigits: 3 });
-  try {
-    return formatCurrency(
-      toMajorAmount(parseAmountMinor(values.amount, currency), currency),
-      currency,
-    );
-  } catch {
-    return 'Amount needed';
-  }
+  if (!currency) return values.amount.toLocaleString('en', { maximumFractionDigits: 20 });
+  // As entered, never rounded: the Needs line says when it has too many decimals (#537).
+  return formatCurrencyAsEntered(values.amount, currency);
 }
 function sourceLabel(item: ReviewItemModel) {
   if (item.id.startsWith('save:')) return 'Save awaiting confirmation';

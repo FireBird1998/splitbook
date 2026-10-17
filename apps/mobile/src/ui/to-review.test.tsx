@@ -508,6 +508,14 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(text(list)).not.toContain('the currency');
     expect(text(list)).not.toContain('Amount needed');
   });
+  it('shows an amount with too many decimals as entered, never rounded or called missing (#537)', async () => {
+    const f = fixture({ unpaid: true });
+    f.items()[0].draft.values!.amount = 10.555;
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    expect(text(list)).toContain('₹10.555');
+    for (const shown of ['₹10.56', 'Amount needed']) expect(text(list)).not.toContain(shown);
+  });
   it('names a missing date, amount or description once, in the Needs line (#435)', async () => {
     const f = fixture();
     await signIn(f);
