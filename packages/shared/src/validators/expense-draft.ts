@@ -79,6 +79,42 @@ export const createExpenseDraftsSchema = z
 export const replaceExpenseDraftSchema = z.object({ values: expenseDraftValuesSchema }).strict();
 
 export type ExpenseDraftValues = z.infer<typeof expenseDraftValuesSchema>;
+
+/** Whether a Draft has a value for a fact at all: not blank, not zero, not an empty list. */
+function hasValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  return value !== undefined && value !== null && value !== '' && value !== 0;
+}
+
+/**
+ * The facts a Draft is missing, from the save schema's issues and any fields reported as needing
+ * attention (#506). A fact with no value is missing, and so is a member row with a part left out
+ * (who paid, who shared it). A value that is there but wrong, such as a split that doesn't add
+ * up to the amount or a share with too many decimals, is not missing: the issue says what is
+ * wrong with it instead.
+ */
+export function missingDraftFields(
+  values: ExpenseDraftValues,
+  issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey> }>,
+  reported: readonly string[] = [],
+): string[] {
+  const value = (field: string) => values[field as keyof ExpenseDraftValues];
+  const fromIssues = issues.flatMap((issue) => {
+    const [first, index, part] = issue.path;
+    const field = String(first ?? 'expense');
+    if (issue.path.length === 1) return hasValue(value(field)) ? [] : [field];
+    if (issue.path.length === 3) {
+      const row = (value(field) as Array<Record<string, unknown>> | undefined)?.[Number(index)];
+      const entered = row?.[String(part)];
+      return entered !== undefined && entered !== null && entered !== '' ? [] : [field];
+    }
+    return [field];
+  });
+  const stillMissing = reported.filter(
+    (field) => fromIssues.includes(field) || !hasValue(value(field)),
+  );
+  return [...new Set([...stillMissing, ...fromIssues])];
+}
 export const persistedExpenseDraftSchema = z
   .object({
     id: draftObjectId,

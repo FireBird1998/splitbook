@@ -158,7 +158,8 @@ export default function ToReviewPanel({
           </Alert>
         )}
         {item.accountItem!.draft.preparedBy.kind === 'assistant' &&
-          item.missingFacts.map((fact) => (
+          // Only a fact with no value was left out; a wrong one isn't something it didn't know (#506).
+          item.unknownFacts.map((fact) => (
             <Typography key={fact} variant="body2">
               {item.accountItem!.draft.preparedBy.kind === 'assistant'
                 ? item.accountItem!.draft.preparedBy.name
