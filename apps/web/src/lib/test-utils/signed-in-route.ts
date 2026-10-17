@@ -117,11 +117,6 @@ export type RouteCall<Params> = {
   | { body?: never; rawBody: string }
 );
 
-/** The issues of a 422 VALIDATION_ERROR, which travel as the serialized Zod error's message. */
-export function validationIssues(body: { details: { message: string } }): unknown[] {
-  return JSON.parse(body.details.message);
-}
-
 /** Call a route handler with a request carrying the session cookie, as Next would. */
 export async function callRoute<Params>(
   handler: (request: Request, context: { params: Promise<Params> }) => Promise<Response>,

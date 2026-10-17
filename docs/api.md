@@ -16,6 +16,23 @@ Helpers in `src/lib/utils/api-response.ts` produce this shape. Two exceptions ex
 today: the tag handlers hand-roll `new Response(JSON.stringify(...))` for their
 `TAG_EXISTS` / `TAG_IN_USE` cases and omit the `status` field.
 
+A body or query the route's schema refuses answers **422** `VALIDATION_ERROR`,
+with each problem in `details` as `{ path, message }`, the shape the Draft APIs
+use too (#538):
+
+```json
+{
+  "error": "Validation error",
+  "code": "VALIDATION_ERROR",
+  "status": 422,
+  "details": [{ "path": ["category"], "message": "Invalid category" }]
+}
+```
+
+Two routes refuse with a message of their own instead: an invite's email
+(`Invalid email address`) and an invitation's action (`Invalid action`), both
+**422** without `details`. Tag commands answer **400** `INVALID_TAG_COMMAND`.
+
 **Unauthenticated `/api/*` requests get `401` JSON, never a redirect.** Route
 protection lives in `src/proxy.ts` (rules in `src/lib/auth/proxy-rules.ts`); for
 API paths without a session cookie it answers `{ "error": "Unauthorized", "status": 401 }`,
@@ -453,8 +470,9 @@ created an expense, so any member can edit or delete any expense in the group.
   (`INVALID_MEMBERS`).
 - `amount` — positive, at most 10,000,000.
 
-`category` is a free string defaulting to `"other"`; the category list in
-`packages/shared/src/categories.ts` is **not** enforced by the validator.
+`category` defaults to `"other"` and must be one of the Category ids in
+`packages/shared/src/categories.ts`; any other answers **422**
+`VALIDATION_ERROR` at `["category"]` ("Invalid category"), on create and edit.
 
 `receiptUrl` is present on the model but absent from both expense schemas, so no
 API path can set it.
@@ -466,9 +484,9 @@ API path can set it.
 - `unequal` / `exact`: Client sends `amount` for each user, **passed through
   untouched**. A row without one is refused as a missing amount, "Enter an amount
   for each person in the split", pointing at that row (#497): a create answers
-  **422** `VALIDATION_ERROR` with the issue at `splitBetween.<i>.amount`, and an
-  edit answers **422** `MISSING_SPLIT_AMOUNT` with
-  `field: ["splitBetween", <i>, "amount"]`.
+  **422** `VALIDATION_ERROR` with the issue at
+  `["splitBetween", <i>, "amount"]`, and an edit answers **422**
+  `MISSING_SPLIT_AMOUNT` with `field: ["splitBetween", <i>, "amount"]`.
 - `percentage`: Client sends `percentage` for each user.
 - `shares`: Client sends `shares` for each user. Server calculates proportional
   amounts.
