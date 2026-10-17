@@ -464,4 +464,29 @@ describe('memberProblems (#435)', () => {
       ),
     ).toEqual(['The amount paid by Sam?']);
   });
+
+  it('names the person whose exact share was left out, not the Expense amount (#497)', () => {
+    const sam = 'a00000000000000000000002';
+    const values = {
+      description: 'Station dinner',
+      amount: 30,
+      currency: 'INR',
+      date: '2026-10-16',
+      category: 'other',
+      tagId: 'c00000000000000000000001',
+      paidBy: [{ user: alex, amount: 30 }],
+      splitMethod: 'exact',
+      splitBetween: [{ user: alex, amount: 30 }, { user: sam }],
+    };
+    // The problem as a Draft review words the save schema's issue.
+    const reviewed = model(
+      ['splitBetween.1.amount: Enter an amount for each person in the split'],
+      values,
+    );
+
+    expect(reviewed.missingFacts).toEqual(['who shared it']);
+    expect(memberProblems(reviewed, { [alex]: 'Alex', [sam]: 'Sam' })).toEqual([
+      'The amount for Sam?',
+    ]);
+  });
 });

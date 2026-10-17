@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmountMinor, sumMinorAmounts } from './exact-money';
-import { calculateSplitAmounts, type SplitParticipantInput } from './split-calculation';
+import {
+  calculateSplitAmounts,
+  calculateSplitAmountsMinor,
+  type SplitParticipantInput,
+} from './split-calculation';
 
 const participants = (...input: SplitParticipantInput[]): SplitParticipantInput[] => input;
 
@@ -178,12 +182,44 @@ describe('calculateSplitAmounts', () => {
 });
 
 describe('split paths the suite missed (#471)', () => {
-  it('refuses an exact split with a share left out', () => {
+  /** The refusal for a share nobody entered, naming the row it belongs to (#497). */
+  const missingShare = (index: number) =>
+    expect.objectContaining({
+      code: 'MISSING_SPLIT_AMOUNT',
+      message: 'Enter an amount for each person in the split',
+      field: ['splitBetween', index, 'amount'],
+    });
+
+  it('refuses an exact split with a share left out, as a missing amount', () => {
     // ₹10 between two, b's amount never entered: nothing is guessed for it.
-    expect(
-      () =>
-        calculateSplitAmounts('exact', 10, participants({ user: 'a', amount: 10 }, { user: 'b' })),
-      // Refused as an amount it can't read exactly.
-    ).toThrow(expect.objectContaining({ code: 'UNSAFE_MONEY' }));
+    expect(() =>
+      calculateSplitAmounts('exact', 10, participants({ user: 'a', amount: 10 }, { user: 'b' })),
+    ).toThrow(missingShare(1));
+  });
+
+  it('refuses an unequal split with a share left out, as a missing amount', () => {
+    // ₹10 among three, a's amount never entered.
+    expect(() =>
+      calculateSplitAmounts(
+        'unequal',
+        10,
+        participants({ user: 'a' }, { user: 'b', amount: 6 }, { user: 'c', amount: 4 }),
+      ),
+    ).toThrow(missingShare(0));
+  });
+
+  it('still refuses a share too large to hold exactly as UNSAFE_MONEY', () => {
+    // 2^53 paise is the first amount a number can no longer hold exactly.
+    expect(() =>
+      calculateSplitAmountsMinor('exact', 100, [
+        { user: 'a', amountMinor: 100 },
+        { user: 'b', amountMinor: 2 ** 53 },
+      ]),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'UNSAFE_MONEY',
+        message: 'Amount is outside the supported exact range',
+      }),
+    );
   });
 });

@@ -174,4 +174,25 @@ describe('POST and GET /api/groups/[id]/recurring', () => {
     expect(await templates(groupId, alexCookie)).toEqual([]);
     expect(await debts(groupId, alexCookie)).toEqual([]);
   });
+
+  it('refuses a Rent with Sam’s exact share left out, at that row of the split (#497)', async () => {
+    const groupId = await household();
+    const alexCookie = await signIn('alex');
+
+    const refused = await addRecurring(groupId, alexCookie, {
+      ...monthlyRent,
+      splitMethod: 'exact',
+      splitBetween: [{ user: alex, amount: 18000 }, { user: sam }],
+    });
+
+    expect(refused.status).toBe(422);
+    expect(JSON.parse(refused.body.details.message)).toEqual([
+      {
+        code: 'custom',
+        message: 'Enter an amount for each person in the split',
+        path: ['splitBetween', 1, 'amount'],
+      },
+    ]);
+    expect(await templates(groupId, alexCookie)).toEqual([]);
+  });
 });

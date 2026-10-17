@@ -4,6 +4,7 @@ import {
   MoneyValidationError,
   assertStoredExpenseMoney,
   calculateSplitAmountsMinor,
+  moneyErrorPath,
   normalizeExpenseMoney,
   parseAmountMinor,
   parseExpenseAmountMinor,
@@ -471,5 +472,32 @@ describe('money paths the suite missed (#471)', () => {
         (row) => row.amountMinor,
       ),
     ).toEqual([33, 34, 33]);
+  });
+});
+
+describe('where a money refusal points (#497)', () => {
+  it('points a share left out at its row of the split', () => {
+    const refusal = (() => {
+      try {
+        normalizeExpenseMoney({
+          amount: 10,
+          currency: 'INR',
+          paidBy: [{ user: 'a', amount: 10 }],
+          splitMethod: 'exact',
+          splitBetween: [{ user: 'a', amount: 10 }, { user: 'b' }],
+        });
+      } catch (error) {
+        return error;
+      }
+    })();
+
+    expect(moneyErrorPath(refusal)).toEqual(['splitBetween', 1, 'amount']);
+  });
+
+  it('points any other refusal at the Expense amount', () => {
+    expect(moneyErrorPath(new MoneyValidationError('UNSAFE_MONEY', 'too large'))).toEqual([
+      'amount',
+    ]);
+    expect(moneyErrorPath(new Error('not money'))).toEqual(['amount']);
   });
 });

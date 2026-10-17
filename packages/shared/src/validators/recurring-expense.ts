@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '../currency';
 import { CATEGORY_IDS } from '../categories';
-import { normalizeExpenseMoney } from '../exact-money';
+import { moneyErrorPath, normalizeExpenseMoney } from '../exact-money';
 import { calendarDate } from './calendar-date';
 
 const recurringexpenseFields = z.object({
@@ -56,7 +56,7 @@ export const createRecurringExpenseSchema = recurringexpenseFields
       context.addIssue({
         code: 'custom',
         message: error instanceof Error ? error.message : 'Invalid recurring allocation',
-        path: ['amount'],
+        path: moneyErrorPath(error),
       });
     }
   });

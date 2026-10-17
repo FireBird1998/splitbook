@@ -12,10 +12,17 @@ export class MoneyValidationError extends Error {
   constructor(
     public readonly code: string,
     message: string,
+    /** The input field the refusal is about, when it is narrower than the Expense amount. */
+    public readonly field?: ReadonlyArray<string | number>,
   ) {
     super(message);
     this.name = 'MoneyValidationError';
   }
+}
+
+/** Where a money refusal belongs in Expense input: the field it names, or else the amount. */
+export function moneyErrorPath(error: unknown): Array<string | number> {
+  return error instanceof MoneyValidationError && error.field ? [...error.field] : ['amount'];
 }
 
 export function assertSafeMinorAmount(value: number): number {
@@ -210,8 +217,16 @@ export function calculateSplitAmountsMinor<T extends MinorSplitInput>(
   }
   assertUniqueMoneyParticipants(participants);
   if (method === 'exact' || method === 'unequal') {
-    const result = participants.map((participant) => {
-      const minor = assertSafeMinorAmount(participant.amountMinor as number);
+    const result = participants.map((participant, index) => {
+      // A share nobody entered is missing, not too large to hold exactly (#497).
+      if (participant.amountMinor === undefined) {
+        throw new MoneyValidationError(
+          'MISSING_SPLIT_AMOUNT',
+          'Enter an amount for each person in the split',
+          ['splitBetween', index, 'amount'],
+        );
+      }
+      const minor = assertSafeMinorAmount(participant.amountMinor);
       if (minor < 0)
         throw new MoneyValidationError('INVALID_SPLIT', 'Split amounts cannot be negative');
       return { ...participant, amountMinor: minor };
