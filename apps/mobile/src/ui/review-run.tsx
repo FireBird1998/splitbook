@@ -26,7 +26,7 @@ import { clockTime } from './activity-format';
 import { PayerSheet, paidBySummary } from './payer-sheet';
 import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
-import { useStartShown } from './start-shown';
+import { useStartWhileUnfocused } from './start-while-unfocused';
 import { useTheme } from './theme';
 import { reviewedItemsLine } from './review-run-copy';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
@@ -106,7 +106,7 @@ function ReviewRunContent({
   const [invalid, setInvalid] = useState<string | null>(null);
   const [typedAmount, setTypedAmount] = useState<string | null>(null);
   const [sheet, setSheet] = useState<'date' | 'payers' | 'split' | 'tag' | null>(null);
-  const descriptionStart = useStartShown();
+  const descriptionStart = useStartWhileUnfocused();
   if (!selected) {
     const summary = summarizeReviewRun(state.outcomes);
     return (
@@ -262,7 +262,9 @@ function ReviewRunContent({
               value={form.description}
               editable={!locked}
               onChangeText={(description) => change({ description })}
-              {...descriptionStart}
+              selection={descriptionStart.selection}
+              onFocus={descriptionStart.onFocus}
+              onBlur={descriptionStart.onBlur}
               style={{ color: theme.text, padding: 12, borderColor: theme.border, borderWidth: 1 }}
             />
           </View>
