@@ -1,20 +1,8 @@
 import type { Metadata } from 'next';
-import { Outfit, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 import ThemeProvider from '@/providers/ThemeProvider';
 import { PRODUCT_NAME, THEME_STORAGE_KEY } from '@/lib/product';
-
-const outfit = Outfit({
-  variable: '--font-outfit',
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-});
-
-const plexMono = IBM_Plex_Mono({
-  variable: '--font-plex-mono',
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-});
+import { outfit, plexMono } from './fonts';
 
 export const metadata: Metadata = {
   title: {

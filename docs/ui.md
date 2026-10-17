@@ -76,7 +76,9 @@ Standard MUI keys work as usual (`primary.main`, `text.primary`,
 
 ### Typography
 
-Two fonts, both loaded via `next/font/google` in `src/app/layout.tsx`:
+Two fonts, both served from the repository with `next/font/local` (`src/app/fonts.ts`,
+files and SIL OFL licences in `src/app/fonts/`), so a build never fetches them from Google
+(#502):
 
 - **Outfit** (`--font-outfit`) — all UI text
 - **IBM Plex Mono** (`--font-plex-mono`) — money
