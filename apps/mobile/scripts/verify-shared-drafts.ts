@@ -13,7 +13,7 @@ import { toDateParam } from '@splitbook/shared/date';
 import { buildToReview, summarizeReviewRun } from '@splitbook/shared/to-review';
 import { parseToReviewResponse } from '@splitbook/shared/to-review-read';
 import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
-import { reportVerifierFailure } from './verify-report';
+import { observe, present, reportVerifierFailure } from './verify-report';
 
 async function main() {
   process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED = 'true';
@@ -192,17 +192,27 @@ async function main() {
     loseDraftResponse = true;
     await controller.keepExpenseAsSharedDraft();
     assert.equal(controller.getSnapshot().expense.finishLaterPending, true);
-    assert.ok(await requests.load(alexId, groupId));
-    assert.ok(await drafts.load(alexId, groupId));
+    present(
+      await requests.load(alexId, groupId),
+      'Finish later kept no pending upload request on this phone.',
+    );
+    present(await drafts.load(alexId, groupId), 'Finish later kept no local copy of the Expense.');
     assert.equal(submitted.length, 1);
     const reopened = controller.sharedDrafts(groupId);
-    assert.ok(await reopened.pending());
+    present(await reopened.pending(), 'The lost upload left nothing pending to check again.');
     assert.equal(submitted.length, 1, 'Reading pending state must never retry automatically');
     await controller.updateExpenseDraft({ description: 'Newer local correction after upload' });
     const localAfterCorrection = await drafts.load(alexId, groupId);
     const acknowledgment = await reopened.retry();
     assert.equal(acknowledgment?.kind, 'create');
-    assert.ok(acknowledgment?.kind === 'create' && acknowledgment.localDraftRetained);
+    observe(
+      acknowledgment?.kind === 'create' && acknowledgment.localDraftRetained,
+      'Checking again did not confirm the upload and keep the newer local copy.',
+      {
+        kind: acknowledgment?.kind ?? null,
+        kept: acknowledgment?.kind === 'create' ? acknowledgment.localDraftRetained : null,
+      },
+    );
     assert.deepEqual(submitted[1], submitted[0]);
     assert.deepEqual(
       await drafts.load(alexId, groupId),
@@ -235,22 +245,22 @@ async function main() {
     onlineManager.setOnline(false);
     const beforeOffline = submitted.length;
     await controller.keepExpenseAsSharedDraft();
-    assert.ok(await drafts.load(alexId, groupId));
+    present(await drafts.load(alexId, groupId), 'Offline Finish later kept no local copy.');
     onlineManager.setOnline(true);
     await controller.refreshToReview();
     assert.equal(submitted.length, beforeOffline, 'Reconnecting never uploads phone entries');
     await controller.openExpense(groupId);
     loseDraftResponse = true;
     await controller.keepExpenseAsSharedDraft();
-    assert.ok(await drafts.load(alexId, groupId));
-    assert.ok(await requests.load(alexId, groupId));
+    present(await drafts.load(alexId, groupId), 'A lost create reply dropped the local copy.');
+    present(await requests.load(alexId, groupId), 'A lost create reply left no pending request.');
     await controller.keepExpenseAsSharedDraft();
     assert.deepEqual(submitted.at(-1), submitted.at(-2));
     assert.equal(await drafts.load(alexId, groupId), null);
     const phoneDraft = (await reopened.list()).find(
       (item) => item.values?.description === 'Phone-only groceries',
     );
-    assert.ok(phoneDraft);
+    present(phoneDraft, 'The phone item was not uploaded to To review.');
     assert.deepEqual(phoneDraft.preparedBy, { kind: 'member' });
     await reopened.discard(phoneDraft);
 
@@ -264,7 +274,10 @@ async function main() {
     });
     loseExpenseResponse = true;
     await controller.saveExpense();
-    assert.ok(controller.getSnapshot().expense.attempt);
+    present(
+      controller.getSnapshot().expense.attempt,
+      'A lost save reply left no unconfirmed attempt.',
+    );
     const beforeResolve = submitted.length;
     await controller.keepExpenseAsSharedDraft();
     assert.equal(submitted.length, beforeResolve);
@@ -326,11 +339,19 @@ async function main() {
           item.draft.preparedBy.name === 'Claude' &&
           item.draft.values?.description === 'Fictional Claude prepared lunch',
       );
-    assert.ok(claude, 'The isolated seed must include a fictional Claude-prepared item');
+    present(claude, 'The isolated seed must include a fictional Claude-prepared item');
     const all = buildToReview(read, [], new Date());
     assert.match(all.sourceSummary, /1 from Claude/);
-    assert.ok(all.groups.some((row) => row.groupId === groupId && row.counts.total === 5));
-    assert.ok(all.groups.some((row) => row.groupId === secondGroupId && row.counts.ready === 1));
+    observe(
+      all.groups.some((row) => row.groupId === groupId && row.counts.total === 5),
+      'To review did not count 5 items in the first Group.',
+      { counts: all.groups.map((row) => ({ groupId: row.groupId, counts: row.counts })) },
+    );
+    observe(
+      all.groups.some((row) => row.groupId === secondGroupId && row.counts.ready === 1),
+      'To review did not count 1 ready item in the second Group.',
+      { counts: all.groups.map((row) => ({ groupId: row.groupId, counts: row.counts })) },
+    );
     const groupRead = {
       total: 5,
       groups: read.groups.filter((row) => row.groupId === groupId),
@@ -390,9 +411,10 @@ async function main() {
     const mixed = await reopened.save(readyReviews, []);
     assert.equal(mixed.find((item) => item.id === ready.id)?.status, 'saved');
     const stale = mixed.find((item) => item.id === changedAfterReview.id);
-    assert.ok(
+    observe(
       stale?.status === 'failed' && stale.message.length > 0,
       'A changed reviewed version must fail and retain a reason',
+      { status: stale?.status ?? null, reason: stale && 'message' in stale ? stale.message : null },
     );
     assert.deepEqual(summarizeReviewRun(mixed), {
       saved: 1,
@@ -429,7 +451,7 @@ async function main() {
     loseSaveResponse = true;
     await assert.rejects(() => secondClient.save(euroReviews, []));
     const retained = await secondClient.pending();
-    assert.ok(retained, 'Lost Save reply must retain the exact reviewed versions');
+    present(retained, 'Lost Save reply must retain the exact reviewed versions');
     const sentBeforeCheck = savedSubmissions.length;
     const resumed = controller.sharedDrafts(secondGroupId);
     assert.equal(await resumed.pending(), retained);
@@ -444,7 +466,14 @@ async function main() {
         .parse(await web.request(`/api/groups/${id}/expenses`)).data.pagination.total;
     assert.equal(await countExpenses(secondGroupId), 1, 'The lost reply already committed once');
     const checked = await resumed.retry();
-    assert.ok(checked?.kind === 'save' && checked.outcomes[0].status === 'saved');
+    observe(
+      checked?.kind === 'save' && checked.outcomes[0].status === 'saved',
+      'Checking again did not confirm the lost Save.',
+      {
+        kind: checked?.kind ?? null,
+        outcomes: checked?.kind === 'save' ? checked.outcomes.map((row) => row.status) : null,
+      },
+    );
     assert.equal(
       savedSubmissions.at(-1),
       savedSubmissions.at(-2),
@@ -458,19 +487,25 @@ async function main() {
     );
     assert.equal(await countExpenses(groupId), 3, 'Only the ready unchanged item was added');
     const after = parseToReviewResponse(await web.request(toReviewPath()));
-    assert.ok(!after.groups.some((row) => row.groupId === secondGroupId));
+    observe(
+      !after.groups.some((row) => row.groupId === secondGroupId),
+      'The second Group still listed items after its Save.',
+      { groups: after.groups.map((row) => ({ groupId: row.groupId, count: row.count })) },
+    );
     assert.equal(after.groups.find((row) => row.groupId === groupId)?.count, 4);
     // Guided native review uses the shared client's exact version and replay identity.
     await controller.refreshToReview();
     await controller.startReviewRun(claude.draft.groupId);
     const run = controller.getSnapshot().toReview.run;
-    assert.ok(run);
-    assert.ok(
+    present(run, 'The guided review did not start.');
+    observe(
       run.items.some(
         (row) =>
           row.item.draft.preparedBy.kind === 'assistant' &&
           row.item.draft.preparedBy.name === 'Claude',
       ),
+      'The guided review did not include the Claude-prepared item.',
+      { prepared: run.items.map((row) => row.item.draft.preparedBy) },
     );
     while (
       controller.getSnapshot().toReview.run?.items[controller.getSnapshot().toReview.run!.index]
@@ -492,10 +527,16 @@ async function main() {
       'Guided Check again creates exactly one Expense',
     );
     assert.equal(savedSubmissions.at(-1), savedSubmissions.at(-2));
-    assert.ok(
+    observe(
       controller
         .getSnapshot()
         .toReview.run!.outcomes.some((row) => row.id === claude.draft.id && row.status === 'saved'),
+      'The guided review did not record the Claude item as saved.',
+      {
+        outcomes: controller
+          .getSnapshot()
+          .toReview.run!.outcomes.map((row) => ({ id: row.id, status: row.status })),
+      },
     );
     await controller.closeReviewRun();
     console.log(

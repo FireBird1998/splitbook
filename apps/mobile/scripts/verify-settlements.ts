@@ -10,7 +10,7 @@ import { parseGroupBalances } from '../src/data/financial-dto';
 import { parseSettlementHistory } from '../src/data/settlement';
 import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
-import { reportVerifierFailure } from './verify-report';
+import { present, reportVerifierFailure } from './verify-report';
 
 async function run() {
   const origin = localOrigin(),
@@ -235,7 +235,7 @@ async function run() {
     history = parseSettlementHistory(await alex.request(settlements), groupId);
     assert.equal(history.length, 4);
     const recovered = history.find((r) => r.note === 'Lost response payment');
-    assert.ok(recovered);
+    present(recovered, 'The payment whose reply was lost is not in the history.');
     const activities = z
       .object({
         data: z.object({

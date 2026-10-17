@@ -14,7 +14,7 @@ import {
 import { decodeStoredSession } from '../src/data/cookies';
 import type { AccountLocalStorage } from '../src/data/types';
 import { localOrigin } from './verification-origin';
-import { reportVerifierFailure } from './verify-report';
+import { observe, reportVerifierFailure } from './verify-report';
 
 const alexId = 'a00000000000000000000001';
 const samId = 'a00000000000000000000002';
@@ -30,17 +30,24 @@ function deferred<T>() {
 
 function assertSignedOut(controller: MobileController) {
   const state = controller.getSnapshot();
-  assert.ok(
+  observe(
     state.auth.status === 'signed-out' && state.auth.user === null,
     'A signed-out controller retained or restored an account.',
+    { status: state.auth.status, user: state.auth.user?.id ?? null },
   );
-  assert.ok(
+  observe(
     state.groups.data.length === 0 && state.detail.data === null,
     'A signed-out controller retained or restored Group data.',
+    { groups: state.groups.data.length, detail: state.detail.data?.id ?? null },
   );
-  assert.ok(
+  observe(
     state.creation.draft.name === '' && state.invitation.code === null && state.share.url === null,
     'A signed-out controller retained a form, invitation, or share link.',
+    {
+      draftName: state.creation.draft.name,
+      invitation: state.invitation.code,
+      share: state.share.url,
+    },
   );
 }
 
@@ -98,20 +105,27 @@ async function verify() {
   };
   const localFetch: MobileFetch = async (url, init) => {
     const target = new URL(url);
-    assert.ok(target.origin === apiBaseUrl, 'A request attempted to leave the local backend.');
-    assert.ok(
+    observe(target.origin === apiBaseUrl, 'A request attempted to leave the local backend.', {
+      origin: target.origin,
+    });
+    observe(
       !init.method ||
         init.method === 'GET' ||
         (init.method === 'POST' &&
           ['/api/auth/demo-persona/sign-in', '/api/auth/sign-out'].includes(target.pathname)),
       'The Settings smoke attempted a non-authentication write.',
+      { method: init.method ?? 'GET', path: target.pathname },
     );
     const hold = holdNextGroupRead && target.pathname === '/api/groups';
     if (hold) holdNextGroupRead = false;
     const response = await fetch(url, { ...init, redirect: 'error' });
     if (!hold) return response;
-    assert.ok(response.ok, 'The held Group read did not succeed against the real backend.');
-    assert.ok(init.signal, 'The real Group read had no cancellation signal.');
+    observe(response.ok, 'The held Group read did not succeed against the real backend.', {
+      status: response.status,
+    });
+    observe(init.signal, 'The real Group read had no cancellation signal.', {
+      cancellable: Boolean(init.signal),
+    });
     // Consume the actual server response before holding delivery. Logout cannot
     // undo completed work, so the controller must reject this late result too.
     const body = await response.arrayBuffer();
@@ -130,11 +144,14 @@ async function verify() {
       { fetch: localFetch, credentials, accountLocal },
     );
   const assertStoresEmpty = () => {
-    assert.ok(
+    observe(
       featureStores.every((storage) => storage.size === 0),
       'Registered account-local storage retained or recovered a value.',
+      { sizes: featureStores.map((storage) => storage.size) },
     );
-    assert.ok(!cleanupPending, 'The successful cleanup left its restart marker pending.');
+    observe(!cleanupPending, 'The successful cleanup left its restart marker pending.', {
+      pending: cleanupPending,
+    });
   };
   const assertRevoked = async (cookie: string) => {
     const response = await fetch(`${apiBaseUrl}/api/auth/get-session`, {
@@ -143,9 +160,10 @@ async function verify() {
       redirect: 'error',
       signal: AbortSignal.timeout(20_000),
     });
-    assert.ok(
+    observe(
       response.status === 200 && (await response.json()) === null,
       'The real backend retained a signed-out session.',
+      { status: response.status },
     );
   };
 
@@ -154,23 +172,33 @@ async function verify() {
     await active.signIn('alex');
     active.openSettings();
     const settings = active.getSnapshot();
-    assert.ok(
+    observe(
       settings.screen === 'settings' &&
         settings.auth.user?.id === alexId &&
         settings.auth.user.name === 'Alex Rivera' &&
         settings.auth.user.email === 'alex.demo@splitbook.local',
       'Settings did not expose the actual signed-in Alex identity.',
+      {
+        screen: settings.screen,
+        user: settings.auth.user?.id ?? null,
+        name: settings.auth.user?.name ?? null,
+        emailMatches: settings.auth.user?.email === 'alex.demo@splitbook.local',
+      },
     );
     await active.refresh();
-    assert.ok(active.getSnapshot().screen === 'settings', 'Session refresh left Settings.');
-    assert.ok(
+    observe(active.getSnapshot().screen === 'settings', 'Session refresh left Settings.', {
+      screen: active.getSnapshot().screen,
+    });
+    observe(
       active.getSnapshot().groups.data.some((group) => group.id === alexOnlyGroup),
       'Alex did not receive the synthetic private Group.',
+      { groups: active.getSnapshot().groups.data.map((group) => group.id) },
     );
     const alexLease = active.accountStorage();
-    assert.ok(
+    observe(
       alexLease?.accountId === alexId,
       'Alex did not receive an account-bound storage lease.',
+      { accountId: alexLease?.accountId ?? null },
     );
     await alexLease.write(async () => {
       cache.set(alexId, 'cached-view-marker');
@@ -190,13 +218,21 @@ async function verify() {
     ]);
     active.openSettings();
     const revokedCookie = sessionCookie((await credentials.load()) ?? '');
-    assert.ok(revokedCookie, 'Alex had no saved session before logout.');
+    observe(revokedCookie, 'Alex had no saved session before logout.', {
+      saved: Boolean(revokedCookie),
+    });
     await active.signOut();
-    assert.ok(signal.aborted, 'Sign-out did not cancel the in-flight Group request.');
+    observe(signal.aborted, 'Sign-out did not cancel the in-flight Group request.', {
+      aborted: signal.aborted,
+    });
     assertSignedOut(active);
     assertStoresEmpty();
-    assert.ok((await credentials.load()) === null, 'Sign-out retained the saved session cookie.');
-    assert.ok((await accountLocal.owner.load()) === null, 'Sign-out retained the storage owner.');
+    observe((await credentials.load()) === null, 'Sign-out retained the saved session cookie.', {
+      credential: 'still saved',
+    });
+    observe((await accountLocal.owner.load()) === null, 'Sign-out retained the storage owner.', {
+      owner: 'still saved',
+    });
     await assertRevoked(revokedCookie);
 
     releaseResponse.resolve();
@@ -222,14 +258,20 @@ async function verify() {
     await active.signIn('sam');
     active.openSettings();
     const sam = active.getSnapshot();
-    assert.ok(
+    observe(
       sam.screen === 'settings' &&
         sam.auth.user?.id === samId &&
         sam.auth.user.name === 'Sam Chen' &&
         sam.auth.user.email === 'sam.demo@splitbook.local',
       'Settings did not reflect Sam after the account switch.',
+      {
+        screen: sam.screen,
+        user: sam.auth.user?.id ?? null,
+        name: sam.auth.user?.name ?? null,
+        emailMatches: sam.auth.user?.email === 'sam.demo@splitbook.local',
+      },
     );
-    assert.ok(
+    observe(
       sam.groups.status === 'ready' &&
         sam.groups.data.length > 0 &&
         sam.groups.data.every(
@@ -237,10 +279,19 @@ async function verify() {
             group.id !== alexOnlyGroup && group.members.some((member) => member.user.id === samId),
         ),
       'The account switch exposed Alex-only or unscoped Group data.',
+      {
+        status: sam.groups.status,
+        groups: sam.groups.data.map((group) => ({
+          id: group.id,
+          members: group.members.map((member) => member.user.id),
+        })),
+      },
     );
     assertStoresEmpty();
     const samLease = active.accountStorage();
-    assert.ok(samLease?.accountId === samId, 'Sam did not receive his own storage lease.');
+    observe(samLease?.accountId === samId, 'Sam did not receive his own storage lease.', {
+      accountId: samLease?.accountId ?? null,
+    });
     await samLease.write(async () => {
       cache.set(samId, 'sam-cache-marker');
     });

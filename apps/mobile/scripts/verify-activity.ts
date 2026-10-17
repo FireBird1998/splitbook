@@ -7,7 +7,7 @@ import { formatActivityHeadline } from '@splitbook/shared/activity-timeline';
 import { createMobileController } from '../src/data';
 import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
-import { reportVerifierFailure } from './verify-report';
+import { observe, present, reportVerifierFailure } from './verify-report';
 
 const id = z.string().regex(/^[a-f\d]{24}$/);
 const record = z.object({ data: z.object({ _id: id, revision: z.number().optional() }) });
@@ -154,9 +154,10 @@ async function run() {
       'expense_deleted',
       'settlement_recorded',
     ])
-      assert.ok(
+      observe(
         events.some((event) => event.type === type),
         `Missing ${type}`,
+        { types: events.map((event) => event.type) },
       );
     const added = events.find((event) => event.type === 'expense_added')!;
     assert.equal(added.metadata.amount, 30);
@@ -174,7 +175,11 @@ async function run() {
     offline = true;
     await controller.refreshActivity();
     assert.equal(controller.getSnapshot().activity.status, 'error');
-    assert.ok(controller.getSnapshot().activity.message?.includes('stale'));
+    observe(
+      controller.getSnapshot().activity.message?.includes('stale'),
+      'An offline refresh did not say the Activity shown is stale.',
+      { message: controller.getSnapshot().activity.message },
+    );
     offline = false;
     await controller.refreshActivity();
     assert.equal(controller.getSnapshot().activity.status, 'ready');
@@ -197,7 +202,7 @@ async function run() {
     const removal = controller
       .getSnapshot()
       .activity.events.find((event) => event.type === 'member_left');
-    assert.ok(removal);
+    present(removal, 'Activity did not list the member’s removal.');
     assert.equal(removal.actor?._id, alexId);
     assert.equal(removal.metadata.userId, samId);
     assert.equal(removal.metadata.method, 'removed');

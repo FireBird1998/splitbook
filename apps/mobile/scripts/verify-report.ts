@@ -45,6 +45,15 @@ export function observe(condition: unknown, message: string, snapshot: unknown):
 }
 
 /**
+ * Fails when `value` is missing (null, undefined, false, 0 or ''), showing what was there
+ * instead: for a value read once, such as a stored item, whose absence is the observation.
+ */
+export function present<T>(value: T, message: string): asserts value {
+  if (!value)
+    throw new AssertionError({ message, actual: value, operator: OBSERVED, stackStartFn: present });
+}
+
+/**
  * The verifier's failure: its message, the command that reruns it, then expected and observed.
  * `unexpected`, when given, is said for anything that isn't a check instead of its own text,
  * which could hold a URL or a response.

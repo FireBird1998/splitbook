@@ -3,7 +3,6 @@
  * Requires the isolated, synthetic development server and seeded Sam fixtures.
  * It never seeds/resets a database or prints session cookies or response bodies.
  */
-import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -14,7 +13,7 @@ import {
 } from '../src/data';
 import { decodeStoredSession, readSessionCookie } from '../src/data/cookies';
 import { localOrigin } from './verification-origin';
-import { reportVerifierFailure } from './verify-report';
+import { observe, reportVerifierFailure } from './verify-report';
 
 const samId = 'a00000000000000000000002';
 const tripId = 'a00000000000000000000010';
@@ -67,7 +66,9 @@ async function sessionKeepsItsToken(origin: string, cookie: string) {
   const changed = await sessions((collection) =>
     collection.updateOne({ token }, { $set: { expiresAt: aged } }),
   );
-  assert.ok(changed.matchedCount === 1, 'The session to age was not found.');
+  observe(changed.matchedCount === 1, 'The session to age was not found.', {
+    matched: changed.matchedCount,
+  });
 
   const read = (path: string) =>
     fetch(`${origin}${path}`, {
@@ -79,26 +80,30 @@ async function sessionKeepsItsToken(origin: string, cookie: string) {
   const replies = await Promise.all(
     ['/api/auth/get-session', '/api/groups', '/api/user/balances'].map(read),
   );
-  assert.ok(
+  observe(
     replies.every((reply) => reply.status === 200),
     'A read sent beside a session refresh was refused.',
+    { statuses: replies.map((reply) => reply.status) },
   );
-  assert.ok(
+  observe(
     replies.every((reply) => {
       const next = readSessionCookie(reply.headers, origin.startsWith('https:'), Date.now());
       return next === undefined || next === cookie;
     }),
     'A session refresh set another session cookie.',
+    { statuses: replies.map((reply) => reply.status) },
   );
   const refreshed = await sessions((collection) => collection.findOne({ token }));
-  assert.ok(
+  observe(
     refreshed !== null && refreshed.expiresAt.getTime() > aged.getTime(),
     'The aged session was not refreshed under its own token.',
+    { aged, refreshedUntil: refreshed?.expiresAt ?? null },
   );
   const after = await read('/api/auth/get-session');
-  assert.ok(
+  observe(
     after.status === 200 && (await after.json()) !== null,
     'The session cookie stopped working after a refresh.',
+    { status: after.status },
   );
   return true;
 }
@@ -118,7 +123,9 @@ async function verify() {
     },
   };
   const localFetch: MobileFetch = async (url, init) => {
-    assert.ok(new URL(url).origin === apiBaseUrl, 'The controller attempted a nonlocal target.');
+    observe(new URL(url).origin === apiBaseUrl, 'The controller attempted a nonlocal target.', {
+      origin: new URL(url).origin,
+    });
     requestCount += 1;
     return fetch(url, { ...init, redirect: 'error' });
   };
@@ -129,34 +136,47 @@ async function verify() {
     );
   const assertSamGroups = (controller: MobileController) => {
     const state = controller.getSnapshot();
-    assert.ok(
+    observe(
       state.auth.status === 'authenticated' && state.auth.user?.id === samId,
       'Sam was not authenticated. Check demo mode and synthetic fixtures.',
+      { status: state.auth.status, user: state.auth.user?.id ?? null },
     );
-    assert.ok(state.groups.status === 'ready', 'The real Group list did not load.');
+    observe(state.groups.status === 'ready', 'The real Group list did not load.', {
+      status: state.groups.status,
+    });
     // The fictional database may also hold other test Groups, so the seed Groups are
     // checked by identity, and every listed Group must be one Sam belongs to.
-    assert.ok(
+    observe(
       state.groups.data.some((group) => group.id === tripId),
       'The synthetic Trip is missing.',
+      { groups: state.groups.data.map((group) => group.id) },
     );
-    assert.ok(
+    observe(
       state.groups.data.some((group) => group.id === householdId),
       'The synthetic Household is missing.',
+      { groups: state.groups.data.map((group) => group.id) },
     );
-    assert.ok(
+    observe(
       !state.groups.data.some((group) => group.id === alexOnlyId),
       'The Alex-only Group appeared in Sam’s list.',
+      { groups: state.groups.data.map((group) => group.id) },
     );
-    assert.ok(
+    observe(
       state.groups.data.every((group) => group.members.some((member) => member.user.id === samId)),
       'The Group list included a Group Sam is not a member of.',
+      {
+        groups: state.groups.data.map((group) => ({
+          id: group.id,
+          members: group.members.map((member) => member.user.id),
+        })),
+      },
     );
-    assert.ok(
+    observe(
       state.groups.data.every(
         (group) => group.createdAt instanceof Date && Number.isFinite(group.createdAt.getTime()),
       ),
       'Group creation dates were not normalized.',
+      { createdAt: state.groups.data.map((group) => group.createdAt) },
     );
   };
 
@@ -164,25 +184,34 @@ async function verify() {
     active = makeController();
     await active.signIn('sam');
     assertSamGroups(active);
-    assert.ok(savedCookie !== null, 'The signed session cookie was not persisted.');
+    observe(savedCookie !== null, 'The signed session cookie was not persisted.', {
+      saved: savedCookie !== null,
+    });
 
     await active.openGroup(householdId);
     const household = active.getSnapshot().detail;
-    assert.ok(
+    observe(
       household.status === 'ready' && household.data?.id === householdId,
       'The Household detail did not load.',
+      { status: household.status, id: household.data?.id ?? null },
     );
-    assert.ok(
+    observe(
       household.data.category === 'home' &&
         household.data.startDate === null &&
         household.data.endDate === null,
       'The Household shape does not match the real API contract.',
+      {
+        category: household.data.category,
+        startDate: household.data.startDate,
+        endDate: household.data.endDate,
+      },
     );
-    assert.ok(
+    observe(
       household.data.members.every(
         (member) => member.joinedAt instanceof Date && Number.isFinite(member.joinedAt.getTime()),
       ),
       'Member dates were not normalized.',
+      { joinedAt: household.data.members.map((member) => member.joinedAt) },
     );
 
     // Replace the entire controller, retaining only the injected credential store.
@@ -195,45 +224,58 @@ async function verify() {
     await active.openGroup(householdId);
     await active.openGroup(alexOnlyId);
     const denied = active.getSnapshot();
-    assert.ok(
+    observe(
       denied.detail.status === 'denied' && denied.detail.data === null,
       'An unauthorized Group retained detail data.',
+      { status: denied.detail.status, data: denied.detail.data?.id ?? null },
     );
-    assert.ok(
+    observe(
       !denied.groups.data.some((group) => group.id === alexOnlyId),
       'An unauthorized Group appeared in the list.',
+      { groups: denied.groups.data.map((group) => group.id) },
     );
 
     const revokedSession = await credentials.load();
-    assert.ok(revokedSession, 'The session disappeared before sign-out.');
+    observe(revokedSession, 'The session disappeared before sign-out.', {
+      found: Boolean(revokedSession),
+    });
     const revokedCookie = decodeStoredSession(revokedSession, apiBaseUrl.startsWith('https:'));
-    assert.ok(revokedCookie?.accountId === samId, 'The saved session was not recorded for Sam.');
+    observe(revokedCookie?.accountId === samId, 'The saved session was not recorded for Sam.', {
+      accountId: revokedCookie?.accountId ?? null,
+    });
     const refreshChecked = await sessionKeepsItsToken(apiBaseUrl, revokedCookie.cookie);
     await active.signOut();
     const signedOut = active.getSnapshot();
-    assert.ok(
+    observe(
       signedOut.auth.status === 'signed-out' && signedOut.auth.user === null,
       'Sign-out retained a user.',
+      { status: signedOut.auth.status, user: signedOut.auth.user?.id ?? null },
     );
-    assert.ok(
+    observe(
       signedOut.groups.data.length === 0 && signedOut.detail.data === null,
       'Sign-out retained Group data.',
+      { groups: signedOut.groups.data.length, detail: signedOut.detail.data?.id ?? null },
     );
-    assert.ok((await credentials.load()) === null, 'Sign-out retained the saved credential.');
+    observe((await credentials.load()) === null, 'Sign-out retained the saved credential.', {
+      credential: 'still saved',
+    });
 
     const anonymous = await localFetch(`${apiBaseUrl}/api/groups`, {
       credentials: 'omit',
       signal: AbortSignal.timeout(20_000),
     });
-    assert.ok(anonymous.status === 401, 'The real Group API did not reject an anonymous request.');
+    observe(anonymous.status === 401, 'The real Group API did not reject an anonymous request.', {
+      status: anonymous.status,
+    });
     const revoked = await localFetch(`${apiBaseUrl}/api/auth/get-session`, {
       headers: { Cookie: revokedCookie.cookie },
       credentials: 'omit',
       signal: AbortSignal.timeout(20_000),
     });
-    assert.ok(
+    observe(
       revoked.status === 200 && (await revoked.json()) === null,
       'The server did not revoke the signed-out session.',
+      { status: revoked.status },
     );
 
     active.dispose();
@@ -242,18 +284,21 @@ async function verify() {
     const beforeDisabled = requestCount;
     await active.restore();
     await active.signIn('sam');
-    assert.ok(
+    observe(
       requestCount === beforeDisabled,
       'Disabled development authentication made a request.',
+      { requests: requestCount - beforeDisabled },
     );
-    assert.ok(
+    observe(
       active.getSnapshot().auth.status === 'signed-out' &&
         active.getSnapshot().groups.data.length === 0,
       'Disabled development authentication exposed data.',
+      { status: active.getSnapshot().auth.status, groups: active.getSnapshot().groups.data.length },
     );
-    assert.ok(
+    observe(
       (await credentials.load()) === null,
       'Disabled development authentication retained a credential.',
+      { credential: 'still saved' },
     );
 
     console.log(

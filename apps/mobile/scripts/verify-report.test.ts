@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, expect, it } from 'vitest';
-import { failureReport, observe, verifierCommand } from './verify-report';
+import { failureReport, observe, present, verifierCommand } from './verify-report';
 
 /** The error a check throws, caught as a verifier's last handler catches it. */
 function caught(check: () => void): unknown {
@@ -119,6 +119,22 @@ describe('a failing verifier’s report (#478)', () => {
         'Never shown.',
       ),
     ).toMatch(/^FAIL: Counts differ\./);
+  });
+
+  it('shows the missing value when something that should be there isn’t', () => {
+    expect(
+      failureReport(
+        caught(() => present(null, 'Finish later kept no pending request.')),
+        COMMAND,
+      ),
+    ).toBe(
+      [
+        'FAIL: Finish later kept no pending request.',
+        '  command: pnpm --filter @splitbook/mobile run verify:financial',
+        '  observed: null',
+      ].join('\n'),
+    );
+    expect(() => present({ kind: 'create' }, 'Never shown.')).not.toThrow();
   });
 
   it('passes a check that holds', () => {
