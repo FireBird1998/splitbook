@@ -25,15 +25,15 @@ describe('calculateSplitAmounts', () => {
       expect(sumMinor(result)).toBe(9000);
     });
 
-    it('assigns leftover pennies to the first participant', () => {
+    it('gives the leftover paisa to the participant whose user id sorts first', () => {
       const result = calculateSplitAmounts(
         'equal',
         100,
-        participants({ user: 'a' }, { user: 'b' }, { user: 'c' }),
+        participants({ user: 'c' }, { user: 'a' }, { user: 'b' }),
       );
 
-      // ₹100 is 10,000 paise: 3,334 + 3,333 + 3,333.
-      expect(result.map((p) => p.amount)).toEqual([33.34, 33.33, 33.33]);
+      // ₹100 is 10,000 paise: 3,333 + 3,334 + 3,333, the extra paisa to a, listed second.
+      expect(result.map((p) => p.amount)).toEqual([33.33, 33.34, 33.33]);
       expect(sumMinor(result)).toBe(10000);
     });
 
