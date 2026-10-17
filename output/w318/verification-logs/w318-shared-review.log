@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/packages/shared
+
+
+ Test Files  3 passed (3)
+      Tests  34 passed (34)
+   Start at  17:54:30
+   Duration  674ms (transform 547ms, setup 0ms, import 832ms, tests 131ms, environment 0ms)
+

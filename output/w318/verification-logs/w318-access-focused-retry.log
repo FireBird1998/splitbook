@@ -1,0 +1,117 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec playwright test --config /tmp/w318-runner/w318-access.config.ts export.spec.ts statement.spec.ts --workers=1
+
+▲ Next.js 16.3.8 (webpack)
+✓ Running next.config.ts took 121ms
+- Experiments (use with caution):
+  ✓ authInterrupts
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 19.8s
+  Running TypeScript ...
+  Finished TypeScript in 12.5s ...
+  Collecting page data using 10 workers ...
+  Generating static pages using 10 workers (0/19) ...
+  Generating static pages using 10 workers (4/19) 
+  Generating static pages using 10 workers (9/19) 
+  Generating static pages using 10 workers (14/19) 
+✓ Generating static pages using 10 workers (19/19) in 259ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /.well-known/assetlinks.json
+├ ƒ /.well-known/splitbook-mobile.json
+├ ƒ /api/auth/[...all]
+├ ƒ /api/export
+├ ƒ /api/groups
+├ ƒ /api/groups/[id]
+├ ƒ /api/groups/[id]/activity
+├ ƒ /api/groups/[id]/balances
+├ ƒ /api/groups/[id]/expenses
+├ ƒ /api/groups/[id]/expenses/[expenseId]
+├ ƒ /api/groups/[id]/expenses/check-duplicate
+├ ƒ /api/groups/[id]/insights
+├ ƒ /api/groups/[id]/invite
+├ ƒ /api/groups/[id]/invite-link
+├ ƒ /api/groups/[id]/leave
+├ ƒ /api/groups/[id]/members/[userId]
+├ ƒ /api/groups/[id]/recurring
+├ ƒ /api/groups/[id]/recurring/[recurringId]
+├ ƒ /api/groups/[id]/settlements
+├ ƒ /api/groups/[id]/tags
+├ ƒ /api/groups/[id]/tags/[tagId]
+├ ƒ /api/invitations
+├ ƒ /api/invitations/[id]
+├ ƒ /api/join/[code]
+├ ƒ /api/search
+├ ƒ /api/user/activity
+├ ƒ /api/user/balances
+├ ƒ /api/user/profile
+├ ƒ /api/user/spending
+├ ƒ /dashboard
+├ ○ /dev/design-system
+├ ƒ /export
+├ ƒ /groups
+├ ƒ /groups/[id]
+├ ƒ /groups/[id]/activity
+├ ƒ /groups/[id]/balances
+├ ƒ /groups/[id]/expenses
+├ ƒ /groups/[id]/insights
+├ ƒ /groups/[id]/members
+├ ƒ /groups/[id]/settings
+├ ƒ /groups/[id]/statement
+├ ƒ /groups/new
+├ ƒ /join/[code]
+├ ƒ /login
+└ ƒ /settings
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+▲ Next.js 16.3.8
+- Local:         http://127.0.0.1:63977
+- Network:       http://127.0.0.1:63977
+✓ Ready in 126ms
+
+Running 29 tests using 1 worker
+
+(node:52190) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 playwright-expense-access/export.spec.ts:27:9 › export csv: a member exports a Group’s manual Expense, by name and never by email (950ms)
+  ✓   2 playwright-expense-access/export.spec.ts:51:11 › export csv: manual Expense denies outsider access without side effects (456ms)
+  ✓   3 playwright-expense-access/export.spec.ts:51:11 › export csv: manual Expense denies removed access without side effects (404ms)
+  ✓   4 playwright-expense-access/export.spec.ts:51:11 › export csv: manual Expense denies mixed access without side effects (275ms)
+  ✓   5 playwright-expense-access/export.spec.ts:51:11 › export csv: manual Expense denies missing access without side effects (320ms)
+  ✓   6 playwright-expense-access/export.spec.ts:51:11 › export csv: manual Expense denies anonymous access without side effects (359ms)
+  ✓   7 playwright-expense-access/export.spec.ts:27:9 › export csv: a member exports a Group’s recurring Expense, by name and never by email (424ms)
+  ✓   8 playwright-expense-access/export.spec.ts:51:11 › export csv: recurring Expense denies outsider access without side effects (274ms)
+  ✓   9 playwright-expense-access/export.spec.ts:51:11 › export csv: recurring Expense denies removed access without side effects (284ms)
+  ✓  10 playwright-expense-access/export.spec.ts:51:11 › export csv: recurring Expense denies mixed access without side effects (304ms)
+  ✓  11 playwright-expense-access/export.spec.ts:51:11 › export csv: recurring Expense denies missing access without side effects (341ms)
+  ✓  12 playwright-expense-access/export.spec.ts:51:11 › export csv: recurring Expense denies anonymous access without side effects (542ms)
+  ✓  13 playwright-expense-access/export.spec.ts:27:9 › export json: a member exports a Group’s manual Expense, by name and never by email (226ms)
+  ✓  14 playwright-expense-access/export.spec.ts:51:11 › export json: manual Expense denies outsider access without side effects (200ms)
+  ✓  15 playwright-expense-access/export.spec.ts:51:11 › export json: manual Expense denies removed access without side effects (297ms)
+  ✓  16 playwright-expense-access/export.spec.ts:51:11 › export json: manual Expense denies mixed access without side effects (252ms)
+  ✓  17 playwright-expense-access/export.spec.ts:51:11 › export json: manual Expense denies missing access without side effects (358ms)
+  ✓  18 playwright-expense-access/export.spec.ts:51:11 › export json: manual Expense denies anonymous access without side effects (495ms)
+  ✓  19 playwright-expense-access/export.spec.ts:27:9 › export json: a member exports a Group’s recurring Expense, by name and never by email (395ms)
+  ✓  20 playwright-expense-access/export.spec.ts:51:11 › export json: recurring Expense denies outsider access without side effects (549ms)
+  ✓  21 playwright-expense-access/export.spec.ts:51:11 › export json: recurring Expense denies removed access without side effects (675ms)
+  ✓  22 playwright-expense-access/export.spec.ts:51:11 › export json: recurring Expense denies mixed access without side effects (688ms)
+  ✓  23 playwright-expense-access/export.spec.ts:51:11 › export json: recurring Expense denies missing access without side effects (776ms)
+  ✓  24 playwright-expense-access/export.spec.ts:51:11 › export json: recurring Expense denies anonymous access without side effects (792ms)
+  ✓  25 playwright-expense-access/statement.spec.ts:5:5 › statement: a current member can read named contributions (636ms)
+  ✓  26 playwright-expense-access/statement.spec.ts:13:7 › statement denies outsider without ledger side effects (880ms)
+  ✓  27 playwright-expense-access/statement.spec.ts:13:7 › statement denies removed without ledger side effects (589ms)
+  ✓  28 playwright-expense-access/statement.spec.ts:13:7 › statement denies missing without ledger side effects (745ms)
+  ✓  29 playwright-expense-access/statement.spec.ts:13:7 › statement denies anonymous without ledger side effects (519ms)
+
+  29 passed (54.5s)

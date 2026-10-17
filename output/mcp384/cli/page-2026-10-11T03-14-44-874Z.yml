@@ -1,0 +1,7 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e4]:
+    - heading "Continue connecting to SplitBook" [level=1] [ref=f2e5]
+    - paragraph [ref=f2e6]: You are signed in. Continue to review the permissions requested by your assistant.
+    - button "Continue" [ref=f2e7] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=f2e13] [cursor=pointer]
+  - alert [ref=f2e17]

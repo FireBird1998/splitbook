@@ -1,0 +1,13 @@
+
+> splitbook@0.1.0 mobile /private/tmp/splitbook-pr248-final
+> pnpm -C apps/mobile exec vitest run src/app.test.tsx --maxWorkers=2 -t 'cancels a row return after layout'
+
+
+ RUN  v4.1.10 /private/tmp/splitbook-pr248-final/apps/mobile
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 55 skipped (57)
+   Start at  07:15:27
+   Duration  1.82s (transform 497ms, setup 44ms, import 1.13s, tests 543ms, environment 0ms)
+

@@ -1,0 +1,35 @@
+
+> splitbook@0.1.0 test:unit /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -r test:unit --maxWorkers=2
+
+Scope: 4 of 5 workspace projects
+tools/swarm test:unit$ vitest run --maxWorkers=2
+packages/shared test:unit$ vitest run --maxWorkers=2
+packages/shared test:unit:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/packages/shared
+tools/swarm test:unit:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/tools/swarm
+packages/shared test:unit:  Test Files  57 passed (57)
+packages/shared test:unit:       Tests  1480 passed (1480)
+packages/shared test:unit:    Start at  15:14:00
+packages/shared test:unit:    Duration  8.77s (transform 1.43s, setup 0ms, import 6.97s, tests 2.03s, environment 3ms)
+packages/shared test:unit: Done
+tools/swarm test:unit:  Test Files  6 passed (6)
+tools/swarm test:unit:       Tests  122 passed (122)
+tools/swarm test:unit:    Start at  15:14:00
+tools/swarm test:unit:    Duration  14.85s (transform 251ms, setup 0ms, import 1.31s, tests 17.01s, environment 0ms)
+tools/swarm test:unit: Done
+apps/mobile test:unit$ vitest run --maxWorkers=2
+apps/web test:unit$ vitest run --exclude "src/**/*.integration.test.ts" --maxWorkers=2
+apps/web test:unit:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web
+apps/mobile test:unit:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/mobile
+apps/web test:unit:  Test Files  67 passed (67)
+apps/web test:unit:       Tests  814 passed (814)
+apps/web test:unit:    Start at  15:14:15
+apps/web test:unit:    Duration  18.68s (transform 1.99s, setup 0ms, import 22.77s, tests 6.31s, environment 3ms)
+apps/web test:unit: Done
+apps/mobile test:unit: (node:64565) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+apps/mobile test:unit: (Use `node --trace-warnings ...` to show where the warning was created)
+apps/mobile test:unit:  Test Files  81 passed (81)
+apps/mobile test:unit:       Tests  2020 passed (2020)
+apps/mobile test:unit:    Start at  15:14:15
+apps/mobile test:unit:    Duration  51.66s (transform 2.15s, setup 1.66s, import 41.31s, tests 49.27s, environment 5ms)
+apps/mobile test:unit: Done

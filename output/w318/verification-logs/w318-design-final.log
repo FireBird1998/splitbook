@@ -1,0 +1,30 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web check:design-system
+
+
+> @splitbook/web@0.1.0 check:design-system /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web
+> tsx --tsconfig scripts/tsconfig.json scripts/check-design-system.ts
+
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/zg/c91r6pzj7ql8z_xxw8rbqqgr0000gn/T/tsx-501/99321.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/ankitdas/AnkitPersonalProjech/SplidBook/node_modules/.pnpm/tsx@4.23.1/node_modules/tsx/dist/cli.mjs:53:31472
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/ankitdas/AnkitPersonalProjech/SplidBook/node_modules/.pnpm/tsx@4.23.1/node_modules/tsx/dist/cli.mjs:53:31450)
+    at async file:///Users/ankitdas/AnkitPersonalProjech/SplidBook/node_modules/.pnpm/tsx@4.23.1/node_modules/tsx/dist/cli.mjs:55:500 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/zg/c91r6pzj7ql8z_xxw8rbqqgr0000gn/T/tsx-501/99321.pipe',
+  port: -1
+}
+
+Node.js v22.22.2
+ ELIFECYCLE  Command failed with exit code 1.
+ ELIFECYCLE  Command failed with exit code 1.

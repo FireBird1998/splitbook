@@ -1,0 +1,103 @@
+▲ Next.js 16.3.8 (webpack)
+✓ Running next.config.ts took 59ms
+- Experiments (use with caution):
+  ✓ authInterrupts
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 7.2s
+  Running TypeScript ...
+  Finished TypeScript in 4.0s ...
+  Collecting page data using 10 workers ...
+2026-10-07T12:15:42.142Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-07T12:15:42.144Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-07T12:15:42.145Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:15:42.143Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-07T12:15:42.152Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-07T12:15:42.153Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:15:42.169Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-07T12:15:42.171Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-07T12:15:42.172Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:15:42.170Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-07T12:15:42.172Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-07T12:15:42.173Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:15:42.173Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-07T12:15:42.176Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-07T12:15:42.177Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:15:42.175Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-07T12:15:42.177Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-07T12:15:42.178Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:15:42.181Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-07T12:15:42.184Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-07T12:15:42.185Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:15:42.204Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-07T12:15:42.205Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-07T12:15:42.205Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:15:42.234Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-07T12:15:42.237Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-07T12:15:42.237Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:15:42.260Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-07T12:15:42.262Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-07T12:15:42.262Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+  Generating static pages using 10 workers (0/19) ...
+  Generating static pages using 10 workers (4/19) 
+  Generating static pages using 10 workers (9/19) 
+  Generating static pages using 10 workers (14/19) 
+✓ Generating static pages using 10 workers (19/19) in 191ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /.well-known/assetlinks.json
+├ ƒ /.well-known/splitbook-mobile.json
+├ ƒ /api/auth/[...all]
+├ ƒ /api/export
+├ ƒ /api/groups
+├ ƒ /api/groups/[id]
+├ ƒ /api/groups/[id]/activity
+├ ƒ /api/groups/[id]/balances
+├ ƒ /api/groups/[id]/expenses
+├ ƒ /api/groups/[id]/expenses/[expenseId]
+├ ƒ /api/groups/[id]/expenses/check-duplicate
+├ ƒ /api/groups/[id]/insights
+├ ƒ /api/groups/[id]/invite
+├ ƒ /api/groups/[id]/invite-link
+├ ƒ /api/groups/[id]/leave
+├ ƒ /api/groups/[id]/members/[userId]
+├ ƒ /api/groups/[id]/recurring
+├ ƒ /api/groups/[id]/recurring/[recurringId]
+├ ƒ /api/groups/[id]/settlements
+├ ƒ /api/groups/[id]/tags
+├ ƒ /api/groups/[id]/tags/[tagId]
+├ ƒ /api/invitations
+├ ƒ /api/invitations/[id]
+├ ƒ /api/join/[code]
+├ ƒ /api/search
+├ ƒ /api/user/activity
+├ ƒ /api/user/balances
+├ ƒ /api/user/profile
+├ ƒ /api/user/spending
+├ ƒ /dashboard
+├ ○ /dev/design-system
+├ ƒ /export
+├ ƒ /groups
+├ ƒ /groups/[id]
+├ ƒ /groups/[id]/activity
+├ ƒ /groups/[id]/balances
+├ ƒ /groups/[id]/expenses
+├ ƒ /groups/[id]/insights
+├ ƒ /groups/[id]/members
+├ ƒ /groups/[id]/settings
+├ ƒ /groups/[id]/statement
+├ ƒ /groups/new
+├ ƒ /join/[code]
+├ ƒ /login
+└ ƒ /settings
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

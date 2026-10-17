@@ -1,0 +1,115 @@
+{
+  "verdict": "pass",
+  "interrupted": false,
+  "worktree": "/private/tmp/splitbook-pr248-back-qa",
+  "commit": "f9c009fbaf58a07846a2e8169e35cd6a3c9b8e1e",
+  "base": {
+    "ref": "origin/main",
+    "commit": "e0d9d0c712f749699b58e1ac542ed744ac61598f"
+  },
+  "startedAt": "2026-10-09T16:23:11.361Z",
+  "seconds": 188.6,
+  "vitestWorkers": 2,
+  "backend": {
+    "origin": "http://127.0.0.1:63072",
+    "database": "splitbook_mobile_swarm_a3c835bce0_cff96117",
+    "startedByGate": true
+  },
+  "steps": [
+    {
+      "name": "install check",
+      "status": "pass",
+      "seconds": 0
+    },
+    {
+      "name": "lint",
+      "status": "pass",
+      "seconds": 13.6,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/lint.log"
+    },
+    {
+      "name": "typecheck",
+      "status": "pass",
+      "seconds": 11.6,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/typecheck.log"
+    },
+    {
+      "name": "format check",
+      "status": "pass",
+      "seconds": 8.9,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/format-check.log"
+    },
+    {
+      "name": "unit tests",
+      "status": "pass",
+      "seconds": 118.2,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/unit-tests.log"
+    },
+    {
+      "name": "ceilings",
+      "status": "pass",
+      "seconds": 0.5,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/ceilings.log"
+    },
+    {
+      "name": "backend",
+      "status": "pass",
+      "seconds": 5.4,
+      "detail": "started at http://127.0.0.1:63072; stopped and dropped after the verifiers"
+    },
+    {
+      "name": "verify:api",
+      "status": "pass",
+      "seconds": 3.3,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/verify-api.log"
+    },
+    {
+      "name": "verify:groups",
+      "status": "pass",
+      "seconds": 3.8,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/verify-groups.log"
+    },
+    {
+      "name": "verify:settings",
+      "status": "pass",
+      "seconds": 0.9,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/verify-settings.log"
+    },
+    {
+      "name": "verify:financial",
+      "status": "pass",
+      "seconds": 3.6,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/verify-financial.log"
+    },
+    {
+      "name": "verify:expenses",
+      "status": "pass",
+      "seconds": 5.4,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/verify-expenses.log"
+    },
+    {
+      "name": "verify:expense-edit",
+      "status": "pass",
+      "seconds": 4.5,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/verify-expense-edit.log"
+    },
+    {
+      "name": "verify:settlements",
+      "status": "pass",
+      "seconds": 4.4,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/verify-settlements.log"
+    },
+    {
+      "name": "verify:activity",
+      "status": "pass",
+      "seconds": 2.3,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/verify-activity.log"
+    },
+    {
+      "name": "verify:offline",
+      "status": "pass",
+      "seconds": 2.1,
+      "log": "/private/tmp/splitbook-pr248-back-qa/tools/swarm/out/gate/verify-offline.log"
+    }
+  ]
+}

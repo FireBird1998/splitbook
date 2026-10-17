@@ -1,0 +1,6 @@
+
+> splitbook@0.1.0 format:check /Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook
+> prettier --check .
+
+Checking formatting...
+All matched files use Prettier code style!

@@ -1,0 +1,13 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec vitest run src/app/api/export/route.integration.test.ts
+
+
+ RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web
+
+
+ Test Files  1 passed (1)
+      Tests  37 passed (37)
+   Start at  17:56:02
+   Duration  9.34s (transform 1.03s, setup 0ms, import 3.05s, tests 6.02s, environment 0ms)
+

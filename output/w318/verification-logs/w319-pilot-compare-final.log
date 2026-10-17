@@ -1,0 +1,34 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec playwright test --config /tmp/w318-runner/w319-pilot.config.ts --grep 'loaded presentation is accessible and visually stable|statement print uses' --workers=1
+
+[WebServer] (node:99359) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 2026-10-07T12:35:14.531Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+[WebServer] 2026-10-07T12:35:14.532Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+[WebServer] 2026-10-07T12:35:14.532Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+
+Running 12 tests using 1 worker
+
+(node:99375) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop-light] › playwright-pilot/pilot.spec.ts:262:7 › dashboard loaded presentation is accessible and visually stable (15.0s)
+  ✓   2 [desktop-light] › playwright-pilot/pilot.spec.ts:262:7 › balances loaded presentation is accessible and visually stable (10.6s)
+  ✓   3 [desktop-light] › playwright-pilot/statement-print.spec.ts:5:5 › statement print uses clean A4 light colours in every theme (4.7s)
+(node:299) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [desktop-dark] › playwright-pilot/pilot.spec.ts:262:7 › dashboard loaded presentation is accessible and visually stable (7.7s)
+  ✓   5 [desktop-dark] › playwright-pilot/pilot.spec.ts:262:7 › balances loaded presentation is accessible and visually stable (7.3s)
+  ✓   6 [desktop-dark] › playwright-pilot/statement-print.spec.ts:5:5 › statement print uses clean A4 light colours in every theme (5.5s)
+(node:1067) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [mobile-light] › playwright-pilot/pilot.spec.ts:262:7 › dashboard loaded presentation is accessible and visually stable (5.9s)
+  ✓   8 [mobile-light] › playwright-pilot/pilot.spec.ts:262:7 › balances loaded presentation is accessible and visually stable (6.2s)
+  ✓   9 [mobile-light] › playwright-pilot/statement-print.spec.ts:5:5 › statement print uses clean A4 light colours in every theme (3.3s)
+(node:1239) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [mobile-dark] › playwright-pilot/pilot.spec.ts:262:7 › dashboard loaded presentation is accessible and visually stable (6.1s)
+  ✓  11 [mobile-dark] › playwright-pilot/pilot.spec.ts:262:7 › balances loaded presentation is accessible and visually stable (6.7s)
+  ✓  12 [mobile-dark] › playwright-pilot/statement-print.spec.ts:5:5 › statement print uses clean A4 light colours in every theme (3.7s)
+
+  12 passed (1.5m)

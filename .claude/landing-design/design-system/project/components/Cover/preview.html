@@ -1,0 +1,63 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Splitbook</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&amp;display=swap">
+<style>
+  html, body { margin:0; height:100%; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font-sans); overflow:hidden; }
+  .cover { position:relative; height:288px; overflow:hidden; }
+  .art { position:absolute; top:0; left:480px; width:480px; height:288px; overflow:hidden; }
+  .art svg { display:block; width:480px; height:288px; }
+  .ticket { fill:var(--brand); rx:var(--radius-lg); }
+  .ink { fill:var(--text); rx:var(--radius-md); }
+  .owed { fill:var(--negative); rx:var(--radius-md); }
+  .settled { fill:var(--positive); rx:var(--radius-md); }
+  .sky { fill:var(--info); rx:var(--radius-sm); }
+  .hole { fill:var(--bg); }
+  .words { position:absolute; left:var(--space-3); bottom:var(--space-3); max-width:440px; }
+  .name { margin:0; font-size:80px; line-height:.95; font-weight:700; letter-spacing:-.025em; color:var(--text); }
+  .tag { margin:var(--space-1) 0 0 3px; font-size:14px; line-height:20px; color:var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="cover">
+<div class="art" aria-hidden="true">
+<svg viewBox="0 0 480 288" width="480" height="288">
+<!--
+  blocks      brand 480x120 ticket bled off the right edge (the identity, largest) · text 248x112 ink slab bled off the bottom-right · negative 96x80 and positive 96x80, the Equal share pair, one up and one down · info 48x24 once (it only ever informs) — about 36% of 960x288
+  arrangement one wide ticket across the top with satellites under it: the owed/settled pair staggered like the mark's two halves rotated 180 degrees, the ink slab beside them
+  pattern     literal motif, the boarding-pass perforation from the trip strip ("a seam of punched holes in strip-perforation"): space-1.5 discs at a space-3 pitch, a tear line down the ticket and half-holes along the ink slab's top edge, all cut in bg
+  scales      sides in space-1 multiples; gutters space-2; pitch space-3; ticket radius-lg, blocks radius-md, the info chip radius-sm; holes r = half of space-1.5
+-->
+<rect class="ticket" x="0" y="32" width="496" height="120" rx="16"/>
+<circle class="hole" cx="352" cy="44" r="6"/>
+<circle class="hole" cx="352" cy="68" r="6"/>
+<circle class="hole" cx="352" cy="92" r="6"/>
+<circle class="hole" cx="352" cy="116" r="6"/>
+<circle class="hole" cx="352" cy="140" r="6"/>
+<rect class="owed" x="0" y="168" width="96" height="80" rx="12"/>
+<rect class="settled" x="112" y="192" width="96" height="80" rx="12"/>
+<rect class="sky" x="0" y="256" width="48" height="24" rx="8"/>
+<rect class="ink" x="224" y="176" width="272" height="128" rx="12"/>
+<circle class="hole" cx="248" cy="176" r="6"/>
+<circle class="hole" cx="272" cy="176" r="6"/>
+<circle class="hole" cx="296" cy="176" r="6"/>
+<circle class="hole" cx="320" cy="176" r="6"/>
+<circle class="hole" cx="344" cy="176" r="6"/>
+<circle class="hole" cx="368" cy="176" r="6"/>
+<circle class="hole" cx="392" cy="176" r="6"/>
+<circle class="hole" cx="416" cy="176" r="6"/>
+<circle class="hole" cx="440" cy="176" r="6"/>
+<circle class="hole" cx="464" cy="176" r="6"/>
+</svg>
+</div>
+<div class="words">
+<h1 class="name">Splitbook</h1>
+<p class="tag">Shared expenses, settled fairly.</p>
+</div>
+</div>
+</body>
+</html>

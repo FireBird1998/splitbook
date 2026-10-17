@@ -1,0 +1,10 @@
+
+> @splitbook/mobile@0.1.0 verify:expense-edit /Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/apps/mobile
+> node --import tsx scripts/verify-expense-edit.ts
+
+PASS: X-Splitbook-Revision is honoured and preferred, an older app’s If-Match still edits and deletes, stale stays 409 and missing or malformed 428.
+PASS: metadata edit/read-back preserves money, currency, date, archived Tag and history.
+PASS: two editors, stale revision, restart, explicit review and retained draft.
+PASS: committed edit response loss, persistent recovery, confirmed by revision on checking.
+PASS: a transport-level resend of a committed edit is confirmed as the member’s own, with one edit on the server.
+PASS: stale delete refusal; committed deletion loss, confirmed on checking; one deletion Activity, no replay.

@@ -1,0 +1,5 @@
+
+> @splitbook/mobile@0.1.0 verify:settings /Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/apps/mobile
+> node --import tsx scripts/verify-settings.ts
+
+PASS: real Settings identities, foreground validation, logout cancellation and server revocation, late-response isolation, registered storage purge, retired lease rejection, restart, and account switch.

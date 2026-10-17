@@ -1,0 +1,58 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec playwright test --config c319p.playwright.config.ts export-backup-statement.spec.ts trip-summary.spec.ts --workers=1
+
+
+Running 40 tests using 1 worker
+
+(node:64162) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop-light] › playwright/export-backup-statement.spec.ts:30:5 › JSON backup downloads all time, round-trips and has no emails (2.4s)
+  ✓   2 [desktop-light] › playwright/export-backup-statement.spec.ts:56:5 › Export opens one Group’s printable statement with named sections in both themes (1.6s)
+  ✓   3 [desktop-light] › playwright/export-backup-statement.spec.ts:83:5 › a Trip’s Share wrap-up opens its whole-trip statement, with every section (2.7s)
+  ✓   4 [desktop-light] › playwright/export-backup-statement.spec.ts:164:5 › a Group the member can’t open refuses its statement with the app’s own page (1.5s)
+  ✓   5 [desktop-light] › playwright/trip-summary.spec.ts:98:5 › a Trip’s Insights shows the whole trip, not Months (1.8s)
+  ✓   6 [desktop-light] › playwright/trip-summary.spec.ts:157:5 › the tooltip names a day’s two biggest Expenses and the member’s share (1.2s)
+  ✓   7 [desktop-light] › playwright/trip-summary.spec.ts:181:5 › the Table view lists each day, the daily average and the whole trip, and passes axe (1.9s)
+  ✓   8 [desktop-light] › playwright/trip-summary.spec.ts:227:5 › a Tag opens the Expenses tab filtered by it (1.2s)
+  ✓   9 [desktop-light] › playwright/trip-summary.spec.ts:247:5 › a wrap-up Record opens Balances with Record payment filled in for the pair (1.4s)
+  ✓  10 [desktop-light] › playwright/trip-summary.spec.ts:294:5 › a Trip’s Expenses sit under their trip days, each with its total (2.2s)
+(node:64483) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 [desktop-dark] › playwright/export-backup-statement.spec.ts:30:5 › JSON backup downloads all time, round-trips and has no emails (1.7s)
+  ✓  12 [desktop-dark] › playwright/export-backup-statement.spec.ts:56:5 › Export opens one Group’s printable statement with named sections in both themes (1.8s)
+  ✓  13 [desktop-dark] › playwright/export-backup-statement.spec.ts:83:5 › a Trip’s Share wrap-up opens its whole-trip statement, with every section (2.6s)
+  ✓  14 [desktop-dark] › playwright/export-backup-statement.spec.ts:164:5 › a Group the member can’t open refuses its statement with the app’s own page (1.8s)
+  ✓  15 [desktop-dark] › playwright/trip-summary.spec.ts:98:5 › a Trip’s Insights shows the whole trip, not Months (2.1s)
+  ✓  16 [desktop-dark] › playwright/trip-summary.spec.ts:157:5 › the tooltip names a day’s two biggest Expenses and the member’s share (1.1s)
+  ✓  17 [desktop-dark] › playwright/trip-summary.spec.ts:181:5 › the Table view lists each day, the daily average and the whole trip, and passes axe (1.9s)
+  ✓  18 [desktop-dark] › playwright/trip-summary.spec.ts:227:5 › a Tag opens the Expenses tab filtered by it (1.1s)
+  ✓  19 [desktop-dark] › playwright/trip-summary.spec.ts:247:5 › a wrap-up Record opens Balances with Record payment filled in for the pair (1.3s)
+  ✓  20 [desktop-dark] › playwright/trip-summary.spec.ts:294:5 › a Trip’s Expenses sit under their trip days, each with its total (2.1s)
+(node:65610) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  21 [mobile-light] › playwright/export-backup-statement.spec.ts:30:5 › JSON backup downloads all time, round-trips and has no emails (1.6s)
+  ✓  22 [mobile-light] › playwright/export-backup-statement.spec.ts:56:5 › Export opens one Group’s printable statement with named sections in both themes (1.6s)
+  ✓  23 [mobile-light] › playwright/export-backup-statement.spec.ts:83:5 › a Trip’s Share wrap-up opens its whole-trip statement, with every section (2.8s)
+  ✓  24 [mobile-light] › playwright/export-backup-statement.spec.ts:164:5 › a Group the member can’t open refuses its statement with the app’s own page (1.3s)
+  ✓  25 [mobile-light] › playwright/trip-summary.spec.ts:98:5 › a Trip’s Insights shows the whole trip, not Months (1.9s)
+  -  26 [mobile-light] › playwright/trip-summary.spec.ts:157:5 › the tooltip names a day’s two biggest Expenses and the member’s share
+  ✓  27 [mobile-light] › playwright/trip-summary.spec.ts:181:5 › the Table view lists each day, the daily average and the whole trip, and passes axe (1.9s)
+  ✓  28 [mobile-light] › playwright/trip-summary.spec.ts:227:5 › a Tag opens the Expenses tab filtered by it (1.2s)
+  ✓  29 [mobile-light] › playwright/trip-summary.spec.ts:247:5 › a wrap-up Record opens Balances with Record payment filled in for the pair (1.4s)
+  ✓  30 [mobile-light] › playwright/trip-summary.spec.ts:294:5 › a Trip’s Expenses sit under their trip days, each with its total (2.0s)
+(node:66271) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  31 [mobile-dark] › playwright/export-backup-statement.spec.ts:30:5 › JSON backup downloads all time, round-trips and has no emails (1.7s)
+  ✓  32 [mobile-dark] › playwright/export-backup-statement.spec.ts:56:5 › Export opens one Group’s printable statement with named sections in both themes (1.9s)
+  ✓  33 [mobile-dark] › playwright/export-backup-statement.spec.ts:83:5 › a Trip’s Share wrap-up opens its whole-trip statement, with every section (2.9s)
+  ✓  34 [mobile-dark] › playwright/export-backup-statement.spec.ts:164:5 › a Group the member can’t open refuses its statement with the app’s own page (1.8s)
+  ✓  35 [mobile-dark] › playwright/trip-summary.spec.ts:98:5 › a Trip’s Insights shows the whole trip, not Months (2.2s)
+  -  36 [mobile-dark] › playwright/trip-summary.spec.ts:157:5 › the tooltip names a day’s two biggest Expenses and the member’s share
+  ✓  37 [mobile-dark] › playwright/trip-summary.spec.ts:181:5 › the Table view lists each day, the daily average and the whole trip, and passes axe (1.9s)
+  ✓  38 [mobile-dark] › playwright/trip-summary.spec.ts:227:5 › a Tag opens the Expenses tab filtered by it (1.1s)
+  ✓  39 [mobile-dark] › playwright/trip-summary.spec.ts:247:5 › a wrap-up Record opens Balances with Record payment filled in for the pair (1.3s)
+  ✓  40 [mobile-dark] › playwright/trip-summary.spec.ts:294:5 › a Trip’s Expenses sit under their trip days, each with its total (2.1s)
+
+  2 skipped
+  38 passed (1.2m)

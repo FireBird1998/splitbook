@@ -1,0 +1,68 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec playwright test --config /tmp/w318-runner/w318-access.config.ts export.spec.ts statement.spec.ts --workers=1
+
+▲ Next.js 16.3.8 (webpack)
+✓ Running next.config.ts took 17ms
+- Experiments (use with caution):
+  ✓ authInterrupts
+
+  Creating an optimized production build ...
+Failed to compile.
+
+__barrel_optimize__?names=CssBaseline,ThemeProvider!=!../../../../../../node_modules/.pnpm/@mui+material@7.3.7_@emotion+react@11.14.0_@types+react@19.2.13_react@19.2.3__@emotion+_de274ce96ec669f5643e962e36df66e1/node_modules/@mui/material/esm/index.js
+Error: ENOENT: no such file or directory, open '/private/node_modules/.pnpm/@mui+material@7.3.7_@emotion+react@11.14.0_@types+react@19.2.13_react@19.2.3__@emotion+_de274ce96ec669f5643e962e36df66e1/node_modules/@mui/material/esm/index.js'
+
+Import trace for requested module:
+__barrel_optimize__?names=CssBaseline,ThemeProvider!=!../../../../../../node_modules/.pnpm/@mui+material@7.3.7_@emotion+react@11.14.0_@types+react@19.2.13_react@19.2.3__@emotion+_de274ce96ec669f5643e962e36df66e1/node_modules/@mui/material/esm/index.js
+./src/providers/ThemeProvider.tsx
+
+__barrel_optimize__?names=addMonths,endOfMonth,format,isSameMonth,startOfMonth!=!../../../../../../node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js
+Error: ENOENT: no such file or directory, open '/private/node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js'
+
+Import trace for requested module:
+__barrel_optimize__?names=addMonths,endOfMonth,format,isSameMonth,startOfMonth!=!../../../../../../node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js
+./src/components/groups/MonthCycleBar.tsx
+./src/components/groups/GroupDetailView.tsx
+
+__barrel_optimize__?names=endOfMonth,format,startOfMonth!=!../../../../../../node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js
+Error: ENOENT: no such file or directory, open '/private/node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js'
+
+Import trace for requested module:
+__barrel_optimize__?names=endOfMonth,format,startOfMonth!=!../../../../../../node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js
+./src/components/groups/GroupCard.tsx
+./src/components/groups/GroupsListView.tsx
+
+__barrel_optimize__?names=format!=!../../../../../../node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js
+Error: ENOENT: no such file or directory, open '/private/node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js'
+
+Import trace for requested module:
+__barrel_optimize__?names=format!=!../../../../../../node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js
+./src/components/dashboard/HomeHeader.tsx
+./src/components/dashboard/DashboardView.tsx
+
+__barrel_optimize__?names=format,isSameDay,subDays!=!../../../../../../node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js
+Error: ENOENT: no such file or directory, open '/private/node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js'
+
+Import trace for requested module:
+__barrel_optimize__?names=format,isSameDay,subDays!=!../../../../../../node_modules/.pnpm/date-fns@4.1.0/node_modules/date-fns/index.js
+./src/components/dashboard/groups-table.ts
+./src/components/dashboard/GroupsTableCard.tsx
+./src/components/dashboard/DashboardView.tsx
+
+
+> Build failed because of webpack errors
+Error: Isolated production build failed: 1
+
+   at ../../../../../../../private/tmp/w318-access-suite/playwright-expense-access/global-setup.ts:127
+
+  125 |       try {
+  126 |         const [code] = await once(build, 'exit');
+> 127 |         if (code !== 0) throw new Error(`Isolated production build failed: ${code}`);
+      |                               ^
+  128 |       } finally {
+  129 |         clearTimeout(timeout);
+  130 |       }
+    at startIsolatedApp (/private/tmp/w318-access-suite/playwright-expense-access/global-setup.ts:127:31)
+
+ ELIFECYCLE  Command failed with exit code 1.

@@ -1,0 +1,44 @@
+{"text": "", "content-desc": "Back to Home", "class": "android.widget.Button", "bounds": "[11,84][137,210]", "enabled": "true", "resource-id": ""}
+{"text": "\uf127", "content-desc": "", "class": "android.widget.TextView", "bounds": "[42,114][105,179]", "enabled": "true", "resource-id": ""}
+{"text": "Maple House", "content-desc": "", "class": "android.view.View", "bounds": "[152,95][797,158]", "enabled": "true", "resource-id": ""}
+{"text": "Household \u00b7 3 members \u00b7 INR", "content-desc": "", "class": "android.widget.TextView", "bounds": "[152,158][797,200]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Invite people", "class": "android.widget.Button", "bounds": "[812,84][938,210]", "enabled": "true", "resource-id": ""}
+{"text": "\uf4a7", "content-desc": "", "class": "android.widget.TextView", "bounds": "[843,114][906,179]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Group options", "class": "android.widget.Button", "bounds": "[944,84][1070,210]", "enabled": "true", "resource-id": ""}
+{"text": "\uf2d8", "content-desc": "", "class": "android.widget.TextView", "bounds": "[975,114][1038,179]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Previous month", "class": "android.widget.Button", "bounds": "[56,269][182,395]", "enabled": "true", "resource-id": ""}
+{"text": "\uf229", "content-desc": "", "class": "android.widget.TextView", "bounds": "[87,299][150,364]", "enabled": "true", "resource-id": ""}
+{"text": "October 2026", "content-desc": "", "class": "android.view.View", "bounds": "[181,303][698,359]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Next month", "class": "android.widget.Button", "bounds": "[698,269][824,395]", "enabled": "false", "resource-id": ""}
+{"text": "\uf23b", "content-desc": "", "class": "android.widget.TextView", "bounds": "[729,299][792,364]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "All time", "class": "android.widget.Button", "bounds": "[824,264][1025,390]", "enabled": "true", "resource-id": ""}
+{"text": "All time", "content-desc": "", "class": "android.widget.TextView", "bounds": "[855,300][993,353]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Spent: \u20b90.00", "class": "android.view.ViewGroup", "bounds": "[82,432][374,532]", "enabled": "true", "resource-id": ""}
+{"text": "Spent", "content-desc": "", "class": "android.widget.TextView", "bounds": "[82,432][374,474]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b90.00", "content-desc": "", "class": "android.widget.TextView", "bounds": "[82,479][374,532]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Your share: \u20b90.00", "class": "android.view.ViewGroup", "bounds": "[395,432][687,532]", "enabled": "true", "resource-id": ""}
+{"text": "Your share", "content-desc": "", "class": "android.widget.TextView", "bounds": "[395,432][687,474]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b90.00", "content-desc": "", "class": "android.widget.TextView", "bounds": "[395,479][687,532]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "You paid: \u20b90.00", "class": "android.view.ViewGroup", "bounds": "[707,432][999,532]", "enabled": "true", "resource-id": ""}
+{"text": "You paid", "content-desc": "", "class": "android.widget.TextView", "bounds": "[707,432][999,474]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b90.00", "content-desc": "", "class": "android.widget.TextView", "bounds": "[707,479][999,532]", "enabled": "true", "resource-id": ""}
+{"text": "0 expenses this month", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,587][425,635]", "enabled": "true", "resource-id": ""}
+{"text": "Updated 10:20\u202fPM", "content-desc": "", "class": "android.widget.TextView", "bounds": "[734,590][999,632]", "enabled": "true", "resource-id": ""}
+{"text": "No expenses in October 2026", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,744][999,797]", "enabled": "true", "resource-id": ""}
+{"text": "Try another Month or All time.", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,797][999,845]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Add expense", "class": "android.widget.Button", "bounds": "[622,1781][1038,1928]", "enabled": "true", "resource-id": ""}
+{"text": "\uf103", "content-desc": "", "class": "android.widget.TextView", "bounds": "[664,1822][727,1887]", "enabled": "true", "resource-id": ""}
+{"text": "Add expense", "content-desc": "", "class": "android.widget.TextView", "bounds": "[753,1828][985,1881]", "enabled": "true", "resource-id": ""}
+{"text": "Expense saved \u00b7 API36 Back QA", "content-desc": "", "class": "android.widget.TextView", "bounds": "[84,2009][625,2057]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "View in September", "class": "android.widget.Button", "bounds": "[645,1970][1022,2096]", "enabled": "true", "resource-id": ""}
+{"text": "View in September", "content-desc": "", "class": "android.widget.TextView", "bounds": "[676,2006][990,2059]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Maple House sections", "class": "android.view.View", "bounds": "[0,2124][1080,2337]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Expenses", "class": "android.view.View", "bounds": "[21,2153][367,2300]", "enabled": "true", "resource-id": ""}
+{"text": "\uf50f", "content-desc": "", "class": "android.widget.TextView", "bounds": "[162,2167][225,2232]", "enabled": "true", "resource-id": ""}
+{"text": "Expenses", "content-desc": "", "class": "android.widget.TextView", "bounds": "[126,2252][262,2294]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Balances", "class": "android.view.View", "bounds": "[367,2153][713,2300]", "enabled": "true", "resource-id": ""}
+{"text": "\uf5b1", "content-desc": "", "class": "android.widget.TextView", "bounds": "[508,2167][571,2232]", "enabled": "true", "resource-id": ""}
+{"text": "Balances", "content-desc": "", "class": "android.widget.TextView", "bounds": "[475,2252][604,2294]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Activity", "class": "android.view.View", "bounds": "[713,2153][1059,2300]", "enabled": "true", "resource-id": ""}
+{"text": "\uf4f7", "content-desc": "", "class": "android.widget.TextView", "bounds": "[854,2167][917,2232]", "enabled": "true", "resource-id": ""}
+{"text": "Activity", "content-desc": "", "class": "android.widget.TextView", "bounds": "[831,2252][940,2294]", "enabled": "true", "resource-id": ""}

@@ -1,0 +1,5 @@
+
+> @splitbook/mobile@0.1.0 verify:api /Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/apps/mobile
+> node --import tsx scripts/verify-api.ts
+
+PASS: real persona sign-in, scoped Groups, Household dates, session restore, denied access, a session refresh that keeps its token, server sign-out, and disabled development auth.

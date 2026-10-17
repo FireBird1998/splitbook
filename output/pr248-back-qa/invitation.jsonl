@@ -1,0 +1,18 @@
+{"text": "", "content-desc": "Back to Home", "class": "android.widget.Button", "bounds": "[11,84][137,210]", "enabled": "true", "resource-id": ""}
+{"text": "\uf127", "content-desc": "", "class": "android.widget.TextView", "bounds": "[42,114][105,179]", "enabled": "true", "resource-id": ""}
+{"text": "You\u2019re invited", "content-desc": "", "class": "android.view.View", "bounds": "[152,116][928,179]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Settings", "class": "android.widget.Button", "bounds": "[944,84][1070,210]", "enabled": "true", "resource-id": ""}
+{"text": "\uf56c", "content-desc": "", "class": "android.widget.TextView", "bounds": "[975,114][1038,179]", "enabled": "true", "resource-id": ""}
+{"text": "A place for you, too.", "content-desc": "", "class": "android.widget.TextView", "bounds": "[42,242][1038,295]", "enabled": "true", "resource-id": ""}
+{"text": "\ud83d\udccb", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,366][131,419]", "enabled": "true", "resource-id": ""}
+{"text": "GENERAL", "content-desc": "", "class": "android.widget.TextView", "bounds": "[152,372][309,412]", "enabled": "true", "resource-id": ""}
+{"text": "Back QA invitation", "content-desc": "", "class": "android.view.View", "bounds": "[81,429][999,492]", "enabled": "true", "resource-id": ""}
+{"text": "\uf4a3", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,504][129,554]", "enabled": "true", "resource-id": ""}
+{"text": "1 member", "content-desc": "", "class": "android.widget.TextView", "bounds": "[144,503][318,556]", "enabled": "true", "resource-id": ""}
+{"text": "Opening this invitation hasn\u2019t added you. Join when you\u2019re ready to share this Group.", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,582][999,678]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Join Group", "class": "android.widget.Button", "bounds": "[81,705][999,831]", "enabled": "true", "resource-id": ""}
+{"text": "\uf137", "content-desc": "", "class": "android.widget.TextView", "bounds": "[405,743][453,793]", "enabled": "true", "resource-id": ""}
+{"text": "Join Group", "content-desc": "", "class": "android.widget.TextView", "bounds": "[474,741][673,794]", "enabled": "true", "resource-id": ""}
+{"text": "You\u2019ll need an account approved for the private beta. An invitation doesn\u2019t grant account access.", "content-desc": "", "class": "android.widget.TextView", "bounds": "[42,901][1038,997]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Not now", "class": "android.widget.Button", "bounds": "[42,1029][1038,1155]", "enabled": "true", "resource-id": ""}
+{"text": "Not now", "content-desc": "", "class": "android.widget.TextView", "bounds": "[464,1065][615,1118]", "enabled": "true", "resource-id": ""}

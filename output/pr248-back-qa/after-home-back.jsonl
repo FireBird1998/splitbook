@@ -1,0 +1,14 @@
+{"text": "", "content-desc": "At a glance", "class": "androidx.viewpager.widget.ViewPager", "bounds": "[83,100][997,373]", "enabled": "true", "resource-id": "com.google.android.apps.nexuslauncher:id/smartspace_card_pager"}
+{"text": "Fri, Oct 9", "content-desc": "Fri, Oct 9", "class": "android.widget.TextView", "bounds": "[83,199][290,261]", "enabled": "true", "resource-id": "com.google.android.apps.nexuslauncher:id/date"}
+{"text": "Gmail", "content-desc": "Gmail", "class": "android.widget.TextView", "bounds": "[314,1406][519,1692]", "enabled": "true", "resource-id": ""}
+{"text": "Photos", "content-desc": "Photos", "class": "android.widget.TextView", "bounds": "[561,1406][766,1692]", "enabled": "true", "resource-id": ""}
+{"text": "YouTube", "content-desc": "YouTube", "class": "android.widget.TextView", "bounds": "[808,1406][1013,1692]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Home", "class": "android.view.View", "bounds": "[0,63][1080,2337]", "enabled": "true", "resource-id": ""}
+{"text": "Phone", "content-desc": "Phone", "class": "android.widget.TextView", "bounds": "[83,1873][256,2068]", "enabled": "true", "resource-id": ""}
+{"text": "Messages", "content-desc": "Messages", "class": "android.widget.TextView", "bounds": "[330,1873][503,2068]", "enabled": "true", "resource-id": ""}
+{"text": "Chrome", "content-desc": "Chrome", "class": "android.widget.TextView", "bounds": "[577,1873][750,2068]", "enabled": "true", "resource-id": ""}
+{"text": "SplitBook Dev", "content-desc": "Predicted app: SplitBook Dev", "class": "android.widget.TextView", "bounds": "[824,1873][997,2068]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Google search", "class": "android.widget.FrameLayout", "bounds": "[90,2125][990,2290]", "enabled": "true", "resource-id": "com.google.android.apps.nexuslauncher:id/search_container_hotseat"}
+{"text": "", "content-desc": "Google app", "class": "android.widget.ImageView", "bounds": "[101,2144][227,2270]", "enabled": "true", "resource-id": "com.google.android.apps.nexuslauncher:id/g_icon"}
+{"text": "", "content-desc": "Voice search", "class": "android.widget.ImageView", "bounds": "[727,2125][853,2290]", "enabled": "true", "resource-id": "com.google.android.apps.nexuslauncher:id/mic_icon"}
+{"text": "", "content-desc": "Google Lens", "class": "android.widget.ImageButton", "bounds": "[853,2125][979,2290]", "enabled": "true", "resource-id": "com.google.android.apps.nexuslauncher:id/lens_icon"}

@@ -1,0 +1,670 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "DarkMain.dc.html": {
+      "expand": "fill",
+      "h": 1420,
+      "title": "Home · dark",
+      "w": 1440,
+      "x": 0,
+      "y": 5260
+    },
+    "Export.dc.html": {
+      "expand": "fill",
+      "h": 1880,
+      "is_interactive": true,
+      "title": "Export",
+      "w": 1440,
+      "x": 3040,
+      "y": 0
+    },
+    "GroupBalances.dc.html": {
+      "expand": "fill",
+      "h": 1440,
+      "is_interactive": true,
+      "title": "Maple House · Balances",
+      "w": 1440,
+      "x": 1520,
+      "y": 2970
+    },
+    "GroupExpenses.dc.html": {
+      "expand": "fill",
+      "h": 1580,
+      "is_interactive": true,
+      "title": "Maple House · Expenses",
+      "w": 1440,
+      "x": 0,
+      "y": 2970
+    },
+    "GroupInsights.dc.html": {
+      "expand": "fill",
+      "h": 1300,
+      "is_interactive": true,
+      "title": "Maple House · Insights",
+      "w": 1440,
+      "x": 3040,
+      "y": 2970
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 1420,
+      "is_interactive": true,
+      "title": "Home · every Group",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "McpApprovals.dc.html": {
+      "expand": "fill",
+      "h": 1240,
+      "is_interactive": true,
+      "page": "assistants",
+      "title": "Waiting for you · Later",
+      "w": 1440,
+      "x": 4560,
+      "y": 1910
+    },
+    "McpAssistant.dc.html": {
+      "expand": "fill",
+      "h": 2240,
+      "is_interactive": true,
+      "page": "assistants",
+      "title": "One assistant · tool switches and log Dropped",
+      "w": 1440,
+      "x": 1520,
+      "y": 1910
+    },
+    "McpChat.dc.html": {
+      "h": 980,
+      "is_interactive": true,
+      "page": "assistants",
+      "title": "In the assistant · adding an Expense is Later",
+      "w": 1280,
+      "x": 4880,
+      "y": 0
+    },
+    "McpConnect.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "is_interactive": true,
+      "page": "assistants",
+      "title": "Connect an assistant",
+      "w": 1440,
+      "x": 1840,
+      "y": 0
+    },
+    "McpConsent.dc.html": {
+      "expand": "fill",
+      "h": 1500,
+      "is_interactive": true,
+      "page": "assistants",
+      "title": "Approve access · v1 is read only",
+      "w": 1440,
+      "x": 3360,
+      "y": 0
+    },
+    "McpFlow.dc.html": {
+      "h": 954,
+      "page": "assistants",
+      "title": "How it works · write branch is Later",
+      "w": 1760,
+      "x": 0,
+      "y": 0
+    },
+    "McpGroupPolicy.dc.html": {
+      "expand": "fill",
+      "h": 1220,
+      "is_interactive": true,
+      "page": "assistants",
+      "title": "Maple House · Assistant rule",
+      "w": 1440,
+      "x": 0,
+      "y": 4560
+    },
+    "McpSettings.dc.html": {
+      "expand": "fill",
+      "h": 1380,
+      "is_interactive": true,
+      "page": "assistants",
+      "title": "Settings · Connected assistants",
+      "w": 1440,
+      "x": 0,
+      "y": 1910
+    },
+    "McpTools.dc.html": {
+      "expand": "fill",
+      "h": 2200,
+      "is_interactive": true,
+      "page": "assistants",
+      "title": "What assistants can use · record tools Later",
+      "w": 1440,
+      "x": 3040,
+      "y": 1910
+    },
+    "MobileActivityVia.dc.html": {
+      "h": 915,
+      "is_interactive": true,
+      "page": "assistants",
+      "radius": 28,
+      "title": "Android · Activity via Claude · Later",
+      "w": 412,
+      "x": 2012,
+      "y": 4560
+    },
+    "MobileAssistants.dc.html": {
+      "h": 915,
+      "is_interactive": true,
+      "page": "assistants",
+      "radius": 28,
+      "title": "Android · Connected assistants",
+      "w": 412,
+      "x": 1520,
+      "y": 4560
+    },
+    "Receipts.dc.html": {
+      "expand": "fill",
+      "h": 2560,
+      "is_interactive": true,
+      "title": "Receipts · backlog, needs research",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "TripGroup.dc.html": {
+      "expand": "fill",
+      "h": 1880,
+      "is_interactive": true,
+      "title": "Goa Friends Trip",
+      "w": 1440,
+      "x": 4560,
+      "y": 2970
+    },
+    "BrandKit.dc.html": {
+      "expand": "fill",
+      "h": 1460,
+      "page": "brand",
+      "title": "Brand kit in the product",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "WebSignIn.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "brand",
+      "title": "Web · Sign in",
+      "w": 1440,
+      "x": 0,
+      "y": 1960,
+      "is_interactive": true
+    },
+    "WebJoin.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "page": "brand",
+      "title": "Web · Join a Group from an invite",
+      "w": 1440,
+      "x": 1520,
+      "y": 1960,
+      "is_interactive": true
+    },
+    "WebLanding.dc.html": {
+      "expand": "fill",
+      "h": 1040,
+      "page": "brand",
+      "title": "Web · Landing page",
+      "w": 1440,
+      "x": 3040,
+      "y": 1960,
+      "is_interactive": true
+    },
+    "WebTabs.dc.html": {
+      "expand": "fill",
+      "h": 740,
+      "page": "brand",
+      "title": "Web · Tabs, bookmarks, home screen",
+      "w": 1440,
+      "x": 4560,
+      "y": 1960
+    },
+    "AndroidLauncher.dc.html": {
+      "h": 915,
+      "page": "brand",
+      "radius": 28,
+      "title": "Android · Launcher icon",
+      "w": 412,
+      "x": 0,
+      "y": 3580,
+      "is_interactive": true
+    },
+    "AndroidSplash.dc.html": {
+      "h": 915,
+      "page": "brand",
+      "radius": 28,
+      "title": "Android · Splash",
+      "w": 412,
+      "x": 492,
+      "y": 3580,
+      "is_interactive": true
+    },
+    "AndroidSplashDark.dc.html": {
+      "h": 915,
+      "page": "brand",
+      "radius": 28,
+      "title": "Android · Splash, dark",
+      "w": 412,
+      "x": 984,
+      "y": 3580
+    },
+    "AndroidSignIn.dc.html": {
+      "h": 915,
+      "page": "brand",
+      "radius": 28,
+      "title": "Android · Sign in",
+      "w": 412,
+      "x": 1476,
+      "y": 3580
+    },
+    "AndroidHome.dc.html": {
+      "h": 915,
+      "page": "brand",
+      "radius": 28,
+      "title": "Android · Home top bar",
+      "w": 412,
+      "x": 1968,
+      "y": 3580
+    },
+    "AndroidHomeDark.dc.html": {
+      "h": 915,
+      "page": "brand",
+      "radius": 28,
+      "title": "Android · Home top bar, dark",
+      "w": 412,
+      "x": 2460,
+      "y": 3580
+    },
+    "ReviewHome.dc.html": {
+      "h": 915,
+      "w": 412,
+      "x": 0,
+      "y": 0,
+      "page": "review",
+      "radius": 28,
+      "title": "Home · To review across Groups",
+      "is_interactive": true
+    },
+    "ReviewGroup.dc.html": {
+      "h": 915,
+      "w": 412,
+      "x": 492,
+      "y": 0,
+      "page": "review",
+      "radius": 28,
+      "title": "Maple House · the To review banner",
+      "is_interactive": true
+    },
+    "ReviewList.dc.html": {
+      "h": 915,
+      "w": 412,
+      "x": 984,
+      "y": 0,
+      "page": "review",
+      "radius": 28,
+      "title": "Maple House · To review",
+      "is_interactive": true
+    },
+    "ReviewCard.dc.html": {
+      "h": 915,
+      "w": 412,
+      "x": 1476,
+      "y": 0,
+      "page": "review",
+      "radius": 28,
+      "title": "Review one at a time",
+      "is_interactive": true
+    },
+    "ReviewForm.dc.html": {
+      "h": 915,
+      "w": 412,
+      "x": 1968,
+      "y": 0,
+      "page": "review",
+      "radius": 28,
+      "title": "Add expense · Finish later",
+      "is_interactive": true
+    },
+    "LandingPage.dc.html": {
+      "expand": "fill",
+      "h": 8200,
+      "w": 1440,
+      "x": 0,
+      "y": 0,
+      "page": "landing",
+      "title": "Landing page · desktop"
+    },
+    "LandingPageDark.dc.html": {
+      "expand": "fill",
+      "h": 8200,
+      "w": 1440,
+      "x": 1520,
+      "y": 0,
+      "page": "landing",
+      "title": "Landing page · desktop, dark"
+    },
+    "LandingPagePhone.dc.html": {
+      "expand": "fill",
+      "h": 10400,
+      "w": 390,
+      "x": 3040,
+      "y": 0,
+      "page": "landing",
+      "title": "Landing page · phone"
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-03T01:55:26Z",
+    "v": 1
+  },
+  "designSystems": [
+    {
+      "title": "Splitbook",
+      "namespace": "splitbook",
+      "artifact": "https://claude.ai/artifact/Rjz3pLE2p1dXzZSa7BwBa1",
+      "version": null,
+      "copiedAt": "2026-10-16T18:39:13Z"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "across": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Across Groups: dashboard, receipts, export",
+      "w": 240,
+      "x": 0,
+      "y": -290
+    },
+    "dark": {
+      "kind": "title1",
+      "maxW": 1440,
+      "text": "Dark, designed with light",
+      "w": 240,
+      "x": 0,
+      "y": 4970
+    },
+    "inside": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Inside a Group: work, settle, understand",
+      "w": 240,
+      "x": 0,
+      "y": 2680
+    },
+    "mcpConnect": {
+      "kind": "title1",
+      "maxW": 6160,
+      "page": "assistants",
+      "text": "Connecting an assistant: how it works, connect, approve, ask",
+      "w": 240,
+      "x": 0,
+      "y": -290
+    },
+    "mcpControl": {
+      "kind": "title1",
+      "maxW": 6000,
+      "page": "assistants",
+      "text": "Staying in control: settings, one assistant, tools, approvals",
+      "w": 240,
+      "x": 0,
+      "y": 1620
+    },
+    "mcpGroups": {
+      "kind": "title1",
+      "maxW": 2424,
+      "page": "assistants",
+      "text": "Group rules and Android",
+      "w": 240,
+      "x": 0,
+      "y": 4270
+    },
+    "receiptsBacklog": {
+      "fill": "orange",
+      "size": 24,
+      "text": "Backlog: Receipts\n\nThe Receipts screen stays as a direction, not planned work. Reading receipts on the user's computer needs research first: which text reader (Tesseract.js, PaddleOCR in the browser, ML Kit on Android), accuracy on Indian receipts, download size, and how the parsing is shared between web and Android.\n\nHome's \"2 receipts read\" row and the Receipts menu item wait with it.",
+      "w": 420,
+      "x": 4560,
+      "y": 0
+    },
+    "v1Decisions": {
+      "page": "assistants",
+      "x": 6240,
+      "y": 0,
+      "w": 560,
+      "fill": "blue",
+      "text": "First version, decided 2026-10-04\n\nRead only, plus insights Splitbook computes: spending summary, trends against previous Months, across my Groups, Trip summary.\n\nReaches all your Groups except Excluded Groups. Groups you join later are included. The assistant is never told about exclusions.\n\nEach Group has an Assistant rule: Allowed (default) or Not allowed. Admins see whose assistants can reach their Group.\n\nNames only, never emails. Disconnecting is immediate; 90 days unused expires. Client ID Metadata Documents only. Staging first, then opt-in for the private beta.\n\nDocs: github.com/FireBird1998/splitbook/tree/main/docs/connected-assistants (live once the docs PR merges)"
+    },
+    "laterRecording": {
+      "page": "assistants",
+      "x": 6240,
+      "y": 820,
+      "w": 560,
+      "fill": "orange",
+      "text": "Later: recording\n\nThe 'Read and record' choice on Approve access, adding an Expense in the chat, and the write branch in How it works belong to a later phase. In the first version an unreachable Group gets 'not found', never 'not shared'."
+    },
+    "droppedControls": {
+      "page": "assistants",
+      "x": 6080,
+      "y": 1910,
+      "w": 520,
+      "fill": "gray",
+      "text": "Dropped\n\nPer-tool switches and the call log on One assistant, and the 30-day reminder in Settings. Members see when each connection was last used and when it expires.\n\nChanged: the Groups lists start all ticked; untick to exclude. Settings gains the private-beta opt-in switch."
+    },
+    "laterApprovals": {
+      "page": "assistants",
+      "x": 6080,
+      "y": 2660,
+      "w": 520,
+      "fill": "orange",
+      "text": "Later: Waiting for you\n\nAn approvals queue needs entries stored on the server while they wait. Deferred together with recording."
+    },
+    "laterRule": {
+      "page": "assistants",
+      "x": 2504,
+      "y": 4560,
+      "w": 520,
+      "fill": "orange",
+      "text": "Later: 'Read only' and amount limits on the Assistant rule\n\nFirst version: Allowed (default) or Not allowed, and admins see who's connected. 'via Claude' in Activity arrives with recording."
+    },
+    "brandKitTitle": {
+      "kind": "title1",
+      "maxW": 2080,
+      "page": "brand",
+      "text": "The Equal share identity, in the product",
+      "w": 240,
+      "x": 0,
+      "y": -290
+    },
+    "brandWebTitle": {
+      "kind": "title1",
+      "maxW": 6640,
+      "page": "brand",
+      "text": "Web: sign in, invite, landing, browser",
+      "w": 240,
+      "x": 0,
+      "y": 1670
+    },
+    "brandAndroidTitle": {
+      "kind": "title1",
+      "maxW": 3512,
+      "page": "brand",
+      "text": "Android: launcher, splash, sign in, Home",
+      "w": 240,
+      "x": 0,
+      "y": 3290
+    },
+    "brandName": {
+      "page": "brand",
+      "x": 1520,
+      "y": 0,
+      "w": 560,
+      "fill": "blue",
+      "text": "To decide: one spelling of the name\n\nThe brand standard says Splitbook: capital S, lower-case b. The web already uses it. Android still says SplitBook in the name under the launcher icon, the sign-in copy, \"Opening SplitBook…\", the saving messages, Settings and the invite share text.\n\nRecommendation: Splitbook everywhere. The boards on this page already use it."
+    },
+    "brandToday": {
+      "page": "brand",
+      "x": 1520,
+      "y": 560,
+      "w": 560,
+      "fill": "gray",
+      "text": "What's built today\n\nWeb: the kit is copied into apps/web/public/brand, but nothing uses it yet. The header, sign in, invite and landing pages draw a letter S in an indigo tile next to typed text. Browser tabs show the default Next.js icon.\n\nAndroid: PR #247 adds the launcher icon, the themed icon and the light and dark splash (it needs a dev-client rebuild). Inside the app, Home shows the old \"splitbook.\" text and sign in has no brand.\n\nReact Native can't draw SVG files without react-native-svg. The kit's logo PNGs (24 and 32 px high, at 1x to 3x) work as they are."
+    },
+    "brandLater": {
+      "page": "brand",
+      "x": 1520,
+      "y": 1200,
+      "w": 560,
+      "fill": "orange",
+      "text": "Not designed: ask first\n\n- An install icon for the web app (a web manifest; the kit has maskable icons).\n- A link-preview image for invite links, showing the Group and the logo.\n- About Splitbook in Android Settings (version, licences)."
+    },
+    "brandWebChoices": {
+      "page": "brand",
+      "x": 6080,
+      "y": 1960,
+      "w": 560,
+      "fill": "blue",
+      "text": "Web choices shown here\n\n- Sidebar and page headers: the logo at 32 px, linking home. Every board on the other two pages now uses it too, and the PDF statement uses it at 24 px.\n- Sign in: the logo at 40 px replaces the letter-S tile and typed name. While it loads, the mark at 48 px.\n- Invite: the logo moves to the page header, and the card shows the Group.\n- Landing: line icons in place of emoji, and the mark in the footer.\n- Tabs: \"page · Splitbook\" titles with the favicon."
+    },
+    "brandAndroidChoices": {
+      "page": "brand",
+      "x": 2952,
+      "y": 3580,
+      "w": 560,
+      "fill": "blue",
+      "text": "Android choices shown here\n\n- Home top bar: the logo at 32 px, about the size of today's text. Tweaks compare 24 px and today.\n- Sign in: the logo at 32 px above the welcome copy.\n- Splash: the mark on Paper, or on Ink in dark, as PR #247 builds it. Keep it up until the fonts load, so \"Opening Splitbook…\" never flashes.\n- Launcher: white on Ink. The themed icon uses the monochrome layer (Tweaks).\n\nIn Play, tap the icon to open the splash, then Home."
+    },
+    "reviewTitle": {
+      "kind": "title1",
+      "page": "review",
+      "maxW": 2380,
+      "w": 240,
+      "x": 0,
+      "y": -290,
+      "text": "Phone first: one To review inbox, in place of private Drafts"
+    },
+    "reviewDecided": {
+      "page": "review",
+      "x": 2460,
+      "y": 0,
+      "w": 560,
+      "fill": "blue",
+      "text": "Decided 2026-10-14\n\n- One place called To review. It replaces \"Your private Drafts\", Home’s \"Continue\" rows and the Group’s \"Resume draft\".\n- Home shows a To review card across Groups. Inside a Group, a banner opens that Group’s list. No hidden button.\n- Review one at a time. \"Save N ready\" saves every item that needs nothing, and each item reports its own result.\n- Every item says where it came from: Claude, ChatGPT, you, or \"only on this phone\".\n- The form’s \"Keep as Draft\" becomes \"Finish later\".\n- Words on screen: To review, Finish later, Delete, Check again. Never Draft, revision or request."
+    },
+    "reviewOpen": {
+      "page": "review",
+      "x": 2460,
+      "y": 760,
+      "w": 560,
+      "fill": "green",
+      "text": "Settled in review, 2026-10-14\n\n- Draft stays the word in code and docs. Members see To review.\n- Closing a half-filled form asks: Finish later, Delete or Keep editing. Items stay \"On this phone\" only when offline or after a crash, and move to your account only when you choose.\n- \"Save N ready\" asks first, listing each item and the total. That is the review.\n- Home's Review walks across Groups, with the Group name heading each card.\n- Limit: 100 per member per Group.\n- No push notifications for now.\n- Changes are kept as you go. If Claude changes an item while you look, the card says what changed.\n- Leaving a Group says your items there are kept but hidden.\n- Run order: Ready, possible duplicates, needs details, on this phone. A summary at the end.\n- A saved Expense shows \"prepared by Claude\" to the whole Group.\n- Web: a list plus the side panel. Claude says \"Added N to To review\" with a link.\n- Ships on Android and the web together behind the existing flag, which is off in production."
+    },
+    "landingTitle": {
+      "kind": "title1",
+      "page": "landing",
+      "maxW": 3430,
+      "w": 240,
+      "x": 0,
+      "y": -290,
+      "text": "Landing page: every shared cost, settled fairly"
+    },
+    "landingDecided": {
+      "page": "landing",
+      "x": 3510,
+      "y": 0,
+      "w": 560,
+      "fill": "blue",
+      "text": "Decided 2026-10-16\n\n- Story: every shared cost, not just trips. Trip, Household, Couple, Work and General, with the boarding-pass strip as the one signature visual.\n- Actions: Sign in with Google (primary), Get it on Google Play, Connect Claude or ChatGPT. No invite form.\n- Illustration language: precise isometric drawings of real machines, in the figure's own tones, colour only for money (coral owes, mint gets back).\n- Figures: Fig 1 the splitting line (hero), Fig 2 the To review rack (assistants), Fig 3 the netting station (settle up), all in one factory style (owner, 2026-10-17).\n- Built on the Splitbook design system. It replaces the Brand page's Web · Landing page board, which stays for comparison."
+    },
+    "landingBeforeShip": {
+      "page": "landing",
+      "x": 3510,
+      "y": 900,
+      "w": 560,
+      "fill": "orange",
+      "text": "Before this page ships, each claim must be true in production\n\n- Connected assistants are live on staging only; #384 is still open.\n- Preparing items for To review needs the persistent Drafts flag, which is off in production.\n- \"Assistants see members' names, never their email addresses\" needs #438 fixed first.\n- \"prepared by Claude\" on a saved Expense: confirm it ships in the app.\n- Google Play: needs the store listing and Google's official badge artwork in place of this button.\n- Pricing, Plus and ads need billing, which isn't built yet. Launch prices from docs/launch-and-pricing-plan.md.\n- Privacy, Terms and Support pages are linked but don't exist yet; Play requires them."
+    },
+    "landingFigures": {
+      "page": "landing",
+      "x": 3510,
+      "y": 1820,
+      "w": 560,
+      "fill": "gray",
+      "text": "About the figures\n\nThree anatomy-style plates in one factory language, every number from Splitbook's own split and simplify code.\n\nFig 1, the splitting line (hero): each Expense is a bar of chips, one chip per share. A saw cuts it, and pneumatic pushers send every chip into its member's bin; the four counters always add up to zero.\n\nFig 2, the To review rack (assistants): Claude's terminal sends prepared items as tagged bars through a tube into the rack. Only your lever lets a bar onto the conveyor to the line; a thin read line shows it can read Balances.\n\nFig 3, the netting station (settle up): five debts on a pegboard become three payment cords, and a magnet shuttle carries ₹100 coins until every counter reads 0.\n\nThe boards show stills. The live versions step through each story and ship as React components from the anatomy kit."
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Receipts.dc.html",
+    "Export.dc.html",
+    "GroupExpenses.dc.html",
+    "GroupBalances.dc.html",
+    "GroupInsights.dc.html",
+    "TripGroup.dc.html",
+    "DarkMain.dc.html",
+    "McpFlow.dc.html",
+    "McpConnect.dc.html",
+    "McpConsent.dc.html",
+    "McpChat.dc.html",
+    "McpSettings.dc.html",
+    "McpAssistant.dc.html",
+    "McpTools.dc.html",
+    "McpApprovals.dc.html",
+    "McpGroupPolicy.dc.html",
+    "MobileAssistants.dc.html",
+    "MobileActivityVia.dc.html",
+    "BrandKit.dc.html",
+    "WebSignIn.dc.html",
+    "WebJoin.dc.html",
+    "WebLanding.dc.html",
+    "WebTabs.dc.html",
+    "AndroidLauncher.dc.html",
+    "AndroidSplash.dc.html",
+    "AndroidSplashDark.dc.html",
+    "AndroidSignIn.dc.html",
+    "AndroidHome.dc.html",
+    "AndroidHomeDark.dc.html",
+    "ReviewHome.dc.html",
+    "ReviewGroup.dc.html",
+    "ReviewList.dc.html",
+    "ReviewCard.dc.html",
+    "ReviewForm.dc.html",
+    "LandingPage.dc.html",
+    "LandingPageDark.dc.html",
+    "LandingPagePhone.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "web",
+      "name": "Web portal"
+    },
+    {
+      "id": "assistants",
+      "name": "Connected assistants (MCP)"
+    },
+    {
+      "id": "brand",
+      "name": "Brand in the product"
+    },
+    {
+      "id": "review",
+      "name": "Phone: To review"
+    },
+    {
+      "id": "landing",
+      "name": "Landing page"
+    }
+  ],
+  "title": "Splitbook web portal concepts"
+}

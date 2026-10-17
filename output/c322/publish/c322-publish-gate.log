@@ -1,0 +1,42 @@
+
+> splitbook@0.1.0 swarm /Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook
+> node tools/swarm/bin/swarm.mjs gate --mongo-port 27018 --base origin/main
+
+Gate in /Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook
+  PASS  install check           0.0 s
+  PASS  lint                   12.1 s  log tools/swarm/out/gate/lint.log
+  PASS  typecheck              12.9 s  log tools/swarm/out/gate/typecheck.log
+  PASS  format check            9.1 s  log tools/swarm/out/gate/format-check.log
+  PASS  unit tests             82.7 s  log tools/swarm/out/gate/unit-tests.log
+  PASS  ceilings                0.4 s  log tools/swarm/out/gate/ceilings.log
+  PASS  backend                 0.0 s  reused the backend from pnpm swarm up at http://127.0.0.1:3322
+  PASS  verify:api              0.9 s  log tools/swarm/out/gate/verify-api.log
+  PASS  verify:groups           1.1 s  log tools/swarm/out/gate/verify-groups.log
+  PASS  verify:settings         0.6 s  log tools/swarm/out/gate/verify-settings.log
+  PASS  verify:financial        1.4 s  log tools/swarm/out/gate/verify-financial.log
+  PASS  verify:expenses         1.5 s  log tools/swarm/out/gate/verify-expenses.log
+  PASS  verify:expense-edit     1.4 s  log tools/swarm/out/gate/verify-expense-edit.log
+  PASS  verify:settlements      1.1 s  log tools/swarm/out/gate/verify-settlements.log
+  PASS  verify:activity         1.1 s  log tools/swarm/out/gate/verify-activity.log
+  PASS  verify:offline          0.9 s  log tools/swarm/out/gate/verify-offline.log
+
+Gate: PASS
+Worktree /Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook
+Commit 0f6eed8, base e0d9d0c (merge-base with origin/main)
+  PASS  install check           0.0 s
+  PASS  lint                   12.1 s  log tools/swarm/out/gate/lint.log
+  PASS  typecheck              12.9 s  log tools/swarm/out/gate/typecheck.log
+  PASS  format check            9.1 s  log tools/swarm/out/gate/format-check.log
+  PASS  unit tests             82.7 s  log tools/swarm/out/gate/unit-tests.log
+  PASS  ceilings                0.4 s  log tools/swarm/out/gate/ceilings.log
+  PASS  backend                 0.0 s  reused the backend from pnpm swarm up at http://127.0.0.1:3322
+  PASS  verify:api              0.9 s  log tools/swarm/out/gate/verify-api.log
+  PASS  verify:groups           1.1 s  log tools/swarm/out/gate/verify-groups.log
+  PASS  verify:settings         0.6 s  log tools/swarm/out/gate/verify-settings.log
+  PASS  verify:financial        1.4 s  log tools/swarm/out/gate/verify-financial.log
+  PASS  verify:expenses         1.5 s  log tools/swarm/out/gate/verify-expenses.log
+  PASS  verify:expense-edit     1.4 s  log tools/swarm/out/gate/verify-expense-edit.log
+  PASS  verify:settlements      1.1 s  log tools/swarm/out/gate/verify-settlements.log
+  PASS  verify:activity         1.1 s  log tools/swarm/out/gate/verify-activity.log
+  PASS  verify:offline          0.9 s  log tools/swarm/out/gate/verify-offline.log
+No step failed in 127.2 s. JSON: tools/swarm/out/verdict.json

@@ -1,0 +1,1021 @@
+
+> @splitbook/mobile@0.1.0 build:production /private/tmp/splitbook-production-apk-20261011/apps/mobile
+> node scripts/build-staging-apk.mjs --production
+
+- Clearing android
+✔ Cleared android code
+- Creating native directory (./android)
+✔ Created native directory
+- Updating package.json
+✔ Updated package.json | no changes
+- Running prebuild
+✔ Finished prebuild
+> Task :gradle-plugin:shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:shared:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:shared:compileJava NO-SOURCE
+> Task :gradle-plugin:shared:processResources NO-SOURCE
+> Task :gradle-plugin:shared:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:processResources NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:classes UP-TO-DATE
+> Task :gradle-plugin:shared:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:jar UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:settings-plugin:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-autolinking-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-module-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-launcher-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-launcher-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-module-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:processResources UP-TO-DATE
+> Task :expo-module-gradle-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-dev-launcher-gradle-plugin:classes UP-TO-DATE
+> Task :expo-module-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:jar UP-TO-DATE
+> Task :expo-module-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-module-gradle-plugin:classes UP-TO-DATE
+> Task :expo-module-gradle-plugin:jar UP-TO-DATE
+
+> Configure project :app
+ ℹ️  [33mApplying gradle plugin[0m '[32mexpo-max-sdk-override-plugin[0m'
+  [expo-max-sdk-override-plugin] This plugin will find all permissions declared with `android:maxSdkVersion`. If there exists a declaration with the `android:maxSdkVersion` annotation and another one without, the plugin will remove the annotation from the final merged manifest. In order to see a log with the changes run a clean build of the app.
+ ℹ️  [33mApplying gradle plugin[0m '[32mexpo-dev-launcher-gradle-plugin[0m'
+
+> Configure project :
+[32m[ExpoRootProject][0m Using the following versions:
+  - buildTools:  [32m36.0.0[0m
+  - minSdk:      [32m24[0m
+  - compileSdk:  [32m36[0m
+  - targetSdk:   [32m36[0m
+  - ndk:         [32m27.1.12297006[0m
+  - kotlin:      [32m2.1.20[0m
+  - ksp:         [32m2.1.20-2.0.1[0m
+
+> Configure project :expo
+
+Using expo modules
+  - [32mexpo-log-box[0m (57.0.4)
+  - [32mexpo-constants[0m (57.0.19)
+  - [32mexpo-dev-client[0m (57.0.19)
+  - [32mexpo-dev-launcher[0m (57.0.20)
+  - [32mexpo-dev-menu[0m (57.0.18)
+  - [32mexpo-dev-menu-interface[0m (57.0.0)
+  - [32mexpo-json-utils[0m (57.0.2)
+  - [32mexpo-manifests[0m (57.0.2)
+  - [32mexpo-modules-core[0m (57.0.19)
+  - [32mexpo-updates-interface[0m (57.0.2)
+  - [33m[📦][0m [32mexpo-dom-webview[0m (57.0.1)
+  - [33m[📦][0m [32mexpo-asset[0m (57.0.18)
+  - [33m[📦][0m [32mexpo-crypto[0m (57.0.3)
+  - [33m[📦][0m [32mexpo-file-system[0m (57.0.7)
+  - [33m[📦][0m [32mexpo-font[0m (57.0.4)
+  - [33m[📦][0m [32mexpo-keep-awake[0m (57.0.2)
+  - [33m[📦][0m [32mexpo-linear-gradient[0m (57.0.2)
+  - [33m[📦][0m [32mexpo-secure-store[0m (57.0.4)
+  - [33m[📦][0m [32mexpo-splash-screen[0m (57.0.9)
+  - [33m[📦][0m [32mexpo-sqlite[0m (57.0.3)
+  - [33m[📦][0m [32mexpo-status-bar[0m (57.0.1)
+  - [33m[📦][0m [32mexpo-system-ui[0m (57.0.4)
+
+
+> Configure project :react-native-nitro-google-signin
+[NitroModules] 🔥 NitroGoogleSignin is boosted by nitro!
+
+> Configure project :react-native-nitro-modules
+[NitroModules] 🔥 Your app is boosted by nitro modules!
+
+> Task :expo-dev-menu:preBuild UP-TO-DATE
+> Task :expo-json-utils:preBuild UP-TO-DATE
+> Task :expo-dev-launcher:preBuild UP-TO-DATE
+> Task :expo-dev-client:preBuild UP-TO-DATE
+> Task :expo-dev-menu-interface:preBuild UP-TO-DATE
+> Task :expo-updates-interface:preBuild UP-TO-DATE
+> Task :expo-log-box:preBuild UP-TO-DATE
+> Task :expo-manifests:preBuild UP-TO-DATE
+> Task :expo-dev-client:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-launcher:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-menu:preReleaseBuild UP-TO-DATE
+> Task :expo-modules-core:preBuild UP-TO-DATE
+> Task :expo-dev-menu-interface:preReleaseBuild UP-TO-DATE
+> Task :expo:generatePackagesList
+> Task :expo:preBuild
+> Task :expo:preReleaseBuild
+> Task :expo-dev-menu-interface:mergeReleaseJniLibFolders
+> Task :expo-dev-launcher:mergeReleaseJniLibFolders
+> Task :expo-dev-menu-interface:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-menu:mergeReleaseJniLibFolders
+> Task :expo-dev-menu:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-launcher:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo:mergeReleaseJniLibFolders
+> Task :expo:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-menu-interface:copyReleaseJniLibsProjectOnly
+> Task :expo-json-utils:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-menu:copyReleaseJniLibsProjectOnly
+> Task :expo-log-box:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-launcher:copyReleaseJniLibsProjectOnly
+> Task :expo-manifests:preReleaseBuild UP-TO-DATE
+> Task :expo:copyReleaseJniLibsProjectOnly
+> Task :expo-modules-core:preReleaseBuild UP-TO-DATE
+> Task :expo-json-utils:mergeReleaseJniLibFolders
+> Task :expo-manifests:mergeReleaseJniLibFolders
+> Task :expo-log-box:mergeReleaseJniLibFolders
+> Task :expo-log-box:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-manifests:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-json-utils:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-json-utils:copyReleaseJniLibsProjectOnly
+> Task :expo-updates-interface:preReleaseBuild UP-TO-DATE
+> Task :expo-log-box:copyReleaseJniLibsProjectOnly
+> Task :expo-manifests:copyReleaseJniLibsProjectOnly
+> Task :expo:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-launcher:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-updates-interface:mergeReleaseJniLibFolders
+> Task :expo-dev-launcher:dataBindingMergeDependencyArtifactsRelease
+> Task :expo:generateReleaseBuildConfig
+> Task :expo-updates-interface:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-launcher:generateReleaseResValues
+> Task :expo-modules-core:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :expo:generateReleaseResValues
+> Task :expo-updates-interface:copyReleaseJniLibsProjectOnly
+> Task :expo-dev-menu:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo:generateReleaseResources
+> Task :expo-dev-launcher:generateReleaseResources
+> Task :expo-dev-menu:generateReleaseBuildConfig
+> Task :expo-dev-menu:generateReleaseResValues
+> Task :expo-dev-menu:generateReleaseResources
+> Task :expo-dev-launcher:packageReleaseResources
+> Task :expo:packageReleaseResources
+> Task :expo-dev-menu:packageReleaseResources
+> Task :expo-dev-client:mergeReleaseJniLibFolders
+> Task :expo-dev-client:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-client:copyReleaseJniLibsProjectOnly
+> Task :expo-dev-client:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-client:dataBindingMergeDependencyArtifactsRelease
+> Task :expo-dev-client:generateReleaseResValues
+> Task :expo-dev-menu:parseReleaseLocalResources
+> Task :expo-dev-launcher:parseReleaseLocalResources
+> Task :expo-dev-client:generateReleaseResources
+> Task :expo:parseReleaseLocalResources
+> Task :expo-dev-launcher:generateReleaseBuildConfig
+> Task :react-native-community_netinfo:generateCodegenSchemaFromJavaScript
+> Task :expo-dev-client:packageReleaseResources
+> Task :expo:generateReleaseRFile
+> Task :expo-dev-menu:generateReleaseRFile
+> Task :expo-dev-menu-interface:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-menu:javaPreCompileRelease
+> Task :expo-dev-menu-interface:generateReleaseBuildConfig
+> Task :expo-dev-client:parseReleaseLocalResources
+> Task :expo-json-utils:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-client:generateReleaseBuildConfig
+> Task :expo-dev-menu-interface:generateReleaseResValues
+> Task :expo-dev-menu-interface:generateReleaseResources
+> Task :expo-json-utils:generateReleaseBuildConfig
+> Task :expo-json-utils:generateReleaseResValues
+
+> Task :react-native-nitro-google-signin:generateCodegenSchemaFromJavaScript
+No modules to process in combine-js-to-schema-cli. If this is unexpected, please check if you set up your NativeComponent correctly. See combine-js-to-schema.js for how codegen finds modules.
+
+> Task :expo-dev-client:dataBindingGenBaseClassesRelease
+> Task :expo-json-utils:generateReleaseResources
+> Task :expo-dev-client:javaPreCompileRelease
+> Task :expo-dev-client:generateReleaseRFile
+> Task :expo-log-box:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-menu-interface:packageReleaseResources
+> Task :expo-log-box:generateReleaseBuildConfig
+> Task :react-native-safe-area-context:generateCodegenSchemaFromJavaScript
+> Task :expo-dev-menu-interface:parseReleaseLocalResources
+> Task :expo-dev-menu-interface:javaPreCompileRelease
+> Task :expo-json-utils:packageReleaseResources
+> Task :expo-log-box:generateReleaseResValues
+> Task :expo-log-box:generateReleaseResources
+> Task :expo-json-utils:parseReleaseLocalResources
+> Task :expo-dev-launcher:dataBindingGenBaseClassesRelease
+> Task :expo-dev-menu-interface:generateReleaseRFile
+> Task :expo-manifests:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-nitro-modules:generateCodegenSchemaFromJavaScript
+> Task :expo-manifests:generateReleaseBuildConfig
+> Task :expo-json-utils:generateReleaseRFile
+> Task :expo-log-box:packageReleaseResources
+> Task :expo-dev-launcher:generateReleaseRFile
+> Task :expo-manifests:generateReleaseResValues
+> Task :expo-dev-launcher:javaPreCompileRelease
+> Task :expo-json-utils:javaPreCompileRelease
+> Task :expo-updates-interface:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-manifests:generateReleaseResources
+> Task :expo-log-box:parseReleaseLocalResources
+> Task :expo:javaPreCompileRelease
+> Task :expo-log-box:javaPreCompileRelease
+> Task :expo-updates-interface:generateReleaseBuildConfig
+> Task :expo:writeReleaseAarMetadata
+> Task :expo-updates-interface:generateReleaseResValues
+> Task :expo-dev-client:writeReleaseAarMetadata
+> Task :expo-manifests:packageReleaseResources
+> Task :expo-dev-launcher:writeReleaseAarMetadata
+> Task :expo-updates-interface:generateReleaseResources
+> Task :expo-log-box:generateReleaseRFile
+> Task :expo-manifests:javaPreCompileRelease
+> Task :expo-manifests:parseReleaseLocalResources
+> Task :expo-dev-menu-interface:writeReleaseAarMetadata
+> Task :expo-json-utils:writeReleaseAarMetadata
+> Task :expo-dev-menu:writeReleaseAarMetadata
+> Task :expo-log-box:writeReleaseAarMetadata
+> Task :expo:extractDeepLinksRelease
+> Task :expo-updates-interface:packageReleaseResources
+> Task :expo-manifests:generateReleaseRFile
+> Task :expo-dev-client:extractDeepLinksRelease
+> Task :expo-manifests:writeReleaseAarMetadata
+> Task :expo-updates-interface:javaPreCompileRelease
+> Task :expo-updates-interface:parseReleaseLocalResources
+> Task :expo-dev-launcher:extractDeepLinksRelease
+> Task :expo:processReleaseManifest
+> Task :expo-updates-interface:writeReleaseAarMetadata
+> Task :expo-updates-interface:generateReleaseRFile
+> Task :expo-dev-menu:extractDeepLinksRelease
+> Task :expo-dev-client:processReleaseManifest
+> Task :expo-dev-launcher:processReleaseManifest
+> Task :expo-dev-menu-interface:extractDeepLinksRelease
+> Task :expo-json-utils:extractDeepLinksRelease
+> Task :expo-log-box:extractDeepLinksRelease
+> Task :expo-dev-menu:processReleaseManifest
+> Task :expo-log-box:processReleaseManifest
+> Task :expo-json-utils:processReleaseManifest
+> Task :expo-dev-menu-interface:processReleaseManifest
+> Task :expo-manifests:extractDeepLinksRelease
+> Task :expo-updates-interface:extractDeepLinksRelease
+> Task :expo:compileReleaseLibraryResources
+> Task :expo-dev-client:compileReleaseLibraryResources
+> Task :expo-dev-launcher:compileReleaseLibraryResources
+> Task :expo-dev-menu:compileReleaseLibraryResources
+> Task :expo-dev-menu-interface:compileReleaseLibraryResources
+> Task :expo-json-utils:compileReleaseLibraryResources
+> Task :expo-updates-interface:processReleaseManifest
+> Task :expo-manifests:processReleaseManifest
+> Task :expo-manifests:compileReleaseLibraryResources
+> Task :expo-log-box:compileReleaseLibraryResources
+> Task :expo-dev-launcher:prepareReleaseArtProfile
+> Task :expo-dev-client:prepareReleaseArtProfile
+> Task :expo:prepareReleaseArtProfile
+> Task :expo-updates-interface:compileReleaseLibraryResources
+> Task :expo-dev-menu:prepareReleaseArtProfile
+> Task :expo-dev-menu-interface:prepareReleaseArtProfile
+> Task :expo-updates-interface:prepareReleaseArtProfile
+> Task :expo-log-box:prepareReleaseArtProfile
+> Task :expo-manifests:prepareReleaseArtProfile
+> Task :expo-json-utils:prepareReleaseArtProfile
+> Task :expo:mergeReleaseShaders
+> Task :expo:compileReleaseShaders NO-SOURCE
+> Task :expo-dev-launcher:mergeReleaseShaders
+> Task :expo:generateReleaseAssets UP-TO-DATE
+> Task :expo-dev-client:mergeReleaseShaders
+> Task :expo-dev-menu:mergeReleaseShaders
+> Task :expo-dev-launcher:compileReleaseShaders NO-SOURCE
+> Task :expo-dev-client:compileReleaseShaders NO-SOURCE
+> Task :expo-dev-client:generateReleaseAssets UP-TO-DATE
+> Task :expo-dev-menu:compileReleaseShaders NO-SOURCE
+> Task :expo-dev-launcher:generateReleaseAssets UP-TO-DATE
+> Task :expo-dev-menu:generateReleaseAssets UP-TO-DATE
+> Task :expo:mergeReleaseAssets
+> Task :expo-dev-client:mergeReleaseAssets
+> Task :expo-dev-launcher:mergeReleaseAssets
+> Task :expo-dev-menu:mergeReleaseAssets
+> Task :expo-log-box:mergeReleaseShaders
+> Task :expo-json-utils:mergeReleaseShaders
+> Task :expo-manifests:mergeReleaseShaders
+> Task :expo-dev-menu-interface:mergeReleaseShaders
+> Task :expo-manifests:compileReleaseShaders NO-SOURCE
+> Task :expo-dev-menu-interface:compileReleaseShaders NO-SOURCE
+> Task :expo-manifests:generateReleaseAssets UP-TO-DATE
+> Task :expo-log-box:compileReleaseShaders NO-SOURCE
+> Task :expo-dev-menu-interface:generateReleaseAssets UP-TO-DATE
+> Task :expo-log-box:generateReleaseAssets UP-TO-DATE
+> Task :expo-json-utils:compileReleaseShaders NO-SOURCE
+> Task :expo-json-utils:generateReleaseAssets UP-TO-DATE
+> Task :expo-log-box:mergeReleaseAssets
+> Task :expo-manifests:mergeReleaseAssets
+> Task :expo-json-utils:mergeReleaseAssets
+> Task :expo-dev-menu-interface:mergeReleaseAssets
+> Task :expo-updates-interface:mergeReleaseShaders
+> Task :expo-dev-client:extractProguardFiles
+> Task :expo:extractProguardFiles
+> Task :expo-dev-launcher:extractProguardFiles
+> Task :expo-updates-interface:compileReleaseShaders NO-SOURCE
+> Task :expo-updates-interface:generateReleaseAssets UP-TO-DATE
+> Task :expo-dev-client:prepareLintJarForPublish
+> Task :expo-dev-launcher:prepareLintJarForPublish
+> Task :expo-updates-interface:mergeReleaseAssets
+> Task :expo-json-utils:extractProguardFiles
+> Task :expo-dev-menu:extractProguardFiles
+> Task :expo-json-utils:prepareLintJarForPublish
+> Task :expo-dev-menu-interface:extractProguardFiles
+> Task :expo-log-box:extractProguardFiles
+> Task :expo-dev-menu-interface:prepareLintJarForPublish
+> Task :expo-dev-menu:prepareLintJarForPublish
+> Task :expo-log-box:prepareLintJarForPublish
+> Task :expo-manifests:extractProguardFiles
+> Task :expo-log-box:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo:prepareLintJarForPublish
+> Task :expo-manifests:prepareLintJarForPublish
+> Task :expo:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-dev-launcher:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-updates-interface:extractProguardFiles
+> Task :expo:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-log-box:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo:extractDeepLinksForAarRelease
+> Task :expo-updates-interface:prepareLintJarForPublish
+> Task :expo-log-box:extractDeepLinksForAarRelease
+> Task :expo-dev-menu-interface:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-dev-launcher:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-dev-launcher:extractDeepLinksForAarRelease
+> Task :expo-dev-client:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-dev-menu:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-manifests:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-dev-menu-interface:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-dev-menu-interface:extractDeepLinksForAarRelease
+> Task :expo-json-utils:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-manifests:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-dev-client:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-json-utils:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-dev-client:extractDeepLinksForAarRelease
+> Task :expo-updates-interface:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-json-utils:extractDeepLinksForAarRelease
+> Task :expo-updates-interface:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-dev-menu:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-dev-client:writeReleaseLintModelMetadata
+> Task :expo-updates-interface:extractDeepLinksForAarRelease
+> Task :expo-dev-launcher:writeReleaseLintModelMetadata
+> Task :expo-manifests:extractDeepLinksForAarRelease
+> Task :expo-dev-menu-interface:writeReleaseLintModelMetadata
+> Task :expo-json-utils:writeReleaseLintModelMetadata
+> Task :expo-dev-menu:extractDeepLinksForAarRelease
+> Task :expo-manifests:writeReleaseLintModelMetadata
+> Task :expo-updates-interface:writeReleaseLintModelMetadata
+> Task :expo-log-box:writeReleaseLintModelMetadata
+> Task :react-native-community_netinfo:generateCodegenArtifactsFromSchema
+> Task :react-native-community_netinfo:preBuild
+> Task :react-native-community_netinfo:preReleaseBuild
+> Task :expo:writeReleaseLintModelMetadata
+> Task :expo-dev-menu:writeReleaseLintModelMetadata
+> Task :react-native-community_netinfo:mergeReleaseJniLibFolders
+> Task :react-native-community_netinfo:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-community_netinfo:copyReleaseJniLibsProjectOnly
+> Task :react-native-nitro-google-signin:generateCodegenArtifactsFromSchema
+> Task :react-native-nitro-google-signin:preBuild
+> Task :react-native-nitro-google-signin:preReleaseBuild
+> Task :react-native-community_netinfo:generateReleaseBuildConfig
+> Task :react-native-nitro-google-signin:mergeReleaseJniLibFolders
+> Task :react-native-nitro-google-signin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-community_netinfo:generateReleaseResValues
+> Task :react-native-nitro-google-signin:generateReleaseBuildConfig
+> Task :react-native-nitro-google-signin:generateReleaseResValues
+> Task :react-native-community_netinfo:generateReleaseResources
+> Task :react-native-nitro-google-signin:generateReleaseResources
+> Task :react-native-nitro-google-signin:packageReleaseResources
+> Task :react-native-community_netinfo:packageReleaseResources
+> Task :react-native-nitro-google-signin:javaPreCompileRelease
+> Task :react-native-nitro-google-signin:parseReleaseLocalResources
+> Task :react-native-nitro-google-signin:writeReleaseAarMetadata
+> Task :react-native-community_netinfo:parseReleaseLocalResources
+> Task :react-native-community_netinfo:javaPreCompileRelease
+> Task :react-native-community_netinfo:writeReleaseAarMetadata
+> Task :react-native-community_netinfo:extractDeepLinksRelease
+> Task :react-native-safe-area-context:generateCodegenArtifactsFromSchema
+> Task :react-native-safe-area-context:preBuild
+> Task :react-native-safe-area-context:preReleaseBuild
+> Task :react-native-nitro-google-signin:extractDeepLinksRelease
+> Task :react-native-community_netinfo:generateReleaseRFile
+> Task :react-native-nitro-google-signin:generateReleaseRFile
+> Task :react-native-nitro-modules:generateCodegenArtifactsFromSchema
+> Task :react-native-safe-area-context:mergeReleaseJniLibFolders
+> Task :react-native-safe-area-context:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-safe-area-context:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-safe-area-context:copyReleaseJniLibsProjectOnly
+> Task :react-native-safe-area-context:generateReleaseBuildConfig
+> Task :react-native-nitro-google-signin:compileReleaseLibraryResources
+> Task :react-native-safe-area-context:generateReleaseResValues
+> Task :react-native-nitro-google-signin:processReleaseManifest
+
+> Task :react-native-community_netinfo:processReleaseManifest
+package="com.reactnativecommunity.netinfo" found in source AndroidManifest.xml: /private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/@react-native-community+netinfo@12.0.1_react-native@0.86.3_@babel+core@7.29.0_@types+re_eaf5cc274112972c0ea35683bd63fb4a/node_modules/@react-native-community/netinfo/android/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="com.reactnativecommunity.netinfo" from the source AndroidManifest.xml: /private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/@react-native-community+netinfo@12.0.1_react-native@0.86.3_@babel+core@7.29.0_@types+re_eaf5cc274112972c0ea35683bd63fb4a/node_modules/@react-native-community/netinfo/android/src/main/AndroidManifest.xml.
+
+> Task :react-native-nitro-google-signin:prepareReleaseArtProfile
+> Task :react-native-safe-area-context:generateReleaseResources
+> Task :react-native-nitro-google-signin:mergeReleaseShaders
+> Task :react-native-nitro-google-signin:compileReleaseShaders NO-SOURCE
+> Task :react-native-nitro-google-signin:generateReleaseAssets UP-TO-DATE
+> Task :react-native-nitro-google-signin:mergeReleaseAssets
+> Task :react-native-safe-area-context:packageReleaseResources
+> Task :react-native-nitro-google-signin:extractProguardFiles
+> Task :react-native-nitro-google-signin:prepareLintJarForPublish
+> Task :react-native-nitro-google-signin:extractDeepLinksForAarRelease
+> Task :react-native-safe-area-context:javaPreCompileRelease
+> Task :react-native-safe-area-context:parseReleaseLocalResources
+> Task :react-native-safe-area-context:writeReleaseAarMetadata
+> Task :react-native-nitro-google-signin:writeReleaseLintModelMetadata
+> Task :react-native-safe-area-context:extractDeepLinksRelease
+> Task :react-native-safe-area-context:generateReleaseRFile
+
+> Task :react-native-safe-area-context:processReleaseManifest
+package="com.th3rdwave.safeareacontext" found in source AndroidManifest.xml: /private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-safe-area-context@5.7.0_react-native@0.86.3_@babel+core@7.29.0_@types+reac_d9b1686b2eb5c3337d7d85f006eea070/node_modules/react-native-safe-area-context/android/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="com.th3rdwave.safeareacontext" from the source AndroidManifest.xml: /private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-safe-area-context@5.7.0_react-native@0.86.3_@babel+core@7.29.0_@types+reac_d9b1686b2eb5c3337d7d85f006eea070/node_modules/react-native-safe-area-context/android/src/main/AndroidManifest.xml.
+
+> Task :react-native-safe-area-context:compileReleaseLibraryResources
+> Task :react-native-safe-area-context:prepareReleaseArtProfile
+> Task :react-native-safe-area-context:mergeReleaseShaders
+> Task :react-native-safe-area-context:compileReleaseShaders NO-SOURCE
+> Task :react-native-safe-area-context:generateReleaseAssets UP-TO-DATE
+> Task :react-native-safe-area-context:mergeReleaseAssets
+> Task :react-native-nitro-modules:prepareHeaders
+> Task :react-native-nitro-modules:preBuild
+> Task :react-native-nitro-modules:preReleaseBuild
+> Task :react-native-safe-area-context:extractProguardFiles
+> Task :react-native-safe-area-context:prepareLintJarForPublish
+> Task :react-native-safe-area-context:stripReleaseDebugSymbols NO-SOURCE
+> Task :react-native-safe-area-context:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-safe-area-context:extractDeepLinksForAarRelease
+> Task :react-native-safe-area-context:writeReleaseLintModelMetadata
+> Task :react-native-nitro-modules:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :expo-constants:createExpoConfig
+> Task :expo-constants:preBuild
+> Task :expo-constants:preReleaseBuild
+> Task :expo-constants:mergeReleaseJniLibFolders
+> Task :expo-constants:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-constants:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-constants:copyReleaseJniLibsProjectOnly
+> Task :expo-constants:generateReleaseBuildConfig
+> Task :expo-constants:generateReleaseResValues
+> Task :expo-constants:generateReleaseResources
+> Task :expo-constants:packageReleaseResources
+> Task :expo-constants:parseReleaseLocalResources
+> Task :expo-constants:javaPreCompileRelease
+> Task :expo-constants:writeReleaseAarMetadata
+> Task :expo-constants:extractDeepLinksRelease
+> Task :expo-constants:generateReleaseRFile
+> Task :expo-constants:processReleaseManifest
+> Task :expo-constants:compileReleaseLibraryResources
+> Task :expo-constants:prepareReleaseArtProfile
+> Task :expo-constants:mergeReleaseShaders
+> Task :expo-constants:compileReleaseShaders NO-SOURCE
+> Task :expo-constants:generateReleaseAssets UP-TO-DATE
+> Task :expo-constants:mergeReleaseAssets
+> Task :expo-constants:extractProguardFiles
+> Task :expo-constants:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-constants:prepareLintJarForPublish
+> Task :expo-constants:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-constants:extractDeepLinksForAarRelease
+> Task :expo-constants:writeReleaseLintModelMetadata
+> Task :expo-modules-core:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :expo-modules-core:mergeReleaseJniLibFolders
+> Task :expo-modules-core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-modules-core:generateReleaseBuildConfig
+> Task :expo-modules-core:generateReleaseResValues
+> Task :expo-modules-core:generateReleaseResources
+> Task :expo-modules-core:packageReleaseResources
+> Task :expo-modules-core:parseReleaseLocalResources
+> Task :expo-modules-core:javaPreCompileRelease
+> Task :expo-modules-core:writeReleaseAarMetadata
+> Task :expo-modules-core:extractDeepLinksRelease
+> Task :expo-modules-core:compileReleaseLibraryResources
+
+> Task :expo-modules-core:processReleaseManifest
+/private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/AndroidManifest.xml:8:9-11:45 Warning:
+	meta-data#com.facebook.soloader.enabled@android:value was tagged at AndroidManifest.xml:8 to replace other declarations but no other declaration present
+
+> Task :expo-modules-core:prepareReleaseArtProfile
+> Task :expo-modules-core:mergeReleaseShaders
+> Task :expo-modules-core:compileReleaseShaders NO-SOURCE
+> Task :expo-modules-core:generateReleaseAssets UP-TO-DATE
+> Task :expo-modules-core:mergeReleaseAssets
+> Task :expo-modules-core:extractProguardFiles
+> Task :expo-modules-core:prepareLintJarForPublish
+> Task :expo-modules-core:extractDeepLinksForAarRelease
+> Task :expo-modules-core:writeReleaseLintModelMetadata
+> Task :expo-modules-core:mergeReleaseNativeLibs
+> Task :expo-modules-core:generateReleaseRFile
+> Task :react-native-nitro-modules:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :expo-modules-core:copyReleaseJniLibsProjectOnly
+
+> Task :react-native-community_netinfo:compileReleaseJavaWithJavac
+/private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/@react-native-community+netinfo@12.0.1_react-native@0.86.3_@babel+core@7.29.0_@types+re_eaf5cc274112972c0ea35683bd63fb4a/node_modules/@react-native-community/netinfo/android/src/newarch/com/reactnativecommunity/netinfo/NetInfoModule.java:43: warning: [removal] onCatalystInstanceDestroy() in NativeModule has been deprecated and marked for removal
+    public void onCatalystInstanceDestroy() {
+                ^
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+1 warning
+
+> Task :react-native-community_netinfo:compileReleaseLibraryResources
+> Task :react-native-community_netinfo:prepareReleaseArtProfile
+> Task :react-native-community_netinfo:bundleLibCompileToJarRelease
+> Task :react-native-community_netinfo:bundleLibRuntimeToDirRelease
+> Task :react-native-community_netinfo:bundleLibRuntimeToJarRelease
+
+> Task :react-native-safe-area-context:compileReleaseKotlin
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-safe-area-context@5.7.0_react-native@0.86.3_@babel+core@7.29.0_@types+reac_d9b1686b2eb5c3337d7d85f006eea070/node_modules/react-native-safe-area-context/android/src/main/java/com/th3rdwave/safeareacontext/SafeAreaProviderManager.kt:39:19 'fun getEventDispatcherForReactTag(context: ReactContext, reactTag: Int): EventDispatcher?' is deprecated. reactTag is no longer needed.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-safe-area-context@5.7.0_react-native@0.86.3_@babel+core@7.29.0_@types+reac_d9b1686b2eb5c3337d7d85f006eea070/node_modules/react-native-safe-area-context/android/src/main/java/com/th3rdwave/safeareacontext/SafeAreaView.kt:9:8 'class UIManagerModule : ReactContextBaseJavaModule, LifecycleEventListener, UIManager' is deprecated. Deprecated in Java.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-safe-area-context@5.7.0_react-native@0.86.3_@babel+core@7.29.0_@types+reac_d9b1686b2eb5c3337d7d85f006eea070/node_modules/react-native-safe-area-context/android/src/main/java/com/th3rdwave/safeareacontext/SafeAreaView.kt:50:54 'class UIManagerModule : ReactContextBaseJavaModule, LifecycleEventListener, UIManager' is deprecated. Deprecated in Java.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-safe-area-context@5.7.0_react-native@0.86.3_@babel+core@7.29.0_@types+reac_d9b1686b2eb5c3337d7d85f006eea070/node_modules/react-native-safe-area-context/android/src/main/java/com/th3rdwave/safeareacontext/SafeAreaView.kt:59:23 'val uiImplementation: UIImplementation!' is deprecated. Deprecated in Java.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-safe-area-context@5.7.0_react-native@0.86.3_@babel+core@7.29.0_@types+reac_d9b1686b2eb5c3337d7d85f006eea070/node_modules/react-native-safe-area-context/android/src/main/java/com/th3rdwave/safeareacontext/SafeAreaViewShadowNode.kt:9:32 'class LayoutShadowNode : ReactShadowNodeImpl' is deprecated. This class is part of Legacy Architecture and will be removed in a future release.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-safe-area-context@5.7.0_react-native@0.86.3_@babel+core@7.29.0_@types+reac_d9b1686b2eb5c3337d7d85f006eea070/node_modules/react-native-safe-area-context/android/src/main/java/com/th3rdwave/safeareacontext/SafeAreaViewShadowNode.kt:110:61 'class NativeViewHierarchyOptimizer : Any' is deprecated. This class is part of Legacy Architecture and will be removed in a future release.
+
+> Task :react-native-community_netinfo:mergeReleaseShaders
+> Task :react-native-community_netinfo:compileReleaseShaders NO-SOURCE
+> Task :react-native-community_netinfo:generateReleaseAssets UP-TO-DATE
+> Task :react-native-community_netinfo:mergeReleaseAssets
+> Task :react-native-community_netinfo:processReleaseJavaRes NO-SOURCE
+> Task :react-native-community_netinfo:createFullJarRelease
+> Task :react-native-community_netinfo:extractProguardFiles
+> Task :react-native-nitro-modules:externalNativeBuildRelease
+> Task :react-native-nitro-modules:generateJsonModelRelease
+> Task :react-native-nitro-modules:prefabReleaseConfigurePackage
+> Task :react-native-nitro-modules:prefabReleasePackage
+> Task :react-native-nitro-modules:mergeReleaseJniLibFolders
+> Task :react-native-nitro-modules:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-nitro-modules:generateReleaseBuildConfig
+> Task :react-native-nitro-modules:generateReleaseResValues
+> Task :react-native-nitro-modules:generateReleaseResources
+> Task :react-native-nitro-modules:mergeReleaseNativeLibs
+> Task :react-native-nitro-modules:packageReleaseResources
+> Task :react-native-nitro-modules:parseReleaseLocalResources
+> Task :react-native-nitro-modules:generateReleaseRFile
+> Task :react-native-nitro-modules:javaPreCompileRelease
+> Task :react-native-nitro-google-signin:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-nitro-modules:copyReleaseJniLibsProjectOnly
+> Task :expo-modules-core:stripReleaseDebugSymbols
+> Task :expo-modules-core:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-nitro-modules:writeReleaseAarMetadata
+> Task :react-native-nitro-modules:extractDeepLinksRelease
+> Task :react-native-nitro-modules:processReleaseManifest
+> Task :react-native-nitro-modules:compileReleaseLibraryResources
+> Task :react-native-nitro-modules:prepareReleaseArtProfile
+> Task :react-native-nitro-modules:mergeReleaseShaders
+> Task :react-native-nitro-modules:compileReleaseShaders NO-SOURCE
+> Task :react-native-nitro-modules:generateReleaseAssets UP-TO-DATE
+> Task :react-native-nitro-modules:mergeReleaseAssets
+> Task :react-native-nitro-modules:extractProguardFiles
+> Task :react-native-nitro-modules:prepareLintJarForPublish
+> Task :react-native-nitro-modules:extractDeepLinksForAarRelease
+> Task :react-native-nitro-modules:writeReleaseLintModelMetadata
+> Task :react-native-nitro-modules:stripReleaseDebugSymbols
+
+> Task :app:createBundleReleaseJsAndAssets
+Expo Autolinking module resolution enabled
+
+> Task :react-native-nitro-modules:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-community_netinfo:generateReleaseLintModel
+> Task :react-native-community_netinfo:stripReleaseDebugSymbols NO-SOURCE
+> Task :react-native-community_netinfo:prepareLintJarForPublish
+> Task :react-native-community_netinfo:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-community_netinfo:extractDeepLinksForAarRelease
+> Task :react-native-community_netinfo:extractReleaseAnnotations
+> Task :react-native-community_netinfo:mergeReleaseGeneratedProguardFiles
+> Task :react-native-community_netinfo:mergeReleaseConsumerProguardFiles
+> Task :react-native-community_netinfo:mergeReleaseJavaResource
+> Task :react-native-community_netinfo:syncReleaseLibJars
+> Task :react-native-community_netinfo:bundleReleaseLocalLintAar
+> Task :react-native-community_netinfo:writeReleaseLintModelMetadata
+> Task :react-native-community_netinfo:generateReleaseLintVitalModel
+> Task :react-native-nitro-modules:compileReleaseKotlin
+> Task :react-native-safe-area-context:compileReleaseJavaWithJavac
+> Task :react-native-safe-area-context:bundleLibCompileToJarRelease
+> Task :react-native-safe-area-context:bundleLibRuntimeToJarRelease
+> Task :react-native-safe-area-context:processReleaseJavaRes
+> Task :react-native-safe-area-context:bundleLibRuntimeToDirRelease
+> Task :react-native-safe-area-context:createFullJarRelease
+> Task :react-native-safe-area-context:generateReleaseLintModel
+> Task :react-native-safe-area-context:extractReleaseAnnotations
+> Task :react-native-safe-area-context:mergeReleaseGeneratedProguardFiles
+> Task :react-native-safe-area-context:mergeReleaseConsumerProguardFiles
+> Task :react-native-safe-area-context:mergeReleaseJavaResource
+> Task :react-native-safe-area-context:syncReleaseLibJars
+> Task :react-native-safe-area-context:bundleReleaseLocalLintAar
+> Task :react-native-safe-area-context:generateReleaseLintVitalModel
+
+> Task :app:createBundleReleaseJsAndAssets
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+| (node:11753) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+
+> Task :react-native-nitro-modules:compileReleaseJavaWithJavac
+> Task :react-native-nitro-modules:bundleLibCompileToJarRelease
+> Task :react-native-nitro-modules:bundleLibRuntimeToJarRelease
+> Task :react-native-nitro-modules:processReleaseJavaRes
+> Task :react-native-nitro-modules:createFullJarRelease
+> Task :react-native-nitro-modules:generateReleaseLintModel
+> Task :react-native-nitro-modules:bundleLibRuntimeToDirRelease
+> Task :react-native-nitro-modules:extractReleaseAnnotations
+> Task :react-native-nitro-modules:mergeReleaseGeneratedProguardFiles
+> Task :react-native-nitro-modules:mergeReleaseConsumerProguardFiles
+> Task :react-native-nitro-modules:mergeReleaseJavaResource
+> Task :react-native-nitro-modules:generateReleaseLintVitalModel
+> Task :react-native-nitro-modules:syncReleaseLibJars
+> Task :react-native-nitro-modules:bundleReleaseLocalLintAar
+> Task :react-native-community_netinfo:lintVitalAnalyzeRelease
+
+> Task :app:createBundleReleaseJsAndAssets
+| (node:11753) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:11753) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:11753) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:11753) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:11753) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:11753) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+| (node:11753) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+| (Use `node --trace-warnings ...` to show where the warning was created)
+
+The Daemon will expire after the build after running out of JVM Metaspace.
+The project memory settings are likely not configured or are configured to an insufficient value.
+The daemon will restart for the next build, which may increase subsequent build times.
+These settings can be adjusted by setting 'org.gradle.jvmargs' in 'gradle.properties'.
+The currently configured max heap space is '2 GiB' and the configured max metaspace is '512 MiB'.
+For more information on how to set these values, please refer to https://docs.gradle.org/9.3.1/userguide/build_environment.html#sec:configuring_jvm_memory in the Gradle documentation.
+To disable this warning, set 'org.gradle.daemon.performance.disable-logging=true'.
+Daemon will be stopped at the end of the build after running out of JVM Metaspace
+
+> Task :react-native-nitro-modules:lintVitalAnalyzeRelease
+> Task :react-native-safe-area-context:lintVitalAnalyzeRelease
+
+> Task :app:createBundleReleaseJsAndAssets
+Android Bundled 9072ms apps/mobile/index.ts (1334 modules)
+Writing bundle output to: /private/tmp/splitbook-production-apk-20261011/apps/mobile/android/app/build/generated/assets/react/release/index.android.bundle
+Writing sourcemap output to: /private/tmp/splitbook-production-apk-20261011/apps/mobile/android/app/build/intermediates/sourcemaps/react/release/index.android.bundle.packager.map
+Copying 6 asset files
+Done writing bundle output
+Done writing sourcemap output
+
+> Task :react-native-nitro-google-signin:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-nitro-google-signin:mergeReleaseNativeLibs
+> Task :react-native-nitro-google-signin:stripReleaseDebugSymbols
+> Task :react-native-nitro-google-signin:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-nitro-google-signin:copyReleaseJniLibsProjectOnly
+
+> Task :expo-modules-core:compileReleaseKotlin
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/apploader/AppLoaderProvider.kt:34:52 Unchecked cast of 'Class<*>!' to 'Class<out HeadlessAppLoader>'.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:14:8 'class UIManagerModule : ReactContextBaseJavaModule, LifecycleEventListener, UIManager' is deprecated. Deprecated in Java.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:22:8 'typealias ErrorManagerModule = JSLoggerModule' is deprecated. Use JSLoggerModule instead.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:61:13 'val hostingRuntimeContext: MainRuntime' is deprecated. Use AppContext.runtimeContext instead.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:271:21 'typealias ErrorManagerModule = JSLoggerModule' is deprecated. Use JSLoggerModule instead.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:380:21 'val DEFAULT: Int' is deprecated. UIManagerType.DEFAULT will be deleted in the next release of React Native. Use [LEGACY] instead.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:381:10 'class UIManagerModule : ReactContextBaseJavaModule, LifecycleEventListener, UIManager' is deprecated. Deprecated in Java.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/defaultmodules/NativeModulesProxyModule.kt:16:5 'fun Constants(legacyConstantsProvider: () -> Map<String, Any?>): Unit' is deprecated. Use `Constant` or `Property` instead.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/events/KModuleEventEmitterWrapper.kt:99:21 'fun getEventDispatcherForReactTag(context: ReactContext, reactTag: Int): EventDispatcher?' is deprecated. reactTag is no longer needed.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/events/KModuleEventEmitterWrapper.kt:108:21 'fun getEventDispatcherForReactTag(context: ReactContext, reactTag: Int): EventDispatcher?' is deprecated. reactTag is no longer needed.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewDefinitionBuilder.kt:470:16 'val errorManager: JSLoggerModule?' is deprecated. Use AppContext.jsLogger instead.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewDefinitionBuilder.kt:470:30 'fun reportExceptionToLogBox(codedException: CodedException): Unit' is deprecated. Use appContext.jsLogger.error(...) instead.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewManagerDefinition.kt:41:16 'val errorManager: JSLoggerModule?' is deprecated. Use AppContext.jsLogger instead.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-modules-core@57.0.19_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3__react@19.2.3/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewManagerDefinition.kt:41:30 'fun reportExceptionToLogBox(codedException: CodedException): Unit' is deprecated. Use appContext.jsLogger.error(...) instead.
+
+> Task :react-native-nitro-google-signin:compileReleaseKotlin
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-nitro-google-signin@2.3.0_expo@57.0.25_react-native-nitro-modules@0.37.1_r_b266ddb9ce57228ed1a895125ac4785a/node_modules/react-native-nitro-google-signin/android/src/main/java/com/nitrogooglesignin/GoogleSignInButtonShadowNode.kt:3:8 'class LayoutShadowNode : ReactShadowNodeImpl' is deprecated. This class is part of Legacy Architecture and will be removed in a future release.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-nitro-google-signin@2.3.0_expo@57.0.25_react-native-nitro-modules@0.37.1_r_b266ddb9ce57228ed1a895125ac4785a/node_modules/react-native-nitro-google-signin/android/src/main/java/com/nitrogooglesignin/GoogleSignInButtonShadowNode.kt:16:47 'class LayoutShadowNode : ReactShadowNodeImpl' is deprecated. This class is part of Legacy Architecture and will be removed in a future release.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-nitro-google-signin@2.3.0_expo@57.0.25_react-native-nitro-modules@0.37.1_r_b266ddb9ce57228ed1a895125ac4785a/node_modules/react-native-nitro-google-signin/android/src/main/java/com/nitrogooglesignin/GoogleSignInButtonViewManager.kt:4:8 'class LayoutShadowNode : ReactShadowNodeImpl' is deprecated. This class is part of Legacy Architecture and will be removed in a future release.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-nitro-google-signin@2.3.0_expo@57.0.25_react-native-nitro-modules@0.37.1_r_b266ddb9ce57228ed1a895125ac4785a/node_modules/react-native-nitro-google-signin/android/src/main/java/com/nitrogooglesignin/GoogleSignInButtonViewManager.kt:33:44 'class LayoutShadowNode : ReactShadowNodeImpl' is deprecated. This class is part of Legacy Architecture and will be removed in a future release.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-nitro-google-signin@2.3.0_expo@57.0.25_react-native-nitro-modules@0.37.1_r_b266ddb9ce57228ed1a895125ac4785a/node_modules/react-native-nitro-google-signin/android/src/main/java/com/nitrogooglesignin/GoogleSignInButtonViewManager.kt:37:44 'class LayoutShadowNode : ReactShadowNodeImpl' is deprecated. This class is part of Legacy Architecture and will be removed in a future release.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/react-native-nitro-google-signin@2.3.0_expo@57.0.25_react-native-nitro-modules@0.37.1_r_b266ddb9ce57228ed1a895125ac4785a/node_modules/react-native-nitro-google-signin/android/src/main/java/com/nitrogooglesignin/GoogleSignInButtonViewManager.kt:38:55 'class LayoutShadowNode : ReactShadowNodeImpl' is deprecated. This class is part of Legacy Architecture and will be removed in a future release.
+
+> Task :react-native-nitro-google-signin:compileReleaseJavaWithJavac
+> Task :react-native-nitro-google-signin:bundleLibCompileToJarRelease
+> Task :react-native-nitro-google-signin:bundleLibRuntimeToJarRelease
+> Task :react-native-nitro-google-signin:processReleaseJavaRes
+> Task :react-native-nitro-google-signin:createFullJarRelease
+> Task :react-native-nitro-google-signin:generateReleaseLintModel
+> Task :react-native-nitro-google-signin:extractReleaseAnnotations
+> Task :react-native-nitro-google-signin:mergeReleaseGeneratedProguardFiles
+> Task :react-native-nitro-google-signin:mergeReleaseConsumerProguardFiles
+> Task :react-native-nitro-google-signin:bundleLibRuntimeToDirRelease
+> Task :react-native-nitro-google-signin:mergeReleaseJavaResource
+> Task :react-native-nitro-google-signin:syncReleaseLibJars
+> Task :react-native-nitro-google-signin:bundleReleaseLocalLintAar
+> Task :react-native-nitro-google-signin:generateReleaseLintVitalModel
+
+> Task :expo-modules-core:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :expo-modules-core:bundleLibCompileToJarRelease
+> Task :expo-dev-menu-interface:compileReleaseKotlin NO-SOURCE
+> Task :expo-dev-client:compileReleaseKotlin NO-SOURCE
+> Task :expo-dev-client:compileReleaseJavaWithJavac
+> Task :expo-dev-client:bundleLibCompileToJarRelease
+> Task :expo-dev-client:bundleLibRuntimeToDirRelease
+> Task :expo-json-utils:compileReleaseKotlin
+> Task :expo-modules-core:bundleLibRuntimeToJarRelease
+> Task :expo-dev-menu-interface:compileReleaseJavaWithJavac
+> Task :expo-dev-menu-interface:bundleLibCompileToJarRelease
+> Task :expo-dev-menu-interface:bundleLibRuntimeToDirRelease
+> Task :expo-updates-interface:compileReleaseKotlin
+> Task :expo-dev-menu-interface:bundleLibRuntimeToJarRelease
+> Task :expo-dev-client:bundleLibRuntimeToJarRelease
+> Task :expo-json-utils:compileReleaseJavaWithJavac
+> Task :expo-json-utils:bundleLibCompileToJarRelease
+> Task :expo-json-utils:bundleLibRuntimeToDirRelease
+> Task :expo-modules-core:processReleaseJavaRes
+
+> Task :expo-constants:compileReleaseKotlin
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-constants@57.0.19_expo@57.0.25_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3_/node_modules/expo-constants/android/src/main/java/expo/modules/constants/ConstantsModule.kt:13:5 'fun Constants(legacyConstantsProvider: () -> Map<String, Any?>): Unit' is deprecated. Use `Constant` or `Property` instead.
+
+> Task :expo-dev-menu:compileReleaseKotlin
+> Task :expo-json-utils:bundleLibRuntimeToJarRelease
+> Task :expo-updates-interface:compileReleaseJavaWithJavac
+> Task :expo-updates-interface:bundleLibCompileToJarRelease
+> Task :expo-updates-interface:bundleLibRuntimeToJarRelease
+> Task :expo-updates-interface:bundleLibRuntimeToDirRelease
+> Task :expo-constants:compileReleaseJavaWithJavac
+> Task :expo-constants:bundleLibCompileToJarRelease
+> Task :expo-constants:bundleLibRuntimeToDirRelease
+> Task :expo-constants:bundleLibRuntimeToJarRelease
+> Task :expo-constants:processReleaseJavaRes
+> Task :expo-constants:createFullJarRelease
+> Task :expo-dev-client:processReleaseJavaRes NO-SOURCE
+> Task :expo-dev-client:createFullJarRelease
+> Task :expo-dev-menu-interface:processReleaseJavaRes NO-SOURCE
+> Task :expo-dev-menu-interface:createFullJarRelease
+> Task :expo-json-utils:processReleaseJavaRes
+> Task :expo-json-utils:createFullJarRelease
+> Task :expo-updates-interface:processReleaseJavaRes
+> Task :expo-updates-interface:createFullJarRelease
+
+> Task :expo-dev-launcher:compileReleaseKotlin
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-dev-launcher@57.0.20_expo@57.0.25_react-native@0.86.3_@babel+core@7.29.0_@types+react@19.2.13_react@19.2.3_/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/DevLauncherPackage.kt:15:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+
+> Task :expo-modules-core:createFullJarRelease
+> Task :expo-constants:extractReleaseAnnotations
+> Task :expo-modules-core:generateReleaseLintModel
+> Task :expo-constants:mergeReleaseGeneratedProguardFiles
+> Task :expo-dev-menu-interface:extractReleaseAnnotations
+> Task :expo-dev-client:generateReleaseLintModel
+> Task :expo-constants:generateReleaseLintModel
+> Task :expo-json-utils:generateReleaseLintModel
+> Task :expo-dev-menu-interface:generateReleaseLintModel
+> Task :expo-dev-menu-interface:mergeReleaseGeneratedProguardFiles
+> Task :expo-dev-menu-interface:mergeReleaseConsumerProguardFiles
+> Task :expo-dev-menu-interface:mergeReleaseJavaResource
+> Task :expo-dev-menu-interface:syncReleaseLibJars
+> Task :expo-updates-interface:generateReleaseLintModel
+> Task :expo-constants:mergeReleaseConsumerProguardFiles
+> Task :expo-constants:mergeReleaseJavaResource
+> Task :expo-constants:syncReleaseLibJars
+> Task :expo-dev-menu-interface:bundleReleaseLocalLintAar
+> Task :expo-constants:bundleReleaseLocalLintAar
+> Task :expo-dev-client:extractReleaseAnnotations
+> Task :expo-dev-client:mergeReleaseGeneratedProguardFiles
+> Task :expo-json-utils:extractReleaseAnnotations
+> Task :expo-json-utils:mergeReleaseGeneratedProguardFiles
+> Task :expo-json-utils:mergeReleaseConsumerProguardFiles
+> Task :expo-json-utils:mergeReleaseJavaResource
+> Task :expo-dev-launcher:compileReleaseJavaWithJavac
+> Task :expo-json-utils:syncReleaseLibJars
+> Task :expo-dev-launcher:bundleLibCompileToJarRelease
+> Task :expo-json-utils:bundleReleaseLocalLintAar
+> Task :expo-updates-interface:extractReleaseAnnotations
+> Task :expo-updates-interface:mergeReleaseGeneratedProguardFiles
+> Task :expo-updates-interface:mergeReleaseConsumerProguardFiles
+
+> Task :expo-manifests:compileReleaseKotlin
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-manifests@57.0.2_expo@57.0.25/node_modules/expo-manifests/android/src/main/java/expo/modules/manifests/core/EmbeddedManifest.kt:19:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-manifests@57.0.2_expo@57.0.25/node_modules/expo-manifests/android/src/main/java/expo/modules/manifests/core/EmbeddedManifest.kt:19:86 'fun getLegacyID(): String' is deprecated. Prefer scopeKey or projectId depending on use case.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-manifests@57.0.2_expo@57.0.25/node_modules/expo-manifests/android/src/main/java/expo/modules/manifests/core/ExpoUpdatesManifest.kt:16:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-manifests@57.0.2_expo@57.0.25/node_modules/expo-manifests/android/src/main/java/expo/modules/manifests/core/Manifest.kt:13:3 Deprecations and opt-ins on a method overridden from 'Any' may not be reported.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo-manifests@57.0.2_expo@57.0.25/node_modules/expo-manifests/android/src/main/java/expo/modules/manifests/core/Manifest.kt:15:12 'fun getRawJson(): JSONObject' is deprecated. Prefer to use specific field getters.
+
+> Task :expo-updates-interface:mergeReleaseJavaResource
+> Task :expo-log-box:compileReleaseKotlin
+> Task :expo-updates-interface:syncReleaseLibJars
+> Task :expo-dev-client:mergeReleaseConsumerProguardFiles
+> Task :expo-updates-interface:bundleReleaseLocalLintAar
+> Task :expo-dev-client:mergeReleaseJavaResource
+> Task :expo-dev-client:syncReleaseLibJars
+> Task :expo-modules-core:extractReleaseAnnotations
+> Task :expo-constants:generateReleaseLintVitalModel
+> Task :expo-modules-core:mergeReleaseGeneratedProguardFiles
+> Task :expo-dev-launcher:bundleLibRuntimeToDirRelease
+> Task :expo-dev-launcher:bundleLibRuntimeToJarRelease
+> Task :expo-modules-core:mergeReleaseConsumerProguardFiles
+> Task :expo-dev-launcher:processReleaseJavaRes
+> Task :expo-dev-client:bundleReleaseLocalLintAar
+> Task :expo-modules-core:mergeReleaseJavaResource
+> Task :expo-dev-launcher:createFullJarRelease
+> Task :expo-dev-launcher:generateReleaseLintModel
+> Task :expo-dev-client:generateReleaseLintVitalModel
+> Task :expo-dev-launcher:extractReleaseAnnotations
+> Task :expo-dev-launcher:mergeReleaseGeneratedProguardFiles
+> Task :expo-manifests:compileReleaseJavaWithJavac
+> Task :expo-dev-launcher:mergeReleaseConsumerProguardFiles
+> Task :expo-manifests:bundleLibCompileToJarRelease
+> Task :expo-json-utils:generateReleaseLintVitalModel
+> Task :expo-manifests:bundleLibRuntimeToJarRelease
+> Task :expo-dev-launcher:mergeReleaseJavaResource
+> Task :expo-manifests:processReleaseJavaRes
+> Task :expo-manifests:bundleLibRuntimeToDirRelease
+> Task :expo-manifests:createFullJarRelease
+> Task :expo-dev-launcher:syncReleaseLibJars
+> Task :expo-manifests:generateReleaseLintModel
+> Task :expo-log-box:compileReleaseJavaWithJavac
+> Task :expo-dev-launcher:bundleReleaseLocalLintAar
+> Task :expo-log-box:bundleLibCompileToJarRelease
+> Task :expo-manifests:extractReleaseAnnotations
+> Task :expo-log-box:bundleLibRuntimeToJarRelease
+> Task :expo-log-box:bundleLibRuntimeToDirRelease
+> Task :expo-log-box:processReleaseJavaRes
+> Task :expo-log-box:createFullJarRelease
+> Task :expo-modules-core:bundleLibRuntimeToDirRelease
+> Task :expo-manifests:mergeReleaseGeneratedProguardFiles
+> Task :expo-manifests:mergeReleaseConsumerProguardFiles
+> Task :expo-dev-menu-interface:generateReleaseLintVitalModel
+> Task :expo-dev-launcher:generateReleaseLintVitalModel
+> Task :expo-manifests:mergeReleaseJavaResource
+> Task :expo-log-box:generateReleaseLintModel
+> Task :expo-manifests:generateReleaseLintVitalModel
+> Task :expo-manifests:syncReleaseLibJars
+> Task :expo-updates-interface:generateReleaseLintVitalModel
+> Task :expo-log-box:extractReleaseAnnotations
+> Task :expo-log-box:mergeReleaseGeneratedProguardFiles
+> Task :expo-manifests:bundleReleaseLocalLintAar
+> Task :expo-log-box:mergeReleaseConsumerProguardFiles
+> Task :expo-log-box:mergeReleaseJavaResource
+> Task :expo-log-box:generateReleaseLintVitalModel
+> Task :expo-log-box:syncReleaseLibJars
+> Task :expo-log-box:bundleReleaseLocalLintAar
+> Task :expo-modules-core:syncReleaseLibJars
+> Task :expo-modules-core:bundleReleaseLocalLintAar
+> Task :expo-dev-menu:compileReleaseJavaWithJavac
+> Task :expo-dev-menu:bundleLibCompileToJarRelease
+> Task :expo-dev-menu:bundleLibRuntimeToDirRelease
+> Task :expo-dev-menu:processReleaseJavaRes
+> Task :expo-modules-core:generateReleaseLintVitalModel
+> Task :expo-dev-menu:generateReleaseLintModel
+> Task :expo-dev-menu:bundleLibRuntimeToJarRelease
+> Task :expo-dev-menu:extractReleaseAnnotations
+> Task :expo-dev-menu:createFullJarRelease
+> Task :expo-dev-menu:mergeReleaseGeneratedProguardFiles
+> Task :expo-dev-menu:mergeReleaseConsumerProguardFiles
+> Task :expo-dev-menu:mergeReleaseJavaResource
+> Task :expo-dev-menu:generateReleaseLintVitalModel
+> Task :expo-dev-client:lintVitalAnalyzeRelease
+> Task :expo-dev-menu:syncReleaseLibJars
+> Task :expo-dev-menu:bundleReleaseLocalLintAar
+> Task :expo-constants:lintVitalAnalyzeRelease
+> Task :expo-dev-menu:lintVitalAnalyzeRelease
+> Task :expo-dev-launcher:lintVitalAnalyzeRelease
+> Task :expo-dev-menu-interface:lintVitalAnalyzeRelease
+> Task :expo-json-utils:lintVitalAnalyzeRelease
+> Task :expo-manifests:lintVitalAnalyzeRelease
+
+> Task :expo:compileReleaseKotlin
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo@57.0.25_@babel+core@7.29.0_@expo+dom-webview@57.0.1_react-dom@19.2.3_react@19.2.3__176ca16f0e474d73720428b03db6a84c/node_modules/expo/android/src/main/java/expo/modules/ExpoModulesPackage.kt:34:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo@57.0.25_@babel+core@7.29.0_@expo+dom-webview@57.0.1_react-dom@19.2.3_react@19.2.3__176ca16f0e474d73720428b03db6a84c/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:22:8 'class ReactInstanceManager : Any' is deprecated. Deprecated in Java.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo@57.0.25_@babel+core@7.29.0_@expo+dom-webview@57.0.1_react-dom@19.2.3_react@19.2.3__176ca16f0e474d73720428b03db6a84c/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:102:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo@57.0.25_@babel+core@7.29.0_@expo+dom-webview@57.0.1_react-dom@19.2.3_react@19.2.3__176ca16f0e474d73720428b03db6a84c/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:102:43 'class ReactInstanceManager : Any' is deprecated. Deprecated in Java.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo@57.0.25_@babel+core@7.29.0_@expo+dom-webview@57.0.1_react-dom@19.2.3_react@19.2.3__176ca16f0e474d73720428b03db6a84c/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:103:21 'val reactInstanceManager: ReactInstanceManager' is deprecated. Deprecated in Java.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo@57.0.25_@babel+core@7.29.0_@expo+dom-webview@57.0.1_react-dom@19.2.3_react@19.2.3__176ca16f0e474d73720428b03db6a84c/node_modules/expo/android/src/main/java/expo/modules/fetch/ExpoFetchModule.kt:33:39 'constructor(reactContext: ReactContext): ForwardingCookieHandler' is deprecated. Use the default constructor.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo@57.0.25_@babel+core@7.29.0_@expo+dom-webview@57.0.1_react-dom@19.2.3_react@19.2.3__176ca16f0e474d73720428b03db6a84c/node_modules/expo/android/src/main/java/expo/modules/fetch/NativeResponse.kt:44:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///private/tmp/splitbook-production-apk-20261011/node_modules/.pnpm/expo@57.0.25_@babel+core@7.29.0_@expo+dom-webview@57.0.1_react-dom@19.2.3_react@19.2.3__176ca16f0e474d73720428b03db6a84c/node_modules/expo/android/src/main/java/expo/modules/fetch/NativeResponse.kt:46:11 'fun deallocate(): Unit' is deprecated. Use sharedObjectDidRelease() instead.
+
+> Task :expo:compileReleaseJavaWithJavac
+> Task :expo:bundleLibCompileToJarRelease
+> Task :expo:processReleaseJavaRes
+> Task :expo:bundleLibRuntimeToJarRelease
+> Task :expo-log-box:lintVitalAnalyzeRelease
+> Task :expo:bundleLibRuntimeToDirRelease
+> Task :expo:generateReleaseLintModel
+> Task :expo:createFullJarRelease
+> Task :expo:extractReleaseAnnotations
+> Task :expo:mergeReleaseGeneratedProguardFiles
+> Task :expo:mergeReleaseConsumerProguardFiles
+> Task :expo:mergeReleaseJavaResource
+> Task :expo:generateReleaseLintVitalModel
+> Task :expo:syncReleaseLibJars
+> Task :expo:bundleReleaseLocalLintAar
+> Task :expo-updates-interface:lintVitalAnalyzeRelease
+> Task :react-native-nitro-google-signin:lintVitalAnalyzeRelease
+> Task :app:generateAutolinkingNewArchitectureFiles
+> Task :app:generateAutolinkingPackageList
+> Task :app:generateCodegenSchemaFromJavaScript SKIPPED
+> Task :app:generateCodegenArtifactsFromSchema SKIPPED
+> Task :app:generateReactNativeEntryPoint
+> Task :app:preBuild
+> Task :app:preReleaseBuild
+> Task :expo:lintVitalAnalyzeRelease
+> Task :app:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :app:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:buildKotlinToolingMetadata
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateReleaseBuildConfig
+> Task :app:generateReleaseResValues
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:checkReleaseAarMetadata
+> Task :app:generateReleaseResources
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:mergeReleaseNativeLibs
+> Task :app:packageReleaseResources
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+
+> Task :app:processReleaseMainManifest
+/private/tmp/splitbook-production-apk-20261011/apps/mobile/android/app/src/main/AndroidManifest.xml Warning:
+	provider#expo.modules.filesystem.FileSystemFileProvider@android:authorities was tagged at AndroidManifest.xml:0 to replace other declarations but no other declaration present
+
+> Task :app:expoReleaseOverrideMaxSdkConflicts
+[33m---------- Expo Max Sdk Override Plugin ----------[0m
+[32m>>> No 'android:maxSdkVersion' conflicts found[0m
+[33m--------------------------------------------------[0m
+
+> Task :app:processReleaseManifest
+> Task :app:parseReleaseLocalResources
+> Task :app:javaPreCompileRelease
+> Task :app:desugarReleaseFileDependencies
+> Task :app:mergeReleaseStartupProfile
+> Task :app:processReleaseManifestForPackage
+> Task :app:mergeReleaseShaders
+> Task :app:mergeReleaseArtProfile
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:extractProguardFiles
+> Task :app:compressReleaseAssets
+> Task :app:stripReleaseDebugSymbols
+> Task :app:mergeReleaseResources
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:extractReleaseNativeSymbolTables
+> Task :app:mergeReleaseNativeDebugMetadata
+> Task :app:processReleaseResources
+> Task :app:optimizeReleaseResources
+> Task :expo-modules-core:lintVitalAnalyzeRelease
+> Task :app:compileReleaseKotlin
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:dexBuilderRelease
+> Task :app:mergeReleaseGlobalSynthetics
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:processReleaseJavaRes
+> Task :app:mergeReleaseJavaResource
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:mergeExtDexRelease
+> Task :app:lintVitalReportRelease
+> Task :app:lintVitalRelease
+> Task :app:mergeDexRelease
+> Task :app:compileReleaseArtProfile
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+
+[Incubating] Problems report is available at: file:///private/tmp/splitbook-production-apk-20261011/apps/mobile/android/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.3.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 47s
+669 actionable tasks: 637 executed, 32 up-to-date
+production ARM64 APK: /private/tmp/splitbook-production-apk-20261011/apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+Verify its signing certificate, Google registration and App Links before distribution.

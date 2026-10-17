@@ -1,0 +1,42 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec playwright test --config /tmp/w318-runner/w318-demo.config.ts export.spec.ts export-backup-statement.spec.ts --workers=1
+
+[WebServer] (node:93535) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 2026-10-07T12:33:55.469Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+[WebServer] 2026-10-07T12:33:55.469Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+[WebServer] 2026-10-07T12:33:55.470Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+
+Running 20 tests using 1 worker
+
+(node:93584) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop-light] › playwright/export-backup-statement.spec.ts:12:5 › JSON backup downloads all time, round-trips and has no emails (2.5s)
+  ✓   2 [desktop-light] › playwright/export-backup-statement.spec.ts:38:5 › Export opens one Group’s printable statement with named sections in both themes (2.0s)
+  ✓   3 [desktop-light] › playwright/export.spec.ts:44:5 › from the sidebar: pick one Group and all time, and download its Expenses as a CSV (2.9s)
+  ✓   4 [desktop-light] › playwright/export.spec.ts:97:5 › several files download as one zip, named for the Groups and the period (1.4s)
+  ✓   5 [desktop-light] › playwright/export.spec.ts:136:5 › a Group header’s Export opens the page with that Group picked (1.5s)
+(node:93911) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   6 [desktop-dark] › playwright/export-backup-statement.spec.ts:12:5 › JSON backup downloads all time, round-trips and has no emails (2.2s)
+  ✓   7 [desktop-dark] › playwright/export-backup-statement.spec.ts:38:5 › Export opens one Group’s printable statement with named sections in both themes (2.1s)
+  ✓   8 [desktop-dark] › playwright/export.spec.ts:44:5 › from the sidebar: pick one Group and all time, and download its Expenses as a CSV (2.8s)
+  ✓   9 [desktop-dark] › playwright/export.spec.ts:97:5 › several files download as one zip, named for the Groups and the period (1.5s)
+  ✓  10 [desktop-dark] › playwright/export.spec.ts:136:5 › a Group header’s Export opens the page with that Group picked (1.4s)
+(node:95094) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 [mobile-light] › playwright/export-backup-statement.spec.ts:12:5 › JSON backup downloads all time, round-trips and has no emails (1.8s)
+  ✓  12 [mobile-light] › playwright/export-backup-statement.spec.ts:38:5 › Export opens one Group’s printable statement with named sections in both themes (1.7s)
+  ✓  13 [mobile-light] › playwright/export.spec.ts:44:5 › from the sidebar: pick one Group and all time, and download its Expenses as a CSV (2.8s)
+  ✓  14 [mobile-light] › playwright/export.spec.ts:97:5 › several files download as one zip, named for the Groups and the period (1.2s)
+  ✓  15 [mobile-light] › playwright/export.spec.ts:136:5 › a Group header’s Export opens the page with that Group picked (1.3s)
+(node:95511) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [mobile-dark] › playwright/export-backup-statement.spec.ts:12:5 › JSON backup downloads all time, round-trips and has no emails (2.1s)
+  ✓  17 [mobile-dark] › playwright/export-backup-statement.spec.ts:38:5 › Export opens one Group’s printable statement with named sections in both themes (2.0s)
+  ✓  18 [mobile-dark] › playwright/export.spec.ts:44:5 › from the sidebar: pick one Group and all time, and download its Expenses as a CSV (3.1s)
+  ✓  19 [mobile-dark] › playwright/export.spec.ts:97:5 › several files download as one zip, named for the Groups and the period (1.2s)
+  ✓  20 [mobile-dark] › playwright/export.spec.ts:136:5 › a Group header’s Export opens the page with that Group picked (1.4s)
+
+  20 passed (42.5s)

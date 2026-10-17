@@ -1,0 +1,61 @@
+{"text": "", "content-desc": "Back to Group, keeping your draft", "class": "android.widget.Button", "bounds": "[11,84][137,210]", "enabled": "true", "resource-id": ""}
+{"text": "\uf24a", "content-desc": "", "class": "android.widget.TextView", "bounds": "[42,114][105,179]", "enabled": "true", "resource-id": ""}
+{"text": "Add expense", "content-desc": "", "class": "android.view.View", "bounds": "[152,98][811,154]", "enabled": "true", "resource-id": ""}
+{"text": "Maple House \u00b7 INR", "content-desc": "", "class": "android.widget.TextView", "bounds": "[152,154][811,196]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Draft saved", "class": "android.view.ViewGroup", "bounds": "[827,125][1070,169]", "enabled": "true", "resource-id": ""}
+{"text": "\uf21d", "content-desc": "", "class": "android.widget.TextView", "bounds": "[837,125][879,169]", "enabled": "true", "resource-id": ""}
+{"text": "Draft saved", "content-desc": "", "class": "android.widget.TextView", "bounds": "[890,126][1059,168]", "enabled": "true", "resource-id": ""}
+{"text": "Amount", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,281][205,329]", "enabled": "true", "resource-id": ""}
+{"text": "Required", "content-desc": "", "class": "android.widget.TextView", "bounds": "[236,284][354,324]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Currency INR, the Group\u2019s currency", "class": "android.view.ViewGroup", "bounds": "[81,376][206,460]", "enabled": "true", "resource-id": ""}
+{"text": "INR", "content-desc": "", "class": "android.widget.TextView", "bounds": "[107,391][179,444]", "enabled": "true", "resource-id": ""}
+{"text": "120", "content-desc": "Amount, required", "class": "android.widget.EditText", "bounds": "[232,355][999,481]", "enabled": "false", "resource-id": ""}
+{"text": "Description", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,558][260,606]", "enabled": "true", "resource-id": ""}
+{"text": "Required", "content-desc": "", "class": "android.widget.TextView", "bounds": "[291,561][409,601]", "enabled": "true", "resource-id": ""}
+{"text": "Back QA groceries", "content-desc": "Description, required", "class": "android.widget.EditText", "bounds": "[81,622][999,748]", "enabled": "false", "resource-id": ""}
+{"text": "", "content-desc": "Date: Wednesday, September 30, 2026. locked", "class": "android.widget.Button", "bounds": "[42,818][530,975]", "enabled": "false", "resource-id": ""}
+{"text": "\uf1d6", "content-desc": "", "class": "android.widget.TextView", "bounds": "[76,869][129,924]", "enabled": "true", "resource-id": ""}
+{"text": "Date", "content-desc": "", "class": "android.widget.TextView", "bounds": "[155,849][226,891]", "enabled": "true", "resource-id": ""}
+{"text": "Wed Sep 30", "content-desc": "", "class": "android.widget.TextView", "bounds": "[155,891][501,944]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Paid by: You. locked", "class": "android.widget.Button", "bounds": "[551,818][1038,975]", "enabled": "false", "resource-id": ""}
+{"text": "\uf626", "content-desc": "", "class": "android.widget.TextView", "bounds": "[585,869][638,924]", "enabled": "true", "resource-id": ""}
+{"text": "Paid by", "content-desc": "", "class": "android.widget.TextView", "bounds": "[664,849][769,891]", "enabled": "true", "resource-id": ""}
+{"text": "You", "content-desc": "", "class": "android.widget.TextView", "bounds": "[664,891][1011,944]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Split: Equally \u00b7 3. locked", "class": "android.widget.Button", "bounds": "[42,997][530,1155]", "enabled": "false", "resource-id": ""}
+{"text": "\uf4b8", "content-desc": "", "class": "android.widget.TextView", "bounds": "[76,1048][129,1103]", "enabled": "true", "resource-id": ""}
+{"text": "Split", "content-desc": "", "class": "android.widget.TextView", "bounds": "[155,1028][218,1070]", "enabled": "true", "resource-id": ""}
+{"text": "Equally \u00b7 3", "content-desc": "", "class": "android.widget.TextView", "bounds": "[155,1070][501,1123]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tag, required: Groceries. locked", "class": "android.widget.Button", "bounds": "[551,997][1038,1155]", "enabled": "false", "resource-id": ""}
+{"text": "\uf4eb", "content-desc": "", "class": "android.widget.TextView", "bounds": "[585,1048][638,1103]", "enabled": "true", "resource-id": ""}
+{"text": "Tag", "content-desc": "", "class": "android.widget.TextView", "bounds": "[664,1028][717,1070]", "enabled": "true", "resource-id": ""}
+{"text": "Required", "content-desc": "", "class": "android.widget.TextView", "bounds": "[748,1029][866,1069]", "enabled": "true", "resource-id": ""}
+{"text": "Groceries", "content-desc": "", "class": "android.widget.TextView", "bounds": "[664,1072][1011,1125]", "enabled": "true", "resource-id": ""}
+{"text": "WHO OWES WHAT", "content-desc": "", "class": "android.view.View", "bounds": "[81,1229][382,1269]", "enabled": "true", "resource-id": ""}
+{"text": "\uf21d", "content-desc": "", "class": "android.widget.TextView", "bounds": "[805,1227][847,1271]", "enabled": "true", "resource-id": ""}
+{"text": "Adds up\u200a", "content-desc": "", "class": "android.widget.TextView", "bounds": "[858,1228][978,1270]", "enabled": "true", "resource-id": ""}
+{"text": "Paid", "content-desc": "", "class": "android.widget.TextView", "bounds": "[558,1294][780,1336]", "enabled": "true", "resource-id": ""}
+{"text": "Share", "content-desc": "", "class": "android.widget.TextView", "bounds": "[778,1294][999,1336]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "You: paid \u20b9120.00, share \u20b940.00", "class": "android.view.ViewGroup", "bounds": "[45,1337][1035,1463]", "enabled": "true", "resource-id": ""}
+{"text": "AR", "content-desc": "", "class": "android.widget.TextView", "bounds": "[97,1379][135,1421]", "enabled": "true", "resource-id": ""}
+{"text": "You", "content-desc": "", "class": "android.widget.TextView", "bounds": "[176,1373][507,1426]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b9120.00", "content-desc": "", "class": "android.widget.TextView", "bounds": "[608,1378][752,1423]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b940.00", "content-desc": "", "class": "android.widget.TextView", "bounds": "[875,1378][999,1423]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Sam Chen: paid nothing, share \u20b940.00", "class": "android.view.ViewGroup", "bounds": "[45,1463][1035,1589]", "enabled": "true", "resource-id": ""}
+{"text": "SC", "content-desc": "", "class": "android.widget.TextView", "bounds": "[98,1505][134,1547]", "enabled": "true", "resource-id": ""}
+{"text": "Sam Chen", "content-desc": "", "class": "android.widget.TextView", "bounds": "[176,1499][507,1552]", "enabled": "true", "resource-id": ""}
+{"text": "\u2013", "content-desc": "", "class": "android.widget.TextView", "bounds": "[730,1500][752,1553]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b940.00", "content-desc": "", "class": "android.widget.TextView", "bounds": "[875,1504][999,1549]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Priya Shah: paid nothing, share \u20b940.00", "class": "android.view.ViewGroup", "bounds": "[45,1589][1035,1715]", "enabled": "true", "resource-id": ""}
+{"text": "PS", "content-desc": "", "class": "android.widget.TextView", "bounds": "[99,1631][133,1673]", "enabled": "true", "resource-id": ""}
+{"text": "Priya Shah", "content-desc": "", "class": "android.widget.TextView", "bounds": "[176,1625][507,1678]", "enabled": "true", "resource-id": ""}
+{"text": "\u2013", "content-desc": "", "class": "android.widget.TextView", "bounds": "[730,1626][752,1679]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b940.00", "content-desc": "", "class": "android.widget.TextView", "bounds": "[875,1630][999,1675]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b9120.00 paid = \u20b9120.00 shared.", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,1764][999,1812]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Category and notes, optional", "class": "android.widget.Button", "bounds": "[45,1887][1035,2034]", "enabled": "true", "resource-id": ""}
+{"text": "\uf2b4", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,1933][134,1988]", "enabled": "true", "resource-id": ""}
+{"text": "Category and notes", "content-desc": "", "class": "android.widget.TextView", "bounds": "[166,1934][737,1987]", "enabled": "true", "resource-id": ""}
+{"text": "Optional", "content-desc": "", "class": "android.widget.TextView", "bounds": "[782,1940][898,1980]", "enabled": "true", "resource-id": ""}
+{"text": "\uf236", "content-desc": "", "class": "android.widget.TextView", "bounds": "[946,1933][999,1988]", "enabled": "true", "resource-id": ""}
+{"text": "Sending this Expense. Keep this screen open until SplitBook confirms it.", "content-desc": "", "class": "android.widget.TextView", "bounds": "[42,2067][1038,2163]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Saving expense\u2026, busy", "class": "android.widget.Button", "bounds": "[42,2180][1038,2306]", "enabled": "false", "resource-id": ""}
+{"text": "Saving expense\u2026", "content-desc": "", "class": "android.widget.TextView", "bounds": "[420,2216][732,2269]", "enabled": "true", "resource-id": ""}

@@ -1,0 +1,48 @@
+
+> splitbook@0.1.0 mobile /private/tmp/splitbook-pr248-final
+> pnpm -C apps/mobile exec vitest run src/app.test.tsx --maxWorkers=2 -t 'cancels a row return after layout'
+
+
+ RUN  v4.1.10 /private/tmp/splitbook-pr248-final/apps/mobile
+
+ ❯ src/app.test.tsx (57 tests | 2 failed | 55 skipped) 495ms
+     × cancels a row return after layout when the member chooses a drag (#225) 294ms
+     × cancels a row return after layout when the member chooses a Month change (#225) 199ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app.test.tsx > App Expense window (#219) > cancels a row return after layout when the member chooses a drag (#225)
+ FAIL  src/app.test.tsx > App Expense window (#219) > cancels a row return after layout when the member chooses a Month change (#225)
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "animated": false,
+        "y": 4800,
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/app.test.tsx:1389:35
+    1387|       else await settle(app.controller.selectMonth('2026-08'));
+    1388|       await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+    1389|       expect(native.scrollTo).not.toHaveBeenCalled();
+       |                                   ^
+    1390|       // Subsequent native layout callbacks cannot resurrect the cance…
+    1391|       await app.layout(700, 7000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 55 skipped (57)
+   Start at  07:15:10
+   Duration  1.85s (transform 489ms, setup 45ms, import 1.20s, tests 495ms, environment 0ms)
+
+ ELIFECYCLE  Command failed with exit code 1.

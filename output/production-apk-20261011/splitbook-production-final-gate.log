@@ -1,0 +1,46 @@
+
+> splitbook@0.1.0 swarm /private/tmp/splitbook-production-apk-20261011
+> node tools/swarm/bin/swarm.mjs gate --mongo-port 27031 --vitest-workers 2
+
+Gate in /private/tmp/splitbook-production-apk-20261011
+  PASS  install check           0.0 s
+  PASS  lint                   12.8 s  log tools/swarm/out/gate/lint.log
+  PASS  typecheck              14.3 s  log tools/swarm/out/gate/typecheck.log
+  PASS  format check           20.3 s  log tools/swarm/out/gate/format-check.log
+  PASS  unit tests            100.4 s  log tools/swarm/out/gate/unit-tests.log
+  PASS  ceilings                0.4 s  log tools/swarm/out/gate/ceilings.log
+Seeding splitbook_mobile_swarm_76d6494861_c5257a09 on the Mongo server at 127.0.0.1:27031
+Starting the backend at http://127.0.0.1:55063
+  PASS  backend                 4.0 s  started at http://127.0.0.1:55063; stopped and dropped after the verifiers
+  PASS  verify:api              3.3 s  log tools/swarm/out/gate/verify-api.log
+  PASS  verify:groups           3.9 s  log tools/swarm/out/gate/verify-groups.log
+  PASS  verify:settings         0.8 s  log tools/swarm/out/gate/verify-settings.log
+  PASS  verify:financial        3.7 s  log tools/swarm/out/gate/verify-financial.log
+  PASS  verify:expenses         5.5 s  log tools/swarm/out/gate/verify-expenses.log
+  PASS  verify:expense-edit     5.5 s  log tools/swarm/out/gate/verify-expense-edit.log
+  PASS  verify:settlements      3.9 s  log tools/swarm/out/gate/verify-settlements.log
+  PASS  verify:activity         2.1 s  log tools/swarm/out/gate/verify-activity.log
+  PASS  verify:offline          1.8 s  log tools/swarm/out/gate/verify-offline.log
+Stopped the backend at http://127.0.0.1:55063.
+Dropped splitbook_mobile_swarm_76d6494861_c5257a09.
+
+Gate: PASS
+Worktree /private/tmp/splitbook-production-apk-20261011
+Commit 9788b24, base 9788b24 (merge-base with origin/main)
+  PASS  install check           0.0 s
+  PASS  lint                   12.8 s  log tools/swarm/out/gate/lint.log
+  PASS  typecheck              14.3 s  log tools/swarm/out/gate/typecheck.log
+  PASS  format check           20.3 s  log tools/swarm/out/gate/format-check.log
+  PASS  unit tests            100.4 s  log tools/swarm/out/gate/unit-tests.log
+  PASS  ceilings                0.4 s  log tools/swarm/out/gate/ceilings.log
+  PASS  backend                 4.0 s  started at http://127.0.0.1:55063; stopped and dropped after the verifiers
+  PASS  verify:api              3.3 s  log tools/swarm/out/gate/verify-api.log
+  PASS  verify:groups           3.9 s  log tools/swarm/out/gate/verify-groups.log
+  PASS  verify:settings         0.8 s  log tools/swarm/out/gate/verify-settings.log
+  PASS  verify:financial        3.7 s  log tools/swarm/out/gate/verify-financial.log
+  PASS  verify:expenses         5.5 s  log tools/swarm/out/gate/verify-expenses.log
+  PASS  verify:expense-edit     5.5 s  log tools/swarm/out/gate/verify-expense-edit.log
+  PASS  verify:settlements      3.9 s  log tools/swarm/out/gate/verify-settlements.log
+  PASS  verify:activity         2.1 s  log tools/swarm/out/gate/verify-activity.log
+  PASS  verify:offline          1.8 s  log tools/swarm/out/gate/verify-offline.log
+No step failed in 183.0 s. JSON: tools/swarm/out/verdict.json

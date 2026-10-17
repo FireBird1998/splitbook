@@ -1,0 +1,144 @@
+- generic [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - complementary "Splitbook" [ref=f2e3]:
+      - generic [ref=f2e5]:
+        - link [ref=f2e7] [cursor=pointer]:
+          - /url: /dashboard
+          - img "Splitbook home" [ref=f2e8]
+        - navigation "Main" [ref=f2e9]:
+          - link "Home" [ref=f2e10] [cursor=pointer]:
+            - /url: /dashboard
+          - link "Export" [ref=f2e13] [cursor=pointer]:
+            - /url: /export
+        - generic [ref=f2e17]:
+          - generic [ref=f2e18]:
+            - link "Groups" [ref=f2e19] [cursor=pointer]:
+              - /url: /groups
+            - link "New Group" [ref=f2e20] [cursor=pointer]:
+              - /url: /groups/new
+          - navigation "Your Groups" [ref=f2e23]:
+            - link "Draft Test House Settled up" [ref=f2e81] [cursor=pointer]:
+              - /url: /groups/c00000000000000000000001
+              - generic [ref=f2e85]:
+                - generic [ref=f2e86]: Draft Test House
+                - generic [ref=f2e87]: Settled up
+        - generic [ref=f2e40]:
+          - link "Settings" [ref=f2e41] [cursor=pointer]:
+            - /url: /settings
+          - button "Alex Rivera, account menu" [ref=f2e44] [cursor=pointer]:
+            - generic [aria-hidden] [ref=f2e45]: AR
+            - generic [ref=f2e46]: Alex Rivera
+    - generic [ref=f2e47]:
+      - banner [ref=f2e48]:
+        - button "Search Expenses, Groups and people" [ref=f2e50] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f2e54]: ⌘K
+        - generic "Shared demo environment — data is seeded for private beta testing" [ref=f2e55]: Demo
+        - button "Switch to dark mode" [ref=f2e58] [cursor=pointer]
+        - button "Add expense" [ref=f2e61] [cursor=pointer]:
+          - generic [aria-hidden] [ref=f2e65]: "N"
+      - main [ref=f2e66]:
+        - generic [ref=f2e88]:
+          - generic [ref=f2e90]:
+            - generic [ref=f2e95]:
+              - heading "Draft Test House" [level=1] [ref=f2e96]
+              - paragraph [ref=f2e97]: Household · 1 member · INR
+            - generic [ref=f2e98]:
+              - 'img "Members: you" [ref=f2e99]':
+                - generic [aria-hidden] [ref=f2e100]: AR
+              - button [ref=f2e101] [cursor=pointer]
+              - link [ref=f2e105] [cursor=pointer]:
+                - /url: /export?group=c00000000000000000000001
+              - link "Draft Test House settings" [ref=f2e109] [cursor=pointer]:
+                - /url: /groups/c00000000000000000000001/settings
+          - navigation "Draft Test House sections" [ref=f2e112]:
+            - link "Expenses" [ref=f2e113] [cursor=pointer]:
+              - /url: /groups/c00000000000000000000001/expenses
+            - link "Balances" [ref=f2e114] [cursor=pointer]:
+              - /url: /groups/c00000000000000000000001/balances
+            - link "Insights" [ref=f2e115] [cursor=pointer]:
+              - /url: /groups/c00000000000000000000001/insights
+            - link "Activity" [ref=f2e116] [cursor=pointer]:
+              - /url: /groups/c00000000000000000000001/activity
+            - link "Drafts" [ref=f2e117] [cursor=pointer]:
+              - /url: /groups/c00000000000000000000001/drafts
+            - link "Members" [ref=f2e118] [cursor=pointer]:
+              - /url: /groups/c00000000000000000000001/members
+          - generic [ref=f2e119]:
+            - heading "Your private Drafts" [level=1] [ref=f2e120]
+            - paragraph [ref=f2e121]: Available online across SplitBook and your authorized assistants. Drafts do not change Balances. Unknown fields stay empty until you review them.
+            - generic [ref=f2e122]:
+              - button "Reload" [ref=f2e123] [cursor=pointer]
+              - button "New Draft" [active] [ref=f2e124] [cursor=pointer]
+            - generic [ref=f2e127]:
+              - heading "Keep an incomplete Expense" [level=2] [ref=f2e128]
+              - generic [ref=f2e129]:
+                - generic: Description
+                - generic [ref=f2e130]:
+                  - textbox "Description" [ref=f2e131]
+                  - group [aria-hidden]:
+                    - generic: Description
+              - generic [ref=f2e132]:
+                - generic: Amount
+                - generic [ref=f2e133]:
+                  - textbox "Amount" [ref=f2e134]
+                  - group [aria-hidden]:
+                    - generic: Amount
+              - generic [ref=f2e135]:
+                - generic: Currency (e.g. INR)
+                - generic [ref=f2e136]:
+                  - textbox "Currency (e.g. INR)" [ref=f2e137]
+                  - group [aria-hidden]:
+                    - generic: Currency (e.g. INR)
+              - generic [ref=f2e138]:
+                - generic: Date (YYYY-MM-DD)
+                - generic [ref=f2e139]:
+                  - textbox "Date (YYYY-MM-DD)" [ref=f2e140]
+                  - group [aria-hidden]:
+                    - generic: Date (YYYY-MM-DD)
+              - generic [ref=f2e141]:
+                - generic: Category
+                - generic [ref=f2e142]:
+                  - combobox "Category" [ref=f2e143] [cursor=pointer]
+                  - textbox [aria-hidden]
+                  - group [aria-hidden]:
+                    - generic: Category
+              - generic [ref=f2e144]:
+                - generic: Tag
+                - generic [ref=f2e145]:
+                  - combobox "Tag" [ref=f2e146] [cursor=pointer]
+                  - textbox [aria-hidden]
+                  - group [aria-hidden]:
+                    - generic: Tag
+              - generic [ref=f2e147]:
+                - generic: Split method
+                - generic [ref=f2e148]:
+                  - combobox "Split method" [ref=f2e149] [cursor=pointer]
+                  - textbox [aria-hidden]
+                  - group [aria-hidden]:
+                    - generic: Split method
+              - generic [ref=f2e150]:
+                - generic: Notes
+                - generic [ref=f2e151]:
+                  - textbox "Notes" [ref=f2e152]
+                  - group [aria-hidden]:
+                    - generic: Notes
+              - generic [ref=f2e153]:
+                - generic: Paid by Alex Rivera
+                - generic [ref=f2e154]:
+                  - combobox "Paid by Alex Rivera" [ref=f2e155] [cursor=pointer]
+                  - textbox [aria-hidden]
+                  - group [aria-hidden]:
+                    - generic: Paid by Alex Rivera
+              - generic [ref=f2e156]:
+                - generic: Shared by Alex Rivera
+                - generic [ref=f2e157]:
+                  - combobox "Shared by Alex Rivera" [ref=f2e158] [cursor=pointer]
+                  - textbox [aria-hidden]
+                  - group [aria-hidden]:
+                    - generic: Shared by Alex Rivera
+              - button "Keep as Draft" [ref=f2e159] [cursor=pointer]
+              - button "Close editor" [ref=f2e160] [cursor=pointer]
+            - paragraph [ref=f2e125]: No active Drafts.
+            - button "Review selected Drafts" [disabled]
+  - button "Open Next.js Dev Tools" [ref=f2e76] [cursor=pointer]
+  - alert [ref=f2e80]

@@ -1,0 +1,19 @@
+- generic [active] [ref=f3e1]:
+  - generic [ref=f3e4]:
+    - heading "Connect an assistant" [level=1] [ref=f3e5]
+    - paragraph [ref=f3e6]: This connection can access all Groups you belong to now and any you join in the future, while you remain a member.
+    - paragraph [ref=f3e7]: "Client identity: uEnBoHLggKELSSOvrAchBJXoCjjQkCYC"
+    - paragraph [ref=f3e8]: "Ledger permission: read Group details, Balances and spending."
+    - generic [ref=f3e9] [cursor=pointer]:
+      - checkbox "Also allow private Draft access" [ref=f3e11]
+      - generic [ref=f3e14]: Also allow private Draft access
+    - paragraph [ref=f3e15]: Draft access allows reading, creating, editing and permanently discarding your manual and assistant-prepared Drafts. Discard cannot be undone. Only you can save an Expense after review in SplitBook.
+    - paragraph [ref=f3e16]: The assistant may stay connected while you are away, until you disconnect it.
+    - alert [ref=f3e17]:
+      - generic [ref=f3e21]: This first release only checks the connection. Ledger and Draft tools are not enabled yet.
+    - paragraph [ref=f3e22]: Disconnect at any time in Settings. Your Drafts remain yours; disconnecting cannot erase information already shared with the assistant.
+    - generic [ref=f3e23]:
+      - button "Allow connection" [ref=f3e24] [cursor=pointer]
+      - button "Deny" [ref=f3e25] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=f3e31] [cursor=pointer]
+  - alert [ref=f3e35]

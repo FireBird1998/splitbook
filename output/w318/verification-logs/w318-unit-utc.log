@@ -1,0 +1,109 @@
+
+> splitbook@0.1.0 test:unit /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -r test:unit -- --maxWorkers=2
+
+Scope: 4 of 5 workspace projects
+packages/shared test:unit$ vitest run -- --maxWorkers=2
+tools/swarm test:unit$ vitest run -- --maxWorkers=2
+packages/shared test:unit:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/packages/shared
+tools/swarm test:unit:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/tools/swarm
+packages/shared test:unit:  Test Files  55 passed (55)
+packages/shared test:unit:       Tests  1418 passed (1418)
+packages/shared test:unit:    Start at  12:09:58
+packages/shared test:unit:    Duration  4.85s (transform 3.07s, setup 0ms, import 18.27s, tests 5.18s, environment 4ms)
+packages/shared test:unit: Done
+tools/swarm test:unit:  ❯ src/live.test.ts (20 tests | 7 failed) 34359ms
+tools/swarm test:unit:      × stops a backend that never becomes ready, with the processes it started, after the timeout 72ms
+tools/swarm test:unit:      × stops the backend and its children when up is interrupted 48ms
+tools/swarm test:unit:      × stops a running step's whole process group when the gate is interrupted 20ms
+tools/swarm test:unit:      × stops a step at its timeout with everything it started 11ms
+tools/swarm test:unit:      × hands out loopback ports that are free 6ms
+tools/swarm test:unit:      × reads a process's start time and its group's members, and nothing for one that is gone 14ms
+tools/swarm test:unit:      × reads a process's working directory and the port it listens on, as down needs for a lone next-server 30003ms
+tools/swarm test:unit: ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+tools/swarm test:unit:  FAIL  src/live.test.ts > on real processes > stops a backend that never becomes ready, with the processes it started, after the timeout
+tools/swarm test:unit:  FAIL  src/live.test.ts > on real processes > stops a step at its timeout with everything it started
+tools/swarm test:unit: Error: spawn EPERM
+tools/swarm test:unit:  ❯ MixedScheduler.<anonymous> src/live.ts:162:7
+tools/swarm test:unit:     160|     Effect.callback<string | undefined>((resume) => {
+tools/swarm test:unit:     161|       if (!Number.isInteger(pid) || pid <= 1) return resume(Effect.suc…
+tools/swarm test:unit:     162|       execFile('ps', ['-o', 'lstart=', '-p', String(pid)], (error, std…
+tools/swarm test:unit:        |       ^
+tools/swarm test:unit:     163|         resume(Effect.succeed(error ? undefined : stdout.trim().replac…
+tools/swarm test:unit:     164|       );
+tools/swarm test:unit:  ❯ AsyncImpl.~effect/Effect/evaluate ../../node_modules/.pnpm/effect@4.0.0/node_modules/effect/src/internal/effect.ts:1168:37
+tools/swarm test:unit:  ❯ FiberImpl.runLoop ../../node_modules/.pnpm/effect@4.0.0/node_modules/effect/src/internal/effect.ts:670:39
+tools/swarm test:unit:  ❯ FiberImpl.evaluate ../../node_modules/.pnpm/effect@4.0.0/node_modules/effect/src/internal/effect.ts:613:22
+tools/swarm test:unit:  ❯ ../../node_modules/.pnpm/effect@4.0.0/node_modules/effect/src/internal/effect.ts:5681:8
+tools/swarm test:unit:  ❯ ../../node_modules/.pnpm/effect@4.0.0/node_modules/effect/src/internal/effect.ts:5759:18
+tools/swarm test:unit:  ❯ Module.<anonymous> ../../node_modules/.pnpm/effect@4.0.0/node_modules/effect/src/internal/effect.ts:5778:4
+tools/swarm test:unit: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+tools/swarm test:unit:  FAIL  src/live.test.ts > on real processes > stops the backend and its children when up is interrupted
+tools/swarm test:unit: Error: spawnSync ps EPERM
+tools/swarm test:unit:  ❯ processesWith src/live.test.ts:23:10
+tools/swarm test:unit:      21| /** Every process whose command line carries the marker. */
+tools/swarm test:unit:      22| function processesWith(marker: string): string[] {
+tools/swarm test:unit:      23|   return execFileSync('ps', ['-A', '-o', 'pid=,command='], { encoding:…
+tools/swarm test:unit:        |          ^
+tools/swarm test:unit:      24|     .split('\n')
+tools/swarm test:unit:      25|     .filter((line) => line.includes(marker) && !line.includes('ps -A')…
+tools/swarm test:unit:  ❯ src/live.test.ts:72:23
+tools/swarm test:unit:  ❯ until src/test-fakes.ts:225:11
+tools/swarm test:unit:  ❯ src/live.test.ts:72:11
+tools/swarm test:unit: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+tools/swarm test:unit:  FAIL  src/live.test.ts > on real processes > stops a running step's whole process group when the gate is interrupted
+tools/swarm test:unit: Error: spawnSync ps EPERM
+tools/swarm test:unit:  ❯ processesWith src/live.test.ts:23:10
+tools/swarm test:unit:      21| /** Every process whose command line carries the marker. */
+tools/swarm test:unit:      22| function processesWith(marker: string): string[] {
+tools/swarm test:unit:      23|   return execFileSync('ps', ['-A', '-o', 'pid=,command='], { encoding:…
+tools/swarm test:unit:        |          ^
+tools/swarm test:unit:      24|     .split('\n')
+tools/swarm test:unit:      25|     .filter((line) => line.includes(marker) && !line.includes('ps -A')…
+tools/swarm test:unit:  ❯ src/live.test.ts:93:23
+tools/swarm test:unit:  ❯ until src/test-fakes.ts:225:11
+tools/swarm test:unit:  ❯ src/live.test.ts:93:11
+tools/swarm test:unit: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+tools/swarm test:unit:  FAIL  src/live.test.ts > the live services > hands out loopback ports that are free
+tools/swarm test:unit: Error: The operating system gave no free port.
+tools/swarm test:unit:  ❯ src/live.ts:258:35
+tools/swarm test:unit:     256|   freePort: Effect.promise(async () => {
+tools/swarm test:unit:     257|     const port = await listen(0);
+tools/swarm test:unit:     258|     if (port === undefined) throw new Error('The operating system gave…
+tools/swarm test:unit:        |                                   ^
+tools/swarm test:unit:     259|     return port;
+tools/swarm test:unit:     260|   }),
+tools/swarm test:unit: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+tools/swarm test:unit:  FAIL  src/live.test.ts > the live services > reads a process's start time and its group's members, and nothing for one that is gone
+tools/swarm test:unit: Error: spawnSync ps EPERM
+tools/swarm test:unit:  ❯ processesWith src/live.test.ts:23:10
+tools/swarm test:unit:      21| /** Every process whose command line carries the marker. */
+tools/swarm test:unit:      22| function processesWith(marker: string): string[] {
+tools/swarm test:unit:      23|   return execFileSync('ps', ['-A', '-o', 'pid=,command='], { encoding:…
+tools/swarm test:unit:        |          ^
+tools/swarm test:unit:      24|     .split('\n')
+tools/swarm test:unit:      25|     .filter((line) => line.includes(marker) && !line.includes('ps -A')…
+tools/swarm test:unit:  ❯ src/live.test.ts:259:25
+tools/swarm test:unit:  ❯ until src/test-fakes.ts:225:11
+tools/swarm test:unit:  ❯ src/live.test.ts:259:13
+tools/swarm test:unit: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+tools/swarm test:unit:  FAIL  src/live.test.ts > the live services > reads a process's working directory and the port it listens on, as down needs for a lone next-server
+tools/swarm test:unit: Error: Test timed out in 30000ms.
+tools/swarm test:unit: If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+tools/swarm test:unit:  ❯ src/live.test.ts:287:3
+tools/swarm test:unit:     285|   }, 30_000);
+tools/swarm test:unit:     286|
+tools/swarm test:unit:     287|   it("reads a process's working directory and the port it listens on, …
+tools/swarm test:unit:        |   ^
+tools/swarm test:unit:     288|     const cwd = fixtureWorktree();
+tools/swarm test:unit:     289|     const child = spawn(
+tools/swarm test:unit: ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+tools/swarm test:unit:  Test Files  1 failed | 5 passed (6)
+tools/swarm test:unit:       Tests  7 failed | 115 passed (122)
+tools/swarm test:unit:    Start at  12:09:59
+tools/swarm test:unit:    Duration  35.60s (transform 300ms, setup 0ms, import 3.02s, tests 37.32s, environment 0ms)
+tools/swarm test:unit: Failed
+/Users/ankitdas/AnkitPersonalProjech/SplidBook/tools/swarm:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @splitbook/swarm@0.1.0 test:unit: `vitest run -- --maxWorkers=2`
+Exit status 1
+ ELIFECYCLE  Command failed with exit code 1.

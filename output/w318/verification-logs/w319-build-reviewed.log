@@ -1,0 +1,83 @@
+▲ Next.js 16.3.8 (webpack)
+✓ Running next.config.ts took 64ms
+- Experiments (use with caution):
+  ✓ authInterrupts
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 32.5s
+  Running TypeScript ...
+  Finished TypeScript in 18.1s ...
+  Collecting page data using 10 workers ...
+2026-10-07T12:27:46.152Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:27:46.885Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:27:46.951Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:27:46.954Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:27:47.462Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:27:47.593Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:27:47.595Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:27:47.603Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:27:47.669Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+2026-10-07T12:27:47.816Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+  Generating static pages using 10 workers (0/19) ...
+  Generating static pages using 10 workers (4/19) 
+  Generating static pages using 10 workers (9/19) 
+  Generating static pages using 10 workers (14/19) 
+✓ Generating static pages using 10 workers (19/19) in 1255ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /.well-known/assetlinks.json
+├ ƒ /.well-known/splitbook-mobile.json
+├ ƒ /api/auth/[...all]
+├ ƒ /api/export
+├ ƒ /api/groups
+├ ƒ /api/groups/[id]
+├ ƒ /api/groups/[id]/activity
+├ ƒ /api/groups/[id]/balances
+├ ƒ /api/groups/[id]/expenses
+├ ƒ /api/groups/[id]/expenses/[expenseId]
+├ ƒ /api/groups/[id]/expenses/check-duplicate
+├ ƒ /api/groups/[id]/insights
+├ ƒ /api/groups/[id]/invite
+├ ƒ /api/groups/[id]/invite-link
+├ ƒ /api/groups/[id]/leave
+├ ƒ /api/groups/[id]/members/[userId]
+├ ƒ /api/groups/[id]/recurring
+├ ƒ /api/groups/[id]/recurring/[recurringId]
+├ ƒ /api/groups/[id]/settlements
+├ ƒ /api/groups/[id]/tags
+├ ƒ /api/groups/[id]/tags/[tagId]
+├ ƒ /api/invitations
+├ ƒ /api/invitations/[id]
+├ ƒ /api/join/[code]
+├ ƒ /api/search
+├ ƒ /api/user/activity
+├ ƒ /api/user/balances
+├ ƒ /api/user/profile
+├ ƒ /api/user/spending
+├ ƒ /dashboard
+├ ○ /dev/design-system
+├ ƒ /export
+├ ƒ /groups
+├ ƒ /groups/[id]
+├ ƒ /groups/[id]/activity
+├ ƒ /groups/[id]/balances
+├ ƒ /groups/[id]/expenses
+├ ƒ /groups/[id]/insights
+├ ƒ /groups/[id]/members
+├ ƒ /groups/[id]/settings
+├ ƒ /groups/[id]/statement
+├ ƒ /groups/new
+├ ƒ /join/[code]
+├ ƒ /login
+└ ƒ /settings
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

@@ -1,0 +1,38 @@
+{"text": "", "content-desc": "Back to Group", "class": "android.widget.Button", "bounds": "[11,84][137,210]", "enabled": "true", "resource-id": ""}
+{"text": "\uf127", "content-desc": "", "class": "android.widget.TextView", "bounds": "[42,114][105,179]", "enabled": "true", "resource-id": ""}
+{"text": "Members and details", "content-desc": "", "class": "android.view.View", "bounds": "[152,95][1059,158]", "enabled": "true", "resource-id": ""}
+{"text": "Maple House", "content-desc": "", "class": "android.widget.TextView", "bounds": "[152,158][1059,200]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Theme: Household", "class": "android.view.ViewGroup", "bounds": "[45,245][1035,371]", "enabled": "true", "resource-id": ""}
+{"text": "Theme", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,281][205,334]", "enabled": "true", "resource-id": ""}
+{"text": "\uf383", "content-desc": "", "class": "android.widget.TextView", "bounds": "[743,281][796,336]", "enabled": "true", "resource-id": ""}
+{"text": "Household", "content-desc": "", "class": "android.widget.TextView", "bounds": "[811,282][998,335]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Currency: INR", "class": "android.view.ViewGroup", "bounds": "[45,373][1035,499]", "enabled": "true", "resource-id": ""}
+{"text": "Currency", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,409][245,462]", "enabled": "true", "resource-id": ""}
+{"text": "INR", "content-desc": "", "class": "android.widget.TextView", "bounds": "[927,410][999,463]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Expenses shown by: Month", "class": "android.view.ViewGroup", "bounds": "[45,502][1035,628]", "enabled": "true", "resource-id": ""}
+{"text": "Expenses shown by", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,538][420,591]", "enabled": "true", "resource-id": ""}
+{"text": "Month", "content-desc": "", "class": "android.widget.TextView", "bounds": "[884,539][999,592]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Description: Fictional isolated data for native development only.", "class": "android.view.ViewGroup", "bounds": "[45,631][1035,800]", "enabled": "true", "resource-id": ""}
+{"text": "Description", "content-desc": "", "class": "android.widget.TextView", "bounds": "[81,689][285,742]", "enabled": "true", "resource-id": ""}
+{"text": "Fictional isolated data for native development only.", "content-desc": "", "class": "android.widget.TextView", "bounds": "[328,663][999,769]", "enabled": "true", "resource-id": ""}
+{"text": "MEMBERS \u00b7 3", "content-desc": "", "class": "android.view.View", "bounds": "[47,870][251,910]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Invite people", "class": "android.widget.Button", "bounds": "[796,833][1033,949]", "enabled": "true", "resource-id": ""}
+{"text": "\uf4a7", "content-desc": "", "class": "android.widget.TextView", "bounds": "[832,865][880,915]", "enabled": "true", "resource-id": ""}
+{"text": "Invite", "content-desc": "", "class": "android.widget.TextView", "bounds": "[901,864][995,917]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Alex Rivera, You, Admin", "class": "android.view.ViewGroup", "bounds": "[45,983][1035,1140]", "enabled": "true", "resource-id": ""}
+{"text": "AR", "content-desc": "", "class": "android.widget.TextView", "bounds": "[102,1041][146,1083]", "enabled": "true", "resource-id": ""}
+{"text": "Alex Rivera \u00b7 You", "content-desc": "", "class": "android.widget.TextView", "bounds": "[197,1013][911,1066]", "enabled": "true", "resource-id": ""}
+{"text": "Admin", "content-desc": "", "class": "android.widget.TextView", "bounds": "[197,1068][911,1110]", "enabled": "true", "resource-id": ""}
+{"text": "\uf579", "content-desc": "", "class": "android.widget.TextView", "bounds": "[941,1031][999,1092]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Sam Chen, Member", "class": "android.view.ViewGroup", "bounds": "[45,1140][1035,1300]", "enabled": "true", "resource-id": ""}
+{"text": "SC", "content-desc": "", "class": "android.widget.TextView", "bounds": "[103,1201][144,1243]", "enabled": "true", "resource-id": ""}
+{"text": "Sam Chen", "content-desc": "", "class": "android.widget.TextView", "bounds": "[197,1173][1000,1226]", "enabled": "true", "resource-id": ""}
+{"text": "Member", "content-desc": "", "class": "android.widget.TextView", "bounds": "[197,1228][1000,1270]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Priya Shah, Member", "class": "android.view.ViewGroup", "bounds": "[45,1300][1035,1461]", "enabled": "true", "resource-id": ""}
+{"text": "PS", "content-desc": "", "class": "android.widget.TextView", "bounds": "[105,1361][143,1403]", "enabled": "true", "resource-id": ""}
+{"text": "Priya Shah", "content-desc": "", "class": "android.widget.TextView", "bounds": "[197,1333][1000,1386]", "enabled": "true", "resource-id": ""}
+{"text": "Member", "content-desc": "", "class": "android.widget.TextView", "bounds": "[197,1388][1000,1430]", "enabled": "true", "resource-id": ""}
+{"text": "Changing roles or removing members is done on the web for now.", "content-desc": "", "class": "android.widget.TextView", "bounds": "[42,1494][1038,1590]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Leave Group", "class": "android.widget.Button", "bounds": "[42,1654][1038,1780]", "enabled": "true", "resource-id": ""}
+{"text": "\uf2de", "content-desc": "", "class": "android.widget.TextView", "bounds": "[389,1692][437,1742]", "enabled": "true", "resource-id": ""}
+{"text": "Leave Group", "content-desc": "", "class": "android.widget.TextView", "bounds": "[458,1690][690,1743]", "enabled": "true", "resource-id": ""}

@@ -1,0 +1,10 @@
+
+> @splitbook/mobile@0.1.0 verify:expenses /Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/apps/mobile
+> node --import tsx scripts/verify-expense-create.ts
+
+PASS: equal, multiple payers, offline prevention, persisted retry, exact read-back and one Activity.
+PASS: unequal, multiple payers, offline prevention, persisted retry, exact read-back and one Activity.
+PASS: percentage, multiple payers, offline prevention, persisted retry, exact read-back and one Activity.
+PASS: shares, multiple payers, offline prevention, persisted retry, exact read-back and one Activity.
+PASS: exact, multiple payers, offline prevention, persisted retry, exact read-back and one Activity.
+PASS: exact remainder; validation correction; offline Save prevention; persisted lost-response restart/retry; one Expense + one Activity; refreshed balances; account isolation.

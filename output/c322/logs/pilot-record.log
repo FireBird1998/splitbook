@@ -1,0 +1,26 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec playwright test --config /tmp/c322-pilot.config.ts pilot.spec.ts --grep 'loaded presentation' --project desktop-light --project desktop-dark --update-snapshots --workers=1
+
+[WebServer] (node:89045) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 2026-10-09T15:58:49.181Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+[WebServer] 2026-10-09T15:58:49.182Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+[WebServer] 2026-10-09T15:58:49.182Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+
+Running 4 tests using 1 worker
+
+(node:89053) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web/playwright-pilot/snapshots/desktop-light/dashboard.png is re-generated, writing actual.
+  ✓  1 [desktop-light] › playwright-pilot/pilot.spec.ts:262:7 › dashboard loaded presentation is accessible and visually stable (7.4s)
+/Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web/playwright-pilot/snapshots/desktop-light/balances.png is re-generated, writing actual.
+  ✓  2 [desktop-light] › playwright-pilot/pilot.spec.ts:262:7 › balances loaded presentation is accessible and visually stable (8.5s)
+(node:89221) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+/Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web/playwright-pilot/snapshots/desktop-dark/dashboard.png is re-generated, writing actual.
+  ✓  3 [desktop-dark] › playwright-pilot/pilot.spec.ts:262:7 › dashboard loaded presentation is accessible and visually stable (7.5s)
+/Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web/playwright-pilot/snapshots/desktop-dark/balances.png is re-generated, writing actual.
+  ✓  4 [desktop-dark] › playwright-pilot/pilot.spec.ts:262:7 › balances loaded presentation is accessible and visually stable (8.0s)
+
+  4 passed (34.2s)

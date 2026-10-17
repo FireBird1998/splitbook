@@ -1,0 +1,103 @@
+
+> splitbook@0.1.0 build /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm --filter @splitbook/web build
+
+
+> @splitbook/web@0.1.0 build /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web
+> next build --webpack
+
+▲ Next.js 16.3.8 (webpack)
+- Environments: .env.local
+✓ Running next.config.ts took 117ms
+- Experiments (use with caution):
+  ✓ authInterrupts
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 19.9s
+  Running TypeScript ...
+  Finished TypeScript in 12.2s ...
+  Collecting page data using 10 workers ...
+2026-10-09T15:13:57.603Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-09T15:13:57.611Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-09T15:13:57.713Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-09T15:13:57.714Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-09T15:13:57.723Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-09T15:13:57.725Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-09T15:13:57.714Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-09T15:13:57.730Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-09T15:13:57.728Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-09T15:13:57.739Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-09T15:13:57.736Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-09T15:13:57.741Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-09T15:13:57.740Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-09T15:13:57.743Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-09T15:13:57.745Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-09T15:13:57.748Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-09T15:13:57.760Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-09T15:13:57.770Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+2026-10-09T15:13:57.782Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+2026-10-09T15:13:57.789Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+  Generating static pages using 10 workers (0/19) ...
+  Generating static pages using 10 workers (4/19) 
+  Generating static pages using 10 workers (9/19) 
+  Generating static pages using 10 workers (14/19) 
+✓ Generating static pages using 10 workers (19/19) in 694ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /.well-known/assetlinks.json
+├ ƒ /.well-known/splitbook-mobile.json
+├ ƒ /api/auth/[...all]
+├ ƒ /api/export
+├ ƒ /api/groups
+├ ƒ /api/groups/[id]
+├ ƒ /api/groups/[id]/activity
+├ ƒ /api/groups/[id]/balances
+├ ƒ /api/groups/[id]/expenses
+├ ƒ /api/groups/[id]/expenses/[expenseId]
+├ ƒ /api/groups/[id]/expenses/check-duplicate
+├ ƒ /api/groups/[id]/insights
+├ ƒ /api/groups/[id]/invite
+├ ƒ /api/groups/[id]/invite-link
+├ ƒ /api/groups/[id]/leave
+├ ƒ /api/groups/[id]/members/[userId]
+├ ƒ /api/groups/[id]/recurring
+├ ƒ /api/groups/[id]/recurring/[recurringId]
+├ ƒ /api/groups/[id]/settlements
+├ ƒ /api/groups/[id]/tags
+├ ƒ /api/groups/[id]/tags/[tagId]
+├ ƒ /api/groups/[id]/trip-summary
+├ ƒ /api/invitations
+├ ƒ /api/invitations/[id]
+├ ƒ /api/join/[code]
+├ ƒ /api/search
+├ ƒ /api/user/activity
+├ ƒ /api/user/balances
+├ ƒ /api/user/profile
+├ ƒ /api/user/spending
+├ ƒ /dashboard
+├ ○ /dev/design-system
+├ ƒ /export
+├ ƒ /groups
+├ ƒ /groups/[id]
+├ ƒ /groups/[id]/activity
+├ ƒ /groups/[id]/balances
+├ ƒ /groups/[id]/expenses
+├ ƒ /groups/[id]/insights
+├ ƒ /groups/[id]/members
+├ ƒ /groups/[id]/settings
+├ ƒ /groups/[id]/statement
+├ ƒ /groups/new
+├ ƒ /join/[code]
+├ ƒ /login
+└ ƒ /settings
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

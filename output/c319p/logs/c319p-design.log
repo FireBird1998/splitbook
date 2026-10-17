@@ -1,0 +1,9 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web check:design-system
+
+
+> @splitbook/web@0.1.0 check:design-system /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web
+> tsx --tsconfig scripts/tsconfig.json scripts/check-design-system.ts
+
+Design-system style policy passed (68 adopted files).

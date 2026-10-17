@@ -1,0 +1,18 @@
+{
+  "sourceCommit": "360ef41",
+  "baseMain": "9788b240a772fb7e9c7cbfe45250226efd47198d",
+  "package": "com.splitbook.app",
+  "version": "0.1.0",
+  "versionCode": 1,
+  "apkSha256": "b1a9f1e18b0cba027915d01b836802ce2662268a60451a1b93236d475d031dca",
+  "certificateSha256": "B6:34:FC:FC:EC:42:B9:15:67:56:A6:97:37:EF:B0:D8:97:19:2C:22:26:19:BA:6F:42:DE:33:4A:A2:FC:18:EB",
+  "status": "candidate-not-cleared-for-distribution",
+  "pending": [
+    "production backend rollout",
+    "Google Android OAuth registration",
+    "verified App Links",
+    "approved/denied real Google login",
+    "authenticated device journeys",
+    "physical-phone pilot"
+  ]
+}

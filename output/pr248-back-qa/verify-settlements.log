@@ -1,0 +1,9 @@
+
+> @splitbook/mobile@0.1.0 verify:settlements /private/tmp/splitbook-pr248-back-qa/apps/mobile
+> node --import tsx scripts/verify-settlements.ts
+
+PASS: partial/full payments, currency precision, history, exact remaining balances and unauthorized-party rejection.
+PASS: over-suggestion acknowledgment records the reviewed actual amount; resulting reverse debt is read from the server.
+PASS: committed response loss, offline retry refusal, persistent restart, immutable explicit retry, one Settlement/Activity and exact balance.
+PASS: recovered payment appears once in the native Activity controller after authoritative refresh.
+PASS: current membership denial blocks a new record; sign-out purges account-local recovery.

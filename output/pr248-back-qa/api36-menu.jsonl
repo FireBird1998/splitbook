@@ -1,0 +1,12 @@
+{"text": "", "content-desc": "Close Group options", "class": "android.widget.Button", "bounds": "[0,0][1080,2400]", "enabled": "true", "resource-id": ""}
+{"text": "Maple House", "content-desc": "", "class": "android.view.View", "bounds": "[53,1836][362,1899]", "enabled": "true", "resource-id": ""}
+{"text": "Household \u00b7 3 members \u00b7 INR", "content-desc": "", "class": "android.widget.TextView", "bounds": "[53,1899][886,1941]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Done", "class": "android.widget.Button", "bounds": "[906,1815][1059,1930]", "enabled": "true", "resource-id": ""}
+{"text": "Done", "content-desc": "", "class": "android.widget.TextView", "bounds": "[937,1846][1027,1899]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Members and Group details", "class": "android.widget.Button", "bounds": "[56,1965][1026,2123]", "enabled": "true", "resource-id": ""}
+{"text": "\uf4a3", "content-desc": "", "class": "android.widget.TextView", "bounds": "[119,2016][172,2071]", "enabled": "true", "resource-id": ""}
+{"text": "Members and Group details", "content-desc": "", "class": "android.widget.TextView", "bounds": "[229,2017][990,2070]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Refresh, Check for the latest changes", "class": "android.widget.Button", "bounds": "[56,2125][1026,2283]", "enabled": "true", "resource-id": ""}
+{"text": "\uf518", "content-desc": "", "class": "android.widget.TextView", "bounds": "[119,2176][172,2231]", "enabled": "true", "resource-id": ""}
+{"text": "Refresh", "content-desc": "", "class": "android.widget.TextView", "bounds": "[229,2155][990,2208]", "enabled": "true", "resource-id": ""}
+{"text": "Check for the latest changes", "content-desc": "", "class": "android.widget.TextView", "bounds": "[229,2210][990,2252]", "enabled": "true", "resource-id": ""}

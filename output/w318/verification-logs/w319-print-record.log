@@ -1,0 +1,30 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec playwright test --config /tmp/w318-runner/w319-pilot.config.ts statement-print.spec.ts --workers=1 --update-snapshots
+
+[WebServer] (node:62501) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 2026-10-07T12:17:05.059Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+[WebServer] 2026-10-07T12:17:05.061Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+[WebServer] 2026-10-07T12:17:05.065Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+
+Running 4 tests using 1 worker
+
+(node:62526) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web/playwright-pilot/snapshots/desktop-light/statement-print.png, writing actual.
+  ✓  1 [desktop-light] › playwright-pilot/statement-print.spec.ts:5:5 › statement print uses clean A4 light colours in every theme (8.5s)
+(node:62686) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web/playwright-pilot/snapshots/desktop-dark/statement-print.png, writing actual.
+  ✓  2 [desktop-dark] › playwright-pilot/statement-print.spec.ts:5:5 › statement print uses clean A4 light colours in every theme (7.7s)
+(node:62866) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web/playwright-pilot/snapshots/mobile-light/statement-print.png, writing actual.
+  ✓  3 [mobile-light] › playwright-pilot/statement-print.spec.ts:5:5 › statement print uses clean A4 light colours in every theme (5.1s)
+(node:62992) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web/playwright-pilot/snapshots/mobile-dark/statement-print.png, writing actual.
+  ✓  4 [mobile-dark] › playwright-pilot/statement-print.spec.ts:5:5 › statement print uses clean A4 light colours in every theme (5.9s)
+
+  4 passed (37.3s)

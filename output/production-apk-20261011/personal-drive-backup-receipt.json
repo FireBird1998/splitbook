@@ -1,0 +1,23 @@
+{
+  "account": "www.das5471@gmail.com",
+  "folderUrl": "https://drive.google.com/drive/u/1/folders/1Ti51_HzyRgEvxnEbbKg8hpWEyCGYBSYO",
+  "access": "Restricted; personal owner only verified before upload",
+  "uploadResult": "3 uploads complete verified in Google Drive",
+  "files": [
+    {
+      "name": "SplitBook-Android-Signing-PRIVATE.zip",
+      "size": 8825,
+      "sha256": "6591eca5ca174dfa16c98217fb64fe583d254f1ade6c11942263dc0c7078d4f2"
+    },
+    {
+      "name": "SplitBook-Important-Documentation.zip",
+      "size": 9240292,
+      "sha256": "7fa401d8a4d31336f0d022aba24e610121eed64f3dc671393a1e48b98864361e"
+    },
+    {
+      "name": "SplitBook-Production.apk",
+      "size": 33818817,
+      "sha256": "3a386255e9d221fcf580a009557c1929ecb2898a15f4cbfc8776a8d8d14f9aa9"
+    }
+  ]
+}

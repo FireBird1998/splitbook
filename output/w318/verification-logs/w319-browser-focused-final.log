@@ -1,0 +1,30 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec playwright test --config /tmp/w318-runner/w319-demo.config.ts export-backup-statement.spec.ts --workers=1
+
+[WebServer] (node:99509) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 2026-10-07T12:35:19.999Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+[WebServer] 2026-10-07T12:35:20.000Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+[WebServer] 2026-10-07T12:35:20.001Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+
+Running 8 tests using 1 worker
+
+(node:99528) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [desktop-light] › playwright/export-backup-statement.spec.ts:12:5 › JSON backup downloads all time, round-trips and has no emails (3.2s)
+  ✓  2 [desktop-light] › playwright/export-backup-statement.spec.ts:38:5 › Export opens one Group’s printable statement with named sections in both themes (2.1s)
+(node:99623) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [desktop-dark] › playwright/export-backup-statement.spec.ts:12:5 › JSON backup downloads all time, round-trips and has no emails (2.4s)
+  ✓  4 [desktop-dark] › playwright/export-backup-statement.spec.ts:38:5 › Export opens one Group’s printable statement with named sections in both themes (2.4s)
+(node:99733) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [mobile-light] › playwright/export-backup-statement.spec.ts:12:5 › JSON backup downloads all time, round-trips and has no emails (2.1s)
+  ✓  6 [mobile-light] › playwright/export-backup-statement.spec.ts:38:5 › Export opens one Group’s printable statement with named sections in both themes (1.8s)
+(node:99896) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  7 [mobile-dark] › playwright/export-backup-statement.spec.ts:12:5 › JSON backup downloads all time, round-trips and has no emails (2.2s)
+  ✓  8 [mobile-dark] › playwright/export-backup-statement.spec.ts:38:5 › Export opens one Group’s printable statement with named sections in both themes (2.0s)
+
+  8 passed (22.5s)

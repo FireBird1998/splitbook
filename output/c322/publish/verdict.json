@@ -1,0 +1,115 @@
+{
+  "verdict": "pass",
+  "interrupted": false,
+  "worktree": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook",
+  "commit": "0f6eed8a2962bbe6361ee6e15f368e4fe4dcd1b5",
+  "base": {
+    "ref": "origin/main",
+    "commit": "e0d9d0c712f749699b58e1ac542ed744ac61598f"
+  },
+  "startedAt": "2026-10-09T16:19:37.650Z",
+  "seconds": 127.2,
+  "vitestWorkers": 2,
+  "backend": {
+    "origin": "http://127.0.0.1:3322",
+    "database": "splitbook_mobile_swarm_6250b7446a_b7b9240a",
+    "startedByGate": false
+  },
+  "steps": [
+    {
+      "name": "install check",
+      "status": "pass",
+      "seconds": 0
+    },
+    {
+      "name": "lint",
+      "status": "pass",
+      "seconds": 12.1,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/lint.log"
+    },
+    {
+      "name": "typecheck",
+      "status": "pass",
+      "seconds": 12.9,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/typecheck.log"
+    },
+    {
+      "name": "format check",
+      "status": "pass",
+      "seconds": 9.1,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/format-check.log"
+    },
+    {
+      "name": "unit tests",
+      "status": "pass",
+      "seconds": 82.7,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/unit-tests.log"
+    },
+    {
+      "name": "ceilings",
+      "status": "pass",
+      "seconds": 0.4,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/ceilings.log"
+    },
+    {
+      "name": "backend",
+      "status": "pass",
+      "seconds": 0,
+      "detail": "reused the backend from pnpm swarm up at http://127.0.0.1:3322"
+    },
+    {
+      "name": "verify:api",
+      "status": "pass",
+      "seconds": 0.9,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/verify-api.log"
+    },
+    {
+      "name": "verify:groups",
+      "status": "pass",
+      "seconds": 1.1,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/verify-groups.log"
+    },
+    {
+      "name": "verify:settings",
+      "status": "pass",
+      "seconds": 0.6,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/verify-settings.log"
+    },
+    {
+      "name": "verify:financial",
+      "status": "pass",
+      "seconds": 1.4,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/verify-financial.log"
+    },
+    {
+      "name": "verify:expenses",
+      "status": "pass",
+      "seconds": 1.5,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/verify-expenses.log"
+    },
+    {
+      "name": "verify:expense-edit",
+      "status": "pass",
+      "seconds": 1.4,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/verify-expense-edit.log"
+    },
+    {
+      "name": "verify:settlements",
+      "status": "pass",
+      "seconds": 1.1,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/verify-settlements.log"
+    },
+    {
+      "name": "verify:activity",
+      "status": "pass",
+      "seconds": 1.1,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/verify-activity.log"
+    },
+    {
+      "name": "verify:offline",
+      "status": "pass",
+      "seconds": 0.9,
+      "log": "/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/tools/swarm/out/gate/verify-offline.log"
+    }
+  ]
+}

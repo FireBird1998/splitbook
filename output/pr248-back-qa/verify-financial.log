@@ -1,0 +1,5 @@
+
+> @splitbook/mobile@0.1.0 verify:financial /private/tmp/splitbook-pr248-back-qa/apps/mobile
+> node --import tsx scripts/verify-financial-views.ts
+
+PASS: separate INR/EUR Home obligations, exact expense reads, local Month boundaries, pagination, empty Month, unchanged running balances, Trip dates, refresh, denied access, late-response logout, restart, and account isolation.

@@ -1,0 +1,13 @@
+
+> splitbook@0.1.0 typecheck /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -r typecheck
+
+Scope: 4 of 5 workspace projects
+packages/shared typecheck$ tsc --noEmit
+tools/swarm typecheck$ tsc --noEmit
+tools/swarm typecheck: Done
+packages/shared typecheck: Done
+apps/mobile typecheck$ tsc --noEmit
+apps/web typecheck$ tsc --noEmit
+apps/mobile typecheck: Done
+apps/web typecheck: Done

@@ -1,0 +1,31 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - img "Splitbook" [ref=f1e5]
+      - generic "Shared demo environment — data is seeded for private beta testing" [ref=f1e6]: Demo mode
+      - heading "Continue as a demo persona" [level=1] [ref=f1e9]
+      - paragraph [ref=f1e10]: Choose who you are entering as for this private beta session.
+    - generic [ref=f1e11]:
+      - button "Enter as Alex Rivera, organizer. Trip organizer · group admin" [ref=f1e12] [cursor=pointer]:
+        - generic [ref=f1e13]:
+          - generic [aria-hidden] [ref=f1e14]: A
+          - generic [ref=f1e15]:
+            - heading "Alex Rivera" [level=6] [ref=f1e16]
+            - generic [ref=f1e17]: Organizer
+        - paragraph [ref=f1e19]: Trip organizer · group admin
+      - button "Enter as Sam Chen, member. Trip member" [ref=f1e20] [cursor=pointer]:
+        - generic [ref=f1e21]:
+          - generic [aria-hidden] [ref=f1e22]: S
+          - generic [ref=f1e23]:
+            - heading "Sam Chen" [level=6] [ref=f1e24]
+            - generic [ref=f1e25]: Member
+        - paragraph [ref=f1e27]: Trip member
+      - button "Enter as Priya Shah, member. Trip member" [ref=f1e28] [cursor=pointer]:
+        - generic [ref=f1e29]:
+          - generic [aria-hidden] [ref=f1e30]: P
+          - generic [ref=f1e31]:
+            - heading "Priya Shah" [level=6] [ref=f1e32]
+            - generic [ref=f1e33]: Member
+        - paragraph [ref=f1e35]: Trip member
+    - paragraph [ref=f1e36]: Shared demo data — sign out and pick another persona to switch views. Currencies stay separate, never combined into one number.
+  - button "Open Next.js Dev Tools" [ref=f1e42] [cursor=pointer]

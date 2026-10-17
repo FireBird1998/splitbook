@@ -1,0 +1,12 @@
+
+> splitbook@0.1.0 test:integration /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -r test:integration --maxWorkers=2
+
+Scope: 4 of 5 workspace projects
+apps/web test:integration$ vitest run integration --maxWorkers=2
+apps/web test:integration:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web
+apps/web test:integration:  Test Files  35 passed (35)
+apps/web test:integration:       Tests  372 passed (372)
+apps/web test:integration:    Start at  18:03:12
+apps/web test:integration:    Duration  35.00s (transform 1.12s, setup 0ms, import 20.79s, tests 44.15s, environment 2ms)
+apps/web test:integration: Done

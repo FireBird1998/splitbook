@@ -1,0 +1,7 @@
+
+> @splitbook/mobile@0.1.0 ceilings:compare /Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/apps/mobile
+> node --import tsx scripts/compare-ceilings.ts --base e0d9d0c712f749699b58e1ac542ed744ac61598f
+
+Ceilings in src/render-profile.ceilings.json, compared with e0d9d0c:
+  no changes
+No ceiling rose, and no journey was removed or renamed.

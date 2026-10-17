@@ -1,0 +1,81 @@
+{"text": "", "content-desc": "Close Date, keeping your entries", "class": "android.widget.Button", "bounds": "[0,0][1080,2400]", "enabled": "true", "resource-id": ""}
+{"text": "Date", "content-desc": "", "class": "android.view.View", "bounds": "[53,994][173,1057]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Done", "class": "android.widget.Button", "bounds": "[906,952][1059,1068]", "enabled": "true", "resource-id": ""}
+{"text": "Done", "content-desc": "", "class": "android.widget.TextView", "bounds": "[937,983][1027,1036]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Today", "class": "android.widget.Button", "bounds": "[53,1099][233,1215]", "enabled": "true", "resource-id": ""}
+{"text": "Today", "content-desc": "", "class": "android.widget.TextView", "bounds": "[92,1130][194,1183]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Yesterday", "class": "android.widget.Button", "bounds": "[255,1099][499,1215]", "enabled": "true", "resource-id": ""}
+{"text": "Yesterday", "content-desc": "", "class": "android.widget.TextView", "bounds": "[294,1130][459,1183]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Previous month", "class": "android.widget.Button", "bounds": "[32,1246][158,1372]", "enabled": "true", "resource-id": ""}
+{"text": "\uf22d", "content-desc": "", "class": "android.widget.TextView", "bounds": "[63,1276][126,1341]", "enabled": "true", "resource-id": ""}
+{"text": "September 2026", "content-desc": "", "class": "android.view.View", "bounds": "[158,1281][923,1337]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Next month", "class": "android.widget.Button", "bounds": "[923,1246][1049,1372]", "enabled": "true", "resource-id": ""}
+{"text": "\uf23f", "content-desc": "", "class": "android.widget.TextView", "bounds": "[954,1276][1017,1341]", "enabled": "true", "resource-id": ""}
+{"text": "S", "content-desc": "", "class": "android.widget.TextView", "bounds": "[53,1393][193,1441]", "enabled": "true", "resource-id": ""}
+{"text": "M", "content-desc": "", "class": "android.widget.TextView", "bounds": "[192,1393][333,1441]", "enabled": "true", "resource-id": ""}
+{"text": "T", "content-desc": "", "class": "android.widget.TextView", "bounds": "[331,1393][471,1441]", "enabled": "true", "resource-id": ""}
+{"text": "W", "content-desc": "", "class": "android.widget.TextView", "bounds": "[470,1393][610,1441]", "enabled": "true", "resource-id": ""}
+{"text": "T", "content-desc": "", "class": "android.widget.TextView", "bounds": "[610,1393][750,1441]", "enabled": "true", "resource-id": ""}
+{"text": "F", "content-desc": "", "class": "android.widget.TextView", "bounds": "[749,1393][890,1441]", "enabled": "true", "resource-id": ""}
+{"text": "S", "content-desc": "", "class": "android.widget.TextView", "bounds": "[888,1393][1028,1441]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tuesday, September 1, 2026", "class": "android.widget.Button", "bounds": "[332,1462][471,1583]", "enabled": "true", "resource-id": ""}
+{"text": "1", "content-desc": "", "class": "android.widget.TextView", "bounds": "[394,1496][408,1549]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Wednesday, September 2, 2026", "class": "android.widget.Button", "bounds": "[471,1462][611,1583]", "enabled": "true", "resource-id": ""}
+{"text": "2", "content-desc": "", "class": "android.widget.TextView", "bounds": "[529,1496][551,1549]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Thursday, September 3, 2026", "class": "android.widget.Button", "bounds": "[610,1462][749,1583]", "enabled": "true", "resource-id": ""}
+{"text": "3", "content-desc": "", "class": "android.widget.TextView", "bounds": "[668,1496][690,1549]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Friday, September 4, 2026", "class": "android.widget.Button", "bounds": "[749,1462][888,1583]", "enabled": "true", "resource-id": ""}
+{"text": "4", "content-desc": "", "class": "android.widget.TextView", "bounds": "[806,1496][830,1549]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Saturday, September 5, 2026", "class": "android.widget.Button", "bounds": "[889,1462][1028,1583]", "enabled": "true", "resource-id": ""}
+{"text": "5", "content-desc": "", "class": "android.widget.TextView", "bounds": "[947,1496][969,1549]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Sunday, September 6, 2026", "class": "android.widget.Button", "bounds": "[53,1583][192,1704]", "enabled": "true", "resource-id": ""}
+{"text": "6", "content-desc": "", "class": "android.widget.TextView", "bounds": "[111,1617][134,1670]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Monday, September 7, 2026", "class": "android.widget.Button", "bounds": "[192,1583][331,1704]", "enabled": "true", "resource-id": ""}
+{"text": "7", "content-desc": "", "class": "android.widget.TextView", "bounds": "[251,1617][272,1670]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tuesday, September 8, 2026", "class": "android.widget.Button", "bounds": "[332,1583][471,1704]", "enabled": "true", "resource-id": ""}
+{"text": "8", "content-desc": "", "class": "android.widget.TextView", "bounds": "[390,1617][412,1670]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Wednesday, September 9, 2026", "class": "android.widget.Button", "bounds": "[471,1583][611,1704]", "enabled": "true", "resource-id": ""}
+{"text": "9", "content-desc": "", "class": "android.widget.TextView", "bounds": "[529,1617][552,1670]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Thursday, September 10, 2026", "class": "android.widget.Button", "bounds": "[610,1583][749,1704]", "enabled": "true", "resource-id": ""}
+{"text": "10", "content-desc": "", "class": "android.widget.TextView", "bounds": "[659,1617][700,1670]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Friday, September 11, 2026", "class": "android.widget.Button", "bounds": "[749,1583][888,1704]", "enabled": "true", "resource-id": ""}
+{"text": "11", "content-desc": "", "class": "android.widget.TextView", "bounds": "[804,1617][832,1670]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Saturday, September 12, 2026", "class": "android.widget.Button", "bounds": "[889,1583][1028,1704]", "enabled": "true", "resource-id": ""}
+{"text": "12", "content-desc": "", "class": "android.widget.TextView", "bounds": "[940,1617][976,1670]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Sunday, September 13, 2026", "class": "android.widget.Button", "bounds": "[53,1704][192,1825]", "enabled": "true", "resource-id": ""}
+{"text": "13", "content-desc": "", "class": "android.widget.TextView", "bounds": "[104,1738][140,1791]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Monday, September 14, 2026", "class": "android.widget.Button", "bounds": "[192,1704][331,1825]", "enabled": "true", "resource-id": ""}
+{"text": "14", "content-desc": "", "class": "android.widget.TextView", "bounds": "[242,1738][280,1791]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tuesday, September 15, 2026", "class": "android.widget.Button", "bounds": "[332,1704][471,1825]", "enabled": "true", "resource-id": ""}
+{"text": "15", "content-desc": "", "class": "android.widget.TextView", "bounds": "[383,1738][419,1791]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Wednesday, September 16, 2026", "class": "android.widget.Button", "bounds": "[471,1704][611,1825]", "enabled": "true", "resource-id": ""}
+{"text": "16", "content-desc": "", "class": "android.widget.TextView", "bounds": "[522,1738][559,1791]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Thursday, September 17, 2026", "class": "android.widget.Button", "bounds": "[610,1704][749,1825]", "enabled": "true", "resource-id": ""}
+{"text": "17", "content-desc": "", "class": "android.widget.TextView", "bounds": "[662,1738][697,1791]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Friday, September 18, 2026", "class": "android.widget.Button", "bounds": "[749,1704][888,1825]", "enabled": "true", "resource-id": ""}
+{"text": "18", "content-desc": "", "class": "android.widget.TextView", "bounds": "[800,1738][836,1791]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Saturday, September 19, 2026", "class": "android.widget.Button", "bounds": "[889,1704][1028,1825]", "enabled": "true", "resource-id": ""}
+{"text": "19", "content-desc": "", "class": "android.widget.TextView", "bounds": "[940,1738][977,1791]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Sunday, September 20, 2026", "class": "android.widget.Button", "bounds": "[53,1824][192,1944]", "enabled": "true", "resource-id": ""}
+{"text": "20", "content-desc": "", "class": "android.widget.TextView", "bounds": "[98,1858][146,1911]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Monday, September 21, 2026", "class": "android.widget.Button", "bounds": "[192,1824][331,1944]", "enabled": "true", "resource-id": ""}
+{"text": "21", "content-desc": "", "class": "android.widget.TextView", "bounds": "[243,1858][279,1911]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tuesday, September 22, 2026", "class": "android.widget.Button", "bounds": "[332,1824][471,1944]", "enabled": "true", "resource-id": ""}
+{"text": "22", "content-desc": "", "class": "android.widget.TextView", "bounds": "[379,1858][423,1911]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Wednesday, September 23, 2026", "class": "android.widget.Button", "bounds": "[471,1824][611,1944]", "enabled": "true", "resource-id": ""}
+{"text": "23", "content-desc": "", "class": "android.widget.TextView", "bounds": "[518,1858][562,1911]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Thursday, September 24, 2026", "class": "android.widget.Button", "bounds": "[610,1824][749,1944]", "enabled": "true", "resource-id": ""}
+{"text": "24", "content-desc": "", "class": "android.widget.TextView", "bounds": "[656,1858][702,1911]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Friday, September 25, 2026", "class": "android.widget.Button", "bounds": "[749,1824][888,1944]", "enabled": "true", "resource-id": ""}
+{"text": "25", "content-desc": "", "class": "android.widget.TextView", "bounds": "[796,1858][840,1911]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Saturday, September 26, 2026", "class": "android.widget.Button", "bounds": "[889,1824][1028,1944]", "enabled": "true", "resource-id": ""}
+{"text": "26", "content-desc": "", "class": "android.widget.TextView", "bounds": "[936,1858][981,1911]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Sunday, September 27, 2026", "class": "android.widget.Button", "bounds": "[53,1945][192,2066]", "enabled": "true", "resource-id": ""}
+{"text": "27", "content-desc": "", "class": "android.widget.TextView", "bounds": "[101,1979][143,2032]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Monday, September 28, 2026", "class": "android.widget.Button", "bounds": "[192,1945][331,2066]", "enabled": "true", "resource-id": ""}
+{"text": "28", "content-desc": "", "class": "android.widget.TextView", "bounds": "[239,1979][283,2032]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tuesday, September 29, 2026", "class": "android.widget.Button", "bounds": "[332,1945][471,2066]", "enabled": "true", "resource-id": ""}
+{"text": "29", "content-desc": "", "class": "android.widget.TextView", "bounds": "[379,1979][424,2032]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Wednesday, September 30, 2026", "class": "android.widget.Button", "bounds": "[471,1945][611,2066]", "enabled": "true", "resource-id": ""}
+{"text": "30", "content-desc": "", "class": "android.widget.TextView", "bounds": "[516,1979][565,2032]", "enabled": "true", "resource-id": ""}
+{"text": "Wednesday, September 30, 2026", "content-desc": "", "class": "android.widget.TextView", "bounds": "[52,2242][1027,2295]", "enabled": "true", "resource-id": ""}

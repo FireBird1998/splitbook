@@ -1,0 +1,8 @@
+Final verification complete on head `7f26f7ff53327590467df4f60313ee707205cfad`.
+
+- Fresh-worktree full gate passed: lint, typecheck, formatting, ceilings, 4,469 unit tests and all nine HTTP verifiers, two Vitest workers, isolated fictional database removed afterwards.
+- Android15/API35 control reproduced the Back exit bug. Fixed APK passed the native route/draft/sheet/save matrix on API35 and API36; actual API35 left-edge Back also returned Group→Home. Delayed-save proxy/database checks proved one write and no unexpected invitation join. Shared staging emulator untouched.
+- The refreshed CI exposed an existing #225 test-ordering race; the test-only fix batches layout/cancellation before yielding. Controlled-yield reproduction failed before; removing production drag cancellation still fails the corrected assertion. All three CI timezone jobs and full final-head CI passed: https://github.com/FireBird1998/splitbook/actions/runs/37972442987.
+- Closing linkage was corrected to exactly #197. The owner explicitly accepted emulator evidence for this fix. #193 remains open for signed staging APK, physical-phone and real-account release verification; those checks are not claimed as completed.
+- PR was squash-merged concurrently by `ankit-thesys` as `db4a6769e32636031ed644ed8cf0172acccf1018`; its tree exactly matches the tested head. Local main matches it. All branches retained; no direct push to main.
+- Vercel production deployment `dpl_5x5sCXjB8jtvN65eiRwLnhNwp7NS` is READY, and the Vercel status on the merge commit is green: https://vercel.com/ankit-das-projects/splitbook/5x5sCXjB8jtvN65eiRwLnhNwp7NS.

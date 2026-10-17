@@ -1,0 +1,16 @@
+
+> @splitbook/mobile@0.1.0 verify:groups /Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook/apps/mobile
+> node --import tsx scripts/verify-group-journey.ts
+
+PASS: 11 real HTTP Group/invitation journey checks; 4 run-owned Groups archived.
+- Household creation and authorized persisted read-back
+- A created Household opens on the current Month with its Expenses and Balances read, with no openGroup
+- Canonical invite link and reuse without rotation
+- Public preview, restart/auth continuation, and explicit joining
+- Existing-member reopening and both personas reading the same Group
+- Unsupported origins rejected before fetch and unavailable invite recovery
+- Committed create response loss, retained input, blocked resubmit, and read reconciliation
+- Explicit retry of a committed create returns the same Group, listed once
+- Transport-level resend of a committed create saves one Group
+- A Group being created survives a restart, and its resubmit saves one Group
+- Committed invite-generation response loss recovered without another generation

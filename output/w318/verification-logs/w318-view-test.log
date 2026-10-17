@@ -1,0 +1,13 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec vitest run src/components/export/ExportView.test.ts
+
+
+ RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web
+
+
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+   Start at  17:36:56
+   Duration  874ms (transform 138ms, setup 0ms, import 507ms, tests 249ms, environment 0ms)
+

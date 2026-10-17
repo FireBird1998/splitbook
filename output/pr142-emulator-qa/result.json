@@ -1,0 +1,33 @@
+{
+  "pr": 142,
+  "commit": "a41f0b17a9a4bfd4a0157c172caea342c29fe595",
+  "emulator": "emulator-5580 / SplitBook_PR142_QA",
+  "android": "16 / API 36.1 / arm64",
+  "hardwareKeyboard": false,
+  "source": "exact PR source served by isolated Metro; existing development native shell APK",
+  "database": "splitbook_pr142_device_qa",
+  "passed": [
+    "Docked Amount keyboard leaves Save visible",
+    "Next moves Amount to Description",
+    "Docked Description keyboard leaves Save visible",
+    "Negative -5 preserved and rejected without Expense POST",
+    "Fractional 1.5 shares preserved and rejected without Expense POST",
+    "Close and resume preserve draft including fractional share",
+    "Corrected save returns to Group with snackbar",
+    "Database has exactly one test Expense, amountMinor=15000, three equal shares of 5000",
+    "413 mobile tests",
+    "All current CI checks"
+  ],
+  "limits": [
+    "Fresh launch encountered local cleanup error; recovered on retry, cause not established",
+    "Additional 360x640 dp and 130% dark-mode retest inconclusive: Android System UI ANR after display change and instability after reboot",
+    "No fresh Google login or TalkBack test"
+  ],
+  "evidence": [
+    "pr142-keyboard-amount.png",
+    "pr142-keyboard-description.png",
+    "pr142-negative-amount.png",
+    "pr142-fractional-shares.png",
+    "pr142-recovered-shares.png"
+  ]
+}

@@ -1,0 +1,52 @@
+{"text": "", "content-desc": "Tools", "class": "android.widget.ImageView", "bounds": "[937,140][1005,208]", "enabled": "true", "resource-id": ""}
+{"text": "splitbook.", "content-desc": "", "class": "android.view.View", "bounds": "[53,108][327,187]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Refresh Home", "class": "android.widget.Button", "bounds": "[812,84][938,210]", "enabled": "true", "resource-id": ""}
+{"text": "\uf518", "content-desc": "", "class": "android.widget.TextView", "bounds": "[843,114][906,179]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Account and settings", "class": "android.widget.Button", "bounds": "[944,84][1070,210]", "enabled": "true", "resource-id": ""}
+{"text": "AR", "content-desc": "", "class": "android.widget.TextView", "bounds": "[985,126][1029,168]", "enabled": "true", "resource-id": ""}
+{"text": "YOUR BALANCES", "content-desc": "", "class": "android.view.View", "bounds": "[81,290][725,330]", "enabled": "true", "resource-id": ""}
+{"text": "Updated 11:42\u202fPM", "content-desc": "", "class": "android.widget.TextView", "bounds": "[745,289][998,331]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "INR: You owe \u20b911,387.77, Owed to you \u20b96,160.00", "class": "android.view.ViewGroup", "bounds": "[81,331][999,494]", "enabled": "true", "resource-id": ""}
+{"text": "INR", "content-desc": "", "class": "android.widget.TextView", "bounds": "[113,385][185,438]", "enabled": "true", "resource-id": ""}
+{"text": "You owe", "content-desc": "", "class": "android.widget.TextView", "bounds": "[249,357][609,405]", "enabled": "true", "resource-id": ""}
+{"text": "Owed to you", "content-desc": "", "class": "android.widget.TextView", "bounds": "[639,357][999,405]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b911,387.77", "content-desc": "", "class": "android.widget.TextView", "bounds": "[249,405][609,468]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b96,160.00", "content-desc": "", "class": "android.widget.TextView", "bounds": "[639,405][999,468]", "enabled": "true", "resource-id": ""}
+{"text": "GROUPS \u00b7 6", "content-desc": "", "class": "android.view.View", "bounds": "[47,602][230,642]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "New Group", "class": "android.widget.Button", "bounds": "[712,565][1033,681]", "enabled": "true", "resource-id": ""}
+{"text": "\uf103", "content-desc": "", "class": "android.widget.TextView", "bounds": "[743,597][791,647]", "enabled": "true", "resource-id": ""}
+{"text": "New Group", "content-desc": "", "class": "android.widget.TextView", "bounds": "[812,596][1001,649]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Open Alex private test Group, General \u00b7 1 member, Settled up", "class": "android.widget.Button", "bounds": "[45,699][1035,857]", "enabled": "true", "resource-id": ""}
+{"text": "\uf4a3", "content-desc": "", "class": "android.widget.TextView", "bounds": "[108,750][161,805]", "enabled": "true", "resource-id": ""}
+{"text": "Alex private test Group", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,729][763,782]", "enabled": "true", "resource-id": ""}
+{"text": "General \u00b7 1 member", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,784][763,826]", "enabled": "true", "resource-id": ""}
+{"text": "Settled up", "content-desc": "", "class": "android.widget.TextView", "bounds": "[844,754][998,802]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Open Maple House, Household \u00b7 3 members, Settled up", "class": "android.widget.Button", "bounds": "[45,859][1035,1017]", "enabled": "true", "resource-id": ""}
+{"text": "\uf383", "content-desc": "", "class": "android.widget.TextView", "bounds": "[108,910][161,965]", "enabled": "true", "resource-id": ""}
+{"text": "Maple House", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,889][763,942]", "enabled": "true", "resource-id": ""}
+{"text": "Household \u00b7 3 members", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,944][763,986]", "enabled": "true", "resource-id": ""}
+{"text": "Settled up", "content-desc": "", "class": "android.widget.TextView", "bounds": "[844,914][998,962]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Open Banyan Court Flat 4B, Household \u00b7 3 members, You owe \u20b92,726.77", "class": "android.widget.Button", "bounds": "[45,1019][1035,1177]", "enabled": "true", "resource-id": ""}
+{"text": "\uf383", "content-desc": "", "class": "android.widget.TextView", "bounds": "[108,1070][161,1125]", "enabled": "true", "resource-id": ""}
+{"text": "Banyan Court Flat 4B", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,1049][759,1102]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b92,726.77", "content-desc": "", "class": "android.widget.TextView", "bounds": "[789,1049][999,1102]", "enabled": "true", "resource-id": ""}
+{"text": "Household \u00b7 3 members", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,1104][759,1146]", "enabled": "true", "resource-id": ""}
+{"text": "you owe", "content-desc": "", "class": "android.widget.TextView", "bounds": "[883,1104][999,1146]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Open Kochi to Alleppey, Trip \u00b7 18\u201323 Aug \u00b7 3 members, You owe \u20b98,661.00", "class": "android.widget.Button", "bounds": "[45,1179][1035,1337]", "enabled": "true", "resource-id": ""}
+{"text": "\uf10a", "content-desc": "", "class": "android.widget.TextView", "bounds": "[108,1230][161,1285]", "enabled": "true", "resource-id": ""}
+{"text": "Kochi to Alleppey", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,1209][759,1262]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b98,661.00", "content-desc": "", "class": "android.widget.TextView", "bounds": "[789,1209][999,1262]", "enabled": "true", "resource-id": ""}
+{"text": "Trip \u00b7 18\u201323 Aug \u00b7 3 members", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,1264][759,1306]", "enabled": "true", "resource-id": ""}
+{"text": "you owe", "content-desc": "", "class": "android.widget.TextView", "bounds": "[883,1264][999,1306]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Open Studio Lunch Club, Work \u00b7 2 members, Settled up", "class": "android.widget.Button", "bounds": "[45,1340][1035,1497]", "enabled": "true", "resource-id": ""}
+{"text": "\uf1b2", "content-desc": "", "class": "android.widget.TextView", "bounds": "[108,1391][161,1446]", "enabled": "true", "resource-id": ""}
+{"text": "Studio Lunch Club", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,1370][763,1423]", "enabled": "true", "resource-id": ""}
+{"text": "Work \u00b7 2 members", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,1425][763,1467]", "enabled": "true", "resource-id": ""}
+{"text": "Settled up", "content-desc": "", "class": "android.widget.TextView", "bounds": "[844,1395][998,1443]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Open Goa Friends Trip, Trip \u00b7 29 Sep \u2013 2 Oct \u00b7 3 members, Owed to you \u20b96,160.00", "class": "android.widget.Button", "bounds": "[45,1500][1035,1657]", "enabled": "true", "resource-id": ""}
+{"text": "\uf10a", "content-desc": "", "class": "android.widget.TextView", "bounds": "[108,1551][161,1606]", "enabled": "true", "resource-id": ""}
+{"text": "Goa Friends Trip", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,1530][759,1583]", "enabled": "true", "resource-id": ""}
+{"text": "\u20b96,160.00", "content-desc": "", "class": "android.widget.TextView", "bounds": "[789,1530][999,1583]", "enabled": "true", "resource-id": ""}
+{"text": "Trip \u00b7 29 Sep \u2013 2 Oct \u00b7 3 members", "content-desc": "", "class": "android.widget.TextView", "bounds": "[218,1585][759,1627]", "enabled": "true", "resource-id": ""}
+{"text": "owed to you", "content-desc": "", "class": "android.widget.TextView", "bounds": "[829,1585][999,1627]", "enabled": "true", "resource-id": ""}
+{"text": "Local development \u00b7 fictional data", "content-desc": "", "class": "android.widget.TextView", "bounds": "[42,1691][1038,1733]", "enabled": "true", "resource-id": ""}

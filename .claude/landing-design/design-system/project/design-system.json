@@ -1,0 +1,156 @@
+{
+ "v": 3,
+ "layout": "files",
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-10-16T18:04:08Z"
+ },
+ "title": "Splitbook",
+ "namespace": "Splitbook",
+ "libraries": [],
+ "sections": {},
+ "groups": [
+  "Logos",
+  "Brand board"
+ ],
+ "assetGroups": {
+  "Logos": {
+   "name": "Logos",
+   "tile": "m",
+   "order": [
+    "logo-light.svg",
+    "logo-dark.svg",
+    "logo-ink.svg",
+    "logo-white.svg",
+    "mark-indigo.svg",
+    "mark-on-dark.svg",
+    "mark-ink.svg",
+    "mark-white.svg",
+    "stacked-light.svg",
+    "stacked-dark.svg",
+    "wordmark-light.svg",
+    "wordmark-dark.svg",
+    "app-icon.svg",
+    "app-icon-indigo.svg",
+    "favicon.svg"
+   ],
+   "files": {
+    "logo-light.svg": {
+     "name": "logo-light.svg",
+     "blob": "113186e68dc8a5b4c7ed4c4fa5f867cd",
+     "size": 6242,
+     "type": "image/svg+xml"
+    },
+    "logo-dark.svg": {
+     "name": "logo-dark.svg",
+     "blob": "175261d2dbcdd4343d303189708a5857",
+     "size": 6242,
+     "type": "image/svg+xml"
+    },
+    "logo-ink.svg": {
+     "name": "logo-ink.svg",
+     "blob": "da5021ae3760d2e8e32a491098c3a9a9",
+     "size": 6242,
+     "type": "image/svg+xml"
+    },
+    "logo-white.svg": {
+     "name": "logo-white.svg",
+     "blob": "4f836175b03e759667e72ae60dba91b3",
+     "size": 6242,
+     "type": "image/svg+xml"
+    },
+    "mark-indigo.svg": {
+     "name": "mark-indigo.svg",
+     "blob": "ffcdd6d1eae2be6f4913d9bde5964238",
+     "size": 909,
+     "type": "image/svg+xml"
+    },
+    "mark-on-dark.svg": {
+     "name": "mark-on-dark.svg",
+     "blob": "28aaf9381d664f74e82d38fb783d9e63",
+     "size": 909,
+     "type": "image/svg+xml"
+    },
+    "mark-ink.svg": {
+     "name": "mark-ink.svg",
+     "blob": "24b69cb0b7efddfb550f7dd531c81204",
+     "size": 909,
+     "type": "image/svg+xml"
+    },
+    "mark-white.svg": {
+     "name": "mark-white.svg",
+     "blob": "24d4fd7ccebabf67cd79daa197bfd52d",
+     "size": 909,
+     "type": "image/svg+xml"
+    },
+    "stacked-light.svg": {
+     "name": "stacked-light.svg",
+     "blob": "92687bd07a7da5d1cdd87f7ec45ba640",
+     "size": 6244,
+     "type": "image/svg+xml"
+    },
+    "stacked-dark.svg": {
+     "name": "stacked-dark.svg",
+     "blob": "3b662399e337f9a19c9cb51a4d367a0a",
+     "size": 6244,
+     "type": "image/svg+xml"
+    },
+    "wordmark-light.svg": {
+     "name": "wordmark-light.svg",
+     "blob": "bfd2b5b831130d5ee287dc9dcd1f9129",
+     "size": 5458,
+     "type": "image/svg+xml"
+    },
+    "wordmark-dark.svg": {
+     "name": "wordmark-dark.svg",
+     "blob": "8ab609a44fcb2772f5ffe6aedad8ddfb",
+     "size": 5458,
+     "type": "image/svg+xml"
+    },
+    "app-icon.svg": {
+     "name": "app-icon.svg",
+     "blob": "8333bfe3e884c1ddde363f72ce358265",
+     "size": 998,
+     "type": "image/svg+xml"
+    },
+    "app-icon-indigo.svg": {
+     "name": "app-icon-indigo.svg",
+     "blob": "82dc860773cdba4eb9bfe55fb2016fef",
+     "size": 998,
+     "type": "image/svg+xml"
+    },
+    "favicon.svg": {
+     "name": "favicon.svg",
+     "blob": "ff98cb6c77211bc9b9bab486ebd7b3a1",
+     "size": 982,
+     "type": "image/svg+xml"
+    }
+   }
+  },
+  "Brand board": {
+   "name": "Brand board",
+   "tile": "l",
+   "order": [
+    "brand-board.png"
+   ],
+   "files": {
+    "brand-board.png": {
+     "name": "brand-board.png",
+     "blob": "24e9df229726e982203b061526d5a007",
+     "size": 170053,
+     "type": "image/png"
+    }
+   }
+  }
+ },
+ "blobs": {},
+ "docs": {
+  "sections": []
+ },
+ "lastChange": {
+  "by": "Ankit Das",
+  "at": "2026-10-16T18:04:08Z",
+  "via": "GitHub \u00b7 FireBird1998/splitbook@f30efef4",
+  "note": "First sync: colours, type, spacing, radii, shadows and layout from design-tokens.ts and brand.json; the Equal share logos; brand book from docs/ui.md and the brand standard."
+ }
+}

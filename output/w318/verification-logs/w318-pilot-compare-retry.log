@@ -1,0 +1,30 @@
+
+> splitbook@0.1.0 web /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -C apps/web exec playwright test --config /tmp/w318-runner/w318-pilot.config.ts pilot.spec.ts --grep 'loaded presentation is accessible and visually stable' --workers=1
+
+[WebServer] (node:72452) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 2026-10-07T12:21:55.427Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET should be at least 32 characters long for adequate security. Generate one with `npx auth secret` or `openssl rand -base64 32`.
+[WebServer] 2026-10-07T12:21:55.428Z WARN [Better Auth]: [better-auth] Warning: your BETTER_AUTH_SECRET appears low-entropy. Use a randomly generated secret for production.
+[WebServer] 2026-10-07T12:21:55.429Z WARN [Better Auth]: Social provider google is missing clientId or clientSecret
+
+Running 8 tests using 1 worker
+
+(node:72502) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [desktop-light] › playwright-pilot/pilot.spec.ts:262:7 › dashboard loaded presentation is accessible and visually stable (24.0s)
+  ✓  2 [desktop-light] › playwright-pilot/pilot.spec.ts:262:7 › balances loaded presentation is accessible and visually stable (19.4s)
+(node:73350) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [desktop-dark] › playwright-pilot/pilot.spec.ts:262:7 › dashboard loaded presentation is accessible and visually stable (19.0s)
+  ✓  4 [desktop-dark] › playwright-pilot/pilot.spec.ts:262:7 › balances loaded presentation is accessible and visually stable (19.6s)
+(node:74325) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [mobile-light] › playwright-pilot/pilot.spec.ts:262:7 › dashboard loaded presentation is accessible and visually stable (18.7s)
+  ✓  6 [mobile-light] › playwright-pilot/pilot.spec.ts:262:7 › balances loaded presentation is accessible and visually stable (18.4s)
+(node:75037) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  7 [mobile-dark] › playwright-pilot/pilot.spec.ts:262:7 › dashboard loaded presentation is accessible and visually stable (15.1s)
+  ✓  8 [mobile-dark] › playwright-pilot/pilot.spec.ts:262:7 › balances loaded presentation is accessible and visually stable (18.1s)
+
+  8 passed (2.8m)

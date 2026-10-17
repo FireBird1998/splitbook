@@ -1,0 +1,115 @@
+{
+  "verdict": "pass",
+  "interrupted": false,
+  "worktree": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook",
+  "commit": "1059bb5f5a1257311720ca73151b4e2f190268f1",
+  "base": {
+    "ref": "origin/main",
+    "commit": "9788b240a772fb7e9c7cbfe45250226efd47198d"
+  },
+  "startedAt": "2026-10-11T15:25:48.764Z",
+  "seconds": 156.6,
+  "vitestWorkers": 2,
+  "backend": {
+    "origin": "http://127.0.0.1:61445",
+    "database": "splitbook_mobile_swarm_f0cbcfa6a2_47e5e2c0",
+    "startedByGate": true
+  },
+  "steps": [
+    {
+      "name": "install check",
+      "status": "pass",
+      "seconds": 0
+    },
+    {
+      "name": "lint",
+      "status": "pass",
+      "seconds": 12.7,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/lint.log"
+    },
+    {
+      "name": "typecheck",
+      "status": "pass",
+      "seconds": 12.4,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/typecheck.log"
+    },
+    {
+      "name": "format check",
+      "status": "pass",
+      "seconds": 9.6,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/format-check.log"
+    },
+    {
+      "name": "unit tests",
+      "status": "pass",
+      "seconds": 87.6,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/unit-tests.log"
+    },
+    {
+      "name": "ceilings",
+      "status": "pass",
+      "seconds": 0.5,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/ceilings.log"
+    },
+    {
+      "name": "backend",
+      "status": "pass",
+      "seconds": 4,
+      "detail": "started at http://127.0.0.1:61445; stopped and dropped after the verifiers"
+    },
+    {
+      "name": "verify:api",
+      "status": "pass",
+      "seconds": 3.3,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/verify-api.log"
+    },
+    {
+      "name": "verify:groups",
+      "status": "pass",
+      "seconds": 3.9,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/verify-groups.log"
+    },
+    {
+      "name": "verify:settings",
+      "status": "pass",
+      "seconds": 0.8,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/verify-settings.log"
+    },
+    {
+      "name": "verify:financial",
+      "status": "pass",
+      "seconds": 3.6,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/verify-financial.log"
+    },
+    {
+      "name": "verify:expenses",
+      "status": "pass",
+      "seconds": 5,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/verify-expenses.log"
+    },
+    {
+      "name": "verify:expense-edit",
+      "status": "pass",
+      "seconds": 4,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/verify-expense-edit.log"
+    },
+    {
+      "name": "verify:settlements",
+      "status": "pass",
+      "seconds": 4.4,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/verify-settlements.log"
+    },
+    {
+      "name": "verify:activity",
+      "status": "pass",
+      "seconds": 2.7,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/verify-activity.log"
+    },
+    {
+      "name": "verify:offline",
+      "status": "pass",
+      "seconds": 1.8,
+      "log": "/Users/ankitdas/.codex/worktrees/mcp-pr-verification/SplidBook/tools/swarm/out/gate/verify-offline.log"
+    }
+  ]
+}

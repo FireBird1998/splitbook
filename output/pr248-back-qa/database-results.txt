@@ -1,0 +1,27 @@
+[
+  {
+    _id: ObjectId('6ac9198da1a7ccb87b79094b'),
+    group: ObjectId('a00000000000000000000020'),
+    description: 'Back QA groceries',
+    amount: 120
+  },
+  {
+    _id: ObjectId('6ac91b54a1a7ccb87b790a0c'),
+    group: ObjectId('a00000000000000000000020'),
+    description: 'API36 Back QA',
+    amount: 90
+  }
+]
+[
+  {
+    _id: ObjectId('6ac919d4a1a7ccb87b79096b'),
+    name: 'Back QA invitation',
+    members: [
+      {
+        user: ObjectId('a00000000000000000000002'),
+        role: 'admin',
+        joinedAt: ISODate('2026-10-09T16:44:04.676Z')
+      }
+    ]
+  }
+]

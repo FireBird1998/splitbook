@@ -1,0 +1,13 @@
+
+> splitbook@0.1.0 mobile /private/tmp/splitbook-production-apk-20261011
+> pnpm -C apps/mobile exec vitest run src/ui/sign-in.test.tsx --maxWorkers=2
+
+
+ RUN  v4.1.10 /private/tmp/splitbook-production-apk-20261011/apps/mobile
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  21:23:14
+   Duration  444ms (transform 153ms, setup 73ms, import 171ms, tests 32ms, environment 0ms)
+

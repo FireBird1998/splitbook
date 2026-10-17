@@ -1,0 +1,21 @@
+{
+  "sourceCommit": "360ef41c18a28e98d2b637b79963c7e78966ded4",
+  "mergedMainCommit": "74005bf1c0e54fdf8c3912d1adca1a5485ddfefa",
+  "pullRequest": 397,
+  "googleAndroidClientId": "454607327176-h6oc1ml40iospk995i6192ds8dd7bdr0.apps.googleusercontent.com",
+  "certificateSha256": "B6:34:FC:FC:EC:42:B9:15:67:56:A6:97:37:EF:B0:D8:97:19:2C:22:26:19:BA:6F:42:DE:33:4A:A2:FC:18:EB",
+  "checks": {
+    "unitTests": 4587,
+    "fullLocalGate": "passed",
+    "productionDeployment": "READY",
+    "isolatedAndroid15ColdLaunch": "passed",
+    "realAccountPhonePilot": "pending",
+    "keyBackup": "owner action required",
+    "productionBuildPreflight": "passed",
+    "productionAppLinks": "verified on Android 15",
+    "googleAccountHandoff": "reached Google account setup; authenticated sign-in pending"
+  },
+  "deploymentId": "dpl_6RnAqfZDxbBKBtb5NWuoDaPmdXN7",
+  "apk": "SplitBook-Production.apk",
+  "apkSha256": "3a386255e9d221fcf580a009557c1929ecb2898a15f4cbfc8776a8d8d14f9aa9"
+}

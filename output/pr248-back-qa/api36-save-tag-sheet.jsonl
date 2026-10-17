@@ -1,0 +1,20 @@
+{"text": "", "content-desc": "Close Tag, keeping your entries", "class": "android.widget.Button", "bounds": "[0,0][1080,2400]", "enabled": "true", "resource-id": ""}
+{"text": "Tag", "content-desc": "", "class": "android.view.View", "bounds": "[53,1073][142,1136]", "enabled": "true", "resource-id": ""}
+{"text": "Required", "content-desc": "", "class": "android.widget.TextView", "bounds": "[173,1084][291,1124]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Done", "class": "android.widget.Button", "bounds": "[906,1031][1059,1146]", "enabled": "true", "resource-id": ""}
+{"text": "Done", "content-desc": "", "class": "android.widget.TextView", "bounds": "[937,1062][1027,1115]", "enabled": "true", "resource-id": ""}
+{"text": "\uf563", "content-desc": "", "class": "android.widget.TextView", "bounds": "[89,1213][142,1268]", "enabled": "true", "resource-id": ""}
+{"text": "Search Tags", "content-desc": "Search Tags", "class": "android.widget.EditText", "bounds": "[169,1178][992,1304]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tag: General", "class": "android.widget.RadioButton", "bounds": "[0,1336][1080,1462]", "enabled": "true", "resource-id": ""}
+{"text": "General", "content-desc": "", "class": "android.widget.TextView", "bounds": "[147,1372][1028,1425]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tag: Rent", "class": "android.widget.RadioButton", "bounds": "[0,1473][1080,1599]", "enabled": "true", "resource-id": ""}
+{"text": "Rent", "content-desc": "", "class": "android.widget.TextView", "bounds": "[147,1509][1028,1562]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tag: Utilities", "class": "android.widget.RadioButton", "bounds": "[0,1609][1080,1735]", "enabled": "true", "resource-id": ""}
+{"text": "Utilities", "content-desc": "", "class": "android.widget.TextView", "bounds": "[147,1645][1028,1698]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tag: Groceries", "class": "android.widget.RadioButton", "bounds": "[0,1746][1080,1872]", "enabled": "true", "resource-id": ""}
+{"text": "Groceries", "content-desc": "", "class": "android.widget.TextView", "bounds": "[147,1782][1028,1835]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tag: Internet", "class": "android.widget.RadioButton", "bounds": "[0,1882][1080,2008]", "enabled": "true", "resource-id": ""}
+{"text": "Internet", "content-desc": "", "class": "android.widget.TextView", "bounds": "[147,1918][1028,1971]", "enabled": "true", "resource-id": ""}
+{"text": "", "content-desc": "Tag: Household", "class": "android.widget.RadioButton", "bounds": "[0,2019][1080,2145]", "enabled": "true", "resource-id": ""}
+{"text": "Household", "content-desc": "", "class": "android.widget.TextView", "bounds": "[147,2055][1028,2108]", "enabled": "true", "resource-id": ""}
+{"text": "Only this Group\u2019s active Tags are listed. Manage Tags on the web.", "content-desc": "", "class": "android.widget.TextView", "bounds": "[52,2199][1027,2295]", "enabled": "true", "resource-id": ""}

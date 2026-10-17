@@ -1,0 +1,7 @@
+
+> @splitbook/mobile@0.1.0 verify:activity /private/tmp/splitbook-pr248-back-qa/apps/mobile
+> node --import tsx scripts/verify-activity.ts
+
+PASS: mixed paginated Activity, original snapshot money, and current deleted-target detail without an editor.
+PASS: explicit stale/error recovery, single payment event, and foreground membership revocation.
+PASS: removal history distinguishes the acting admin from the removed member.

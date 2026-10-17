@@ -1,0 +1,33 @@
+
+> splitbook@0.1.0 test:unit /Users/ankitdas/AnkitPersonalProjech/SplidBook
+> pnpm -r test:unit --maxWorkers=2
+
+Scope: 4 of 5 workspace projects
+packages/shared test:unit$ vitest run --maxWorkers=2
+tools/swarm test:unit$ vitest run --maxWorkers=2
+packages/shared test:unit:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/packages/shared
+tools/swarm test:unit:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/tools/swarm
+packages/shared test:unit:  Test Files  55 passed (55)
+packages/shared test:unit:       Tests  1418 passed (1418)
+packages/shared test:unit:    Start at  12:12:04
+packages/shared test:unit:    Duration  7.58s (transform 860ms, setup 0ms, import 5.62s, tests 1.85s, environment 3ms)
+packages/shared test:unit: Done
+tools/swarm test:unit:  Test Files  6 passed (6)
+tools/swarm test:unit:       Tests  122 passed (122)
+tools/swarm test:unit:    Start at  12:12:04
+tools/swarm test:unit:    Duration  15.71s (transform 249ms, setup 0ms, import 1.25s, tests 17.42s, environment 0ms)
+tools/swarm test:unit: Done
+apps/mobile test:unit$ vitest run --maxWorkers=2
+apps/web test:unit$ vitest run --exclude "src/**/*.integration.test.ts" --maxWorkers=2
+apps/web test:unit:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/web
+apps/mobile test:unit:  RUN  v4.1.10 /Users/ankitdas/AnkitPersonalProjech/SplidBook/apps/mobile
+apps/web test:unit:  Test Files  62 passed (62)
+apps/web test:unit:       Tests  771 passed (771)
+apps/web test:unit:    Start at  12:12:20
+apps/web test:unit:    Duration  23.55s (transform 3.55s, setup 0ms, import 28.40s, tests 7.64s, environment 6ms)
+apps/web test:unit: Done
+apps/mobile test:unit:  Test Files  72 passed (72)
+apps/mobile test:unit:       Tests  1577 passed (1577)
+apps/mobile test:unit:    Start at  12:12:20
+apps/mobile test:unit:    Duration  56.50s (transform 3.33s, setup 3.23s, import 54.97s, tests 39.64s, environment 5ms)
+apps/mobile test:unit: Done

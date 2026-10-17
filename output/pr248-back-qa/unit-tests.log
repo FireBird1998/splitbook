@@ -1,0 +1,55 @@
+Scope: 4 of 5 workspace projects
+
+> @splitbook/shared@0.1.0 test:unit /private/tmp/splitbook-pr248-back-qa/packages/shared
+> vitest run
+
+
+ RUN  v4.1.10 /private/tmp/splitbook-pr248-back-qa/packages/shared
+
+
+ Test Files  57 passed (57)
+      Tests  1480 passed (1480)
+   Start at  21:53:46
+   Duration  5.44s (transform 479ms, setup 0ms, import 3.78s, tests 1.27s, environment 2ms)
+
+
+> @splitbook/swarm@0.1.0 test:unit /private/tmp/splitbook-pr248-back-qa/tools/swarm
+> vitest run
+
+
+ RUN  v4.1.10 /private/tmp/splitbook-pr248-back-qa/tools/swarm
+
+
+ Test Files  6 passed (6)
+      Tests  122 passed (122)
+   Start at  21:53:52
+   Duration  15.01s (transform 145ms, setup 0ms, import 781ms, tests 16.27s, environment 0ms)
+
+
+> @splitbook/mobile@0.1.0 test:unit /private/tmp/splitbook-pr248-back-qa/apps/mobile
+> vitest run
+
+
+ RUN  v4.1.10 /private/tmp/splitbook-pr248-back-qa/apps/mobile
+
+(node:13400) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ Test Files  82 passed (82)
+      Tests  2024 passed (2024)
+   Start at  21:54:08
+   Duration  79.17s (transform 2.89s, setup 3.26s, import 72.41s, tests 67.77s, environment 6ms)
+
+
+> @splitbook/web@0.1.0 test:unit /private/tmp/splitbook-pr248-back-qa/apps/web
+> vitest run --exclude "src/**/*.integration.test.ts"
+
+
+ RUN  v4.1.10 /private/tmp/splitbook-pr248-back-qa/apps/web
+
+
+ Test Files  67 passed (67)
+      Tests  814 passed (814)
+   Start at  21:55:27
+   Duration  15.71s (transform 1.63s, setup 0ms, import 19.15s, tests 5.30s, environment 3ms)
+
