@@ -38,20 +38,28 @@ export async function signInWithGoogle(callbackURL: string) {
   window.location.assign(`/login?${params}`);
 }
 
-/** Sign out, then reload at the landing page (persona picker or marketing page). */
-export async function signOutToHome() {
+/**
+ * Sign out, then reload at the landing page (persona picker or marketing page). Resolves
+ * 'unreachable', never throwing, when the server can't be reached: the member stays signed in on
+ * this page, and the caller tells them (#536).
+ */
+export async function signOutToHome(): Promise<'leaving' | 'unreachable'> {
   // This tab navigates on its own; its session guard must not reload it first.
   leaveExpectedAccount();
-  const result = await authClient.signOut().catch((error: unknown) => {
+  let result: Awaited<ReturnType<typeof authClient.signOut>>;
+  try {
+    result = await authClient.signOut();
+  } catch {
     // Unreachable: this tab stays signed in, so its session guard and sign-in redirect apply.
     stayInExpectedAccount();
-    throw error;
-  });
+    return 'unreachable';
+  }
   // Unconfirmed payments are account-local data: none outlives the session (#198).
-  // A sign-out that failed (offline, say) leaves the member signed in, so they stay.
+  // A sign-out the server refused leaves the member signed in, so they stay.
   if (!result?.error) {
     forgetBrowserSettlementAttempts();
     forgetBrowserTagActions();
   }
   window.location.assign('/');
+  return 'leaving';
 }

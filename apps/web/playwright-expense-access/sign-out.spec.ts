@@ -55,6 +55,36 @@ async function holdNextGroupsRefresh(page: Page) {
   return held!;
 }
 
+/** Errors the page raised and left unhandled, such as a rejected Sign Out nobody caught. */
+function pageErrors(page: Page) {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  return errors;
+}
+
+/** Make Sign Out unreachable, as offline; `failed` resolves once its request has failed. */
+async function signOutUnreachable(page: Page) {
+  await page.route('**/api/auth/sign-out', (route) => route.abort('internetdisconnected'));
+  const failed = page.waitForEvent(
+    'requestfailed',
+    (request) => new URL(request.url()).pathname === '/api/auth/sign-out',
+  );
+  return { failed };
+}
+
+const COULD_NOT_SIGN_OUT = 'Couldn’t sign out. Check your connection and try again.';
+
+/**
+ * Sam is told Sign Out couldn't reach the server (#536): announced politely by the status region,
+ * and shown in the notice, so the words are on the page twice.
+ */
+async function expectToldCouldNotSignOut(page: Page) {
+  await expect(page.getByRole('status').filter({ hasText: COULD_NOT_SIGN_OUT })).toHaveText(
+    COULD_NOT_SIGN_OUT,
+  );
+  await expect(page.getByText(COULD_NOT_SIGN_OUT)).toHaveCount(2);
+}
+
 /** Hold the landing page's document, as a slow server or network would, until released. */
 async function holdLandingPage(page: Page) {
   let release!: () => void;
@@ -119,15 +149,15 @@ test('a Sign Out that cannot reach the server keeps the tab, and a later ended s
 }) => {
   await page.clock.install();
   await enterAsSam(page, ledger, '/groups');
-  await page.route('**/api/auth/sign-out', (route) => route.abort('internetdisconnected'));
-  const unreachable = page.waitForEvent(
-    'requestfailed',
-    (request) => new URL(request.url()).pathname === '/api/auth/sign-out',
-  );
+  const errors = pageErrors(page);
+  const unreachable = await signOutUnreachable(page);
   await page.getByRole('button', { name: 'Account menu' }).click();
   await page.getByRole('menuitem', { name: 'Sign Out' }).click();
-  await unreachable;
+  await unreachable.failed;
+  // Sam is told, and stays signed in on the page, with nothing left unhandled (#536).
+  await expectToldCouldNotSignOut(page);
   await expect(page).toHaveURL(appURL('/groups'));
+  expect(errors).toEqual([]);
 
   // Signed out from another tab later: this tab is no longer leaving, so it goes to sign in.
   await signOutElsewhere(page);
@@ -135,4 +165,19 @@ test('a Sign Out that cannot reach the server keeps the tab, and a later ended s
   const signIn = appURL('/login?callbackUrl=%2Fgroups');
   await runClockUntil(page, () => page.url() === signIn);
   await expect(page).toHaveURL(signIn);
+});
+
+test('a Sign Out from Settings that cannot reach the server says so and keeps the page (#536)', async ({
+  page,
+  ledger,
+}) => {
+  await page.clock.install();
+  await enterAsSam(page, ledger, '/settings');
+  const errors = pageErrors(page);
+  const unreachable = await signOutUnreachable(page);
+  await page.getByRole('button', { name: 'Sign Out' }).click();
+  await unreachable.failed;
+  await expectToldCouldNotSignOut(page);
+  await expect(page).toHaveURL(appURL('/settings'));
+  expect(errors).toEqual([]);
 });
