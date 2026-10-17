@@ -19,6 +19,15 @@ const SWATCH = {
   cord: { width: 14, height: 3, bgcolor: 'var(--fg-cord)', borderRadius: '2px' },
   pay: { width: 14, height: 3, bgcolor: 'var(--fg-pay)', borderRadius: '2px' },
   coin: { width: 10, bgcolor: 'text.disabled', borderRadius: '50%' },
+  // the To review rack: the lever's lit knob, a bar's blue tag and the thin read line
+  lever: {
+    width: 10,
+    bgcolor: 'var(--anatomy-lit-top)',
+    border: '1px solid var(--anatomy-lo)',
+    borderRadius: '50%',
+  },
+  tag: { width: 14, height: 3, bgcolor: 'var(--fg-tag)', borderRadius: '2px' },
+  read: { width: 14, height: '1px', bgcolor: 'var(--anatomy-lo)' },
 } as const;
 
 /**

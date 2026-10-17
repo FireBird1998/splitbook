@@ -15,6 +15,7 @@
     "test:expense-access": "playwright test --config playwright.expense-access.config.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:google": "playwright test --config playwright.google.config.ts",
+    "test:e2e:google:assistants": "playwright test --config playwright.google-assistants.config.ts",
     "test:design-system": "playwright test --config playwright.design-system.config.ts",
     "test:pilot": "playwright test --config playwright.pilot.config.ts",
     "test:production-ui": "playwright test --config playwright.production-ui.config.ts",

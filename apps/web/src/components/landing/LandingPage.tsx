@@ -16,6 +16,7 @@ import type { WhatsLive } from '@/lib/landing/whats-live';
 import LandingPricing, { pricingSections } from './LandingPricing';
 import SignInWithGoogleButton from './SignInWithGoogleButton';
 import LandingApps from './LandingApps';
+import LandingAssistants, { assistantsSections } from './LandingAssistants';
 import LandingGroups from './LandingGroups';
 import LandingSplit from './LandingSplit';
 import LandingSettleUp from './LandingSettleUp';
@@ -316,6 +317,7 @@ export default function LandingPage({ live }: LandingPageProps) {
         sections={[
           { href: '#how', label: 'How it works' },
           { href: '#groups', label: 'Groups' },
+          ...assistantsSections(live),
           ...pricingSections(live),
         ]}
       />
@@ -324,6 +326,7 @@ export default function LandingPage({ live }: LandingPageProps) {
         <LandingGroups />
         <LandingSplit />
         <LandingSettleUp />
+        <LandingAssistants live={live} />
         <LandingApps
           live={live}
           storeBadge={live.playStoreUrl && <GetItOnGooglePlay href={live.playStoreUrl} />}
