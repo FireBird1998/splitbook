@@ -33,6 +33,51 @@ async function stop(child: ChildProcess): Promise<void> {
   }
 }
 
+/**
+ * Compile the pages the suite opens before any test does. A dev server compiles each route on
+ * its first request, which can take longer than a test waits for it (#476); a production
+ * server has nothing left to compile. The landing and sign-in pages are opened signed out, as
+ * sign-out leaves them; the rest signed in as a persona, so the proxy lets them through. An
+ * unknown Group id still compiles that Group's routes. Demo mode only: a Google-mode app (the
+ * auth-recovery suite) has no persona sign-in.
+ */
+async function compilePages(baseURL: string) {
+  for (const path of ['/', '/login']) await fetch(`${baseURL}${path}`, { redirect: 'manual' });
+  const signIn = await fetch(`${baseURL}/api/auth/demo-persona/sign-in`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: baseURL },
+    body: JSON.stringify({ personaId: 'alex' }),
+  });
+  if (!signIn.ok) throw new Error(`Page warm-up sign-in failed: ${signIn.status}`);
+  const cookie = signIn.headers
+    .getSetCookie()
+    .map((value) => value.split(';')[0])
+    .join('; ');
+  const group = `/groups/${'0'.repeat(24)}`;
+  const tabs = ['expenses', 'balances', 'activity', 'members', 'settings', 'review', 'insights'];
+  for (const path of [
+    '/dashboard',
+    '/groups',
+    '/groups/new',
+    '/settings',
+    '/export',
+    group,
+    ...tabs.map((tab) => `${group}/${tab}`),
+    // The reads those pages make first, which compile on their first request too.
+    '/api/auth/get-session',
+    '/api/groups',
+    '/api/user/balances',
+    '/api/user/spending',
+    '/api/user/activity',
+    '/api/user/to-review',
+    '/api/invitations',
+    `/api${group}`,
+    ...['expenses', 'balances', 'activity', 'drafts'].map((read) => `/api${group}/${read}`),
+  ]) {
+    await fetch(`${baseURL}${path}`, { headers: { cookie }, redirect: 'manual' });
+  }
+}
+
 export async function startIsolatedApp(
   authMode: 'demo' | 'google' = 'demo',
   googleTestIdentity?: { email: string; idTokenSecret: string },
@@ -179,6 +224,7 @@ export async function startIsolatedApp(
         reject(new Error(`Isolated app exited: ${code}`));
       });
     });
+    if (!production && authMode === 'demo') await compilePages(baseURL);
     // Only publish the URL after our own child reports readiness. An occupied
     // port fails startup; an existing app is never reused.
     process.env.EXPENSE_ACCESS_BASE_URL = baseURL;
