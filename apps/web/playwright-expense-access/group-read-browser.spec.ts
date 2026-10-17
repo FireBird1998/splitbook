@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { test, expect, dataOf, joinGroup, type Ledger } from './fixtures';
@@ -32,7 +33,8 @@ for (const viewport of [
       ledger,
     }) => {
       await page.setViewportSize(viewport);
-      const validName = `Valid Group on ${viewport.name} ${path}`;
+      // Unique to this test: a retry or repeat in the same database adds another of Sam's Groups.
+      const validName = `Valid Group on ${viewport.name} ${path} ${randomUUID().slice(0, 8)}`;
       await dataOf(
         await ledger.sam.post('/api/groups', {
           data: { name: validName, category: 'other', defaultCurrency: 'INR' },
@@ -141,7 +143,8 @@ test('sign-out clears Group cards and a late prior-account refresh cannot popula
   page,
   ledger,
 }) => {
-  const privateName = 'Sam-only late response Group';
+  // Unique to this test: a retry or repeat in the same database adds another of Sam's Groups.
+  const privateName = `Sam-only late response Group ${randomUUID().slice(0, 8)}`;
   await dataOf(
     await ledger.sam.post('/api/groups', {
       data: { name: privateName, category: 'other', defaultCurrency: 'INR' },
@@ -170,8 +173,13 @@ test('sign-out clears Group cards and a late prior-account refresh cannot popula
     await page.getByRole('menuitem', { name: 'Sign Out' }).click();
     await expect(page.getByRole('button', { name: 'Enter as Alex Rivera' })).toBeVisible();
     await expect(page.getByText(privateName, { exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Enter as Alex Rivera' }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    // The picker is server-rendered, and a click before it hydrates does nothing (#476): click
+    // until Alex is signed in, within the 5 s the page had.
+    const enterAsAlex = page.getByRole('button', { name: 'Enter as Alex Rivera' });
+    await expect(async () => {
+      if (new URL(page.url()).pathname === '/') await enterAsAlex.click({ timeout: 1_000 });
+      await expect(page).toHaveURL(/\/dashboard$/, { timeout: 1_000 });
+    }).toPass({ timeout: 5_000 });
     release();
     await expect(page.locator(`a[href="/groups/${ledger.groupA}"]`).first()).toBeVisible();
     await expect(page.getByText(privateName, { exact: true })).toHaveCount(0);
@@ -460,9 +468,11 @@ test('a Household reopened after Sam is back shows no month figures or dialog fr
   page,
   ledger,
 }) => {
+  // Unique to this test: a retry or repeat in the same database adds another of Sam's Groups.
+  const householdName = `Synthetic lantern household ${randomUUID().slice(0, 8)}`;
   const household = await dataOf(
     await ledger.priya.post('/api/groups', {
-      data: { name: 'Synthetic lantern household', category: 'home', defaultCurrency: 'INR' },
+      data: { name: householdName, category: 'home', defaultCurrency: 'INR' },
     }),
     201,
   );
@@ -493,7 +503,7 @@ test('a Household reopened after Sam is back shows no month figures or dialog fr
     .getByRole('definition')
     .first();
 
-  const sections = main.getByRole('navigation', { name: 'Synthetic lantern household sections' });
+  const sections = main.getByRole('navigation', { name: `${householdName} sections` });
   const expensesTab = `/groups/${household._id}/expenses`;
 
   await page.clock.install();
@@ -542,7 +552,7 @@ test('a Household reopened after Sam is back shows no month figures or dialog fr
   await reread;
   // Neither the dialog left open before the loss nor the deep link's opens again by itself.
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(main.getByText('Synthetic lantern household', { exact: true })).toBeVisible();
+  await expect(main.getByText(householdName, { exact: true })).toBeVisible();
   await expect(sections.getByRole('link', { name: 'Expenses', exact: true })).toHaveAttribute(
     'aria-current',
     'page',
