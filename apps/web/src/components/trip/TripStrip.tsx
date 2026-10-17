@@ -108,11 +108,12 @@ export default function TripStrip({
   const isFull = variant === 'full';
 
   const tone = balance ? getMoneyTone(balance.amount) : 'neutral';
+  const signed = !balanceUnavailable && !!balance && tone !== 'neutral';
   const balanceText = balanceUnavailable
     ? 'Balance unavailable'
-    : !balance || tone === 'neutral'
-      ? 'Settled'
-      : formatSignedCurrency(balance.amount, balance.currency);
+    : signed
+      ? formatSignedCurrency(balance.amount, balance.currency)
+      : 'Settled';
   const balanceDescription = balanceUnavailable
     ? 'Balance unavailable'
     : !balance || tone === 'neutral'
@@ -269,10 +270,9 @@ export default function TripStrip({
         </Box>
       </Box>
 
-      {/* Stub */}
+      {/* Stub: its grid column fits the balance, between these widths. */}
       <Box
         sx={{
-          width: '28%',
           minWidth: 120,
           maxWidth: 180,
           p: 2,
@@ -298,6 +298,8 @@ export default function TripStrip({
               ...(theme.typography.money as React.CSSProperties),
               fontSize: '1.125rem',
               fontWeight: 600,
+              // The sign never breaks away from its amount (#510).
+              ...(signed ? { whiteSpace: 'nowrap' } : {}),
               animation: 'balance-settle 400ms ease-out both',
             })}
           >

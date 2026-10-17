@@ -86,6 +86,35 @@ test('the header shows the Group’s icon, name, Theme, members, currency, Invit
   await reviewScreenshot(page, testInfo, 'group-header');
 });
 
+test('the Trip strip shows its balance on one line, sign and amount together, within the stub', async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== 'desktop-light',
+    'It sets its own widths; the theme changes nothing here.',
+  );
+  await enterAsPersona(page, 'alex');
+  for (const width of [1440, 360]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(GROUP);
+    const strip = page
+      .getByRole('main')
+      .getByRole('region', { name: new RegExp(`^${DEMO_TRIP_NAME} trip,`) });
+    const balance = strip.getByText(/^[+−]₹[\d,]+\.\d{2}$/);
+    await expect(balance).toBeVisible();
+    const shown = await balance.evaluate((element) => {
+      const text = document.createRange();
+      text.selectNodeContents(element);
+      return {
+        lines: new Set([...text.getClientRects()].map((line) => Math.round(line.top))).size,
+        // Its box is as wide as the text, so nothing spills out of the stub.
+        fits: text.getBoundingClientRect().right <= element.getBoundingClientRect().right + 0.5,
+      };
+    });
+    expect(shown, `at ${width} px`).toEqual({ lines: 1, fits: true });
+  }
+});
+
 test('each tab is a link with its own address; Back, Forward and reload land on the right tab', async ({
   page,
 }) => {
