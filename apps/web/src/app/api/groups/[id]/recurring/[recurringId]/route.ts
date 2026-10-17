@@ -7,6 +7,8 @@ import {
   serverError,
   validationError,
   error,
+  readJson,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { updateRecurringExpenseSchema } from '@splitbook/shared/validators/recurring-expense';
@@ -42,8 +44,8 @@ export async function PATCH(
     if (!user) return unauthorized();
     assertRecurringExpensesOn();
 
-    const { id, recurringId } = await params;
-    const body = await req.json();
+    const { id, recurringId } = await routeIds(params);
+    const body = await readJson(req);
     const parsed = updateRecurringExpenseSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 
@@ -74,7 +76,7 @@ export async function DELETE(
     if (!user) return unauthorized();
     assertRecurringExpensesOn();
 
-    const { id, recurringId } = await params;
+    const { id, recurringId } = await routeIds(params);
 
     const template = await recurringExpenseService.remove(
       id,

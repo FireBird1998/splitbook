@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import mongoose from 'mongoose';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { balanceService } from '@/lib/services/balance.service';
@@ -14,7 +15,7 @@ vi.mock('@/lib/services/group.service', () => ({ groupService: { isMember: vi.fn
 vi.mock('@/lib/services/expense.service', () => ({ expenseService: { create: vi.fn() } }));
 vi.mock('@/lib/services/recurring-expense.service', () => ({ recurringExpenseService: {} }));
 
-const { getAuthUser, serverError } = await import('./api-response');
+const { getAuthUser, readJson, routeIds, serverError } = await import('./api-response');
 const balancesRoute = await import('@/app/api/user/balances/route');
 const expensesRoute = await import('@/app/api/groups/[id]/expenses/route');
 
@@ -52,6 +53,59 @@ describe('serverError', () => {
     const response = serverError(new Error('Something unexpected'));
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: 'Internal server error', status: 500 });
+  });
+
+  it('keeps the server’s own faults as 500 and logs them, never as bad input (#539)', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logged.mockClear();
+    const bsonFault = new Error(
+      'input must be a 24 character hex string, 12 byte Uint8Array, or an integer',
+    );
+    bsonFault.name = 'BSONError';
+    const faults = [
+      // JSON the server parses itself, such as a stored record.
+      new SyntaxError('Unexpected token } in JSON at position 1'),
+      // A stored reference that is not an id, failing to cast or to build an ObjectId.
+      new mongoose.Error.CastError('ObjectId', 'null', '_id'),
+      bsonFault,
+    ];
+    for (const fault of faults) expect(serverError(fault).status, fault.message).toBe(500);
+    expect(logged.mock.calls.map(([, fault]) => fault)).toEqual(faults);
+  });
+});
+
+describe('routeIds (#539)', () => {
+  it('passes the ids in the address through', async () => {
+    const ids = { id: GROUP, expenseId: 'A00000000000000000000099' };
+    expect(await routeIds(Promise.resolve(ids))).toEqual(ids);
+  });
+
+  it('refuses an address with one id that is not one as INVALID_ID, answered 400', async () => {
+    for (const id of ['not-an-id', 'a0000000000000000000001', 'a00000000000000000000010x']) {
+      const refused = routeIds(Promise.resolve({ id: GROUP, expenseId: id }));
+      await expect(refused, id).rejects.toThrow('INVALID_ID');
+    }
+    const response = serverError(new Error('INVALID_ID'));
+    expect(await response.json()).toEqual({ error: 'Invalid id', status: 400, code: 'INVALID_ID' });
+  });
+});
+
+describe('readJson (#539)', () => {
+  const request = (body: string) =>
+    new Request('http://localhost/api/groups', { method: 'POST', body });
+
+  it('reads a JSON body', async () => {
+    expect(await readJson(request('{"name":"Lakeview Flat"}'))).toEqual({ name: 'Lakeview Flat' });
+  });
+
+  it('refuses a body that is not JSON as INVALID_JSON', async () => {
+    await expect(readJson(request('{"name":'))).rejects.toThrow('INVALID_JSON');
+  });
+
+  it('leaves any other failure to read the body as the server’s fault', async () => {
+    const used = request('{}');
+    await used.text();
+    await expect(readJson(used)).rejects.toThrow(TypeError);
   });
 });
 

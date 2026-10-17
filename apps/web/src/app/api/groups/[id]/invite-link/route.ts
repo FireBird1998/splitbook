@@ -5,6 +5,7 @@ import {
   notFound,
   success,
   serverError,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 
@@ -14,7 +15,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
+    const { id } = await routeIds(params);
 
     const body = await req.json().catch(() => ({}));
     const expiresInDays = body.expiresInDays || 7;
@@ -35,7 +36,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
+    const { id } = await routeIds(params);
 
     const group = await groupService.getById(id);
     if (!group) return notFound('Group');

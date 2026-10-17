@@ -4,6 +4,7 @@ import {
   success,
   serverError,
   validationError,
+  readJson,
 } from '@/lib/utils/api-response';
 import connectDB from '@/lib/db';
 import User from '@/lib/models/User';
@@ -40,7 +41,7 @@ export async function PATCH(req: Request) {
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const body = await req.json();
+    const body = await readJson(req);
     const parsed = updateProfileSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 

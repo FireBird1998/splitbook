@@ -4,6 +4,7 @@ import {
   forbidden,
   success,
   serverError,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
@@ -14,7 +15,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
+    const { id } = await routeIds(params);
 
     const isMember = await groupService.isMember(id, user.id!);
     if (!isMember) return forbidden();
