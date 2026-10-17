@@ -15,5 +15,6 @@ describe('the tour chunk for the web app', () => {
       expect(play.license).toContain('Anatomy kit (https://github.com/wheresryan22/anatomy)');
       expect(play.license).toContain(LICENSE.trim());
     }
-  });
+    // Bundling every figure's tour takes 6–7 s on CI runners, past Vitest's 5 s default.
+  }, 30_000);
 });
