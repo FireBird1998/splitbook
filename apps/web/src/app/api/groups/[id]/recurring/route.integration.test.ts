@@ -1,9 +1,7 @@
 /**
  * HTTP tests for a Group's recurring Expenses collection (#473) against a real, isolated MongoDB
- * database (`splitbook-test-recurring-collection-route`). Members sign in for real: a demo
- * persona sign-in through Better Auth's own handler returns the session cookie, and every route
- * call sends it back. `next/headers` is the only stand-in, because a handler called outside Next
- * has no request scope; it hands the route the headers of the request it is answering.
+ * database (`splitbook-test-recurring-collection-route`), with a real session
+ * (`signed-in-route.ts`).
  *
  * A recurring Expense passes the same gate as other ledger writes: only a Household admin
  * creates one, only members read the list, and while the product switch is off (#289) nothing
@@ -12,38 +10,28 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import mongoose from 'mongoose';
-import User from '@/lib/models/User';
-import { DEMO_PERSONAS, DEMO_PERSONA_IDS, type DemoPersonaKey } from '@/lib/demo-personas';
+import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
 import { groupService } from '@/lib/services/group.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
+import {
+  callRoute,
+  connectSignedIn,
+  disconnectSignedIn,
+  insertDemoPersonas,
+  signIn,
+} from '@/lib/test-utils/signed-in-route';
 import { toPeriod } from '@splitbook/shared/recurring-due-periods';
 
-const APP_URL = 'http://localhost:3000';
-
-const request = vi.hoisted(() => ({ headers: new Headers() }));
-vi.mock('next/headers', () => ({ headers: async () => request.headers }));
-
-type Handler = (
-  request: Request,
-  context: { params: Promise<{ id: string }> },
-) => Promise<Response>;
+vi.mock('next/headers', async () => (await import('@/lib/test-utils/signed-in-route')).nextHeaders);
 
 const db = integrationTestDb('recurring-collection-route');
 const { alex, sam } = DEMO_PERSONA_IDS;
 
-let auth: typeof import('@/lib/auth').auth;
 let recurring: typeof import('./route');
 let balances: typeof import('../balances/route');
 
 beforeAll(async () => {
-  vi.stubEnv('AUTH_MODE', 'demo');
-  vi.stubEnv('AUTH_SECRET', 'splitbook-test-secret-for-recurring-routes');
-  vi.stubEnv('NEXT_PUBLIC_APP_URL', APP_URL);
-  await db.connect();
-  // Better Auth opens its client on the database MONGODB_URI names when it loads, so the
-  // routes load only once connect has pointed MONGODB_URI at this file's database.
-  ({ auth } = await import('@/lib/auth'));
+  await connectSignedIn(db);
   recurring = await import('./route');
   balances = await import('../balances/route');
 });
@@ -51,51 +39,9 @@ beforeEach(async () => {
   // Recurring Expenses are off unless switched on (#289); a test that needs them off says so.
   vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'true');
   await db.reset();
-  await User.insertMany(
-    DEMO_PERSONAS.map((persona) => ({
-      _id: new mongoose.Types.ObjectId(persona.id),
-      name: persona.name,
-      email: persona.email,
-      preferredCurrency: 'INR',
-    })),
-  );
+  await insertDemoPersonas();
 });
-afterAll(async () => {
-  await db.teardown();
-  vi.unstubAllEnvs();
-});
-
-/** Sign in as a demo persona and return the cookies a browser would send back. */
-async function signIn(persona: DemoPersonaKey): Promise<string> {
-  const response = await auth.handler(
-    new Request(`${APP_URL}/api/auth/demo-persona/sign-in`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin: APP_URL },
-      body: JSON.stringify({ personaId: persona }),
-    }),
-  );
-  expect(response.status, await response.clone().text()).toBe(200);
-  return response.headers
-    .getSetCookie()
-    .map((cookie) => cookie.split(';')[0])
-    .join('; ');
-}
-
-async function call(
-  handler: Handler,
-  groupId: string,
-  path: string,
-  init: { cookie: string; body?: unknown },
-) {
-  const httpRequest = new Request(`${APP_URL}/api/groups/${groupId}${path}`, {
-    method: init.body === undefined ? 'GET' : 'POST',
-    headers: { cookie: init.cookie, 'content-type': 'application/json' },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
-  request.headers = httpRequest.headers;
-  const response = await handler(httpRequest, { params: Promise.resolve({ id: groupId }) });
-  return { status: response.status, body: await response.json() };
-}
+afterAll(() => disconnectSignedIn(db));
 
 /** Alex's and Sam's Household, with Alex as its admin and nothing in its ledger. */
 async function household() {
@@ -122,8 +68,27 @@ const monthlyRent = {
   startsOn: `${toPeriod(new Date())}-01`,
 };
 
-async function rentTemplates(groupId: string, cookie: string) {
-  const listed = await call(recurring.GET, groupId, '/recurring', { cookie });
+function addRecurring(groupId: string, cookie: string, body: object) {
+  return callRoute(recurring.POST, {
+    method: 'POST',
+    path: `/api/groups/${groupId}/recurring`,
+    params: { id: groupId },
+    cookie,
+    body,
+  });
+}
+
+function listRecurring(groupId: string, cookie: string) {
+  return callRoute(recurring.GET, {
+    method: 'GET',
+    path: `/api/groups/${groupId}/recurring`,
+    params: { id: groupId },
+    cookie,
+  });
+}
+
+async function templates(groupId: string, cookie: string) {
+  const listed = await listRecurring(groupId, cookie);
   expect(listed.status).toBe(200);
   return listed.body.data.map((template: { description: string; amount: number }) => ({
     description: template.description,
@@ -132,7 +97,12 @@ async function rentTemplates(groupId: string, cookie: string) {
 }
 
 async function debts(groupId: string, cookie: string) {
-  const { status, body } = await call(balances.GET, groupId, '/balances', { cookie });
+  const { status, body } = await callRoute(balances.GET, {
+    method: 'GET',
+    path: `/api/groups/${groupId}/balances`,
+    params: { id: groupId },
+    cookie,
+  });
   expect(status).toBe(200);
   return body.data.debts.map(
     (debt: { from: { _id: string }; to: { _id: string }; amount: number }) => ({
@@ -147,17 +117,12 @@ describe('POST and GET /api/groups/[id]/recurring', () => {
   it('lets the Household admin add a monthly Rent whose due month reaches the ledger', async () => {
     const groupId = await household();
 
-    const created = await call(recurring.POST, groupId, '/recurring', {
-      cookie: await signIn('alex'),
-      body: monthlyRent,
-    });
+    const created = await addRecurring(groupId, await signIn('alex'), monthlyRent);
 
     expect(created.status).toBe(201);
     expect(created.body.data).toMatchObject({ description: 'Rent', amount: 30000, dayOfMonth: 1 });
     const samCookie = await signIn('sam');
-    expect(await rentTemplates(groupId, samCookie)).toEqual([
-      { description: 'Rent', amount: 30000 },
-    ]);
+    expect(await templates(groupId, samCookie)).toEqual([{ description: 'Rent', amount: 30000 }]);
     expect(await debts(groupId, samCookie)).toEqual([{ from: sam, to: alex, amount: 15000 }]);
   });
 
@@ -165,13 +130,13 @@ describe('POST and GET /api/groups/[id]/recurring', () => {
     const groupId = await household();
     const samCookie = await signIn('sam');
 
-    const refused = await call(recurring.POST, groupId, '/recurring', {
-      cookie: samCookie,
-      body: { ...monthlyRent, paidBy: [{ user: sam, amount: 30000 }] },
+    const refused = await addRecurring(groupId, samCookie, {
+      ...monthlyRent,
+      paidBy: [{ user: sam, amount: 30000 }],
     });
 
     expect(refused).toEqual({ status: 403, body: { error: 'Forbidden', status: 403 } });
-    expect(await rentTemplates(groupId, samCookie)).toEqual([]);
+    expect(await templates(groupId, samCookie)).toEqual([]);
     expect(await debts(groupId, samCookie)).toEqual([]);
   });
 
@@ -179,28 +144,22 @@ describe('POST and GET /api/groups/[id]/recurring', () => {
     const groupId = await household();
     const priyaCookie = await signIn('priya');
 
-    const read = await call(recurring.GET, groupId, '/recurring', { cookie: priyaCookie });
-    const added = await call(recurring.POST, groupId, '/recurring', {
-      cookie: priyaCookie,
-      body: monthlyRent,
-    });
+    const read = await listRecurring(groupId, priyaCookie);
+    const added = await addRecurring(groupId, priyaCookie, monthlyRent);
 
     expect([read, added]).toEqual([
       { status: 403, body: { error: 'Forbidden', status: 403 } },
       { status: 403, body: { error: 'Forbidden', status: 403 } },
     ]);
-    expect(await rentTemplates(groupId, await signIn('alex'))).toEqual([]);
+    expect(await templates(groupId, await signIn('alex'))).toEqual([]);
   });
 
-  it('adds nothing and lists nothing while recurring Expenses are off', async () => {
+  it('adds nothing while recurring Expenses are off', async () => {
     const groupId = await household();
     const alexCookie = await signIn('alex');
     vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'false');
 
-    const refused = await call(recurring.POST, groupId, '/recurring', {
-      cookie: alexCookie,
-      body: monthlyRent,
-    });
+    const refused = await addRecurring(groupId, alexCookie, monthlyRent);
 
     expect(refused).toEqual({
       status: 409,
@@ -210,7 +169,9 @@ describe('POST and GET /api/groups/[id]/recurring', () => {
         code: 'RECURRING_EXPENSES_OFF',
       },
     });
-    expect(await rentTemplates(groupId, alexCookie)).toEqual([]);
+    // While the switch is off the list is empty whatever is stored, so read it back switched on.
+    vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'true');
+    expect(await templates(groupId, alexCookie)).toEqual([]);
     expect(await debts(groupId, alexCookie)).toEqual([]);
   });
 });
