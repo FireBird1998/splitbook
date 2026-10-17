@@ -113,6 +113,15 @@ describe('apiFetch', () => {
     expect(doc.reload).not.toHaveBeenCalled();
   });
 
+  it('does not race an intentional sign-out in this tab with a sign-in redirect', async () => {
+    doc.pinExpectedAccount(ALEX);
+    doc.leaveExpectedAccount();
+    // A read that was in flight when the session ended answers 401 (#476).
+    answer(401, { error: 'Unauthorized', status: 401 });
+    await expect(doc.fetcher('/api/user/balances')).rejects.toThrow('Unauthorized');
+    expect(doc.assign).not.toHaveBeenCalled();
+  });
+
   it('returns every other answer to the caller unchanged', async () => {
     doc.pinExpectedAccount(ALEX);
     answer(409, { error: 'Stale', code: 'STALE_REVISION' });
