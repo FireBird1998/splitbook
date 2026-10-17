@@ -36,6 +36,7 @@ import AutorenewIcon from '@mui/icons-material/Autorenew';
 import MoneyText from '@/components/common/MoneyText';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { formatDate, toDateParam } from '@splitbook/shared/date';
+import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import { fetchWebRead } from '@/lib/web-read';
 import { displayTagReference, findReferencedTag } from '@splitbook/shared/tag-identity';
 import {
@@ -91,6 +92,12 @@ const SPLIT_METHOD_OPTIONS: Array<{ value: SplitMethod; label: string }> = [
   { value: 'percentage', label: 'Percentages' },
   { value: 'shares', label: 'Shares' },
 ];
+
+/**
+ * "Feb 1, 2026": a recurring Expense's start or end, a calendar day stored at midnight UTC, so the
+ * same in every zone (#522).
+ */
+const dayLabel = (date: Date | string) => formatDate(expenseLocalDate(date));
 
 function toDateInputValue(date: Date | string | null | undefined): string {
   if (!date) return '';
@@ -589,8 +596,8 @@ export default function RecurringExpensesSection({
                     </Stack>
                     <Typography variant="caption" color="text.disabled">
                       Day {template.dayOfMonth} monthly · {payerName(template)} pays ·{' '}
-                      {splitSummary(template)} · since {formatDate(template.startsOn)}
-                      {template.endsOn ? ` · until ${formatDate(template.endsOn)}` : ''}
+                      {splitSummary(template)} · since {dayLabel(template.startsOn)}
+                      {template.endsOn ? ` · until ${dayLabel(template.endsOn)}` : ''}
                     </Typography>
                   </Box>
                 </Stack>
