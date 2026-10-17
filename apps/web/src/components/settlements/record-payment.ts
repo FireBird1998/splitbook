@@ -51,6 +51,10 @@ export function readPaymentAmount(text: string, currency: string): AmountReading
   const typed = text.trim();
   if (typed === '') return { status: 'empty' };
   const like = `Enter an amount like ${example(currency)}.`;
+  // A negative amount gets zero's words: what's wanted, not a format (#514).
+  if (/^[-−]\s*(?:\d[\d,]*(?:\.\d*)?|\.\d+)$/.test(typed)) {
+    return { status: 'invalid', message: `Enter an amount above ${money(0, currency)}.` };
+  }
   if (typed.includes(',') && !/^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/.test(typed)) {
     return { status: 'invalid', message: like };
   }
