@@ -589,6 +589,20 @@ describe('rendered Expense corrections', () => {
     expect(ui.focusCount('Description, required')).toBe(1);
   });
 
+  it('opens a saved Description at its start, and leaves the cursor to the member while typing (#525)', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId, expenseId));
+    await ui.press('Edit expense');
+    const description = () => ui.input('Description, required');
+    // Android otherwise opens a filled single-line box at its end, cutting off the start.
+    expect(description().props.selection).toEqual({ start: 0, end: 0 });
+    await act(async () => description().props.onFocus());
+    expect(description().props.selection).toBeUndefined();
+    await ui.type('Description, required', 'Sofa cleaning service with a long name');
+    expect(description().props.selection).toBeUndefined();
+    await ui.leave('Description, required');
+    expect(description().props.selection).toEqual({ start: 0, end: 0 });
+  });
+
   it('explains a disabled Save when the draft cannot be stored on the device', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     ui.drafts.save = async () => {
