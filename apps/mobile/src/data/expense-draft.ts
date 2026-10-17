@@ -36,6 +36,7 @@ import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import { objectId, toMobileGroup } from './dto';
 import { emptyExpenseHistory, type ExpenseHistoryState } from './activity';
 import type { GroupReturnContext, MobileGroup } from './types';
+import { idleReceiptScan, type ReceiptScanState } from './receipt-scan';
 
 // Historical missing identities are local read/delete-recovery keys, never API identities.
 const draftMemberId = z.union([objectId, z.string().regex(/^former-(payer|participant)-\d+$/)]);
@@ -139,6 +140,8 @@ export interface ExpenseEditor {
   blank: ExpenseDraft | null;
   /** The saved Expense's changes, read while its record is shown. */
   history: ExpenseHistoryState;
+  /** The receipt-scanning experiment's review, bound to this editor's account, Group and draft. */
+  receiptScan: ReceiptScanState;
   /**
    * The record shown is what this device already knew (a saved copy, or a read before this
    * open): when it was verified, whether it is being read again, and whether it is this device's
@@ -204,6 +207,7 @@ export function emptyExpenseEditor(): ExpenseEditor {
     groupDraft: null,
     blank: null,
     history: emptyExpenseHistory(),
+    receiptScan: idleReceiptScan,
   };
 }
 export function parseExpenseContext(value: unknown): ExpenseContext {

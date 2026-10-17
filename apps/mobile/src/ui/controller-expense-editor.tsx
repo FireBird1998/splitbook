@@ -26,7 +26,7 @@ function sameFrame(before: Editor, after: Editor) {
     );
   };
   return (
-    sameExcept(before, after, ['draft', 'persistence', 'preview', 'validation']) &&
+    sameExcept(before, after, ['draft', 'persistence', 'preview', 'validation', 'receiptScan']) &&
     sameExcept(a, b, ['amount', 'description', 'notes', 'category']) &&
     // The fields own their correction text, but the shared card still owns its error border.
     !!before.validation.errors.amount === !!after.validation.errors.amount &&

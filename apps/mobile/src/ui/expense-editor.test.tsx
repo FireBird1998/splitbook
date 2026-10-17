@@ -12,6 +12,7 @@ import { savedQueriesIn } from '../test-utils/saved-queries';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
+import type { ReceiptScanner } from '../data/receipt-scan';
 import { draftFromExpense, expenseDraftSchema } from '../data/expense-draft';
 import { expenseRecordSchema } from '../data/expense-record';
 import { ExpenseEditor } from './expense-editor';
@@ -80,6 +81,7 @@ function backend({
   holdCreate,
   readGroup,
   now = () => localNoon,
+  receiptScanner,
 }: {
   record?: Record<string, unknown>;
   /** Loses every create response, or only this many. */
@@ -94,6 +96,8 @@ function backend({
   holdCreate?: Promise<void>;
   readGroup?: () => Promise<FetchResponse>;
   now?: () => number;
+  /** Enables the receipt-scanning experiment with this on-device reader (#90). */
+  receiptScanner?: ReceiptScanner;
 } = {}) {
   const writes: string[] = [];
   const submissions: { key: string | null; body: string }[] = [];
@@ -167,9 +171,11 @@ function backend({
       apiBaseUrl: 'http://localhost:4138',
       authOrigin: 'http://localhost:4138',
       developmentPersonaEnabled: true,
+      receiptScanEnabled: !!receiptScanner,
     },
     {
       fetch,
+      receiptScanner,
       credentials: {
         load: async () => cookie,
         save: async (value) => {
@@ -692,6 +698,55 @@ const words = (scope: ReactTestInstance) =>
     .flatMap((node) => node.children.filter((child) => typeof child === 'string'));
 const labelled = (root: ReactTestInstance, label: string) =>
   root.findAll((node) => isHost(node, 'View') && node.props.accessibilityLabel === label);
+
+describe('rendered receipt scanning (#90)', () => {
+  // What the on-device reader returns: a label and its right-aligned amount on each row.
+  const line = (text: string, column: number, row: number) => ({
+    text,
+    frame: {
+      left: 40 + column * 600,
+      top: 200 + row * 80,
+      right: 400 + column * 600,
+      bottom: 250 + row * 80,
+    },
+  });
+  const receipt = {
+    width: 1080,
+    height: 2400,
+    lines: [
+      line('Item total', 0, 0),
+      line('₹310.00', 1, 0),
+      line('To Pay', 0, 1),
+      line('₹289.86', 1, 1),
+    ],
+  };
+
+  it('is not offered while the experiment is off', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    expect(() => ui.pressable('Scan receipt')).toThrow();
+    expect(text(ui.root())).not.toContain('Receipt scanning');
+  });
+
+  it('reviews the suggestion beside the amount as typed and applies only the amount', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId), {
+      receiptScanner: { scan: async () => structuredClone(receipt) },
+    });
+    await ui.type('Amount, required', '100');
+    await ui.press('Scan receipt');
+    expect(text(ui.root())).toContain('Read from “to pay” on your receipt.');
+    expect(text(ui.root())).toContain('Applying replaces the current amount (100).');
+    // The panel follows the draft's amount on its own, outside the task frame.
+    await ui.type('Amount, required', '150');
+    expect(text(ui.root())).toContain('Applying replaces the current amount (150).');
+
+    await ui.press('Dismiss suggestion');
+    await ui.press('Scan receipt');
+    await ui.press('Apply ₹289.86');
+    expect(ui.input('Amount, required').props.value).toBe('289.86');
+    expect(() => ui.pressable('Apply ₹289.86')).toThrow();
+    expect(ui.writes).toEqual([]);
+  });
+});
 
 describe('rendered draft recovery', () => {
   it('resumes an ordinary draft calmly and drops the resume notice once answered', async () => {

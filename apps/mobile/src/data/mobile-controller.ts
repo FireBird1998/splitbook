@@ -110,6 +110,12 @@ import {
   parseSignIn,
 } from './dto';
 import { parseInvitationLink, parseToReviewLink } from './invitation-links';
+import {
+  idleReceiptScan,
+  receiptScanAvailability,
+  receiptScanMessages,
+  runReceiptScan,
+} from './receipt-scan';
 import { parseGroupBalances } from './financial-dto';
 import { createHomeQueries, draftSummaries, emptyHome, type Envelope } from './home-queries';
 import { createGroupQueries, emptyExpenses } from './group-queries';
@@ -2864,6 +2870,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           groupDraft: held,
           blank: record ? record.blank : blank,
           history: emptyExpenseHistory(),
+          receiptScan: idleReceiptScan,
         },
       });
       // The record is shown first; its changes follow when they've been read.
@@ -3050,6 +3057,67 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     })();
     draftWrite = write;
     await write;
+  };
+
+  const receiptScanEnabled = Boolean(config.receiptScanEnabled && dependencies.receiptScanner);
+  let receiptScans = 0;
+
+  /** Recognize a chosen receipt on this device and offer its total for review. */
+  const scanReceipt = async () => {
+    const editor = snapshot.expense;
+    if (
+      snapshot.screen !== 'expense' ||
+      editor.status !== 'editing' ||
+      editor.receiptScan.status === 'scanning' ||
+      receiptScanAvailability(editor, receiptScanEnabled) !== 'available'
+    )
+      return;
+    const owner = generation;
+    const view = route;
+    const scanId = ++receiptScans;
+    publish({ ...snapshot, expense: { ...editor, receiptScan: { status: 'scanning', scanId } } });
+    const next = await runReceiptScan(dependencies.receiptScanner!, scanId, editor.draft!.amount);
+    // Bound to the originating account (generation), route visit and scan; late results drop.
+    const shown = latest().expense;
+    if (
+      !current(owner) ||
+      view !== route ||
+      shown.groupId !== editor.groupId ||
+      shown.receiptScan.status !== 'scanning' ||
+      shown.receiptScan.scanId !== scanId
+    )
+      return;
+    publish({ ...snapshot, expense: { ...shown, receiptScan: next } });
+  };
+
+  /** Explicit confirmation: replace only the draft amount, then revalidate the allocation. */
+  const applyReceiptScan = async () => {
+    const editor = snapshot.expense;
+    const scan = editor.receiptScan;
+    if (
+      snapshot.screen !== 'expense' ||
+      editor.status !== 'editing' ||
+      !editor.draft ||
+      scan.status !== 'review'
+    )
+      return;
+    if (editor.draft.amount !== scan.baseAmount) {
+      publish({
+        ...snapshot,
+        expense: {
+          ...editor,
+          receiptScan: { status: 'no-result', message: receiptScanMessages.stale },
+        },
+      });
+      return;
+    }
+    publish({ ...snapshot, expense: { ...editor, receiptScan: idleReceiptScan } });
+    await updateExpenseDraft({ amount: scan.amount });
+  };
+
+  const dismissReceiptScan = () => {
+    if (snapshot.screen !== 'expense' || snapshot.expense.receiptScan.status === 'idle') return;
+    publish({ ...snapshot, expense: { ...snapshot.expense, receiptScan: idleReceiptScan } });
   };
 
   const discardExpenseDraft = async () => {
@@ -6686,6 +6754,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     resumeExpenseDraft,
     updateExpenseDraft,
     touchExpenseField,
+    receiptScanEnabled,
+    scanReceipt,
+    applyReceiptScan,
+    dismissReceiptScan,
     restore,
     signIn,
     signInWithGoogle,
