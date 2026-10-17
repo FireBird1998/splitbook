@@ -484,9 +484,11 @@ describe('the content sections (#446)', () => {
         'Equally, by shares, by percent or exact amounts, between everyone or just the people who were there.',
         'More than one payer? Say who paid what, and the split still adds up.',
         'Every paisa lands somewhere. ₹1,000 between three is ₹333.34 + ₹333.33 + ₹333.33, never ₹999.99.',
-        'A Group can use its main currency and up to two more, and balances never add currencies together.',
+        'Each Group keeps its own currency, and balances never add currencies together.',
       ])
         expect(shown).toContain(sentence);
+      // Every Expense and payment is in its Group's currency (#507).
+      expect(shown).not.toMatch(/two more|other currenc|multi-?currenc/i);
       expect(shown).toMatch(/Groceries.*Paid by Sam.*Split by shares/);
       // Shares 2:1:1:1 of ₹1,000: You ₹400, and ₹200 each for Priya, Sam and Alex.
       for (const [name, shares] of [
