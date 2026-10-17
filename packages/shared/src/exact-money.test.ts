@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CURRENCIES, formatCurrency, getCurrencyPrecision } from './currency';
 import {
   MoneyValidationError,
+  assertStoredExpenseMoney,
   calculateSplitAmountsMinor,
   normalizeExpenseMoney,
   parseAmountMinor,
@@ -372,5 +373,103 @@ describe('exact downstream ledgers', () => {
       createSettlementSchema.safeParse({ paidTo: 'a', amount: 10_000_001, currency: 'INR' })
         .success,
     ).toBe(false);
+  });
+});
+
+/*
+ * #471: each money path the suite didn't reach, one worked example each, every amount a
+ * minor-unit literal.
+ */
+describe('money paths the suite missed (#471)', () => {
+  const stored = {
+    currency: 'INR',
+    amount: 10,
+    paidBy: [{ user: 'a', amount: 10 }],
+    splitBetween: [
+      { user: 'a', amount: 5 },
+      { user: 'b', amount: 5 },
+    ],
+  };
+  const code = (code: string) => expect.objectContaining({ code });
+
+  it('refuses a legacy stored amount that is missing, and says so', () => {
+    // Without this check the decimal reader still refuses it, but as "Enter a valid decimal amount".
+    expect(() => readStoredAmountMinor({ currency: 'INR' })).toThrow('Stored amount is missing');
+  });
+
+  it('refuses a stored Expense of nothing', () => {
+    expect(() =>
+      assertStoredExpenseMoney({
+        ...stored,
+        amount: 0,
+        paidBy: [{ user: 'a', amount: 0 }],
+        splitBetween: [{ user: 'a', amount: 0 }],
+      }),
+    ).toThrow(code('INVALID_MONEY_RANGE'));
+  });
+
+  it('refuses a negative stored allocation, even when the rows add up', () => {
+    // ₹15 and −₹5 make the ₹10: 1,500 + −500 = 1,000 paise.
+    expect(() =>
+      assertStoredExpenseMoney({
+        ...stored,
+        paidBy: [
+          { user: 'a', amount: 15 },
+          { user: 'b', amount: -5 },
+        ],
+      }),
+    ).toThrow(code('INVALID_SPLIT'));
+  });
+
+  it('refuses stored shares that don’t add up to the Expense', () => {
+    // 400 + 400 paise of a 1,000-paise Expense.
+    expect(() =>
+      assertStoredExpenseMoney({
+        ...stored,
+        splitBetween: [
+          { user: 'a', amount: 4 },
+          { user: 'b', amount: 4 },
+        ],
+      }),
+    ).toThrow(code('UNBALANCED_LEDGER'));
+  });
+
+  it('needs someone to split between', () => {
+    expect(() => calculateSplitAmountsMinor('equal', 1000, [])).toThrow(code('INVALID_SPLIT'));
+  });
+
+  it('refuses a negative exact amount', () => {
+    expect(() =>
+      calculateSplitAmountsMinor('exact', 1000, [
+        { user: 'a', amountMinor: 1500 },
+        { user: 'b', amountMinor: -500 },
+      ]),
+    ).toThrow(code('INVALID_SPLIT'));
+  });
+
+  it('refuses a split method it doesn’t know', () => {
+    expect(() =>
+      calculateSplitAmountsMinor('halves' as 'equal', 1000, [{ user: 'a' }, { user: 'b' }]),
+    ).toThrow('Choose a valid split method');
+  });
+
+  it('refuses negative shares', () => {
+    expect(() =>
+      calculateSplitAmountsMinor('shares', 1000, [
+        { user: 'a', shares: 2 },
+        { user: 'b', shares: -1 },
+      ]),
+    ).toThrow('Shares cannot be negative');
+  });
+
+  it('gives a leftover paisa to the earliest person by id, wherever they are listed', () => {
+    // 100 paise between three: 33 each and 1 left over, which goes to "a", listed second. The
+    // comparator's "a.id > b.id" arm decides nothing under V8, whose sort reads only a negative
+    // result; another engine, such as Hermes, may use it.
+    expect(
+      calculateSplitAmountsMinor('equal', 100, [{ user: 'b' }, { user: 'a' }, { user: 'c' }]).map(
+        (row) => row.amountMinor,
+      ),
+    ).toEqual([33, 34, 33]);
   });
 });
