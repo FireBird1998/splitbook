@@ -428,13 +428,6 @@ export function buildNettingStation(STORY) {
     body: [...back, `<g class="st-bench">${groups.join('')}</g>`],
   });
 
-  // The still the tour holds under reduced motion: the first payment made, the second in flight.
-  const [first, second] = PAYMENTS;
-  const afterFirst = BAL.map((b, i) =>
-    IDS[i] === first.from ? b + first.amountMinor : IDS[i] === first.to ? b - first.amountMinor : b,
-  );
-  const STILL_TEXT = `A netting station: four tills with counters and coin trays, a pegboard whose cords show who owes whom, and a shuttle on an overhead beam carrying ${rupees(COIN)} coins with a magnet. ${nameOf(first.from)} has paid ${nameOf(first.to)} ${rupees(first.amountMinor)} and the shuttle is carrying ${word(second.amountMinor / COIN)} coins to ${nameOf(second.to)}; ${andList(NAMES.map((n, i) => `${n} reads ${signed(afterFirst[i])}`))}.`;
-
   const DATA = {
     P,
     names: STORY.members.map((m) => m.name),
@@ -467,8 +460,10 @@ export function buildNettingStation(STORY) {
       { mark: 'pay', label: 'Blue cords: the payments that replace them' },
       { mark: 'coin', label: `Each coin is ${rupees(COIN)}` },
     ],
-    caption: `Splitbook's simplify step, the same code the app runs, nets the ${word(DEBTS.length)} debts into ${word(PAYMENTS.length)} payments, and every counter ends at zero.`,
-    still: STILL_TEXT,
+    caption: `From the balances those ${word(DEBTS.length)} debts add up to, Splitbook's simplify step, the same code the app runs, works out ${word(PAYMENTS.length)} payments, and every counter ends at zero.`,
+    // The Settle up section's heading, in the story's own counts.
+    headline: `${word(DEBTS.length, true)} debts between ${word(NAMES.length)} people. ${word(PAYMENTS.length, true)} payments.`,
+    currency: STORY.currency,
     payments: PAYMENTS.map((p) => ({
       from: nameOf(p.from),
       to: nameOf(p.to),

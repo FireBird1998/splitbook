@@ -66,11 +66,13 @@ export function tourScript(figure: Figure, format: 'esm' | 'iife'): string {
 
 const stillFile = (figure: Figure) => `${figure.id}-light.png`;
 export const stillPath = (figure: Figure) => `${STILL_DIR}/${stillFile(figure)}`;
+/** The figures that have a still: the ones that are a link preview. */
+export const withStills = (figures: Figure[]) => figures.filter((figure) => 'still' in figure);
 
 /**
  * The web app's view of the figures:
  * - `figure.ts`: the figure type and one shared stylesheet (the kit's light and dark tokens);
- * - `<id>.ts`: per figure, server only, its static drawing, its words and its still;
+ * - `<id>.ts`: per figure, server only, its static drawing, its words and its extras;
  * - `<id>-tour.js`: its live tour, a client chunk loaded near the screen;
  * - `tours.ts`: the loaders for those chunks, the only figure code in the client bundle;
  * - `index.ts`: re-exports for the server.
@@ -101,10 +103,15 @@ export interface LandingFigure {
     label: string;
   }[];
   caption: string;
-  /** The light still the tour shows under reduced motion, as a link preview image. */
-  still: { src: string; width: number; height: number; alt: string };
-  /** The payments a settle-up figure carries, by member name (Fig 3). */
+  // A figure's own extras. Each figure's module declares exactly the ones it has (it satisfies
+  // this type), so they are typed as present where they exist.
+  /** The light still the tour shows under reduced motion, as the page's link preview (Fig 1). */
+  still?: { src: string; width: number; height: number; alt: string };
+  /** The heading of the section the figure belongs to, in the story's own counts (Fig 3). */
+  headline?: string;
+  /** The payments a settle-up figure carries, by member name, in currency (Fig 3). */
   payments?: { from: string; to: string; amountMinor: number }[];
+  currency?: string;
 }
 
 /** The kit's styles; a wrapper with class "iso" picks dark, or light with data-theme="light". */
@@ -124,19 +131,18 @@ export const figureCss = ${JSON.stringify(ISO_CSS)};
       readout: figure.readout,
       legend: figure.legend,
       caption: figure.caption,
-      ...('payments' in figure && { payments: figure.payments }),
-      still: {
-        src: `${STILL_URL_DIR}/${stillFile(figure)}`,
-        ...STILL_SIZE,
-        alt: figure.still,
-      },
+      ...('still' in figure && {
+        still: { src: `${STILL_URL_DIR}/${stillFile(figure)}`, ...STILL_SIZE, alt: figure.still },
+      }),
+      ...('headline' in figure && { headline: figure.headline }),
+      ...('payments' in figure && { payments: figure.payments, currency: figure.currency }),
     };
     files.set(
       `${OUT_DIR}/${figure.id}.ts`,
       `${HEADER}import 'server-only';
 import type { LandingFigure } from './figure';
 
-export const ${camel(figure.id)}: LandingFigure = ${JSON.stringify(data)};
+export const ${camel(figure.id)} = ${JSON.stringify(data)} satisfies LandingFigure;
 `,
     );
     files.set(

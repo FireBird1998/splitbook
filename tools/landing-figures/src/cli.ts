@@ -14,6 +14,7 @@ import {
   buildFigures,
   generatedFiles,
   stillPath,
+  withStills,
   type Figure,
 } from './generate.ts';
 import { THEMES, cleanConsole, drive, livePage, restPage } from './pages.ts';
@@ -90,7 +91,7 @@ function check() {
   const problems: string[] = [];
   const stale = staleOutputs(generatedFiles(figures), ROOT, OUT_DIR);
   if (stale.length) problems.push(`Stale output, run ${BUILD}: ${stale.join(', ')}`);
-  for (const figure of figures)
+  for (const figure of withStills(figures))
     problems.push(
       ...stillDrift(join(ROOT, stillPath(figure)), STILL_SIZE, stillSource(figure)).map(
         (problem) => `${problem} Run ${BUILD}.`,

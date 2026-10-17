@@ -9,12 +9,10 @@ import { nettingStation } from '@/components/landing-figures/generated';
 import { PRODUCT_NAME } from '@/lib/product';
 import LandingSection from './LandingSection';
 
-/** The story's money is in rupees (tools/landing-figures/src/story.ts). */
-const CURRENCY = 'INR';
-
 /**
  * Settle up (#449): the five debts the story's Expenses leave become three payments. Fig 3 shows
- * the netting, and the payments beneath it are the figure's own, from Splitbook's simplify step.
+ * the netting; the heading's counts and the payments beneath it are the figure's own, from the
+ * story model and Splitbook's simplify step.
  */
 export default function LandingSettleUp() {
   return (
@@ -22,7 +20,7 @@ export default function LandingSettleUp() {
       id="settle"
       elevated
       eyebrow="Settle up"
-      title="Five debts between four people. Three payments."
+      title={nettingStation.headline}
       intro={`${PRODUCT_NAME} nets every Expense into one balance each, then works out the fewest payments that clear them. When someone pays you back, record it and the whole Group sees it in Activity.`}
     >
       <LandingFigure figure={nettingStation} />
@@ -31,7 +29,7 @@ export default function LandingSettleUp() {
         aria-label="The payments"
         sx={{ m: 0, mt: 3, p: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: 1.25 }}
       >
-        {(nettingStation.payments ?? []).map((payment) => (
+        {nettingStation.payments.map((payment) => (
           <Box
             component="li"
             key={`${payment.from}-${payment.to}`}
@@ -58,8 +56,8 @@ export default function LandingSettleUp() {
               {payment.to}
             </Typography>
             <MoneyText
-              amount={toMajorAmount(payment.amountMinor, CURRENCY)}
-              currency={CURRENCY}
+              amount={toMajorAmount(payment.amountMinor, nettingStation.currency)}
+              currency={nettingStation.currency}
               tone="neutral"
               color="text.primary"
               sx={{ fontWeight: 600 }}

@@ -315,9 +315,11 @@ describe('Fig 1 in the hero', () => {
 
   it('draws the figures in the page’s theme', () => {
     for (const mode of MODES) {
-      const themes = [...render(mode, OFF).matchAll(/\sdata-theme="(\w+)"/g)].map((m) => m[1]);
-      expect(themes.length).toBeGreaterThan(0);
-      expect(new Set(themes)).toEqual(new Set([mode]));
+      const html = render(mode, OFF);
+      // One themed plate per figure on the page, each in the page's theme.
+      expect([...html.matchAll(/\sdata-theme="(\w+)"/g)].map((m) => m[1])).toEqual(
+        svgImages(html).map(() => mode),
+      );
     }
   });
 });

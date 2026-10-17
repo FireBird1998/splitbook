@@ -114,3 +114,58 @@ export function runTour(root, makeScene) {
     stage.removeAttribute('aria-label');
   };
 }
+
+// ---------------------------------------------------------------- what every scene draws with
+export const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+export const lerp = (a, b, t) => a + (b - a) * t;
+const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+/** Whole rupees: ₹1,200. */
+export const rupees = (minor) => '₹' + inr.format(Math.abs(minor / 100));
+/** Whole rupees with their sign, as a counter reads them: +500, −700, 0. */
+export const signed = (minor) => {
+  const v = Math.round(minor / 100);
+  return v === 0 ? '0' : (v > 0 ? '+' : '−') + inr.format(Math.abs(v));
+};
+
+/** Counter readings on springs: each eases toward its target, or jumps there when calm. */
+export function springs(count) {
+  const shown = Array.from({ length: count }, () => ({ at: 0, rate: 0 }));
+  return {
+    shown,
+    jump(values) {
+      shown.forEach((n, i) => {
+        n.at = values[i];
+        n.rate = 0;
+      });
+    },
+    step(target, dt, calm) {
+      shown.forEach((n, i) => {
+        if (calm) {
+          n.at = target[i];
+          n.rate = 0;
+          return;
+        }
+        for (let k = 0; k < 6; k++) {
+          n.rate += ((target[i] - n.at) * 70 - n.rate * 12) * (dt / 6);
+          n.at += n.rate * (dt / 6);
+        }
+        if (Math.abs(target[i] - n.at) < 1 && Math.abs(n.rate) < 1) {
+          n.at = target[i];
+          n.rate = 0;
+        }
+      });
+    },
+    /** Every reading has come to rest on its target. */
+    settledOn: (target) => shown.every((n, i) => n.at === target[i] && n.rate === 0),
+  };
+}
+
+/** Writes each counter's reading, signed, and marks its sign for the ink. */
+export function drawCounters(elements, shown) {
+  elements.forEach((el, i) => {
+    const text = signed(shown[i].at);
+    if (el.textContent !== text) el.textContent = text;
+    const v = Math.round(shown[i].at / 100);
+    el.dataset.sign = v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
+  });
+}

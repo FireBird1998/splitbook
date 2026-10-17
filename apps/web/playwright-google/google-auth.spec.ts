@@ -239,6 +239,26 @@ test.describe('google auth mode', () => {
     await expect.poll(drawing).not.toBe(held);
   });
 
+  test('stepping during Fig 3’s netting finishes it: the debt cords down, the payment cords up', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await fig3(page).scrollIntoViewIfNeeded();
+    await expect(fig3(page)).toContainText('Netting · 5 debts become 3 payments', {
+      timeout: 10_000,
+    });
+    await fig3(page)
+      .getByRole('group', { name: /^Live tour\./ })
+      .click();
+    await expect(fig3(page)).toContainText('Pay 1 of 3 · Alex pays You ₹500');
+    const opacities = (cords: string) =>
+      fig3Drawing(page)
+        .locator(cords)
+        .evaluateAll((els) => els.map((el) => (el as SVGElement).style.opacity));
+    expect(await opacities('[data-debt]')).toEqual(['0', '0', '0', '0', '0']);
+    expect(await opacities('[data-pay]')).toEqual(['1', '1', '1']);
+  });
+
   test('Fig 1’s tour ships with the Anatomy kit’s licence', async ({ page }) => {
     await page.goto('/');
     await expect(fig1(page).getByRole('button', { name: 'Pause' })).toBeVisible();

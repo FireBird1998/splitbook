@@ -7,7 +7,7 @@ import {
   lineOnTop,
   translateAlong,
 } from '../../vendor/anatomy/kit/iso-kit.mjs';
-import { runTour } from './tour.js';
+import { drawCounters, ease, lerp, rupees, runTour, signed, springs } from './tour.js';
 
 /** Starts the tour on root; returns a function that stops it and leaves the drawing as it is. */
 export function playTour(root, D) {
@@ -18,10 +18,6 @@ export function playTour(root, D) {
 function splittingLine({ svg, held, say, announce }, D) {
   const P = D.P;
   const q = (sel) => svg.querySelector(sel);
-  const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-  const money = (minor) => '₹' + inr.format(Math.abs(minor / 100));
-  const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
-  const lerp = (a, b, t) => a + (b - a) * t;
 
   const onBelt = q('[data-part="on-belt"]');
   const inMag = q('[data-part="in-mag"]');
@@ -46,13 +42,13 @@ function splittingLine({ svg, held, say, announce }, D) {
     const same = values.every((v) => v === values[0]);
     return [
       s.title.toUpperCase(),
-      money(s.amountMinor),
-      same ? `${values.length} × ${money(values[0])}` : `${values.length} chips`,
+      rupees(s.amountMinor),
+      same ? `${values.length} × ${rupees(values[0])}` : `${values.length} chips`,
     ];
   }
 
   // ---------------------------------------------------------------- state
-  const shown = D.xs.map(() => ({ at: 0, rate: 0 }));
+  const readings = springs(D.xs.length);
   let target = D.xs.map(() => 0);
   let fill = D.xs.map(() => 0);
   let beltTravel = 0;
@@ -96,14 +92,9 @@ function splittingLine({ svg, held, say, announce }, D) {
       setScreen([
         'DONE',
         `${D.steps.length} split`,
-        `sum ${money(target.reduce((a, b) => a + b, 0))}`,
+        `sum ${rupees(target.reduce((a, b) => a + b, 0))}`,
       ]);
-      const text = D.names
-        .map(
-          (n, i) =>
-            `${n} ${target[i] > 0 ? '+' : target[i] < 0 ? '−' : ''}${inr.format(Math.abs(target[i] / 100))}`,
-        )
-        .join(' · ');
+      const text = D.names.map((n, i) => `${n} ${signed(target[i])}`).join(' · ');
       say(text);
       announce(`All ${D.steps.length} Expenses split. ${text}`);
       return;
@@ -118,7 +109,7 @@ function splittingLine({ svg, held, say, announce }, D) {
     );
     target[s.paidBy] += s.amountMinor;
     setScreen(screenFor(s));
-    const text = `${s.title} ${money(s.amountMinor)} · ${D.names[s.paidBy]} paid`;
+    const text = `${s.title} ${rupees(s.amountMinor)} · ${D.names[s.paidBy]} paid`;
     say(text);
     announce(text);
   }
@@ -344,31 +335,11 @@ function splittingLine({ svg, held, say, announce }, D) {
     } else if (phase === 'idle' && clock > 1.6) {
       begin(0);
     }
-    // counters on springs
-    shown.forEach((n, i) => {
-      if (calm) {
-        n.at = target[i];
-        n.rate = 0;
-        return;
-      }
-      for (let k = 0; k < 6; k++) {
-        n.rate += ((target[i] - n.at) * 70 - n.rate * 12) * (dt / 6);
-        n.at += n.rate * (dt / 6);
-      }
-      if (Math.abs(target[i] - n.at) < 1 && Math.abs(n.rate) < 1) {
-        n.at = target[i];
-        n.rate = 0;
-      }
-    });
+    readings.step(target, dt, calm);
   }
 
   function draw() {
-    counters.forEach((el, i) => {
-      const v = Math.round(shown[i].at / 100);
-      const text = v === 0 ? '0' : (v > 0 ? '+' : '−') + inr.format(Math.abs(v));
-      if (el.textContent !== text) el.textContent = text;
-      el.dataset.sign = v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
-    });
+    drawCounters(counters, readings.shown);
     pushers.forEach((el, i) => {
       const off = translateAlong(P, [0, pushersY[i], 0]);
       el.setAttribute('transform', off);
@@ -420,8 +391,7 @@ function splittingLine({ svg, held, say, announce }, D) {
       }
     }
   }
-  /** Every counter has come to rest on its value. */
-  const settled = () => shown.every((n, i) => n.at === target[i] && n.rate === 0);
+  const settled = () => readings.settledOn(target);
 
   return { restart, next, update, draw, poseStill, settled };
 }

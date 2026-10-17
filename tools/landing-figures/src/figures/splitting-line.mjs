@@ -6,6 +6,7 @@ import * as k from '../../vendor/anatomy/kit/iso-kit.mjs';
 import * as G from '../../vendor/anatomy/kit/lathe.mjs';
 import * as A from '../../vendor/anatomy/kit/audit.mjs';
 import { tubePieces, tubeSvg } from '../../vendor/anatomy/kit/tube.mjs';
+import { andList, word } from './common.mjs';
 
 export function buildSplittingLine(STORY) {
   const IDS = STORY.members.map((m) => m.id);
@@ -1028,11 +1029,7 @@ export function buildSplittingLine(STORY) {
       `<g class="it" data-name="${item.name}">${item.svg}</g>${slots.get(index) ?? ''}`,
   );
 
-  const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
-  const word = (n) => WORDS[n] ?? String(n);
-  const names = new Intl.ListFormat('en-GB', { type: 'conjunction' }).format(
-    STORY.members.map((m) => m.name),
-  );
+  const names = andList(STORY.members.map((m) => m.name));
   const LABEL_TEXT = `A small production line on a bench that splits Expenses. On the left, a magazine holds ${word(STORY.steps.length)} bars, one per Expense; each bar is as many chips long as the Expense has shares. A conveyor carries the bar under a dicing saw on a column, which cuts it into separate chips. Further along, ${word(STORY.members.length)} pneumatic pushers, fed by air lines from a manifold, kick each chip off the belt down a chute into the bin of the member it belongs to: ${names}. Each bin's counter shows that member's balance, and a lamp marks who paid.`;
   const svg = k.figureSvg({
     width: W,
@@ -1096,7 +1093,7 @@ export function buildSplittingLine(STORY) {
   const stillCounters = STORY.members.map(
     (m) => STORY.steps.at(-2).after[m.id] + (m.id === lastStep.paidBy ? lastStep.amountMinor : 0),
   );
-  const STILL_TEXT = `A small production line that splits Expenses. A saw cuts each Expense bar into one chip per share, and pneumatic pushers send each chip down a chute into its member's bin. While ${lastStep.title} ₹${inr.format(lastStep.amountMinor / 100)}, paid by ${payer}, is being sorted, the bins for ${names} read ${new Intl.ListFormat('en-GB', { type: 'conjunction' }).format(stillCounters.map(signed))}.`;
+  const STILL_TEXT = `A small production line that splits Expenses. A saw cuts each Expense bar into one chip per share, and pneumatic pushers send each chip down a chute into its member's bin. While ${lastStep.title} ₹${inr.format(lastStep.amountMinor / 100)}, paid by ${payer}, is being sorted, the bins for ${names} read ${andList(stillCounters.map(signed))}.`;
   return {
     id: 'splitting-line',
     number: 1,

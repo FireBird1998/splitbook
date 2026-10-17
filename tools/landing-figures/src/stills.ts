@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { STILL_SOURCE_KEY, stillDrift } from './check.ts';
-import { STILL_SIZE, stillPath, type Figure } from './generate.ts';
+import { STILL_SIZE, stillPath, withStills, type Figure } from './generate.ts';
 import { cleanConsole, drive, linkPreviewPage } from './pages.ts';
 import { isPng, pngSize, withPngText } from './png.ts';
 
@@ -21,7 +21,7 @@ export const stillSource = (figure: Figure) =>
 export function drawStills(figures: Figure[], root: string) {
   const dir = mkdtempSync(join(tmpdir(), 'landing-stills-'));
   try {
-    for (const figure of figures) {
+    for (const figure of withStills(figures)) {
       const source = stillSource(figure);
       const still = join(root, stillPath(figure));
       if (!stillDrift(still, STILL_SIZE, source).length) continue;

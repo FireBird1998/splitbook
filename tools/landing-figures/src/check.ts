@@ -4,14 +4,10 @@ import { basename, join, relative } from 'node:path';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { sumMinorAmounts, toMajorAmount } from '@splitbook/shared/exact-money';
 import { isPng, pngSize, pngText } from './png.ts';
-import type { story } from './story.ts';
+import { andList } from './figures/common.mjs';
+import type { Movement, story } from './story.ts';
 
 type Story = ReturnType<typeof story>;
-type Movement = { from: string; to: string; amountMinor: number };
-
-const andList = (items: string[]) =>
-  new Intl.ListFormat('en-GB', { type: 'conjunction' }).format(items);
-
 /**
  * What is left of each member's balance once these movements are paid: zero for everyone when
  * they account for every balance exactly.
@@ -55,17 +51,21 @@ export function verifyStory(s: Story): string[] {
     const balances: Record<string, number> = { ...last.after };
     // Paying every debt the Expenses left would clear every balance, and so would the payments
     // that replace them.
-    const owing = leftAfter(s.debts, s.members, balances);
-    const off = s.members.filter((m) => owing[m.id] !== 0);
-    if (off.length)
+    const stillOwed = (movements: Movement[]) => {
+      const left = leftAfter(movements, s.members, balances);
+      return s.members
+        .filter((m) => left[m.id] !== 0)
+        .map((m) => ({ ...m, left: left[m.id] ?? 0 }));
+    };
+    const offByDebts = stillOwed(s.debts);
+    if (offByDebts.length)
       problems.push(
-        `The debts leave ${andList(off.map((m) => `${m.name} at ${signed((balances[m.id] ?? 0) - (owing[m.id] ?? 0))}`))}, not their balances.`,
+        `The debts leave ${andList(offByDebts.map((m) => `${m.name} at ${signed((balances[m.id] ?? 0) - m.left)}`))}, not their balances.`,
       );
-    const left = leftAfter(s.transfers, s.members, balances);
-    const unsettled = s.members.filter((m) => left[m.id] !== 0);
+    const unsettled = stillOwed(s.transfers);
     if (unsettled.length)
       problems.push(
-        `Settling up leaves ${andList(unsettled.map((m) => `${m.name} at ${signed(left[m.id] ?? 0)}`))}.`,
+        `Settling up leaves ${andList(unsettled.map((m) => `${m.name} at ${signed(m.left)}`))}.`,
       );
   }
   return problems;

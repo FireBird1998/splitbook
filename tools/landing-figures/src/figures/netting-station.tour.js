@@ -3,7 +3,7 @@
 // reads zero. tour.js runs it on the plate in the page; the web app and the preview pages bundle
 // the same code with the kit functions it uses.
 import { axisVector, holdStill, translateAlong } from '../../vendor/anatomy/kit/iso-kit.mjs';
-import { runTour } from './tour.js';
+import { drawCounters, ease, lerp, rupees, runTour, springs } from './tour.js';
 
 /** Starts the tour on root; returns a function that stops it and leaves the drawing as it is. */
 export function playTour(root, D) {
@@ -14,18 +14,14 @@ export function playTour(root, D) {
 function nettingStation({ svg, held, say, announce }, D) {
   const P = D.P;
   const q = (sel) => svg.querySelector(sel);
-  const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-  const money = (minor) => '₹' + inr.format(Math.abs(minor / 100));
-  const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
-  const lerp = (a, b, t) => a + (b - a) * t;
   const T = (dx, dy, dz) => translateAlong(P, [dx, dy, dz]);
   const N = D.names.length;
-  // By this point of the netting the debt cords are down and the payment cords are up.
-  const NET_SHOWN = 3;
+  // Seconds into the netting by which the debt cords are down and the payment cords are up.
+  const NETTED_AT = 3;
 
   const counters = D.xs.map((_, i) => q(`[data-count="${i}"]`));
-  const debts = D.debts.map((_, i) => q(`[data-debt="${i}"]`));
-  const pays = D.payments.map((_, i) => q(`[data-pay="${i}"]`));
+  const debtCords = D.debts.map((_, i) => q(`[data-debt="${i}"]`));
+  const payCords = D.payments.map((_, i) => q(`[data-pay="${i}"]`));
   const coins = [...svg.querySelectorAll('[data-coin]')];
   const shuttle = q('[data-part="shuttle"]');
   const hanger = q('[data-part="hanger"]');
@@ -45,13 +41,13 @@ function nettingStation({ svg, held, say, announce }, D) {
   const stackZ = (n) => D.trayTop + n * D.coinT;
 
   // ---------------------------------------------------------------- state
-  const shown = D.xs.map(() => ({ at: 0, rate: 0 }));
+  const readings = springs(D.xs.length);
   let target = D.balances.slice();
   let stacks = D.xs.map(() => []);
   let carried = [];
   let phase = 'idle';
   let clock = 0;
-  let pay = 0;
+  let payIndex = 0;
   let landed = false;
   let sx = D.home;
   let drop = 0;
@@ -60,17 +56,14 @@ function nettingStation({ svg, held, say, announce }, D) {
   function restart() {
     phase = 'idle';
     clock = 0;
-    pay = 0;
+    payIndex = 0;
     target = D.balances.slice();
-    shown.forEach((n, i) => {
-      n.at = target[i];
-      n.rate = 0;
-    });
+    readings.jump(target);
     stacks = D.xs.map(() => []);
     carried = [];
     coins.forEach((c) => (c.style.display = 'none'));
-    debts.forEach((c) => (c.style.opacity = '1'));
-    pays.forEach((c) => (c.style.opacity = '0'));
+    debtCords.forEach((c) => (c.style.opacity = '1'));
+    payCords.forEach((c) => (c.style.opacity = '0'));
     sx = D.home;
     drop = 0;
     lamp.removeAttribute('data-on');
@@ -89,9 +82,19 @@ function nettingStation({ svg, held, say, announce }, D) {
       if (b < 0) for (let c = 0; c < coinsFor(-b); c++) stacks[i].push(next++);
     });
   }
+  /** The netting so far: the debt cords coming down one by one, then the payment cords going up. */
+  function swapCords() {
+    debtCords.forEach((c, i) => (c.style.opacity = String(1 - ease((clock - i * 0.28) / 0.3))));
+    payCords.forEach((c, i) => (c.style.opacity = String(ease((clock - 1.4 - i * 0.3) / 0.35))));
+  }
+  /** The netting done at once: every debt cord down, every payment cord up. */
+  function showNetted() {
+    clock = NETTED_AT;
+    swapCords();
+  }
   function startPay(j) {
     phase = 'pay';
-    pay = j;
+    payIndex = j;
     clock = 0;
     landed = false;
     fromX = sx;
@@ -99,15 +102,15 @@ function nettingStation({ svg, held, say, announce }, D) {
     setScreen([
       `PAY ${j + 1}/${D.payments.length}`,
       `${nameOf(p.from).toUpperCase()}→${nameOf(p.to).toUpperCase()}`,
-      money(p.amountMinor),
+      rupees(p.amountMinor),
     ]);
     tell(
-      `Pay ${j + 1} of ${D.payments.length} · ${nameOf(p.from)} pays ${nameOf(p.to)} ${money(p.amountMinor)}`,
+      `Pay ${j + 1} of ${D.payments.length} · ${nameOf(p.from)} pays ${nameOf(p.to)} ${rupees(p.amountMinor)}`,
     );
   }
   /** The payment's coins reach the payee's tray and both counters move. */
   function land() {
-    const p = D.payments[pay];
+    const p = D.payments[payIndex];
     const from = idx(p.from);
     const to = idx(p.to);
     if (carried.length) stacks[to].push(...carried);
@@ -115,15 +118,15 @@ function nettingStation({ svg, held, say, announce }, D) {
     carried = [];
     target[from] += p.amountMinor;
     target[to] -= p.amountMinor;
-    pays[pay].style.opacity = '0';
+    payCords[payIndex].style.opacity = '0';
     landed = true;
   }
   /** Finishes the payment at once: the shuttle at the payee, then the next payment or the end. */
   function completePay() {
     if (!landed) land();
-    sx = D.xs[idx(D.payments[pay].to)];
+    sx = D.xs[idx(D.payments[payIndex].to)];
     drop = 0;
-    if (pay + 1 < D.payments.length) {
+    if (payIndex + 1 < D.payments.length) {
       phase = 'paid';
       clock = 0;
     } else finish();
@@ -141,11 +144,10 @@ function nettingStation({ svg, held, say, announce }, D) {
     if (phase === 'idle') {
       if (clock > 1.8) startNet();
     } else if (phase === 'net') {
-      debts.forEach((c, i) => (c.style.opacity = String(1 - ease((clock - i * 0.28) / 0.3))));
-      pays.forEach((c, i) => (c.style.opacity = String(ease((clock - 1.4 - i * 0.3) / 0.35))));
+      swapCords();
       if (clock > 3.2) startPay(0);
     } else if (phase === 'pay') {
-      const p = D.payments[pay];
+      const p = D.payments[payIndex];
       const from = idx(p.from);
       const to = idx(p.to);
       const n = coinsFor(p.amountMinor);
@@ -170,7 +172,7 @@ function nettingStation({ svg, held, say, announce }, D) {
       } else {
         drop = lerp(D.magRest - stackZ(stacks[to].length), 0, ease((t - 3.5) / 0.5));
         if (t > 4.3) {
-          if (pay + 1 < D.payments.length) startPay(pay + 1);
+          if (payIndex + 1 < D.payments.length) startPay(payIndex + 1);
           else finish();
         }
       }
@@ -178,31 +180,11 @@ function nettingStation({ svg, held, say, announce }, D) {
       sx = lerp(sx, D.home, Math.min(1, dt * 2));
       if (clock > 4.2) restart();
     }
-    // counters on springs
-    shown.forEach((s, i) => {
-      if (calm) {
-        s.at = target[i];
-        s.rate = 0;
-        return;
-      }
-      for (let k = 0; k < 6; k++) {
-        s.rate += ((target[i] - s.at) * 70 - s.rate * 12) * (dt / 6);
-        s.at += s.rate * (dt / 6);
-      }
-      if (Math.abs(target[i] - s.at) < 1 && Math.abs(s.rate) < 1) {
-        s.at = target[i];
-        s.rate = 0;
-      }
-    });
+    readings.step(target, dt, calm);
   }
 
   function draw() {
-    counters.forEach((el, i) => {
-      const v = Math.round(shown[i].at / 100);
-      const text = v === 0 ? '0' : (v > 0 ? '+' : '−') + inr.format(Math.abs(v));
-      if (el.textContent !== text) el.textContent = text;
-      el.dataset.sign = v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
-    });
+    drawCounters(counters, readings.shown);
     shuttle.setAttribute('transform', T(sx - D.home, 0, 0));
     hanger.setAttribute('transform', T(0, 0, -drop));
     holdStill(hanger, axisVector(P, [0, 0, -drop]));
@@ -226,15 +208,16 @@ function nettingStation({ svg, held, say, announce }, D) {
   function next() {
     if (phase === 'idle') {
       startNet();
-      if (held()) clock = NET_SHOWN;
+      if (held()) showNetted();
     } else if (phase === 'net') {
+      showNetted();
       startPay(0);
       if (held()) completePay();
     } else if (phase === 'pay') {
       completePay();
-      if (!held() && phase === 'paid') startPay(pay + 1);
+      if (!held() && phase === 'paid') startPay(payIndex + 1);
     } else if (phase === 'paid') {
-      startPay(pay + 1);
+      startPay(payIndex + 1);
       if (held()) completePay();
     } else restart();
   }
@@ -245,16 +228,14 @@ function nettingStation({ svg, held, say, announce }, D) {
   function poseStill() {
     restart();
     startNet();
-    clock = NET_SHOWN;
-    update(0, true);
+    showNetted();
     startPay(0);
     completePay();
     startPay(1);
     for (let n = 0; n < 60 * 60 && clock < 2.5; n++) update(1 / 60, true);
   }
 
-  /** Every counter has come to rest on its value. */
-  const settled = () => shown.every((n, i) => n.at === target[i] && n.rate === 0);
+  const settled = () => readings.settledOn(target);
 
   return { restart, next, update, draw, poseStill, settled };
 }

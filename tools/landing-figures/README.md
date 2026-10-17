@@ -2,7 +2,7 @@
 
 The drawings on the public landing page (#443) are isometric figures of small machines, made with the vendored Anatomy kit (`vendor/anatomy`, MIT, see its `PROVENANCE.md`). This package draws them at build time and writes them into the web app as generated modules (`apps/web/src/components/landing-figures/generated/`), so the page renders a real SVG with no runtime dependency on the kit.
 
-Every number a figure shows comes from `src/story.ts`, which runs the story through `@splitbook/shared`: the exact-money split cuts each Expense and each member's chips, the balance calculation gives the counters, and the debt simplifier gives the payments. The figures can't drift from the product's money rules.
+Every number a figure shows comes from `src/story.ts`, which runs the story through `@splitbook/shared`: the exact-money split cuts each Expense and each member's chips, the balance calculation gives the counters, and the debt simplifier gives the payments. The debts between pairs of members (Fig 3's grey cords) have no shared function: the story nets them from the shared split's shares, and `check` proves that paying them would clear the shared balances. The figures can't drift from the product's money rules.
 
 ## Commands
 

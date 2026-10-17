@@ -1,5 +1,7 @@
-// The story every landing figure tells, computed with the app's own money code: the same split
-// the web and Android clients use, so a figure's numbers can never drift from the product.
+// The story every landing figure tells, computed with the app's own money code: the same split,
+// balance and simplify functions the web and Android clients use. The debts between pairs of
+// members (Fig 3's grey cords) have no shared function; they are netted here from the shared
+// split's shares, and check proves that paying them would clear the shared balances.
 import {
   MONEY_VERSION,
   calculateSplitAmountsMinor,
@@ -101,6 +103,13 @@ function balancesAfter(expenses: Array<{ paidBy: MemberId; amountMinor: number; 
   return balances;
 }
 
+/** Money moving from one member to another: a debt owed, or a payment that settles one. */
+export interface Movement {
+  from: MemberId;
+  to: MemberId;
+  amountMinor: number;
+}
+
 // The debts the Expenses leave before anyone settles up: each person owes each payer their share,
 // and what two people owe each other nets to one debt between them (one cord on Fig 3's board).
 function debtsOf(steps: Array<{ paidBy: MemberId; split: Split }>) {
@@ -111,10 +120,13 @@ function debtsOf(steps: Array<{ paidBy: MemberId; split: Split }>) {
       const key = `${part.user}>${step.paidBy}`;
       owed.set(key, sumMinorAmounts([owed.get(key) ?? 0, part.amountMinor]));
     }
-  const debts: Array<{ from: MemberId; to: MemberId; amountMinor: number }> = [];
+  const debts: Movement[] = [];
   MEMBERS.forEach((a, i) =>
     MEMBERS.slice(i + 1).forEach((b) => {
-      const net = (owed.get(`${a.id}>${b.id}`) ?? 0) - (owed.get(`${b.id}>${a.id}`) ?? 0);
+      const net = sumMinorAmounts([
+        owed.get(`${a.id}>${b.id}`) ?? 0,
+        -(owed.get(`${b.id}>${a.id}`) ?? 0),
+      ]);
       if (net > 0) debts.push({ from: a.id, to: b.id, amountMinor: net });
       if (net < 0) debts.push({ from: b.id, to: a.id, amountMinor: -net });
     }),
@@ -136,10 +148,12 @@ export function story() {
   const final = balancesAfter(done);
   const transfers = simplifyDebtsMinor(
     MEMBERS.map((member) => ({ userId: member.id, amountMinor: final[member.id] })),
-  ).map(({ from, to, amountMinor }) => ({
-    from: from as MemberId,
-    to: to as MemberId,
-    amountMinor,
-  }));
+  ).map(
+    ({ from, to, amountMinor }): Movement => ({
+      from: from as MemberId,
+      to: to as MemberId,
+      amountMinor,
+    }),
+  );
   return { currency: CURRENCY, members: MEMBERS, steps, debts: debtsOf(steps), transfers };
 }

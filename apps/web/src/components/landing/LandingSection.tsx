@@ -45,6 +45,7 @@ export default function LandingSection({
       component="section"
       id={id}
       aria-label={hiddenTitle ? title : undefined}
+      data-elevated={elevated ? '' : undefined}
       sx={{
         py: { xs: 7, md: 13 },
         ...(elevated && {
@@ -52,6 +53,9 @@ export default function LandingSection({
           borderTop: 1,
           borderBottom: 1,
           borderColor: 'divider',
+          // Two elevated sections in a row (Settle up, then Android and web, while assistants
+          // aren't live) read as one band, not a doubled border.
+          '[data-elevated] + &': { borderTop: 0 },
         }),
       }}
     >
