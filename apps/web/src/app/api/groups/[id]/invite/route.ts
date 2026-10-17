@@ -5,6 +5,8 @@ import {
   success,
   error,
   serverError,
+  readJson,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { invitationService } from '@/lib/services/invitation.service';
@@ -20,12 +22,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
+    const { id } = await routeIds(params);
 
     const isMember = await groupService.isMember(id, user.id!);
     if (!isMember) return forbidden();
 
-    const body = await req.json();
+    const body = await readJson(req);
     const parsed = inviteSchema.safeParse(body);
     if (!parsed.success) {
       return error('Invalid email address', 422);

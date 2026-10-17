@@ -6,6 +6,8 @@ import {
   forbidden,
   serverError,
   validationError,
+  readJson,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
@@ -17,7 +19,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
+    const { id } = await routeIds(params);
     const group = await groupService.getById(id);
     if (!group) return notFound('Group');
 
@@ -44,8 +46,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
-    const body = await req.json();
+    const { id } = await routeIds(params);
+    const body = await readJson(req);
     const parsed = updateGroupSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 
@@ -65,7 +67,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
+    const { id } = await routeIds(params);
     const group = await groupService.archive(id, user.id!);
     if (!group) return notFound('Group');
 

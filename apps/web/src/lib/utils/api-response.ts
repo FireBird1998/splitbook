@@ -41,6 +41,34 @@ export async function getAuthUser(): Promise<AuthUser | null> {
 }
 
 /**
+ * The request's JSON body. A body that isn't JSON is the client's mistake, so `serverError`
+ * answers it as 400 INVALID_JSON (#539). Any other failure to read it stays a server fault.
+ */
+export async function readJson(req: Request): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch (cause) {
+    if (cause instanceof SyntaxError) throw new Error('INVALID_JSON');
+    throw cause;
+  }
+}
+
+const OBJECT_ID = /^[a-f\d]{24}$/i;
+
+/**
+ * The ids in a route's address, each checked to be one. One that isn't is the client's mistake,
+ * which `serverError` answers as 400 INVALID_ID (#539). Only the address is checked: an id that
+ * fails later, such as a stored reference, stays a server fault.
+ */
+export async function routeIds<Params extends Record<string, string>>(
+  params: Promise<Params>,
+): Promise<Params> {
+  const ids = await params;
+  if (!Object.values(ids).every((id) => OBJECT_ID.test(id))) throw new Error('INVALID_ID');
+  return ids;
+}
+
+/**
  * Standard success response
  */
 export function success<T>(data: T, status: number = 200) {
@@ -107,6 +135,8 @@ export function serverError(err?: unknown) {
         503,
       ],
       INVALID_MONEY: ['Enter a positive amount with the currency’s supported precision.', 422],
+      INVALID_JSON: ['Invalid JSON body', 400],
+      INVALID_ID: ['Invalid id', 400],
       [ACCOUNT_CHANGED]: [
         'The signed-in account changed in another tab. Reload this page to continue.',
         ACCOUNT_CHANGED_STATUS,
