@@ -21,6 +21,7 @@ import {
   type FinancialFixtures,
 } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
+import { reportVerifierFailure } from './verify-report';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -388,11 +389,9 @@ async function main() {
   }
 }
 
-void main().catch((error: unknown) => {
-  console.error(
-    error instanceof assert.AssertionError
-      ? `FAIL: ${error.message}`
-      : 'FAIL: financial verification could not complete. Check the isolated backend and fixture manifest; no credentials or responses were logged.',
-  );
-  process.exitCode = 1;
-});
+void main().catch((error: unknown) =>
+  reportVerifierFailure(
+    error,
+    'financial verification could not complete. Check the isolated backend and fixture manifest; no credentials or responses were logged.',
+  ),
+);

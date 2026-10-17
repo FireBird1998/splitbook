@@ -14,6 +14,7 @@ import {
 } from '../src/data';
 import { decodeStoredSession, readSessionCookie } from '../src/data/cookies';
 import { localOrigin } from './verification-origin';
+import { reportVerifierFailure } from './verify-report';
 
 const samId = 'a00000000000000000000002';
 const tripId = 'a00000000000000000000010';
@@ -267,13 +268,9 @@ async function verify() {
   }
 }
 
-void verify().catch((error: unknown) => {
-  // Assertion messages are fixed, and unexpected transport errors are summarized.
-  // Never print a response, credential, supplied URL, or stack trace.
-  console.error(
-    error instanceof assert.AssertionError
-      ? `FAIL: ${error.message}`
-      : 'FAIL: the local mobile API smoke could not complete. Check the isolated development server.',
-  );
-  process.exitCode = 1;
-});
+void verify().catch((error: unknown) =>
+  reportVerifierFailure(
+    error,
+    'the local mobile API smoke could not complete. Check the isolated development server.',
+  ),
+);

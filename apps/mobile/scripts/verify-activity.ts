@@ -7,6 +7,7 @@ import { formatActivityHeadline } from '@splitbook/shared/activity-timeline';
 import { createMobileController } from '../src/data';
 import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
+import { reportVerifierFailure } from './verify-report';
 
 const id = z.string().regex(/^[a-f\d]{24}$/);
 const record = z.object({ data: z.object({ _id: id, revision: z.number().optional() }) });
@@ -211,7 +212,4 @@ async function run() {
     await Promise.all([alex.close(), sam.close()]);
   }
 }
-void run().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'Activity verification failed');
-  process.exitCode = 1;
-});
+void run().catch((error: unknown) => reportVerifierFailure(error));

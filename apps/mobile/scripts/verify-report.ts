@@ -44,17 +44,23 @@ export function observe(condition: unknown, message: string, snapshot: unknown):
     });
 }
 
-/** The verifier's failure: its message, the command that reruns it, then expected and observed. */
-export function failureReport(error: unknown, command: string): string {
+/**
+ * The verifier's failure: its message, the command that reruns it, then expected and observed.
+ * `unexpected`, when given, is said for anything that isn't a check instead of its own text,
+ * which could hold a URL or a response.
+ */
+export function failureReport(error: unknown, command: string, unexpected?: string): string {
   const message =
     error instanceof AssertionError
       ? // Node adds its own diff after a check's message; the report shows the values below.
         error.generatedMessage
         ? 'A check failed.'
         : error.message.split('\n')[0]
-      : error instanceof Error
-        ? error.message
-        : String(error);
+      : unexpected !== undefined
+        ? unexpected
+        : error instanceof Error
+          ? error.message
+          : String(error);
   const lines = [`FAIL: ${message}`, `  command: ${command}`];
   if (error instanceof AssertionError) {
     if (error.operator === OBSERVED) lines.push(`  observed: ${show(error.actual)}`);
@@ -78,12 +84,17 @@ export function verifierCommand(
 }
 
 /**
- * A verifier's last handler: prints the report and fails the run. `fallback` is said instead of
- * a message for a failure that isn't an error, so nothing unexpected is printed.
+ * A verifier's last handler: prints the report and fails the run. `unexpected` is said instead of
+ * the text of anything that isn't a check (see `failureReport`); without it, an unexpected error
+ * says its own message, and anything that isn't an error says "Verification failed".
  */
-export function reportVerifierFailure(error: unknown, fallback: string): void {
+export function reportVerifierFailure(error: unknown, unexpected?: string): void {
   console.error(
-    failureReport(error instanceof Error ? error : new Error(fallback), verifierCommand()),
+    failureReport(
+      error instanceof Error ? error : new Error('Verification failed'),
+      verifierCommand(),
+      unexpected,
+    ),
   );
   process.exitCode = 1;
 }

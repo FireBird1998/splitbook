@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { createMobileController, type MobileFetch } from '../src/data';
 import { FixtureActor, alexId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
+import { reportVerifierFailure } from './verify-report';
 
 const origin = localOrigin();
 const id = z.string().regex(/^[a-f\d]{24}$/);
@@ -456,7 +457,4 @@ async function main() {
     await Promise.all([alex.close(), sam.close(), priya.close()]);
   }
 }
-void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'Verification failed');
-  process.exitCode = 1;
-});
+void main().catch((error: unknown) => reportVerifierFailure(error));

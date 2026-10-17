@@ -14,6 +14,7 @@ import {
 import { decodeStoredSession } from '../src/data/cookies';
 import type { AccountLocalStorage } from '../src/data/types';
 import { localOrigin } from './verification-origin';
+import { reportVerifierFailure } from './verify-report';
 
 const alexId = 'a00000000000000000000001';
 const samId = 'a00000000000000000000002';
@@ -275,11 +276,9 @@ async function verify() {
   );
 }
 
-void verify().catch((error: unknown) => {
-  console.error(
-    error instanceof assert.AssertionError
-      ? `FAIL: ${error.message}`
-      : 'FAIL: the local Settings smoke could not complete. Check the isolated development backend.',
-  );
-  process.exitCode = 1;
-});
+void verify().catch((error: unknown) =>
+  reportVerifierFailure(
+    error,
+    'the local Settings smoke could not complete. Check the isolated development backend.',
+  ),
+);

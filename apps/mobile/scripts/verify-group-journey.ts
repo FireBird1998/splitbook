@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { createMobileController, currentMonthKey, type MobileFetch } from '../src/data';
 import { decodeStoredSession } from '../src/data/cookies';
 import { localOrigin } from './verification-origin';
+import { reportVerifierFailure } from './verify-report';
 
 const alexId = 'a00000000000000000000001';
 const samId = 'a00000000000000000000002';
@@ -564,11 +565,9 @@ async function verify() {
   for (const check of checks) console.log(`- ${check}`);
 }
 
-void verify().catch((error: unknown) => {
-  console.error(
-    error instanceof assert.AssertionError
-      ? `FAIL: ${error.message}`
-      : 'FAIL: the local Group journey could not complete. Check the isolated backend and cleanup state.',
-  );
-  process.exitCode = 1;
-});
+void verify().catch((error: unknown) =>
+  reportVerifierFailure(
+    error,
+    'the local Group journey could not complete. Check the isolated backend and cleanup state.',
+  ),
+);

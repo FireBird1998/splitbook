@@ -10,6 +10,7 @@ import { parseGroupBalances } from '../src/data/financial-dto';
 import { parseSettlementHistory } from '../src/data/settlement';
 import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
+import { reportVerifierFailure } from './verify-report';
 
 async function run() {
   const origin = localOrigin(),
@@ -290,7 +291,4 @@ async function run() {
     await rm(directory, { recursive: true, force: true });
   }
 }
-void run().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'Settlement verification failed');
-  process.exitCode = 1;
-});
+void run().catch((error: unknown) => reportVerifierFailure(error));

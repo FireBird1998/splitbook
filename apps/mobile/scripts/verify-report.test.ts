@@ -98,6 +98,29 @@ describe('a failing verifier’s report (#478)', () => {
     );
   });
 
+  it('can say a fixed summary instead of an unexpected error’s own text, which could hold a URL', () => {
+    expect(
+      failureReport(
+        new Error('request to https://user:secret@example.test failed'),
+        COMMAND,
+        'Financial verification could not complete. Check the isolated backend.',
+      ),
+    ).toBe(
+      [
+        'FAIL: Financial verification could not complete. Check the isolated backend.',
+        '  command: pnpm --filter @splitbook/mobile run verify:financial',
+      ].join('\n'),
+    );
+    // A check still says its own message.
+    expect(
+      failureReport(
+        caught(() => assert.equal(1, 2, 'Counts differ.')),
+        COMMAND,
+        'Never shown.',
+      ),
+    ).toMatch(/^FAIL: Counts differ\./);
+  });
+
   it('passes a check that holds', () => {
     expect(() => observe(true, 'Never shown.', { count: 22 })).not.toThrow();
   });

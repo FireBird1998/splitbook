@@ -13,6 +13,7 @@ import { toDateParam } from '@splitbook/shared/date';
 import { buildToReview, summarizeReviewRun } from '@splitbook/shared/to-review';
 import { parseToReviewResponse } from '@splitbook/shared/to-review-read';
 import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
+import { reportVerifierFailure } from './verify-report';
 
 async function main() {
   process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED = 'true';
@@ -508,7 +509,4 @@ async function main() {
     await web.close();
   }
 }
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+void main().catch((error: unknown) => reportVerifierFailure(error));
