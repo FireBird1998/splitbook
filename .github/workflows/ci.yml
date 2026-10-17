@@ -5,8 +5,9 @@ name: CI
 # slow, broad jobs run less often:
 #
 # - PR checks (pr-checks) runs on every event: lint, typecheck, format check, the
-#   design-system style policy, the workspace unit tests in UTC, the web integration suite
-#   against real Mongo (#469) and every mobile HTTP verifier, in one job that installs once. It is the one check branch protection requires,
+#   design-system style policy, the workspace unit tests in UTC, the web integration
+#   suite against real Mongo (#469) and every mobile HTTP verifier, in one job that
+#   installs once. It is the one check branch protection requires,
 #   so its name, "PR checks", must not change. A pull request that changes only Markdown,
 #   docs/ or .claude/ files runs just the format check, and the check still passes.
 # - On a pull request, PR checks ends with the ceilings ratchet (#206): no render or request
@@ -408,8 +409,9 @@ jobs:
           docker logs splitbook-mobile-ci
           exit 1
 
-      # The suite also proves ordinary operation on a standalone server, as production's first
-      # releases ran; the verify job uses one too.
+      # The suite's standalone-compatibility file (group-cleanup-standalone) needs a
+      # standalone server beside the replica set. The verify job also runs its other
+      # standalone checks against one.
       - name: Start the standalone Mongo for the web integration suite
         id: standalone
         if: steps.changes.outputs.docs_only != 'true'
@@ -431,11 +433,15 @@ jobs:
       - name: Web integration suite
         if: steps.changes.outputs.docs_only != 'true'
         timeout-minutes: 15
-        run: pnpm --filter @splitbook/web test:integration
+        run: pnpm web test:integration
         env:
           TZ: UTC
           TEST_MONGODB_URI: mongodb://127.0.0.1:27039/?directConnection=true
           STANDALONE_TEST_MONGODB_URI: mongodb://127.0.0.1:27040/?directConnection=true
+
+      - name: Stop the standalone Mongo
+        if: always() && steps.standalone.outcome != 'skipped'
+        run: docker rm --force --volumes splitbook-standalone-ci 2>/dev/null || true
 
       # up prints MOBILE_VERIFY_URL and the backend's SPLITBOOK_NATIVE_* variables as
       # NAME=value lines; the later steps get them through GITHUB_ENV.
@@ -479,10 +485,6 @@ jobs:
       - name: Stop the test replica set
         if: always() && steps.mongo.outcome != 'skipped'
         run: docker rm --force --volumes splitbook-mobile-ci 2>/dev/null || true
-
-      - name: Stop the standalone Mongo
-        if: always() && steps.standalone.outcome != 'skipped'
-        run: docker rm --force --volumes splitbook-standalone-ci 2>/dev/null || true
 
       # #206's ratchet, last, so a pull request that raises a ceiling still shows every other
       # result before an approver labels it. It compares apps/mobile's
