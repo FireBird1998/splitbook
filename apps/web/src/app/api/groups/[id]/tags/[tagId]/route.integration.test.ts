@@ -1,10 +1,11 @@
 /**
- * HTTP tests for renaming and deleting a Tag (#472) against a real, isolated MongoDB database
- * (`splitbook-test-group-tag-item-route`), with a real session (`signed-in-route.ts`).
+ * HTTP tests for renaming, archiving and deleting a Tag (#472) against a real, isolated MongoDB
+ * database (`splitbook-test-group-tag-item-route`), with a real session (`signed-in-route.ts`).
  *
- * ADR 0009: a Tag keeps its identity when it is renamed, so a saved Expense still points at it;
- * an edit based on an older revision fails instead of overwriting a newer one; only an admin
- * manages Tags; and a Tag in use cannot be deleted.
+ * ADR 0009: a Tag keeps its identity when it is renamed or archived, so a saved Expense still
+ * points at it; an edit based on an older revision fails instead of overwriting a newer one;
+ * only an admin manages Tags; and a Tag in use cannot be deleted. Tags are read back through
+ * the Group, as a member reads them.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,6 +28,7 @@ const db = integrationTestDb('group-tag-item-route');
 const { alex, sam } = DEMO_PERSONA_IDS;
 
 let tag: typeof import('./route');
+let group: typeof import('../../route');
 let expense: typeof import('../../expenses/[expenseId]/route');
 
 beforeAll(async () => {
@@ -34,6 +36,7 @@ beforeAll(async () => {
   // Tag changes use transactions (ADR 0009).
   await requireReplicaSet();
   tag = await import('./route');
+  group = await import('../../route');
   expense = await import('../../expenses/[expenseId]/route');
 });
 beforeEach(async () => {
@@ -42,28 +45,36 @@ beforeEach(async () => {
 });
 afterAll(() => disconnectSignedIn(db));
 
-interface StoredTag {
+interface Tag {
   _id: string;
   name: string;
   revision: number;
+  isArchived: boolean;
   isDeleted?: boolean;
 }
 
-/** A deleted Tag stays stored, marked deleted, so the names a member can pick leave it out. */
-async function activeTagNames(groupId: string) {
-  const stored = await groupService.getById(groupId);
-  return (stored!.tags as unknown as StoredTag[])
-    .filter((entry) => !entry.isDeleted)
-    .map((entry) => entry.name);
+/** The Group's Tags as Alex reads them, deleted ones included (they stay stored, marked). */
+async function tagsOf(groupId: string): Promise<Tag[]> {
+  const read = await callRoute(group.GET, {
+    method: 'GET',
+    path: `/api/groups/${groupId}`,
+    params: { id: groupId },
+    cookie: await signIn('alex'),
+  });
+  expect(read.status).toBe(200);
+  return read.body.data.tags;
 }
 
-async function tagsOf(groupId: string) {
-  const stored = await groupService.getById(groupId);
-  return (stored!.tags as unknown as StoredTag[]).map(({ _id, name, revision }) => ({
-    id: String(_id),
-    name,
-    revision,
-  }));
+async function tagById(groupId: string, tagId: string) {
+  const found = (await tagsOf(groupId)).find((entry) => entry._id === tagId)!;
+  return { name: found.name, revision: found.revision, isArchived: found.isArchived };
+}
+
+/** The names a member can still pick: neither archived nor deleted. */
+async function activeTagNames(groupId: string) {
+  return (await tagsOf(groupId))
+    .filter((entry) => !entry.isArchived && !entry.isDeleted)
+    .map((entry) => entry.name);
 }
 
 /** Alex's trip of Alex (admin) and Sam, with a ₹1,000.00 dinner saved under Food. */
@@ -90,11 +101,11 @@ async function coorgWeekendWithDinner() {
     alex,
   );
   const tags = await tagsOf(groupId);
-  const id = (name: string) => tags.find((entry) => entry.name === name)!.id;
+  const id = (name: string) => tags.find((entry) => entry.name === name)!._id;
   return { groupId, dinnerId: String(dinner._id), foodId: id('Food'), stayId: id('Stay') };
 }
 
-function renameTag(groupId: string, tagId: string, cookie: string, body: object) {
+function changeTag(groupId: string, tagId: string, cookie: string, body: object) {
   return callRoute(tag.PATCH, {
     method: 'PATCH',
     path: `/api/groups/${groupId}/tags/${tagId}`,
@@ -114,43 +125,62 @@ function deleteTag(groupId: string, tagId: string, cookie: string, body: object)
   });
 }
 
+/** The saved dinner's Tag, as Sam reads the Expense. */
+async function dinnersTag(groupId: string, dinnerId: string) {
+  const read = await callRoute(expense.GET, {
+    method: 'GET',
+    path: `/api/groups/${groupId}/expenses/${dinnerId}`,
+    params: { id: groupId, expenseId: dinnerId },
+    cookie: await signIn('sam'),
+  });
+  expect(read.status).toBe(200);
+  return { tagId: read.body.data.tagId, tag: read.body.data.tag };
+}
+
 describe('PATCH /api/groups/[id]/tags/[tagId]', () => {
   it('renames Food to Meals as the same Tag, which the saved dinner still points at', async () => {
     const { groupId, dinnerId, foodId } = await coorgWeekendWithDinner();
-    const alexCookie = await signIn('alex');
 
-    const renamed = await renameTag(groupId, foodId, alexCookie, {
+    const renamed = await changeTag(groupId, foodId, await signIn('alex'), {
       requestId: '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e01',
       expectedRevision: 0,
       name: 'Meals',
     });
 
     expect(renamed.status).toBe(200);
-    expect((await tagsOf(groupId)).find((entry) => entry.id === foodId)).toEqual({
-      id: foodId,
+    expect(await tagById(groupId, foodId)).toEqual({
       name: 'Meals',
       revision: 1,
+      isArchived: false,
     });
-    const dinner = await callRoute(expense.GET, {
-      method: 'GET',
-      path: `/api/groups/${groupId}/expenses/${dinnerId}`,
-      params: { id: groupId, expenseId: dinnerId },
-      cookie: await signIn('sam'),
+    expect(await dinnersTag(groupId, dinnerId)).toEqual({ tagId: foodId, tag: 'Meals' });
+  });
+
+  it('archives Food as the same Tag, which the saved dinner still points at', async () => {
+    const { groupId, dinnerId, foodId } = await coorgWeekendWithDinner();
+
+    const archived = await changeTag(groupId, foodId, await signIn('alex'), {
+      requestId: '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e07',
+      expectedRevision: 0,
+      isArchived: true,
     });
-    expect(dinner.status).toBe(200);
-    expect(dinner.body.data).toMatchObject({ tagId: foodId, tag: 'Meals' });
+
+    expect(archived.status).toBe(200);
+    expect(await tagById(groupId, foodId)).toEqual({ name: 'Food', revision: 1, isArchived: true });
+    expect(await activeTagNames(groupId)).toEqual(['General', 'Transport', 'Stay', 'Activities']);
+    expect(await dinnersTag(groupId, dinnerId)).toEqual({ tagId: foodId, tag: 'Food' });
   });
 
   it('refuses a rename based on an older revision and keeps the newer name', async () => {
     const { groupId, foodId } = await coorgWeekendWithDinner();
     const alexCookie = await signIn('alex');
-    await renameTag(groupId, foodId, alexCookie, {
+    await changeTag(groupId, foodId, alexCookie, {
       requestId: '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e02',
       expectedRevision: 0,
       name: 'Meals',
     });
 
-    const stale = await renameTag(groupId, foodId, alexCookie, {
+    const stale = await changeTag(groupId, foodId, alexCookie, {
       requestId: '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e03',
       expectedRevision: 0,
       name: 'Dining',
@@ -161,21 +191,24 @@ describe('PATCH /api/groups/[id]/tags/[tagId]', () => {
       error: 'This Tag changed. Review its current state before applying your change.',
       code: 'TAG_CHANGED',
     });
-    expect((await tagsOf(groupId)).find((entry) => entry.id === foodId)?.name).toBe('Meals');
+    expect((await tagById(groupId, foodId)).name).toBe('Meals');
   });
 
-  it('refuses a rename from a member who is not an admin', async () => {
+  it('refuses a rename from a member who is not an admin, or from someone outside', async () => {
     const { groupId, foodId } = await coorgWeekendWithDinner();
+    const rename = async (persona: 'sam' | 'priya', requestId: string) =>
+      changeTag(groupId, foodId, await signIn(persona), {
+        requestId,
+        expectedRevision: 0,
+        name: 'Meals',
+      });
 
-    const refused = await renameTag(groupId, foodId, await signIn('sam'), {
-      requestId: '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e04',
-      expectedRevision: 0,
-      name: 'Meals',
-    });
+    const bySam = await rename('sam', '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e04');
+    const byPriya = await rename('priya', '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e08');
 
-    expect(refused.status).toBe(403);
-    expect(refused.body).toMatchObject({ code: 'TAG_ADMIN_REQUIRED' });
-    expect((await tagsOf(groupId)).find((entry) => entry.id === foodId)?.name).toBe('Food');
+    expect([bySam.status, bySam.body.code]).toEqual([403, 'TAG_ADMIN_REQUIRED']);
+    expect([byPriya.status, byPriya.body.code]).toEqual([403, 'FORBIDDEN']);
+    expect((await tagById(groupId, foodId)).name).toBe('Food');
   });
 });
 

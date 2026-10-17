@@ -69,7 +69,7 @@ function readLink(groupId: string, cookie: string) {
 }
 
 describe('POST and GET /api/groups/[id]/invite-link', () => {
-  it('lets Sam make a link that every member then reads', async () => {
+  it('lets Sam make a link that Alex then reads', async () => {
     const groupId = await coorgWeekend();
 
     const made = await makeLink(groupId, await signIn('sam'));
@@ -97,7 +97,11 @@ describe('POST and GET /api/groups/[id]/invite-link', () => {
       params: { code: first },
       cookie: await signIn('priya'),
     });
-    expect(joined.status).toBe(404);
+    expect(joined).toEqual({
+      status: 404,
+      body: { error: 'Invite link is invalid or expired not found', status: 404 },
+    });
+    expect((await readLink(groupId, await signIn('priya'))).status).toBe(403);
   });
 
   it('shows no link before anyone makes one', async () => {

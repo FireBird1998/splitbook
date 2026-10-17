@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Group from '@/lib/models/Group';
 import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
+import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import {
@@ -136,8 +137,9 @@ describe('DELETE /api/groups/[id]', () => {
 });
 
 describe('Group deletion (ADR 0007)', () => {
-  it('refuses to change or archive a Group whose deletion another server has claimed', async () => {
+  it('refuses every write to a Group whose deletion is claimed, even from its admin', async () => {
     const groupId = await coorgWeekend();
+    // The claim another server's deletion wrote; Alex is still listed as the admin.
     await Group.updateOne({ _id: groupId }, { $set: { deletionRequestedAt: new Date() } });
     const alexCookie = await signIn('alex');
 
@@ -149,23 +151,72 @@ describe('Group deletion (ADR 0007)', () => {
     expect([stored?.name, stored?.isArchived]).toEqual(['Coorg Weekend', false]);
   });
 
-  it('removes the Group once its last member leaves and confirms the deletion', async () => {
+  /** Alex's own trip with one ₹600.00 Expense, Alex its only member. */
+  async function soloTrek() {
     const created = await groupService.create(
       { name: 'Solo Trek', category: 'trip', defaultCurrency: 'INR', alternateCurrencies: [] },
       alex,
     );
     const groupId = String(created._id);
-    const alexCookie = await signIn('alex');
+    await expenseService.create(
+      groupId,
+      {
+        description: 'Trail permit',
+        amount: 600,
+        currency: 'INR',
+        category: 'other',
+        tag: 'General',
+        date: new Date('2026-10-10T12:00:00.000Z'),
+        paidBy: [{ user: alex, amount: 600 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }],
+      },
+      alex,
+    );
+    return groupId;
+  }
 
-    const left = await callRoute(leave.POST, {
+  function leaveGroup(groupId: string, cookie: string, body: object) {
+    return callRoute(leave.POST, {
       method: 'POST',
       path: `/api/groups/${groupId}/leave`,
       params: { id: groupId },
-      cookie: alexCookie,
-      body: { deleteIfLastMember: true },
+      cookie,
+      body,
     });
+  }
 
-    expect(left.status).toBe(200);
+  it('asks the last member to confirm before the Group and its history are deleted', async () => {
+    const groupId = await soloTrek();
+    const alexCookie = await signIn('alex');
+
+    const unconfirmed = await leaveGroup(groupId, alexCookie, {});
+
+    expect(unconfirmed).toEqual({
+      status: 409,
+      body: {
+        error:
+          'You are the last member. Leaving will permanently delete this Group and its history. Confirm deletion to continue.',
+        status: 409,
+        code: 'GROUP_DELETION_CONFIRMATION_REQUIRED',
+      },
+    });
+    expect((await readGroup(groupId, alexCookie)).status).toBe(200);
+  });
+
+  it('removes the Group once its last member confirms the deletion', async () => {
+    const groupId = await soloTrek();
+    const alexCookie = await signIn('alex');
+
+    const left = await leaveGroup(groupId, alexCookie, { deleteIfLastMember: true });
+
+    expect(left).toEqual({
+      status: 200,
+      body: {
+        data: { message: 'Left group', archived: true, deleted: true, deletionPending: false },
+        status: 200,
+      },
+    });
     expect(await readGroup(groupId, alexCookie)).toEqual({
       status: 404,
       body: { error: 'Group not found', status: 404 },

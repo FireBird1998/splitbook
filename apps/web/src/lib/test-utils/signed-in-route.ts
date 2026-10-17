@@ -3,9 +3,11 @@
  *
  * A member signs in for real: a demo persona sign-in through Better Auth's own handler returns
  * the session cookie, and every route call sends it back, so the route's `getAuthUser()` checks
- * a session stored in the test file's own database. The one stand-in is `next/headers`: a
- * handler called outside Next has no request scope, so each test file bridges it to the
- * request being answered, with this line at the top (Vitest hoists `vi.mock` per file):
+ * a session stored in the test file's own database. The stand-ins are only for Next's request
+ * scope, which a handler called outside Next does not have: `next/headers` hands the route the
+ * request being answered, and for a route that calls `after()`, `nextServer` below runs that
+ * work once the response is ready. Each test file installs the first with this line at the top
+ * (Vitest hoists `vi.mock` per file):
  *
  *   vi.mock('next/headers', async () => (await import('@/lib/test-utils/signed-in-route')).nextHeaders);
  *

@@ -8,7 +8,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Invitation from '@/lib/models/Invitation';
-import { DEMO_PERSONA_IDS, type DemoPersonaKey } from '@/lib/demo-personas';
+import { DEMO_PERSONAS, DEMO_PERSONA_IDS, type DemoPersonaKey } from '@/lib/demo-personas';
 import { groupService } from '@/lib/services/group.service';
 import { invitationService } from '@/lib/services/invitation.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
@@ -46,7 +46,8 @@ async function priyaInvitedToCoorgWeekend() {
     alex,
   );
   const groupId = String(created._id);
-  const invitation = await invitationService.create(groupId, 'priya.demo@splitbook.local', alex);
+  const priya = DEMO_PERSONAS.find((persona) => persona.key === 'priya')!;
+  const invitation = await invitationService.create(groupId, priya.email, alex);
   return { groupId, invitationId: String(invitation._id) };
 }
 
@@ -108,7 +109,7 @@ describe('POST /api/invitations/[id]', () => {
   });
 
   it('answers an invitation once', async () => {
-    const { invitationId } = await priyaInvitedToCoorgWeekend();
+    const { groupId, invitationId } = await priyaInvitedToCoorgWeekend();
     const priyaCookie = await signIn('priya');
     await answerInvitation(invitationId, priyaCookie, 'decline');
 
@@ -118,6 +119,7 @@ describe('POST /api/invitations/[id]', () => {
       status: 400,
       body: { error: 'Invitation is no longer pending', status: 400 },
     });
+    expect(await groupStatusFor(groupId, 'priya')).toBe(403);
   });
 
   it('refuses an invitation that has expired', async () => {

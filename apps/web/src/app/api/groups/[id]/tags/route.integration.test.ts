@@ -3,7 +3,8 @@
  * (`splitbook-test-group-tags-route`), with a real session (`signed-in-route.ts`).
  *
  * ADR 0009: only an admin manages Tags, a name is unique in its Group whatever its case, and a
- * retried request creates the Tag once. The route answers with the Group.
+ * retried request creates the Tag once. Tags are read back through the Group, as a member
+ * reads them.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,12 +26,14 @@ const db = integrationTestDb('group-tags-route');
 const { alex, sam } = DEMO_PERSONA_IDS;
 
 let tags: typeof import('./route');
+let group: typeof import('../route');
 
 beforeAll(async () => {
   await connectSignedIn(db);
   // Tag changes use transactions (ADR 0009).
   await requireReplicaSet();
   tags = await import('./route');
+  group = await import('../route');
 });
 beforeEach(async () => {
   await db.reset();
@@ -59,15 +62,20 @@ function createTag(groupId: string, cookie: string, body: object) {
   });
 }
 
-interface StoredTag {
-  _id: string;
-  name: string;
-  isArchived: boolean;
+/** The Group's Tags as Sam reads them. */
+async function tagsOf(groupId: string): Promise<{ _id: string; name: string }[]> {
+  const read = await callRoute(group.GET, {
+    method: 'GET',
+    path: `/api/groups/${groupId}`,
+    params: { id: groupId },
+    cookie: await signIn('sam'),
+  });
+  expect(read.status).toBe(200);
+  return read.body.data.tags;
 }
 
 async function tagNames(groupId: string) {
-  const stored = await groupService.getById(groupId);
-  return (stored!.tags as unknown as StoredTag[]).map((tag) => tag.name);
+  return (await tagsOf(groupId)).map((entry) => entry.name);
 }
 
 const TRIP_TAGS = ['General', 'Food', 'Transport', 'Stay', 'Activities'];
@@ -82,8 +90,6 @@ describe('POST /api/groups/[id]/tags', () => {
     const retried = await createTag(groupId, alexCookie, request);
 
     expect([created.status, retried.status]).toEqual([200, 200]);
-    const snacks = (created.body.data.tags as StoredTag[]).find((tag) => tag.name === 'Snacks');
-    expect(snacks).toMatchObject({ name: 'Snacks', isArchived: false });
     expect(await tagNames(groupId)).toEqual([...TRIP_TAGS, 'Snacks']);
   });
 
@@ -105,10 +111,21 @@ describe('POST /api/groups/[id]/tags', () => {
     expect(await tagNames(groupId)).toEqual(TRIP_TAGS);
   });
 
+  it('refuses someone who is not in the Group', async () => {
+    const groupId = await coorgWeekend();
+
+    const refused = await createTag(groupId, await signIn('priya'), {
+      requestId: '7b0b0e43-6d61-4d55-9c43-1f4c3a2b9e05',
+      name: 'Snacks',
+    });
+
+    expect([refused.status, refused.body.code]).toEqual([403, 'FORBIDDEN']);
+    expect(await tagNames(groupId)).toEqual(TRIP_TAGS);
+  });
+
   it('refuses a name the Group already has, whatever its case', async () => {
     const groupId = await coorgWeekend();
-    const stored = await groupService.getById(groupId);
-    const food = (stored!.tags as unknown as StoredTag[]).find((tag) => tag.name === 'Food')!;
+    const food = (await tagsOf(groupId)).find((entry) => entry.name === 'Food')!;
 
     const refused = await createTag(groupId, await signIn('alex'), {
       requestId: '7b0b0e43-6d61-4d55-9c43-1f4c3a2b9e03',
@@ -119,7 +136,7 @@ describe('POST /api/groups/[id]/tags', () => {
     expect(refused.body).toMatchObject({
       error: 'A Tag with this name already exists. Archived Tags can be restored.',
       code: 'TAG_EXISTS',
-      existingTagId: String(food._id),
+      existingTagId: food._id,
     });
     expect(await tagNames(groupId)).toEqual(TRIP_TAGS);
   });

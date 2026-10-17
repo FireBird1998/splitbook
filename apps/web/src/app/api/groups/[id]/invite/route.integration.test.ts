@@ -6,7 +6,7 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
+import { DEMO_PERSONAS, DEMO_PERSONA_IDS } from '@/lib/demo-personas';
 import { groupService } from '@/lib/services/group.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import {
@@ -21,7 +21,7 @@ vi.mock('next/headers', async () => (await import('@/lib/test-utils/signed-in-ro
 
 const db = integrationTestDb('group-invite-route');
 const { alex, sam } = DEMO_PERSONA_IDS;
-const PRIYA_EMAIL = 'priya.demo@splitbook.local';
+const PRIYA_EMAIL = DEMO_PERSONAS.find((persona) => persona.key === 'priya')!.email;
 
 let invite: typeof import('./route');
 let invitations: typeof import('@/app/api/invitations/route');
