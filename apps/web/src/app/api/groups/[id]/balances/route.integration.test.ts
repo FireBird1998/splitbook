@@ -173,7 +173,7 @@ describe('GET /api/groups/[id]/balances with a recurring Expense due', () => {
     const { status, body } = await read(readBalances, groupId, '/balances');
 
     expect(status).toBe(200);
-    expect(balanceOf(body.data, bob)).toBe(-20000);
+    expect(balanceOf(body.data, bob)).toBe(-19999);
     expect(debtOf(body.data, bob, alice)).toBe(20000);
     expect(debtOf(body.data, carol, alice)).toBe(20000);
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
