@@ -1,0 +1,33 @@
+/*
+ * The design system's font variables (#502), read through FONT_UI and FONT_MONO in
+ * @splitbook/shared/design-tokens. fonts.ts declares the @font-face rules under the families'
+ * real names; the variables live here because Turbopack names a next/font variable after the
+ * JavaScript constant rather than a declared family, which `next dev` would turn into a family
+ * that matches no font.
+ *
+ * Until a font arrives, text is drawn in Arial adjusted to the font's size, with the metrics
+ * next/font/google used for these fonts, so the page doesn't shift when the font swaps in.
+ */
+
+@font-face {
+  font-family: 'Outfit Fallback';
+  src: local('Arial');
+  ascent-override: 100.18%;
+  descent-override: 26.05%;
+  line-gap-override: 0%;
+  size-adjust: 99.82%;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono Fallback';
+  src: local('Arial');
+  ascent-override: 76.16%;
+  descent-override: 20.43%;
+  line-gap-override: 0%;
+  size-adjust: 134.59%;
+}
+
+:root {
+  --font-outfit: 'Outfit', 'Outfit Fallback';
+  --font-plex-mono: 'IBM Plex Mono', 'IBM Plex Mono Fallback';
+}
