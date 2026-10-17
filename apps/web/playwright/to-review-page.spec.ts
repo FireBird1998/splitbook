@@ -896,3 +896,18 @@ test('typing that could not be kept after Back is pointed out when the item open
     "Your last change to this item wasn't kept. Check it and make the change again.",
   );
 });
+
+test('typing not yet autosaved is still kept when the page reloads', async ({ page }) => {
+  await page.clock.install();
+  await openFromExpenses(page, ['ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const review = panel(page);
+  await review.getByLabel('What was it for?').fill('Review edit before reload');
+  await expect(
+    review.getByRole('status').filter({ hasText: 'Keeping your changes' }),
+  ).toBeVisible();
+  await page.reload();
+  await expect
+    .poll(async () => (await rows(page))[0].values.description)
+    .toBe('Review edit before reload');
+});

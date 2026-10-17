@@ -191,10 +191,19 @@ export function useReviewEditor(
         if (kept) window.location.assign(link.href);
       });
     };
+    // A reload or closed tab can't wait for the autosave; send the typing as the page goes (#500).
+    const pageHide = () => {
+      if (!edits().pending || edits().writing) return;
+      if (timer.current) clearTimeout(timer.current);
+      adapter.current.client.replaceAsPageGoes(current.current, draftValues(input.current));
+      edits().clear();
+    };
     window.addEventListener('beforeunload', beforeUnload);
+    window.addEventListener('pagehide', pageHide);
     document.addEventListener('click', navigate, true);
     return () => {
       window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('pagehide', pageHide);
       document.removeEventListener('click', navigate, true);
     };
   });
