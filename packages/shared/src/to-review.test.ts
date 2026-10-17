@@ -13,7 +13,7 @@ import {
   completeExpenseDraftSchema,
   persistedExpenseDraftSchema,
 } from './validators/expense-draft';
-import { parseToReviewResponse } from './to-review-read';
+import { parseReadableToReview, parseToReviewResponse } from './to-review-read';
 import type { ToReviewItem, ToReviewRead } from './to-review-read';
 import { toReviewHref, toReviewPath } from './api-paths';
 import { toReviewKey, queryKeyPath } from './query-keys';
@@ -249,6 +249,50 @@ describe('To review read contract', () => {
       { status: 200, data: { groups: [], total: -1 } },
     ])
       expect(() => parseToReviewResponse(value)).toThrow('Unable to load To review. Please retry.');
+  });
+  it('leaves out each item it can’t read, counts it, and reads the rest (#513)', () => {
+    const flat = 'a00000000000000000000002';
+    const value = {
+      status: 200,
+      data: {
+        total: 4,
+        groups: [
+          {
+            groupId,
+            groupName: 'Weekend',
+            count: 3,
+            items: [
+              item(1),
+              // Fails the shared schema, as an old or migrated Draft might.
+              { ...item(2), draft: { ...item(2).draft, revision: 'two' } },
+              // Filed under another Group.
+              item(3, { draft: { ...item(3).draft, groupId: flat } }),
+            ],
+          },
+          {
+            groupId: flat,
+            groupName: 'Flat',
+            count: 1,
+            items: [{ ...item(4), problems: 'none' }],
+          },
+        ],
+      },
+    };
+    expect(parseReadableToReview(value)).toEqual({
+      read: { total: 1, groups: [{ groupId, groupName: 'Weekend', count: 1, items: [item(1)] }] },
+      unreadable: { [groupId]: 2, [flat]: 1 },
+    });
+    // Android still reads To review whole or not at all.
+    expect(() => parseToReviewResponse(value)).toThrow('Unable to load To review. Please retry.');
+  });
+  it('reads nothing when the read itself doesn’t add up, whatever its items (#513)', () => {
+    const data = read([item(1)]);
+    for (const value of [
+      {},
+      { status: 200, data: { ...data, total: 9 } },
+      { status: 200, data: { ...data, groups: [{ ...data.groups[0], count: 2 }] } },
+    ])
+      expect(() => parseReadableToReview(value)).toThrow('Unable to load To review. Please retry.');
   });
   it('shares a scoped cache key and safely encoded destination', () => {
     expect(queryKeyPath(toReviewKey({ accountId: member, environment: 'test' }))).toBe(
