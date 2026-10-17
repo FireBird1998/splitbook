@@ -1,4 +1,4 @@
-import { apiFetch } from '@/lib/utils/api-fetch';
+import { apiFetch, signInAgain } from '@/lib/utils/api-fetch';
 import { noteAnswered } from '@/lib/utils/read-times';
 
 export class HttpResponseError extends Error {
@@ -15,12 +15,8 @@ export async function fetcher(url: string) {
   // A 419 (the session moved to another account) never settles: the page reloads instead.
   const res = await apiFetch(url);
   const json = await res.json().catch(() => ({}));
-  if (res.status === 401 && typeof window !== 'undefined') {
-    // The session is gone (expired, or signed out in another tab). Resume at
-    // /login the way a page navigation would, then let the caller fail fast.
-    const callbackUrl = `${window.location.pathname}${window.location.search}`;
-    window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
-  }
+  // The session is gone: resume at /login, then let the caller fail fast.
+  if (res.status === 401) signInAgain();
   if (!res.ok) {
     const message = (json as { error?: unknown } | null)?.error;
     throw new HttpResponseError(

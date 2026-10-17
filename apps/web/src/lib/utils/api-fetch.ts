@@ -38,10 +38,25 @@ export function leaveExpectedAccount(): void {
   leavingAccount = true;
 }
 
+/** The sign-out never left (it could not reach the server): an ended session counts again. */
+export function stayInExpectedAccount(): void {
+  leavingAccount = false;
+}
+
 /** Load the page again for whichever account is signed in now (or `/login`). */
 export function reloadForAccountChange(): void {
   if (typeof window === 'undefined' || leavingAccount) return;
   window.location.reload();
+}
+
+/**
+ * The session is gone (expired, or signed out in another tab): resume at `/login` the way a
+ * page navigation would. Not while this tab is signing out, which goes to `/` on its own (#476).
+ */
+export function signInAgain(): void {
+  if (typeof window === 'undefined' || leavingAccount) return;
+  const callbackUrl = `${window.location.pathname}${window.location.search}`;
+  window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
 }
 
 function isAppApi(input: string) {

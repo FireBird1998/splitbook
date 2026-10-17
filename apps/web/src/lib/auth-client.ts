@@ -5,7 +5,7 @@
 
 import { createAuthClient } from 'better-auth/react';
 import { demoPersonaClient } from '@/lib/auth/demo-persona-client';
-import { leaveExpectedAccount } from '@/lib/utils/api-fetch';
+import { leaveExpectedAccount, stayInExpectedAccount } from '@/lib/utils/api-fetch';
 import { forgetBrowserSettlementAttempts } from '@/lib/settlement-attempts';
 import { forgetBrowserTagActions } from '@/lib/tag-actions';
 
@@ -42,7 +42,11 @@ export async function signInWithGoogle(callbackURL: string) {
 export async function signOutToHome() {
   // This tab navigates on its own; its session guard must not reload it first.
   leaveExpectedAccount();
-  const result = await authClient.signOut();
+  const result = await authClient.signOut().catch((error: unknown) => {
+    // Unreachable: this tab stays signed in, so its session guard and sign-in redirect apply.
+    stayInExpectedAccount();
+    throw error;
+  });
   // Unconfirmed payments are account-local data: none outlives the session (#198).
   // A sign-out that failed (offline, say) leaves the member signed in, so they stay.
   if (!result?.error) {
