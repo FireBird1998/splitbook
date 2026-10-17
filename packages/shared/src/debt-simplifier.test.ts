@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { calculateNetBalances, simplifyDebts } from './debt-simplifier';
+import { parseAmountMinor, sumMinorAmounts } from './exact-money';
 
 describe('calculateNetBalances', () => {
   it('returns empty balances for empty inputs', () => {
@@ -147,8 +148,10 @@ describe('calculateNetBalances', () => {
       ],
     );
 
-    const total = balances.reduce((sum, balance) => sum + balance.amount, 0);
-    expect(total).toBeCloseTo(0, 10);
+    // Balances net to exactly zero in minor units (#471).
+    expect(
+      sumMinorAmounts(balances.map((balance) => parseAmountMinor(balance.amount, 'INR'))),
+    ).toBe(0);
     expect(balances).toHaveLength(3);
   });
 });
