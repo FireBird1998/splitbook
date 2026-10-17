@@ -1,0 +1,19 @@
+## Parent
+
+https://github.com/FireBird1998/splitbook/issues/72
+
+## What to build
+
+Members can open a Group and view complete, consistent detail/settings data on web and Android, with safe recovery for invalid responses.
+
+## Acceptance criteria
+
+- [ ] Adopt the shared definition for Group detail consumers, including web settings, without dropping Tags, flags, dates, alternate currencies or other currently consumed fields. Keep Android representation conversion in its adapter.
+- [ ] Preserve requested-Group and signed-in membership checks. Null, unpopulated or malformed required members fail visibly with Retry, rather than crashing rendering or inventing identities.
+- [ ] Preserve authenticated detail-read recurring generation and its access ordering. Keep creation response status handling, invitation flows and settings writes compatible.
+- [ ] Test actual authenticated detail responses through both adapters, optional legacy shapes, invalid required values, response-ID mismatch, access denial, initial errors, refresh errors and successful Retry.
+- [ ] Remove duplicate detail field validation and casts while keeping the shared module free of framework, database and platform dependencies.
+
+## Blocked by
+
+- https://github.com/FireBird1998/splitbook/issues/74

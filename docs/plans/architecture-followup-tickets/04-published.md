@@ -1,0 +1,20 @@
+## Parent
+
+https://github.com/FireBird1998/splitbook/issues/73
+
+## What to build
+
+Make the current financial recovery guarantees executable against the verified Expense baseline before changing coordination.
+
+## Acceptance criteria
+
+- [ ] Read #70 completion evidence and use its accepted revision; do not treat the current unverified working tree as the baseline. Keep this ticket behavior-preserving.
+- [ ] Use authenticated real-app/Mongo creation and read-back tests for concurrency, identical retries, conflicting payloads, scoped identity, removed actors, current-record responses and unkeyed legacy compatibility.
+- [ ] Characterize participant-departure eligibility separately for Expense and Settlement, historical Tag replay after rename/retirement/later reassignment, and creation array-order fingerprints separately from money-edit equivalence.
+- [ ] Inject response preparation failure after real commit for both writers and assert persisted record, pending/publication state, same-key recovery, one Balance effect and eventual single Activity. Record the existing ordering difference explicitly.
+- [ ] Exercise an unrelated unique collision without a matching scoped record, Activity outage and publication-before-ack recovery. Use isolated infrastructure fault injection without production fault routes.
+- [ ] Reuse existing creation/browser/outbox seams and report passing baseline cases and discovered defects. Any policy discrepancy must be recorded before consolidation rather than silently redefined.
+
+## Blocked by
+
+- https://github.com/FireBird1998/splitbook/issues/70

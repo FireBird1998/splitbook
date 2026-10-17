@@ -1,0 +1,15 @@
+Browser tab: 1605770272, Title: "Splitbook - Shared Expenses, Settled Fairly", URL: "https://splitbook.in/groups/6abc5d43d990c2fa4408c85a".
+1 AXWebArea Splitbook - Shared Expenses, Settled Fairly, URL: splitbook.in/groups/6abc5d43d990c2fa4408c85a
+	2 container Invite Members Close invite dialog
+		3 heading Invite Members Close invite dialog, Value: 2
+			4 text Invite Members
+			5 button Close invite dialog
+		6 text Invite by email
+		7 text field (settable)
+		8 button (disabled) Send
+		9 text Share invite link
+		10 text field https://splitbook.in/join/[redacted]
+		11 button Copy invite link
+		12 text Expires in 7 days
+
+The focused UI element is 1 AXWebArea Splitbook - Shared Expenses, Settled Fairly, URL: splitbook.in/groups/6abc5d43d990c2fa4408c85a
