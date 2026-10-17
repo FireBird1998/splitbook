@@ -53,14 +53,18 @@ const linksTo = (html: string, href: string) =>
 /** The theme's money font, as the server-rendered style rules name it. */
 const MONEY_FONT = String(createAppTheme('light').typography.money.fontFamily).split(',')[0];
 
-/** The text of each element drawn in the money style, in page order. */
-function moneyText(html: string): string[] {
+/**
+ * The text of each element drawn in the money style, in page order; with `from`, only those after
+ * it, such as one section's (#446 put other amounts on the page).
+ */
+function moneyText(html: string, from?: string): string[] {
   const money = new Set(
     [...html.matchAll(/\.(css-[\w-]+)\{([^}]*)\}/g)]
       .filter(([, , rule]) => rule.includes(`font-family:${MONEY_FONT}`))
       .map(([, name]) => name),
   );
-  return [...html.matchAll(/<\w+\b[^>]*\bclass="([^"]*)"[^>]*>([^<]*)(?=<)/g)]
+  const shown = from === undefined ? html : html.slice(html.indexOf(from));
+  return [...shown.matchAll(/<\w+\b[^>]*\bclass="([^"]*)"[^>]*>([^<]*)(?=<)/g)]
     .filter(([, classes]) => classes.split(' ').some((name) => money.has(name)))
     .map(([, , inner]) => inner.trim());
 }
@@ -225,7 +229,7 @@ describe('the landing page’s pricing (#447)', () => {
         'Plus Best value yearly ₹29 a month · or ₹199 a year For the flat, the office and every trip. More Groups No ads Web dashboards, Group insights and exports One subscription on Android and web Get Plus',
       ]);
       // Every amount is in the money style: the heading, the launch line, then each plan.
-      expect(moneyText(html)).toEqual(['₹29', '₹199', '₹17', '₹0', '₹29', '₹199']);
+      expect(moneyText(html, 'id="pricing"')).toEqual(['₹29', '₹199', '₹17', '₹0', '₹29', '₹199']);
       expect(linksTo(html, '/login').map((anchor) => anchor.text)).toEqual([
         'Sign in',
         'Start free',
