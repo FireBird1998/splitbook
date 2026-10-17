@@ -10,18 +10,19 @@ import { inspect } from 'node:util';
 const SECRET_KEY = /cookie|token|secret|password|authorization|session/i;
 const REDACTED = '[redacted]';
 
-function redact(value: unknown, seen = new WeakSet<object>()): unknown {
+function redact(value: unknown, copies = new WeakMap<object, unknown>()): unknown {
   if (value === null || typeof value !== 'object') return value;
-  if (seen.has(value)) return value;
-  seen.add(value);
-  if (Array.isArray(value)) return value.map((item) => redact(item, seen));
-  if (value instanceof Date || value instanceof Map || value instanceof Set) return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key,
-      SECRET_KEY.test(key) ? REDACTED : redact(item, seen),
-    ]),
-  );
+  // A pattern, date, error or other non-plain value is shown as it is: it holds no fields to hide.
+  const plain =
+    Array.isArray(value) || [Object.prototype, null].includes(Object.getPrototypeOf(value));
+  if (!plain) return value;
+  // One redacted copy per object, so a value seen twice, or in a loop, is redacted every time.
+  if (copies.has(value)) return copies.get(value);
+  const copy: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};
+  copies.set(value, copy);
+  for (const [key, item] of Object.entries(value))
+    (copy as Record<string, unknown>)[key] = SECRET_KEY.test(key) ? REDACTED : redact(item, copies);
+  return copy;
 }
 
 const show = (value: unknown) =>

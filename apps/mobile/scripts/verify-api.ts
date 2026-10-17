@@ -124,7 +124,7 @@ async function verify() {
   };
   const localFetch: MobileFetch = async (url, init) => {
     observe(new URL(url).origin === apiBaseUrl, 'The controller attempted a nonlocal target.', {
-      origin: new URL(url).origin,
+      host: new URL(url).hostname,
     });
     requestCount += 1;
     return fetch(url, { ...init, redirect: 'error' });

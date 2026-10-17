@@ -137,6 +137,69 @@ describe('a failing verifier’s report (#478)', () => {
     expect(() => present({ kind: 'create' }, 'Never shown.')).not.toThrow();
   });
 
+  it('redacts a secret every time it appears, however the snapshot reaches it', () => {
+    const session = { cookie: 'a=fictional' };
+    const looped: Record<string, unknown> = { token: 'fictional' };
+    looped.self = looped;
+    expect(
+      failureReport(
+        caught(() => observe(false, 'Shared.', { first: session, second: session, looped })),
+        COMMAND,
+      ),
+    ).toBe(
+      [
+        'FAIL: Shared.',
+        '  command: pnpm --filter @splitbook/mobile run verify:financial',
+        "  observed: { first: { cookie: '[redacted]' }, second: { cookie: '[redacted]' }, looped: <ref *1> { token: '[redacted]', self: [Circular *1] } }",
+      ].join('\n'),
+    );
+  });
+
+  it('shows a pattern it matched against as the pattern', () => {
+    expect(
+      failureReport(
+        caught(() =>
+          assert.match('2 from Claude', /1 from Claude/, 'To review miscounted Claude.'),
+        ),
+        COMMAND,
+      ),
+    ).toBe(
+      [
+        'FAIL: To review miscounted Claude.',
+        '  command: pnpm --filter @splitbook/mobile run verify:financial',
+        '  expected: /1 from Claude/',
+        "  observed: '2 from Claude'",
+      ].join('\n'),
+    );
+  });
+
+  it('adds nothing a bare condition can’t know, and names a check that had no message', () => {
+    expect(
+      failureReport(
+        caught(() => assert.ok(false, 'Home did not load.')),
+        COMMAND,
+      ),
+    ).toBe(
+      [
+        'FAIL: Home did not load.',
+        '  command: pnpm --filter @splitbook/mobile run verify:financial',
+      ].join('\n'),
+    );
+    expect(
+      failureReport(
+        caught(() => assert.equal(1, 2)),
+        COMMAND,
+      ),
+    ).toBe(
+      [
+        'FAIL: A check failed.',
+        '  command: pnpm --filter @splitbook/mobile run verify:financial',
+        '  expected: 2',
+        '  observed: 1',
+      ].join('\n'),
+    );
+  });
+
   it('passes a check that holds', () => {
     expect(() => observe(true, 'Never shown.', { count: 22 })).not.toThrow();
   });

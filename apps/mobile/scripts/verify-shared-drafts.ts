@@ -34,13 +34,10 @@ async function main() {
   const hello = z
     .object({ setName: z.string().optional(), msg: z.string().optional() })
     .parse(await withIsolatedDatabase((database) => database.admin().command({ hello: 1 })));
-  if (!hello.setName && hello.msg !== 'isdbgrid') {
-    console.error(
+  if (!hello.setName && hello.msg !== 'isdbgrid')
+    throw new Error(
       'This verifier needs a replica-set MongoDB, because saving Drafts uses transactions.',
     );
-    process.exitCode = 1;
-    return;
-  }
   const web = new FixtureActor(origin);
   const memory = () => {
     const rows = new Map<string, unknown>();

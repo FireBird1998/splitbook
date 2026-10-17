@@ -58,7 +58,7 @@ async function verify() {
       requests += 1;
       const target = new URL(url);
       observe(target.origin === apiBaseUrl, 'A request attempted to leave the local backend.', {
-        origin: target.origin,
+        host: target.hostname,
       });
       sent.push(`${init.method ?? 'GET'} ${target.pathname}`);
       const creating = init.method === 'POST' && target.pathname === '/api/groups';
@@ -325,7 +325,10 @@ async function verify() {
     observe(
       invitation.origin === apiBaseUrl && /^\/join\/[a-f\d]{8}$/.test(invitation.pathname),
       'The invitation was not a canonical local web link.',
-      { origin: invitation.origin, path: invitation.pathname },
+      {
+        local: invitation.origin === apiBaseUrl,
+        joinPath: /^\/join\/[a-f\d]{8}$/.test(invitation.pathname),
+      },
     );
     const generations = alex.invitePosts;
     observe(

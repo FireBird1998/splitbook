@@ -45,8 +45,8 @@ function assertSignedOut(controller: MobileController) {
     'A signed-out controller retained a form, invitation, or share link.',
     {
       draftName: state.creation.draft.name,
-      invitation: state.invitation.code,
-      share: state.share.url,
+      invitationKept: state.invitation.code !== null,
+      shareKept: state.share.url !== null,
     },
   );
 }
@@ -106,7 +106,7 @@ async function verify() {
   const localFetch: MobileFetch = async (url, init) => {
     const target = new URL(url);
     observe(target.origin === apiBaseUrl, 'A request attempted to leave the local backend.', {
-      origin: target.origin,
+      host: target.hostname,
     });
     observe(
       !init.method ||
@@ -212,8 +212,10 @@ async function verify() {
     const refreshing = active.refresh();
     const signal = await Promise.race([
       heldResponse.promise,
-      refreshing.then(() => {
-        throw new Error('The real Group request finished before delivery could be held.');
+      refreshing.then((): never => {
+        observe(false, 'The real Group request finished before delivery could be held.', {
+          held: false,
+        });
       }),
     ]);
     active.openSettings();
