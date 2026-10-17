@@ -56,7 +56,7 @@ const POINTS: { icon: typeof GroupOutlinedIcon; text: ReactNode }[] = [
   },
   {
     icon: CurrencyExchangeOutlinedIcon,
-    text: 'A Group can use its main currency and up to two more, and balances never add currencies together.',
+    text: 'Each Group keeps its own currency, and balances never add currencies together.',
   },
 ];
 
