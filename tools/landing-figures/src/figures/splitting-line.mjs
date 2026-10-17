@@ -1110,6 +1110,9 @@ export function buildSplittingLine(STORY) {
       { mark: 'lamp', label: 'Lamp: who paid' },
     ],
     caption: 'Each Expense is cut into one chip per share, and the counters always add up to zero.',
+    // The poses the tour shows under reduced motion, stepping from its still: every Expense split,
+    // the finished line, the idle line, then each Expense before the last.
+    poses: STORY.steps.length + 2,
     still: STILL_TEXT,
     width: W,
     height: H,

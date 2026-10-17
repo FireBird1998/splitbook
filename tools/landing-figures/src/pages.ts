@@ -40,7 +40,7 @@ function page(figure: Figure, theme: Theme, body: string, script?: string) {
  * web app's LandingFigure gives the tour the same hooks.
  */
 const stage = (figure: Figure) =>
-  `<div class="iso-stage ln-stage">${figure.svg}<span class="fg-sr" role="status" aria-live="polite" data-status></span></div>`;
+  `<div class="iso-stage" data-stage>${figure.svg}<span class="fg-sr" role="status" aria-live="polite" data-status></span></div>`;
 
 /** A figure in its card, without the live script: the drawing exactly as the page first paints it. */
 export function restPage(figure: Figure, theme: Theme) {

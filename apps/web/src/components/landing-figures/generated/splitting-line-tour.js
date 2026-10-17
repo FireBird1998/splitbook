@@ -44,14 +44,104 @@ function holdStill(element, [dx, dy]) {
   element.querySelectorAll("[data-hold]").forEach((node) => text ? node.setAttribute("transform", text) : node.removeAttribute("transform"));
 }
 
+// src/figures/tour.js
+var KEYS = "Click, or press → or Space, for the next step; Home starts over.";
+function runTour(root, makeScene) {
+  const stage = root.querySelector("[data-stage]");
+  const readout = root.querySelector("[data-readout]");
+  const status = stage.querySelector("[data-status]");
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let paused = false;
+  const held = () => still.matches || paused;
+  const scene = makeScene({
+    svg: stage.querySelector("svg"),
+    held,
+    say(text) {
+      if (readout && readout.textContent !== text) readout.textContent = text;
+    },
+    announce(text) {
+      if (status) status.textContent = text;
+    }
+  });
+  let frame = 0;
+  let last = 0;
+  let visible = false;
+  function tick(now) {
+    const dt = last ? Math.min((now - last) / 1e3, 1 / 30) : 1 / 60;
+    last = now;
+    scene.update(held() ? 0 : dt, held());
+    scene.draw();
+    frame = visible && !(held() && scene.settled()) ? requestAnimationFrame(tick) : 0;
+  }
+  const run = () => {
+    if (!frame && visible) {
+      last = 0;
+      frame = requestAnimationFrame(tick);
+    }
+  };
+  function next() {
+    scene.next();
+    run();
+  }
+  function onKey(event) {
+    if (event.key === "ArrowRight" || event.key === " " || event.key === "Enter") next();
+    else if (event.key === "Home") {
+      scene.restart();
+      run();
+    } else return;
+    event.preventDefault();
+  }
+  const observer = new IntersectionObserver(
+    (entries) => {
+      visible = entries[entries.length - 1].isIntersecting;
+      if (visible) run();
+    },
+    { rootMargin: "120px 0px" }
+  );
+  observer.observe(stage);
+  stage.addEventListener("click", next);
+  stage.addEventListener("keydown", onKey);
+  const pause = root.querySelector("[data-pause]");
+  function togglePause() {
+    paused = !paused;
+    pause.textContent = paused ? "Play" : "Pause";
+    run();
+  }
+  if (pause && !still.matches) {
+    pause.hidden = false;
+    pause.addEventListener("click", togglePause);
+  }
+  stage.tabIndex = 0;
+  stage.setAttribute("role", "group");
+  stage.setAttribute("aria-label", `Live tour. ${KEYS}`);
+  if (still.matches) {
+    scene.poseStill();
+    scene.update(0, true);
+  } else scene.restart();
+  scene.draw();
+  return () => {
+    cancelAnimationFrame(frame);
+    frame = 0;
+    observer.disconnect();
+    stage.removeEventListener("click", next);
+    stage.removeEventListener("keydown", onKey);
+    if (pause) {
+      pause.removeEventListener("click", togglePause);
+      pause.hidden = true;
+      pause.textContent = "Pause";
+    }
+    stage.removeAttribute("tabindex");
+    stage.removeAttribute("role");
+    stage.removeAttribute("aria-label");
+  };
+}
+
 // src/figures/splitting-line.tour.js
 function playTour(root, D) {
+  return runTour(root, (tour) => splittingLine(tour, D));
+}
+function splittingLine({ svg, held, say, announce }, D) {
   const P = D.P;
-  const stage = root.querySelector(".ln-stage");
-  const svg = stage.querySelector("svg");
-  const readout = root.querySelector("[data-readout]");
-  const announce = stage.querySelector("[data-status]");
-  const still = window.matchMedia("(prefers-reduced-motion: reduce)");
   const q = (sel) => svg.querySelector(sel);
   const inr = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
   const money = (minor) => "₹" + inr.format(Math.abs(minor / 100));
@@ -88,8 +178,6 @@ function playTour(root, D) {
   let fill = D.xs.map(() => 0);
   let beltTravel = 0;
   let phase = "idle";
-  let paused = false;
-  const held = () => still.matches || paused;
   let e = -1;
   let clock = 0;
   let bar = { x: D.mag, onBelt: false };
@@ -102,12 +190,6 @@ function playTour(root, D) {
     screen.forEach((el, i) => {
       if (el.textContent !== (lines[i] ?? "")) el.textContent = lines[i] ?? "";
     });
-  }
-  function say(text) {
-    if (readout.textContent !== text) readout.textContent = text;
-  }
-  function announceText(text) {
-    announce.textContent = text;
   }
   function resetMagazine() {
     bars.forEach((el, i) => {
@@ -139,7 +221,7 @@ function playTour(root, D) {
         (n, i) => `${n} ${target[i] > 0 ? "+" : target[i] < 0 ? "−" : ""}${inr.format(Math.abs(target[i] / 100))}`
       ).join(" · ");
       say(text2);
-      announceText(`All ${D.steps.length} Expenses split. ${text2}`);
+      announce(`All ${D.steps.length} Expenses split. ${text2}`);
       return;
     }
     const s = D.steps[e];
@@ -154,7 +236,7 @@ function playTour(root, D) {
     setScreen(screenFor(s));
     const text = `${s.title} ${money(s.amountMinor)} · ${D.names[s.paidBy]} paid`;
     say(text);
-    announceText(text);
+    announce(text);
   }
   function restart() {
     e = -1;
@@ -424,23 +506,6 @@ function playTour(root, D) {
     phase = "hold";
     clock = 0;
   }
-  let frame = 0;
-  let last = 0;
-  let visible = false;
-  const settled = () => held() && shown.every((n, i) => n.at === target[i] && n.rate === 0);
-  function tick(now) {
-    const dt = last ? Math.min((now - last) / 1e3, 1 / 30) : 1 / 60;
-    last = now;
-    update(held() ? 0 : dt, held());
-    draw();
-    frame = visible && !settled() ? requestAnimationFrame(tick) : 0;
-  }
-  const run = () => {
-    if (!frame && visible) {
-      last = 0;
-      frame = requestAnimationFrame(tick);
-    }
-  };
   function next() {
     if (phase === "done") restart();
     else {
@@ -452,60 +517,9 @@ function playTour(root, D) {
         update(0, true);
       }
     }
-    run();
   }
-  function onKey(event) {
-    if (event.key === "ArrowRight" || event.key === " " || event.key === "Enter") next();
-    else if (event.key === "Home") {
-      restart();
-      run();
-    } else return;
-    event.preventDefault();
-  }
-  const observer = new IntersectionObserver(
-    (entries) => {
-      visible = entries[entries.length - 1].isIntersecting;
-      if (visible) run();
-    },
-    { rootMargin: "120px 0px" }
-  );
-  observer.observe(stage);
-  stage.addEventListener("click", next);
-  stage.addEventListener("keydown", onKey);
-  const pause = root.querySelector("[data-pause]");
-  function togglePause() {
-    paused = !paused;
-    pause.textContent = paused ? "Play" : "Pause";
-    run();
-  }
-  if (pause && !still.matches) {
-    pause.hidden = false;
-    pause.addEventListener("click", togglePause);
-  }
-  const KEYS = "Click, or press → or Space, for the next step; Home starts over.";
-  stage.tabIndex = 0;
-  stage.setAttribute("role", "group");
-  stage.setAttribute("aria-label", `Live tour. ${KEYS}`);
-  if (still.matches) {
-    poseStill();
-    update(0, true);
-  } else restart();
-  draw();
-  return () => {
-    cancelAnimationFrame(frame);
-    frame = 0;
-    observer.disconnect();
-    stage.removeEventListener("click", next);
-    stage.removeEventListener("keydown", onKey);
-    if (pause) {
-      pause.removeEventListener("click", togglePause);
-      pause.hidden = true;
-      pause.textContent = "Pause";
-    }
-    stage.removeAttribute("tabindex");
-    stage.removeAttribute("role");
-    stage.removeAttribute("aria-label");
-  };
+  const settled = () => shown.every((n, i) => n.at === target[i] && n.rate === 0);
+  return { restart, next, update, draw, poseStill, settled };
 }
 
 // src/figures/splitting-line.tour-entry.js

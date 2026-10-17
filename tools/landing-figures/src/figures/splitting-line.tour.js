@@ -1,22 +1,22 @@
-// Fig 1's live tour: the splitting line runs the story an Expense at a time. It works on a plate
-// already in the page (the figure's SVG at rest inside `.ln-stage`, a `[data-readout]` and a
-// `[data-status]` live region) and plays the tour data the figure module builds from the story.
-// The web app and the preview pages run the same code, bundled with the kit functions it uses.
+// Fig 1's live tour: the splitting line runs the story an Expense at a time, on the tour data the
+// figure module builds from the story. tour.js runs it on the plate in the page; the web app and
+// the preview pages bundle the same code with the kit functions it uses.
 import {
   axisVector,
   holdStill,
   lineOnTop,
   translateAlong,
 } from '../../vendor/anatomy/kit/iso-kit.mjs';
+import { runTour } from './tour.js';
 
 /** Starts the tour on root; returns a function that stops it and leaves the drawing as it is. */
 export function playTour(root, D) {
+  return runTour(root, (tour) => splittingLine(tour, D));
+}
+
+/** The splitting line's scene, for runTour. */
+function splittingLine({ svg, held, say, announce }, D) {
   const P = D.P;
-  const stage = root.querySelector('.ln-stage');
-  const svg = stage.querySelector('svg');
-  const readout = root.querySelector('[data-readout]');
-  const announce = stage.querySelector('[data-status]');
-  const still = window.matchMedia('(prefers-reduced-motion: reduce)');
   const q = (sel) => svg.querySelector(sel);
   const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
   const money = (minor) => '₹' + inr.format(Math.abs(minor / 100));
@@ -57,9 +57,6 @@ export function playTour(root, D) {
   let fill = D.xs.map(() => 0);
   let beltTravel = 0;
   let phase = 'idle';
-  // The Pause button holds the line where it is; under reduced motion it is always held.
-  let paused = false;
-  const held = () => still.matches || paused;
   let e = -1;
   let clock = 0;
   let bar = { x: D.mag, onBelt: false };
@@ -73,12 +70,6 @@ export function playTour(root, D) {
     screen.forEach((el, i) => {
       if (el.textContent !== (lines[i] ?? '')) el.textContent = lines[i] ?? '';
     });
-  }
-  function say(text) {
-    if (readout.textContent !== text) readout.textContent = text;
-  }
-  function announceText(text) {
-    announce.textContent = text;
   }
   function resetMagazine() {
     bars.forEach((el, i) => {
@@ -114,7 +105,7 @@ export function playTour(root, D) {
         )
         .join(' · ');
       say(text);
-      announceText(`All ${D.steps.length} Expenses split. ${text}`);
+      announce(`All ${D.steps.length} Expenses split. ${text}`);
       return;
     }
     const s = D.steps[e];
@@ -129,7 +120,7 @@ export function playTour(root, D) {
     setScreen(screenFor(s));
     const text = `${s.title} ${money(s.amountMinor)} · ${D.names[s.paidBy]} paid`;
     say(text);
-    announceText(text);
+    announce(text);
   }
 
   function restart() {
@@ -416,26 +407,7 @@ export function playTour(root, D) {
     clock = 0;
   }
 
-  // ---------------------------------------------------------------- loop and input
-  let frame = 0;
-  let last = 0;
-  let visible = false;
-  /** Whether a frame would change nothing: the line is held and every counter has settled. */
-  const settled = () => held() && shown.every((n, i) => n.at === target[i] && n.rate === 0);
-  function tick(now) {
-    const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
-    last = now;
-    // Held, nothing moves on its own: each step is shown settled when asked for.
-    update(held() ? 0 : dt, held());
-    draw();
-    frame = visible && !settled() ? requestAnimationFrame(tick) : 0;
-  }
-  const run = () => {
-    if (!frame && visible) {
-      last = 0;
-      frame = requestAnimationFrame(tick);
-    }
-  };
+  // ---------------------------------------------------------------- stepping
   function next() {
     if (phase === 'done') restart();
     else {
@@ -447,63 +419,9 @@ export function playTour(root, D) {
         update(0, true);
       }
     }
-    run();
   }
-  function onKey(event) {
-    if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') next();
-    else if (event.key === 'Home') {
-      restart();
-      run();
-    } else return;
-    event.preventDefault();
-  }
-  // It runs only while the figure is on screen, or about to be.
-  const observer = new IntersectionObserver(
-    (entries) => {
-      visible = entries[entries.length - 1].isIntersecting;
-      if (visible) run();
-    },
-    { rootMargin: '120px 0px' },
-  );
-  observer.observe(stage);
-  stage.addEventListener('click', next);
-  stage.addEventListener('keydown', onKey);
-  // The line moves by itself, so it shows a Pause button (WCAG 2.2.2); under reduced motion it
-  // never does, and the button stays hidden.
-  const pause = root.querySelector('[data-pause]');
-  function togglePause() {
-    paused = !paused;
-    pause.textContent = paused ? 'Play' : 'Pause';
-    run();
-  }
-  if (pause && !still.matches) {
-    pause.hidden = false;
-    pause.addEventListener('click', togglePause);
-  }
-  // The stage takes focus and keys only while the tour runs, so a page without it has no dead stop.
-  const KEYS = 'Click, or press → or Space, for the next step; Home starts over.';
-  stage.tabIndex = 0;
-  stage.setAttribute('role', 'group');
-  stage.setAttribute('aria-label', `Live tour. ${KEYS}`);
-  if (still.matches) {
-    poseStill();
-    update(0, true);
-  } else restart();
-  draw();
+  /** Every counter has come to rest on its value. */
+  const settled = () => shown.every((n, i) => n.at === target[i] && n.rate === 0);
 
-  return () => {
-    cancelAnimationFrame(frame);
-    frame = 0;
-    observer.disconnect();
-    stage.removeEventListener('click', next);
-    stage.removeEventListener('keydown', onKey);
-    if (pause) {
-      pause.removeEventListener('click', togglePause);
-      pause.hidden = true;
-      pause.textContent = 'Pause';
-    }
-    stage.removeAttribute('tabindex');
-    stage.removeAttribute('role');
-    stage.removeAttribute('aria-label');
-  };
+  return { restart, next, update, draw, poseStill, settled };
 }

@@ -60,13 +60,11 @@ function lineEnds(figures: Figure[]): string[] {
   const dir = mkdtempSync(join(tmpdir(), 'landing-figures-'));
   try {
     for (const figure of figures) {
-      const steps = (figure.tour as { steps: unknown[] }).steps.length;
       for (const theme of THEMES) {
         const pages = [
           { name: 'at rest', html: restPage(figure, theme), poses: 1 },
-          // With reduced motion the tour opens on its still, partway through the last Expense;
-          // → then shows the finished line, the idle line, and each Expense before the last.
-          { name: 'live tour', html: livePage(figure, theme), poses: steps + 2 },
+          // With reduced motion the tour opens on its still; → then shows each of its other poses.
+          { name: 'live tour', html: livePage(figure, theme), poses: figure.poses },
         ];
         for (const { name, html, poses } of pages) {
           const file = join(dir, `${figure.id}-${theme}.html`);

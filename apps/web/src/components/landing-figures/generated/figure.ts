@@ -16,10 +16,15 @@ export interface LandingFigure {
   /** The plate's readout before the live tour runs. */
   readout: string;
   /** The legend under the plate: each key's mark and words. */
-  legend: { mark: 'bin' | 'positive' | 'negative' | 'lamp'; label: string }[];
+  legend: {
+    mark: 'bin' | 'positive' | 'negative' | 'lamp' | 'cord' | 'pay' | 'coin';
+    label: string;
+  }[];
   caption: string;
   /** The light still the tour shows under reduced motion, as a link preview image. */
   still: { src: string; width: number; height: number; alt: string };
+  /** The payments a settle-up figure carries, by member name (Fig 3). */
+  payments?: { from: string; to: string; amountMinor: number }[];
 }
 
 /** The kit's styles; a wrapper with class "iso" picks dark, or light with data-theme="light". */
