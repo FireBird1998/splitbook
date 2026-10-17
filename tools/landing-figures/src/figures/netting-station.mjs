@@ -207,7 +207,7 @@ export function buildNettingStation(STORY) {
     const lines = [0, 1, 2]
       .map(
         (i) =>
-          `<text class="fg-screen" data-line="${i}" x="2.2" y="${(5 + i * 5.6).toFixed(1)}" font-size="${i === 1 ? 4.6 : 4}">${IDLE[i]}</text>`,
+          `<text class="fg-screen" data-line="${i}" x="2.2" y="${(5 + i * 5.6).toFixed(1)}" font-size="4">${IDLE[i]}</text>`,
       )
       .join('');
     const screen = faceWindow(

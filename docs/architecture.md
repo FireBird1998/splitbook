@@ -130,7 +130,8 @@ src/
 │   │   ├── BrandLogo.tsx
 │   │   └── BrandMark.tsx
 │   ├── landing/
-│   │   └── LandingPage.tsx         # Public landing page
+│   │   ├── LandingPage.tsx         # Public landing page
+│   │   └── LandingSettleUp.tsx     # Settle up: Fig 3 and the three payments
 │   ├── landing-figures/
 │   │   ├── LandingFigure.tsx       # A figure's plate, server-rendered SVG (Fig 1 in the hero)
 │   │   ├── FigureTour.tsx          # Its theme and live tour, loaded near the screen

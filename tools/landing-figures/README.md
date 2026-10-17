@@ -25,17 +25,18 @@ pnpm --filter @splitbook/landing-figures test      # the story and check unit te
 - **A missing or stale still:** a figure's light still is missing, isn't a PNG, isn't 1200 × 630, or was drawn from another version of the figure (its stamp differs). `check` doesn't redraw it or compare pixels, because Chrome's pixels differ from machine to machine.
 - **An edited vendored kit:** a file in `vendor/anatomy` differs from the bytes `MANIFEST.sha256` pins, or isn't listed there.
 - **Audit problems:** the kit's audit finds clearance, depth-order, support or other faults in a figure's geometry.
-- **Floating line ends, or a page error:** in light or dark, a line ends in mid-air, or the page logs an error. The vendored line-end check runs in headless Chrome with reduced motion, on the drawing at rest and on every pose of the live tour: its still, the finished line, the idle line, then each Expense before the last.
+- **Floating line ends, or a page error:** in light or dark, a line ends in mid-air, or the page logs an error. The vendored line-end check runs in headless Chrome with reduced motion, on the drawing at rest and on every pose its live tour shows, stepping from its still (each figure says how many).
 
 ## Figures
 
-| Figure                    | Module                           | Shows                                                                                                                                               |
-| ------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fig 1, the splitting line | `src/figures/splitting-line.mjs` | Each Expense is a bar of chips, one per share. A saw cuts it, and pushers send each chip into its member's bin. The counters always add up to zero. |
+| Figure                     | Module                            | Shows                                                                                                                                                                                                      |
+| -------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fig 1, the splitting line  | `src/figures/splitting-line.mjs`  | Each Expense is a bar of chips, one per share. A saw cuts it, and pushers send each chip into its member's bin. The counters always add up to zero.                                                        |
+| Fig 3, the netting station | `src/figures/netting-station.mjs` | Four tills, and a pegboard whose grey cords are the five debts the Expenses left. A cabinet replaces them with the three payments, and a magnet shuttle carries ₹100 coins until every counter reads zero. |
 
-Each figure module exports a function of the story that returns its SVG at rest, its own styles, the words around it (readout, legend, caption, the still's description), the data its live tour animates, and the audit recorder.
+Each figure module exports a function of the story that returns its SVG at rest, its own styles, the words around it (readout, legend, caption, the still's description), the data its live tour animates, how many poses its tour shows under reduced motion, and the audit recorder. Fig 3 (and the figures after it) build on `src/figures/common.mjs`: the projection, the recorder, solids, screens, tubes and the bench they stand on.
 
-`<id>.tour.js` is the figure's live tour: `playTour(root, data)` runs it on a plate already in the page and returns a function that stops it. It works only inside `root`:
+`<id>.tour.js` is the figure's live tour: `playTour(root, data)` runs it on a plate already in the page and returns a function that stops it. Each figure's tour supplies only its scene (how its story moves, steps, starts over and holds its still); `src/figures/tour.js` runs every scene the same way, only inside `root`:
 
 - clicking, or pressing →, Space or Enter, steps through the story;
 - Home starts it over;
