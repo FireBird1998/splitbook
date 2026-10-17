@@ -50,6 +50,30 @@ function render(mode: ThemeMode, live: WhatsLive): string {
 const linksTo = (html: string, href: string) =>
   anchors(html).filter((anchor) => anchor.href === href);
 
+/** The theme's money font, as the server-rendered style rules name it. */
+const MONEY_FONT = String(createAppTheme('light').typography.money.fontFamily).split(',')[0];
+
+/** The text of each element drawn in the money style, in page order. */
+function moneyText(html: string): string[] {
+  const money = new Set(
+    [...html.matchAll(/\.(css-[\w-]+)\{([^}]*)\}/g)]
+      .filter(([, , rule]) => rule.includes(`font-family:${MONEY_FONT}`))
+      .map(([, name]) => name),
+  );
+  return [...html.matchAll(/<\w+\b[^>]*\bclass="([^"]*)"[^>]*>([^<]*)(?=<)/g)]
+    .filter(([, classes]) => classes.split(' ').some((name) => money.has(name)))
+    .map(([, , inner]) => inner.trim());
+}
+
+/** The style rules of the element with this id, or of the first element with this tag. */
+function rulesOf(html: string, element: RegExp): string {
+  const classes = element.exec(html)?.[1]?.split(' ') ?? [];
+  return [...html.matchAll(/\.(css-[\w-]+)\{([^}]*)\}/g)]
+    .filter(([, name]) => classes.includes(name))
+    .map(([, , rule]) => rule)
+    .join('');
+}
+
 describe('the landing page with everything off', () => {
   it('leads with the headline and Sign in with Google, in both themes', () => {
     for (const mode of MODES) {
@@ -169,6 +193,70 @@ describe('the top bar', () => {
       ['/', ''],
       ['#how', 'How it works'],
       ['#groups', 'Groups'],
+      ['/login', 'Sign in'],
+    ]);
+  });
+});
+
+describe('the landing page’s pricing (#447)', () => {
+  const live = { ...OFF, pricingVisible: true };
+  const plans = (html: string) =>
+    [...html.matchAll(/<article\b[^>]*>([\s\S]*?)<\/article>/g)].map(([, inner]) => text(inner));
+
+  it('shows no pricing section or Pricing link until the setting is on', () => {
+    for (const mode of MODES) {
+      const html = render(mode, OFF);
+      expect(html).not.toContain('id="pricing"');
+      expect(linksTo(html, '#pricing')).toEqual([]);
+      expect(plans(html)).toEqual([]);
+      expect(text(html)).not.toContain('₹');
+    }
+  });
+
+  it('shows Free and Plus at the launch prices, in the money style, in both themes', () => {
+    for (const mode of MODES) {
+      const html = render(mode, live);
+      expect(html).toMatch(
+        /<h2\b[^>]*id="pricing-title"[^>]*>Free for a few Groups\. .*₹29.* a month for more\.<\/h2>/,
+      );
+      expect(text(html)).toContain('Launch prices. ₹199 a year works out to under ₹17 a month.');
+      expect(plans(html)).toEqual([
+        'Free ₹0 For a trip or two. Three Groups, made or joined Expenses, splits, Balances and settle up Android and web Light ads, never on save or settle-up screens Start free',
+        'Plus Best value yearly ₹29 a month · or ₹199 a year For the flat, the office and every trip. More Groups No ads Web dashboards, Group insights and exports One subscription on Android and web Get Plus',
+      ]);
+      // Every amount is in the money style: the heading, the launch line, then each plan.
+      expect(moneyText(html)).toEqual(['₹29', '₹199', '₹17', '₹0', '₹29', '₹199']);
+      expect(linksTo(html, '/login').map((anchor) => anchor.text)).toEqual([
+        'Sign in',
+        'Start free',
+        'Get Plus',
+      ]);
+    }
+  });
+
+  it('draws Plus in the brand colour and the section on the raised surface of each theme', () => {
+    for (const mode of MODES) {
+      const { palette } = createAppTheme(mode);
+      const html = render(mode, live);
+      expect(rulesOf(html, /<section\b[^>]*class="([^"]*)"[^>]*id="pricing"/)).toContain(
+        `background-color:${palette.surface.elevated}`,
+      );
+      const [, plus] = [...html.matchAll(/<article\b[^>]*class="([^"]*)"/g)].map(([, classes]) =>
+        rulesOf(html, new RegExp(`class="(${classes})"`)),
+      );
+      expect(plus).toContain(`border-color:${palette.primary.main}`);
+    }
+  });
+
+  it('adds Pricing to the top bar only with the section', () => {
+    const html = render('light', live);
+    expect(
+      anchors(html)
+        .map(({ href, text: label }) => [href, label])
+        .slice(0, 3),
+    ).toEqual([
+      ['/', ''],
+      ['#pricing', 'Pricing'],
       ['/login', 'Sign in'],
     ]);
   });

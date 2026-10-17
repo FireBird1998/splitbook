@@ -47,12 +47,14 @@ test.describe('google auth mode', () => {
     await expect(page.getByText(/demo persona/i)).toHaveCount(0);
     await expect(page.getByText('Demo mode', { exact: true })).toHaveCount(0);
 
-    // This server has nothing optional live (#444): no store, assistants or legal links.
+    // This server has nothing optional live (#444): no store, assistants, pricing (#447) or
+    // legal links.
     await expect(
       page.getByRole('link', {
-        name: /Get the app|Google Play|Connect Splitbook|Privacy|Terms|Support/,
+        name: /Get the app|Google Play|Connect Splitbook|Pricing|Privacy|Terms|Support/,
       }),
     ).toHaveCount(0);
+    await expect(page.locator('#pricing')).toHaveCount(0);
 
     // The brand kit: the logo leads home, and the footer's mark is decorative beside the name.
     const home = page.getByRole('link', { name: 'Splitbook home' });

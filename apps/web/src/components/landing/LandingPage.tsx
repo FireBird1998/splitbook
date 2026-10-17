@@ -11,6 +11,7 @@ import BrandMark from '@/components/layout/BrandMark';
 import { PRODUCT_NAME } from '@/lib/product';
 import { TOPBAR_HEIGHT } from '@/lib/theme/tokens';
 import type { WhatsLive } from '@/lib/landing/whats-live';
+import LandingPricing, { pricingSections } from './LandingPricing';
 import SignInWithGoogleButton from './SignInWithGoogleButton';
 import { LANDING_ACTION_HEIGHT, LANDING_HEADLINE, LANDING_PROMISE } from './landing-copy';
 
@@ -298,9 +299,10 @@ function LandingFooter({ live }: LandingPageProps) {
 export default function LandingPage({ live }: LandingPageProps) {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <LandingTopBar live={live} />
+      <LandingTopBar live={live} sections={pricingSections(live)} />
       <Box component="main">
         <Hero live={live} />
+        <LandingPricing live={live} />
         <ClosingCallToAction live={live} />
       </Box>
       <LandingFooter live={live} />
