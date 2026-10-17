@@ -12,9 +12,9 @@ export default defineConfig([
     languageOptions: { globals: { process: 'readonly', console: 'readonly' } },
   },
   {
-    // A figure's live tour runs in the browser: the generator bundles it for the web app and the
-    // preview pages.
-    files: ['src/figures/*.tour.js'],
+    // The live tours run in the browser: the generator bundles each figure's scene with the
+    // shared runtime for the web app and the preview pages.
+    files: ['src/figures/tour.js', 'src/figures/*.tour.js'],
     languageOptions: {
       globals: {
         window: 'readonly',

@@ -1,27 +1,23 @@
-// Fig 1's live tour: the splitting line runs the story an Expense at a time. It works on a plate
-// already in the page (the figure's SVG at rest inside `.ln-stage`, a `[data-readout]` and a
-// `[data-status]` live region) and plays the tour data the figure module builds from the story.
-// The web app and the preview pages run the same code, bundled with the kit functions it uses.
+// Fig 1's live tour: the splitting line runs the story an Expense at a time, on the tour data the
+// figure module builds from the story. tour.js runs it on the plate in the page; the web app and
+// the preview pages bundle the same code with the kit functions it uses.
 import {
   axisVector,
   holdStill,
   lineOnTop,
   translateAlong,
 } from '../../vendor/anatomy/kit/iso-kit.mjs';
+import { drawCounters, ease, lerp, rupees, runTour, signed, springs } from './tour.js';
 
 /** Starts the tour on root; returns a function that stops it and leaves the drawing as it is. */
 export function playTour(root, D) {
+  return runTour(root, (tour) => splittingLine(tour, D));
+}
+
+/** The splitting line's scene, for runTour. */
+function splittingLine({ svg, held, say, announce }, D) {
   const P = D.P;
-  const stage = root.querySelector('.ln-stage');
-  const svg = stage.querySelector('svg');
-  const readout = root.querySelector('[data-readout]');
-  const announce = stage.querySelector('[data-status]');
-  const still = window.matchMedia('(prefers-reduced-motion: reduce)');
   const q = (sel) => svg.querySelector(sel);
-  const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-  const money = (minor) => '₹' + inr.format(Math.abs(minor / 100));
-  const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
-  const lerp = (a, b, t) => a + (b - a) * t;
 
   const onBelt = q('[data-part="on-belt"]');
   const inMag = q('[data-part="in-mag"]');
@@ -46,20 +42,17 @@ export function playTour(root, D) {
     const same = values.every((v) => v === values[0]);
     return [
       s.title.toUpperCase(),
-      money(s.amountMinor),
-      same ? `${values.length} × ${money(values[0])}` : `${values.length} chips`,
+      rupees(s.amountMinor),
+      same ? `${values.length} × ${rupees(values[0])}` : `${values.length} chips`,
     ];
   }
 
   // ---------------------------------------------------------------- state
-  const shown = D.xs.map(() => ({ at: 0, rate: 0 }));
+  const readings = springs(D.xs.length);
   let target = D.xs.map(() => 0);
   let fill = D.xs.map(() => 0);
   let beltTravel = 0;
   let phase = 'idle';
-  // The Pause button holds the line where it is; under reduced motion it is always held.
-  let paused = false;
-  const held = () => still.matches || paused;
   let e = -1;
   let clock = 0;
   let bar = { x: D.mag, onBelt: false };
@@ -73,12 +66,6 @@ export function playTour(root, D) {
     screen.forEach((el, i) => {
       if (el.textContent !== (lines[i] ?? '')) el.textContent = lines[i] ?? '';
     });
-  }
-  function say(text) {
-    if (readout.textContent !== text) readout.textContent = text;
-  }
-  function announceText(text) {
-    announce.textContent = text;
   }
   function resetMagazine() {
     bars.forEach((el, i) => {
@@ -105,16 +92,11 @@ export function playTour(root, D) {
       setScreen([
         'DONE',
         `${D.steps.length} split`,
-        `sum ${money(target.reduce((a, b) => a + b, 0))}`,
+        `sum ${rupees(target.reduce((a, b) => a + b, 0))}`,
       ]);
-      const text = D.names
-        .map(
-          (n, i) =>
-            `${n} ${target[i] > 0 ? '+' : target[i] < 0 ? '−' : ''}${inr.format(Math.abs(target[i] / 100))}`,
-        )
-        .join(' · ');
+      const text = D.names.map((n, i) => `${n} ${signed(target[i])}`).join(' · ');
       say(text);
-      announceText(`All ${D.steps.length} Expenses split. ${text}`);
+      announce(`All ${D.steps.length} Expenses split. ${text}`);
       return;
     }
     const s = D.steps[e];
@@ -127,9 +109,9 @@ export function playTour(root, D) {
     );
     target[s.paidBy] += s.amountMinor;
     setScreen(screenFor(s));
-    const text = `${s.title} ${money(s.amountMinor)} · ${D.names[s.paidBy]} paid`;
+    const text = `${s.title} ${rupees(s.amountMinor)} · ${D.names[s.paidBy]} paid`;
     say(text);
-    announceText(text);
+    announce(text);
   }
 
   function restart() {
@@ -353,31 +335,11 @@ export function playTour(root, D) {
     } else if (phase === 'idle' && clock > 1.6) {
       begin(0);
     }
-    // counters on springs
-    shown.forEach((n, i) => {
-      if (calm) {
-        n.at = target[i];
-        n.rate = 0;
-        return;
-      }
-      for (let k = 0; k < 6; k++) {
-        n.rate += ((target[i] - n.at) * 70 - n.rate * 12) * (dt / 6);
-        n.at += n.rate * (dt / 6);
-      }
-      if (Math.abs(target[i] - n.at) < 1 && Math.abs(n.rate) < 1) {
-        n.at = target[i];
-        n.rate = 0;
-      }
-    });
+    readings.step(target, dt, calm);
   }
 
   function draw() {
-    counters.forEach((el, i) => {
-      const v = Math.round(shown[i].at / 100);
-      const text = v === 0 ? '0' : (v > 0 ? '+' : '−') + inr.format(Math.abs(v));
-      if (el.textContent !== text) el.textContent = text;
-      el.dataset.sign = v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
-    });
+    drawCounters(counters, readings.shown);
     pushers.forEach((el, i) => {
       const off = translateAlong(P, [0, pushersY[i], 0]);
       el.setAttribute('transform', off);
@@ -416,26 +378,7 @@ export function playTour(root, D) {
     clock = 0;
   }
 
-  // ---------------------------------------------------------------- loop and input
-  let frame = 0;
-  let last = 0;
-  let visible = false;
-  /** Whether a frame would change nothing: the line is held and every counter has settled. */
-  const settled = () => held() && shown.every((n, i) => n.at === target[i] && n.rate === 0);
-  function tick(now) {
-    const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
-    last = now;
-    // Held, nothing moves on its own: each step is shown settled when asked for.
-    update(held() ? 0 : dt, held());
-    draw();
-    frame = visible && !settled() ? requestAnimationFrame(tick) : 0;
-  }
-  const run = () => {
-    if (!frame && visible) {
-      last = 0;
-      frame = requestAnimationFrame(tick);
-    }
-  };
+  // ---------------------------------------------------------------- stepping
   function next() {
     if (phase === 'done') restart();
     else {
@@ -447,63 +390,8 @@ export function playTour(root, D) {
         update(0, true);
       }
     }
-    run();
   }
-  function onKey(event) {
-    if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') next();
-    else if (event.key === 'Home') {
-      restart();
-      run();
-    } else return;
-    event.preventDefault();
-  }
-  // It runs only while the figure is on screen, or about to be.
-  const observer = new IntersectionObserver(
-    (entries) => {
-      visible = entries[entries.length - 1].isIntersecting;
-      if (visible) run();
-    },
-    { rootMargin: '120px 0px' },
-  );
-  observer.observe(stage);
-  stage.addEventListener('click', next);
-  stage.addEventListener('keydown', onKey);
-  // The line moves by itself, so it shows a Pause button (WCAG 2.2.2); under reduced motion it
-  // never does, and the button stays hidden.
-  const pause = root.querySelector('[data-pause]');
-  function togglePause() {
-    paused = !paused;
-    pause.textContent = paused ? 'Play' : 'Pause';
-    run();
-  }
-  if (pause && !still.matches) {
-    pause.hidden = false;
-    pause.addEventListener('click', togglePause);
-  }
-  // The stage takes focus and keys only while the tour runs, so a page without it has no dead stop.
-  const KEYS = 'Click, or press → or Space, for the next step; Home starts over.';
-  stage.tabIndex = 0;
-  stage.setAttribute('role', 'group');
-  stage.setAttribute('aria-label', `Live tour. ${KEYS}`);
-  if (still.matches) {
-    poseStill();
-    update(0, true);
-  } else restart();
-  draw();
+  const settled = () => readings.settledOn(target);
 
-  return () => {
-    cancelAnimationFrame(frame);
-    frame = 0;
-    observer.disconnect();
-    stage.removeEventListener('click', next);
-    stage.removeEventListener('keydown', onKey);
-    if (pause) {
-      pause.removeEventListener('click', togglePause);
-      pause.hidden = true;
-      pause.textContent = 'Pause';
-    }
-    stage.removeAttribute('tabindex');
-    stage.removeAttribute('role');
-    stage.removeAttribute('aria-label');
-  };
+  return { restart, next, update, draw, poseStill, settled };
 }

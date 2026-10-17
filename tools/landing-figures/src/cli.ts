@@ -14,6 +14,7 @@ import {
   buildFigures,
   generatedFiles,
   stillPath,
+  withStills,
   type Figure,
 } from './generate.ts';
 import { THEMES, cleanConsole, drive, livePage, restPage } from './pages.ts';
@@ -60,13 +61,11 @@ function lineEnds(figures: Figure[]): string[] {
   const dir = mkdtempSync(join(tmpdir(), 'landing-figures-'));
   try {
     for (const figure of figures) {
-      const steps = (figure.tour as { steps: unknown[] }).steps.length;
       for (const theme of THEMES) {
         const pages = [
           { name: 'at rest', html: restPage(figure, theme), poses: 1 },
-          // With reduced motion the tour opens on its still, partway through the last Expense;
-          // → then shows the finished line, the idle line, and each Expense before the last.
-          { name: 'live tour', html: livePage(figure, theme), poses: steps + 2 },
+          // With reduced motion the tour opens on its still; → then shows each of its other poses.
+          { name: 'live tour', html: livePage(figure, theme), poses: figure.poses },
         ];
         for (const { name, html, poses } of pages) {
           const file = join(dir, `${figure.id}-${theme}.html`);
@@ -92,7 +91,7 @@ function check() {
   const problems: string[] = [];
   const stale = staleOutputs(generatedFiles(figures), ROOT, OUT_DIR);
   if (stale.length) problems.push(`Stale output, run ${BUILD}: ${stale.join(', ')}`);
-  for (const figure of figures)
+  for (const figure of withStills(figures))
     problems.push(
       ...stillDrift(join(ROOT, stillPath(figure)), STILL_SIZE, stillSource(figure)).map(
         (problem) => `${problem} Run ${BUILD}.`,

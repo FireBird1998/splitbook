@@ -295,11 +295,11 @@ describe('Fig 1 in the hero', () => {
   it('shows the splitting line in its plate, named by its full description, in both themes', () => {
     for (const mode of MODES) {
       const html = render(mode, OFF);
-      expect(svgImages(html)).toEqual([
+      expect(svgImages(html)[0]).toEqual(
         expect.stringMatching(
           /^A small production line on a bench that splits Expenses\. .* into the bin of the member it belongs to: You, Priya, Sam and Alex\. Each bin's counter shows that member's balance, and a lamp marks who paid\.$/,
         ),
-      ]);
+      );
       expect(text(html)).toContain('Fig 1 The splitting line');
       expect(text(html)).toContain('Line idle · 3 Expenses waiting');
       for (const key of [
@@ -313,11 +313,47 @@ describe('Fig 1 in the hero', () => {
     }
   });
 
-  it('draws the figure in the page’s theme', () => {
-    for (const mode of MODES)
-      expect([...render(mode, OFF).matchAll(/\sdata-theme="(\w+)"/g)].map((m) => m[1])).toEqual([
-        mode,
-      ]);
+  it('draws the figures in the page’s theme', () => {
+    for (const mode of MODES) {
+      const html = render(mode, OFF);
+      // One themed plate per figure on the page, each in the page's theme.
+      expect([...html.matchAll(/\sdata-theme="(\w+)"/g)].map((m) => m[1])).toEqual(
+        svgImages(html).map(() => mode),
+      );
+    }
+  });
+});
+
+describe('the Settle up section', () => {
+  it('shows five debts becoming three payments, with Fig 3 and the payments, in both themes', () => {
+    for (const mode of MODES) {
+      const html = render(mode, OFF);
+      expect(html).toMatch(/<h2\b[^>]*>Five debts between four people\. Three payments\.<\/h2>/);
+      expect(text(html)).toContain(
+        'Splitbook nets every Expense into one balance each, then works out the fewest payments that clear them. When someone pays you back, record it and the whole Group sees it in Activity.',
+      );
+      expect(svgImages(html)).toContainEqual(
+        expect.stringMatching(
+          /^A netting station on a bench\. Four tills .*: You \+500, Priya −100, Sam \+300 and Alex −700\. .* five debts left by three Expenses .* three payment cords, .*: five from Alex to You, two from Alex to Sam and one from Priya to Sam\. Then every counter reads zero\.$/,
+        ),
+      );
+      expect(text(html)).toContain('Fig 3 The netting station');
+      expect(text(html)).toContain('Grey cords: the debts the Expenses left');
+      // The three payments beneath it, as Splitbook's simplify step works them out.
+      for (const payment of [
+        'Alex pays You ₹500.00',
+        'Alex pays Sam ₹200.00',
+        'Priya pays Sam ₹100.00',
+      ])
+        expect(text(html)).toContain(payment);
+    }
+  });
+
+  it('comes after the split and before Android and web', () => {
+    const order = (html: string) =>
+      [...html.matchAll(/<section\b[^>]*\sid="(\w+)"/g)].map((m) => m[1]);
+    const ids = order(render('light', OFF));
+    expect(ids.indexOf('settle')).toBe(ids.indexOf('how') + 1);
   });
 });
 
@@ -378,6 +414,13 @@ function moneyStyled(html: string, amount: string): boolean[] {
     );
 }
 
+/** One section's markup, with the styles the render emits, so moneyStyled reads it alone. */
+function section(html: string, id: string): string {
+  const styles = [...html.matchAll(/<style[^>]*>[\s\S]*?<\/style>/g)].map((m) => m[0]).join('');
+  const start = html.lastIndexOf('<section', html.indexOf(` id="${id}"`));
+  return styles + html.slice(start, html.indexOf('</section>', start) + '</section>'.length);
+}
+
 const headings = (html: string, level: number) =>
   [...html.matchAll(new RegExp(`<h${level}\\b[^>]*>([\\s\\S]*?)</h${level}>`, 'g'))].map(
     ([, inner]) => text(inner),
@@ -389,6 +432,7 @@ describe('the content sections (#446)', () => {
       expect(headings(render(mode, OFF), 2)).toEqual([
         'Not just trips. Every kind of shared money.',
         'Split it the way it actually happened.',
+        'Five debts between four people. Three payments.',
         'Your Groups on a bigger screen.',
         'Why you can trust it',
         'Start your first Group tonight. Settle it by the weekend.',
@@ -452,10 +496,11 @@ describe('the content sections (#446)', () => {
         ['Alex', '1 share'],
       ])
         expect(shown).toContain(`${name} ${shares}`);
-      expect(moneyStyled(html, '₹400.00')).toEqual([true]);
-      expect(moneyStyled(html, '₹200.00')).toEqual([true, true, true]);
+      const split = section(html, 'how');
+      expect(moneyStyled(split, '₹400.00')).toEqual([true]);
+      expect(moneyStyled(split, '₹200.00')).toEqual([true, true, true]);
       // The total, and what the shares add up to.
-      expect(moneyStyled(html, '₹1,000.00')).toEqual([true, true]);
+      expect(moneyStyled(split, '₹1,000.00')).toEqual([true, true]);
     }
   });
 

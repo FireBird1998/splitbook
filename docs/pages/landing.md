@@ -39,7 +39,11 @@ A setting that isn't valid counts as off. An assistant connection the server ref
 │ worked out to the paisa.    [Sign in with Google] [Google Play]  │
 │                             Use Claude or ChatGPT? Connect …  →  │
 ├──────────────────────────────────────────────────────────────────┤
-│        (Fig 1 and the content sections arrive with #446–#450)    │
+│ Fig 1 · The splitting line   (the live tour, Pause)              │  hero figure
+├──────────────────────────────────────────────────────────────────┤
+│ Groups · How an Expense splits                                   │  sections
+│ Settle up: Fig 3 · The netting station, and the three payments   │
+│ Android and web · Trust · Pricing                                │
 ├──────────────────────────────────────────────────────────────────┤
 │        Start your first Group tonight. Settle it by the weekend. │  closing
 │               [Sign in with Google] [Google Play]                │
@@ -54,6 +58,8 @@ Parts in brackets show only when "what's live" allows them.
 
 - **Top bar:** the logo links to `/` ("Splitbook home"). The section links are the sections the page shows; later tickets add them with their sections, and they're hidden below 900 px. "Get the app" links to the Play listing and is hidden below 900 px. "Sign in" links to `/login`, which explains invite-only access when sign-in is refused.
 - **Hero:** the headline is the page's only `h1`. "Sign in with Google" is the primary action and starts Google sign-in, landing on `/dashboard`.
+- **Figures:** Fig 1 (the splitting line) under the hero and Fig 3 (the netting station) in Settle up are server-rendered SVG with `role="img"` and their full descriptions, in the page's theme. Each plate's live tour loads near the screen: click, → or Space steps, Home starts over, Pause holds it, and under reduced motion it shows its documented still. `tools/landing-figures` draws them from the story model.
+- **Settle up:** "Five debts between four people. Three payments.": Fig 3, then the three payments it works out, read from the figure's own data.
 - **Closing call to action:** the same two actions under "Start your first Group tonight. Settle it by the weekend."
 - **Footer:** the decorative mark beside the name, the configured links, the guide for connecting ChatGPT while assistants are available, and the year.
 

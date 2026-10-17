@@ -169,6 +169,10 @@ describe('the landing page', () => {
       'CheckCircleOutline',
       'CurrencyExchangeOutlined',
       'CheckCircleOutline',
+      // Settle up (#449): the arrow in each of the three payments.
+      'ArrowForward',
+      'ArrowForward',
+      'ArrowForward',
       'LaptopOutlined',
       'SearchOutlined',
       'InsertChartOutlined',

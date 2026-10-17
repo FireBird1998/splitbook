@@ -16,10 +16,20 @@ export interface LandingFigure {
   /** The plate's readout before the live tour runs. */
   readout: string;
   /** The legend under the plate: each key's mark and words. */
-  legend: { mark: 'bin' | 'positive' | 'negative' | 'lamp'; label: string }[];
+  legend: {
+    mark: 'bin' | 'positive' | 'negative' | 'lamp' | 'cord' | 'pay' | 'coin';
+    label: string;
+  }[];
   caption: string;
-  /** The light still the tour shows under reduced motion, as a link preview image. */
-  still: { src: string; width: number; height: number; alt: string };
+  // A figure's own extras. Each figure's module declares exactly the ones it has (it satisfies
+  // this type), so they are typed as present where they exist.
+  /** The light still the tour shows under reduced motion, as the page's link preview (Fig 1). */
+  still?: { src: string; width: number; height: number; alt: string };
+  /** The heading of the section the figure belongs to, in the story's own counts (Fig 3). */
+  headline?: string;
+  /** The payments a settle-up figure carries, by member name, in currency (Fig 3). */
+  payments?: { from: string; to: string; amountMinor: number }[];
+  currency?: string;
 }
 
 /** The kit's styles; a wrapper with class "iso" picks dark, or light with data-theme="light". */

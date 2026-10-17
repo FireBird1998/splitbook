@@ -11,10 +11,14 @@ const PLATE_LABEL = { fontFamily: FONT_MONO, fontSize: 12, lineHeight: 1.5 } as 
 
 /** Each legend key's mark, in the drawing's own colours (the figure's stylesheet defines them). */
 const SWATCH = {
-  bin: { bgcolor: 'text.disabled', borderRadius: '2px' },
-  positive: { bgcolor: 'var(--ln-pos)', borderRadius: '2px' },
-  negative: { bgcolor: 'var(--ln-neg)', borderRadius: '2px' },
-  lamp: { bgcolor: 'var(--ln-lamp)', borderRadius: '50%' },
+  bin: { width: 10, bgcolor: 'text.disabled', borderRadius: '2px' },
+  positive: { width: 10, bgcolor: 'var(--ln-pos)', borderRadius: '2px' },
+  negative: { width: 10, bgcolor: 'var(--ln-neg)', borderRadius: '2px' },
+  lamp: { width: 10, bgcolor: 'var(--ln-lamp)', borderRadius: '50%' },
+  // the pegboard's cords, as short strokes
+  cord: { width: 14, height: 3, bgcolor: 'var(--fg-cord)', borderRadius: '2px' },
+  pay: { width: 14, height: 3, bgcolor: 'var(--fg-pay)', borderRadius: '2px' },
+  coin: { width: 10, bgcolor: 'text.disabled', borderRadius: '50%' },
 } as const;
 
 /**
@@ -23,8 +27,8 @@ const SWATCH = {
  * description, so the page reads without JavaScript; the figure's markup never reaches a client
  * bundle (its module is server only).
  *
- * The live tour looks for `.ln-stage` (the drawing and a `[data-status]` live region) and
- * `[data-readout]` inside the figure (tools/landing-figures/src/figures/*.tour.js).
+ * The live tour looks for `[data-stage]` (the drawing and a `[data-status]` live region),
+ * `[data-readout]` and `[data-pause]` inside the figure (tools/landing-figures/src/figures/tour.js).
  */
 export default function LandingFigure({ figure }: { figure: Figure }) {
   const titleId = `fig-${figure.number}-title`;
@@ -93,7 +97,7 @@ export default function LandingFigure({ figure }: { figure: Figure }) {
           </Box>
         </Box>
         <Box
-          className="ln-stage"
+          data-stage=""
           sx={{
             borderRadius: 2,
             '&:focus-visible': { outline: '2px solid', outlineColor: 'focus.main' },
@@ -143,7 +147,7 @@ export default function LandingFigure({ figure }: { figure: Figure }) {
               <Box
                 component="span"
                 aria-hidden="true"
-                sx={{ width: 10, height: 10, flexShrink: 0, ...SWATCH[key.mark] }}
+                sx={{ height: 10, flexShrink: 0, ...SWATCH[key.mark] }}
               />
               {key.label}
             </Typography>

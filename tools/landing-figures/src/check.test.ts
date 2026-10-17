@@ -25,6 +25,7 @@ describe('verifyStory', () => {
     };
     expect(verifyStory(broken)).toEqual([
       'After Groceries the counters add up to 1, not 0.',
+      'The debts leave You at +₹500.00, not their balances.',
       'Settling up leaves You at +₹0.01.',
     ]);
   });
@@ -38,6 +39,16 @@ describe('verifyStory', () => {
     const broken = { ...s, steps: [s.steps[0]!, s.steps[1]!, { ...groceries, chips }] };
     expect(verifyStory(broken)).toEqual([
       "Groceries' chips for You add up to ₹399.50, not their share of ₹400.00.",
+    ]);
+  });
+
+  it('flags debts that would leave a member somewhere other than their balance', () => {
+    const s = story();
+    const debts = s.debts.map((d, i) =>
+      i === 0 ? { ...d, amountMinor: d.amountMinor + 10000 } : d,
+    );
+    expect(verifyStory({ ...s, debts })).toEqual([
+      'The debts leave You at +₹600.00 and Priya at −₹200.00, not their balances.',
     ]);
   });
 

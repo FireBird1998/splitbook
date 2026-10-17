@@ -130,9 +130,16 @@ src/
 │   │   ├── BrandLogo.tsx
 │   │   └── BrandMark.tsx
 │   ├── landing/
-│   │   └── LandingPage.tsx         # Public landing page
+│   │   ├── LandingPage.tsx         # Public landing page: top bar, hero with Fig 1, sections, footer
+│   │   ├── LandingSection.tsx      # One section: eyebrow, heading, lead, content
+│   │   ├── LandingGroups.tsx       # Every kind of Group
+│   │   ├── LandingSplit.tsx        # How an Expense splits
+│   │   ├── LandingSettleUp.tsx     # Settle up: Fig 3 and the three payments
+│   │   ├── LandingApps.tsx         # Android and web
+│   │   ├── LandingTrust.tsx        # Why you can trust it
+│   │   └── LandingPricing.tsx      # Pricing, behind its setting
 │   ├── landing-figures/
-│   │   ├── LandingFigure.tsx       # A figure's plate, server-rendered SVG (Fig 1 in the hero)
+│   │   ├── LandingFigure.tsx       # A figure's plate, server-rendered SVG (Fig 1, Fig 3)
 │   │   ├── FigureTour.tsx          # Its theme and live tour, loaded near the screen
 │   │   └── generated/              # Written by tools/landing-figures; never edit
 │   ├── auth/
