@@ -319,6 +319,7 @@ async function render(
     revealed,
     focusCount,
     type: (label: string, text: string) => act$(() => input(label).props.onChangeText(text)),
+    enter: (label: string) => act$(() => input(label).props.onFocus()),
     leave: (label: string) => act$(() => input(label).props.onBlur()),
     press: (label: string) => act$(() => pressable(label).props.onPress()),
   };
@@ -595,7 +596,7 @@ describe('rendered Expense corrections', () => {
     const description = () => ui.input('Description, required');
     // Android otherwise opens a filled single-line box at its end, cutting off the start.
     expect(description().props.selection).toEqual({ start: 0, end: 0 });
-    await act(async () => description().props.onFocus());
+    await ui.enter('Description, required');
     expect(description().props.selection).toBeUndefined();
     await ui.type('Description, required', 'Sofa cleaning service with a long name');
     expect(description().props.selection).toBeUndefined();
