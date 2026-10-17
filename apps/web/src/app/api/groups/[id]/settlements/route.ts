@@ -6,6 +6,8 @@ import {
   serverError,
   validationError,
   error,
+  readJson,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { settlementService } from '@/lib/services/settlement.service';
@@ -25,12 +27,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
+    const { id } = await routeIds(params);
 
     const isMember = await groupService.isMember(id, user.id!);
     if (!isMember) return forbidden();
 
-    const body = await req.json();
+    const body = await readJson(req);
     const parsed = createSettlementSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 
@@ -56,7 +58,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
+    const { id } = await routeIds(params);
 
     const isMember = await groupService.isMember(id, user.id!);
     if (!isMember) return forbidden();

@@ -24,10 +24,14 @@ an expired session.
 Pages still redirect to `/login?callbackUrl=…`. The web client's SWR `fetcher`
 sends a 401 to `/login` with the current page as `callbackUrl`.
 
-**Common status codes:** `401` unauthenticated (from a route's own `getAuthUser`
+**Common status codes:** `400` input the route can't read: an id in the path
+that isn't one (`INVALID_ID`) or a required body that isn't JSON
+(`INVALID_JSON`), `401` unauthenticated (from a route's own `getAuthUser`
 guard), `403` not a group member or not an admin, `404` not found, `422` Zod
 validation failure or a service invariant (`CURRENCY_MISMATCH`, `INVALID_TAG`,
-`INVALID_MEMBERS`, …).
+`INVALID_MEMBERS`, …). The Draft routes answer an id that isn't one with `422`
+`VALIDATION_ERROR`, and the Tag routes answer both with `400`
+`INVALID_TAG_COMMAND`.
 
 ---
 

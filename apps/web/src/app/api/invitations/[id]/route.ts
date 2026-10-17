@@ -5,6 +5,8 @@ import {
   success,
   error,
   serverError,
+  readJson,
+  routeIds,
 } from '@/lib/utils/api-response';
 import { invitationService } from '@/lib/services/invitation.service';
 import { z } from 'zod/v4';
@@ -19,8 +21,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
-    const { id } = await params;
-    const body = await req.json();
+    const { id } = await routeIds(params);
+    const body = await readJson(req);
     const parsed = actionSchema.safeParse(body);
     if (!parsed.success) return error('Invalid action', 422);
 
