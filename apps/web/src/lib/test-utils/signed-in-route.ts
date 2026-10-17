@@ -3,9 +3,11 @@
  *
  * A member signs in for real: a demo persona sign-in through Better Auth's own handler returns
  * the session cookie, and every route call sends it back, so the route's `getAuthUser()` checks
- * a session stored in the test file's own database. The one stand-in is `next/headers`: a
- * handler called outside Next has no request scope, so each test file bridges it to the
- * request being answered, with this line at the top (Vitest hoists `vi.mock` per file):
+ * a session stored in the test file's own database. The stand-ins are only for Next's request
+ * scope, which a handler called outside Next does not have: `next/headers` hands the route the
+ * request being answered, and for a route that calls `after()`, `nextServer` below runs that
+ * work once the response is ready. Each test file installs the first with this line at the top
+ * (Vitest hoists `vi.mock` per file):
  *
  *   vi.mock('next/headers', async () => (await import('@/lib/test-utils/signed-in-route')).nextHeaders);
  *
@@ -27,6 +29,24 @@ const requestScope = { headers: new Headers() };
 
 /** The `next/headers` stand-in each test file installs with `vi.mock`. */
 export const nextHeaders = { headers: async () => requestScope.headers };
+
+/** Work a route scheduled with `after()`, which `callRoute` runs once the response is ready. */
+const afterResponse: (() => unknown)[] = [];
+
+/**
+ * The `next/server` stand-in for a route that schedules work with `after()`, which also needs a
+ * request scope. It keeps the rest of the module, `NextResponse` included:
+ *
+ *   vi.mock('next/server', async (original) => (await import('@/lib/test-utils/signed-in-route')).nextServer(original));
+ */
+export async function nextServer(original: () => Promise<typeof import('next/server')>) {
+  return {
+    ...(await original()),
+    after: (task: Promise<unknown> | (() => unknown)) => {
+      afterResponse.push(typeof task === 'function' ? task : () => task);
+    },
+  };
+}
 
 let auth: typeof import('@/lib/auth').auth | null = null;
 
@@ -106,5 +126,7 @@ export async function callRoute<Params>(
   });
   requestScope.headers = request.headers;
   const response = await handler(request, { params: Promise.resolve(params as Params) });
-  return { status: response.status, body: await response.json() };
+  const answer = { status: response.status, body: await response.json() };
+  for (const task of afterResponse.splice(0)) await task();
+  return answer;
 }
