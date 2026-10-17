@@ -20,6 +20,8 @@ export default defineConfig({
     // worker count, and a big machine's default would pass the default soft limit
     // (nofile 1024), where mongod aborts. --maxWorkers and VITEST_MAX_WORKERS still override it.
     maxWorkers: Math.min(4, Math.max(1, availableParallelism() - 1)),
+    // The test server keeps no snapshot history during the run, and gets its own back after it.
+    globalSetup: ['./src/lib/test-utils/integration-global-setup.ts'],
   },
   resolve: {
     alias: {
