@@ -138,3 +138,36 @@ describe('PATCH and DELETE /api/groups/[id]/recurring/[recurringId] revision hea
     expect(await stored()).toBeNull();
   });
 });
+
+describe('PATCH /api/groups/[id]/recurring/[recurringId] refusals name their code (#523)', () => {
+  it.each([
+    {
+      code: 'INVALID_WINDOW',
+      error: 'End date must be on or after the start date',
+      change: { endsOn: '2020-01-31' },
+    },
+    {
+      code: 'INVALID_MEMBERS',
+      error: 'All payers and split participants must be group members',
+      change: { paidBy: [{ user: TEST_USER_IDS.carol, amount: 30000 }] },
+    },
+    {
+      code: 'INVALID_TAG',
+      error: 'Tag must be an active group tag',
+      change: { tag: 'Synthetic missing tag' },
+    },
+    {
+      code: 'CURRENCY_MISMATCH',
+      error: 'Currency must match the group default currency',
+      change: { currency: 'USD' },
+    },
+  ])('answers 422 $code and leaves the template as it was', async ({ code, error, change }) => {
+    const { edit, stored } = await monthlyRent();
+
+    expect(await edit(change, { 'X-Splitbook-Revision': '0' })).toEqual({
+      status: 422,
+      body: { error, status: 422, code },
+    });
+    expect(await stored()).toEqual({ description: 'Rent', isPaused: false, revision: 0 });
+  });
+});

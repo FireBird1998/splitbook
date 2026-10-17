@@ -27,7 +27,8 @@ function mapServiceError(err: unknown) {
   if (err instanceof Error) {
     if (err.message === 'FORBIDDEN') return forbidden();
     if (err.message in recurringValidationMessages) {
-      return error(recurringValidationMessages[err.message], 422);
+      // The code docs/api.md names, as the Expense routes send it (#523).
+      return error(recurringValidationMessages[err.message], 422, err.message);
     }
   }
   return serverError(err);

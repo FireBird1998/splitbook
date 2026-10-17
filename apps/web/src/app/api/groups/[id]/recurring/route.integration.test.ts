@@ -198,3 +198,57 @@ describe('POST and GET /api/groups/[id]/recurring', () => {
     expect(await templates(groupId, alexCookie)).toEqual([]);
   });
 });
+
+describe('POST /api/groups/[id]/recurring refusals name their code (#523)', () => {
+  /** A Trip Alex runs with Sam: a Theme without recurring Expenses. */
+  async function trip() {
+    const group = await groupService.create(
+      { name: 'Coast trip', category: 'trip', defaultCurrency: 'INR', alternateCurrencies: [] },
+      alex,
+    );
+    const groupId = String(group._id);
+    await groupService.addMember(groupId, sam);
+    return groupId;
+  }
+
+  it.each([
+    {
+      code: 'NOT_HOUSEHOLD',
+      error: 'Recurring expenses are only available in Household groups',
+      setup: trip,
+      change: {},
+    },
+    {
+      code: 'INVALID_WINDOW',
+      error: 'End date must be on or after the start date',
+      setup: household,
+      change: { startsOn: '2026-08-01', endsOn: '2026-07-31' },
+    },
+    {
+      code: 'INVALID_MEMBERS',
+      error: 'All payers and split participants must be group members',
+      setup: household,
+      change: { paidBy: [{ user: DEMO_PERSONA_IDS.priya, amount: 30000 }] },
+    },
+    {
+      code: 'INVALID_TAG',
+      error: 'Tag must be an active group tag',
+      setup: household,
+      change: { tag: 'Synthetic missing tag' },
+    },
+    {
+      code: 'CURRENCY_MISMATCH',
+      error: 'Currency must match the group default currency',
+      setup: household,
+      change: { currency: 'USD' },
+    },
+  ])('answers 422 $code and adds nothing', async ({ code, error, setup, change }) => {
+    const groupId = await setup();
+    const alexCookie = await signIn('alex');
+
+    const refused = await addRecurring(groupId, alexCookie, { ...monthlyRent, ...change });
+
+    expect(refused).toEqual({ status: 422, body: { error, status: 422, code } });
+    expect(await templates(groupId, alexCookie)).toEqual([]);
+  });
+});
