@@ -10,7 +10,7 @@
  * columns after the ones that are always there, so a column never moves when another option
  * is turned on.
  */
-import { getCategory } from './categories';
+import { categoryLabel } from './categories';
 import { getCurrencyPrecision } from './currency';
 import { expenseDay } from './expense-day';
 import { assertSafeMinorAmount, moneyParticipantId, readLegacyAmountMinor } from './exact-money';
@@ -124,8 +124,6 @@ export const SPLIT_LABELS: Record<SplitMethod, string> = {
   percentage: 'Percentages',
   shares: 'Shares',
 };
-
-const categoryLabel = (id: string) => getCategory(id)?.label ?? id;
 
 // ─── Records ────────────────────────────────────────────
 
