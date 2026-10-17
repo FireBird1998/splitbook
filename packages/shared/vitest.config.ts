@@ -10,7 +10,10 @@ export default defineConfig({
     env: { TZ: requestedTimeZone ?? 'UTC' },
     provide: { requestedTimeZone },
     // The money modules' branches, measured by `pnpm test` (and `test:unit`) with --coverage
-    // (#471). The few left uncovered can't be reached; a drop below the threshold fails the run.
+    // (#471); a drop below the threshold fails the run. Left uncovered, as no test can reach them
+    // under V8: the leftover ranking comparator's "a.id > b.id" arm (V8's sort reads only a
+    // negative result), and splitEntryProblem's fallback for an error that isn't a
+    // MoneyValidationError (parseDecimalUnits throws only those).
     coverage: {
       provider: 'v8',
       include: [

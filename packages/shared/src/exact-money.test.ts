@@ -463,7 +463,9 @@ describe('money paths the suite missed (#471)', () => {
   });
 
   it('gives a leftover paisa to the earliest person by id, wherever they are listed', () => {
-    // 100 paise between three: 33 each and 1 left over, which goes to "a", listed second.
+    // 100 paise between three: 33 each and 1 left over, which goes to "a", listed second. The
+    // comparator's "a.id > b.id" arm decides nothing under V8, whose sort reads only a negative
+    // result; another engine, such as Hermes, may use it.
     expect(
       calculateSplitAmountsMinor('equal', 100, [{ user: 'b' }, { user: 'a' }, { user: 'c' }]).map(
         (row) => row.amountMinor,

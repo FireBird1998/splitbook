@@ -396,9 +396,11 @@ describe('Home’s paths the suite missed (#471)', () => {
   });
 
   it('puts what the member pays before what they receive, whichever came first', () => {
-    const receive = pay({ direction: 'receive' });
+    // A receipt in a currency that sorts first still comes after a payment.
+    const receive = pay({ direction: 'receive', currency: 'EUR' });
     const owe = pay({});
     expect(orderSuggestedPayments([receive, owe])).toEqual([owe, receive]);
+    expect(orderSuggestedPayments([owe, receive])).toEqual([owe, receive]);
   });
 
   it('orders two people of the same name by who they are', () => {

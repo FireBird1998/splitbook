@@ -180,8 +180,10 @@ describe('calculateSplitAmounts', () => {
 describe('split paths the suite missed (#471)', () => {
   it('refuses an exact split with a share left out', () => {
     // ₹10 between two, Sam's amount never entered: nothing is guessed for it.
-    expect(() =>
-      calculateSplitAmounts('exact', 10, participants({ user: 'a', amount: 10 }, { user: 'b' })),
-    ).toThrow();
+    expect(
+      () =>
+        calculateSplitAmounts('exact', 10, participants({ user: 'a', amount: 10 }, { user: 'b' })),
+      // Refused as an amount it can't read exactly.
+    ).toThrow(expect.objectContaining({ code: 'UNSAFE_MONEY' }));
   });
 });
