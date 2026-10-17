@@ -24,6 +24,15 @@ export function images(html: string) {
   }));
 }
 
+/** Every inline <svg role="img"> in document order: its accessible name (aria-label). */
+export function svgImages(html: string): string[] {
+  return [...html.matchAll(/<svg\b([^>]*)>/g)]
+    .filter(([, attributes]) => attribute(attributes, 'role') === 'img')
+    .map(([, attributes]) =>
+      (attribute(attributes, 'aria-label') ?? '').replace(/&#x27;|&#39;/g, "'"),
+    );
+}
+
 /** The <img>s showing brand artwork from public/brand. */
 export function brandImages(html: string) {
   return images(html).filter((image) => image.src?.startsWith('/brand/'));
@@ -45,14 +54,19 @@ export function anchors(html: string) {
   }));
 }
 
-/** The markup's text, tags removed and whitespace collapsed. */
-export function text(html: string): string {
-  return html
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
+/** The few entities React writes in text and attributes, decoded. */
+function decodeEntities(value: string): string {
+  return value
     .replace(/&#x27;|&#39;/g, "'")
     .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&')
+    .replace(/&amp;/g, '&');
+}
+
+/** The markup's text, tags removed and whitespace collapsed. */
+export function text(html: string): string {
+  return decodeEntities(
+    html.replace(/<style\b[^>]*>[\s\S]*?<\/style>/g, ' ').replace(/<[^>]+>/g, ' '),
+  )
     .replace(/\s+/g, ' ')
     .trim();
 }

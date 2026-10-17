@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { sumMinorAmounts, toMajorAmount } from '@splitbook/shared/exact-money';
+import { isPng, pngSize, pngText } from './png.ts';
 import type { story } from './story.ts';
 
 type Story = ReturnType<typeof story>;
@@ -97,4 +98,28 @@ export function vendorDrift(dir: string): string[] {
       problems.push(`${path} is not in MANIFEST.sha256.`);
   }
   return problems;
+}
+
+/** The text chunk a still carries: the source it was drawn from (see stills.ts). */
+export const STILL_SOURCE_KEY = 'Source';
+
+/**
+ * What is wrong with a figure's still: missing, not a PNG, not the link preview's size, or drawn
+ * from another version of the figure than `source`.
+ */
+export function stillDrift(
+  file: string,
+  size: { width: number; height: number },
+  source: string,
+): string[] {
+  const name = basename(file);
+  if (!existsSync(file)) return [`${name} is missing.`];
+  const png = readFileSync(file);
+  if (!isPng(png)) return [`${name} is not a PNG.`];
+  const { width, height } = pngSize(png);
+  if (width !== size.width || height !== size.height)
+    return [`${name} is ${width} × ${height}, not ${size.width} × ${size.height}.`];
+  return pngText(png).get(STILL_SOURCE_KEY) === source
+    ? []
+    : [`${name} was drawn from another version of the figure.`];
 }

@@ -1086,10 +1086,31 @@ export function buildSplittingLine(STORY) {
   .ln-lamp{fill:var(--ln-lamp-off);opacity:.85;transition:fill .3s}
   .ln-lamp[data-on]{fill:var(--ln-lamp)}
   `;
+  // The words around the drawing: the plate's readout before the tour runs, the legend and the
+  // description of the still the tour shows under reduced motion (and the link preview shows).
+  const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+  const signed = (minor) =>
+    minor === 0 ? '0' : `${minor > 0 ? '+' : '−'}${inr.format(Math.abs(minor) / 100)}`;
+  const lastStep = STORY.steps.at(-1);
+  const payer = STORY.members.find((m) => m.id === lastStep.paidBy).name;
+  const stillCounters = STORY.members.map(
+    (m) => STORY.steps.at(-2).after[m.id] + (m.id === lastStep.paidBy ? lastStep.amountMinor : 0),
+  );
+  const STILL_TEXT = `A small production line that splits Expenses. A saw cuts each Expense bar into one chip per share, and pneumatic pushers send each chip down a chute into its member's bin. While ${lastStep.title} ₹${inr.format(lastStep.amountMinor / 100)}, paid by ${payer}, is being sorted, the bins for ${names} read ${new Intl.ListFormat('en-GB', { type: 'conjunction' }).format(stillCounters.map(signed))}.`;
   return {
     id: 'splitting-line',
+    number: 1,
     title: 'The splitting line',
     label: LABEL_TEXT,
+    readout: `Line idle · ${STORY.steps.length} Expenses waiting`,
+    legend: [
+      { mark: 'bin', label: `Bins, left to right: ${names}` },
+      { mark: 'positive', label: '+ gets back' },
+      { mark: 'negative', label: '− owes' },
+      { mark: 'lamp', label: 'Lamp: who paid' },
+    ],
+    caption: 'Each Expense is cut into one chip per share, and the counters always add up to zero.',
+    still: STILL_TEXT,
     width: W,
     height: H,
     svg,
