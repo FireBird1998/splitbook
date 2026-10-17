@@ -287,6 +287,9 @@ describe('balance integrity integration', () => {
         ],
       },
     ]);
+    // The Group's own Balances still flag euros in a dollar Group: any currency other than its
+    // default, not only more than one currency in use.
+    expect((await balanceService.getGroupBalances(groupId))!.hasMixedCurrencies).toBe(true);
   });
 
   it('excludes archived trips from dashboard balances', async () => {
