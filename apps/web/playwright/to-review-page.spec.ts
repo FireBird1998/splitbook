@@ -746,3 +746,168 @@ test('when keeping the last ready item makes it incomplete, focus returns to its
   await expect(panel(page)).toBeFocused();
   await expect(panel(page).getByLabel('What was it for?')).toHaveValue('');
 });
+
+/** Reach To review from the Group's Expenses, so Back is the app's own navigation (#500). */
+async function reviewFromExpenses(page: Page) {
+  await page
+    .getByRole('region', { name: 'To review', exact: true })
+    .getByRole('link', { name: 'Review', exact: true })
+    .click();
+  await page.waitForURL(`**${root}/review`);
+}
+async function openFromExpenses(page: Page, kinds: Parameters<typeof seedReviewPage>[0]) {
+  await seedReviewPage(kinds);
+  await enterAsPersona(page, 'alex');
+  await page.goto(`${root}/expenses`);
+  await reviewFromExpenses(page);
+}
+
+/**
+ * Hold the reply to the first autosave of this Draft after the server has applied it. `applied`
+ * resolves once the write is applied; `release` lets its reply through.
+ */
+async function holdFirstWrite(page: Page, draftId: string) {
+  let release = () => {};
+  let markApplied = () => {};
+  const applied = new Promise<void>((resolve) => {
+    markApplied = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let holding = true;
+  await page.route(`**/api/groups/${DEMO_GROUP_ID}/drafts/${draftId}`, async (route) => {
+    if (route.request().method() !== 'PUT' || !holding) return route.continue();
+    holding = false;
+    const result = await route.fetch();
+    markApplied();
+    await held;
+    await route.fulfill({ response: result });
+  });
+  return { applied, release };
+}
+
+test('typing entered during an autosave is still kept after Back', async ({ page }) => {
+  await openFromExpenses(page, ['ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const draft = (await rows(page))[0];
+  const write = await holdFirstWrite(page, draft.id);
+  const review = panel(page);
+  try {
+    await review.getByLabel('What was it for?').fill('Review first edit');
+    await write.applied;
+    await review.getByLabel('What was it for?').fill('Review newer typing');
+    await page.goBack();
+    await page.waitForURL(`**${root}/expenses`);
+  } finally {
+    write.release();
+  }
+  await expect
+    .poll(async () => (await rows(page))[0].values.description)
+    .toBe('Review newer typing');
+});
+
+test('typing not yet autosaved is still kept after Back', async ({ page }) => {
+  // The page clock holds the 500 ms autosave, so Back comes before it.
+  await page.clock.install();
+  await openFromExpenses(page, ['ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const review = panel(page);
+  await review.getByLabel('What was it for?').fill('Review quick edit');
+  await expect(
+    review.getByRole('status').filter({ hasText: 'Keeping your changes' }),
+  ).toBeVisible();
+  await page.goBack();
+  await page.waitForURL(`**${root}/expenses`);
+  await expect.poll(async () => (await rows(page))[0].values.description).toBe('Review quick edit');
+});
+
+test('typing for an item removed elsewhere is not sent after Back, and no error shows', async ({
+  page,
+}) => {
+  await openFromExpenses(page, ['ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const draft = (await rows(page))[0];
+  const endpoint = `/api/groups/${DEMO_GROUP_ID}/drafts`;
+  let writes = 0;
+  page.on('request', (request) => {
+    if (request.method() === 'PUT' && new URL(request.url()).pathname === `${endpoint}/${draft.id}`)
+      writes++;
+  });
+  const write = await holdFirstWrite(page, draft.id);
+  const review = panel(page);
+  // After the held reply, leaving either writes the newer typing or first finds the item gone.
+  const next = page.waitForRequest((request) => {
+    const path = new URL(request.url()).pathname;
+    return (
+      (request.method() === 'PUT' && path === `${endpoint}/${draft.id}` && writes > 1) ||
+      (request.method() === 'GET' && path === endpoint)
+    );
+  });
+  try {
+    await review.getByLabel('What was it for?').fill('Review first edit');
+    await write.applied;
+    await review.getByLabel('What was it for?').fill('Review typing for a removed item');
+    const kept = (await rows(page))[0];
+    const removed = await page.request.delete(`${endpoint}/${draft.id}`, {
+      headers: { 'X-Splitbook-Revision': String(kept.revision) },
+    });
+    expect(removed.status()).toBe(200);
+    await page.goBack();
+    await page.waitForURL(`**${root}/expenses`);
+  } finally {
+    write.release();
+  }
+  expect((await next).method()).toBe('GET');
+  await (await next).response();
+  // Coming back to To review takes several round trips; any write would have gone out first.
+  await page.goForward();
+  await page.waitForURL(`**${root}/review`);
+  await expect(page.getByRole('button', { name: 'Review Review meal 1', exact: true })).toHaveCount(
+    0,
+  );
+  expect(writes).toBe(1);
+  await expect(page.locator('body')).not.toContainText(/not kept|no longer in To review/);
+});
+
+test('typing that could not be kept after Back is pointed out when the item opens again', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await openFromExpenses(page, ['ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const draft = (await rows(page))[0];
+  await page.route(`**/api/groups/${DEMO_GROUP_ID}/drafts/${draft.id}`, (route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill({ status: 503, json: { error: 'Service unavailable' } })
+      : route.continue(),
+  );
+  const failed = page.waitForResponse(
+    (response) => response.request().method() === 'PUT' && response.status() === 503,
+  );
+  await panel(page).getByLabel('What was it for?').fill('Review lost edit');
+  await page.goBack();
+  await page.waitForURL(`**${root}/expenses`);
+  await failed;
+  expect((await rows(page))[0].values.description).toBe('Review meal 1');
+  await reviewFromExpenses(page);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  await expect(panel(page)).toContainText(
+    "Your last change to this item wasn't kept. Check it and make the change again.",
+  );
+});
+
+test('typing not yet autosaved is still kept when the page reloads', async ({ page }) => {
+  await page.clock.install();
+  await openFromExpenses(page, ['ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const review = panel(page);
+  await review.getByLabel('What was it for?').fill('Review edit before reload');
+  await expect(
+    review.getByRole('status').filter({ hasText: 'Keeping your changes' }),
+  ).toBeVisible();
+  await page.reload();
+  await expect
+    .poll(async () => (await rows(page))[0].values.description)
+    .toBe('Review edit before reload');
+});

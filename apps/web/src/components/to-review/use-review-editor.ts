@@ -10,6 +10,18 @@ import {
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
 import type { WebReviewClient } from './review-client';
 
+/** The Draft left To review elsewhere, so typing for it is obsolete and is never sent. */
+class RemovedElsewhere extends Error {}
+const removedElsewhere = (cause: unknown) =>
+  cause instanceof RemovedElsewhere || (cause as { status?: number } | null)?.status === 404;
+
+/** Drafts whose typing couldn't be kept after their editor closed; said when one opens again. */
+const UNKEPT_NOTE =
+  "Your last change to this item wasn't kept. Check it and make the change again.";
+const unkeptDraftIds = new Set<string>();
+/** Drafts with an editor open now, which shows their latest state itself. */
+const openDraftIds = new Set<string>();
+
 /** Serializes kept edits. A save/navigation must flush typing before using the shown version. */
 export function useReviewEditor(
   initial: PersistedExpenseDraft,
@@ -20,12 +32,18 @@ export function useReviewEditor(
   const [draft, setDraft] = useState(initial);
   const [entries, setEntries] = useState(() => draftEntries(initial.values));
   const [status, setStatus] = useState<'kept' | 'changed' | 'keeping' | 'failed'>('kept');
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(() => (unkeptDraftIds.has(initial.id) ? UNKEPT_NOTE : ''));
   const [error, setError] = useState('');
   const current = useRef(initial);
   const input = useRef(entries);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const live = useRef(true);
+  /**
+   * Closed without a member flush (such as Back) while typing was unsent: keep sending it, as
+   * Close would (#500). It is the member's own typing, sent once as its autosave would have been,
+   * not a write resumed later.
+   */
+  const leaving = useRef(false);
   const namesRef = useRef(names);
   const adapter = useRef({ client, refresh });
   useEffect(() => {
@@ -57,10 +75,17 @@ export function useReviewEditor(
   // Construct on first use in an effect or member action, never by reading refs in render.
   const edits = useCallback(() => {
     editQueue.current ??= draftEditQueue<DraftEntries>({
-      current: () => live.current,
-      canWrite: () => live.current,
-      replace: (before, submitted) =>
-        adapter.current.client.replace(before, draftValues(submitted)),
+      current: () => live.current || leaving.current,
+      canWrite: () => live.current || leaving.current,
+      replace: async (before, submitted) => {
+        // After the editor closes, nothing is sent for a Draft removed elsewhere (#500).
+        if (
+          !live.current &&
+          !(await adapter.current.client.list()).some(({ id }) => id === before.id)
+        )
+          throw new RemovedElsewhere();
+        return adapter.current.client.replace(before, draftValues(submitted));
+      },
       kept: (kept, pending) => {
         current.current = kept;
         if (live.current) {
@@ -71,6 +96,7 @@ export function useReviewEditor(
       refresh: () => adapter.current.refresh(),
       refreshAfter: 'write',
       recover: async ({ cause }) => {
+        if (!live.current) return current.current;
         if ((cause as { status?: number }).status === 409) {
           try {
             await reloadChanged();
@@ -99,12 +125,28 @@ export function useReviewEditor(
     if (!edits().receive(initial)) adopt(initial, true);
   }, [initial, edits, adopt]);
   useEffect(() => {
+    const id = current.current.id;
     live.current = true;
+    leaving.current = false;
+    openDraftIds.add(id);
+    unkeptDraftIds.delete(id);
     return () => {
       live.current = false;
+      openDraftIds.delete(id);
       if (timer.current) clearTimeout(timer.current);
+      const queue = edits();
+      if (!queue.pending && !queue.writing) return;
+      leaving.current = true;
+      void queue.flush(current.current).then((result) => {
+        if (result.kind === 'kept') unkeptDraftIds.delete(id);
+        else if (
+          !openDraftIds.has(id) &&
+          !(result.kind === 'failed' && removedElsewhere(result.cause))
+        )
+          unkeptDraftIds.add(id);
+      });
     };
-  }, []);
+  }, [edits]);
   async function flush(): Promise<boolean> {
     if (timer.current) clearTimeout(timer.current);
     if (!edits().pending && !edits().writing) return true;
@@ -149,10 +191,19 @@ export function useReviewEditor(
         if (kept) window.location.assign(link.href);
       });
     };
+    // A reload or closed tab can't wait for the autosave; send the typing as the page goes (#500).
+    const pageHide = () => {
+      if (!edits().pending || edits().writing) return;
+      if (timer.current) clearTimeout(timer.current);
+      adapter.current.client.replaceAsPageGoes(current.current, draftValues(input.current));
+      edits().clear();
+    };
     window.addEventListener('beforeunload', beforeUnload);
+    window.addEventListener('pagehide', pageHide);
     document.addEventListener('click', navigate, true);
     return () => {
       window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('pagehide', pageHide);
       document.removeEventListener('click', navigate, true);
     };
   });
