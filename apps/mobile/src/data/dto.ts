@@ -39,7 +39,7 @@ export function toMobileGroup(value: GroupRead): MobileGroup {
     category: value.category,
     defaultCurrency: value.defaultCurrency,
     members: value.members.map(({ user, role, joinedAt }) => ({
-      user: { id: user._id, name: user.name, email: user.email, image: user.image ?? null },
+      user: { id: user._id, name: user.name, email: user.email ?? null, image: user.image ?? null },
       role,
       joinedAt: new Date(joinedAt),
     })),

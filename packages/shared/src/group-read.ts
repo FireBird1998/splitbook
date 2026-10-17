@@ -9,7 +9,8 @@ const image = z
   .string()
   .nullish()
   .transform((value) => value ?? undefined);
-const person = z.looseObject({ _id: identity, name, email: z.email(), image });
+// A member's email reaches only the Group's admin, and each member their own (#517).
+const person = z.looseObject({ _id: identity, name, email: z.email().optional(), image });
 const tag = z.looseObject({
   _id: identity,
   name,

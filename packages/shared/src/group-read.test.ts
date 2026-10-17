@@ -30,6 +30,20 @@ describe('Group read contract', () => {
   });
 });
 
+it('reads a member sent by id and name only, as everyone but a Group’s admin gets them (#517)', () => {
+  const sam = { _id: 'a00000000000000000000002', name: 'Sam' };
+  const [read] = parseGroupListResponse({
+    status: 200,
+    data: [
+      {
+        ...group,
+        members: [...group.members, { user: sam, role: 'member', joinedAt: timestamp }],
+      },
+    ],
+  });
+  expect(read.members.map(({ user }) => user)).toEqual([person, sam]);
+});
+
 it('keeps response order, historical currencies and retired Tags with their identities', () => {
   const tags = [
     {
