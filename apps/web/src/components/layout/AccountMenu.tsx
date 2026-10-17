@@ -42,7 +42,7 @@ interface AccountMenuProps {
  */
 export default function AccountMenu({ user, onNavigate }: AccountMenuProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const { signOut, unreachable, dismiss } = useSignOut();
+  const { signOut, problem, dismiss } = useSignOut();
   const open = Boolean(anchorEl);
   const name = user.name || user.email || 'Account';
 
@@ -142,7 +142,7 @@ export default function AccountMenu({ user, onNavigate }: AccountMenuProps) {
           Sign Out
         </MenuItem>
       </Menu>
-      <SignOutNotice unreachable={unreachable} onClose={dismiss} />
+      <SignOutNotice problem={problem} onClose={dismiss} />
     </>
   );
 }
