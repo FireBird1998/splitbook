@@ -211,7 +211,8 @@ function statementsOf(canPrepare: boolean) {
     {
       icon: LinkOffOutlinedIcon,
       title: 'Stay in control',
-      text: 'Disconnect any time in Settings.',
+      // True since #438: the assistant tools send members' names, never their email addresses.
+      text: 'Disconnect any time in Settings. Assistants see members’ names, never their email addresses.',
     },
   ];
 }
