@@ -713,7 +713,7 @@ export function ToReviewList({
               <Button
                 label={model.ready.label}
                 disabled={disabled || model.ready.count === 0}
-                onPress={() => void client.reviewReady(model.ready.items)}
+                onPress={() => void client.reviewReady(model.ready.items, own?.currency)}
               />
               <Button
                 label="Review one at a time"

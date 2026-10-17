@@ -82,7 +82,8 @@ export type ExpenseDraftValues = z.infer<typeof expenseDraftValuesSchema>;
 
 /**
  * A Draft's values as its Group saves them: one without a currency takes the Group's, as Add
- * expense does, so it is never asked for (#512). The stored Draft keeps what was entered.
+ * expense does, so it is never asked for (#512). The stored Draft keeps what was entered. This is
+ * not a guess: a Group records Expenses in its one currency only.
  */
 export function withGroupCurrency(
   values: ExpenseDraftValues = {},

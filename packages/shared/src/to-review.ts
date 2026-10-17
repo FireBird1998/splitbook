@@ -265,14 +265,18 @@ export function reviewDate(date?: string): string {
   return date ? formatDate(`${date}T12:00:00`) : 'Date missing';
 }
 
-/** Shared member wording for a newer version; callers supply names, never guess identities. */
+/**
+ * Shared member wording for a newer version; callers supply names, never guess identities, and
+ * the Group's currency, which an item without its own is in (#512).
+ */
 export function describeDraftChange(
   before: PersistedExpenseDraft,
   after: PersistedExpenseDraft,
   names: Readonly<Record<string, string>> = {},
+  groupCurrency?: string,
 ): string {
-  const prior = before.values ?? {};
-  const next = after.values ?? {};
+  const prior = withGroupCurrency(before.values, groupCurrency);
+  const next = withGroupCurrency(after.values, groupCurrency);
   const currency = (values: ExpenseDraftValues) =>
     values.amount === undefined || !values.currency
       ? 'not specified'

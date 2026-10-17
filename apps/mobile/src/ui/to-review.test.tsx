@@ -465,6 +465,16 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       expect(text(list)).toContain('Save ready expenses?');
       expect(text(list)).not.toContain('Yesterday');
     }));
+  it('saves ready items without a currency in the Group’s (#512)', async () => {
+    const f = fixture();
+    delete f.items()[0].draft.values!.currency;
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'Save 2 ready');
+    expect(text(list)).toContain('Save ready expenses?');
+    expect(text(list)).toContain('₹12.34');
+    expect(text(list)).not.toContain('Some items changed');
+  });
   it('hides an empty Home card and renders the empty list', async () => {
     const f = fixture({ empty: true });
     await signIn(f);

@@ -648,6 +648,10 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(text(tree)).not.toContain('Use INR as currency');
     expect(text(tree)).not.toContain('the currency');
     expect(button(tree, 'Save expense').props.disabled).toBe(false);
+    // The Group's currency is a fact the save already has, so the item saves as it is.
+    await tap(tree, 'Save expense');
+    expect(f.saves).toHaveLength(1);
+    expect(text(tree)).toContain('Saved 1');
   });
   it('shows the shared change note from a newer read, and never saves an unseen version', async () => {
     const f = fixture({ one: true });

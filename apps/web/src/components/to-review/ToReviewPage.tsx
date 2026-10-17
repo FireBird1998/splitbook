@@ -130,6 +130,8 @@ export default function ToReviewPage({
   }, []);
   const model = read.status === 'ready' ? read.value : null;
   const items = model?.items ?? [];
+  // The Group's currency as the read names it, which the model already applied (#512).
+  const currency = model?.groups[0]?.currency;
   useEffect(() => {
     const id = refocus.current;
     const row = id ? openRows.current.get(id) : undefined;
@@ -143,7 +145,7 @@ export default function ToReviewPage({
     checked && online && !!group && !groupError && !failed && read.status === 'ready';
   const names = Object.fromEntries(group?.members.map(({ user }) => [user._id, user.name]) ?? []);
   const context = {
-    currency: group?.defaultCurrency,
+    currency,
     members: group?.members.map(({ user }) => ({ id: user._id, name: user.name })) ?? [],
     tags:
       group?.tags
@@ -641,7 +643,7 @@ export default function ToReviewPage({
                             key={item.id}
                             item={item}
                             quick={quickFor(item)}
-                            currency={group?.defaultCurrency}
+                            currency={currency}
                             open={selected?.id === item.id}
                             selected={cursor === item.id && !selected}
                             disabled={rowsDisabled}
@@ -733,12 +735,7 @@ export default function ToReviewPage({
         <DialogContent>
           <Stack spacing={2}>
             {confirmation?.reviews.map((item) => (
-              <ReviewFacts
-                key={item.draft.id}
-                item={item}
-                names={names}
-                currency={group?.defaultCurrency}
-              />
+              <ReviewFacts key={item.draft.id} item={item} names={names} currency={currency} />
             ))}
             {confirmation?.totals.map((total) => (
               <Typography key={total.currency} fontWeight={600}>

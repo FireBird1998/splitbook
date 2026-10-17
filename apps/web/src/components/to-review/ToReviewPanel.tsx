@@ -63,7 +63,7 @@ export default function ToReviewPanel({
     surface.current?.focus({ preventScroll: true });
     surface.current?.scrollIntoView({ block: 'start' });
   }, []);
-  const editor = useReviewEditor(item.accountItem!.draft, client, refresh, names);
+  const editor = useReviewEditor(item.accountItem!.draft, client, refresh, names, context.currency);
   const [acknowledgedVersion, setAcknowledgedVersion] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);

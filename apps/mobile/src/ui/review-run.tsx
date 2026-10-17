@@ -126,7 +126,7 @@ function ReviewRunContent({
   const { item, groupId, groupName } = selected;
   const values = item.draft.values ?? {};
   // An item without a currency is in its Group's, as on Add expense (#512).
-  const groupCurrency = state.context?.group.defaultCurrency;
+  const groupCurrency = selected.currency;
   const model = buildToReview(
     {
       total: 1,
@@ -216,6 +216,7 @@ function ReviewRunContent({
                   ...(members ?? []).map((member) => [member.id, person(member.id)]),
                   ...(state.context?.tags ?? []).map((tag) => [tag.id, tag.name]),
                 ]),
+                groupCurrency,
               )}
             </Copy>
           )}
@@ -224,7 +225,7 @@ function ReviewRunContent({
           </Copy>
           <Money numberOfLines={0}>{money(values.amount, values.currency || groupCurrency)}</Money>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {groupCurrency && (values.currency ?? groupCurrency) === groupCurrency && (
+            {groupCurrency && (values.currency || groupCurrency) === groupCurrency && (
               <CurrencyBadge currency={groupCurrency} recorded={false} />
             )}
             <TextInput

@@ -279,6 +279,15 @@ describe('changes while an item is open', () => {
       "Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00. You're seeing the latest version.",
     );
   });
+  it('describes an amount without a currency in the Group’s (#512)', () => {
+    const { before, after } = changed();
+    delete before.values!.currency;
+    delete after.values!.currency;
+    after.values!.amount = 2400;
+    expect(describeDraftChange(before, after, names, 'INR')).toBe(
+      "Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00. You're seeing the latest version.",
+    );
+  });
   it('formats date facts as calendar days in every host time zone', () => {
     const { before, after } = changed();
     after.values!.date = '2026-10-15';
