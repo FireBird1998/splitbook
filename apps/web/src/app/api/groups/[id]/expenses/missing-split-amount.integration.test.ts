@@ -1,14 +1,17 @@
 /**
- * HTTP test for an Expense saved with a share left out of an exact or unequal split (#497),
+ * HTTP tests for an Expense saved or edited with a share left out of an exact split (#497),
  * against a real, isolated MongoDB database (`splitbook-test-missing-split-amount`), with a real
  * session (`signed-in-route.ts`).
  *
- * The share nobody entered is refused as a missing amount, and the issue points at that row of
- * the split, not at the Expense total. Nothing is saved.
+ * The share nobody entered is refused as a missing amount that points at that row of the split,
+ * not at the Expense total, and nothing changes. A new Expense is refused by the save schema (422
+ * VALIDATION_ERROR with the issue at the row); an edit by the money rules (422
+ * MISSING_SPLIT_AMOUNT with the row as its field).
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
+import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import {
@@ -17,6 +20,7 @@ import {
   disconnectSignedIn,
   insertDemoPersonas,
   signIn,
+  validationIssues,
 } from '@/lib/test-utils/signed-in-route';
 
 vi.mock('next/headers', async () => (await import('@/lib/test-utils/signed-in-route')).nextHeaders);
@@ -25,10 +29,12 @@ const db = integrationTestDb('missing-split-amount');
 const { alex, sam } = DEMO_PERSONA_IDS;
 
 let expenses: typeof import('./route');
+let expense: typeof import('./[expenseId]/route');
 
 beforeAll(async () => {
   await connectSignedIn(db);
   expenses = await import('./route');
+  expense = await import('./[expenseId]/route');
 });
 beforeEach(async () => {
   await db.reset();
@@ -90,8 +96,7 @@ describe('POST /api/groups/[id]/expenses with a share left out', () => {
 
     expect(refused.status).toBe(422);
     expect(refused.body).toMatchObject({ code: 'VALIDATION_ERROR' });
-    // The issues travel as the serialized Zod error's message.
-    expect(JSON.parse(refused.body.details.message)).toEqual([
+    expect(validationIssues(refused.body)).toEqual([
       {
         code: 'custom',
         message: 'Enter an amount for each person in the split',
@@ -99,5 +104,52 @@ describe('POST /api/groups/[id]/expenses with a share left out', () => {
       },
     ]);
     expect(await expenseCount(groupId, alexCookie)).toBe(0);
+  });
+
+  it('refuses an edit that leaves Sam’s share out, at that row, and keeps the Expense', async () => {
+    const groupId = await coorgWeekend();
+    const dinner = await expenseService.create(
+      groupId,
+      {
+        ...dinnerWithSamsShareLeftOut,
+        splitMethod: 'exact',
+        date: new Date('2026-10-10T12:00:00.000Z'),
+        splitBetween: [
+          { user: alex, amount: 600 },
+          { user: sam, amount: 400 },
+        ],
+      },
+      alex,
+    );
+    const expenseId = String(dinner._id);
+    const alexCookie = await signIn('alex');
+
+    const refused = await callRoute(expense.PATCH, {
+      method: 'PATCH',
+      path: `/api/groups/${groupId}/expenses/${expenseId}`,
+      params: { id: groupId, expenseId },
+      cookie: alexCookie,
+      body: { splitMethod: 'exact', splitBetween: [{ user: alex, amount: 600 }, { user: sam }] },
+      headers: { 'X-Splitbook-Revision': '0' },
+    });
+
+    expect(refused).toEqual({
+      status: 422,
+      body: {
+        error: 'Enter an amount for each person in the split',
+        status: 422,
+        code: 'MISSING_SPLIT_AMOUNT',
+        field: ['splitBetween', 1, 'amount'],
+      },
+    });
+    const kept = await callRoute(expense.GET, {
+      method: 'GET',
+      path: `/api/groups/${groupId}/expenses/${expenseId}`,
+      params: { id: groupId, expenseId },
+      cookie: alexCookie,
+    });
+    expect(kept.body.data.splitBetween.map((row: { amount: number }) => row.amount)).toEqual([
+      600, 400,
+    ]);
   });
 });

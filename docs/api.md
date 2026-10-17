@@ -460,7 +460,11 @@ API path can set it.
 - `equal`: Server calculates equal amounts (floor plus remainder to the first
   participant). Client just sends user IDs.
 - `unequal` / `exact`: Client sends `amount` for each user, **passed through
-  untouched**.
+  untouched**. A row without one is refused as a missing amount, "Enter an amount
+  for each person in the split", pointing at that row (#497): a create answers
+  **422** `VALIDATION_ERROR` with the issue at `splitBetween.<i>.amount`, and an
+  edit answers **422** `MISSING_SPLIT_AMOUNT` with
+  `field: ["splitBetween", <i>, "amount"]`.
 - `percentage`: Client sends `percentage` for each user.
 - `shares`: Client sends `shares` for each user. Server calculates proportional
   amounts.

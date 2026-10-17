@@ -181,20 +181,18 @@ describe('calculateSplitAmounts', () => {
   });
 });
 
-describe('split paths the suite missed (#471)', () => {
-  /** The refusal for a share nobody entered, naming the row it belongs to (#497). */
-  const missingShare = (index: number) =>
-    expect.objectContaining({
-      code: 'MISSING_SPLIT_AMOUNT',
-      message: 'Enter an amount for each person in the split',
-      field: ['splitBetween', index, 'amount'],
-    });
+describe('a share left out of a split (#497)', () => {
+  /** A share nobody entered is missing, not an amount too large to hold. */
+  const missingShare = expect.objectContaining({
+    code: 'MISSING_SPLIT_AMOUNT',
+    message: 'Enter an amount for each person in the split',
+  });
 
   it('refuses an exact split with a share left out, as a missing amount', () => {
     // ₹10 between two, b's amount never entered: nothing is guessed for it.
     expect(() =>
       calculateSplitAmounts('exact', 10, participants({ user: 'a', amount: 10 }, { user: 'b' })),
-    ).toThrow(missingShare(1));
+    ).toThrow(missingShare);
   });
 
   it('refuses an unequal split with a share left out, as a missing amount', () => {
@@ -205,7 +203,7 @@ describe('split paths the suite missed (#471)', () => {
         10,
         participants({ user: 'a' }, { user: 'b', amount: 6 }, { user: 'c', amount: 4 }),
       ),
-    ).toThrow(missingShare(0));
+    ).toThrow(missingShare);
   });
 
   it('still refuses a share too large to hold exactly as UNSAFE_MONEY', () => {

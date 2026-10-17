@@ -20,6 +20,15 @@ export class MoneyValidationError extends Error {
   }
 }
 
+/** A share nobody entered in an exact or unequal split: missing, not too large to hold (#497). */
+function missingSplitAmount(field?: ReadonlyArray<string | number>) {
+  return new MoneyValidationError(
+    'MISSING_SPLIT_AMOUNT',
+    'Enter an amount for each person in the split',
+    field,
+  );
+}
+
 /** Where a money refusal belongs in Expense input: the field it names, or else the amount. */
 export function moneyErrorPath(error: unknown): Array<string | number> {
   return error instanceof MoneyValidationError && error.field ? [...error.field] : ['amount'];
@@ -217,15 +226,8 @@ export function calculateSplitAmountsMinor<T extends MinorSplitInput>(
   }
   assertUniqueMoneyParticipants(participants);
   if (method === 'exact' || method === 'unequal') {
-    const result = participants.map((participant, index) => {
-      // A share nobody entered is missing, not too large to hold exactly (#497).
-      if (participant.amountMinor === undefined) {
-        throw new MoneyValidationError(
-          'MISSING_SPLIT_AMOUNT',
-          'Enter an amount for each person in the split',
-          ['splitBetween', index, 'amount'],
-        );
-      }
+    const result = participants.map((participant) => {
+      if (participant.amountMinor === undefined) throw missingSplitAmount();
       const minor = assertSafeMinorAmount(participant.amountMinor);
       if (minor < 0)
         throw new MoneyValidationError('INVALID_SPLIT', 'Split amounts cannot be negative');
@@ -336,15 +338,14 @@ export function normalizeExpenseMoney<P extends MoneyPayerInput, S extends Money
       'Payer amounts must add up to the expense amount',
     );
   }
-  const splitInput = input.splitBetween.map((participant) => ({
-    ...participant,
-    amountMinor:
-      input.splitMethod === 'exact' || input.splitMethod === 'unequal'
-        ? participant.amount === undefined
-          ? undefined
-          : parseAmountMinor(participant.amount, currency)
-        : undefined,
-  }));
+  const splitInput = input.splitBetween.map((participant, index) => {
+    if (input.splitMethod !== 'exact' && input.splitMethod !== 'unequal')
+      return { ...participant, amountMinor: undefined };
+    // Named for its row, so a save points at that person's share, not the Expense amount.
+    if (participant.amount === undefined)
+      throw missingSplitAmount(['splitBetween', index, 'amount']);
+    return { ...participant, amountMinor: parseAmountMinor(participant.amount, currency) };
+  });
   const splitBetween = calculateSplitAmountsMinor(input.splitMethod, amountMinor, splitInput).map(
     (participant) => ({
       ...participant,
