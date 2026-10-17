@@ -38,7 +38,8 @@ async function stop(child: ChildProcess): Promise<void> {
  * its first request, which can take longer than a test waits for it (#476); a production
  * server has nothing left to compile. The landing and sign-in pages are opened signed out, as
  * sign-out leaves them; the rest signed in as a persona, so the proxy lets them through. An
- * unknown Group id still compiles that Group's routes.
+ * unknown Group id still compiles that Group's routes. Demo mode only: a Google-mode app (the
+ * auth-recovery suite) has no persona sign-in.
  */
 async function compilePages(baseURL: string) {
   for (const path of ['/', '/login']) await fetch(`${baseURL}${path}`, { redirect: 'manual' });
@@ -223,7 +224,7 @@ export async function startIsolatedApp(
         reject(new Error(`Isolated app exited: ${code}`));
       });
     });
-    if (!production) await compilePages(baseURL);
+    if (!production && authMode === 'demo') await compilePages(baseURL);
     // Only publish the URL after our own child reports readiness. An occupied
     // port fails startup; an existing app is never reused.
     process.env.EXPENSE_ACCESS_BASE_URL = baseURL;
