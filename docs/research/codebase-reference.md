@@ -568,7 +568,7 @@ Three layers, ~250 assertions across 39 files.
 
 28 non-integration `*.test.ts` files under `src/`. All pure-function or mock-based; there are **no component tests** — `vitest.config.ts:7` includes only `src/**/*.test.ts`, so a `.tsx` test would not even be collected, and no React testing library is installed. The heaviest suites are `recurring-due-periods.test.ts` (22 cases), `split-calculation.test.ts` (15), `expense-validation.test.ts` (15), `auth.config.test.ts` (12), `debt-simplifier.test.ts` (12).
 
-`balance.service.test.ts` is the one unit test of a DB-touching service, and it works by `vi.mock`-ing `@/lib/db` and all four models (`:7-32`) — it therefore pins the _currency-bucketing shape_ of the service's output but proves nothing about the queries.
+`balance.service.test.ts` is the one unit test of a DB-touching service, and it works by `vi.mock`-ing `@/lib/db` and all four models (`:7-32`) — it therefore pins the _currency-bucketing shape_ of the service's output but proves nothing about the queries. _(Later: #474 deleted it on 2026-10-17; its cases are covered against a real database in `balance-integrity.integration.test.ts` and `suggested-payments.integration.test.ts`.)_
 
 ### 9.2 Integration (Vitest against a real MongoDB)
 
@@ -615,7 +615,7 @@ Two suites, both fully serial (`workers: 1`) because they share one mutable data
 - **What NextAuth actually does with a `false` return.** `auth.config.test.ts` calls the callback directly and asserts the return value; the middleware's translation of `false` into a redirect is never exercised for API paths.
 - **`MonthCycleBar.parseMonthParam`** — the month-range derivation, timezone bounds, and forward cap. Zero unit tests; only indirectly touched by the E2E suite.
 - **Any React component**, by construction (§9.1).
-- **The group-balance mixed-currency summation.** `balance.service.test.ts:41` asserts the _flag_ is raised; nothing asserts what the summed number means.
+- **The group-balance mixed-currency summation.** `balance.service.test.ts:41` asserts the _flag_ is raised; nothing asserts what the summed number means. _(Later: that file was deleted by #474; the flag is now asserted in `balance-integrity.integration.test.ts`.)_
 - **Rate limiting, pagination bounds, `limit` ceilings** — none exist, none are tested.
 - **The `{description: 'text'}` index** and `alternateCurrencies` — both dead.
 - **Route handlers themselves.** Every test targets services or pure functions; no test invokes an exported `GET`/`POST` route function, so response envelopes, status codes and error mappings are verified only through the browser suite.

@@ -70,8 +70,8 @@ The backend's own scripts keep their rules: they refuse root and `apps/web` `.en
 | Each push to a pull request, and each push to `main` or `pilot/tanstack-reads` | **PR checks**                    |
 | Nightly at 04:17 UTC, a manual run, and a pull request labelled **`full-ci`**  | **PR checks** and the full suite |
 
-- **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, every mobile HTTP verifier (below) and, last, on a pull request, the ceilings ratchet (below). That is the gate without its install check, plus the style policy. It is the one check branch protection requires, so its name, `PR checks`, must not change.
-- **The full suite** adds `verify` (the unit and integration tests, the authenticated Playwright suites and the build), `playwright` (the browser journeys, the Google sign-in journeys and the visual comparisons) and the unit tests in three more time zones.
+- **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, the web integration suite against real Mongo (#469), every mobile HTTP verifier (below) and, last, on a pull request, the ceilings ratchet (below). That is the gate without its install check, plus the style policy and the web integration suite. **The gate never runs the integration suite** (see [the gate](#pnpm-swarm-gate)), so a branch can pass the gate and fail PR checks: run `pnpm web test:integration` yourself ([docs/testing.md](../../docs/testing.md#running-it)) when a change touches the database, the routes or money. PR checks is the one check branch protection requires, so its name, `PR checks`, must not change.
+- **The full suite** adds `verify` (the unit and integration tests again, the authenticated Playwright suites and the build), `playwright` (the browser journeys, the Google sign-in journeys and the visual comparisons) and the unit tests in three more time zones.
 - **A docs-only pull request,** one that changes only Markdown, `docs/` or `.claude/` files, passes PR checks after the format check alone. Prettier formats Markdown and the `docs/` mockups, so that check still runs.
 - **A push to `main` runs PR checks only,** on the merged result, since branches needn't be up to date with `main` to merge. The full suite never runs on a push: a merge reaches it in that night's run.
 - **`pilot/tanstack-reads`,** the integration branch of ADR 0006's TanStack pilot (#214 to #217), is checked like `main`: each push to it, such as merging `main` into it, runs PR checks only, and a pull request into it runs PR checks with the ceilings ratchet against that branch.
@@ -119,12 +119,12 @@ The label must exist before it can be applied: the owner creates `re-record-ceil
 PR checks runs every verifier (#228) against a backend of the run's own:
 
 ```sh
-pnpm swarm up --mongo-port 27017 --server production --ready-timeout 600
+pnpm swarm up --mongo-port 27039 --server production --ready-timeout 600
 TZ=Asia/Kolkata pnpm mobile verify:all   # with MOBILE_VERIFY_URL from up
-pnpm swarm down --mongo-port 27017
+pnpm swarm down --mongo-port 27039
 ```
 
-The job's `mongo:7` service listens on 27017, so `up` and `down` name that port; locally the default, 27018, applies. The job adds `up`'s `NAME=value` lines to `GITHUB_ENV`, turns each `FAIL verify:*` line of `verify:all` into an annotation, uploads `tools/swarm/out/backend.log` as the `mobile-verifier-backend-log` artifact when anything fails after `up` started, and always runs `down` once `up` has started. One job runs one swarm command at a time, so the worktree lock never refuses one there.
+The job starts a `mongo:7.0.39` replica set on 27039, with test commands on, for the web integration suite first and then this backend, so `up` and `down` name that port; locally the default, 27018, applies. The job adds `up`'s `NAME=value` lines to `GITHUB_ENV`, turns each `FAIL verify:*` line of `verify:all` into an annotation, uploads `tools/swarm/out/backend.log` as the `mobile-verifier-backend-log` artifact when anything fails after `up` started, and always runs `down` once `up` has started. One job runs one swarm command at a time, so the worktree lock never refuses one there.
 
 It serves a production build, as the Playwright jobs do, so no route compiles while a verifier waits; see the timings below. Changing `--server production` to `--server dev` in the job is all it takes to use `next dev` instead.
 
@@ -162,7 +162,7 @@ Runs these steps in the worktree, in order, and prints one verdict:
 | backend                       | this worktree's backend: the one `up` started, or a new one   | 3 min         |
 | `verify:*`, one after another | `pnpm --dir apps/mobile run verify:<name>`                    | 10 min each   |
 
-- **Unit tests, not integration tests.** The web integration tests name their databases per test file, so two worktrees running them at once on one Mongo would share databases. CI's full suite runs them (see [In CI](#in-ci)); the gate never does.
+- **Unit tests, not integration tests.** The web integration tests name their databases per test file, so two worktrees running them at once on one Mongo would share databases. PR checks runs them on every pull request (see [In CI](#in-ci)); the gate never does, so a branch can pass the gate and fail PR checks. Run `pnpm web test:integration` against a replica set of your own ([docs/testing.md](../../docs/testing.md#running-it)) when a change touches the database, the routes or money.
 - **vitest workers are capped**, so gates running at once don't fight over the CPU (each vitest run otherwise uses all cores but one). The cap defaults to **2** workers and applies to the whole step: the packages run one after another, each with `VITEST_MAX_WORKERS` set to the cap. Change it per run with `--vitest-workers <n>` or `SWARM_VITEST_WORKERS=<n>`.
 - **Verifiers** run one after another, because several assume exclusive use of the Sam persona on their backend (#228), each with `MOBILE_VERIFY_URL` and the three `SPLITBOOK_NATIVE_*` variables set to this worktree's backend, and `TZ=Asia/Kolkata`, which `verify:financial`'s fixtures need. The list is every `verify:*` script in `apps/mobile/package.json` except `verify:all`.
 - **No step inherits credentials or another backend.** Steps get the gate's environment without database and auth settings (`MONGO*`, `TEST_MONGO*`, `DATABASE_URL`, `AUTH_*`, `BETTER_AUTH*`, `NEXTAUTH*`, `GOOGLE_*`, `ALLOW_*`, `NEXT_PUBLIC_*`), without anything that looks like a credential (names containing `SECRET`, `TOKEN`, `PASSWORD`, `CREDENTIAL`, `API_KEY`, `PRIVATE_KEY` or `ACCESS_KEY`), and without any `SPLITBOOK_*` or `MOBILE_VERIFY_URL` of another backend.
@@ -221,7 +221,9 @@ The quiet production run predates `--server`: it ran the same steps by hand (the
 
 On a quiet machine the production build is faster, because `next dev` compiles every route the verifiers reach while they wait (the verifiers took 24 s against a warm `next dev`, 11 s against a production build); on a busy one the parallel build suffers most. A CI runner is a quiet machine with 4 cores, where the web app's build takes 40 to 60 s. That holds while the repository is public: GitHub's runners for private repositories have 2 cores, so measure the job again if it goes private. A production backend also uses less memory: about 0.27 GB once the verifiers have run, against 1.1 to 1.7 GB for `next dev`.
 
-Measured on 2026-10-05 on the same machine for #277, at a load average of 5 to 8: PR checks' commands, one after another, took 106 s. The install took 1 s, the format check 7 s, lint 9 s, typecheck 9 s, the style policy 2 s, the unit tests in UTC 35 s (with 3 vitest workers, as on a 4-core runner), `up --server production` 32 s with its build, `verify:all` 12 s and `down` 1 s. On a public 4-core runner the same steps add up to about 3.5 minutes, from the medians of the CI jobs they came from. Measure the job again once the repository is private and its runners have 2 cores.
+Measured on 2026-10-05 on the same machine for #277, at a load average of 5 to 8: PR checks' commands, one after another, took 106 s. The install took 1 s, the format check 7 s, lint 9 s, typecheck 9 s, the style policy 2 s, the unit tests in UTC 35 s (with 3 vitest workers, as on a 4-core runner), `up --server production` 32 s with its build, `verify:all` 12 s and `down` 1 s. On a public 4-core runner the same steps added up to about 3.5 minutes, from the medians of the CI jobs they came from.
+
+Since #469 added the web integration suite, PR checks on `main` (403a8c0b, 2026-10-17, a public 4-core runner) took 7 min 46 s: the install 5 s, the format check 24 s, lint 33 s, typecheck 34 s, the style policy 2 s, the unit tests in UTC 2 min 10 s, starting Mongo 10 s, the integration suite 1 min 38 s, `up --server production` 1 min 29 s with its build, `verify:all` 24 s and the rest a few seconds. Measure the job again once the repository is private and its runners have 2 cores.
 
 ## Files
 
