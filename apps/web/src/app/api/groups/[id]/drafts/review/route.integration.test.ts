@@ -160,6 +160,24 @@ describe('POST /api/groups/[id]/drafts/review', () => {
     ]);
   });
 
+  it('names the share left out of an exact split at its row, not the amount (#497)', async () => {
+    const { groupId, foodTagId } = await emptyTrip();
+    const samCookie = await signIn('sam');
+    // An assistant can keep a Draft whose split has a share nobody entered.
+    const draftId = await samKeeps(groupId, samCookie, {
+      ...samsDinner(foodTagId),
+      splitMethod: 'exact',
+      splitBetween: [{ user: alex }, { user: sam, amount: 500 }],
+    });
+
+    const reviewed = await reviewDrafts(groupId, samCookie, [draftId]);
+
+    expect(reviewed.status).toBe(200);
+    expect(reviewed.body.data[0].problems).toEqual([
+      'splitBetween.0.amount: Enter an amount for each person in the split',
+    ]);
+  });
+
   it('does not let Alex review the Draft Sam keeps', async () => {
     const { groupId, foodTagId } = await emptyTrip();
     const draftId = await samKeeps(groupId, await signIn('sam'), samsDinner(foodTagId));

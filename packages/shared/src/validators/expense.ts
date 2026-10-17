@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '../currency';
 import { CATEGORY_IDS } from '../categories';
-import { normalizeExpenseMoney } from '../exact-money';
+import { moneyErrorPath, normalizeExpenseMoney } from '../exact-money';
 import { onExpenseDay } from '../expense-day';
 import { calendarDate } from './calendar-date';
 
@@ -57,7 +57,7 @@ export const createExpenseSchema = expenseFields
       context.addIssue({
         code: 'custom',
         message: error instanceof Error ? error.message : 'Invalid Expense allocation',
-        path: ['amount'],
+        path: moneyErrorPath(error),
       });
     }
   });

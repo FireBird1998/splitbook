@@ -79,7 +79,14 @@ export function notFound(resource: string = 'Resource') {
  * 500 Server Error response
  */
 export function serverError(err?: unknown) {
-  if (err instanceof MoneyValidationError) return error(err.message, 422, err.code);
+  if (err instanceof MoneyValidationError) {
+    // A refusal about one input field names it, such as a split row's amount (#497).
+    const field = err.field ? { field: err.field } : {};
+    return NextResponse.json(
+      { error: err.message, status: 422, code: err.code, ...field },
+      { status: 422 },
+    );
+  }
   if (err instanceof Error) {
     const messages: Record<string, [string, number]> = {
       FORBIDDEN: ['Forbidden', 403],
