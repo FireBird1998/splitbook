@@ -629,11 +629,13 @@ template that existed then resumes from the month it was turned on (see
 
 `dayOfMonth` is 1–31 and is clamped to the last day of shorter months at
 generation time. `endsOn` must not precede `startsOn` (422 `INVALID_WINDOW`).
-The same member, active-tag and currency invariants as manual expenses apply.
+The same member, active-tag and currency invariants as manual expenses apply
+(422 `INVALID_MEMBERS`, `INVALID_TAG`, `CURRENCY_MISMATCH`).
 
 ### PATCH /api/groups/[id]/recurring/[recurringId]
 
-Accepts any subset of the create body plus `isPaused: boolean`. **Edits apply to
+Accepts any subset of the create body plus `isPaused: boolean`, and refuses with
+the create codes except `NOT_HOUSEHOLD`. **Edits apply to
 future periods only** — expenses already generated are ordinary expenses and are
 never rewritten. Resuming a paused template skips the on-hold window rather than
 backfilling it.
