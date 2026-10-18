@@ -122,7 +122,6 @@ import {
   expiredMessage,
   RequestError,
   storageMessage,
-  groupArchived,
   groupRefused,
   singleFlight,
   Superseded,
@@ -1010,17 +1009,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     onExpired: failSession,
     // Today's denial purge: its reads, saved copies and content on screen go. An archived Group
     // goes the same way, as its own read refusing would (#578).
-    onGroupDenied: (groupId, status, owner, path, code) => {
-      if (code === 'GROUP_ARCHIVED') archivedGroups.add(groupId);
-      return forgetGroup(
+    onGroupDenied: (groupId, status, owner, path, code) =>
+      forgetGroup(
         groupId,
         status,
         owner,
         code === 'GROUP_ARCHIVED' ||
           path === `/api/groups/${groupId}` ||
           path.includes('/tag-actions'),
-      );
-    },
+      ),
     // Balances and Home follow every read of a Group or its Expenses (M1-5, AMEND-1); an Expense
     // list read also leaves their saved copies from before it unshown (#191).
     onLedgerRead: (groupId, owner, expenses) => {
@@ -1888,7 +1885,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const evictGroupContent = (id: string, status: number) => {
     if (persistentDrafts) toReviewQueries.lose(id);
-    const message = archivedGroups.has(id) ? groupArchived : groupRefused(status);
+    const message = groupRefused(status);
     const expense =
       snapshot.expense.groupId === id
         ? {
@@ -1943,8 +1940,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   // Only the Group's own refusal authorizes deleting its financial records (#233).
   const lostGroups = new Set<string>();
-  /** Groups the server said were archived (#578): lost like the others, in their own words. */
-  const archivedGroups = new Set<string>();
   const gainedGroup = (groupId: string) => {
     lostGroups.delete(groupId);
     invalidateReads(
