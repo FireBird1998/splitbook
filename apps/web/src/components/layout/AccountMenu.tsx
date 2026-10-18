@@ -11,7 +11,6 @@ import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { SignOutNotice, useSignOut } from './sign-out';
 import { SETTINGS_HREF } from './shell-nav';
 
 export interface ShellUser {
@@ -33,16 +32,16 @@ interface AccountMenuProps {
   user: ShellUser;
   /** The phone drawer: the menu's own links close it. */
   onNavigate?: () => void;
+  /** The shell's Sign Out, whose notice outlives the phone drawer this menu may sit in (#566). */
+  onSignOut: () => void;
 }
 
 /**
  * The account at the foot of the sidebar: the member's avatar and name, opening the account
- * menu (who is signed in, Settings and Sign out). Sign out is the same call, with the same
- * handling, as the navbar's before #303.
+ * menu (who is signed in, Settings and Sign out). Sign out is the shell's, which keeps its notice.
  */
-export default function AccountMenu({ user, onNavigate }: AccountMenuProps) {
+export default function AccountMenu({ user, onNavigate, onSignOut }: AccountMenuProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const { signOut, problem, dismiss } = useSignOut();
   const open = Boolean(anchorEl);
   const name = user.name || user.email || 'Account';
 
@@ -133,7 +132,7 @@ export default function AccountMenu({ user, onNavigate }: AccountMenuProps) {
         <MenuItem
           onClick={() => {
             setAnchorEl(null);
-            signOut();
+            onSignOut();
           }}
         >
           <ListItemIcon>
@@ -142,7 +141,6 @@ export default function AccountMenu({ user, onNavigate }: AccountMenuProps) {
           Sign Out
         </MenuItem>
       </Menu>
-      <SignOutNotice problem={problem} onClose={dismiss} />
     </>
   );
 }

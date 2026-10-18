@@ -15,10 +15,22 @@ function appURL(path: string) {
   return `${origin}${path}`;
 }
 
-async function enterAsSam(page: Page, ledger: Ledger, path: string) {
+/** Sam on `path`, once the shell shows `ready`: the account menu, or on a phone the drawer's button. */
+async function enterAsSam(page: Page, ledger: Ledger, path: string, ready = 'Account menu') {
   await page.context().addCookies((await ledger.sam.storageState()).cookies);
   await page.goto(appURL(path));
-  await expect(page.getByRole('button', { name: 'Account menu' })).toBeVisible();
+  await expect(page.getByRole('button', { name: ready })).toBeVisible();
+}
+
+/** Open the phone's navigation drawer. A click that lands before the page hydrates does nothing. */
+async function openDrawer(page: Page) {
+  const drawer = page.getByRole('dialog', { name: 'Navigation menu' });
+  await expect(async () => {
+    if (!(await drawer.isVisible()))
+      await page.getByRole('button', { name: 'Open navigation menu' }).click({ timeout: 1_000 });
+    await expect(drawer).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  return drawer;
 }
 
 /** Sign Sam out from outside this tab, as another tab of the same browser would. */
@@ -207,6 +219,44 @@ test('a Sign Out the server refuses keeps the tab signed in and says so (#550)',
 
   // The tab stayed, in its account: a session ended later still sends it to sign in, from here.
   await endedElsewhereGoesToSignIn(page);
+});
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('a Sign Out from the drawer that cannot reach the server still says so once the drawer closes (#566)', async ({
+    page,
+    ledger,
+  }) => {
+    await page.clock.install();
+    await enterAsSam(page, ledger, '/groups', 'Open navigation menu');
+    const errors = pageErrors(page);
+    const unreachable = await signOutUnreachable(page);
+    const drawer = await openDrawer(page);
+    await drawer.getByRole('button', { name: 'Account menu' }).click();
+    // From here the notice's 6 s run only as the test says.
+    await page.clock.pauseAt(Date.now() + 1_000);
+    await page.getByRole('menuitem', { name: 'Sign Out' }).click();
+    await unreachable.failed;
+    // The open drawer hides the page from assistive technology, so it announces the failure.
+    await expect(drawer.getByRole('status')).toHaveText(UNREACHABLE);
+    // The account menu finishes closing, its backdrop with it.
+    await page.clock.runFor(500);
+
+    // The drawer closes, and with it everything inside it; the notice was never in it.
+    await drawer.getByRole('button', { name: 'Close navigation menu' }).click();
+    await page.clock.runFor(1_000);
+    await expect(drawer).toHaveCount(0);
+    await expectToldSignOutFailed(page, UNREACHABLE);
+    await expect(page).toHaveURL(appURL('/groups'));
+
+    // It leaves after its own 6 s, as on a desktop, and the Snackbar then slides away.
+    await page.clock.runFor(6_000);
+    await expect(page.getByRole('status').filter({ hasText: UNREACHABLE })).toHaveCount(0);
+    await page.clock.runFor(1_000);
+    await expect(page.getByText(UNREACHABLE)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
 });
 
 test('a Sign Out from Settings that cannot reach the server says so and keeps the page (#536)', async ({

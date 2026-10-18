@@ -65,6 +65,7 @@ describe('the shell', () => {
         createElement(Sidebar, {
           user: { id: 'a00000000000000000000001', name: 'Alex Rivera', email: 'alex@example.test' },
           pathname: '/dashboard',
+          onSignOut: () => {},
         }),
       );
       expect(brand(html)).toEqual([{ src: logo(mode), alt: 'Splitbook home', height: '32px' }]);

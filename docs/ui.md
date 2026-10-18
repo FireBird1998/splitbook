@@ -216,7 +216,7 @@ xl: 1536px    — Large desktop
 
 | Component       | Description                                                          |
 | --------------- | -------------------------------------------------------------------- |
-| `AppShell`      | Sidebar (lg+) or drawer, the top bar and `main`                      |
+| `AppShell`      | Sidebar (lg+) or drawer, the top bar, `main` and Sign Out's notice   |
 | `Sidebar`       | Logo, main navigation, Group list, Settings and the account          |
 | `SidebarGroups` | The live Group list: Theme icon, name and balance line per Group     |
 | `TopBar`        | Phones' menu button and logo, search, demo badge, theme, Add expense |

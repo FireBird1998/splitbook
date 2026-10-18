@@ -9,6 +9,7 @@ import { useTheme } from '@mui/material/styles';
 import { CONTENT_MAX_WIDTH, SIDEBAR_WIDTH } from '@/lib/theme/tokens';
 import type { ShellUser } from './AccountMenu';
 import Sidebar from './Sidebar';
+import { SignOutNotice, SignOutStatus, useSignOut } from './sign-out';
 import TopBar from './TopBar';
 
 type AppShellProps = PropsWithChildren<{
@@ -33,6 +34,9 @@ export default function AppShell({ user, demoMode, children }: AppShellProps) {
   if (drawerPath !== null && drawerPath !== pathname) setDrawerPath(null);
   const drawerOpen = phone && drawerPath === pathname;
   const closeDrawer = () => setDrawerPath(null);
+  // Here, not in the account menu: the phone drawer unmounts what it holds as it closes, and
+  // Sign Out's notice must stay its full time (#566).
+  const { signOut, problem, dismiss } = useSignOut();
 
   return (
     <Box
@@ -59,7 +63,7 @@ export default function AppShell({ user, demoMode, children }: AppShellProps) {
         >
           {/* The column runs the page's full height; its contents stay in view as it scrolls. */}
           <Box sx={{ position: 'sticky', top: 0, height: '100vh' }}>
-            <Sidebar user={user} pathname={pathname} />
+            <Sidebar user={user} pathname={pathname} onSignOut={signOut} />
           </Box>
         </Box>
       )}
@@ -112,9 +116,14 @@ export default function AppShell({ user, demoMode, children }: AppShellProps) {
             variant="drawer"
             onNavigate={closeDrawer}
             onClose={closeDrawer}
+            onSignOut={signOut}
           />
+          {/* The open drawer hides the page, and the notice's region with it, from assistive
+              technology, so it announces a Sign Out that failed from inside it. */}
+          <SignOutStatus problem={problem} />
         </Drawer>
       ) : null}
+      <SignOutNotice problem={problem} onClose={dismiss} />
     </Box>
   );
 }

@@ -45,6 +45,8 @@ interface SidebarProps {
   /** Called as any link is followed, so the drawer closes on navigation. */
   onNavigate?: () => void;
   onClose?: () => void;
+  /** Sign Out from the account menu, kept by the shell. */
+  onSignOut: () => void;
 }
 
 /**
@@ -58,6 +60,7 @@ export default function Sidebar({
   variant = 'desktop',
   onNavigate,
   onClose,
+  onSignOut,
 }: SidebarProps) {
   const drawer = variant === 'drawer';
 
@@ -153,7 +156,7 @@ export default function Sidebar({
           Settings
         </Box>
         {drawer ? <DrawerThemeSwitch /> : null}
-        <AccountMenu user={user} onNavigate={onNavigate} />
+        <AccountMenu user={user} onNavigate={onNavigate} onSignOut={onSignOut} />
       </Box>
     </Box>
   );
