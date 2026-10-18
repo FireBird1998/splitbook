@@ -80,58 +80,63 @@ const labelled = (label: string) =>
       typeof node.type === 'string' && node.props.accessibilityLabel === label,
   );
 
-describe('Renaming a Tag (#554)', () => {
-  it('opens a long name at its start, and leaves the cursor to the member while typing', async () => {
-    let cookie: string | null = null;
-    let owner: string | null = null;
-    const tagRequests = memoryRecords();
-    controller = createMobileController(
-      {
-        apiBaseUrl: 'http://tags.example.test',
-        authOrigin: 'http://tags.example.test',
-        developmentPersonaEnabled: true,
-      },
-      {
-        fetch,
-        tagRequests,
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (next) => {
-              owner = next;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [tagRequests],
-        },
-        credentials: {
-          load: async () => cookie,
+/** Alex's Manage Tags at 200% text, once its Tags are read. */
+async function openManageTags() {
+  let cookie: string | null = null;
+  let owner: string | null = null;
+  const tagRequests = memoryRecords();
+  controller = createMobileController(
+    {
+      apiBaseUrl: 'http://tags.example.test',
+      authOrigin: 'http://tags.example.test',
+      developmentPersonaEnabled: true,
+    },
+    {
+      fetch,
+      tagRequests,
+      accountLocal: {
+        owner: {
+          load: async () => owner,
           save: async (next) => {
-            cookie = next;
+            owner = next;
           },
           clear: async () => {
-            cookie = null;
+            owner = null;
           },
         },
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
+        stores: [tagRequests],
       },
+      credentials: {
+        load: async () => cookie,
+        save: async (next) => {
+          cookie = next;
+        },
+        clear: async () => {
+          cookie = null;
+        },
+      },
+    },
+  );
+  await controller.signIn('alex');
+  setWindow({ width: 360, height: 780, fontScale: 2 });
+  act(() => {
+    renderer = create(
+      <TagManager
+        controller={controller!}
+        groupId={groupId}
+        accountId={alex.id}
+        offline={false}
+        onClose={vi.fn()}
+      />,
     );
-    await controller.signIn('alex');
-    setWindow({ width: 360, height: 780, fontScale: 2 });
-    act(() => {
-      renderer = create(
-        <TagManager
-          controller={controller!}
-          groupId={groupId}
-          accountId={alex.id}
-          offline={false}
-          onClose={vi.fn()}
-        />,
-      );
-    });
-    await settle();
+  });
+  await settle();
+}
+
+describe('Renaming a Tag (#554)', () => {
+  it('opens a long name at its start, and leaves the cursor to the member while typing', async () => {
+    await openManageTags();
     await act(async () => labelled(`Rename ${longName}`).props.onPress());
     const box = () => labelled('Tag name');
     expect(box().props.value).toBe(longName);
@@ -141,5 +146,26 @@ describe('Renaming a Tag (#554)', () => {
     expect(box().props.selection).toBeUndefined();
     act(() => box().props.onBlur());
     expect(box().props.selection).toEqual({ start: 0, end: 0 });
+  });
+});
+
+describe('Manage Tags on a phone (#562)', () => {
+  it('keeps its content inside the safe area, clear of the status bar and gesture bar', async () => {
+    await openManageTags();
+    const heading = renderer!.root.find(
+      (node: ReactTestInstance) =>
+        String(node.type) === 'Text' && node.props.children === 'Manage Tags',
+    );
+    let area: ReactTestInstance | null = heading.parent;
+    while (area && String(area.type) !== 'SafeAreaView') area = area.parent;
+    expect(area, 'a SafeAreaView around the heading').not.toBeNull();
+    // Every edge: a full-screen Modal draws under the status bar and the gesture bar.
+    expect(area!.props.edges).toBeUndefined();
+    const scroll = renderer!.root.find(
+      (node: ReactTestInstance) => String(node.type) === 'ScrollView',
+    );
+    expect(area!.findAll((node) => node === scroll)).toHaveLength(1);
+    // The inset is the gap above the content now, not a fixed guess at the status bar.
+    expect(scroll.props.contentContainerStyle).not.toHaveProperty('paddingTop');
   });
 });
