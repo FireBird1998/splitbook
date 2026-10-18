@@ -1,4 +1,5 @@
 import { readSessionCookie } from './cookies';
+import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
 import type { FetchResponse, MobileFetch, MobileTimer } from './types';
 
 export const expiredMessage = 'Your session has expired. Sign in again to continue.';
@@ -82,7 +83,7 @@ export class RequestError extends Error {
 }
 
 /** What the member is told when a Group was archived, which takes nothing more (#578). */
-export const groupArchived = 'This Group was archived, so nothing more can be saved in it.';
+export const groupArchived = GROUP_ARCHIVED_MESSAGE;
 
 /** An archived Group refuses as a lost one does (403), with its own code and words. */
 const archivedRefusal = (details?: unknown) =>

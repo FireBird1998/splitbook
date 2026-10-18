@@ -205,6 +205,33 @@ describe('recordSettlement', () => {
   });
 
   it.each([
+    ['the first send', 1],
+    ['a retry', 2],
+  ] as const)(
+    'an archived Group refusing %s removes the attempt and says why (#578)',
+    async (_, send) => {
+      const storage = new MemoryStorage();
+      const archived = () =>
+        Response.json(
+          {
+            error: 'This Group was archived, so nothing more can be saved in it.',
+            code: 'GROUP_ARCHIVED',
+            status: 409,
+          },
+          { status: 409 },
+        );
+      const server = fakeServer((n) => (n < send ? 'lost' : n === send ? archived() : undefined));
+      let result = await save(storage, server.post);
+      if (send === 2) result = await save(storage, server.post, { resend: stored(storage)[0] });
+      expect(result).toEqual({
+        status: 'rejected',
+        message: 'This Group was archived, so nothing more can be saved in it.',
+      });
+      expect(stored(storage)).toEqual([]);
+    },
+  );
+
+  it.each([
     ['a 422 on a retry', 2, () => Response.json({ error: 'Not a member' }, { status: 422 })],
     ['a 403 on a retry', 2, () => Response.json({ error: 'Forbidden' }, { status: 403 })],
     ['a 5xx on the first send', 1, () => Response.json({ error: 'Server down' }, { status: 503 })],

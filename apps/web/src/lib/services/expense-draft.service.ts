@@ -1,4 +1,5 @@
 import 'server-only';
+import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
 import { isPossibleExpenseDuplicate } from '@splitbook/shared/expense-duplicate';
 import mongoose from 'mongoose';
 import {
@@ -516,7 +517,11 @@ export const expenseDraftService = {
         outcomes.push({
           id: item.id,
           status: known ? 'failed' : 'unresolved',
-          message: known ? error.message : 'Save not confirmed. Retry this same reviewed save.',
+          message: !known
+            ? 'Save not confirmed. Retry this same reviewed save.'
+            : error.message === 'GROUP_ARCHIVED'
+              ? GROUP_ARCHIVED_MESSAGE
+              : error.message,
         });
       }
     }

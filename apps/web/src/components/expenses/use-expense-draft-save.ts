@@ -95,8 +95,9 @@ export function useExpenseDraftSave(setDraft: Dispatch<SetStateAction<ExpenseDra
           const result = await response.json();
           const message =
             result.error || `Failed to ${submission.expenseId ? 'update' : 'add'} expense`;
-          if (mounted.current)
-            setDraft((current) => current.fail(submission, message, response.status));
+          // An archived Group's refusal isn't a conflict to reload: the form stays as it was (#578).
+          const status = result.code === 'GROUP_ARCHIVED' ? undefined : response.status;
+          if (mounted.current) setDraft((current) => current.fail(submission, message, status));
           return { status: 'refused', message, httpStatus: response.status };
         }
         setDraft((current) => current.complete(submission));

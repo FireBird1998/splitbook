@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
 import { NextResponse } from 'next/server';
 import type { ZodError } from 'zod';
 import { auth } from '@/lib/auth';
@@ -130,7 +131,7 @@ export function serverError(err?: unknown) {
       ],
       REVISION_REQUIRED: ['Reload this record before changing it.', 428],
       CURRENCY_LOCKED: ['Currency cannot change after this Group has financial records.', 409],
-      GROUP_ARCHIVED: ['This Group was archived, so nothing more can be saved in it.', 409],
+      GROUP_ARCHIVED: [GROUP_ARCHIVED_MESSAGE, 409],
       [RECURRING_EXPENSES_OFF]: ['Recurring Expenses are turned off.', 409],
       ACTIVITY_BACKLOG_FULL: [
         'The audit feed is temporarily unavailable. Please retry later.',
