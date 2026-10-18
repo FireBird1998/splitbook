@@ -55,7 +55,8 @@ async function runClockUntil(page: Page, done: () => boolean) {
 
 /**
  * Start the Groups list's next refresh (every 30 s) and keep it in flight, unanswered, so the
- * test decides when and how it answers.
+ * test decides when and how it answers. `settled` resolves with the status the read got, or why it
+ * failed, such as the page leaving; it listens from the moment the read is held (#576).
  */
 async function holdNextGroupsRefresh(page: Page) {
   let held: Route | undefined;
@@ -64,7 +65,18 @@ async function holdNextGroupsRefresh(page: Page) {
     held = route;
   });
   await runClockUntil(page, () => held !== undefined);
-  return held!;
+  const read = held!.request();
+  const settled = Promise.race([
+    page
+      .waitForResponse((response) => response.request() === read, { timeout: 0 })
+      .then((response) => response.status()),
+    page
+      .waitForEvent('requestfailed', { predicate: (request) => request === read, timeout: 0 })
+      .then((request) => `failed: ${request.failure()?.errorText}`),
+  ]);
+  // A test that fails before it awaits this still ends without a stray rejection.
+  void settled.catch(() => {});
+  return { route: held!, settled };
 }
 
 /** Errors the page raised and left unhandled, such as a rejected Sign Out nobody caught. */
@@ -144,6 +156,21 @@ async function holdLandingPage(page: Page) {
   return { release, requested: () => requested };
 }
 
+/** The app's writes the page sends from now on: method and path, never through Better Auth. */
+function appWrites(page: Page) {
+  const writes: string[] = [];
+  page.on('request', (request) => {
+    const { pathname } = new URL(request.url());
+    if (
+      request.method() !== 'GET' &&
+      pathname.startsWith('/api/') &&
+      !pathname.startsWith('/api/auth/')
+    )
+      writes.push(`${request.method()} ${pathname}`);
+  });
+  return writes;
+}
+
 test('Sign Out lands on the landing page even when a read answers 401 after the session ends', async ({
   page,
   ledger,
@@ -152,24 +179,32 @@ test('Sign Out lands on the landing page even when a read answers 401 after the 
   await enterAsSam(page, ledger, '/groups');
   const refresh = await holdNextGroupsRefresh(page);
   const landing = await holdLandingPage(page);
+  const writes = appWrites(page);
 
   const signedOut = page.waitForResponse(
     (response) => new URL(response.url()).pathname === '/api/auth/sign-out',
   );
   await page.getByRole('button', { name: 'Account menu' }).click();
-  await page.getByRole('menuitem', { name: 'Sign Out' }).click();
+  // Not awaited until the landing page is let through: a click waits for a navigation the page
+  // asks for while it is finishing, and when the sign-out answers quickly, that is the landing
+  // page this test holds (#576).
+  const signingOut = page.getByRole('menuitem', { name: 'Sign Out' }).click();
+  void signingOut.catch(() => {});
   expect((await signedOut).ok()).toBe(true);
   await expect.poll(landing.requested).toBe(true);
 
   // The session has ended, so the refresh answers as the server now would, while the page Sam
-  // left is still loaded and the landing page is on its way.
-  const answered = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === '/api/groups' && response.status() === 401,
-  );
-  await refresh.fulfill({ status: 401, json: UNAUTHORIZED_BODY });
-  await answered;
+  // left is still loaded and the landing page is on its way. The held read either gets that
+  // answer or fails because the page left: only the answer is right while the landing page waits.
+  await refresh.route.fulfill({ status: 401, json: UNAUTHORIZED_BODY });
+  expect(await refresh.settled).toBe(401);
   landing.release();
-  await expect(page).toHaveURL(appURL('/'));
+  await signingOut;
+  // The landing page loads in its own time once let through: 30 s, as settlement-attempt's
+  // Sign Out test allows.
+  await expect(page).toHaveURL(appURL('/'), { timeout: 30_000 });
+  // The tab Sam left saved nothing, under his account or any other.
+  expect(writes).toEqual([]);
 });
 
 test('a session ended elsewhere still sends the tab to sign in, back to the page it was on', async ({
