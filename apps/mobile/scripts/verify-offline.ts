@@ -143,8 +143,8 @@ async function run() {
     await sam.request(`/api/join/${code}`, 'POST', undefined, 201);
     await controller.signIn('sam');
     assert.equal(controller.getSnapshot().home.status, 'ready', 'Home after online sign-in');
-    // A ready read is displayed before the background saved-copy queue reaches disk. Wait
-    // before navigation invalidates Home, and before disposal cancels remaining copies.
+    // A ready read is displayed before the background saved-copy queue reaches disk. Wait for
+    // Home's copies now, because the later disposal cancels any copy still waiting to be written.
     await waitForSavedQueries(savedQueries, samId, ['/api/groups', '/api/user/balances']);
     await controller.openGroup(groupId);
     await controller.selectMonth('2026-08');
