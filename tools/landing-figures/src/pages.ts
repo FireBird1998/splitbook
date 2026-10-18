@@ -13,14 +13,55 @@ const SR_CSS =
   '.fg-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}' +
   '.fg-pause{position:absolute;top:44px;right:24px;font:12px var(--anatomy-mono);color:var(--anatomy-text);background:none;border:0;cursor:pointer}';
 
-/** Runs actions on a page in headless Chrome with reduced motion, and returns what it printed. */
-export function drive(file: string, actions: unknown[]): string {
-  const run = spawnSync(process.execPath, [DRIVE, file, JSON.stringify(actions), '--reduced'], {
-    encoding: 'utf8',
-    timeout: 120_000,
-  });
+/**
+ * Runs actions on a page in headless Chrome, with reduced motion unless `moving`, and returns what
+ * it printed. `preload` names a script that runs before the page's own; `timeout` bounds the run.
+ */
+export function drive(
+  file: string,
+  actions: unknown[],
+  {
+    moving = false,
+    preload,
+    timeout = 120_000,
+  }: { moving?: boolean; preload?: string; timeout?: number } = {},
+): string {
+  const args = [DRIVE, file, JSON.stringify(actions)];
+  if (!moving) args.push('--reduced');
+  if (preload) args.push('--preload', preload);
+  const run = spawnSync(process.execPath, args, { encoding: 'utf8', timeout });
   return `${run.stdout}${run.stderr}${run.error ? `\n${run.error.message}` : ''}`;
 }
+
+/**
+ * A script for `drive`'s preload that reads a live tour's counters after every frame it draws: what
+ * each reads and where it is heading (drawCounters' `data-target`), in whole rupees, keeping each
+ * reading that changed. It notes the tour has gone round once when the plate's readout comes back
+ * to where it started.
+ */
+export const COUNTER_SAMPLER = `(() => {
+  const frames = [];
+  let drawn = 0, last = '', first = null, moved = false, round = false;
+  const rupees = (text) => Number(text.replace('\u2212', '-').replace(/[+,]/g, ''));
+  const read = () => {
+    const counters = [...document.querySelectorAll('[data-count][data-target]')];
+    if (!counters.length || round) return;
+    drawn += 1;
+    const shown = counters.map((el) => rupees(el.textContent));
+    const target = counters.map((el) => Number(el.dataset.target));
+    // Only readings that changed are kept, numbered by the frame they were drawn in.
+    const key = JSON.stringify([shown, target]);
+    if (key !== last) frames.push({ frame: drawn, shown, target });
+    last = key;
+    const readout = document.querySelector('[data-readout]')?.textContent ?? '';
+    if (first === null) first = readout;
+    else if (readout !== first) moved = true;
+    else if (moved) round = true;
+  };
+  const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = (callback) => raf((now) => { callback(now); read(); });
+  window.__counters = { frames, round: () => round };
+})();`;
 
 /** Whether a drive run's page logged no errors or exceptions. */
 export const cleanConsole = (out: string) => out.includes('console: clean');

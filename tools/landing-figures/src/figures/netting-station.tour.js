@@ -3,7 +3,7 @@
 // reads zero. tour.js runs it on the plate in the page; the web app and the preview pages bundle
 // the same code with the kit functions it uses.
 import { axisVector, holdStill, translateAlong } from '../../vendor/anatomy/kit/iso-kit.mjs';
-import { drawCounters, ease, lerp, rupees, runTour, springs } from './tour.js';
+import { counterReadings, drawCounters, ease, lerp, rupees, runTour } from './tour.js';
 
 /** Starts the tour on root; returns a function that stops it and leaves the drawing as it is. */
 export function playTour(root, D) {
@@ -41,8 +41,7 @@ function nettingStation({ svg, held, say, announce }, D) {
   const stackZ = (n) => D.trayTop + n * D.coinT;
 
   // ---------------------------------------------------------------- state
-  const readings = springs(D.xs.length);
-  let target = D.balances.slice();
+  const readings = counterReadings(D.xs.length);
   let stacks = D.xs.map(() => []);
   let carried = [];
   let phase = 'idle';
@@ -57,8 +56,7 @@ function nettingStation({ svg, held, say, announce }, D) {
     phase = 'idle';
     clock = 0;
     payIndex = 0;
-    target = D.balances.slice();
-    readings.jump(target);
+    readings.jump(D.balances);
     stacks = D.xs.map(() => []);
     carried = [];
     coins.forEach((c) => (c.style.display = 'none'));
@@ -116,8 +114,8 @@ function nettingStation({ svg, held, say, announce }, D) {
     if (carried.length) stacks[to].push(...carried);
     else stacks[to].push(...stacks[from].splice(stacks[from].length - coinsFor(p.amountMinor)));
     carried = [];
-    target[from] += p.amountMinor;
-    target[to] -= p.amountMinor;
+    // The payer's till rises by the payment and the payee's falls by it, together.
+    readings.raiseAndLower(from, to, p.amountMinor);
     payCords[payIndex].style.opacity = '0';
     landed = true;
   }
@@ -180,11 +178,11 @@ function nettingStation({ svg, held, say, announce }, D) {
       sx = lerp(sx, D.home, Math.min(1, dt * 2));
       if (clock > 4.2) restart();
     }
-    readings.step(target, dt, calm);
+    readings.step(dt, calm);
   }
 
   function draw() {
-    drawCounters(counters, readings.shown);
+    drawCounters(counters, readings);
     shuttle.setAttribute('transform', T(sx - D.home, 0, 0));
     hanger.setAttribute('transform', T(0, 0, -drop));
     holdStill(hanger, axisVector(P, [0, 0, -drop]));
@@ -235,7 +233,7 @@ function nettingStation({ svg, held, say, announce }, D) {
     for (let n = 0; n < 60 * 60 && clock < 2.5; n++) update(1 / 60, true);
   }
 
-  const settled = () => readings.settledOn(target);
+  const settled = () => readings.settled();
 
   return { restart, next, update, draw, poseStill, settled };
 }

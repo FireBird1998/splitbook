@@ -1,13 +1,20 @@
 // pnpm --filter @splitbook/landing-figures <build | check | preview [dir]>
 //   build    regenerate the figures into the web app, and draw each still that is out of date
 //   check    fail on stale output or stills, a story that doesn't balance, an edited vendored kit,
-//            or any audit, line-end or console problem
+//            any audit, line-end or console problem, or a counter that is untrue in any frame
 //   preview  write each figure as an interactive page (light and dark) to look at in a browser
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import * as k from './kit.ts';
-import { staleOutputs, stillDrift, vendorDrift, verifyStory } from './check.ts';
+import {
+  counterProblems,
+  staleOutputs,
+  stillDrift,
+  vendorDrift,
+  verifyStory,
+  type CounterFrame,
+} from './check.ts';
 import {
   OUT_DIR,
   STILL_SIZE,
@@ -17,7 +24,7 @@ import {
   withStills,
   type Figure,
 } from './generate.ts';
-import { THEMES, cleanConsole, drive, livePage, restPage } from './pages.ts';
+import { COUNTER_SAMPLER, THEMES, cleanConsole, drive, livePage, restPage } from './pages.ts';
 import { drawStills, stillSource } from './stills.ts';
 import { story } from './story.ts';
 
@@ -86,6 +93,49 @@ function lineEnds(figures: Figure[]): string[] {
   return problems;
 }
 
+/**
+ * Plays each tour that has counters once round, with motion, reading its counters in every frame it
+ * draws: they must add up to zero and never pass where they are heading (#511).
+ */
+function countersEveryFrame(figures: Figure[]): string[] {
+  const problems: string[] = [];
+  const dir = mkdtempSync(join(tmpdir(), 'landing-counters-'));
+  try {
+    const sampler = join(dir, 'sampler.js');
+    writeFileSync(sampler, COUNTER_SAMPLER);
+    for (const figure of figures) {
+      if (!('counters' in figure)) continue;
+      const file = join(dir, `${figure.id}.html`);
+      writeFileSync(file, livePage(figure, 'light'));
+      // Twice real time: the tours step at most 1/30 s a frame, so every step is still drawn.
+      const out = drive(
+        file,
+        [
+          ['slow', 2],
+          ['until', 'window.__counters.round()', 180_000],
+          ['eval', 'window.__counters.frames'],
+        ],
+        // A tour takes up to half a minute to go round at this speed.
+        { moving: true, preload: sampler, timeout: 240_000 },
+      );
+      const where = `${figure.id} (live tour, every frame)`;
+      const line = out.split('\n').find((l) => l.startsWith('eval: '));
+      if (!line) {
+        problems.push(`${where}: the tour did not go round.\n${out.trim()}`);
+        continue;
+      }
+      const frames = JSON.parse(line.slice('eval: '.length)) as CounterFrame[];
+      problems.push(
+        ...counterProblems(frames, figure.counters).map((problem) => `${where}: ${problem}`),
+      );
+      if (!cleanConsole(out)) problems.push(`${where}: the page logged errors.\n${out.trim()}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return problems;
+}
+
 function check() {
   const figures = buildFigures();
   const problems: string[] = [];
@@ -106,13 +156,14 @@ function check() {
       problems.push(`${figure.id}: audit found ${count(found, 'problem')}.\n${k.report(result)}`);
   }
   problems.push(...lineEnds(figures));
+  problems.push(...countersEveryFrame(figures));
   if (problems.length) {
     console.error(problems.join('\n\n'));
     console.error(`\ncheck failed: ${count(problems.length, 'problem')}`);
     process.exitCode = 1;
   } else {
     console.log(
-      `check passed: ${count(figures.length, 'figure')}, output and stills current, story balanced, vendored kit unchanged, audit, line ends and console clean in light and dark`,
+      `check passed: ${count(figures.length, 'figure')}, output and stills current, story balanced, vendored kit unchanged, audit, line ends and console clean in light and dark, counters true in every frame`,
     );
   }
 }

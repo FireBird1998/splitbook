@@ -7,7 +7,7 @@ import {
   lineOnTop,
   translateAlong,
 } from '../../vendor/anatomy/kit/iso-kit.mjs';
-import { drawCounters, ease, lerp, rupees, runTour, signed, springs } from './tour.js';
+import { counterReadings, drawCounters, ease, lerp, rupees, runTour, signed } from './tour.js';
 
 /** Starts the tour on root; returns a function that stops it and leaves the drawing as it is. */
 export function playTour(root, D) {
@@ -48,8 +48,7 @@ function splittingLine({ svg, held, say, announce }, D) {
   }
 
   // ---------------------------------------------------------------- state
-  const readings = springs(D.xs.length);
-  let target = D.xs.map(() => 0);
+  const readings = counterReadings(D.xs.length);
   let fill = D.xs.map(() => 0);
   let beltTravel = 0;
   let phase = 'idle';
@@ -92,9 +91,9 @@ function splittingLine({ svg, held, say, announce }, D) {
       setScreen([
         'DONE',
         `${D.steps.length} split`,
-        `sum ${rupees(target.reduce((a, b) => a + b, 0))}`,
+        `sum ${rupees(readings.targets.reduce((a, b) => a + b, 0))}`,
       ]);
-      const text = D.names.map((n, i) => `${n} ${signed(target[i])}`).join(' · ');
+      const text = D.names.map((n, i) => `${n} ${signed(readings.targets[i])}`).join(' · ');
       say(text);
       announce(`All ${D.steps.length} Expenses split. ${text}`);
       return;
@@ -107,7 +106,6 @@ function splittingLine({ svg, held, say, announce }, D) {
     payLamps.forEach((l, i) =>
       i === s.paidBy ? l.setAttribute('data-on', '') : l.removeAttribute('data-on'),
     );
-    target[s.paidBy] += s.amountMinor;
     setScreen(screenFor(s));
     const text = `${s.title} ${rupees(s.amountMinor)} · ${D.names[s.paidBy]} paid`;
     say(text);
@@ -118,7 +116,7 @@ function splittingLine({ svg, held, say, announce }, D) {
     e = -1;
     phase = 'idle';
     clock = 0;
-    target = D.xs.map(() => 0);
+    readings.jump(D.xs.map(() => 0));
     fill = D.xs.map(() => 0);
     stacks.flat().forEach((el) => (el.style.display = 'none'));
     chips.forEach((c) => {
@@ -143,7 +141,7 @@ function splittingLine({ svg, held, say, announce }, D) {
       if (fill[c.to] < 4) stacks[c.to][fill[c.to]].style.display = '';
       fill[c.to] += 1;
     });
-    target = s.after.slice();
+    readings.jump(s.after);
     pushersY = D.xs.map(() => 0);
     liftMagazine(e + 1);
   }
@@ -317,7 +315,9 @@ function splittingLine({ svg, held, say, announce }, D) {
             c.el.style.display = 'none';
             if (fill[st] < 4) stacks[st][fill[st]].style.display = '';
             fill[st] += 1;
-            target[st] -= c.amountMinor;
+            // The chip carries its share from the member to the payer, so the counters add up to
+            // zero in every frame.
+            readings.raiseAndLower(D.steps[e].paidBy, st, c.amountMinor);
           }
           if (t >= 0.9) {
             pushersY[st] = 0;
@@ -335,11 +335,11 @@ function splittingLine({ svg, held, say, announce }, D) {
     } else if (phase === 'idle' && clock > 1.6) {
       begin(0);
     }
-    readings.step(target, dt, calm);
+    readings.step(dt, calm);
   }
 
   function draw() {
-    drawCounters(counters, readings.shown);
+    drawCounters(counters, readings);
     pushers.forEach((el, i) => {
       const off = translateAlong(P, [0, pushersY[i], 0]);
       el.setAttribute('transform', off);
@@ -362,9 +362,10 @@ function splittingLine({ svg, held, say, announce }, D) {
   }
 
   // ---------------------------------------------------------------- the still
-  // The documented still (#448): Dinner and Cab split, then the last Expense run on a fixed clock
-  // until its first chip slides down its chute. The payer's counter has risen and no chip has
-  // landed, so the counters read +900, +100, +500 and −500. Under reduced motion the tour opens here.
+  // The documented still (#448, #511): Dinner and Cab split, then the last Expense run on a fixed
+  // clock until its first chip slides down its chute. No chip of it has landed, so the counters read
+  // the balances Dinner and Cab left, +900, +100, −500 and −500, and add up to zero. Under reduced
+  // motion the tour opens here.
   function poseStill() {
     restart();
     const lastStep = D.steps.length - 1;
@@ -391,7 +392,7 @@ function splittingLine({ svg, held, say, announce }, D) {
       }
     }
   }
-  const settled = () => readings.settledOn(target);
+  const settled = () => readings.settled();
 
   return { restart, next, update, draw, poseStill, settled };
 }

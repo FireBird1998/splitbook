@@ -1,5 +1,5 @@
 import { useSyncExternalStore, type ReactElement } from 'react';
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onlineManager } from '@tanstack/query-core';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
@@ -533,6 +533,49 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(f.saves).toHaveLength(1);
     expect(text(tree)).toContain('Saved 1');
   });
+  it('labels Amount and Description above their boxes as Add expense does (#524)', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    for (const name of ['Amount', 'Description']) {
+      const input = tree.root.find(
+        (node) => String(node.type) === 'TextInput' && node.props.accessibilityLabel === name,
+      );
+      // The field around the box starts with its visible label and Required mark, above the
+      // box (Amount's sits in a row with the Group's currency, #512).
+      let field = input.parent!;
+      const shown = () =>
+        field.findAll((node) => String(node.type) === 'Text').map((node) => node.children.join(''));
+      while (!shown().includes(name)) field = field.parent!;
+      expect(shown().slice(0, 2), name).toEqual([name, 'Required']);
+      const [label, box] = field.children as ReactTestInstance[];
+      expect(label.findAll((node) => String(node.type) === 'Text').length, name).toBe(2);
+      expect(
+        box.findAll((node) => node === input),
+        name,
+      ).toHaveLength(1);
+    }
+  });
+  it('turns the Amount label red for an amount To review asks to fix (#524)', async () => {
+    const f = fixture({ one: true });
+    const item = f.items()[0];
+    // ₹12.345: there, but with more decimal places than INR has.
+    item.draft.values = { ...item.draft.values, amount: 12.345 };
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    const tone = (name: string) =>
+      tree.root.find((node) => node.props.children === name && node.props.tone !== undefined).props
+        .tone;
+    expect(tone('Amount')).toBe('negative');
+    expect(tone('Description')).toBe('secondary');
+  });
+
   it('shows "Paid by: You" when the signed-in member paid, as Add expense does (#434)', async () => {
     const f = fixture({ one: true });
     await signIn(f);

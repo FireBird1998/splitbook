@@ -25,6 +25,7 @@ pnpm --filter @splitbook/landing-figures test      # the story and check unit te
 - **A missing or stale still:** a figure's light still is missing, isn't a PNG, isn't 1200 × 630, or was drawn from another version of the figure (its stamp differs). `check` doesn't redraw it or compare pixels, because Chrome's pixels differ from machine to machine.
 - **An edited vendored kit:** a file in `vendor/anatomy` differs from the bytes `MANIFEST.sha256` pins, or isn't listed there.
 - **Audit problems:** the kit's audit finds clearance, depth-order, support or other faults in a figure's geometry.
+- **A counter that isn't true in some frame:** each tour with counters (Figs 1 and 3) plays once round with motion in headless Chrome, at twice real time, and every frame it draws is read. In each, the counters must add up to zero, and none may pass where it is heading (drawCounters notes that as `data-target`).
 - **Floating line ends, or a page error:** in light or dark, a line ends in mid-air, or the page logs an error. The vendored line-end check runs in headless Chrome with reduced motion, on the drawing at rest and on every pose its live tour shows, stepping from its still (each figure says how many).
 
 ## Figures
@@ -43,7 +44,7 @@ Each figure module exports a function of the story that returns its SVG at rest,
 - Home starts it over;
 - it runs only while the figure is on screen.
 
-It plays on by itself, so it shows the plate's Pause button (`[data-pause]`, WCAG 2.2.2): Pause holds the line where it is, and steps then show settled; Play goes on from there. Under reduced motion it opens on the figure's still, moves only when stepped and leaves the button hidden. It draws a frame only when something changes. The generator bundles it with the kit functions it uses (esbuild, pinned) and its data: as an ES module for the web app, and as a script for the preview, check and still pages. Every one of them runs the same code.
+It plays on by itself, so it shows the plate's Pause button (`[data-pause]`, WCAG 2.2.2): Pause holds the line where it is, and steps then show settled; Play goes on from there. Under reduced motion it opens on the figure's still, moves only when stepped and leaves the button hidden. It draws a frame only when something changes. Its counters move money only between two of them: `counterReadings` eases each move (`raiseAndLower`) in whole rupees, so they always add up to the same total and never pass where they are heading (a chip in Fig 1 carries its share from the member to the payer as it lands; a payment in Fig 3 moves between two tills). The generator bundles it with the kit functions it uses (esbuild, pinned) and its data: as an ES module for the web app, and as a script for the preview, check and still pages. Every one of them runs the same code.
 
 ## Generated output
 

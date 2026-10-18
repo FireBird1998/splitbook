@@ -75,13 +75,32 @@ describe('signOutToHome', () => {
     expect(assign).toHaveBeenCalledWith('/');
   });
 
-  it('keeps them when the sign-out is refused, since the member is still signed in', async () => {
-    signOut.mockResolvedValue({ data: null, error: { status: 500, statusText: 'Server error' } });
+  it('keeps them, the page and its account when the sign-out is refused (#550)', async () => {
+    signOut.mockResolvedValue({
+      data: null,
+      error: { status: 500, statusText: 'Internal Server Error', code: 'SESSION_NOT_ENDED' },
+    });
+    const { signOutToHome } = await import('./auth-client');
+    const { reloadForAccountChange } = await import('@/lib/utils/api-fetch');
+
+    // The member is still signed in: the tab stays, and the caller tells them.
+    expect(await signOutToHome()).toBe('refused');
+
+    expect(attemptsKept()).toBe(1);
+    expect(assign).not.toHaveBeenCalled();
+    // Still in its expected account, so an account change elsewhere reloads this tab as before.
+    reloadForAccountChange();
+    expect(window.location.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves, forgetting them, when the reply says the session had already ended (#550)', async () => {
+    signOut.mockResolvedValue({ data: null, error: { status: 401, statusText: 'Unauthorized' } });
     const { signOutToHome } = await import('./auth-client');
 
     expect(await signOutToHome()).toBe('leaving');
 
-    expect(attemptsKept()).toBe(1);
+    expect(attemptsKept()).toBe(0);
+    expect(assign).toHaveBeenCalledWith('/');
   });
 
   it('keeps them, and the page, when the sign-out cannot reach the server (#536)', async () => {
