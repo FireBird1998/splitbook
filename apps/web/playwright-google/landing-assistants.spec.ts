@@ -30,6 +30,9 @@ test('the hero and the top bar lead to Connected assistants, with Fig 2 and what
       name: 'Talk to your Groups in Claude or ChatGPT.',
     }),
   ).toBeInViewport();
+  // Splitbook never moves money; what an assistant prepares waits for the member (owner copy).
+  await expect(section(page)).toContainText('Nothing is saved until you say so.');
+  await expect(section(page)).not.toContainText('money only moves');
 
   for (const step of ['Ask, or tell it what you spent', 'Review and save'])
     await expect(section(page).getByRole('listitem').filter({ hasText: step })).toBeVisible();

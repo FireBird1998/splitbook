@@ -399,7 +399,7 @@ describe('the Connected assistants section (#450)', () => {
       const own = section(html, 'assistants');
       expect(own).toMatch(/<h2\b[^>]*>Talk to your Groups in Claude or ChatGPT\.<\/h2>/);
       expect(text(own)).toContain(
-        'Connect your Splitbook account once and ask what you owe. Your money only moves when you say so.',
+        'Connect your Splitbook account once and ask what you owe. Nothing is saved until you say so.',
       );
       expect(steps(html)).toEqual([
         '1 Add Splitbook as a connector',
@@ -428,7 +428,7 @@ describe('the Connected assistants section (#450)', () => {
       const html = render(mode, PREPARING);
       const own = section(html, 'assistants');
       expect(text(own)).toContain(
-        'Connect your Splitbook account once. Ask what you owe, or say what you spent and let the assistant prepare it for To review. Your money only moves when you say so.',
+        'Connect your Splitbook account once. Ask what you owe, or say what you spent and let the assistant prepare it for To review. Nothing is saved until you say so.',
       );
       expect(steps(html)).toEqual([
         '1 Add Splitbook as a connector',
