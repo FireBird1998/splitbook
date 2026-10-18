@@ -27,7 +27,17 @@ setFileWindow({ width: 360, height: 640 });
 vi.mock('react-native-nitro-google-signin', () => ({ GoogleSignInButton: 'GoogleSignInButton' }));
 vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
-vi.mock('expo-font', () => ({ useFonts: () => [true, null] }));
+const launch = vi.hoisted(() => ({
+  fontsLoaded: true,
+  fontError: null as Error | null,
+  preventAutoHideAsync: vi.fn(async () => undefined),
+  hideAsync: vi.fn(async () => undefined),
+}));
+vi.mock('expo-font', () => ({ useFonts: () => [launch.fontsLoaded, launch.fontError] }));
+vi.mock('expo-splash-screen', () => ({
+  preventAutoHideAsync: launch.preventAutoHideAsync,
+  hideAsync: launch.hideAsync,
+}));
 vi.mock('@expo-google-fonts/outfit/400Regular', () => ({ Outfit_400Regular: 1 }));
 vi.mock('@expo-google-fonts/outfit/500Medium', () => ({ Outfit_500Medium: 1 }));
 vi.mock('@expo-google-fonts/outfit/600SemiBold', () => ({ Outfit_600SemiBold: 1 }));
@@ -435,6 +445,9 @@ function device() {
 let screen: ReactTestRenderer | null = null;
 const consoleError = console.error;
 beforeEach(() => {
+  launch.fontsLoaded = true;
+  launch.fontError = null;
+  launch.hideAsync.mockClear();
   // Controller snapshots published between act scopes are the behaviour under test.
   vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
     const message = String(args[0]);
@@ -512,6 +525,47 @@ async function start(phone: ReturnType<typeof device>) {
       },
   };
 }
+
+describe('native launch splash (#606)', () => {
+  it('opens with fallback fonts and hides the splash if font loading fails', async () => {
+    launch.fontsLoaded = false;
+    const app = await start(device());
+    expect(launch.hideAsync).not.toHaveBeenCalled();
+
+    launch.fontError = new Error('Font asset could not load');
+    await act(async () => screen!.update(<App />));
+    await settle();
+
+    expect(app.text()).toContain('Shared expenses.');
+    expect(app.text()).not.toContain('Opening Splitbook…');
+    expect(app.progress()).toHaveLength(0);
+    expect(launch.hideAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the first screen and hides the splash once fonts finish loading', async () => {
+    launch.fontsLoaded = false;
+    const app = await start(device());
+    expect(launch.hideAsync).not.toHaveBeenCalled();
+
+    launch.fontsLoaded = true;
+    await act(async () => screen!.update(<App />));
+    await settle();
+
+    expect(app.text()).toContain('Shared expenses.');
+    expect(app.text()).not.toContain('Opening Splitbook…');
+    expect(app.progress()).toHaveLength(0);
+    expect(launch.hideAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the native splash and renders nothing while fonts are loading', async () => {
+    // Retained at module load, before the first App render can release it.
+    expect.soft(launch.preventAutoHideAsync).toHaveBeenCalledTimes(1);
+    launch.fontsLoaded = false;
+    await start(device());
+    expect.soft(screen!.toJSON()).toBeNull();
+    expect(launch.hideAsync).not.toHaveBeenCalled();
+  });
+});
 
 describe('cold start', () => {
   it('shows the saved Home at once, marked as checking, with nothing to open until confirmed', async () => {
