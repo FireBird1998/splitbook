@@ -64,6 +64,8 @@ export class SettlementService {
         { path: 'createdBy', select: PERSON_FIELDS },
       ]);
     }
+    // A retry of a payment recorded before the archive is confirmed above; nothing new is (#578).
+    if (group.isArchived) throw new Error('GROUP_ARCHIVED');
     assertGroupCurrency(group.defaultCurrency, data.currency);
     await lockLedgerCurrency(groupId, data.currency);
 
@@ -83,21 +85,24 @@ export class SettlementService {
 
     let settlement;
     try {
-      settlement = await withGroupMutation(groupId, async () =>
-        Settlement.create({
-          _id: settlementId,
-          group: groupId,
-          paidBy,
-          paidTo: data.paidTo,
-          amount: command.amount,
-          amountMinor,
-          moneyVersion: 1,
-          currency: data.currency,
-          note: data.note,
-          createdBy: userId,
-          ...(requestKey ? { creationRequest: createRequestMetadata(requestKey, command) } : {}),
-          pendingActivity: [event],
-        }),
+      settlement = await withGroupMutation(
+        groupId,
+        async () =>
+          Settlement.create({
+            _id: settlementId,
+            group: groupId,
+            paidBy,
+            paidTo: data.paidTo,
+            amount: command.amount,
+            amountMinor,
+            moneyVersion: 1,
+            currency: data.currency,
+            note: data.note,
+            createdBy: userId,
+            ...(requestKey ? { creationRequest: createRequestMetadata(requestKey, command) } : {}),
+            pendingActivity: [event],
+          }),
+        { ledger: true },
       );
     } catch (err) {
       if (requestKey && (err as { code?: number }).code === 11000) {

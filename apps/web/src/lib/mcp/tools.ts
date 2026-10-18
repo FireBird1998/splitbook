@@ -33,6 +33,7 @@ export function registerSplitbookTools(
           : error instanceof Error &&
               [
                 'FORBIDDEN',
+                'GROUP_ARCHIVED',
                 'DRAFT_NOT_FOUND',
                 'STALE_REVISION',
                 'REVISION_REQUIRED',
