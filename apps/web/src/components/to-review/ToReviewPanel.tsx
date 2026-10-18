@@ -31,6 +31,7 @@ export default function ToReviewPanel({
   items,
   context,
   names,
+  problemNames = names,
   groupName,
   client,
   refresh,
@@ -47,6 +48,8 @@ export default function ToReviewPanel({
   items: ToReviewItem[];
   context: DraftContext;
   names: Readonly<Record<string, string>>;
+  /** Names as a problem asks about them mid-sentence: the viewer is "you". */
+  problemNames?: Readonly<Record<string, string>>;
   groupName: string;
   client: WebReviewClient;
   refresh: () => Promise<void>;
@@ -190,7 +193,7 @@ export default function ToReviewPanel({
               : 'Keeping your changes…'}
         </Typography>
         {/* A fact the Needs line names isn't said again; any other problem is said once (#441). */}
-        {memberProblems(item, names, editor.draft.values).map((problem) => (
+        {memberProblems(item, problemNames, editor.draft.values).map((problem) => (
           <Typography key={problem} variant="body2" color="text.secondary">
             {problem}
           </Typography>

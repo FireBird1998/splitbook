@@ -8,6 +8,7 @@ import {
   expectThemeApplied,
 } from './fixtures';
 import { cleanupReviewPage, renameMembers, seedReviewPage } from './to-review-seed';
+import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 const root = `/groups/${DEMO_GROUP_ID}`;
 const panel = (page: Page) => page.getByRole('region', { name: 'Review expense', exact: true });
 async function open(page: Page, kinds: Parameters<typeof seedReviewPage>[0]) {
@@ -957,8 +958,7 @@ test('typing not yet autosaved is still kept when the page reloads', async ({ pa
 test('says You for the viewer by id, beside another member of the same name (#442)', async ({
   page,
 }) => {
-  const alex = 'a00000000000000000000001';
-  const sam = 'a00000000000000000000002';
+  const { alex, sam } = DEMO_PERSONA_IDS;
   const restore = await renameMembers({ [alex]: 'Ankit Das', [sam]: 'Ankit Das' });
   try {
     await open(page, ['ready', 'ready']);
@@ -979,7 +979,7 @@ test('says You for the viewer by id, beside another member of the same name (#44
     });
     await page.reload();
     await page.getByRole('button', { name: 'Review Review meal 2', exact: true }).click();
-    await expect(panel(page)).toContainText('The amount paid by You?');
+    await expect(panel(page)).toContainText('The amount paid by you?');
     await expect(panel(page)).not.toContainText('The amount paid by Ankit Das');
     await page.getByRole('button', { name: 'Close review', exact: true }).click();
     await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();

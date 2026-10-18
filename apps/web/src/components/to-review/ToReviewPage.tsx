@@ -160,13 +160,16 @@ export default function ToReviewPage({
   const selected = opened ? (items.find((item) => item.id === opened.id) ?? opened) : null;
   const available =
     checked && online && !!group && !groupError && !failed && read.status === 'ready';
-  // Members' names for the panel, its problems and Save ready, with the viewer as "You" by id (#442).
+  // Members' names for the panel and Save ready, with the viewer as "You" by id (#442). The
+  // pickers take `context.members` instead, with the names as members chose them.
   const names = Object.fromEntries(
     (group?.members ?? []).flatMap(({ user }) => {
       const label = memberLabel(user._id, user.name, accountId);
       return label ? [[user._id, label]] : [];
     }),
   );
+  // A problem asks mid-sentence, "The amount paid by you?", as Android does (#434).
+  const problemNames = accountId in names ? { ...names, [accountId]: 'you' } : names;
   const context = {
     currency,
     category: group?.category,
@@ -730,6 +733,7 @@ export default function ToReviewPage({
                 items={items.flatMap((item) => (item.accountItem ? [item.accountItem] : []))}
                 context={context}
                 names={names}
+                problemNames={problemNames}
                 groupName={group?.name || 'this Group'}
                 client={client}
                 refresh={refresh}
