@@ -210,6 +210,9 @@ describe('demo Groups beside the Goa trip', () => {
       for (const past of monthsBefore(now, 6)) {
         expect(byMonth.get(past) ?? 0, `${now.toISOString()} ${past}`).toBeGreaterThanOrEqual(4);
       }
+      // The seventh back has the first grocery run, so Insights has six earlier Months (#556).
+      const seventh = monthsBefore(now, 7)[0];
+      expect(byMonth.get(seventh) ?? 0, `${now.toISOString()} ${seventh}`).toBeGreaterThan(0);
       expect(byMonth.get(toPeriod(now)) ?? 0).toBeGreaterThanOrEqual(2);
 
       expect(new Set(expenses.map((expense) => expense.tag)).size).toBeGreaterThanOrEqual(5);
@@ -242,6 +245,30 @@ describe('demo Groups beside the Goa trip', () => {
         expect(day).toBeLessThanOrEqual(28);
       }
     }
+  });
+
+  it('starts the Household’s history seven Months back on any day of the month (#556)', () => {
+    const firstMonths = new Map<string, string>();
+    for (const day of ['2026-10-01', '2026-10-17', '2026-10-18', '2026-10-31', '2027-03-01']) {
+      const household = groupOf(buildDemoGroupsPlan(new Date(`${day}T12:00:00.000Z`)), 'household');
+      const first = ledgerExpenses(household)
+        .map((expense) => expense.date)
+        .sort()[0];
+      firstMonths.set(day, month(first));
+      // Its members had joined by then.
+      expect(household.joinedAt.toISOString().slice(0, 10) <= first, `${day} joined first`).toBe(
+        true,
+      );
+    }
+
+    // Insights compares last Month with the six before it, so the oldest is the seventh back.
+    expect(Object.fromEntries(firstMonths)).toEqual({
+      '2026-10-01': '2026-03',
+      '2026-10-17': '2026-03',
+      '2026-10-18': '2026-03',
+      '2026-10-31': '2026-03',
+      '2027-03-01': '2026-08',
+    });
   });
 
   it('records edits and a deletion in the Household so its history shows', () => {
