@@ -234,7 +234,7 @@ export default function LandingAssistants({ live }: { live: WhatsLive }) {
       title="Talk to your Groups in Claude or ChatGPT."
       intro={
         canPrepare
-          ? `Connect your ${PRODUCT_NAME} account once. Ask what you owe, or say what you spent and let the assistant prepare it for To review. Your money only moves when you say so.`
+          ? `Connect your ${PRODUCT_NAME} account once. Ask what you owe, or say what you spent and let the assistant prepare it for To review. Nothing is saved until you say so.`
           : `Connect your ${PRODUCT_NAME} account once and ask what you owe. Nothing is saved until you say so.`
       }
     >
