@@ -71,7 +71,7 @@ function switchRecurringExpenses(on: boolean) {
 /** Home's read, as `userId` sees it. */
 async function home(userId: string): Promise<UserBalancesResponse> {
   session.userId = userId;
-  const response = await readHome();
+  const response = await readHome(new Request('http://localhost/api/user/balances'));
   expect(response.status).toBe(200);
   return (await response.json()).data;
 }
@@ -296,7 +296,7 @@ describe('the fields Android reads', () => {
   it('are unchanged: the same values, keys and key order as before #306', async () => {
     const { lakeview, lisbon, goa, football, oldTrip } = await seedAlicesGroups();
     session.userId = alice;
-    const response = await readHome();
+    const response = await readHome(new Request('http://localhost/api/user/balances'));
     const body = await response.json();
     const updatedAt = Object.fromEntries(
       (await Group.find().select('updatedAt').lean()).map((group) => [

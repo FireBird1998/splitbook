@@ -4,7 +4,7 @@ import {
   forbidden,
   notFound,
   success,
-  serverError,
+  failedRead,
   routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
@@ -31,6 +31,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     return success(balances);
   } catch (err) {
-    return serverError(err);
+    return failedRead(err, req);
   }
 }

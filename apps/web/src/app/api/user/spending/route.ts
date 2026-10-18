@@ -1,4 +1,4 @@
-import { error, getAuthUser, serverError, success, unauthorized } from '@/lib/utils/api-response';
+import { error, getAuthUser, failedRead, success, unauthorized } from '@/lib/utils/api-response';
 import { getMemberSpending } from '@/lib/services/spending.service';
 import { readSpendingMonths } from '@splitbook/shared/insights';
 import { TimeZoneError, readTimeZone } from '@splitbook/shared/zoned-calendar';
@@ -33,6 +33,6 @@ export async function GET(req: Request) {
 
     return success(await getMemberSpending(user.id, { months, timeZone }));
   } catch (err) {
-    return serverError(err);
+    return failedRead(err, req);
   }
 }
