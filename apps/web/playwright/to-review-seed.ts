@@ -3,7 +3,8 @@ import { MongoClient, ObjectId } from 'mongodb';
 import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 import { DEMO_GROUP_ID, DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
-export async function seedToReview(count: number) {
+/** The demo database's address, refused unless it is a local, isolated demo database. */
+function guardedDemoUri() {
   const uri =
     process.env.TO_REVIEW_TEST_MONGODB_URI ??
     process.env.PLAYWRIGHT_DEMO_MONGODB_URI ??
@@ -24,6 +25,11 @@ export async function seedToReview(count: number) {
     !['localhost', '127.0.0.1', 'host.docker.internal'].includes(url.hostname)
   )
     throw new Error('To review fixtures require an isolated demo database.');
+  return uri;
+}
+
+export async function seedToReview(count: number) {
+  const uri = guardedDemoUri();
   const client = await MongoClient.connect(uri);
   try {
     const collection = client.db().collection('expensedrafts');
@@ -110,6 +116,35 @@ export async function seedReviewPage(
   } finally {
     await client.close();
   }
+}
+
+/**
+ * Give demo members the names a test needs, as two members sharing one name (#442). Returns a
+ * function that puts their seeded names back; the suite runs one test at a time.
+ */
+export async function renameMembers(names: Record<string, string>) {
+  const client = await MongoClient.connect(guardedDemoUri());
+  const users = client.db().collection('users');
+  let seeded: Array<{ _id: ObjectId; name: string }> = [];
+  const restore = async () => {
+    try {
+      for (const { _id, name } of seeded) await users.updateOne({ _id }, { $set: { name } });
+    } finally {
+      await client.close();
+    }
+  };
+  try {
+    seeded = await users
+      .find({ _id: { $in: Object.keys(names).map((id) => new ObjectId(id)) } })
+      .project<{ _id: ObjectId; name: string }>({ name: 1 })
+      .toArray();
+    for (const [id, name] of Object.entries(names))
+      await users.updateOne({ _id: new ObjectId(id) }, { $set: { name } });
+  } catch (error) {
+    await restore();
+    throw error;
+  }
+  return restore;
 }
 
 /** Remove this suite's fictional saved records and their Activity, so later projects keep the seed's timeline. */

@@ -507,6 +507,7 @@ function GroupSettingsContent({
             tags={tags}
             members={members}
             defaultCurrency={group.defaultCurrency}
+            viewerId={userId}
             onNotify={(message) => setSnackbar({ open: true, message })}
           />
         )}

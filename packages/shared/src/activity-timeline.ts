@@ -47,7 +47,7 @@ const words = (value: unknown) => (typeof value === 'string' && value.trim() ? v
  * A member as an event names them: "You" when their id is the viewer's (#442), never matched by
  * name, since two members can share one; otherwise their recorded name, or null without one.
  */
-function memberLabel(id: unknown, name: unknown, viewerId?: string): string | null {
+export function memberLabel(id: unknown, name: unknown, viewerId?: string): string | null {
   return viewerId && id === viewerId ? 'You' : words(name);
 }
 

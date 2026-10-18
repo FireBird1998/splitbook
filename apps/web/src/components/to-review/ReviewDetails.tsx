@@ -11,6 +11,7 @@ import type { ToReviewItem } from '@splitbook/shared/to-review-read';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { fetchWebExpenseRecord } from '@/lib/web-read';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { moneyParticipantId } from '@splitbook/shared/exact-money';
 
 export function reviewSource(item: ToReviewItem) {
   const by = item.draft.preparedBy;
@@ -56,10 +57,13 @@ function ExpenseMatch({
   groupId,
   id,
   description,
+  names,
 }: {
   groupId: string;
   id: string;
   description: string;
+  /** Members' names, with the viewer as "You". */
+  names: Readonly<Record<string, string>>;
 }) {
   const { data, error } = useSWR(
     expenseRecordKey(WEB_QUERY_ACCOUNT, groupId, id),
@@ -67,14 +71,17 @@ function ExpenseMatch({
   );
   const expense = data?.data;
   const author = expense?.createdBy;
+  // A current member as To review names them ("You" for the viewer), else the name on the record.
+  const addedBy =
+    names[moneyParticipantId(author)] ??
+    (typeof author === 'object' && author?.name ? author.name : 'a member');
   return (
     <Box>
       <Typography fontWeight={600}>{expense?.description ?? description}</Typography>
       {expense ? (
         <Typography variant="body2">
           {formatCurrency(expense.amount, expense.currency)} ·{' '}
-          {formatDate(expenseLocalDate(expense.date))} · Added by{' '}
-          {typeof author === 'object' && author?.name ? author.name : 'a member'}
+          {formatDate(expenseLocalDate(expense.date))} · Added by {addedBy}
         </Typography>
       ) : (
         <Typography variant="body2">
@@ -109,7 +116,7 @@ export function ReviewMatches({
       </Typography>
       {item.duplicates.map((match) =>
         match.kind === 'expense' ? (
-          <ExpenseMatch key={match.id} groupId={item.draft.groupId} {...match} />
+          <ExpenseMatch key={match.id} groupId={item.draft.groupId} names={names} {...match} />
         ) : (
           <Box key={match.id}>
             {items.find((other) => other.draft.id === match.id) ? (
