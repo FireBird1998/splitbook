@@ -111,7 +111,7 @@ test('authorization checks all pages and shows actual ChatGPT permissions', asyn
   await page.goto('/connect/chatgpt');
   await expect(page.getByText('ChatGPT authorized', { exact: true })).toBeVisible();
   await expect(
-    page.getByText('Private Draft access, including permanent discard', { exact: true }),
+    page.getByText('To review access, including permanent deletion', { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Refresh status' })).toBeVisible();
   expect(offsets).toContain('0');
@@ -197,7 +197,7 @@ test('switching accounts clears access and ignores a late response', async ({ pa
   await expect(page.getByText('ChatGPT is not authorized for this account.')).toBeVisible();
   release();
   await expect(
-    page.getByText('Private Draft access, including permanent discard', { exact: true }),
+    page.getByText('To review access, including permanent deletion', { exact: true }),
   ).toHaveCount(0);
   await expect(page.getByText('ChatGPT authorized', { exact: true })).toHaveCount(0);
   const signout = await page.request.post('/api/auth/sign-out', {

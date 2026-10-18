@@ -36,7 +36,7 @@ MCP discovery and tool requests must be reachable by external assistant servers.
 - Connection management is session-authenticated and ownership-scoped. Cross-origin writes and stale page/account mismatches are rejected. Generic provider consent update/delete routes are intentionally refused because they do not rotate the application generation; change permissions by disconnecting and reconnecting through Settings.
 - MongoDB's Better Auth adapter creates the declared plugin indexes, including the unique owner/client key, on first use. The integration suite uses the real adapter and verifies persistence across fresh auth instances. Do not clear signing keys, connections or OAuth collections on deploy. Connection authorization can use standalone MongoDB. Persistent Draft mutations require a replica set or sharded cluster; there is no unsafe standalone fallback.
 
-To add preparation permission to an existing read-only connection, disconnect and reconnect, then tick “Also let it prepare expenses for your To review”.
+To add preparation permission to an existing read-only connection, disconnect and reconnect, then tick “Also let it prepare Expenses for your To review”.
 
 ## Local verification
 

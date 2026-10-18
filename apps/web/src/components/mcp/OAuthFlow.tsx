@@ -13,6 +13,54 @@ import Typography from '@mui/material/Typography';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 
+/**
+ * The permissions a connection request asks for, as the consent screen lists them: the client,
+ * ledger access, and, when it asks for them, preparing items for To review and staying connected.
+ */
+export function ConsentPermissions({
+  details,
+  drafts,
+  busy,
+  onDraftsChange,
+}: {
+  details: { clientId: string; scopes: string[] };
+  drafts: boolean;
+  busy: boolean;
+  onDraftsChange: (drafts: boolean) => void;
+}) {
+  return (
+    <>
+      <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
+        Client identity: {details.clientId}
+      </Typography>
+      <Typography>Ledger permission: read Group details, Balances and spending.</Typography>
+      {details.scopes.includes(MCP_DRAFT_SCOPE) && (
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={drafts}
+              onChange={(event) => onDraftsChange(event.target.checked)}
+              disabled={busy}
+            />
+          }
+          label="Also let it prepare Expenses for your To review"
+        />
+      )}
+      {details.scopes.includes(MCP_DRAFT_SCOPE) && (
+        <Typography variant="body2">
+          It can add, change and permanently delete items in your To review. Only you can save them
+          as Expenses, in Splitbook.
+        </Typography>
+      )}
+      {details.scopes.includes('offline_access') && (
+        <Typography variant="body2">
+          The assistant may stay connected while you are away, until you disconnect it.
+        </Typography>
+      )}
+    </>
+  );
+}
+
 export default function OAuthFlow({
   query,
   consent,
@@ -100,37 +148,12 @@ export default function OAuthFlow({
                 future, while you remain a member.
               </Typography>
               {details && (
-                <>
-                  <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
-                    Client identity: {details.clientId}
-                  </Typography>
-                  <Typography>
-                    Ledger permission: read Group details, Balances and spending.
-                  </Typography>
-                  {details.scopes.includes(MCP_DRAFT_SCOPE) && (
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={drafts}
-                          onChange={(event) => setDrafts(event.target.checked)}
-                          disabled={busy}
-                        />
-                      }
-                      label="Also let it prepare expenses for your To review"
-                    />
-                  )}
-                  {details.scopes.includes(MCP_DRAFT_SCOPE) && (
-                    <Typography variant="body2">
-                      It can add, change and delete items in your To review. Only you can save them
-                      as expenses, in Splitbook.
-                    </Typography>
-                  )}
-                  {details.scopes.includes('offline_access') && (
-                    <Typography variant="body2">
-                      The assistant may stay connected while you are away, until you disconnect it.
-                    </Typography>
-                  )}
-                </>
+                <ConsentPermissions
+                  details={details}
+                  drafts={drafts}
+                  busy={busy}
+                  onDraftsChange={setDrafts}
+                />
               )}
               <Alert severity="info">
                 Prepared items don&apos;t change Balances until you save them.

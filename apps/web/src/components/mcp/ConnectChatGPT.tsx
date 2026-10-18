@@ -74,7 +74,7 @@ export default function ConnectChatGPT({ resource }: { resource: string | null }
             </Typography>
             <Typography>
               All current and future Groups you belong to are included. Read-only ledger access
-              cannot save Expenses or view your private Drafts.
+              cannot save Expenses or see what’s in your To review.
             </Typography>
             <Typography>
               Refresh access lets ChatGPT stay authorized between visits until you disconnect.

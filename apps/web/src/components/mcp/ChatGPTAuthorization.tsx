@@ -33,6 +33,43 @@ function SignIn() {
   );
 }
 
+/** ChatGPT's authorizations for this account, each with the access it was granted. */
+export function AuthorizedConnections({ connections }: { connections: Connection[] }) {
+  return (
+    <Stack spacing={2}>
+      <Alert severity="success">ChatGPT authorized</Alert>
+      {connections.map((connection, index) => (
+        <Stack key={connection.id} spacing={1}>
+          <Typography fontWeight={600}>
+            Authorization {index + 1} · All current and future Groups
+          </Typography>
+          {connection.scopes.map((scope) => (
+            <Typography key={scope} variant="body2">
+              {scope === MCP_LEDGER_SCOPE
+                ? 'Read Groups, Balances and spending'
+                : scope === MCP_DRAFT_SCOPE
+                  ? 'To review access, including permanent deletion'
+                  : scope === 'offline_access'
+                    ? 'Continued access between visits (refresh tokens)'
+                    : scope}
+            </Typography>
+          ))}
+          {connection.scopes.includes(MCP_DRAFT_SCOPE) && (
+            <Typography variant="body2">
+              This connection has broader access than this read-only guide. To change it, disconnect
+              in Settings and reconnect without To review access.
+            </Typography>
+          )}
+        </Stack>
+      ))}
+      <Typography>
+        Authorization confirms your permission, not a successful tool test. Run the test prompt in
+        ChatGPT to check the connection.
+      </Typography>
+    </Stack>
+  );
+}
+
 // Account and refresh keys remount this reader: old data disappears synchronously,
 // and cleanup prevents any response from an earlier reader restoring it.
 function ConnectionStatus({ accountId }: { accountId: string }) {
@@ -89,39 +126,7 @@ function ConnectionStatus({ accountId }: { accountId: string }) {
   if (status.kind !== 'ready') return null;
   if (status.connections.length === 0)
     return <Typography role="status">ChatGPT is not authorized for this account.</Typography>;
-  return (
-    <Stack spacing={2}>
-      <Alert severity="success">ChatGPT authorized</Alert>
-      {status.connections.map((connection, index) => (
-        <Stack key={connection.id} spacing={1}>
-          <Typography fontWeight={600}>
-            Authorization {index + 1} · All current and future Groups
-          </Typography>
-          {connection.scopes.map((scope) => (
-            <Typography key={scope} variant="body2">
-              {scope === MCP_LEDGER_SCOPE
-                ? 'Read Groups, balances and spending'
-                : scope === MCP_DRAFT_SCOPE
-                  ? 'Private Draft access, including permanent discard'
-                  : scope === 'offline_access'
-                    ? 'Continued access between visits (refresh tokens)'
-                    : scope}
-            </Typography>
-          ))}
-          {connection.scopes.includes(MCP_DRAFT_SCOPE) && (
-            <Typography variant="body2">
-              This connection has broader access than this read-only guide. To change it, disconnect
-              in Settings and reconnect with Draft access off.
-            </Typography>
-          )}
-        </Stack>
-      ))}
-      <Typography>
-        Authorization confirms your permission, not a successful tool test. Run the test prompt in
-        ChatGPT to check the connection.
-      </Typography>
-    </Stack>
-  );
+  return <AuthorizedConnections connections={status.connections} />;
 }
 
 export default function ChatGPTAuthorization({ enabled }: { enabled: boolean }) {
