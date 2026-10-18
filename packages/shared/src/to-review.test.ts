@@ -796,3 +796,45 @@ describe('whether To review asks for an item’s amount (#524)', () => {
     expect(needsAmount(['what it was for', 'the date'])).toBe(false);
   });
 });
+
+describe('an item in another currency than its Group’s (#567)', () => {
+  /** The complete taxi in USD, in a Group whose currency is INR, as today's server reads it. */
+  const inInrGroup = (problems: string[]) =>
+    buildToReview(
+      {
+        total: 1,
+        groups: [
+          {
+            groupId,
+            groupName: 'Weekend',
+            currency: 'INR',
+            count: 1,
+            items: [item(1, { problems })],
+          },
+        ],
+      },
+      [],
+      now,
+    ).items[0];
+
+  it('needs the Group currency, and says so once', () => {
+    const model = inInrGroup(['CURRENCY_MISMATCH']);
+
+    expect([model.state, model.label, model.unknownFacts]).toEqual([
+      'needs-details',
+      'Needs the Group currency',
+      [],
+    ]);
+    // The Needs line names it, so the problem isn't said again.
+    expect(memberProblems(model)).toEqual([]);
+  });
+
+  it('still says the expense details for a problem nothing can name', () => {
+    const model = inInrGroup(['Member left']);
+
+    expect([model.label, memberProblems(model)]).toEqual([
+      'Needs the expense details',
+      ['Check the expense details and try again.'],
+    ]);
+  });
+});

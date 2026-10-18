@@ -68,6 +68,10 @@ export const needsAmount = (missingFacts: readonly string[]) =>
       fact === 'a whole-number amount' ||
       fact.startsWith('an amount with'),
   );
+/** What an item in another currency than its Group's needs (#567). */
+const GROUP_CURRENCY_NEED = 'the Group currency';
+/** A problem the server names by its code, in words that follow "Needs". */
+const codeNeeds = new Map([['CURRENCY_MISMATCH', GROUP_CURRENCY_NEED]]);
 
 const DECIMALS = /^Amount supports at most (\d+) decimal places$/;
 
@@ -123,7 +127,9 @@ function accountModel(item: ToReviewItem, groupCurrency?: string): ReviewItemMod
         facts[String(issue.path[0])] ??
         'the expense details',
     );
-  const missingFacts = [...new Set([...unknownFacts, ...needs])];
+  const coded = item.problems.flatMap((problem) => codeNeeds.get(problem) ?? []);
+  const missingFacts = [...new Set([...unknownFacts, ...needs, ...coded])];
+  // Only a problem nothing can name falls back to the expense details.
   if (item.problems.length && !missingFacts.length) missingFacts.push('the expense details');
   const state = missingFacts.length
     ? 'needs-details'
@@ -458,6 +464,8 @@ export function memberProblems(
     // A wrong fact the Needs line already names (#506); a member's row is still named below.
     const unmet = path && path.index === undefined && unmetNeed(path.reason, path.field);
     if (unmet && item.missingFacts.includes(unmet.need)) continue;
+    const coded = codeNeeds.get(problem);
+    if (coded && item.missingFacts.includes(coded)) continue;
     const words = reviewProblem(problem, values, names);
     if (!said.includes(words)) said.push(words);
   }

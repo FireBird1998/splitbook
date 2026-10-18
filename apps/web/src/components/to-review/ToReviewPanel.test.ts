@@ -5,6 +5,7 @@ import { SWRConfig } from 'swr';
 import { describe, expect, it, vi } from 'vitest';
 import { buildToReview } from '@splitbook/shared/to-review';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
+import type { GroupCategory } from '@splitbook/shared/types';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
 import type { WebReviewClient } from './review-client';
@@ -16,7 +17,12 @@ const sam = 'a00000000000000000000002';
 const groupId = 'b00000000000000000000001';
 
 /** The panel's markup for an item in a Group whose currency is INR, as the read names it. */
-function markup(problems: string[], values: Record<string, unknown>, missingFields: string[]) {
+function markup(
+  problems: string[],
+  values: Record<string, unknown>,
+  missingFields: string[],
+  category?: GroupCategory,
+) {
   const read: ToReviewItem = {
     draft: {
       id: 'd00000000000000000000001',
@@ -54,6 +60,7 @@ function markup(problems: string[], values: Record<string, unknown>, missingFiel
           items: [read],
           context: {
             currency: 'INR',
+            ...(category ? { category } : {}),
             members: [
               { id: alex, name: 'Alex' },
               { id: sam, name: 'Sam' },
@@ -207,5 +214,36 @@ describe('the split method of an item in the web To review panel (#508)', () => 
 
   it('shows Unequal pressed for an item stored as exact, as an assistant sends it', () => {
     expect(pressedSplit(markup([], values('exact'), []))).toEqual(['Unequal']);
+  });
+});
+
+describe('an item in another currency than its Group’s, in the web panel (#567)', () => {
+  const inUsd = {
+    description: 'Station dinner',
+    amount: 30,
+    currency: 'USD',
+    date: '2026-09-02',
+    category: 'food',
+    paidBy: [{ user: sam, amount: 30 }],
+    splitMethod: 'equal',
+    splitBetween: [{ user: alex }, { user: sam }],
+    tag: 'Food',
+  };
+
+  it('says once that it needs the Group currency, and which one the Group uses', () => {
+    const shown = panel(['CURRENCY_MISMATCH'], inUsd, []);
+    expect(shown).toContain('Currency 🇺🇸 USD Currency This Group uses INR');
+    expect(shown.slice(shown.indexOf('Changes kept in To review'))).toBe(
+      'Changes kept in To review Still needs the Group currency. Save expense Delete',
+    );
+  });
+
+  it('names a Trip as Add expense does', () => {
+    expect(panel(['CURRENCY_MISMATCH'], inUsd, [], 'trip')).toContain(
+      'Currency 🇺🇸 USD Currency This Trip uses INR',
+    );
+    expect(panel([], { ...inUsd, currency: 'INR' }, [], 'trip')).toContain(
+      'Currency 🇮🇳 INR Currency Trip currency',
+    );
   });
 });

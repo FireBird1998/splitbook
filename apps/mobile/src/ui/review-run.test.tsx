@@ -726,6 +726,21 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(f.saves).toHaveLength(1);
     expect(text(tree)).toContain('Saved 1');
   });
+  it('says an item in another currency needs the Group currency, not the expense details (#567)', async () => {
+    const f = fixture({ one: true });
+    f.items()[0].draft.values!.currency = 'USD';
+    f.items()[0].problems = ['CURRENCY_MISMATCH'];
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+
+    expect(text(tree)).toContain('One thing left before you can save: the Group currency');
+    expect(text(tree)).not.toContain('the expense details');
+    expect(button(tree, 'Use INR, the Group’s currency').props.disabled).toBe(false);
+    expect(button(tree, 'Save expense').props.disabled).toBe(true);
+  });
   it('shows the shared change note from a newer read, and never saves an unseen version', async () => {
     const f = fixture({ one: true });
     await signIn(f);
