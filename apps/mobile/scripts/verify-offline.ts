@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { createMobileController } from '../src/data';
+import type { MobileSnapshot } from '../src/data/types';
 import type { SavedQueryRecords } from '../src/data/saved-copy-budget';
 import { expensePagePath, activityPagePath } from '@splitbook/shared/api-paths';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
@@ -14,7 +16,16 @@ import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
 import { observe, present, reportVerifierFailure } from './verify-report';
 
-async function run() {
+/** Test controls stop at the first restored snapshot; normal CLI verification runs every stage. */
+interface OfflineVerificationOptions {
+  waitForCopies?: typeof waitForSavedQueries;
+  writeSavedQuery?: (path: string, write: () => Promise<void>) => Promise<void>;
+  checkpointRead?: (path: string) => void;
+  afterOfflineRestart?: (snapshot: MobileSnapshot) => 'stop' | void;
+  beforeCleanup?: () => void;
+}
+
+export async function verifyOffline(options: OfflineVerificationOptions = {}) {
   const origin = localOrigin(),
     alex = new FixtureActor(),
     sam = new FixtureActor();
@@ -55,14 +66,21 @@ async function run() {
     rowsTurn = result.catch(() => undefined);
     return result;
   };
+  const pendingWrites = new Set<Promise<void>>();
   const savedQueries: SavedQueryRecords = {
     load: (account, path) => inTurn(async () => (await entries(rows))[account + path] ?? null),
-    save: (account, path, value) =>
-      inTurn(async () => {
-        const saved = await entries(rows);
-        saved[account + path] = value;
-        await rows.save(saved);
-      }),
+    save: (account, path, value) => {
+      const write = () =>
+        inTurn(async () => {
+          const saved = await entries(rows);
+          saved[account + path] = value;
+          await rows.save(saved);
+        });
+      const pending = options.writeSavedQuery?.(path, write) ?? write();
+      pendingWrites.add(pending);
+      void pending.finally(() => pendingWrites.delete(pending)).catch(() => undefined);
+      return pending;
+    },
     remove: (account, path) =>
       inTurn(async () => {
         const saved = await entries(rows);
@@ -77,6 +95,16 @@ async function run() {
           .map(([key, value]) => ({ groupId: key.slice(account.length), value })),
       ),
   };
+  // Only checkpoint reads signal the controlled disk writer; preview and offline fallback
+  // reads still use the unwrapped file store. A no-op checkpoint cannot release that writer.
+  const checkpointRows: SavedQueryRecords = {
+    ...savedQueries,
+    load: (account, path) => {
+      options.checkpointRead?.(path);
+      return savedQueries.load(account, path);
+    },
+  };
+  const waitForCopies = options.waitForCopies ?? waitForSavedQueries;
   let offline = false,
     writes = 0,
     cleanup = false;
@@ -145,10 +173,10 @@ async function run() {
     assert.equal(controller.getSnapshot().home.status, 'ready', 'Home after online sign-in');
     // A ready read is displayed before the background saved-copy queue reaches disk. Wait for
     // Home's copies now, because the later disposal cancels any copy still waiting to be written.
-    await waitForSavedQueries(savedQueries, samId, ['/api/groups', '/api/user/balances']);
+    await waitForCopies(checkpointRows, samId, ['/api/groups', '/api/user/balances']);
     await controller.openGroup(groupId);
     await controller.selectMonth('2026-08');
-    await waitForSavedQueries(savedQueries, samId, [
+    await waitForCopies(checkpointRows, samId, [
       path,
       `${path}/balances`,
       expensePagePath(groupId, {
@@ -159,9 +187,7 @@ async function run() {
       }),
     ]);
     await controller.openActivity(groupId);
-    await waitForSavedQueries(savedQueries, samId, [
-      activityPagePath(groupId, { page: 1, limit: 20 }),
-    ]);
+    await waitForCopies(checkpointRows, samId, [activityPagePath(groupId, { page: 1, limit: 20 })]);
     const activity = controller.getSnapshot().activity.events.length;
     observe(activity > 0, 'Activity loaded no events to keep for offline.', { events: activity });
     controller.dispose();
@@ -169,6 +195,7 @@ async function run() {
     controller = create();
     await controller.restore();
     assert.equal(controller.getSnapshot().auth.status, 'authenticated');
+    if (options.afterOfflineRestart?.(controller.getSnapshot()) === 'stop') return;
     assert.equal(controller.getSnapshot().home.status, 'ready', 'Home after offline restart');
     present(
       controller.getSnapshot().offline.refreshedAt,
@@ -309,21 +336,25 @@ async function run() {
       'PASS: real HTTP cached Home, Group, Month, balances and Activity; disk restart; missing Month; retained draft; reconnect without writes; revocation; sign-out purge; no saved copy older than a confirmed edit.',
     );
   } finally {
+    options.beforeCleanup?.();
+    await Promise.allSettled([...pendingWrites]);
     offline = false;
     await controller.signOut();
+    controller.dispose();
     if (groupId) await alex.request(`/api/groups/${groupId}`, 'PATCH', { isArchived: true });
     await Promise.all([alex.close(), sam.close()]);
     await rm(directory, { recursive: true, force: true });
   }
 }
-void run().catch((error: unknown) => {
-  reportVerifierFailure(error);
-  // Print only the verifier's source location, keeping the report's credential redaction.
-  const location =
-    error instanceof Error
-      ? error.stack
-          ?.split('\n')
-          .find((line) => /^\s+at .*[/\\]verify-offline\.ts:\d+:\d+/.test(line))
-      : undefined;
-  if (location) console.error(`  check: ${location.trim()}`);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+  void verifyOffline().catch((error: unknown) => {
+    reportVerifierFailure(error);
+    // Print only the verifier's source location, keeping the report's credential redaction.
+    const location =
+      error instanceof Error
+        ? error.stack
+            ?.split('\n')
+            .find((line) => /^\s+at .*[/\\]verify-offline\.ts:\d+:\d+/.test(line))
+        : undefined;
+    if (location) console.error(`  check: ${location.trim()}`);
+  });
