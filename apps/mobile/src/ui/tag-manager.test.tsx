@@ -1,8 +1,11 @@
+import type { ReactElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import type { MobileFetch } from '../data/types';
+import type { TagCommand } from '@splitbook/shared/tag-management';
+import { AccessibilityInfo } from 'react-native';
 import { setWindow } from '../test-utils/native';
 import { TagManager } from './tag-manager';
 
@@ -24,19 +27,50 @@ const json = (data: unknown, status = 200, cookie?: string) =>
     headers: cookie ? { 'Set-Cookie': cookie } : {},
   });
 
-const fetch: MobileFetch = async (url) => {
+const archivedId = 'c00000000000000000000002';
+/** Harbour Flat's Tags as the server keeps them, applying each Tag action it accepts. */
+let server = newServer();
+function newServer() {
+  return {
+    tags: [
+      { id: tagId, name: longName, revision: 0, isArchived: false, isDeleted: false },
+      { id: archivedId, name: 'Old rent', revision: 0, isArchived: true, isDeleted: false },
+    ],
+    /** A refusal the next Tag action gets instead of being applied. */
+    refusal: null as { status: number; code: string } | null,
+  };
+}
+const snapshot = () => ({ canManage: true, tags: structuredClone(server.tags) });
+
+const fetch: MobileFetch = async (url, init) => {
   const path = new URL(url).pathname;
   if (path.endsWith('/sign-in'))
     return json({ user: alex }, 200, 'better-auth.session_token=alex.signature; Max-Age=2592000');
   if (path.endsWith('/get-session'))
     return json({ user: alex, session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' } });
-  if (path.endsWith('/tag-actions'))
+  if (path.endsWith('/tag-actions') && init.method === 'POST') {
+    const command = JSON.parse(String(init.body)) as TagCommand;
+    if (server.refusal)
+      return json(
+        { code: server.refusal.code, error: 'Tag action refused', snapshot: snapshot() },
+        server.refusal.status,
+      );
+    const { intent } = command;
+    const tag = server.tags.find((tag) => 'tagId' in intent && tag.id === intent.tagId)!;
+    if (intent.action === 'rename') tag.name = intent.name;
+    if (intent.action === 'archive' || intent.action === 'restore')
+      tag.isArchived = intent.action === 'archive';
+    tag.revision++;
     return json({
       data: {
-        canManage: true,
-        tags: [{ id: tagId, name: longName, revision: 0, isArchived: false, isDeleted: false }],
+        state: 'applied',
+        requestId: command.requestId,
+        receipt: { intent, tagId: tag.id, appliedAt: '2026-10-18T10:00:00.000Z' },
+        snapshot: snapshot(),
       },
     });
+  }
+  if (path.endsWith('/tag-actions')) return json({ data: snapshot() });
   return json({ data: {} });
 };
 
@@ -62,6 +96,7 @@ function memoryRecords(): AccountGroupRecordStore {
 let controller: MobileController | undefined;
 let renderer: ReactTestRenderer | undefined;
 afterEach(() => {
+  server = newServer();
   act(() => {
     renderer?.unmount();
   });
@@ -80,6 +115,44 @@ const labelled = (label: string) =>
       typeof node.type === 'string' && node.props.accessibilityLabel === label,
   );
 
+/** A native view as the tests see it: its element, where it is laid out, what was asked of it. */
+interface NativeView {
+  element: ReactElement<Record<string, unknown>>;
+  y: number;
+  focus: ReturnType<typeof vi.fn>;
+  scrollTo: ReturnType<typeof vi.fn>;
+  measureLayout: ReturnType<typeof vi.fn>;
+}
+/** Every native view handed out; each sits 100 below the one made before it. */
+let views: NativeView[] = [];
+/** The views measured to scroll to, in order. */
+let measured: NativeView[] = [];
+const nativeViews = () => ({
+  createNodeMock: (element: ReactElement<Record<string, unknown>>): NativeView => {
+    const y = 100 * (views.length + 1);
+    const view: NativeView = {
+      element,
+      y,
+      focus: vi.fn(),
+      scrollTo: vi.fn(),
+      measureLayout: vi.fn((_relativeTo: unknown, onSuccess: (x: number, y: number) => void) => {
+        measured.push(view);
+        onSuccess(0, y);
+      }),
+    };
+    views.push(view);
+    return view;
+  },
+});
+/** Whether an element shows this text anywhere inside it. */
+const shows = (node: unknown, text: string): boolean =>
+  node === text ||
+  (Array.isArray(node) && node.some((child) => shows(child, text))) ||
+  (typeof node === 'object' &&
+    node !== null &&
+    'props' in node &&
+    shows((node as { props: { children?: unknown } }).props.children, text));
+
 /** Alex's Manage Tags at 200% text, once its Tags are read. */
 async function openManageTags() {
   let cookie: string | null = null;
@@ -94,6 +167,7 @@ async function openManageTags() {
     {
       fetch,
       tagRequests,
+      newSubmissionKey: () => crypto.randomUUID(),
       accountLocal: {
         owner: {
           load: async () => owner,
@@ -119,6 +193,14 @@ async function openManageTags() {
     },
   );
   await controller.signIn('alex');
+  await showManageTags();
+}
+
+/** Manage Tags on screen, as opening it from the Group does. */
+async function showManageTags() {
+  views = [];
+  measured = [];
+  vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mockClear();
   setWindow({ width: 360, height: 780, fontScale: 2 });
   act(() => {
     renderer = create(
@@ -129,6 +211,7 @@ async function openManageTags() {
         offline={false}
         onClose={vi.fn()}
       />,
+      nativeViews(),
     );
   });
   await settle();
@@ -167,5 +250,102 @@ describe('Manage Tags on a phone (#562)', () => {
     expect(area!.findAll((node) => node === scroll)).toHaveLength(1);
     // The inset is the gap above the content now, not a fixed guess at the status bar.
     expect(scroll.props.contentContainerStyle).not.toHaveProperty('paddingTop');
+  });
+});
+
+describe('Opening a Tag edit from low in the list (#584)', () => {
+  /** Where the view last scrolled to, and what it scrolled to: the view last measured. */
+  const scrolled = () => {
+    const to = views
+      .filter((view) => view.element.type === 'ScrollView')
+      .flatMap((view) => view.scrollTo.mock.calls)
+      .at(-1)?.[0];
+    const target = measured.at(-1);
+    return { to, target, near: target && { y: Math.max(0, target.y - 16), animated: false } };
+  };
+  /** What the screen reader was last moved to. */
+  const announced = () =>
+    (
+      vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mock.calls.at(-1)?.[0] as
+        | NativeView
+        | undefined
+    )?.element;
+  const typed = (label: string) =>
+    views.some(
+      (view) => view.element.props.accessibilityLabel === label && view.focus.mock.calls.length,
+    );
+  const press = async (label: string) => {
+    await act(async () => labelled(label).props.onPress());
+    await settle();
+  };
+
+  it('brings Rename into view and into the Tag name box, then back to the Tag on Cancel', async () => {
+    await openManageTags();
+    await press(`Rename ${longName}`);
+    // The edit sits above the lists, so the view scrolls up to it from the tapped Tag.
+    expect(scrolled().to).toEqual(scrolled().near);
+    expect(shows(scrolled().target?.element, 'Rename Tag')).toBe(true);
+    expect(typed('Tag name')).toBe(true);
+    await press('Cancel Tag edit');
+    expect(scrolled().to).toEqual(scrolled().near);
+    expect(shows(scrolled().target?.element, longName)).toBe(true);
+    expect(shows(scrolled().target?.element, 'Rename Tag')).toBe(false);
+    expect(shows(announced(), longName)).toBe(true);
+    // The cards get their buttons back, and the view stops short of the Tag until it has taken
+    // the list's new length: once it has, it goes to the Tag again.
+    vi.stubGlobal('requestAnimationFrame', (next: () => void) => next());
+    const before = measured.length;
+    act(() =>
+      renderer!.root
+        .find((node: ReactTestInstance) => String(node.type) === 'ScrollView')
+        .props.onContentSizeChange(360, 4000),
+    );
+    vi.unstubAllGlobals();
+    expect(measured.length).toBe(before + 1);
+    expect(scrolled().to).toEqual(scrolled().near);
+    expect(shows(scrolled().target?.element, longName)).toBe(true);
+  });
+
+  it('shows a saved rename’s confirmation, then goes back to the renamed Tag', async () => {
+    await openManageTags();
+    await press(`Rename ${longName}`);
+    act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
+    await press('Save Tag name');
+    // The confirmation appears above the lists, so it is brought into view, not the Tag.
+    expect(scrolled().to).toEqual(scrolled().near);
+    expect(shows(scrolled().target?.element, 'Confirmed earlier action')).toBe(true);
+    expect(shows(announced(), 'Confirmed earlier action')).toBe(true);
+    await press('Continue managing Tags');
+    expect(scrolled().to).toEqual(scrolled().near);
+    expect(shows(scrolled().target?.element, 'Weekly groceries')).toBe(true);
+    expect(shows(announced(), 'Weekly groceries')).toBe(true);
+  });
+
+  it('brings Archive and Restore into view and to the screen reader, with nothing to type', async () => {
+    await openManageTags();
+    await press(`Archive ${longName}`);
+    expect(scrolled().to).toEqual(scrolled().near);
+    expect(shows(scrolled().target?.element, 'Archive Tag?')).toBe(true);
+    expect(shows(announced(), 'Archive Tag?')).toBe(true);
+    await press('Cancel Tag edit');
+    await press('Restore Old rent');
+    expect(scrolled().to).toEqual(scrolled().near);
+    expect(shows(scrolled().target?.element, 'Restore Tag?')).toBe(true);
+    expect(shows(announced(), 'Restore Tag?')).toBe(true);
+    expect(typed('Tag name')).toBe(false);
+  });
+
+  it('leaves a kept, refused rename where it is when Manage Tags opens again', async () => {
+    await openManageTags();
+    await press(`Rename ${longName}`);
+    act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
+    server.refusal = { status: 409, code: 'AMBIGUOUS_TAG' };
+    await press('Save Tag name');
+    act(() => renderer!.unmount());
+    await showManageTags();
+    expect(labelled('Tag name').props.value).toBe('Weekly groceries');
+    // Nothing was tapped, so the screen opens at its top, with no keyboard.
+    expect(scrolled().to).toBeUndefined();
+    expect(typed('Tag name')).toBe(false);
   });
 });
