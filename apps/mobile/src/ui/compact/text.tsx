@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { Animated, Text, View, type StyleProp, type TextProps, type TextStyle } from 'react-native';
 import type { SemanticTokens } from '@splitbook/shared/design-tokens';
 import { fonts, useTheme } from '../theme';
@@ -47,6 +47,8 @@ export function CompactText({
   style,
   ...props
 }: TextProps & {
+  /** The text itself, as for a heading the screen reader is moved to. */
+  ref?: Ref<Text>;
   variant?: TextVariant;
   tone?: TextTone;
   weight?: 'regular' | 'medium' | 'semibold';
