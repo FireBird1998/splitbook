@@ -370,9 +370,12 @@ describe('the Connected assistants section (#450)', () => {
   const READING = { ...OFF, assistants: { available: true, canPrepare: false } };
   const PREPARING = { ...OFF, assistants: { available: true, canPrepare: true }, toReview: true };
   const ids = (html: string) => [...html.matchAll(/<section\b[^>]*\sid="(\w+)"/g)].map((m) => m[1]);
+  /** The words of each list item in this markup. */
+  const items = (html: string) =>
+    [...html.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map(([, item]) => text(item));
   const steps = (html: string) =>
     [...section(html, 'assistants').matchAll(/<ol\b[^>]*>([\s\S]*?)<\/ol>/g)].flatMap(([, list]) =>
-      [...list.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map(([, step]) => text(step)),
+      items(list),
     );
   /** The section's words as read, without the space text() leaves before punctuation after a tag. */
   const said = (html: string) => text(html).replace(/\s+([.,:])/g, '$1');
@@ -412,9 +415,7 @@ describe('the Connected assistants section (#450)', () => {
       expect(text(own)).toContain(
         '“Who still owes me for Goa?” It reads your Groups, their members, Tags, Balances and spending, as you.',
       );
-      expect(text(own)).toContain('Disconnect any time in Settings.');
       expect(text(own)).not.toMatch(TO_REVIEW_CLAIM);
-      expect(text(own)).not.toMatch(/email/i);
       expect(svgImages(own)).toEqual([]);
       expect(linksTo(own, '/connect/chatgpt').map((anchor) => anchor.text)).toEqual([
         'How to connect ChatGPT',
@@ -449,10 +450,8 @@ describe('the Connected assistants section (#450)', () => {
         'With a separate OK, which starts switched off, it prepares up to 10 items at a time in To review.',
         // #443 story 23: nothing reaches Balances until the member saves it.
         'You check each item and save it yourself: nothing reaches Balances until you do. A saved Expense shows “prepared by Claude” to the Group.',
-        'Disconnect any time in Settings.',
       ])
         expect(text(own)).toContain(sentence);
-      expect(text(own)).not.toMatch(/email/i);
       expect(svgImages(own)).toEqual([
         expect.stringMatching(
           /^A To review rack on a bench\. .* stacked one on another: Dinner at Thalassa, ₹2,400 between You, Priya and Sam, and Cab to the airport, ₹600 between You and Priya\. .* The member saves Dinner at Thalassa, and Cab to the airport waits in the rack\. The tube never reaches the conveyor\.$/,
@@ -469,6 +468,19 @@ describe('the Connected assistants section (#450)', () => {
       ])
         expect(text(own)).toContain(words);
     }
+  });
+
+  it('promises, whatever an assistant can do, that it sees members’ names, never their email addresses (#451)', () => {
+    // The assistant tools stopped sending members' email addresses with #438.
+    for (const live of [READING, PREPARING])
+      for (const mode of MODES) {
+        const own = section(render(mode, live), 'assistants');
+        expect(items(own).filter((card) => card.startsWith('Stay in control'))).toEqual([
+          'Stay in control Disconnect any time in Settings. Assistants see members’ names, never their email addresses.',
+        ]);
+        // That is the section's only word about email.
+        expect(text(own).match(/email/gi)).toHaveLength(1);
+      }
   });
 
   it('comes after Settle up and before Android and web, linked from the top bar', () => {
