@@ -254,6 +254,18 @@ describe('To review read contract', () => {
     ])
       expect(() => parseToReviewResponse(value)).toThrow('Unable to load To review. Please retry.');
   });
+  it('reads each Group’s kind when the server sends it, and none it doesn’t know (#596)', () => {
+    const data = read([item(1)]);
+    const kind = (category?: unknown) =>
+      parseToReviewResponse({
+        status: 200,
+        data: { ...data, groups: [{ ...data.groups[0], ...(category ? { category } : {}) }] },
+      }).groups[0].category;
+    expect(kind('trip')).toBe('trip');
+    expect(kind()).toBeUndefined();
+    // A kind added later reads as none, so it's named as a Group rather than refusing the read.
+    expect(kind('moon')).toBeUndefined();
+  });
   it('leaves out each item it can’t read, counts it, and reads the rest (#513)', () => {
     const flat = 'a00000000000000000000002';
     const value = {
@@ -841,5 +853,41 @@ describe('an item in another currency than its Group’s (#567)', () => {
       'Needs the expense details',
       ['Check the expense details and try again.'],
     ]);
+  });
+});
+
+describe('the currency an item needs, named by its Group’s kind (#596)', () => {
+  /** The complete taxi in USD, refused for its currency, in an INR Group of this kind. */
+  const inKind = (category?: 'trip' | 'home') =>
+    buildToReview(
+      {
+        total: 1,
+        groups: [
+          {
+            groupId,
+            groupName: 'Weekend',
+            currency: 'INR',
+            ...(category ? { category } : {}),
+            count: 1,
+            items: [item(1, { problems: ['CURRENCY_MISMATCH'] })],
+          },
+        ],
+      },
+      [],
+      now,
+    ).items[0];
+
+  it('says the Trip currency in a Trip, and once', () => {
+    const model = inKind('trip');
+    expect([model.label, memberProblems(model)]).toEqual(['Needs the Trip currency', []]);
+  });
+
+  it('says the Household currency in a Household, as Add expense does', () => {
+    const model = inKind('home');
+    expect([model.label, memberProblems(model)]).toEqual(['Needs the Household currency', []]);
+  });
+
+  it('says the Group currency when the read names no kind', () => {
+    expect(inKind().label).toBe('Needs the Group currency');
   });
 });

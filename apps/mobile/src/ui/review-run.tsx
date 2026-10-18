@@ -12,6 +12,7 @@ import {
 } from '@splitbook/shared/to-review';
 import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
+import { groupNounTitle } from '@splitbook/shared/group-themes';
 import { formatDate, toDateParam } from '@splitbook/shared/date';
 import type { MobileController } from '../data/mobile-controller';
 import { reviewForm, reviewFormChange } from '../data/review-form';
@@ -130,7 +131,16 @@ function ReviewRunContent({
   const model = buildToReview(
     {
       total: 1,
-      groups: [{ groupId, groupName, currency: groupCurrency, count: 1, items: [item] }],
+      groups: [
+        {
+          groupId,
+          groupName,
+          currency: groupCurrency,
+          category: selected.category,
+          count: 1,
+          items: [item],
+        },
+      ],
     },
     [],
     new Date(controller.reviewNow()),
@@ -268,7 +278,7 @@ function ReviewRunContent({
           {/* Another currency can only change to the Group's. */}
           {groupCurrency && values.currency && values.currency !== groupCurrency && (
             <Button
-              label={`Use ${groupCurrency}, the Group’s currency`}
+              label={`Use ${groupCurrency}, the ${groupNounTitle(selected.category)}’s currency`}
               disabled={locked}
               onPress={() => change({ currency: groupCurrency })}
             />

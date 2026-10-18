@@ -1,4 +1,6 @@
 import { getCategory } from './categories';
+import type { GroupCategory } from './types';
+import { groupNounTitle } from './group-themes';
 import { GROUP_ARCHIVED_MESSAGE } from './group-archive';
 import type { PersistedExpenseDraft } from './validators/expense-draft';
 import { formatDate } from './date';
@@ -70,9 +72,18 @@ export const needsAmount = (missingFacts: readonly string[]) =>
       fact.startsWith('an amount with'),
   );
 /** What an item in another currency than its Group's needs (#567). */
-const GROUP_CURRENCY_NEED = 'the Group currency';
+function groupCurrencyNeed(category?: GroupCategory) {
+  // Named as Add expense names it: the Trip currency, the Household currency (#596).
+  return `the ${groupNounTitle(category)} currency`;
+}
 /** A problem the server names by its code, in words that follow "Needs". */
-const codeNeeds = new Map([['CURRENCY_MISMATCH', GROUP_CURRENCY_NEED]]);
+const codeNeeds = new Map([['CURRENCY_MISMATCH', groupCurrencyNeed]]);
+/** A code's need as any kind of Group words it, to know the Needs line already says it. */
+const kinds: GroupCategory[] = ['trip', 'home', 'couple', 'work', 'other'];
+const codeNeedWords = (problem: string) => {
+  const need = codeNeeds.get(problem);
+  return need ? new Set(kinds.map(need)) : null;
+};
 
 const DECIMALS = /^Amount supports at most (\d+) decimal places$/;
 
@@ -112,7 +123,11 @@ function unmetNeed(
     : { need: 'a whole-number amount', sentence: 'The amount must be a whole number.' };
 }
 
-function accountModel(item: ToReviewItem, groupCurrency?: string): ReviewItemModel {
+function accountModel(
+  item: ToReviewItem,
+  groupCurrency?: string,
+  category?: GroupCategory,
+): ReviewItemModel {
   const values = withGroupCurrency(item.draft.values, groupCurrency);
   const parsed = completeExpenseDraftSchema.safeParse(values);
   const issues = parsed.success ? [] : parsed.error.issues;
@@ -128,7 +143,7 @@ function accountModel(item: ToReviewItem, groupCurrency?: string): ReviewItemMod
         facts[String(issue.path[0])] ??
         'the expense details',
     );
-  const coded = item.problems.flatMap((problem) => codeNeeds.get(problem) ?? []);
+  const coded = item.problems.flatMap((problem) => codeNeeds.get(problem)?.(category) ?? []);
   const missingFacts = [...new Set([...unknownFacts, ...needs, ...coded])];
   // Only a problem nothing can name falls back to the expense details.
   if (item.problems.length && !missingFacts.length) missingFacts.push('the expense details');
@@ -189,7 +204,7 @@ export function buildToReview(
   now: Date,
 ) {
   const items: ReviewItemModel[] = read.groups.flatMap((group) =>
-    group.items.map((item) => accountModel(item, group.currency)),
+    group.items.map((item) => accountModel(item, group.currency, group.category)),
   );
   items.push(
     ...deviceItems.map((item) => ({
@@ -211,6 +226,7 @@ export function buildToReview(
   );
   const names = new Map(read.groups.map((group) => [group.groupId, group.groupName]));
   const currencies = new Map(read.groups.map((group) => [group.groupId, group.currency]));
+  const categories = new Map(read.groups.map((group) => [group.groupId, group.category]));
   for (const item of deviceItems)
     if (!names.has(item.groupId)) names.set(item.groupId, item.groupName);
   const groups = [...names]
@@ -220,6 +236,7 @@ export function buildToReview(
         groupId,
         groupName,
         currency: currencies.get(groupId),
+        ...(categories.get(groupId) ? { category: categories.get(groupId) } : {}),
         items: own,
         counts: counts(own),
         sourceSummary: toReviewSourceSummary(own),
@@ -466,8 +483,8 @@ export function memberProblems(
     // A wrong fact the Needs line already names (#506); a member's row is still named below.
     const unmet = path && path.index === undefined && unmetNeed(path.reason, path.field);
     if (unmet && item.missingFacts.includes(unmet.need)) continue;
-    const coded = codeNeeds.get(problem);
-    if (coded && item.missingFacts.includes(coded)) continue;
+    const coded = codeNeedWords(problem);
+    if (coded && item.missingFacts.some((fact) => coded.has(fact))) continue;
     const words = reviewProblem(problem, values, names);
     if (!said.includes(words)) said.push(words);
   }

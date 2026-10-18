@@ -16,6 +16,11 @@ const toReviewReadSchema = z.looseObject({
       groupName: z.string(),
       /** The Group's Expense currency, which a Draft without one takes (#512). */
       currency: z.string().optional(),
+      /**
+       * The Group's kind, which names its currency: the Trip currency (#596). One this client
+       * doesn't know reads as none, and the Group is named as a Group.
+       */
+      category: z.enum(['trip', 'home', 'couple', 'work', 'other']).optional().catch(undefined),
       count: z.number().int().nonnegative(),
       items: z.array(toReviewItemSchema),
     }),

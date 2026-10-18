@@ -423,6 +423,7 @@ export const expenseDraftService = {
         groupId: String(group._id),
         groupName: group.name,
         currency: group.defaultCurrency,
+        category: group.category ?? 'other',
         count: items.length,
         items,
       });
