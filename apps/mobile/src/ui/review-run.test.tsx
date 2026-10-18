@@ -120,6 +120,8 @@ function fixture(
     lostExpense?: boolean;
     mixed?: boolean;
     flag?: boolean;
+    /** The kind the To review read names for the Group (#596). */
+    category?: 'trip' | 'home';
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -185,6 +187,7 @@ function fixture(
                     groupId: id,
                     groupName: id === groupId ? group.name : 'Goa Friends Trip',
                     currency: 'INR',
+                    ...(options.category && id === groupId ? { category: options.category } : {}),
                     count: own.length,
                     items: own,
                   },
@@ -741,6 +744,25 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(button(tree, 'Use INR, the Group’s currency').props.disabled).toBe(false);
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
   });
+  it.each([
+    ['trip', 'Trip'],
+    ['home', 'Household'],
+  ] as const)(
+    'names the currency an item in a %s needs by its kind (#596)',
+    async (category, noun) => {
+      const f = fixture({ one: true, category });
+      f.items()[0].draft.values!.currency = 'USD';
+      f.items()[0].problems = ['CURRENCY_MISMATCH'];
+      await signIn(f);
+      await act(async () => {
+        await f.controller.startReviewRun();
+      });
+      const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+
+      expect(text(tree)).toContain(`One thing left before you can save: the ${noun} currency`);
+      expect(button(tree, `Use INR, the ${noun}’s currency`).props.disabled).toBe(false);
+    },
+  );
   it('shows the shared change note from a newer read, and never saves an unseen version', async () => {
     const f = fixture({ one: true });
     await signIn(f);

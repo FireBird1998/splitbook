@@ -43,7 +43,16 @@ function markup(
   const [item] = buildToReview(
     {
       total: 1,
-      groups: [{ groupId, groupName: 'Maple House', currency: 'INR', count: 1, items: [read] }],
+      groups: [
+        {
+          groupId,
+          groupName: 'Maple House',
+          currency: 'INR',
+          ...(category ? { category } : {}),
+          count: 1,
+          items: [read],
+        },
+      ],
     },
     [],
     new Date('2026-10-16T12:00:00.000Z'),
@@ -244,6 +253,36 @@ describe('an item in another currency than its Group’s, in the web panel (#567
     );
     expect(panel([], { ...inUsd, currency: 'INR' }, [], 'trip')).toContain(
       'Currency 🇮🇳 INR Currency Trip currency',
+    );
+  });
+});
+
+describe('the currency an item needs in the web panel, named by its Group’s kind (#596)', () => {
+  const inUsd = {
+    description: 'Station dinner',
+    amount: 30,
+    currency: 'USD',
+    date: '2026-09-02',
+    category: 'food',
+    paidBy: [{ user: sam, amount: 30 }],
+    splitMethod: 'equal',
+    splitBetween: [{ user: alex }, { user: sam }],
+    tag: 'Food',
+  };
+  const needs = (category: GroupCategory) => {
+    const shown = panel(['CURRENCY_MISMATCH'], inUsd, [], category);
+    return shown.slice(shown.indexOf('Changes kept in To review'));
+  };
+
+  it('says the Trip currency in a Trip', () => {
+    expect(needs('trip')).toBe(
+      'Changes kept in To review Still needs the Trip currency. Save expense Delete',
+    );
+  });
+
+  it('says the Household currency in a Household', () => {
+    expect(needs('home')).toBe(
+      'Changes kept in To review Still needs the Household currency. Save expense Delete',
     );
   });
 });

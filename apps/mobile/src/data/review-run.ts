@@ -1,6 +1,7 @@
 import { draftEditQueue } from '@splitbook/shared/draft-edit-queue';
 import { buildToReview, type ReviewRunOutcome } from '@splitbook/shared/to-review';
 import type { ToReviewItem, ToReviewRead } from '@splitbook/shared/to-review-read';
+import type { GroupCategory } from '@splitbook/shared/types';
 import type {
   DraftReview,
   ExpenseDraftValues,
@@ -11,8 +12,14 @@ import type { ExpenseContext } from './expense-draft';
 import type { ExpenseRecord } from './expense-record';
 
 export interface ReviewRunState {
-  /** Each item with its Group, and the Group's currency the read names (#512). */
-  items: { groupId: string; groupName: string; currency?: string; item: ToReviewItem }[];
+  /** Each item with its Group, and the Group's currency (#512) and kind (#596) the read names. */
+  items: {
+    groupId: string;
+    groupName: string;
+    currency?: string;
+    category?: GroupCategory;
+    item: ToReviewItem;
+  }[];
   index: number;
   outcomes: ReviewRunOutcome[];
   context: ExpenseContext | null;
@@ -328,6 +335,7 @@ export function createReviewRun(options: {
                 groupId: selected.groupId,
                 groupName: selected.groupName,
                 currency: selected.currency,
+                category: selected.category,
                 count: 1,
                 items: reviews,
               },

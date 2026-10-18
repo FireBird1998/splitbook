@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getGroupTheme, GROUP_THEMES, GROUP_THEME_LIST } from './group-themes';
+import { getGroupTheme, GROUP_THEMES, GROUP_THEME_LIST, groupNounTitle } from './group-themes';
 import type { GroupCategory } from './types';
 
 const ALL_CATEGORIES: GroupCategory[] = ['trip', 'home', 'couple', 'work', 'other'];
@@ -53,5 +53,13 @@ describe('getGroupTheme', () => {
   it('exposes the five themes in picker order', () => {
     expect(GROUP_THEME_LIST.map((theme) => theme.id)).toEqual(ALL_CATEGORIES);
     expect(Object.keys(GROUP_THEMES)).toHaveLength(5);
+  });
+});
+
+describe('groupNounTitle (#596)', () => {
+  it('names a Group by its kind, as Add expense does', () => {
+    expect(
+      ['trip', 'home', 'couple', 'work', 'other', undefined].map((c) => groupNounTitle(c as never)),
+    ).toEqual(['Trip', 'Household', 'Group', 'Group', 'Group', 'Group']);
   });
 });

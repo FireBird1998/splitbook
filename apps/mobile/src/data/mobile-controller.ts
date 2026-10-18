@@ -6401,6 +6401,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 groupId: group.groupId,
                 groupName: group.groupName,
                 currency: group.currency,
+                category: group.category,
                 item: item.accountItem,
               },
             ]
