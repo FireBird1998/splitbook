@@ -27,7 +27,7 @@ export default function SettingsPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('INR');
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState('');
-  const { signOut, unreachable, dismiss } = useSignOut();
+  const { signOut, problem, dismiss } = useSignOut();
   const [error, setError] = useState('');
   const [nameError, setNameError] = useState('');
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -229,7 +229,7 @@ export default function SettingsPage() {
         </Stack>
       </Paper>
 
-      <SignOutNotice unreachable={unreachable} onClose={dismiss} />
+      <SignOutNotice problem={problem} onClose={dismiss} />
       <Snackbar
         open={!!snackbar}
         autoHideDuration={3000}
