@@ -15,7 +15,7 @@ the work that followed it. When a file count below drifts, the commands still ho
 | Tooling                 | `tools/swarm`, `tools/landing-figures`                                        | 6 and 3       | Vitest                                                            | `pnpm --filter @splitbook/swarm test`                                       | PR checks, time-zone matrix, verify |
 | Expense access          | `apps/web/playwright-expense-access/`                                         | 29 specs      | Playwright, HTTP and Chromium, an isolated app and database       | `pnpm web test:expense-access`                                              | verify                              |
 | Google sign-in recovery | `apps/web/playwright-auth-recovery/`                                          | 1 spec        | Playwright, an isolated app in Google mode                        | `pnpm web exec playwright test --config playwright.auth-recovery.config.ts` | verify                              |
-| Browser journeys        | `apps/web/playwright/`                                                        | 26 specs      | Playwright, four theme projects, the seeded `splitbook-demo`      | `pnpm web test:e2e`                                                         | playwright                          |
+| Browser journeys        | `apps/web/playwright/`                                                        | 26 specs      | Playwright, four theme projects, the seeded `splitbook-demo`      | `pnpm web test:e2e`                                                         | journeys, one job per project       |
 | Google sign-in journeys | `apps/web/playwright-google/`                                                 | 2 specs       | Playwright, `AUTH_MODE=google`                                    | `pnpm web test:e2e:google`, then `pnpm web test:e2e:google:assistants`      | playwright                          |
 | Component lab and pilot | `playwright-design-system/`, `playwright-pilot/`, `playwright-production-ui/` | 1, 4, 1 specs | Playwright; in CI the lab and pilot use a Linux browser container | `pnpm web test:design-system`, `test:pilot`, `test:production-ui`           | playwright                          |
 
@@ -224,6 +224,11 @@ in [`playwright/`](../apps/web/playwright/).
 - Journeys share one database, so the suite runs with `workers: 1`. A test runs after whatever
   earlier tests wrote, so assertions on mutable balances compare with the read they come from
   rather than assume a figure.
+- CI runs one **journeys** job per project (`pnpm web test:e2e --project=<name>`), the four side
+  by side, each on a MongoDB of its own that global setup reseeds. Within a project the suite is
+  still serial, but no project runs after another project's writes, so a test in desktop-dark or
+  a phone project must not rely on what desktop-light's money journeys wrote. Locally,
+  `pnpm web test:e2e` runs the four projects one after another on the same database.
 - Waits on To review's 30 s refresh run on Playwright's clock (`page.clock.runFor`) instead of
   real time (#483).
 - Review screenshots go to `apps/web/playwright/artifacts/<project>/` (gitignored, uploaded by
@@ -314,9 +319,14 @@ skipped when `main`'s commit already passed it.
   worker, the Group-cleanup HTTP check against a backend on the replica set, Chromium, the
   expense-access suite on the replica set, the Google sign-in recovery suite, and the build. On a failure it uploads the Playwright
   output and the backend log.
-- **playwright** (about 30 minutes, 23 of them the browser journeys): install, Chromium, a
-  replica set on 27017 for the demo database, a build with persistent Drafts on, `pnpm web
-test:e2e` (`next start` on 3100), then a default build for `pnpm web test:e2e:google` and
+- **journeys**, as **Browser journeys (desktop-light)**, **(desktop-dark)**, **(mobile-light)**
+  and **(mobile-dark)**: one job per Playwright project, side by side. Each runs install,
+  Chromium, a replica set on 27017 for the demo database, a build with persistent Drafts on and
+  `pnpm web test:e2e --project=<name>` (`next start` on 3100), and uploads its report and review
+  screenshots as `playwright-report-<name>`. Until 2026-10-18 the four ran one after another
+  in the playwright job, 22 to 28 of its 28 to 36 minutes.
+- **playwright**: install, Chromium, a replica set on 27017 (the Google suites' database, and
+  `splitbook-demo` for the pilot), a default build for `pnpm web test:e2e:google` and
   `pnpm web test:e2e:google:assistants` (#450), the
   component lab and the pilot's behaviour, accessibility and visual comparisons (both in a Linux
   Playwright browser container, so screenshots match their baselines), and the production lab
