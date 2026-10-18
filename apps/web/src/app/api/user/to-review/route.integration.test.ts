@@ -115,6 +115,11 @@ describe('GET /api/user/to-review', () => {
       'INR',
       'INR',
     ]);
+    // And its kind, which names its currency: the Trip currency (#596).
+    expect(listed.body.data.groups.map((group: { category: string }) => group.category)).toEqual([
+      'trip',
+      'home',
+    ]);
   });
 
   it('shows Alex none of the Drafts Sam keeps in Alex’s Group', async () => {

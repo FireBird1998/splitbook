@@ -119,3 +119,9 @@ export const GROUP_THEME_LIST: readonly GroupTheme[] = Object.values(GROUP_THEME
 export function getGroupTheme(category: GroupCategory): GroupTheme {
   return GROUP_THEMES[category] ?? GROUP_THEMES.other;
 }
+
+/** The kind's noun as a title, as Add expense names a Group: Trip, Household, Group. */
+export function groupNounTitle(category: GroupCategory = 'other'): string {
+  const noun = getGroupTheme(category).nouns.singular;
+  return `${noun.charAt(0).toUpperCase()}${noun.slice(1)}`;
+}
