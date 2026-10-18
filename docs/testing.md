@@ -13,7 +13,7 @@ the work that followed it. When a file count below drifts, the commands still ho
 | Android                 | `apps/mobile/src`, `apps/mobile/scripts`                                      | 94            | Vitest and react-test-renderer, no database                       | `pnpm mobile test`                                                          | PR checks, time-zone matrix, verify |
 | Android HTTP verifiers  | `apps/mobile/scripts/verify-*.ts`                                             | 11            | a backend of the run's own (`pnpm swarm up`)                      | `pnpm mobile verify:all`                                                    | PR checks                           |
 | Tooling                 | `tools/swarm`, `tools/landing-figures`                                        | 6 and 3       | Vitest                                                            | `pnpm --filter @splitbook/swarm test`                                       | PR checks, time-zone matrix, verify |
-| Expense access          | `apps/web/playwright-expense-access/`                                         | 29 specs      | Playwright, HTTP and Chromium, an isolated app and database       | `pnpm web test:expense-access`                                              | verify                              |
+| Expense access          | `apps/web/playwright-expense-access/`                                         | 29 specs      | Playwright, HTTP and Chromium, an isolated app and database       | `pnpm web test:expense-access`                                              | expense-access                      |
 | Google sign-in recovery | `apps/web/playwright-auth-recovery/`                                          | 1 spec        | Playwright, an isolated app in Google mode                        | `pnpm web exec playwright test --config playwright.auth-recovery.config.ts` | verify                              |
 | Browser journeys        | `apps/web/playwright/`                                                        | 26 specs      | Playwright, four theme projects, the seeded `splitbook-demo`      | `pnpm web test:e2e`                                                         | journeys, one job per project       |
 | Google sign-in journeys | `apps/web/playwright-google/`                                                 | 2 specs       | Playwright, `AUTH_MODE=google`                                    | `pnpm web test:e2e:google`, then `pnpm web test:e2e:google:assistants`      | playwright                          |
@@ -176,8 +176,8 @@ It runs as two projects, against one isolated app and database per run (#476):
   moves, and no Home or Groups list is capped, so their extra Groups crowd nothing out.
 
 Its MongoDB is `127.0.0.1:27017` unless `EXPENSE_ACCESS_MONGO_PORT` names another loopback port;
-To review saves and Tag actions need transactions, so give it a replica set (CI uses verify's on
-27038). With `CI` set it serves a production build of the snapshot, otherwise `next dev`. On `next dev`, global setup first requests the pages the suite
+To review saves and Tag actions need transactions, so give it a replica set (CI's expense-access
+job starts one of its own on 27038). With `CI` set it serves a production build of the snapshot, otherwise `next dev`. On `next dev`, global setup first requests the pages the suite
 opens and the reads they make first (the landing and sign-in pages signed out, the rest signed in
 as a persona), so no route compiles while a test waits on it. That warm-up runs for demo-mode
 apps only: the Google sign-in recovery suite reuses the isolated app in Google mode, which has no
@@ -317,8 +317,12 @@ skipped when `main`'s commit already passed it.
   package's unit tests, and the web integration suite on the replica set with the job's
   standalone `mongo:7` service on 27017), the two standalone recovery files again with one
   worker, the Group-cleanup HTTP check against a backend on the replica set, Chromium, the
-  expense-access suite on the replica set, the Google sign-in recovery suite, and the build. On a failure it uploads the Playwright
-  output and the backend log.
+  Google sign-in recovery suite, and the build. On a failure it uploads the Playwright output
+  and the backend log.
+- **expense-access** (**Authenticated expense access**): install, Chromium, a replica set of its
+  own (27038, test commands on) and `pnpm web test:expense-access`, which builds and serves its
+  isolated app. Until 2026-10-18 it ran inside verify, 7 of verify's 14 to 17 minutes. On a
+  failure it uploads the suite's Playwright output.
 - **journeys**, as **Browser journeys (desktop-light)**, **(desktop-dark)**, **(mobile-light)**
   and **(mobile-dark)**: one job per Playwright project, side by side. Each runs install,
   Chromium, a replica set on 27017 for the demo database, a build with persistent Drafts on and
