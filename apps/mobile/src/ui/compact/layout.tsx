@@ -245,10 +245,12 @@ export function CompactAvatar({ name, small = false }: { name: string; small?: b
         justifyContent: 'center',
       }}
     >
+      {/* The box stays 32 dp (26 small): two letters fit it up to about 130% text (#589). */}
       <CompactText
         variant="caption"
         tone="brand"
         weight="semibold"
+        maxFontSizeMultiplier={1.3}
         style={{ fontSize: small ? 10.5 : 12 }}
       >
         {initials(name)}
