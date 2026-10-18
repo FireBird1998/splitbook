@@ -166,7 +166,7 @@ test('recurring historical preview matches metadata and financial saves without 
     return page.getByRole('dialog', { name: 'Edit recurring expense' });
   };
   let dialog = await editTemplate('Historical recurring remainder');
-  await expect(dialog.getByText(/Priya Shah: ₹0\.02.*Sam Chen: ₹0\.01/)).toBeVisible();
+  await expect(dialog.getByText(/You: ₹0\.02.*Sam Chen: ₹0\.01/)).toBeVisible();
   await dialog.getByLabel('Description').fill('Historical recurring corrected');
   await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -177,7 +177,7 @@ test('recurring historical preview matches metadata and financial saves without 
   ]);
   dialog = await editTemplate('Historical recurring corrected');
   await dialog.getByLabel('Amount', { exact: true }).fill('0.05');
-  await expect(dialog.getByText(/Priya Shah: ₹0\.02.*Sam Chen: ₹0\.03/)).toBeVisible();
+  await expect(dialog.getByText(/You: ₹0\.02.*Sam Chen: ₹0\.03/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(dialog).toBeHidden();
   templates = await dataOf(await ledger.priya.get(`${root}/recurring`));

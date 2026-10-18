@@ -15,7 +15,10 @@ const GROUP = 'b00000000000000000000010';
 const RENT = 'c00000000000000000000001';
 
 /** The Group settings list of recurring Expenses, as the server renders it, for one template. */
-function list(dates: Pick<IRecurringExpense, 'startsOn' | 'endsOn'>) {
+function list(
+  dates: Pick<IRecurringExpense, 'startsOn' | 'endsOn'>,
+  { viewer = MEMBER, names = ['Alex', 'Sam'] }: { viewer?: string; names?: [string, string] } = {},
+) {
   const template: IRecurringExpense = {
     _id: 'd00000000000000000000001',
     group: GROUP,
@@ -67,17 +70,18 @@ function list(dates: Pick<IRecurringExpense, 'startsOn' | 'endsOn'>) {
           ],
           members: [
             {
-              user: { _id: ADMIN, name: 'Alex', email: 'alex@example.test', image: undefined },
+              user: { _id: ADMIN, name: names[0], email: 'alex@example.test', image: undefined },
               role: 'admin',
               joinedAt: '2026-01-01T00:00:00.000Z',
             },
             {
-              user: { _id: MEMBER, name: 'Sam', email: 'sam@example.test', image: undefined },
+              user: { _id: MEMBER, name: names[1], email: 'sam@example.test', image: undefined },
               role: 'member',
               joinedAt: '2026-01-02T00:00:00.000Z',
             },
           ],
           defaultCurrency: 'INR',
+          viewerId: viewer,
           onNotify: vi.fn(),
         }),
       ),
@@ -98,4 +102,21 @@ describe('the recurring list’s start and end (#522)', () => {
         );
       }),
   );
+});
+
+describe('who pays a recurring Expense (#442)', () => {
+  const dates = { startsOn: '2026-10-01T00:00:00.000Z', endsOn: null };
+  const sameName: [string, string] = ['Ankit Das', 'Ankit Das'];
+
+  it('is "You" for the viewer, by id, beside a member of the same name', () => {
+    const shown = list(dates, { viewer: ADMIN, names: sameName });
+    expect(shown).toContain('Day 1 monthly · You pay ·');
+    expect(shown).not.toContain('Ankit Das pays');
+  });
+
+  it('is the payer’s name for anyone else of the same name', () => {
+    expect(list(dates, { viewer: MEMBER, names: sameName })).toContain(
+      'Day 1 monthly · Ankit Das pays ·',
+    );
+  });
 });

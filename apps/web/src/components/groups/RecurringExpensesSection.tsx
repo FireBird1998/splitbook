@@ -57,12 +57,15 @@ import {
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { recurringRefusal } from '@/components/groups/recurring-refusal';
 import { RECURRING_SECTION_ID } from '@/components/groups/group-tabs';
+import { memberLabel } from '@splitbook/shared/activity-timeline';
 
 interface RecurringExpensesSectionProps {
   groupId: string;
   tags: GroupReadTag[];
   members: GroupReadMember[];
   defaultCurrency: string;
+  /** The signed-in member, called "You" (#442). */
+  viewerId: string;
   onNotify: (message: string) => void;
 }
 
@@ -171,6 +174,7 @@ export default function RecurringExpensesSection({
   tags,
   members,
   defaultCurrency,
+  viewerId,
   onNotify,
 }: RecurringExpensesSectionProps) {
   const { data, mutate } = useSWR(recurringExpensesKey(WEB_QUERY_ACCOUNT, groupId), fetchWebRead);
@@ -206,7 +210,7 @@ export default function RecurringExpensesSection({
   const precision = getCurrencyPrecision(defaultCurrency);
 
   const memberName = (id: string) =>
-    members.find((m) => m.user._id === id)?.user.name ?? 'Former member';
+    memberLabel(id, members.find((m) => m.user._id === id)?.user.name, viewerId) ?? 'Former member';
 
   /** A template whose tag or participants no longer match group state stops
    *  generating — surface that here instead of failing silently. */
@@ -464,11 +468,14 @@ export default function RecurringExpensesSection({
     }
   };
 
-  const payerName = (template: IRecurringExpense): string => {
+  /** "Alex Rao pays", or "You pay" for the viewer, matched by id since two members can share a name. */
+  const payerPays = (template: IRecurringExpense): string => {
     const payer = template.paidBy[0];
-    if (!payer) return '—';
-    if (typeof payer.user === 'object' && payer.user?.name) return payer.user.name;
-    return memberName(String(typeof payer.user === 'object' ? payer.user._id : payer.user));
+    if (!payer) return '— pays';
+    const id = String(typeof payer.user === 'object' ? payer.user._id : payer.user);
+    if (id === viewerId) return 'You pay';
+    if (typeof payer.user === 'object' && payer.user?.name) return `${payer.user.name} pays`;
+    return `${memberName(id)} pays`;
   };
 
   return (
@@ -595,7 +602,7 @@ export default function RecurringExpensesSection({
                       )}
                     </Stack>
                     <Typography variant="caption" color="text.disabled">
-                      Day {template.dayOfMonth} monthly · {payerName(template)} pays ·{' '}
+                      Day {template.dayOfMonth} monthly · {payerPays(template)} ·{' '}
                       {splitSummary(template)} · since {dayLabel(template.startsOn)}
                       {template.endsOn ? ` · until ${dayLabel(template.endsOn)}` : ''}
                     </Typography>
