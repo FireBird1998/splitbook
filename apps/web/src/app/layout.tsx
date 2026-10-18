@@ -6,6 +6,7 @@ import ThemeProvider from '@/providers/ThemeProvider';
 import { PRODUCT_NAME, THEME_STORAGE_KEY } from '@/lib/product';
 
 export const metadata: Metadata = {
+  manifest: '/manifest.webmanifest',
   title: {
     default: `${PRODUCT_NAME} - Shared Expenses, Settled Fairly`,
     // A page that names itself reads "<page> · Splitbook", so a row of tabs tells them apart.

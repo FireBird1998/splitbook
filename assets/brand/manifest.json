@@ -1021,6 +1021,22 @@
       "alpha": false
     },
     {
+      "file": "apps/web/public/brand/maskable-192.png",
+      "bytes": 4420,
+      "sha256": "1ab557ef7fb5f4daed5b7fe305b5421cddbe18c549269e3f5fb1122e9c16822c",
+      "width": 192,
+      "height": 192,
+      "alpha": false
+    },
+    {
+      "file": "apps/web/public/brand/maskable-512.png",
+      "bytes": 14691,
+      "sha256": "094ab35660937ff1a4a62ad4971cb59a46534e108e55ff1f502eba24c238262f",
+      "width": 512,
+      "height": 512,
+      "alpha": false
+    },
+    {
       "file": "apps/web/public/brand/favicon.ico",
       "bytes": 2750,
       "sha256": "c0ba96f0096a9b87e537f74290b89dadd3f19d554038cf5c35bbc301df84c867"
