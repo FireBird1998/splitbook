@@ -1,3 +1,6 @@
+import { brandLogoSize } from './brand-logo';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { ThemeContext } from './theme';
 import type { ReactElement } from 'react';
 import {
   act,
@@ -184,4 +187,40 @@ it('identifies production records as live and keeps staging wording separate', a
   const staging = await render(<SignIn busy={false} {...options} onGoogleSignIn={vi.fn()} />);
   expect(text(staging)).toContain('separate test ledger');
   expect(text(staging)).not.toContain('This is your live ledger.');
+});
+
+it.each(['light', 'dark'] as const)('shows the %s logo above the welcome copy', async (mode) => {
+  const root = await render(
+    <ThemeContext.Provider value={getSemanticTokens(mode)}>
+      <SignIn busy={false} {...options} onGoogleSignIn={vi.fn()} />
+    </ThemeContext.Provider>,
+  );
+  const logos = root.findAll(
+    (node) => typeof node.type === 'string' && node.props.accessibilityLabel === 'Splitbook',
+  );
+  expect(logos).toHaveLength(1);
+  expect(logos[0]!.type).toBe('Image');
+  expect(String(logos[0]!.props.source)).toContain(`logo-${mode}.png`);
+  expect(flatten(logos[0]!.props.style)).toMatchObject({ ...brandLogoSize });
+  const hosts = findHosts(renderer!.toJSON(), (_, type) => type === 'Image' || type === 'Text');
+  expect(hosts[0]!.type).toBe('Image');
+});
+
+it('keeps the invited-account explanation before the Google button', async () => {
+  await render(<SignIn busy={false} {...options} onGoogleSignIn={vi.fn()} />);
+  const hosts = findHosts(
+    renderer!.toJSON(),
+    (_, type) => type === 'Text' || type === 'GoogleSignInButton',
+  );
+  const explanation = hosts.findIndex(
+    (node) =>
+      node.type === 'Text' &&
+      node.children
+        ?.filter((child) => typeof child === 'string')
+        .join('')
+        .startsWith('Use the Google account invited to'),
+  );
+  const button = hosts.findIndex((node) => node.type === 'GoogleSignInButton');
+  expect(explanation).toBeGreaterThanOrEqual(0);
+  expect(explanation).toBeLessThan(button);
 });

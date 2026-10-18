@@ -13,6 +13,7 @@ import {
 import type { PersonaId, SignInOption } from '../data/types';
 import { Icon } from './primitives';
 import { useTheme } from './theme';
+import { brandLogo } from './brand-logo';
 import { PRODUCT_NAME } from '../product';
 
 const personas: { id: PersonaId; name: string; detail: string }[] = [
@@ -56,6 +57,7 @@ export function SignIn({
       contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
     >
       <View style={{ paddingVertical: 12, gap: 6 }}>
+        {brandLogo(theme.mode)}
         <CompactText variant="overline">Less math. More living.</CompactText>
         <CompactText variant="title">Good company.{'\n'}Shared expenses.</CompactText>
         <CompactText tone="secondary">A little clarity for everything you share.</CompactText>

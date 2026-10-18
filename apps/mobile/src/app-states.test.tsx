@@ -1,3 +1,4 @@
+import { brandLogoSize } from './ui/brand-logo';
 import {
   act,
   create,
@@ -608,6 +609,14 @@ describe('cold start', () => {
   });
 });
 
+it('shows Sign in branding once without the old tile or typed wordmark', async () => {
+  const app = await start(device());
+  await settle();
+  expect(app.hosts((props) => props.accessibilityLabel === 'Splitbook')).toHaveLength(1);
+  expect(app.text()).not.toContain('splitbook');
+  expect(app.hosts(() => true).filter((node) => node.children.includes('s'))).toEqual([]);
+});
+
 describe('sign-in and start-up show progress while they wait (#335)', () => {
   /** What the App's controller publishes. */
   const shown = () => (runtime.controller as MobileController).getSnapshot();
@@ -692,7 +701,7 @@ describe('sign-in and start-up show progress while they wait (#335)', () => {
     expect(app.text()).not.toContain('Updated');
 
     // Confirmed, Home is read again: the bar goes with the check, and the top bar says
-    // "Refreshing…" over the saved figures until they're answered (#332). Its list and figures
+    // "Updating…" over the saved figures until they're answered (#332). Its list and figures
     // are read together (#333).
     const list = phone.hold('/api/groups');
     const figures = phone.hold('/api/user/balances');
@@ -702,7 +711,7 @@ describe('sign-in and start-up show progress while they wait (#335)', () => {
     expect(app.progress()).toEqual([]);
     expect(aboveContent('ScrollView').props.accessibilityRole).toBeUndefined();
     expect(layoutHeight(aboveContent('ScrollView'))).toBe(progressHeight);
-    expect(app.content().outside).toContain('Refreshing…');
+    expect(app.content().outside).toContain('Updating…');
     expect(app.text()).not.toContain('Checking…');
     expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
     expect(app.text()).not.toContain('Updated');
@@ -1322,7 +1331,7 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.text()).not.toContain(saved);
   });
 
-  it('says only “Refreshing…” above figures read in this session while they are read again', async () => {
+  it('says only “Updating…” above figures read in this session while they are read again', async () => {
     const phone = device();
     await usedBefore(phone);
     const app = await start(phone);
@@ -1335,20 +1344,20 @@ describe('Home says what is true, without jumps (#332)', () => {
     app.tap('Refresh Home');
     await figures.reached;
     await settle();
-    expect(app.content().outside).toContain('Refreshing…');
+    expect(app.content().outside).toContain('Updating…');
     expect(app.content().inside).toContain(read);
     expect(app.text()).not.toContain('Saved');
 
     figures.release();
     await settle();
-    expect(app.text()).not.toContain('Refreshing…');
+    expect(app.text()).not.toContain('Updating…');
     expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
   });
 
-  // On a 360×640dp phone at 130% text, "Refreshing…" wrapped onto two lines on the device
+  // On a 360×640dp phone at 130% text, the previous "Refreshing…" status wrapped on the device
   // (#332 device check, C6): the widths here are calibrated to what it measured there.
-  it.each([1, 1.3])(
-    'keeps the status beside the wordmark on one line, at %s× text',
+  it.each([1, 1.3, 2])(
+    'keeps the status beside the logo on one line, at %s× text',
     async (scale) => {
       setWindow({ fontScale: scale });
       const phone = device();
@@ -1358,11 +1367,44 @@ describe('Home says what is true, without jumps (#332)', () => {
       await start(phone);
       await check.reached;
       await settle();
-      // Laid out at its natural width, the top bar fits a 360dp phone, so its status needs no
-      // second line; past that, it is one line that shrinks to fit rather than wrap or lose a word.
+      // At ordinary text the natural widths fit. At 200%, the existing status shrink rule
+      // uses the room left by the fixed logo and 48 dp actions; the bar never grows taller.
       const fits = (status: string) => {
         const { bar, text } = topBar();
-        expect(layoutWidth(bar, scale)).toBeLessThanOrEqual(360);
+        expect(layoutHeight(bar, scale, 360)).toBe(64);
+        const [logo] = findHosts(
+          bar,
+          (props, type) => type === 'Image' && props.accessibilityLabel === 'Splitbook',
+        );
+        expect(logo).toBeDefined();
+        expect(layoutWidth(logo!, scale)).toBe(brandLogoSize.width);
+        const leading = bar.children![0] as ReactTestRendererJSON;
+        expect(flatten(leading.props.style)).toMatchObject({ flex: 1, minWidth: 0 });
+        const statusBox = leading.children![1] as ReactTestRendererJSON;
+        const outer = flatten(bar.props.style);
+        const fixed =
+          layoutWidth(logo!, scale) +
+          (bar.children!.slice(1) as ReactTestRendererJSON[]).reduce(
+            (sum, action) => sum + layoutWidth(action, scale),
+            0,
+          ) +
+          Number(outer.paddingLeft) +
+          Number(outer.paddingRight) +
+          Number(outer.gap) * 2 +
+          Number(flatten(leading.props.style).gap);
+        expect(fixed).toBe(258.25);
+        expect(flatten(statusBox.props.style)).toMatchObject({
+          maxWidth: 101.75,
+          minWidth: 0,
+          flexShrink: 1,
+        });
+        expect(
+          fixed +
+            Math.min(
+              layoutWidth(statusBox, scale),
+              Number(flatten(statusBox.props.style).maxWidth),
+            ),
+        ).toBeLessThanOrEqual(360);
         expect(text).toContain(status);
         const [line] = findHosts(
           bar,
@@ -1377,7 +1419,7 @@ describe('Home says what is true, without jumps (#332)', () => {
       check.release();
       await figures.reached;
       await settle();
-      fits('Refreshing…');
+      fits('Updating…');
       figures.release();
       await settle();
     },

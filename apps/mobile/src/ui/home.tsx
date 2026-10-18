@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from 'react';
-import { Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, View, useWindowDimensions } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -38,6 +38,7 @@ import { readTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
 import { fonts, useTheme } from './theme';
+import { brandLogo, brandLogoSize } from './brand-logo';
 
 const themeIcons: Record<GroupCategory, IconName> = {
   home: 'home-outline',
@@ -49,7 +50,7 @@ const themeIcons: Record<GroupCategory, IconName> = {
 /** Leading icon tile (40) plus the row's padding and gap, so dividers start under the text. */
 const rowInset = 66;
 
-/** The wordmark, a quiet refresh status, Refresh, and the avatar that opens Account. */
+/** The logo, a quiet refresh status, Refresh, and the avatar that opens Account. */
 export const HomeTopBar = memo(function HomeTopBar({
   userName,
   status,
@@ -66,6 +67,10 @@ export const HomeTopBar = memo(function HomeTopBar({
   onAccount: () => void;
 }) {
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+  // Insets, two 48 dp actions, their 2 dp gaps, and the logo/status gap stay fixed.
+  const fixedWidth = 20 + 4 + 48 * 2 + 2 * 2 + brandLogoSize.width + 10;
+  const statusWidth = Math.max(0, width - fixedWidth);
   return (
     <View
       style={{
@@ -81,19 +86,10 @@ export const HomeTopBar = memo(function HomeTopBar({
     >
       {/* Takes the room the actions leave; the status in it is one short line (#332). */}
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <Text
-          accessibilityRole="header"
-          style={{
-            fontFamily: fonts.bold,
-            fontSize: 24,
-            lineHeight: 30,
-            letterSpacing: -0.6,
-            color: theme.text,
-          }}
-        >
-          splitbook<Text style={{ color: theme.brand.main }}>.</Text>
-        </Text>
-        {status}
+        {brandLogo(theme.mode, true)}
+        {status ? (
+          <View style={{ maxWidth: statusWidth, minWidth: 0, flexShrink: 1 }}>{status}</View>
+        ) : null}
       </View>
       <IconButton
         icon="refresh-outline"

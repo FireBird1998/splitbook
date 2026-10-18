@@ -228,6 +228,10 @@ function AuthenticationScreen() {
   );
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
   const feedback = state;
+  const showsSignIn =
+    configurationReady &&
+    !authenticated &&
+    !['restoring', 'error', 'sign-out-unconfirmed'].includes(state.auth.status);
   const joining = state.invitation.status === 'joining';
   const waiting = !configurationReady
     ? null
@@ -238,92 +242,98 @@ function AuthenticationScreen() {
         : null;
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-      <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
-        {/* Shrinks so the wordmark and its short status never push Settings off screen. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
-          {state.screen !== 'groups' ? (
-            // Disabled while joining: the join finishes and opens its Group.
+      {(!showsSignIn || state.screen !== 'groups') && (
+        <View
+          style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}
+        >
+          {/* Shrinks so the wordmark and its short status never push Settings off screen. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
+            {state.screen !== 'groups' ? (
+              // Disabled while joining: the join finishes and opens its Group.
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to Groups"
+                accessibilityState={{ disabled: joining }}
+                disabled={joining}
+                onPress={controller.back}
+                style={{
+                  minWidth: 48,
+                  minHeight: 48,
+                  justifyContent: 'center',
+                  opacity: joining ? 0.4 : 1,
+                }}
+              >
+                <Icon name="arrow-back-outline" color={theme.text} />
+              </Pressable>
+            ) : (
+              <View
+                style={{
+                  backgroundColor: theme.brand.main,
+                  width: 32,
+                  height: 36,
+                  borderRadius: 9,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <Copy
+                  style={{ color: theme.brand.contrastText, fontFamily: fonts.bold, fontSize: 22 }}
+                >
+                  s
+                </Copy>
+              </View>
+            )}
+            {!showsSignIn && (
+              <Copy style={{ fontFamily: fonts.semibold, fontSize: 23, letterSpacing: -0.6 }}>
+                splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
+              </Copy>
+            )}
+            {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
+            <RefreshStatus visible={feedback.quiet} />
+          </View>
+          {authenticated && state.screen !== 'settings' ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Back to Groups"
-              accessibilityState={{ disabled: joining }}
-              disabled={joining}
-              onPress={controller.back}
+              accessibilityLabel="Settings"
+              accessibilityState={{
+                disabled:
+                  state.creation.status === 'saving' ||
+                  state.invitation.status === 'joining' ||
+                  (state.screen === 'expense' &&
+                    (state.expense.status === 'saving' || state.expense.persistence !== 'saved')),
+              }}
+              disabled={
+                state.creation.status === 'saving' ||
+                state.invitation.status === 'joining' ||
+                (state.screen === 'expense' &&
+                  (state.expense.status === 'saving' || state.expense.persistence !== 'saved'))
+              }
+              onPress={controller.openSettings}
               style={{
-                minWidth: 48,
                 minHeight: 48,
+                minWidth: 48,
                 justifyContent: 'center',
-                opacity: joining ? 0.4 : 1,
+                alignItems: 'flex-end',
               }}
             >
-              <Icon name="arrow-back-outline" color={theme.text} />
+              <Icon name="settings-outline" size={23} />
             </Pressable>
           ) : (
             <View
               style={{
-                backgroundColor: theme.brand.main,
-                width: 32,
-                height: 36,
-                borderRadius: 9,
-                justifyContent: 'center',
-                alignItems: 'center',
+                paddingHorizontal: 9,
+                paddingVertical: 5,
+                borderRadius: 7,
+                backgroundColor: theme.brand.bg,
               }}
             >
-              <Copy
-                style={{ color: theme.brand.contrastText, fontFamily: fonts.bold, fontSize: 22 }}
-              >
-                s
-              </Copy>
+              <Label>
+                {googleSignInEnabled ? (environment.isProduction ? 'LIVE' : 'STAGING') : 'DEV'}
+              </Label>
             </View>
           )}
-          <Copy style={{ fontFamily: fonts.semibold, fontSize: 23, letterSpacing: -0.6 }}>
-            splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
-          </Copy>
-          {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
-          <RefreshStatus visible={feedback.quiet} />
         </View>
-        {authenticated && state.screen !== 'settings' ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            accessibilityState={{
-              disabled:
-                state.creation.status === 'saving' ||
-                state.invitation.status === 'joining' ||
-                (state.screen === 'expense' &&
-                  (state.expense.status === 'saving' || state.expense.persistence !== 'saved')),
-            }}
-            disabled={
-              state.creation.status === 'saving' ||
-              state.invitation.status === 'joining' ||
-              (state.screen === 'expense' &&
-                (state.expense.status === 'saving' || state.expense.persistence !== 'saved'))
-            }
-            onPress={controller.openSettings}
-            style={{
-              minHeight: 48,
-              minWidth: 48,
-              justifyContent: 'center',
-              alignItems: 'flex-end',
-            }}
-          >
-            <Icon name="settings-outline" size={23} />
-          </Pressable>
-        ) : (
-          <View
-            style={{
-              paddingHorizontal: 9,
-              paddingVertical: 5,
-              borderRadius: 7,
-              backgroundColor: theme.brand.bg,
-            }}
-          >
-            <Label>
-              {googleSignInEnabled ? (environment.isProduction ? 'LIVE' : 'STAGING') : 'DEV'}
-            </Label>
-          </View>
-        )}
-      </View>
+      )}
       {/* #331's one progress cue while the session is checked or a sign-in runs. Its room
           stays when nothing runs, so the screen never moves (#335). */}
       {waiting ? <LinearProgress label={waiting} /> : <View style={{ height: progressHeight }} />}
@@ -682,7 +692,13 @@ const HomeScreen = memo(function HomeScreen() {
   const feedback = selected;
   const { checking } = feedback;
   const status = useMemo(
-    () => <RefreshStatus visible={feedback.quiet || checking} checking={checking} />,
+    () => (
+      <RefreshStatus
+        visible={feedback.quiet || checking}
+        checking={checking}
+        refreshLabel="Updating…"
+      />
+    ),
     [feedback.quiet, checking],
   );
   const refresh = useCallback(() => void controller.refresh(), []);
