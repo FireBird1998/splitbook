@@ -6,6 +6,7 @@ import { Field, FieldError } from './group-workflows';
 import { CompactText, FieldMarker, radius } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
+import { useStartWhileUnfocused } from './start-while-unfocused';
 export type ExpenseInputProps = {
   draft: Pick<ExpenseDraft, 'amount' | 'currency' | 'original' | 'description'>;
   locked: boolean;
@@ -173,6 +174,7 @@ export function DescriptionField({
   onLeave,
 }: ExpenseInputProps) {
   const theme = useTheme();
+  const start = useStartWhileUnfocused(() => onLeave('description'));
   const input = {
     color: theme.text,
     paddingVertical: 4,
@@ -197,7 +199,9 @@ export function DescriptionField({
             errors.description ? `${errors.description} What was this for?` : 'What was this for?'
           }
           onChangeText={(description) => onChange({ description })}
-          onBlur={() => onLeave('description')}
+          selection={start.selection}
+          onFocus={start.onFocus}
+          onBlur={start.onBlur}
           style={[input, { minHeight: 48, fontFamily: fonts.regular, fontSize: 17 }]}
         />
       </View>
