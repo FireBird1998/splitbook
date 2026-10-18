@@ -12,9 +12,8 @@ Standard response format:
 { "error": "Human-readable message", "status": 400 }
 ```
 
-Helpers in `src/lib/utils/api-response.ts` produce this shape. Two exceptions exist
-today: the tag handlers hand-roll `new Response(JSON.stringify(...))` for their
-`TAG_EXISTS` / `TAG_IN_USE` cases and omit the `status` field.
+Helpers in `src/lib/utils/api-response.ts` produce this shape. Many errors add a
+`code`, and the Tag routes add the current Tags too (see [Tags](#tags)).
 
 A body or query the route's schema refuses answers **422** `VALIDATION_ERROR`,
 with each problem in `details` as `{ path, message }`, the shape the Draft APIs
@@ -307,24 +306,130 @@ gets **409** `code: "LEAVE_CONFLICT"`.
 
 ## Tags
 
-| Method | Path                            | Description                 |
-| ------ | ------------------------------- | --------------------------- |
-| POST   | `/api/groups/[id]/tags`         | Create tag                  |
-| PATCH  | `/api/groups/[id]/tags/[tagId]` | Rename or archive/unarchive |
-| DELETE | `/api/groups/[id]/tags/[tagId]` | Delete (only if unused)     |
+| Method | Path                                       | Description                                               |
+| ------ | ------------------------------------------ | --------------------------------------------------------- |
+| GET    | `/api/groups/[id]/tag-actions`             | The Group's Tags, as Tag management shows them            |
+| POST   | `/api/groups/[id]/tag-actions`             | Create, rename, archive, restore or delete a Tag          |
+| GET    | `/api/groups/[id]/tag-actions/[requestId]` | Whether the action with this `requestId` was applied      |
+| POST   | `/api/groups/[id]/tags`                    | Create a Tag (older form; answers the Group)              |
+| PATCH  | `/api/groups/[id]/tags/[tagId]`            | Rename, archive or restore a Tag (older form; the Group)  |
+| DELETE | `/api/groups/[id]/tags/[tagId]`            | Delete a Tag nothing uses (older form; answers the Group) |
 
-All admin-only. A tag is a group-scoped label; every expense carries **exactly
-one, required**. See [`v3/tag-management.md`](v3/tag-management.md).
+A Tag is a Group-scoped label, and every Expense carries exactly one. Any member
+reads the Group's Tags; only an admin changes them
+([ADR 0009](adr/0009-shared-tag-management-safety.md)). Each change is a command
+with a `requestId`, a UUID the client makes once per action and keeps for its
+retries. Every change but a create also names the Tag's `expectedRevision`: the
+revision the member reviewed. A Tag starts at revision 0, and each rename,
+archive, restore or delete adds one. The original design is
+[`v3/tag-management.md`](v3/tag-management.md).
 
-**POST body:** `{ "name": "Groceries" }` (1–50 chars)
-**PATCH body:** `{ "name"?: string, "isArchived"?: boolean }`
+**POST `/tag-actions` body:**
 
-Duplicate names return **400** `A tag with this name already exists`; deleting a
-tag still referenced by expenses returns **400** with the usage count. Both of
-these responses omit the standard `status` field.
+```json
+{
+  "requestId": "7b0b0e43-6d61-4d55-9c43-1f4c3a2b9e01",
+  "intent": { "action": "create", "name": "Snacks" }
+}
+```
 
-Note that `Expense.tag` stores the tag **name**, not the tag id, so renaming a
-tag leaves historical expenses pointing at the old name.
+`intent` is `{ action: "create", name }`, `{ action: "rename", tagId,
+expectedRevision, name }`, or `{ action: "archive" | "restore" | "delete", tagId,
+expectedRevision }`. A name is 1–50 characters once trimmed.
+
+It answers **200** with the receipt and the Tags as they are now:
+
+```json
+{
+  "data": {
+    "state": "applied",
+    "requestId": "7b0b0e43-6d61-4d55-9c43-1f4c3a2b9e01",
+    "receipt": {
+      "intent": { "action": "create", "name": "Snacks" },
+      "tagId": "…",
+      "appliedAt": "2026-10-18T09:30:00.000Z"
+    },
+    "snapshot": {
+      "canManage": true,
+      "tags": [
+        {
+          "id": "…",
+          "name": "Snacks",
+          "revision": 0,
+          "isArchived": false,
+          "isDeleted": false
+        }
+      ]
+    }
+  },
+  "status": 200
+}
+```
+
+The same `requestId` and intent again answers the same receipt and changes
+nothing. `GET /tag-actions/[requestId]` answers that receipt too, or
+`{ "state": "not-applied", "requestId", "snapshot" }` when the action never
+applied; a check never applies anything. `GET /tag-actions` answers the
+`snapshot` alone.
+
+**The older forms** take the same identity in a flat body and answer the Group
+(`{ "data": <Group> }`):
+
+- POST `/tags`: `{ "requestId": "<uuid>", "name": "Groceries" }`.
+- PATCH `/tags/[tagId]`: `{ "requestId", "expectedRevision": 0, "name": "Meals" }`
+  to rename, or `{ "requestId", "expectedRevision": 0, "isArchived": true }` to
+  archive (`false` restores). Exactly one of `name` and `isArchived`.
+- DELETE `/tags/[tagId]`: `{ "requestId", "expectedRevision": 0 }`.
+
+A command without `requestId`, or a change without `expectedRevision`, answers
+**428** `TAG_PRECONDITION_REQUIRED` on every route, before the member's role or
+the Tag is checked, and changes nothing. Any other field, or a body that doesn't
+match, answers **400** `INVALID_TAG_COMMAND`.
+
+**Refusals** carry `error`, `status` and `code`, and every `409` and
+`TAG_ADMIN_REQUIRED` also carries the current `snapshot`, so the client can
+show what changed:
+
+| Status | Code                        | When                                                                                                         |
+| ------ | --------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 400    | `INVALID_TAG_COMMAND`       | The body isn't JSON or doesn't match the command, or a Group id, Tag id or `requestId` in the path isn't one |
+| 403    | `TAG_ADMIN_REQUIRED`        | A member who isn't an admin (`snapshot.canManage` is `false`)                                                |
+| 403    | `FORBIDDEN`                 | Someone outside the Group                                                                                    |
+| 409    | `TAG_CHANGED`               | The Tag's revision isn't `expectedRevision`, or the Tag is deleted or gone                                   |
+| 409    | `TAG_EXISTS`                | Another Tag, archived ones included, has the name ignoring case; `existingTagId` names it                    |
+| 409    | `LAST_ACTIVE_TAG`           | Archiving or deleting the Group's last active Tag                                                            |
+| 409    | `TAG_IN_USE`                | Deleting a Tag an Expense, a deleted one included, or a recurring template uses                              |
+| 409    | `AMBIGUOUS_TAG`             | Renaming a name two Tags share while an Expense or template still refers to it by name alone                 |
+| 409    | `REQUEST_KEY_REUSED`        | The `requestId` was already used for a different intent                                                      |
+| 428    | `TAG_PRECONDITION_REQUIRED` | No `requestId`, or a change without `expectedRevision`                                                       |
+| 503    | `TAG_TRANSACTIONS_REQUIRED` | The database can't run the change in a transaction                                                           |
+
+Archiving hides a Tag from new Expenses but keeps it on saved ones and keeps its
+name taken; restoring brings back the same Tag. Deleting is only for a Tag
+nothing uses, and frees its name.
+
+**Names and identity.** An Expense or recurring template refers to its Tag by
+`tagId`, and a rename keeps the Tag's identity (#402). Expense reads, the
+Expense list, recurring Expenses, Insights, trip summaries and export all show
+the Tag's current name; the Expense's own `tag` text is only a fallback for a
+reference no Tag answers. A rename also links Expenses and templates that still
+refer to the old name with no `tagId`, from before #402, to the Tag, unless two
+Tags share that name (`AMBIGUOUS_TAG`).
+
+The HTTP layer is `apps/web/src/lib/tag-management-http.ts`, the rules
+`apps/web/src/lib/services/tag-management.service.ts`, and the command shapes
+`packages/shared/src/tag-management.ts`. Over HTTP,
+`apps/web/src/app/api/groups/[id]/tags/route.integration.test.ts` and
+`…/tags/[tagId]/route.integration.test.ts` pin the older forms (428 included,
+and a rename the saved Expense follows),
+`…/tag-actions/route.integration.test.ts` the commands, receipts, recovery,
+`REQUEST_KEY_REUSED` and `LAST_ACTIVE_TAG`,
+`apps/web/src/lib/services/tag-identity.integration.test.ts` name-only
+references and `AMBIGUOUS_TAG`, and
+`apps/web/src/lib/group-cleanup-standalone.integration.test.ts` the 503 on a
+database without transactions. In the browser,
+`apps/web/playwright-expense-access/tag-identity.spec.ts` and
+`tag-management-recovery.spec.ts` cover the same.
 
 ---
 
