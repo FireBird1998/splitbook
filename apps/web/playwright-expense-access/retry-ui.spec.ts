@@ -115,12 +115,19 @@ test('validation and cancelled duplicate confirmation retain the draft; advisory
   const dialog = page.getByRole('dialog');
   const description = dialog.getByLabel('What was it for?');
   const amount = dialog.getByLabel('Amount');
+  const save = dialog.getByRole('button', { name: 'Save expense', exact: true });
   await description.fill('Private rent');
   await amount.fill('1200.001');
-  await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('decimal places');
+  // The field says why it won't take the amount, and Save waits for one it can read (#528),
+  // keeping what was typed.
+  await expect(dialog.getByText('Use at most 2 decimal places.', { exact: true })).toBeVisible();
+  await expect(amount).toHaveAttribute('aria-invalid', 'true');
+  await expect(save).toBeDisabled();
+  await expect(description).toHaveValue('Private rent');
   await expect(amount).toHaveValue('1200.001');
   await amount.fill('1200');
+  await expect(amount).toHaveAttribute('aria-invalid', 'false');
+  await expect(save).toBeEnabled();
   const warning = page.waitForEvent('dialog');
   const confirmSave = dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
   await (await warning).dismiss();

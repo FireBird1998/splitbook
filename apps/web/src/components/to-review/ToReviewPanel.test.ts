@@ -83,6 +83,39 @@ const selects = (html: string) =>
       locked: attributes.includes('aria-disabled="true"'),
     }),
   );
+/** The Save expense button's disabled state. */
+function saveDisabled(html: string) {
+  const label = html.indexOf('>Save expense</button>');
+  return /\sdisabled=""/.test(html.slice(html.lastIndexOf('<button', label), label));
+}
+
+describe('saving an item whose amount can’t be read (#528)', () => {
+  it('keeps Save off while the amount can’t be read, whatever the server says', () => {
+    const item = (amount: number) => ({
+      description: 'Station dinner',
+      amount,
+      currency: 'INR',
+      date: '2026-10-16',
+      category: 'food',
+      paidBy: [{ user: alex, amount }],
+      splitMethod: 'equal',
+      splitBetween: [{ user: alex }, { user: sam }],
+      tag: 'Food',
+    });
+    for (const [amount, reason] of [
+      [0, 'Enter an amount above ₹0.00.'],
+      [-5, 'Enter an amount above ₹0.00.'],
+      [1.234, 'Use at most 2 decimal places.'],
+      [20_000_000, 'Enter at most ₹10,000,000.00.'],
+    ] as const) {
+      const html = markup([], item(amount), []);
+      expect(text(html), String(amount)).toContain(reason);
+      expect(saveDisabled(html), String(amount)).toBe(true);
+    }
+    // The same item with an amount that can be read can be saved.
+    expect(saveDisabled(markup([], item(1.23), []))).toBe(false);
+  });
+});
 
 /** The split method buttons the panel shows pressed. */
 const pressedSplit = (html: string) =>

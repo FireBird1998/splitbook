@@ -220,6 +220,31 @@ test(
 );
 
 // Opens and closes the seeded trip's forms without saving: nothing is written.
+test('Save stays off while the amount can’t be read, and the field says why (#528)', async ({
+  page,
+}) => {
+  await enterAsPersona(page, 'alex');
+  await page.goto(`/groups/${DEMO_GROUP_ID}/expenses`);
+  const form = await openAddExpense(page);
+  await form.getByLabel('What was it for?').fill('Chai');
+  const amount = form.getByLabel('Amount');
+  const save = form.getByRole('button', { name: 'Save expense' });
+  for (const [typed, reason] of [
+    ['0', 'Enter an amount above ₹0.00.'],
+    ['-5', 'Enter an amount above ₹0.00.'],
+    ['1.234', 'Use at most 2 decimal places.'],
+    ['20000000', 'Enter at most ₹10,000,000.00.'],
+  ]) {
+    await amount.fill(typed);
+    await expect(form.getByText(reason, { exact: true }), typed).toBeVisible();
+    await expect(amount, typed).toHaveAttribute('aria-invalid', 'true');
+    await expect(save, typed).toBeDisabled();
+  }
+  await amount.fill('12.50');
+  await expect(amount).toHaveAttribute('aria-invalid', 'false');
+  await expect(save).toBeEnabled();
+});
+
 test('on every tab of a Group and on its settings, the form opens for that Group', async ({
   page,
 }, testInfo) => {
