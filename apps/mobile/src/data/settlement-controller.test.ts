@@ -568,7 +568,7 @@ describe('native payment recording', () => {
   it('blocks a newly denied member without sending and preserves an unresolved attempt after replay denial', async () => {
     let denied = false,
       rejectReplay = false;
-    // As SplitBook does, a member it no longer lets in is refused every request under the Group.
+    // As Splitbook does, a member it no longer lets in is refused every request under the Group.
     const { controller, writes, records } = setup((path, init) => {
       if (path.startsWith(`/api/groups/${groupId}`) && denied)
         return json({ status: 403, error: 'Access removed' }, 403);
@@ -1040,7 +1040,7 @@ describe('native payment recording', () => {
     },
   );
 
-  it('keeps a payment unconfirmed after one send to a failing gateway, says SplitBook can’t be reached, and sends it again only on Retry (#231)', async () => {
+  it('keeps a payment unconfirmed after one send to a failing gateway, says Splitbook can’t be reached, and sends it again only on Retry (#231)', async () => {
     // The gateway fails from the moment the payment is sent until it recovers.
     let gateway: 'up' | 'down' | 'recovered' = 'up';
     const { controller, writes, records } = setup((path, init) => {
@@ -1060,14 +1060,14 @@ describe('native payment recording', () => {
     expect(controller.getSnapshot().settlement).toMatchObject({ status: 'uncertain', attempt });
     expect([...records.values()]).toEqual([expect.objectContaining(attempt)]);
 
-    // Opened again while the gateway still fails, it says SplitBook can't be reached, and that
+    // Opened again while the gateway still fails, it says Splitbook can't be reached, and that
     // the payment may already be recorded (#334).
     await controller.openSettlements(groupId);
     expect(controller.getSnapshot().settlement).toMatchObject({
       status: 'uncertain',
       attempt,
       message:
-        'Could not reach SplitBook. Check your connection and try again. This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.',
+        'Could not reach Splitbook. Check your connection and try again. This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.',
     });
     expect(writes).toHaveLength(1);
 
@@ -1332,7 +1332,7 @@ describe('native payment recording', () => {
                   members: group.members.filter(({ user }) => user._id !== actor),
                 },
               });
-        // Everything else under the Group is refused, as SplitBook refuses a non-member.
+        // Everything else under the Group is refused, as Splitbook refuses a non-member.
         if (refused && path.startsWith(`/api/groups/${groupId}/`))
           return json({ status: 403, error: 'Forbidden' }, 403);
       });
@@ -1507,13 +1507,13 @@ describe('native payment recording', () => {
   });
 
   // #334: after a network failure, Retry sends the first attempt's record again, never a new one.
-  it('says a Retry that couldn’t reach SplitBook sent nothing, and that the first may already be recorded, then sends its key and revision again only on Retry', async () => {
+  it('says a Retry that couldn’t reach Splitbook sent nothing, and that the first may already be recorded, then sends its key and revision again only on Retry', async () => {
     let down = false,
       posted = 0;
     const { controller, writes, records, connect } = setup((path, init) => {
       if (down && path.startsWith('/api/groups/'))
         return Promise.reject(new TypeError('Network request failed'));
-      // The first payment's reply never arrives: SplitBook may have recorded it.
+      // The first payment's reply never arrives: Splitbook may have recorded it.
       if (path.endsWith('/settlements') && init.method === 'POST' && ++posted === 1)
         return Promise.reject(new TypeError('Network request failed'));
     });
@@ -1541,14 +1541,14 @@ describe('native payment recording', () => {
         'This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.',
     });
 
-    // Retry while SplitBook can't be reached: its checks fail before the payment is sent. The
+    // Retry while Splitbook can't be reached: its checks fail before the payment is sent. The
     // sheet says so, and that the first may already be recorded, still offering Retry with the
     // record kept: never read as a payment that wasn't recorded.
     down = true;
     await controller.recordSettlement();
     expect(writes).toHaveLength(1);
     const unreachableAndUnconfirmed =
-      'Could not reach SplitBook. Check your connection and try again. This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.';
+      'Could not reach Splitbook. Check your connection and try again. This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.';
     expect(controller.getSnapshot().settlement).toMatchObject({
       status: 'uncertain',
       attempt,
@@ -1556,7 +1556,7 @@ describe('native payment recording', () => {
     });
     expect([...records.values()]).toEqual([expect.objectContaining(attempt)]);
 
-    // Closed, then opened again from Balances while SplitBook still can't be reached: the same.
+    // Closed, then opened again from Balances while Splitbook still can't be reached: the same.
     await controller.back();
     await controller.openPendingPayment();
     expect(controller.getSnapshot()).toMatchObject({
@@ -1565,7 +1565,7 @@ describe('native payment recording', () => {
     });
     expect(writes).toHaveLength(1);
 
-    // Nothing is sent by itself: not on a refresh, nor on reconnecting, nor once SplitBook
+    // Nothing is sent by itself: not on a refresh, nor on reconnecting, nor once Splitbook
     // answers again.
     await controller.refresh('foreground');
     connect(false);
@@ -1604,7 +1604,7 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
     return post < 0 ? next : next.slice(0, post + 1);
   };
   const key = (init: RequestInit) => new Headers(init.headers).get('Idempotency-Key');
-  const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+  const unreachable = 'Could not reach Splitbook. Check your connection and try again.';
 
   it('checks only the Balances over a Group its view verified within 30 s; past that, the Group, then the Balances once it has answered', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -1669,7 +1669,7 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
   it('sends nothing when Record’s Balances read is refused, the lost Group goes, and nothing is sent later', async () => {
     let lost = false;
     const { controller, sent, writes, records } = setup((path) => {
-      // Alex has lost the Group: SplitBook refuses every request under it.
+      // Alex has lost the Group: Splitbook refuses every request under it.
       if (lost && path.startsWith(groupPath)) return json({ status: 403, error: 'Forbidden' }, 403);
     });
     await controller.signIn('alex');
@@ -1700,7 +1700,7 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
     const { controller, sent, writes, records } = setup((path, init) => {
       if (down && path.startsWith('/api/groups/'))
         return Promise.reject(new TypeError('Network request failed'));
-      // The first payment's reply never arrives: SplitBook may have recorded it.
+      // The first payment's reply never arrives: Splitbook may have recorded it.
       if (path === paymentPath && init.method === 'POST' && ++posted === 1)
         return Promise.reject(new TypeError('Network request failed'));
     });
@@ -1709,7 +1709,7 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
     await controller.openRecordPayment(actor, recipient, 'INR');
     controller.updateSettlement({ amount: '10', note: 'Paid already' });
 
-    // Its check can't reach SplitBook: never sent, and it says only that.
+    // Its check can't reach Splitbook: never sent, and it says only that.
     down = true;
     let from = sent.length;
     await controller.recordSettlement();
@@ -1730,7 +1730,7 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
     const attempt = controller.getSnapshot().settlement.attempt;
     expect(attempt).not.toBeNull();
 
-    // A Retry whose check can't reach SplitBook sends nothing, and says the first may be recorded.
+    // A Retry whose check can't reach Splitbook sends nothing, and says the first may be recorded.
     down = true;
     from = sent.length;
     await controller.recordSettlement();
@@ -1769,7 +1769,7 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
       'The Group currency changed. Close this and choose the payment again.',
     ],
   ] as const)(
-    'ends a payment SplitBook refuses with %s, as %s: no Record for it again, and the Group is read again',
+    'ends a payment Splitbook refuses with %s, as %s: no Record for it again, and the Group is read again',
     async (code, _, correction) => {
       let changed = false;
       const { controller, sent, writes, records } = setup((path, init) => {

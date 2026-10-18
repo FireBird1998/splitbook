@@ -872,11 +872,11 @@ describe('account-scoped offline financial views', () => {
       });
     });
   });
-  describe('a gateway in front of SplitBook that can’t reach it (#231)', () => {
+  describe('a gateway in front of Splitbook that can’t reach it (#231)', () => {
     const path = `/api/groups/${groupId}`;
     /** The saved Group was verified an hour before it is read again. */
     const verifiedAt = now - 3_600_000;
-    const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+    const unreachable = 'Could not reach Splitbook. Check your connection and try again.';
     const serverFault = 'The server could not complete this request. Please try again.';
     type Fixture = ReturnType<typeof fixture>;
     const count = (sent: string[], request: string) =>
@@ -944,7 +944,7 @@ describe('account-scoped offline financial views', () => {
       },
     );
 
-    it('keeps SplitBook’s own coded 503 a server error with no saved copy, unlike a gateway’s uncoded one', async () => {
+    it('keeps Splitbook’s own coded 503 a server error with no saved copy, unlike a gateway’s uncoded one', async () => {
       const coded = await readAgain((f) =>
         f.failResponse(
           path,
@@ -1049,7 +1049,7 @@ describe('account-scoped offline financial views', () => {
       },
     );
 
-    it('clears offline at the next pull that reaches SplitBook, with no reconnect event, and shows fresh data', async () => {
+    it('clears offline at the next pull that reaches Splitbook, with no reconnect event, and shows fresh data', async () => {
       const f = fixture(),
         controller = f.create();
       await controller.signIn('alex');
@@ -1076,7 +1076,7 @@ describe('account-scoped offline financial views', () => {
       });
     });
 
-    it('blocks Save while a gateway fails, then allows it once a pull reaches SplitBook, sending it once', async () => {
+    it('blocks Save while a gateway fails, then allows it once a pull reaches Splitbook, sending it once', async () => {
       const f = fixture(),
         controller = f.create();
       await controller.signIn('alex');
@@ -1095,7 +1095,7 @@ describe('account-scoped offline financial views', () => {
       });
       let before = f.requests().length;
       await controller.saveExpense();
-      // Saving needs SplitBook: nothing is sent, and nothing waits to be sent later.
+      // Saving needs Splitbook: nothing is sent, and nothing waits to be sent later.
       expect(f.requests().slice(before)).toEqual([]);
       expect(controller.getSnapshot().expense).toMatchObject({ status: 'editing', attempt: null });
 
@@ -1149,7 +1149,7 @@ describe('account-scoped offline financial views', () => {
     const restarted = f.create();
     await restarted.restore();
     f.goOnline();
-    // Retry reads the saved list beside the balances (#333); SplitBook can't answer it yet.
+    // Retry reads the saved list beside the balances (#333); Splitbook can't answer it yet.
     f.failPath('/api/groups');
     await restarted.refreshHome();
     expect(restarted.getSnapshot().offline).toMatchObject({ active: true, refreshedAt: now });

@@ -144,6 +144,7 @@ import type {
   PersonaId,
   Route,
 } from './types';
+import { PRODUCT_NAME } from '../product';
 
 export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 
@@ -1058,7 +1059,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (offlineSession || snapshot.offline.active) {
         await revalidateSession(owner);
         assertCurrent(owner);
-        // SplitBook answered, so the app is online (ADR 0006: a successful request clears
+        // Splitbook answered, so the app is online (ADR 0006: a successful request clears
         // offline): the banner goes while the view is read, unless what's shown is still this
         // device's copy (#219).
         publishReadFreshness({ onlyChanges: true });
@@ -2969,7 +2970,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         // may already be recorded keeps explaining why it stays locked.
         message: editor.attempt
           ? editor.attemptRejected
-            ? `SplitBook refused a retry of this save. ${refusedRetryNotice}`
+            ? `${PRODUCT_NAME} refused a retry of this save. ${refusedRetryNotice}`
             : 'This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.'
           : editor.mutation
             ? 'This change may already be saved. Check the saved Expense before changing anything else.'
@@ -4111,7 +4112,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: storing
             ? 'Could not save the submission on this device. No Expense was sent. Retry local storage before saving.'
             : refused
-              ? `SplitBook refused this retry.${rejection ? ` ${rejection}` : ''} ${refusedRetryNotice}`
+              ? `${PRODUCT_NAME} refused this retry.${rejection ? ` ${rejection}` : ''} ${refusedRetryNotice}`
               : attempt
                 ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.`
                 : expenseFailureMessage(
@@ -4156,7 +4157,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
-   * The Group as its view verified it from SplitBook within the display freshness window, timed
+   * The Group as its view verified it from Splitbook within the display freshness window, timed
    * from that answer: never a saved copy (restoring or falling back to one moves the query's own
    * time, not the answer's), never while offline, never while it is being read again. Null
    * otherwise.
@@ -4433,7 +4434,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       sending = false;
     publish({ ...snapshot, settlement: { ...state, status: 'saving', message: null } });
     try {
-      // The Group the sheet's check named stands (#333): SplitBook checks members, currency and
+      // The Group the sheet's check named stands (#333): Splitbook checks members, currency and
       // who may record on the payment itself. Only the Balances are read again, live: their
       // suggestion is what the payment is checked against, and a Retry's only check before it
       // is sent again.
@@ -5346,8 +5347,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         code: null,
         status: 'invalid',
         preview: null,
-        message:
-          'This link does not belong to this SplitBook environment, or is not a valid invitation.',
+        message: `This link does not belong to this ${PRODUCT_NAME} environment, or is not a valid invitation.`,
       });
       return;
     }
@@ -5402,7 +5402,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       );
       assertCurrent(owner);
       gainedGroup(id);
-      // SplitBook answered, so the app is online (ADR 0006: a successful request clears
+      // Splitbook answered, so the app is online (ADR 0006: a successful request clears
       // offline), wherever the member is now. The join made Home's Groups and figures obsolete:
       // the next time Home shows they're read again, and this device's copies from earlier no
       // longer make Home say it's offline. Its figures still say when they were read (#332).
@@ -5413,7 +5413,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       publish({
         ...snapshot,
         invitation: { code: null, status: 'idle', preview: null, message: null },
-        // Online again, Home's figures are no longer its earlier failure to reach SplitBook:
+        // Online again, Home's figures are no longer its earlier failure to reach Splitbook:
         // the join made them obsolete, and they're read when Home next shows them (#332).
         home:
           snapshot.home.status === 'error'

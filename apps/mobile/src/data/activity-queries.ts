@@ -45,13 +45,13 @@ const notSavedHere = 'Could not save this view for offline use. Online data is s
 const refreshFailed =
   'Could not refresh Activity. Previously loaded events may be stale. A missing event does not mean the ledger change failed.';
 /**
- * What stays on screen when SplitBook can't be reached and this phone keeps no copy to show
+ * What stays on screen when Splitbook can't be reached and this phone keeps no copy to show
  * instead: removed by a change, withheld (#323) or never saved (#222, as #219 and #332 say it).
  */
 const notKept =
   'Couldn’t refresh this Group’s activity, and this phone no longer keeps a copy of it. A missing event does not mean the ledger change failed.';
 const olderFailed = 'Couldn’t load older activity.';
-/** Nothing shown, and a failure SplitBook answered that says nothing itself. */
+/** Nothing shown, and a failure Splitbook answered that says nothing itself. */
 const loadFailed = 'Could not load Activity. Please try again.';
 
 /** One parse per answer: structural sharing keeps an unchanged page, and its events, the same. */
@@ -221,7 +221,7 @@ export function createActivityQueries(session: ActivitySession) {
   /** Data restored from this device to show while the Group is first read: never verified here. */
   const previews = new WeakSet<object>();
   /**
-   * Data a read answered: from the server, or this device's copy once SplitBook couldn't be
+   * Data a read answered: from the server, or this device's copy once Splitbook couldn't be
    * reached. A restored copy the read answered the same keeps its object (structural sharing),
    * and is then no longer only a preview.
    */
@@ -400,7 +400,7 @@ export function createActivityQueries(session: ActivitySession) {
     return query;
   };
   /**
-   * One read of a page: sends it, or when SplitBook can't be reached, answers with the row saved
+   * One read of a page: sends it, or when Splitbook can't be reached, answers with the row saved
    * here for that page and its own time, offline (M4-5). Only its query's removal cancels it.
    */
   const fetchOne = async (key: QueryKey, page: number, run: Run): Promise<Envelope> => {
@@ -822,7 +822,7 @@ export function createActivityQueries(session: ActivitySession) {
       return same(shown, {
         ...next,
         status: 'error',
-        // Nothing shown, SplitBook out of reach, and no copy here: "isn't saved on this phone".
+        // Nothing shown, Splitbook out of reach, and no copy here: "isn't saved on this phone".
         unsaved: unreachable(error) && !next.events.length,
         // Events still on screen: what is true of them, never "not saved" (#222, as #219). With
         // nothing shown, what failed: a server's answer, offline too, says so (#222).

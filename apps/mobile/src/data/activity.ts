@@ -69,8 +69,8 @@ export interface ActivityState {
   /** A page shown is this device's saved copy, not a read in this session: "Saved", not "Updated". */
   restored?: boolean;
   /**
-   * Nothing shows because SplitBook couldn't be reached and this phone keeps no copy of it: "isn't
-   * saved on this phone". Never for a failure SplitBook answered, such as a 500 (#222).
+   * Nothing shows because Splitbook couldn't be reached and this phone keeps no copy of it: "isn't
+   * saved on this phone". Never for a failure Splitbook answered, such as a 500 (#222).
    */
   unsaved?: boolean;
 }

@@ -1241,7 +1241,7 @@ describe('the loading-state audit (#280)', () => {
     expect(controller.getSnapshot().activity.restored).not.toBe(true);
   });
 
-  it('says what failed when SplitBook answers with nothing shown, offline too, and “not saved” only when it can’t be reached', async () => {
+  it('says what failed when Splitbook answers with nothing shown, offline too, and “not saved” only when it can’t be reached', async () => {
     const f = fixture();
     const controller = f.create();
     await controller.signIn('alex');
@@ -1254,7 +1254,7 @@ describe('the loading-state audit (#280)', () => {
       offline: { active: true },
       activity: { status: 'error', events: [], unsaved: true },
     });
-    // SplitBook answers again, with a 500, before the app has seen it reachable.
+    // Splitbook answers again, with a 500, before the app has seen it reachable.
     await controller.selectDestination('expenses');
     f.server.offline = false;
     f.server.failPage = 1;
@@ -1771,7 +1771,7 @@ describe('device check (#222)', () => {
     expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 20));
   });
 
-  // A15: a foreground past the window with SplitBook out of reach, the member at the list's end.
+  // A15: a foreground past the window with Splitbook out of reach, the member at the list's end.
   it('keeps the list and its Load older when a foreground re-read fails offline at the list end (A15)', async () => {
     const f = fixture();
     const controller = await onActivity(f, 5);

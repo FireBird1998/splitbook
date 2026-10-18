@@ -75,6 +75,7 @@ import { SplitSheet } from './split-sheet';
 import { ErrorBoundary } from './error-boundary';
 import { savingNeedsConnection } from './offline-notice';
 import { useTheme } from './theme';
+import { PRODUCT_NAME } from '../product';
 
 /** The form for a draft, rather than loading, a notice or a saved record. */
 const showsForm = ({ draft, status }: Editor) =>
@@ -635,7 +636,7 @@ function ExpenseTask({
   // the latest entries are being stored: the save waits for that write.
   const saveBlocked =
     state.status === 'saving'
-      ? 'Sending this Expense. Keep this screen open until SplitBook confirms it.'
+      ? `Sending this Expense. Keep this screen open until ${PRODUCT_NAME} confirms it.`
       : offline
         ? savingNeedsConnection
         : checking
@@ -696,7 +697,7 @@ function ExpenseTask({
                   : ((state.message && expenseRecoveryWords(state.message)) ??
                     (state.attempt
                       ? state.attemptRejected
-                        ? `SplitBook refused a retry of this save. ${expenseRecoveryWords(refusedRetryNotice)}`
+                        ? `${PRODUCT_NAME} refused a retry of this save. ${expenseRecoveryWords(refusedRetryNotice)}`
                         : `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
                       : `${state.mutation?.kind === 'delete' ? 'This Expense may already be deleted.' : 'This change may already be saved.'} Checking reads the saved Expense first, so nothing is sent twice.`))
               }

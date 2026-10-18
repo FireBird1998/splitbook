@@ -1,9 +1,9 @@
 ---
-description: SplitBook conventions every change follows
+description: Splitbook conventions every change follows
 alwaysApply: true
 ---
 
-# SplitBook conventions
+# Splitbook conventions
 
 Read `AGENTS.md` first: it points at the docs, ADRs and gotchas for each area. Review rules live in `CODING_STANDARDS.md`, and domain terms in `GLOSSARY.md`.
 

@@ -86,6 +86,7 @@ import { GroupMembers } from './src/ui/group-members';
 import type { MobileGroup, MobileSnapshot } from './src/data/types';
 import { shownGroup } from './src/data/mobile-controller';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { PRODUCT_NAME } from './src/product';
 
 export default function App() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
@@ -110,7 +111,7 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeContext.Provider value={getSemanticTokens(mode)}>
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-        {fontsLoaded || fontError ? <SplitBook /> : <Loading label="Opening SplitBook…" />}
+        {fontsLoaded || fontError ? <SplitBook /> : <Loading label={`Opening ${PRODUCT_NAME}…`} />}
       </ThemeContext.Provider>
     </SafeAreaProvider>
   );
@@ -790,8 +791,8 @@ function shareInvite() {
     }
     try {
       await Share.share({
-        message: `Join our Group on SplitBook: ${url}`,
-        title: 'SplitBook invitation',
+        message: `Join our Group on ${PRODUCT_NAME}: ${url}`,
+        title: `${PRODUCT_NAME} invitation`,
       });
     } catch {
       Alert.alert('Couldn’t open sharing', 'Your invitation link is still available. Try again.');

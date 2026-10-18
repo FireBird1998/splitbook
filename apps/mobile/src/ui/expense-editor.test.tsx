@@ -685,7 +685,7 @@ describe('rendered Expense corrections', () => {
       .findAll((node) => isHost(node, 'Text') || node === saving[0])
       .map((node) => (node === saving[0] ? 'Save' : node.children.join('')));
     const note = inOrder.indexOf(
-      'Sending this Expense. Keep this screen open until SplitBook confirms it.',
+      'Sending this Expense. Keep this screen open until Splitbook confirms it.',
     );
     expect(note).toBeGreaterThanOrEqual(0);
     expect(note).toBeLessThan(inOrder.indexOf('Save'));
@@ -880,7 +880,7 @@ describe('rendered save not confirmed', () => {
     );
     expect(banner(ui.root(), 'alert')).toEqual([]);
     const [notice] = banner(ui.root(), 'summary');
-    expect(text(notice)).toContain('SplitBook refused a retry of this save.');
+    expect(text(notice)).toContain('Splitbook refused a retry of this save.');
     expect(text(notice)).toContain(
       'If it’s there, discard this save and don’t save the draft again.',
     );

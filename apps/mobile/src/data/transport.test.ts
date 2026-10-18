@@ -13,7 +13,7 @@ import type { FetchResponse } from './types';
 // No controller command passes a signal or reads a failure's kind yet (#214 will), so these
 // drive the transport itself.
 const groupId = 'b00000000000000000000001';
-const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+const unreachable = 'Could not reach Splitbook. Check your connection and try again.';
 const incomplete = 'The server could not complete this request. Please try again.';
 
 function setup(reply: (init: RequestInit) => Promise<FetchResponse>) {

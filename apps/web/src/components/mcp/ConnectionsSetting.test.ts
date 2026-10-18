@@ -38,7 +38,7 @@ const shown = text(
 describe('Settings → Connected assistants', () => {
   it('names To review, not Drafts, and says deleting an item there is permanent (#579)', () => {
     expect(shown).toContain(
-      'Assistants can read your ledger. If you also let one prepare Expenses, it can add, change and permanently delete items in your To review. Only you can save Expenses in SplitBook.',
+      'Assistants can read your ledger. If you also let one prepare Expenses, it can add, change and permanently delete items in your To review. Only you can save Expenses in Splitbook.',
     );
     expect(shown).toContain(
       'https://chatgpt.com/oauth/client.json All current and future Groups · Ledger access · To review access, including permanent deletion',

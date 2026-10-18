@@ -355,7 +355,7 @@ export function createExpenseQueries(session: ExpenseSession) {
     return query;
   };
   /**
-   * One read of `path`: sends it, or when SplitBook can't be reached, answers with the row saved
+   * One read of `path`: sends it, or when Splitbook can't be reached, answers with the row saved
    * here for that path and its own time, offline (M4-5). Only its query's removal cancels it,
    * never leaving the record: an answer still current is kept and saved wherever it lands.
    */

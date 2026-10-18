@@ -77,7 +77,7 @@ export const MAX_PAGES = 5;
 export const STALE = -Infinity;
 const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
 /**
- * What stays on screen when SplitBook can't be reached and this phone keeps no copy to show
+ * What stays on screen when Splitbook can't be reached and this phone keeps no copy to show
  * instead: removed by a change, withheld (#323) or never saved. Beside the time it was read, as
  * Home says of its balances since #332 (#219).
  */
@@ -524,7 +524,7 @@ export function createGroupQueries(session: GroupSession) {
     value: row.value,
   });
   /**
-   * One read of `path`: sends it, or when SplitBook can't be reached, answers with the row saved
+   * One read of `path`: sends it, or when Splitbook can't be reached, answers with the row saved
    * here for that path and its own time, offline (M4-5). `accept` checks an answer before it is
    * kept. Only its query's removal cancels it, never leaving the view: an answer still current
    * shows wherever it lands.

@@ -11,9 +11,9 @@ import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { PRODUCT_NAME } from '@/lib/product';
 
-const testPrompt =
-  'Run SplitBook connection_status only and show the result. Do not read my Groups, balances or expenses.';
+const testPrompt = `Run ${PRODUCT_NAME} connection_status only and show the result. Do not read my Groups, balances or expenses.`;
 
 function CopyValue({ label, value }: { label: string; value: string }) {
   const [feedback, setFeedback] = useState('');
@@ -54,7 +54,7 @@ export default function ConnectChatGPT({ resource }: { resource: string | null }
   return (
     <Container component="main" maxWidth="md" sx={{ py: { xs: 3, sm: 6 } }}>
       <Stack spacing={3}>
-        <Link href="/">SplitBook home</Link>
+        <Link href="/">{PRODUCT_NAME} home</Link>
         <Stack spacing={1}>
           <Box>
             <Chip label="Guided beta setup" size="small" />{' '}
@@ -96,7 +96,8 @@ export default function ConnectChatGPT({ resource }: { resource: string | null }
                   Open ChatGPT Plugins
                 </Typography>
                 <Typography>
-                  Choose the plus button, then “Add custom MCP server”. Give it the name SplitBook
+                  Choose the plus button, then “Add custom MCP server”. Give it the name{' '}
+                  {PRODUCT_NAME}
                   {staging ? ' Staging' : ''} and a description such as “Read my shared expenses”.
                 </Typography>
                 <Button
@@ -135,9 +136,9 @@ export default function ConnectChatGPT({ resource }: { resource: string | null }
                   Authorize read-only access
                 </Typography>
                 <Typography>
-                  Sign in to SplitBook when prompted. Check the account and permissions, leave Draft
-                  access off, and approve. Review the discovered tools and install the plugin in
-                  ChatGPT.
+                  Sign in to {PRODUCT_NAME} when prompted. Check the account and permissions, leave
+                  Draft access off, and approve. Review the discovered tools and install the plugin
+                  in ChatGPT.
                 </Typography>
               </Stack>
               <Stack component="li" spacing={1} sx={{ display: 'list-item' }}>
@@ -145,7 +146,8 @@ export default function ConnectChatGPT({ resource }: { resource: string | null }
                   Try the connection in chat
                 </Typography>
                 <Typography>
-                  Start a new chat, type @ and select your SplitBook plugin, then send this prompt.
+                  Start a new chat, type @ and select your {PRODUCT_NAME} plugin, then send this
+                  prompt.
                 </Typography>
                 <CopyValue label="test prompt" value={testPrompt} />
                 <Typography>
@@ -168,8 +170,8 @@ export default function ConnectChatGPT({ resource }: { resource: string | null }
               guidance.
             </Typography>
             <Typography>
-              Sign-in refused? Use your invited SplitBook beta account. If you declined consent or
-              setup expired, restart from ChatGPT and review access again.
+              Sign-in refused? Use your invited {PRODUCT_NAME} beta account. If you declined consent
+              or setup expired, restart from ChatGPT and review access again.
             </Typography>
             <Typography>
               Connection failed? Check the full server URL and OAuth settings, then retry in

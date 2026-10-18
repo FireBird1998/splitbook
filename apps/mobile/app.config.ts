@@ -1,6 +1,7 @@
 import 'tsx/cjs';
 import type { ExpoConfig } from 'expo/config';
 import { androidInvitationFilters } from './src/config';
+import { PRODUCT_NAME } from './src/product';
 
 const development = process.env.EXPO_PUBLIC_APP_ENV === 'development';
 const staging = process.env.EXPO_PUBLIC_APP_ENV === 'staging';
@@ -11,7 +12,7 @@ const appIdentifier = development
     : 'com.splitbook.app';
 
 export default {
-  name: development ? 'SplitBook Dev' : staging ? 'SplitBook Staging' : 'SplitBook',
+  name: development ? `${PRODUCT_NAME} Dev` : staging ? `${PRODUCT_NAME} Staging` : PRODUCT_NAME,
   slug: 'splitbook',
   version: '0.1.0',
   orientation: 'portrait',

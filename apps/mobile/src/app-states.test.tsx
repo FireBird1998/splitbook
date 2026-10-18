@@ -165,7 +165,7 @@ function device() {
           buckets: network.noGroups
             ? []
             : [{ currency: 'INR', youOwe: network.paid ? 0 : 30, youAreOwed: 0 }],
-          // Home's figures say which Groups they cover, as SplitBook's do (#333): with no Group
+          // Home's figures say which Groups they cover, as Splitbook's do (#333): with no Group
           // balances, none, so each row's balance stays unknown.
           groups: network.groupBalances
             ? [
@@ -769,7 +769,7 @@ describe('sign-in and start-up show progress while they wait (#335)', () => {
     expect(shown().auth).toEqual({
       status: 'signed-out',
       user: null,
-      message: 'Could not reach SplitBook. Check your connection and try again.',
+      message: 'Could not reach Splitbook. Check your connection and try again.',
     });
     expect(app.progress()).toEqual([]);
     expect(layoutHeight(aboveContent('KeyboardAvoidingView'))).toBe(progressHeight);
@@ -976,7 +976,7 @@ describe('offline', () => {
     const app = await start(phone);
     await settle();
     expect(app.text()).toContain('Couldn’t check your session');
-    expect(app.text()).toContain('Could not reach SplitBook.');
+    expect(app.text()).toContain('Could not reach Splitbook.');
     expect(app.text()).toContain(kept);
     expect(app.button('Try again')).not.toBeNull();
     expect(app.button('Sign out on this device')).not.toBeNull();
@@ -1824,7 +1824,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(app.content().inside).toContain(`Updated ${readAt}`);
     expect(app.text()).not.toContain('Saved');
     expect(app.text()).not.toContain('This view was not saved');
-    // It couldn't be read because SplitBook can't be reached: the offline icon says so.
+    // It couldn't be read because Splitbook can't be reached: the offline icon says so.
     expect(iconsBeside(notice)).toEqual(['cloud-offline-outline']);
     // Nothing shown is this phone's copy: the banner says only that the app is offline.
     expect(app.text()).toContain('You’re offlineConnect to load the latest.');
@@ -1838,7 +1838,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
   });
 
   // Item 2: the offline banner.
-  it('says what was saved only over a Group restored from this phone, and nothing once SplitBook answers', async () => {
+  it('says what was saved only over a Group restored from this phone, and nothing once Splitbook answers', async () => {
     const phone = device();
     const savedAt = await usedBefore(phone);
     phone.network.online = false;
@@ -1862,7 +1862,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(app.text()).toContain('You’re offlineConnect to load the latest.');
     expect(app.text()).not.toContain('What’s shown was saved');
 
-    // SplitBook answered the check: the app is online while the Group and its Expenses are
+    // Splitbook answered the check: the app is online while the Group and its Expenses are
     // still read.
     const expenses = phone.hold(`/api/groups/${lisbon}/expenses?`);
     const read = phone.hold(`/api/groups/${lisbon}`);
@@ -1879,7 +1879,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(app.text()).not.toContain('You’re offline');
   });
 
-  it('says it is offline again when the connection drops after SplitBook answered the session check', async () => {
+  it('says it is offline again when the connection drops after Splitbook answered the session check', async () => {
     const phone = device();
     const savedAt = await usedBefore(phone);
     phone.network.online = false;
@@ -2348,7 +2348,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
 describe('The Expense form and Record payment say what they are doing (#334)', () => {
   const controller = () => runtime.controller as MobileController;
   const openMaple = 'Open Maple House, Household · 2 members';
-  const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+  const unreachable = 'Could not reach Splitbook. Check your connection and try again.';
   const footnote = 'Records a payment made outside Splitbook. No money moves.';
   /** Maple House on Balances, where Alex owes Sam ₹30.00. */
   async function onBalances() {
@@ -2711,8 +2711,8 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     await settle();
   });
 
-  // Item 4: after a network failure the sheet showed only "Could not reach SplitBook…".
-  it('offers Try again on the sheet when its check can’t reach SplitBook, keeping the figures, and sends nothing', async () => {
+  // Item 4: after a network failure the sheet showed only "Could not reach Splitbook…".
+  it('offers Try again on the sheet when its check can’t reach Splitbook, keeping the figures, and sends nothing', async () => {
     const { phone, app } = await onBalances();
     phone.network.online = false;
     app.tap('Record your payment to Sam Chen');

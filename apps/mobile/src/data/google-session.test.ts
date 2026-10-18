@@ -273,7 +273,7 @@ describe('Google login within the native session boundary', () => {
         await test.controller.signInWithGoogle();
         return { sent, restored, signedIn: test.controller.getSnapshot(), acquire: test.acquire };
       }
-      const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+      const unreachable = 'Could not reach Splitbook. Check your connection and try again.';
       const lost = await checkStaging(() =>
         Promise.reject(new TypeError('Network request failed')),
       );

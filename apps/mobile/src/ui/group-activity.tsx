@@ -24,6 +24,7 @@ import {
 import { readTime } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import { fonts, useTheme } from './theme';
+import { PRODUCT_NAME } from '../product';
 
 type Member = { id: string; name: string };
 
@@ -34,7 +35,7 @@ interface GroupActivityProps {
   currency: string;
   /** The Group's members, to name people in edits; anyone else is a former member. */
   members?: Member[];
-  /** The app can't reach SplitBook: this device's saved copy shows its badge. */
+  /** The app can't reach Splitbook: this device's saved copy shows its badge. */
   offline: boolean;
   now?: number;
   dayKey?: string;
@@ -532,7 +533,7 @@ function ActivityDetail({
       ) : null}
       {event.type === 'settlement_recorded' ? (
         <CompactText variant="small" tone="secondary">
-          This records a payment made outside Splitbook. No money moved in the app.
+          This records a payment made outside {PRODUCT_NAME}. No money moved in the app.
         </CompactText>
       ) : null}
       {state.target.status === 'loading' ? (

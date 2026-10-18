@@ -47,7 +47,7 @@ export const listPath = '/api/groups',
 export const notSaved = 'This view was not saved on this device. Connect to load it.';
 const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
 /**
- * What stays on Home when SplitBook can't be reached and this phone keeps no copy to show
+ * What stays on Home when Splitbook can't be reached and this phone keeps no copy to show
  * instead: removed by a change, withheld (#323) or never saved. True beside a "Saved" badge too,
  * for a copy shown before it was removed (#332).
  */
@@ -65,7 +65,7 @@ export const notOnPhone = {
   balances: 'Your balances aren’t saved on this phone. Connect to load them.',
   groups: 'Your Groups aren’t saved on this phone. Connect to load them.',
 };
-/** SplitBook couldn't be reached, and this phone had no saved copy to answer with. */
+/** Splitbook couldn't be reached, and this phone had no saved copy to answer with. */
 const unkept = (error: Error) =>
   error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
 
@@ -344,7 +344,7 @@ export function createHomeQueries(session: HomeSession) {
   const held = (key: QueryKey) => client.getQueryCache().get<Envelope, Error>(hashKey(key))?.state;
   /**
    * A saved copy shows only if its decoder reads it, a Groups list lists the member, and, once a
-   * list from SplitBook has landed, Home's figures name only Groups it lists (#323): one being
+   * list from Splitbook has landed, Home's figures name only Groups it lists (#323): one being
    * restored, or read for an offline answer, while that list removed it, never shows, nor one
    * that doesn't say which Groups it covers.
    */
@@ -457,7 +457,7 @@ export function createHomeQueries(session: HomeSession) {
 
   /**
    * One read of a query. An answer still current is checked by `accept`, then what it sets off
-   * runs, and it is saved as its row; when SplitBook can't be reached, the row saved here answers
+   * runs, and it is saved as its row; when Splitbook can't be reached, the row saved here answers
    * with its own time, offline (M4-5). It takes no signal, so leaving Home never cancels it: its
    * answer shows wherever it lands (#190).
    */
@@ -863,7 +863,7 @@ export function createHomeQueries(session: HomeSession) {
     },
     /**
      * Retry on Home's figures: read again now, with this device's drafts. A list on screen that
-     * SplitBook hasn't answered this session, this device's copy or one whose last read failed,
+     * Splitbook hasn't answered this session, this device's copy or one whose last read failed,
      * is read beside them, as on a pull (#333): it would otherwise stay saved, and offline.
      */
     async refresh() {

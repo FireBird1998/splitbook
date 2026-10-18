@@ -363,16 +363,16 @@ describe('Group creation corrections, rendered', () => {
     const button = view.pressable('Creating your Group…');
     expect(button.props.disabled).toBe(true);
     expect(button.props.accessibilityHint).toBe(
-      'Sending this Group. Keep this screen open until SplitBook confirms it.',
+      'Sending this Group. Keep this screen open until Splitbook confirms it.',
     );
-    expect(text(view.root())).toContain('Keep this screen open until SplitBook confirms it.');
+    expect(text(view.root())).toContain('Keep this screen open until Splitbook confirms it.');
     // #331: at the end of a long form the note can open below the screen: it asks, once, to be
     // shown whole.
     expect(showStatus).toHaveBeenCalledOnce();
     const [note] = showStatus.mock.calls[0] as [NodeMock];
     const shown = note.element.props.children as { props: { children: string } };
     expect(shown.props.children).toBe(
-      'Sending this Group. Keep this screen open until SplitBook confirms it.',
+      'Sending this Group. Keep this screen open until Splitbook confirms it.',
     );
     await act(async () => release());
     await settle();

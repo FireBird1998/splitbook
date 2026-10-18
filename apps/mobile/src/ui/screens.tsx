@@ -13,6 +13,7 @@ import {
 import type { PersonaId, SignInOption } from '../data/types';
 import { Icon } from './primitives';
 import { useTheme } from './theme';
+import { PRODUCT_NAME } from '../product';
 
 const personas: { id: PersonaId; name: string; detail: string }[] = [
   { id: 'alex', name: 'Alex Rivera', detail: 'Organizes the shared adventures' },
@@ -67,8 +68,8 @@ export function SignIn({
               <View style={{ gap: 2 }}>
                 <CompactText variant="heading">Your people. One shared ledger.</CompactText>
                 <CompactText variant="small" tone="secondary">
-                  Use the Google account invited to SplitBook. If you have a Group invitation, you
-                  can continue after signing in.
+                  Use the Google account invited to {PRODUCT_NAME}. If you have a Group invitation,
+                  you can continue after signing in.
                 </CompactText>
               </View>
               <View>

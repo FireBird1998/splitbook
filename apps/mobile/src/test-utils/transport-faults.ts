@@ -32,8 +32,8 @@ export function bodyFails(): FetchResponse {
 }
 
 /**
- * What a gateway in front of SplitBook answers with when it can't reach SplitBook: no body, a
- * page of its own, or JSON without the `code` every SplitBook error carries.
+ * What a gateway in front of Splitbook answers with when it can't reach Splitbook: no body, a
+ * page of its own, or JSON without the `code` every Splitbook error carries.
  */
 export const gatewayBodies = {
   empty: '',

@@ -1066,8 +1066,8 @@ describe('App Members and Group details', () => {
     await openMembers(app);
     await app.press('Invite people');
     expect(Share.share).toHaveBeenLastCalledWith({
-      message: `Join our Group on SplitBook: ${inviteUrl}`,
-      title: 'SplitBook invitation',
+      message: `Join our Group on Splitbook: ${inviteUrl}`,
+      title: 'Splitbook invitation',
     });
     expect(app.text()).toContain('Members and details');
   });
@@ -1077,7 +1077,7 @@ describe('App Members and Group details', () => {
     await app.press('Open Maple House');
     await openMembers(app);
     expect(app.text()).toContain('Sam Chen · YouMember');
-    // An admin removed Sam on the web while SplitBook was in the background.
+    // An admin removed Sam on the web while Splitbook was in the background.
     app.use((path) =>
       path === `/api/groups/${groupId}`
         ? json({}, 403)
@@ -1791,7 +1791,7 @@ describe('App Activity window (#222)', () => {
   });
 
   // The device check of 99f96d6 (A15): at the list's end, a foreground past the window with
-  // SplitBook out of reach. Load older stays, below the events kept; what moved the list there
+  // Splitbook out of reach. Load older stays, below the events kept; what moved the list there
   // was the offline banner shown above it.
   it('keeps Load older at the list end when a foreground re-read fails offline', async () => {
     const app = await renderApp();

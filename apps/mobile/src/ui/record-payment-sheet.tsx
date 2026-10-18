@@ -27,8 +27,9 @@ import { inPlace } from './financial-views';
 import { Field, FieldError } from './group-workflows';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
+import { PRODUCT_NAME } from '../product';
 
-export const recordPaymentFootnote = 'Records a payment made outside Splitbook. No money moves.';
+export const recordPaymentFootnote = `Records a payment made outside ${PRODUCT_NAME}. No money moves.`;
 /** Record's reason while the sheet checks the latest balances (#334). */
 export const recordWaitsForCheck = 'Record is available once the latest balances are checked.';
 /** Retry's, for an unconfirmed payment found on this phone. */
@@ -118,7 +119,7 @@ function Checkbox({
  *
  * While the sheet checks the latest balances, it shows the chosen payment as Balances showed
  * it, locked, and Record waits for the check, saying so where the footnote was; when the check
- * can't reach SplitBook, the figures stay and Try again checks again (#334). Nothing moves when
+ * can't reach Splitbook, the figures stay and Try again checks again (#334). Nothing moves when
  * the progress bar comes or goes: the sheet keeps its room.
  */
 export function RecordPaymentSheet({

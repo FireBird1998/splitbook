@@ -1,4 +1,4 @@
-# SplitBook
+# Splitbook
 
 A shared-expense ledger in one pnpm workspace: the Next.js web app (`apps/web`), the Expo Android app (`apps/mobile`), framework-free domain code (`packages/shared`) and the local gate (`tools/swarm`). Name domain concepts with the terms in `GLOSSARY.md`.
 

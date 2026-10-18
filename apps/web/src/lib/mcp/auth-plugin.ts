@@ -18,6 +18,7 @@ import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import type { AuthEnv } from '@/lib/auth/create-auth';
 import { MCP_LEDGER_SCOPE, MCP_SCOPES, mcpResource } from './config';
 import { currentMcpGrant, requireMcpMember, type McpConnection, type McpConsent } from './grants';
+import { PRODUCT_NAME } from '@/lib/product';
 
 export function mcpAuthPlugins(env: AuthEnv) {
   const resource = mcpResource(env);
@@ -59,7 +60,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
           handler: createAuthMiddleware(async () => {
             // Generic consent CRUD does not rotate our authorization generation.
             throw new APIError('FORBIDDEN', {
-              message: 'Disconnect in SplitBook Settings, then reconnect to change permissions.',
+              message: `Disconnect in ${PRODUCT_NAME} Settings, then reconnect to change permissions.`,
             });
           }),
         },

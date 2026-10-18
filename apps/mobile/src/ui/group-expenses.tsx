@@ -449,7 +449,7 @@ export const GroupExpensesView = memo(
     kept: KeptDraft | null;
     /** Highlighted after a save while its confirmation shows. */
     savedExpenseId: string | null;
-    /** The app can't reach SplitBook: this device's saved copy shows its badge. */
+    /** The app can't reach Splitbook: this device's saved copy shows its badge. */
     offline?: boolean;
     /**
      * The Group is first read, shown as Home lists it: these are its placeholders, in the shape

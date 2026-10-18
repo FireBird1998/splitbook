@@ -123,7 +123,7 @@ function fixture() {
     if (path === '/api/groups') return json({ status: 200, data: listed() });
     // As Better Auth does: 200, even for a session already gone (#202).
     if (path === '/api/auth/sign-out' && init.method === 'POST') return json({ success: true });
-    // Like SplitBook's, Home's figures name the Groups they were worked out over (#333).
+    // Like Splitbook's, Home's figures name the Groups they were worked out over (#333).
     if (path === '/api/user/balances')
       return json({
         status: 200,
@@ -881,7 +881,7 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
     (f.saved('/api/user/balances') as { value: { data: { buckets: { youOwe: number }[] } } } | null)
       ?.value.data.buckets[0]?.youOwe ?? null;
   /**
-   * Figures worked out by the server before a Group left the list. Like SplitBook's, they name
+   * Figures worked out by the server before a Group left the list. Like Splitbook's, they name
    * the Groups they were worked out over: that Group too.
    */
   const olderFigures = () =>

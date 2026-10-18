@@ -168,7 +168,7 @@ function fixture(memberCount = 2) {
             });
           if (path === '/api/groups')
             return Response.json({ status: 200, data: member ? [currentGroup] : [] });
-          // Like SplitBook's, Home's figures name the Groups they were worked out over (#333).
+          // Like Splitbook's, Home's figures name the Groups they were worked out over (#333).
           if (path === '/api/user/balances')
             return Response.json({
               status: 200,
