@@ -194,14 +194,20 @@ async function verify() {
         controller.dispose();
         controller = build();
       },
-      async authorized(path: string, method = 'GET') {
+      async authorized(path: string, method = 'GET', body?: unknown) {
         // The saved session is the cookie and, once verified, its account (#200).
         const session = cookie && decodeStoredSession(cookie, apiBaseUrl.startsWith('https:'));
         observe(session, 'The authorized read or cleanup has no session.', { path });
         observe(path.startsWith('/api/'), 'Only local API requests are permitted.', { path });
         return fetch(`${apiBaseUrl}${path}`, {
           method,
-          headers: { Cookie: session.cookie, Origin: apiBaseUrl, Accept: 'application/json' },
+          headers: {
+            Cookie: session.cookie,
+            Origin: apiBaseUrl,
+            Accept: 'application/json',
+            ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
           credentials: 'omit',
           redirect: 'error',
           signal: AbortSignal.timeout(20_000),
@@ -617,6 +623,47 @@ async function verify() {
       { recovered: Boolean(recoveredUrl), invitePosts: alex.invitePosts - beforeLostInvite },
     );
     checks.push('Committed invite-generation response loss recovered without another generation');
+
+    // #578 (from #184): once Alex archives the Household, Sam's Expense is refused over HTTP and
+    // the app treats the Group as one it lost: it says so and leaves Home.
+    const archived = await alex.authorized(`/api/groups/${household._id}`, 'DELETE');
+    observe(archived.status === 200, 'Alex could not archive the Household.', {
+      status: archived.status,
+    });
+    const refused = await sam.authorized(`/api/groups/${household._id}/expenses`, 'POST', {
+      description: 'After the archive',
+      amount: 10,
+      currency: 'INR',
+      category: 'other',
+      date: new Date().toISOString(),
+      paidBy: [{ user: samId, amount: 10 }],
+      splitMethod: 'equal',
+      splitBetween: [{ user: samId }],
+      tag: 'General',
+    });
+    const refusal = (await refused.json()) as { code?: unknown };
+    observe(
+      refused.status === 409 && refusal.code === 'GROUP_ARCHIVED',
+      'An archived Group did not refuse a new Expense with 409 GROUP_ARCHIVED.',
+      { status: refused.status, code: refusal.code ?? null },
+    );
+    // Sam's app, restarted, reads the Group again: it says it was archived and leaves Home.
+    sam.restart();
+    await sam.controller.restore();
+    await sam.controller.openGroup(household._id);
+    const gone = sam.controller.getSnapshot();
+    observe(
+      gone.detail.status === 'denied' &&
+        gone.detail.message === 'This Group was archived, so nothing more can be saved in it.' &&
+        !gone.groups.data.some((group) => group.id === household._id),
+      'The app kept showing an archived Group.',
+      {
+        status: gone.detail.status,
+        message: gone.detail.message,
+        listed: gone.groups.data.some((group) => group.id === household._id),
+      },
+    );
+    checks.push('An archived Group refuses a new Expense (409 GROUP_ARCHIVED) and leaves Home');
   } finally {
     try {
       if (ownNames.size) {
