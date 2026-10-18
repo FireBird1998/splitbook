@@ -332,8 +332,9 @@ the shared money modules its story uses or the lockfile. It runs
 `pnpm --filter @splitbook/landing-figures check`
 ([tools/landing-figures](../tools/landing-figures/README.md)): stale output or a stale still, the
 story, the vendored kit, and the audit, line ends and console of every figure page in headless
-Chrome, each tour's counters in every frame it draws (#511), and what its live region says at
-every step, by keyboard and as it starts over by itself (#568). No database.
+Chrome, each tour's counters in every frame it draws (#511), what its live region says at every
+step, by keyboard and as it starts over by itself (#568), and that it plays on after Pause and →
+(#570). No database.
 
 The Playwright web servers run a **production** build in CI, so their env sets
 `ALLOW_DEMO_AUTH=true` (demo auth fails closed in production), `AUTH_RATE_LIMIT_ENABLED=false`

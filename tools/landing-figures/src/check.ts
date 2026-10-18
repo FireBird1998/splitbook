@@ -167,6 +167,39 @@ export function statusProblems(steps: StatusStep[]): string[] {
   return problems;
 }
 
+/**
+ * A tour played on after a keyboard visitor paused it (#570). From the restart, the tour was paused
+ * and stepped by → `presses` times to `at`, then played; it must move on by itself and come round
+ * to its restart again.
+ */
+export interface ResumeRound {
+  presses: number;
+  at: string;
+  movedOn: boolean;
+  startedOver: boolean;
+}
+
+/**
+ * What is wrong with a tour played on after Pause and → (#570): a step it stands still at once
+ * playing again, or one it moves on from but never comes round to its restart. `rounds` covers
+ * every step → reaches from the restart while paused; none means → never came round to it.
+ */
+export function resumeProblems({
+  restart,
+  rounds,
+}: {
+  restart: string;
+  rounds: ResumeRound[];
+}): string[] {
+  if (!rounds.length) return [`Paused, → never came round to the restart ("${restart}").`];
+  return rounds.flatMap(({ presses, at, movedOn, startedOver }) => {
+    const after = `After Home, Pause, ${presses} × → and Play, the tour`;
+    if (!movedOn) return [`${after} stood still at "${at}".`];
+    if (!startedOver) return [`${after} moved on from "${at}" but never started over.`];
+    return [];
+  });
+}
+
 const filesUnder = (dir: string): string[] =>
   readdirSync(dir, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile())

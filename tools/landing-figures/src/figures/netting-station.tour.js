@@ -18,6 +18,8 @@ function nettingStation({ svg, held, tell }, D) {
   const N = D.names.length;
   // Seconds into the netting by which the debt cords are down and the payment cords are up.
   const NETTED_AT = 3;
+  // Seconds a payment completed while held rests, once playing again, before the next one starts.
+  const PAID_BEAT = 0.8;
 
   const counters = D.xs.map((_, i) => q(`[data-count="${i}"]`));
   const debtCords = D.debts.map((_, i) => q(`[data-debt="${i}"]`));
@@ -173,6 +175,9 @@ function nettingStation({ svg, held, tell }, D) {
           else finish();
         }
       }
+    } else if (phase === 'paid') {
+      // Only a step taken while held rests here (#570); playing again, the next payment follows.
+      if (clock > PAID_BEAT) startPay(payIndex + 1);
     } else if (phase === 'done') {
       sx = lerp(sx, D.home, Math.min(1, dt * 2));
       if (clock > 4.2) restart();

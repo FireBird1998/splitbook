@@ -94,9 +94,66 @@ export const keyStepper = (keys: readonly string[]) => `(async () => {
   return steps;
 })()`;
 
-/** What a drive run's `eval` returned, or undefined when the run stopped before it. */
+/**
+ * A script for `drive`'s eval that plays a live tour on after a keyboard visitor paused it (#570).
+ * From the restart (Home), paused, it counts the → presses that come round to the restart again.
+ * Then for each count short of that: Home, Pause, that many →, Play, and it watches whether the
+ * readout moves on by itself and comes back to the restart. It starts the run and returns at
+ * once; `window.__resume` holds `{ done, result }`, for an `until`.
+ */
+export const RESUME_STEPPER = `(() => {
+  const stage = document.querySelector('[data-stage]');
+  const readout = document.querySelector('[data-readout]');
+  const pause = document.querySelector('[data-pause]');
+  const frames = (n) => new Promise((done) => {
+    const go = (left) => (left ? requestAnimationFrame(() => go(left - 1)) : done());
+    go(n);
+  });
+  const until = async (test, most) => {
+    for (let n = 0; n < most && !test(); n++) await frames(1);
+    return test();
+  };
+  const press = async (key) => {
+    stage.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    await frames(2);
+  };
+  // Up to ten seconds for the next step, a minute to come round.
+  const STEP_FRAMES = 600;
+  const ROUND_FRAMES = 3600;
+  window.__resume = { done: false };
+  (async () => {
+    await frames(2);
+    await press('Home');
+    const restart = readout.textContent;
+    pause.click();
+    let round = 0;
+    for (let n = 1; n <= 12 && !round; n++) {
+      await press('ArrowRight');
+      if (readout.textContent === restart) round = n;
+    }
+    pause.click();
+    const rounds = [];
+    for (let presses = 1; presses < round; presses++) {
+      await press('Home');
+      pause.click();
+      for (let n = 0; n < presses; n++) await press('ArrowRight');
+      const at = readout.textContent;
+      pause.click();
+      const movedOn = await until(() => readout.textContent !== at, STEP_FRAMES);
+      const startedOver = movedOn && (await until(() => readout.textContent === restart, ROUND_FRAMES));
+      rounds.push({ presses, at, movedOn, startedOver });
+    }
+    window.__resume = { done: true, result: { restart, rounds } };
+  })();
+  return 'started';
+})()`;
+
+/** What a drive run's last `eval` returned, or undefined when the run stopped before it. */
 export function evalResult<T>(out: string): T | undefined {
-  const line = out.split('\n').find((l) => l.startsWith('eval: '));
+  const line = out
+    .split('\n')
+    .filter((l) => l.startsWith('eval: '))
+    .at(-1);
   return line === undefined ? undefined : (JSON.parse(line.slice('eval: '.length)) as T);
 }
 

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import {
   counterProblems,
+  resumeProblems,
   staleOutputs,
   statusProblems,
   stillDrift,
@@ -333,6 +334,51 @@ describe('statusProblems', () => {
     ).toEqual([`The → presses never came round to the restart ("${EMPTY}"), so it went untested.`]);
     expect(statusProblems(stepped(['ArrowRight', EMPTY], ['ArrowRight', 'Two']))).toEqual([
       'The tour was never started over with Home.',
+    ]);
+  });
+});
+
+describe('resumeProblems', () => {
+  const RESTART = '5 debts between 4 people';
+  const round = (presses: number, at: string, movedOn = true, startedOver = movedOn) => ({
+    presses,
+    at,
+    movedOn,
+    startedOver,
+  });
+
+  it('passes a tour that plays on from every step it was paused at, round to the restart', () => {
+    expect(
+      resumeProblems({
+        restart: RESTART,
+        rounds: [
+          round(1, 'Netting · 5 debts become 3 payments'),
+          round(2, 'Pay 1 of 3 · Alex pays You ₹500'),
+          round(3, 'Settled in 3 payments · every counter at 0'),
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it('flags a step the tour stands still at after Play, and one it never comes round from', () => {
+    expect(
+      resumeProblems({
+        restart: RESTART,
+        rounds: [
+          round(1, 'Netting · 5 debts become 3 payments'),
+          round(2, 'Pay 1 of 3 · Alex pays You ₹500', false),
+          round(3, 'Pay 2 of 3 · Alex pays Sam ₹200', true, false),
+        ],
+      }),
+    ).toEqual([
+      'After Home, Pause, 2 × → and Play, the tour stood still at "Pay 1 of 3 · Alex pays You ₹500".',
+      'After Home, Pause, 3 × → and Play, the tour moved on from "Pay 2 of 3 · Alex pays Sam ₹200" but never started over.',
+    ]);
+  });
+
+  it('flags a paused tour that → never brings round to its restart', () => {
+    expect(resumeProblems({ restart: RESTART, rounds: [] })).toEqual([
+      `Paused, → never came round to the restart ("${RESTART}").`,
     ]);
   });
 });

@@ -3,7 +3,7 @@
 //   check    fail on stale output or stills, a story that doesn't balance, an edited vendored kit,
 //            any audit, line-end or console problem, a counter that is untrue in any frame, or a
 //            step, by keyboard or as a tour starts over, that the live region doesn't announce as
-//            drawn
+//            drawn, or a tour that stalls when played on after Pause and →
 //   preview  write each figure as an interactive page (light and dark) to look at in a browser
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,6 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 import * as k from './kit.ts';
 import {
   counterProblems,
+  resumeProblems,
   staleOutputs,
   statusProblems,
   stillDrift,
@@ -19,6 +20,7 @@ import {
   saysWhatIsDrawn,
   type CounterFrame,
   type Reading,
+  type ResumeRound,
   type StatusStep,
 } from './check.ts';
 import {
@@ -31,6 +33,7 @@ import {
   type Figure,
 } from './generate.ts';
 import {
+  RESUME_STEPPER,
   THEMES,
   TOUR_SAMPLER,
   cleanConsole,
@@ -191,6 +194,39 @@ function statusAtEveryStep(figures: Figure[]): string[] {
   });
 }
 
+/**
+ * Plays each tour on after Pause and → from every step → reaches (#570), at twice real time: it
+ * must move on by itself and come round to its restart.
+ */
+function resumingAfterSteps(figures: Figure[]): string[] {
+  return inTempDir('landing-resume-', (dir) => {
+    const problems: string[] = [];
+    for (const figure of figures) {
+      const file = join(dir, `${figure.id}.html`);
+      writeFileSync(file, livePage(figure, 'light'));
+      const out = drive(
+        file,
+        [
+          ['slow', 2],
+          ['eval', RESUME_STEPPER],
+          ['until', 'window.__resume.done', 240_000],
+          ['eval', 'window.__resume.result'],
+        ],
+        { moving: true, timeout: 300_000 },
+      );
+      const where = `${figure.id} (live tour, played on after Pause and →)`;
+      const run = evalResult<{ restart: string; rounds: ResumeRound[] }>(out);
+      if (!run) {
+        problems.push(`${where}: the tour could not be played on.\n${out.trim()}`);
+        continue;
+      }
+      problems.push(...resumeProblems(run).map((problem) => `${where}: ${problem}`));
+      if (!cleanConsole(out)) problems.push(`${where}: the page logged errors.\n${out.trim()}`);
+    }
+    return problems;
+  });
+}
+
 function check() {
   const figures = buildFigures();
   const problems: string[] = [];
@@ -213,13 +249,14 @@ function check() {
   problems.push(...lineEnds(figures));
   problems.push(...playingByItself(figures));
   problems.push(...statusAtEveryStep(figures));
+  problems.push(...resumingAfterSteps(figures));
   if (problems.length) {
     console.error(problems.join('\n\n'));
     console.error(`\ncheck failed: ${count(problems.length, 'problem')}`);
     process.exitCode = 1;
   } else {
     console.log(
-      `check passed: ${count(figures.length, 'figure')}, output and stills current, story balanced, vendored kit unchanged, audit, line ends and console clean in light and dark, counters true in every frame, every step announced as drawn`,
+      `check passed: ${count(figures.length, 'figure')}, output and stills current, story balanced, vendored kit unchanged, audit, line ends and console clean in light and dark, counters true in every frame, every step announced as drawn, every tour plays on after Pause`,
     );
   }
 }

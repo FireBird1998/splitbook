@@ -199,6 +199,7 @@ function nettingStation({ svg, held, tell }, D) {
   const T = (dx, dy, dz) => translateAlong(P, [dx, dy, dz]);
   const N = D.names.length;
   const NETTED_AT = 3;
+  const PAID_BEAT = 0.8;
   const counters = D.xs.map((_, i) => q(`[data-count="${i}"]`));
   const debtCords = D.debts.map((_, i) => q(`[data-debt="${i}"]`));
   const payCords = D.payments.map((_, i) => q(`[data-pay="${i}"]`));
@@ -341,6 +342,8 @@ function nettingStation({ svg, held, tell }, D) {
           else finish();
         }
       }
+    } else if (phase === "paid") {
+      if (clock > PAID_BEAT) startPay(payIndex + 1);
     } else if (phase === "done") {
       sx = lerp(sx, D.home, Math.min(1, dt * 2));
       if (clock > 4.2) restart();
