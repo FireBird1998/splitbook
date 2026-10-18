@@ -68,6 +68,22 @@ function balanceOf(balances: LeanBalance[], userId: string): number {
 }
 
 describe('balance integrity integration', () => {
+  it('names a former member whose pairwise Debts form a zero-balance cycle', async () => {
+    const groupId = await createTrip();
+    await groupService.addMember(groupId, bob);
+    await groupService.addMember(groupId, carol);
+    await addEqualExpense(groupId, alice, 10, [bob]);
+    await addEqualExpense(groupId, bob, 10, [carol]);
+    await addEqualExpense(groupId, carol, 10, [alice]);
+    await groupService.leave(groupId, carol);
+    const result = await balanceService.getGroupBalances(groupId);
+    expect(result!.debts).toEqual([]);
+    expect(result!.debtsBeforeSimplifying).toMatchObject([
+      { from: { _id: alice }, to: { _id: carol, name: 'Carol Tester' }, amount: 10 },
+      { from: { _id: bob }, to: { _id: alice }, amount: 10 },
+      { from: { _id: carol, name: 'Carol Tester' }, to: { _id: bob }, amount: 10 },
+    ]);
+  });
   it('derives zero-sum balances and a single debt for a two-person expense', async () => {
     const groupId = await createTrip();
     await groupService.addMember(groupId, bob);
@@ -242,6 +258,12 @@ describe('balance integrity integration', () => {
     expect(balanceOf(euro.balances, alice)).toBe(-30);
     expect(balanceOf(rupees.balances, alice)).toBe(50);
     expect(euro.debts).toMatchObject([{ from: { _id: alice }, to: { _id: bob }, amount: 30 }]);
+    expect(euro.debtsBeforeSimplifying).toMatchObject([
+      { from: { _id: alice }, to: { _id: bob }, amount: 30 },
+    ]);
+    expect(rupees.debtsBeforeSimplifying).toMatchObject([
+      { from: { _id: bob }, to: { _id: alice }, amount: 50 },
+    ]);
     expect(groupBalances!.balances).toEqual(rupees.balances);
 
     const userBalances = await balanceService.getUserBalances(alice);

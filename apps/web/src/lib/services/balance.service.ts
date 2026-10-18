@@ -15,6 +15,7 @@ import {
   type BalanceExpense,
   type BalanceSettlement,
 } from '@splitbook/shared/debt-simplifier';
+import { calculateDebtsMinor } from '@splitbook/shared/debts-before-simplifying';
 import {
   aggregateCurrencyBalances,
   memberSuggestedPayments,
@@ -82,6 +83,11 @@ export class BalanceService {
     const memberIds = new Set(userMap.keys());
     const netByCurrency = currencies.map((currency) => ({
       currency,
+      debtsBeforeSimplifying: calculateDebtsMinor(
+        expensesIn(expenses, currency),
+        settlementsIn(settlements, currency),
+        currency,
+      ),
       netBalances: calculateNetBalances(
         expensesIn(expenses, currency),
         settlementsIn(settlements, currency),
@@ -93,11 +99,14 @@ export class BalanceService {
     // former member is left out; one with an open balance is named from their account.
     const formerIds = [
       ...new Set(
-        netByCurrency.flatMap(({ netBalances }) =>
-          netBalances
+        netByCurrency.flatMap(({ netBalances, debtsBeforeSimplifying }) => [
+          ...netBalances
             .filter((balance) => balance.amount !== 0 && !userMap.has(balance.userId))
             .map((balance) => balance.userId),
-        ),
+          ...debtsBeforeSimplifying
+            .flatMap((debt) => [debt.from, debt.to])
+            .filter((id) => !userMap.has(id)),
+        ]),
       ),
     ];
     if (formerIds.length > 0) {
@@ -111,23 +120,30 @@ export class BalanceService {
     }
 
     const userInfo = (id: string) => userMap.get(id) || { _id: id, name: 'Unknown' };
-    const byCurrency = netByCurrency.map(({ currency, netBalances: allBalances }) => {
-      const netBalances = allBalances.filter(
-        (balance) => balance.amount !== 0 || memberIds.has(balance.userId),
-      );
-      return {
-        currency,
-        balances: netBalances.map((balance) => ({
-          user: userInfo(balance.userId),
-          balance: balance.amount,
-        })),
-        debts: simplifyDebts(netBalances, currency).map((debt) => ({
-          from: userInfo(debt.from),
-          to: userInfo(debt.to),
-          amount: debt.amount,
-        })),
-      };
-    });
+    const byCurrency = netByCurrency.map(
+      ({ currency, netBalances: allBalances, debtsBeforeSimplifying }) => {
+        const netBalances = allBalances.filter(
+          (balance) => balance.amount !== 0 || memberIds.has(balance.userId),
+        );
+        return {
+          currency,
+          balances: netBalances.map((balance) => ({
+            user: userInfo(balance.userId),
+            balance: balance.amount,
+          })),
+          debts: simplifyDebts(netBalances, currency).map((debt) => ({
+            from: userInfo(debt.from),
+            to: userInfo(debt.to),
+            amount: debt.amount,
+          })),
+          debtsBeforeSimplifying: debtsBeforeSimplifying.map((debt) => ({
+            from: userInfo(debt.from),
+            to: userInfo(debt.to),
+            amount: toMajorAmount(debt.amountMinor, currency),
+          })),
+        };
+      },
+    );
     const defaultBalances = byCurrency.find((bucket) => bucket.currency === group.defaultCurrency)!;
     return {
       ...defaultBalances,

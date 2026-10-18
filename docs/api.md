@@ -902,12 +902,12 @@ back-dated or attributed to a past month.
 
 ## Balances
 
-| Method | Path                        | Description                             |
-| ------ | --------------------------- | --------------------------------------- |
-| GET    | `/api/groups/[id]/balances` | Group balances **and** simplified debts |
+| Method | Path                        | Description                                               |
+| ------ | --------------------------- | --------------------------------------------------------- |
+| GET    | `/api/groups/[id]/balances` | Balances, Suggested payments and Debts before simplifying |
 
 There is no `/balances/simplified` route — the single endpoint returns both the
-per-member balances and the minimum-transaction debt list.
+per-member balances, Suggested payments and pairwise Debts.
 
 ### GET /api/groups/[id]/balances
 
@@ -944,17 +944,44 @@ gets `403` and nothing is materialized.
 }
 ```
 
-Balances are **running and cumulative** — never reset by month. `debts` is the
-simplified (minimum-transfer) set, not the raw pairwise ledger.
+Balances are **running and cumulative** — never reset by Month. **`debts` is the
+legacy wire name for Suggested payments** and is unchanged for older Android builds
+and Connected assistants. It is not the pairwise Debt ledger.
+
+Each `byCurrency` entry contains `currency`, `balances`, `debts` and the additive
+**`debtsBeforeSimplifying`** list. The top-level currency/figures repeat the Group's
+default-currency entry. Both lists have rows shaped as
+`{ from: { _id, name, image? }, to: { _id, name, image? }, amount }`, with positive
+major-unit amounts exactly representable in that currency's minor units.
+
+Debts divide each Expense's shares among its payers in proportion to their paid
+amounts. Largest-remainder rounding is reconciled within each Expense so every
+share and every payer's total remains exact; a cell stays at the floor or ceiling
+of its exact proportion. Payer-own shares take precedence when reconciling ties,
+then stable member-ID order. Self-debts are omitted. A Settlement from A to B
+reduces A's Debt to B, or increases B's Debt to A. Opposite Debts are netted per
+pair and currency, and zero pairs are omitted. Each member's net of Debts equals
+their balance. Suggested payments still use the existing simplifier.
+
+For example, Sam paying INR 1,060 split as Alex 880 / Priya 180, and Priya paying
+600 for Alex, returns three `debtsBeforeSimplifying` rows: Alex → Sam 880,
+Alex → Priya 600, Priya → Sam 180. The unchanged `debts` list suggests two payments:
+Alex → Sam 1,060 and Alex → Priya 420.
+
+The shared parser accepts replies **with or without** `debtsBeforeSimplifying`.
+Missing means unavailable, not an empty list; web keeps Suggested and hides the
+switch for older replies. When present, the list validates people and positive
+finite amounts. Older clients can ignore it. No write or Settlement contract changes.
 
 People who left or were removed stay in the ledger. A settled former member is
 left out of `balances`; one who still has a balance appears under their own
-account name.
+account name. Former members named by a pairwise Debt retain their name even when
+their overall balance is zero.
 
 `hasMixedCurrencies` is true when any expense or settlement differs from the
 group default. The write path forbids that, so it can only arise from legacy
-data — but note the endpoint still sums those amounts into one number labelled
-with the group's default currency.
+data. Each currency has its own `byCurrency` entry; amounts are never combined or
+converted across currencies.
 
 ---
 
