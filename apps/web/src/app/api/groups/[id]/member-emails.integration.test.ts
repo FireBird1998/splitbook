@@ -42,6 +42,7 @@ beforeAll(async () => {
   await connectSignedIn(db);
   routes = {
     groups: (await import('../route')).GET as Handler,
+    create: (await import('../route')).POST as Handler,
     group: (await import('./route')).GET as Handler,
     balances: (await import('./balances/route')).GET as Handler,
     expenses: (await import('./expenses/route')).GET as Handler,
@@ -166,5 +167,19 @@ describe('Group reads and email addresses (#517)', () => {
     for (const [name, body] of Object.entries(reads))
       if (name !== 'group') expect(addresses(body), name).not.toContain(emailOf(sam));
     expect(addresses(reads.groups)).toEqual([emailOf(alex)]);
+  });
+
+  it('send the member who creates a Group their own address in the reply', async () => {
+    const created = await callRoute(routes.create, {
+      method: 'POST',
+      path: '/api/groups',
+      cookie: await signIn('alex'),
+      body: { name: 'Hill Cabin', category: 'trip', defaultCurrency: 'INR' },
+    } as never);
+
+    expect(created.status).toBe(201);
+    expect(members(created.body)).toEqual([
+      { _id: alex, name: 'Alex Rivera', email: emailOf(alex) },
+    ]);
   });
 });
