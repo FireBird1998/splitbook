@@ -33,7 +33,7 @@ export function playTour(root, D) {
 }
 
 /** The To review rack's scene, for runTour. */
-function toReviewRack({ svg, say, announce }, D) {
+function toReviewRack({ svg, say, tell }, D) {
   const P = D.P;
   const q = (sel) => svg.querySelector(sel);
   const T = (dx, dy, dz) => translateAlong(P, [dx, dy, dz]);
@@ -56,10 +56,6 @@ function toReviewRack({ svg, say, announce }, D) {
     els.forEach((el, i) => {
       if (el.textContent !== (lines[i] ?? '')) el.textContent = lines[i] ?? '';
     });
-  const tell = (text, loud = true) => {
-    say(text);
-    if (loud) announce(text);
-  };
   const named = (item) => `${item.title} ${rupees(item.amountMinor)}`;
   const split = (item) =>
     item.chips.every((c) => c === item.chips[0])
@@ -89,7 +85,7 @@ function toReviewRack({ svg, say, announce }, D) {
     set(term, D.screens.termIdle);
     set(hood, D.screens.hoodIdle);
     lamp.setAttribute('data-on', '');
-    tell('Claude connected · To review empty', false);
+    tell('Claude connected · To review empty');
   }
   function send(i) {
     phase = `send${i}`;
@@ -135,7 +131,8 @@ function toReviewRack({ svg, say, announce }, D) {
         if (b.z <= floor) {
           b.where = 'rack';
           waiting += 1;
-          tell(`${named(D.items[i])} is in To review · waiting for you`, false);
+          // A beat within the step: the live region keeps the step's words.
+          say(`${named(D.items[i])} is in To review · waiting for you`);
         }
       }
       if (b.where === 'rack' && clock > 2.4) {

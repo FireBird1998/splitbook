@@ -11,7 +11,7 @@ export function playTour(root, D) {
 }
 
 /** The netting station's scene, for runTour. */
-function nettingStation({ svg, held, say, announce }, D) {
+function nettingStation({ svg, held, tell }, D) {
   const P = D.P;
   const q = (sel) => svg.querySelector(sel);
   const T = (dx, dy, dz) => translateAlong(P, [dx, dy, dz]);
@@ -31,13 +31,14 @@ function nettingStation({ svg, held, say, announce }, D) {
     screen.forEach((el, i) => {
       if (el.textContent !== (lines[i] ?? '')) el.textContent = lines[i] ?? '';
     });
-  const tell = (text, loud = true) => {
-    say(text);
-    if (loud) announce(text);
-  };
   const idx = (id) => D.ids.indexOf(id);
   const nameOf = (id) => D.names[idx(id)];
   const coinsFor = (minor) => Math.round(minor / D.coin);
+  /** A payment's words: who `pays` whom while it is under way, who `paid` once it has landed. */
+  const payWords = (j, verb) => {
+    const p = D.payments[j];
+    return `Pay ${j + 1} of ${D.payments.length} · ${nameOf(p.from)} ${verb} ${nameOf(p.to)} ${rupees(p.amountMinor)}`;
+  };
   const stackZ = (n) => D.trayTop + n * D.coinT;
 
   // ---------------------------------------------------------------- state
@@ -66,7 +67,7 @@ function nettingStation({ svg, held, say, announce }, D) {
     drop = 0;
     lamp.removeAttribute('data-on');
     setScreen(['NETTING', `${D.debts.length} debts`, `${N} people`]);
-    tell(`${D.debts.length} debts between ${N} people`, false);
+    tell(`${D.debts.length} debts between ${N} people`);
   }
   function startNet() {
     phase = 'net';
@@ -102,9 +103,7 @@ function nettingStation({ svg, held, say, announce }, D) {
       `${nameOf(p.from).toUpperCase()}→${nameOf(p.to).toUpperCase()}`,
       rupees(p.amountMinor),
     ]);
-    tell(
-      `Pay ${j + 1} of ${D.payments.length} · ${nameOf(p.from)} pays ${nameOf(p.to)} ${rupees(p.amountMinor)}`,
-    );
+    tell(payWords(j, 'pays'));
   }
   /** The payment's coins reach the payee's tray and both counters move. */
   function land() {
@@ -213,7 +212,11 @@ function nettingStation({ svg, held, say, announce }, D) {
       if (held()) completePay();
     } else if (phase === 'pay') {
       completePay();
-      if (!held() && phase === 'paid') startPay(payIndex + 1);
+      if (phase === 'paid') {
+        // Held, the payment under way lands and the step tells it, as it would any other.
+        if (held()) tell(payWords(payIndex, 'paid'));
+        else startPay(payIndex + 1);
+      }
     } else if (phase === 'paid') {
       startPay(payIndex + 1);
       if (held()) completePay();

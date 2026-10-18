@@ -34,34 +34,71 @@ export function drive(
 }
 
 /**
- * A script for `drive`'s preload that reads a live tour's counters after every frame it draws: what
- * each reads and where it is heading (drawCounters' `data-target`), in whole rupees, keeping each
- * reading that changed. It notes the tour has gone round once when the plate's readout comes back
- * to where it started.
+ * A script for `drive`'s preload that watches a live tour play by itself, after every frame it
+ * draws. It keeps each counter reading that changed, what each reads and where it is heading
+ * (drawCounters' `data-target`) in whole rupees. It notes the tour has gone round once when the
+ * plate's readout comes back to where it started, and what the plate and the live region say in
+ * that frame, as the tour starts over.
  */
-export const COUNTER_SAMPLER = `(() => {
+export const TOUR_SAMPLER = `(() => {
   const frames = [];
-  let drawn = 0, last = '', first = null, moved = false, round = false;
+  let drawn = 0, last = '', first = null, moved = false, round = false, restart = null;
   const rupees = (text) => Number(text.replace('\u2212', '-').replace(/[+,]/g, ''));
   const read = () => {
-    const counters = [...document.querySelectorAll('[data-count][data-target]')];
-    if (!counters.length || round) return;
+    if (round) return;
     drawn += 1;
-    const shown = counters.map((el) => rupees(el.textContent));
-    const target = counters.map((el) => Number(el.dataset.target));
-    // Only readings that changed are kept, numbered by the frame they were drawn in.
-    const key = JSON.stringify([shown, target]);
-    if (key !== last) frames.push({ frame: drawn, shown, target });
-    last = key;
+    const counters = [...document.querySelectorAll('[data-count][data-target]')];
+    if (counters.length) {
+      const shown = counters.map((el) => rupees(el.textContent));
+      const target = counters.map((el) => Number(el.dataset.target));
+      // Only readings that changed are kept, numbered by the frame they were drawn in.
+      const key = JSON.stringify([shown, target]);
+      if (key !== last) frames.push({ frame: drawn, shown, target });
+      last = key;
+    }
     const readout = document.querySelector('[data-readout]')?.textContent ?? '';
     if (first === null) first = readout;
     else if (readout !== first) moved = true;
-    else if (moved) round = true;
+    else if (moved) {
+      round = true;
+      restart = { readout, status: document.querySelector('[data-status]')?.textContent ?? '' };
+    }
   };
   const raf = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (callback) => raf((now) => { callback(now); read(); });
-  window.__counters = { frames, round: () => round };
+  window.__tour = { frames, round: () => round, restart: () => restart };
 })();`;
+
+/**
+ * A script for `drive`'s eval that steps a live tour as a keyboard visitor would: it presses each
+ * key on the stage, reads the plate's readout and the live region at once, the moment the step has
+ * written them, then lets the tour draw two frames before the next key. It returns those readings,
+ * each with what the live region said just before its key.
+ */
+export const keyStepper = (keys: readonly string[]) => `(async () => {
+  const stage = document.querySelector('[data-stage]');
+  const status = stage.querySelector('[data-status]');
+  const readout = document.querySelector('[data-readout]');
+  const frames = (n) => new Promise((done) => {
+    const go = (left) => (left ? requestAnimationFrame(() => go(left - 1)) : done());
+    go(n);
+  });
+  await frames(2);
+  const steps = [];
+  for (const key of ${JSON.stringify(keys)}) {
+    const before = status.textContent;
+    stage.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    steps.push({ key, readout: readout.textContent, status: status.textContent, before });
+    await frames(2);
+  }
+  return steps;
+})()`;
+
+/** What a drive run's `eval` returned, or undefined when the run stopped before it. */
+export function evalResult<T>(out: string): T | undefined {
+  const line = out.split('\n').find((l) => l.startsWith('eval: '));
+  return line === undefined ? undefined : (JSON.parse(line.slice('eval: '.length)) as T);
+}
 
 /** Whether a drive run's page logged no errors or exceptions. */
 export const cleanConsole = (out: string) => out.includes('console: clean');

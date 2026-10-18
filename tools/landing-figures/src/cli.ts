@@ -1,7 +1,9 @@
 // pnpm --filter @splitbook/landing-figures <build | check | preview [dir]>
 //   build    regenerate the figures into the web app, and draw each still that is out of date
 //   check    fail on stale output or stills, a story that doesn't balance, an edited vendored kit,
-//            any audit, line-end or console problem, or a counter that is untrue in any frame
+//            any audit, line-end or console problem, a counter that is untrue in any frame, or a
+//            step, by keyboard or as a tour starts over, that the live region doesn't announce as
+//            drawn
 //   preview  write each figure as an interactive page (light and dark) to look at in a browser
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,10 +12,14 @@ import * as k from './kit.ts';
 import {
   counterProblems,
   staleOutputs,
+  statusProblems,
   stillDrift,
   vendorDrift,
   verifyStory,
+  saysWhatIsDrawn,
   type CounterFrame,
+  type Reading,
+  type StatusStep,
 } from './check.ts';
 import {
   OUT_DIR,
@@ -24,7 +30,16 @@ import {
   withStills,
   type Figure,
 } from './generate.ts';
-import { COUNTER_SAMPLER, THEMES, cleanConsole, drive, livePage, restPage } from './pages.ts';
+import {
+  THEMES,
+  TOUR_SAMPLER,
+  cleanConsole,
+  drive,
+  evalResult,
+  keyStepper,
+  livePage,
+  restPage,
+} from './pages.ts';
 import { drawStills, stillSource } from './stills.ts';
 import { story } from './story.ts';
 
@@ -63,10 +78,19 @@ function floatingEnds(file: string, poses: number): { floating: number[]; out: s
   return { floating, out };
 }
 
-function lineEnds(figures: Figure[]): string[] {
-  const problems: string[] = [];
-  const dir = mkdtempSync(join(tmpdir(), 'landing-figures-'));
+/** Runs `use` in a fresh temporary folder, and removes the folder after. */
+function inTempDir<T>(prefix: string, use: (dir: string) => T): T {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
   try {
+    return use(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function lineEnds(figures: Figure[]): string[] {
+  return inTempDir('landing-figures-', (dir) => {
+    const problems: string[] = [];
     for (const figure of figures) {
       for (const theme of THEMES) {
         const pages = [
@@ -87,24 +111,21 @@ function lineEnds(figures: Figure[]): string[] {
         }
       }
     }
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-  return problems;
+    return problems;
+  });
 }
 
 /**
- * Plays each tour that has counters once round, with motion, reading its counters in every frame it
- * draws: they must add up to zero and never pass where they are heading (#511).
+ * Plays each tour once round by itself, with motion, watching every frame it draws. Its counters,
+ * if it has any, must add up to zero and never pass where they are heading (#511); as it starts
+ * over, its live region must say what the plate reads (#568).
  */
-function countersEveryFrame(figures: Figure[]): string[] {
-  const problems: string[] = [];
-  const dir = mkdtempSync(join(tmpdir(), 'landing-counters-'));
-  try {
+function playingByItself(figures: Figure[]): string[] {
+  return inTempDir('landing-round-', (dir) => {
+    const problems: string[] = [];
     const sampler = join(dir, 'sampler.js');
-    writeFileSync(sampler, COUNTER_SAMPLER);
+    writeFileSync(sampler, TOUR_SAMPLER);
     for (const figure of figures) {
-      if (!('counters' in figure)) continue;
       const file = join(dir, `${figure.id}.html`);
       writeFileSync(file, livePage(figure, 'light'));
       // Twice real time: the tours step at most 1/30 s a frame, so every step is still drawn.
@@ -112,28 +133,62 @@ function countersEveryFrame(figures: Figure[]): string[] {
         file,
         [
           ['slow', 2],
-          ['until', 'window.__counters.round()', 180_000],
-          ['eval', 'window.__counters.frames'],
+          ['until', 'window.__tour.round()', 180_000],
+          ['eval', '({ frames: window.__tour.frames, restart: window.__tour.restart() })'],
         ],
         // A tour takes up to half a minute to go round at this speed.
         { moving: true, preload: sampler, timeout: 240_000 },
       );
       const where = `${figure.id} (live tour, every frame)`;
-      const line = out.split('\n').find((l) => l.startsWith('eval: '));
-      if (!line) {
+      const round = evalResult<{ frames: CounterFrame[]; restart: Reading }>(out);
+      if (!round) {
         problems.push(`${where}: the tour did not go round.\n${out.trim()}`);
         continue;
       }
-      const frames = JSON.parse(line.slice('eval: '.length)) as CounterFrame[];
-      problems.push(
-        ...counterProblems(frames, figure.counters).map((problem) => `${where}: ${problem}`),
-      );
+      if ('counters' in figure)
+        problems.push(
+          ...counterProblems(round.frames, figure.counters).map(
+            (problem) => `${where}: ${problem}`,
+          ),
+        );
+      if (!saysWhatIsDrawn(round.restart))
+        problems.push(
+          `${where}: starting over, the live region says "${round.restart.status}", but the plate reads "${round.restart.readout}".`,
+        );
       if (!cleanConsole(out)) problems.push(`${where}: the page logged errors.\n${out.trim()}`);
     }
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-  return problems;
+    return problems;
+  });
+}
+
+// More than twice round the longest tour (Fig 3 moving, six steps), then Home. statusProblems
+// fails a run whose → presses never come round to the restart.
+const STEP_KEYS = [...Array.from({ length: 13 }, () => 'ArrowRight'), 'Home'];
+
+/**
+ * Steps each tour by keyboard, held (reduced motion) and moving, from where it opens, and reads
+ * its live region after every key: it must tell each step as drawn (#568).
+ */
+function statusAtEveryStep(figures: Figure[]): string[] {
+  return inTempDir('landing-status-', (dir) => {
+    const problems: string[] = [];
+    for (const figure of figures) {
+      const file = join(dir, `${figure.id}.html`);
+      writeFileSync(file, livePage(figure, 'light'));
+      for (const moving of [false, true]) {
+        const out = drive(file, [['eval', keyStepper(STEP_KEYS)]], { moving });
+        const where = `${figure.id} (live tour, ${moving ? 'moving' : 'held'}, by keyboard)`;
+        const steps = evalResult<StatusStep[]>(out);
+        if (!steps) {
+          problems.push(`${where}: the tour could not be stepped.\n${out.trim()}`);
+          continue;
+        }
+        problems.push(...statusProblems(steps).map((problem) => `${where}: ${problem}`));
+        if (!cleanConsole(out)) problems.push(`${where}: the page logged errors.\n${out.trim()}`);
+      }
+    }
+    return problems;
+  });
 }
 
 function check() {
@@ -156,14 +211,15 @@ function check() {
       problems.push(`${figure.id}: audit found ${count(found, 'problem')}.\n${k.report(result)}`);
   }
   problems.push(...lineEnds(figures));
-  problems.push(...countersEveryFrame(figures));
+  problems.push(...playingByItself(figures));
+  problems.push(...statusAtEveryStep(figures));
   if (problems.length) {
     console.error(problems.join('\n\n'));
     console.error(`\ncheck failed: ${count(problems.length, 'problem')}`);
     process.exitCode = 1;
   } else {
     console.log(
-      `check passed: ${count(figures.length, 'figure')}, output and stills current, story balanced, vendored kit unchanged, audit, line ends and console clean in light and dark, counters true in every frame`,
+      `check passed: ${count(figures.length, 'figure')}, output and stills current, story balanced, vendored kit unchanged, audit, line ends and console clean in light and dark, counters true in every frame, every step announced as drawn`,
     );
   }
 }

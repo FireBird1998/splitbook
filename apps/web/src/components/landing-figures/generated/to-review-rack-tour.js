@@ -772,14 +772,20 @@ function runTour(root, makeScene) {
   const still = window.matchMedia("(prefers-reduced-motion: reduce)");
   let paused = false;
   const held = () => still.matches || paused;
+  const say = (text) => {
+    if (readout && readout.textContent !== text) readout.textContent = text;
+  };
+  const announce = (text) => {
+    if (status) status.textContent = text;
+  };
   const scene = makeScene({
     svg: stage.querySelector("svg"),
     held,
-    say(text) {
-      if (readout && readout.textContent !== text) readout.textContent = text;
-    },
-    announce(text) {
-      if (status) status.textContent = text;
+    say,
+    announce,
+    tell(text) {
+      say(text);
+      announce(text);
     }
   });
   let frame = 0;
@@ -877,7 +883,7 @@ function beltMarksSvg(P, belt, travel) {
 function playTour(root, D) {
   return runTour(root, (tour) => toReviewRack(tour, D));
 }
-function toReviewRack({ svg, say, announce }, D) {
+function toReviewRack({ svg, say, tell }, D) {
   const P = D.P;
   const q = (sel) => svg.querySelector(sel);
   const T = (dx, dy, dz) => translateAlong(P, [dx, dy, dz]);
@@ -896,10 +902,6 @@ function toReviewRack({ svg, say, announce }, D) {
   const set = (els, lines) => els.forEach((el, i) => {
     if (el.textContent !== (lines[i] ?? "")) el.textContent = lines[i] ?? "";
   });
-  const tell = (text, loud = true) => {
-    say(text);
-    if (loud) announce(text);
-  };
   const named = (item) => `${item.title} ${rupees(item.amountMinor)}`;
   const split = (item) => item.chips.every((c) => c === item.chips[0]) ? `${item.chips.length} × ${rupees(item.chips[0])}` : `${item.chips.length} chips`;
   let phase = "idle";
@@ -923,7 +925,7 @@ function toReviewRack({ svg, say, announce }, D) {
     set(term, D.screens.termIdle);
     set(hood, D.screens.hoodIdle);
     lamp.setAttribute("data-on", "");
-    tell("Claude connected · To review empty", false);
+    tell("Claude connected · To review empty");
   }
   function send(i) {
     phase = `send${i}`;
@@ -966,7 +968,7 @@ function toReviewRack({ svg, say, announce }, D) {
         if (b.z <= floor) {
           b.where = "rack";
           waiting += 1;
-          tell(`${named(D.items[i])} is in To review · waiting for you`, false);
+          say(`${named(D.items[i])} is in To review · waiting for you`);
         }
       }
       if (b.where === "rack" && clock > 2.4) {

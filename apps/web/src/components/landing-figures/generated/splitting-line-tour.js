@@ -53,14 +53,20 @@ function runTour(root, makeScene) {
   const still = window.matchMedia("(prefers-reduced-motion: reduce)");
   let paused = false;
   const held = () => still.matches || paused;
+  const say = (text) => {
+    if (readout && readout.textContent !== text) readout.textContent = text;
+  };
+  const announce = (text) => {
+    if (status) status.textContent = text;
+  };
   const scene = makeScene({
     svg: stage.querySelector("svg"),
     held,
-    say(text) {
-      if (readout && readout.textContent !== text) readout.textContent = text;
-    },
-    announce(text) {
-      if (status) status.textContent = text;
+    say,
+    announce,
+    tell(text) {
+      say(text);
+      announce(text);
     }
   });
   let frame = 0;
@@ -200,7 +206,7 @@ function drawCounters(elements, readings) {
 function playTour(root, D) {
   return runTour(root, (tour) => splittingLine(tour, D));
 }
-function splittingLine({ svg, held, say, announce }, D) {
+function splittingLine({ svg, held, say, announce, tell }, D) {
   const P = D.P;
   const q = (sel) => svg.querySelector(sel);
   const onBelt = q('[data-part="on-belt"]');
@@ -272,9 +278,9 @@ function splittingLine({ svg, held, say, announce }, D) {
         `${D.steps.length} split`,
         `sum ${rupees(readings.targets.reduce((a, b) => a + b, 0))}`
       ]);
-      const text2 = D.names.map((n, i) => `${n} ${signed(readings.targets[i])}`).join(" · ");
-      say(text2);
-      announce(`All ${D.steps.length} Expenses split. ${text2}`);
+      const text = D.names.map((n, i) => `${n} ${signed(readings.targets[i])}`).join(" · ");
+      say(text);
+      announce(`All ${D.steps.length} Expenses split. ${text}`);
       return;
     }
     const s = D.steps[e];
@@ -286,9 +292,7 @@ function splittingLine({ svg, held, say, announce }, D) {
       (l, i) => i === s.paidBy ? l.setAttribute("data-on", "") : l.removeAttribute("data-on")
     );
     setScreen(screenFor(s));
-    const text = `${s.title} ${rupees(s.amountMinor)} · ${D.names[s.paidBy]} paid`;
-    say(text);
-    announce(text);
+    tell(`${s.title} ${rupees(s.amountMinor)} · ${D.names[s.paidBy]} paid`);
   }
   function restart() {
     e = -1;
@@ -304,7 +308,7 @@ function splittingLine({ svg, held, say, announce }, D) {
     payLamps.forEach((l) => l.removeAttribute("data-on"));
     resetMagazine();
     setScreen(["READY", `${D.steps.length} Expenses`, ""]);
-    say(`Line idle · ${D.steps.length} Expenses waiting`);
+    tell(`Line idle · ${D.steps.length} Expenses waiting`);
   }
   const nOf = (s) => s.chips.length;
   const cutX = (s, k) => D.blade + nOf(s) * D.cw / 2 - k * D.cw;
