@@ -22,7 +22,11 @@ const actionText = (intent: TagIntent) => {
       return 'Delete Tag';
   }
 };
-/** The Tag's name, which opens showing its start: its focus is kept only while it's shown. */
+/**
+ * The Tag's name: at its start while the member isn't in the box, so a long name isn't cut off
+ * at large text; the cursor is theirs once focused. Its own component, so a closed edit drops
+ * its focus state.
+ */
 function TagNameBox({
   name,
   editable,

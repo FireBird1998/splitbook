@@ -1,5 +1,6 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setWindow } from '../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -75,6 +76,8 @@ describe('An invitation while offline (#286)', () => {
 
 describe('A long Group name (#554)', () => {
   it('opens at its start, and leaves the cursor to the member while typing', () => {
+    setWindow({ width: 360, height: 780, fontScale: 2 });
+    const onLeaveField = vi.fn();
     act(() => {
       renderer = create(
         <GroupCreateForm
@@ -93,6 +96,7 @@ describe('A long Group name (#554)', () => {
           uncertain={false}
           onCheckGroups={vi.fn()}
           onDiscard={vi.fn()}
+          onLeaveField={onLeaveField}
         />,
       );
     });
@@ -108,5 +112,7 @@ describe('A long Group name (#554)', () => {
     expect(name().props.selection).toBeUndefined();
     act(() => name().props.onBlur());
     expect(name().props.selection).toEqual({ start: 0, end: 0 });
+    // Leaving the box still checks the name, as before.
+    expect(onLeaveField).toHaveBeenCalledWith('name');
   });
 });
