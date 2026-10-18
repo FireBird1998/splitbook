@@ -116,6 +116,38 @@ test('dashboard respects the project theme and is accessible', async ({ page }, 
   await reviewScreenshot(page, testInfo, 'dashboard');
 });
 
+test('dashboard stays accessible while Needs you waits on one of its reads (#565)', async ({
+  page,
+}, testInfo) => {
+  // The invitations read is held until axe has run, so the suggested payments sit beside a row
+  // still loading, whatever the timing.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/invitations', async (route) => {
+    await held;
+    await route.continue();
+  });
+  await enterAsPersona(page, 'alex');
+  await expectThemeApplied(page, testInfo);
+
+  const needsYou = page.getByRole('region', { name: 'Needs you' });
+  const loading = page.getByRole('status', { name: 'Loading invitations' });
+  await expect(needsYou.getByRole('link', { name: /^Record payment/ }).first()).toBeVisible();
+  // The loading row is one of the list's items, not a status in place of one.
+  await expect(
+    needsYou
+      .getByRole('list', { name: 'Needs you' })
+      .getByRole('listitem')
+      .filter({ has: loading }),
+  ).toBeVisible();
+  await expectNoSeriousA11yViolations(page, testInfo, 'dashboard-needs-you-loading');
+
+  release();
+  await expect(loading).toHaveCount(0);
+});
+
 test('trip workspace respects the project theme and is accessible', async ({ page }, testInfo) => {
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}`);
