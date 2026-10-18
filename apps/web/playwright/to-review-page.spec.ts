@@ -99,7 +99,7 @@ test('fix a missing payer; edits are kept; Save records exactly the version show
   await expect(review).toContainText("Claude didn't know who paid, so it left that to you");
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
   await review.getByLabel('Paid by', { exact: true }).click();
-  await page.getByRole('option', { name: 'Alex Rivera', exact: true }).click();
+  await page.getByRole('option', { name: 'You', exact: true }).click();
   await review.getByLabel('Date', { exact: true }).fill('2026-10-15');
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
   expect((await rows(page))[0].values.date).toBe('2026-10-15');
@@ -126,8 +126,8 @@ test("Claude's one-payer item without a Category is Ready, shows who paid and Ot
   );
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const review = panel(page);
-  await expect(review.getByLabel('Paid by', { exact: true })).toHaveText('Alex Rivera');
-  await expect(review.getByLabel('Paid by Alex Rivera', { exact: true })).toHaveCount(0);
+  await expect(review.getByLabel('Paid by', { exact: true })).toHaveText('You');
+  await expect(review.getByLabel('Paid by You', { exact: true })).toHaveCount(0);
   await expect(review.getByLabel('Category', { exact: true })).toHaveText('Other');
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
   await page.evaluate(() => {
@@ -165,7 +165,7 @@ test("a lone payer's mismatched amount stays editable while it is cleared and re
   ).toBe(200);
   await page.reload();
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
-  const paid = panel(page).getByLabel('Paid by Alex Rivera', { exact: true });
+  const paid = panel(page).getByLabel('Paid by You', { exact: true });
   await expect(paid).toHaveValue('10');
   await paid.fill('');
   await expect(paid).toBeVisible();
@@ -175,7 +175,7 @@ test("a lone payer's mismatched amount stays editable while it is cleared and re
   );
   // Choosing one payer again still works: the kept several-payers mode is only a default.
   await panel(page).getByRole('button', { name: 'Single payer', exact: true }).click();
-  await expect(panel(page).getByLabel('Paid by', { exact: true })).toHaveText('Alex Rivera');
+  await expect(panel(page).getByLabel('Paid by', { exact: true })).toHaveText('You');
   await expect(paid).toHaveCount(0);
 });
 
@@ -611,7 +611,7 @@ test('payer problems use names; split, Tag and optional detail pickers keep thei
   await review.getByLabel('Paid by Sam Chen', { exact: true }).fill('6.17');
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
   await review.getByRole('button', { name: '%', exact: true }).click();
-  await review.getByLabel('Percentage for Alex Rivera', { exact: true }).fill('100');
+  await review.getByLabel('Percentage for You', { exact: true }).fill('100');
   await review.getByLabel('Notes (optional)').fill('A fictional shared lunch');
   const group = (await (await page.request.get(`/api/groups/${DEMO_GROUP_ID}`)).json()).data;
   const tag = group.tags.find(

@@ -8,6 +8,8 @@ export interface DraftContext {
   currency?: string;
   /** The Group's category, which names it as Add expense does: a Trip's currency (#567). */
   category?: GroupCategory;
+  /** The member reviewing, called "You" by id, never made the payer (#591). */
+  viewerId?: string;
 }
 export function draftEntries(values: ExpenseDraftValues = {}): DraftEntries {
   const entries: DraftEntries = {};

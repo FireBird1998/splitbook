@@ -118,6 +118,7 @@ export default function ReviewExpenseFields({
       groupCurrency={context.currency}
       groupCategory={context.category}
       userId=""
+      viewerId={context.viewerId}
       members={members.map((member) => ({ user: { _id: member.id, name: member.name } }))}
       groupTags={context.tags.map((tag) => ({ _id: tag.id, name: tag.name, isArchived: false }))}
       currentTag={entries.tag}
