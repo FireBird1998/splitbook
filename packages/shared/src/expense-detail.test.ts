@@ -1,6 +1,8 @@
 import { format } from 'date-fns';
 import { describe, expect, it } from 'vitest';
 import {
+  expenseEditLineText,
+  expenseEdits,
   expenseHistory,
   expenseLeftover,
   expenseShareRows,
@@ -13,6 +15,7 @@ import {
   type ExpenseLeftover,
   type StoredExpenseSplit,
 } from './expense-detail';
+import { moneyParticipantId } from './exact-money';
 import type { ExpenseSplitMethod } from './split-calculation';
 
 // Fictional members and figures only. Ids order the members: you, then Sam, then Priya.
@@ -241,80 +244,87 @@ describe('the leftover in words', () => {
 
 describe('an Expense’s history', () => {
   const at = (day: number) => `2026-09-${String(day).padStart(2, '0')}T15:40:00.000Z`;
+  const people = new Map([you, sam, priya].map((person) => [person._id, person.name]));
+  /** Members by name, and the viewer (you) as "Your". */
+  const names = {
+    name: (person: unknown) => people.get(moneyParticipantId(person)) ?? 'Former member',
+    viewer: you._id,
+  };
   const history = (...edits: Array<Record<string, { old?: unknown; new?: unknown }>>) =>
-    expenseHistory({
-      currency: 'INR',
-      createdAt: at(1),
-      createdBy: sam,
-      editHistory: edits.map((changes, index) => ({
-        editedBy: index % 2 ? you : priya,
-        editedAt: at(index + 2),
-        changes,
-      })),
-    });
+    expenseHistory(
+      {
+        currency: 'INR',
+        createdAt: at(1),
+        createdBy: sam,
+        editHistory: edits.map((changes, index) => ({
+          editedBy: index % 2 ? you : priya,
+          editedAt: at(index + 2),
+          changes,
+        })),
+      },
+      names,
+    );
+  /** Each line of the newest edit, as both clients read it. */
+  const lines = (...edits: Array<Record<string, { old?: unknown; new?: unknown }>>) =>
+    history(...edits)[0].lines.map(expenseEditLineText);
 
   const row = (user: unknown, minor: number) => ({ user, amount: minor / 100, amountMinor: minor });
+
+  it('says an amount the payer and the split only followed in one line (#515)', () => {
+    // The Tester’s edit: ₹900.00 shared equally by three, paid by Priya, became ₹1,200.00.
+    const [edit] = history({
+      amount: { old: 900, new: 1200 },
+      amountMinor: { old: 90000, new: 120000 },
+      paidBy: { old: [row(priya._id, 90000)], new: [row(priya._id, 120000)] },
+      splitBetween: {
+        old: [row(you._id, 30000), row(sam._id, 30000), row(priya._id, 30000)],
+        new: [row(you._id, 40000), row(sam._id, 40000), row(priya._id, 40000)],
+      },
+    });
+    expect(edit.action).toBe('edited this Expense');
+    expect(edit.lines.map(expenseEditLineText)).toEqual(['Amount ₹900.00 → ₹1,200.00']);
+    expect(edit.lines[0].money).toEqual({ before: true, after: true });
+  });
+
+  it('gives each changed fact its own line, never repeating the notes (#515)', () => {
+    // The Tester’s other edit: the description, date, Tag and notes, in one save.
+    expect(
+      lines({
+        description: { old: 'Groceries', new: 'Weekly groceries' },
+        date: { old: '2026-10-16T00:00:00.000Z', new: '2026-10-17T00:00:00.000Z' },
+        tagId: { old: 'c00000000000000000000001', new: 'c00000000000000000000002' },
+        tag: { old: 'Food', new: 'Travel' },
+        notes: { old: '', new: 'Same shop as last week' },
+      }),
+    ).toEqual([
+      'Description “Groceries” → “Weekly groceries”',
+      'Date 16 Oct → 17 Oct',
+      'Tag Food → Travel',
+      'Notes changed',
+    ]);
+  });
 
   it('lists the edits newest first, then who added it', () => {
     const entries = history(
       { amount: { old: 2680, new: 2860 }, amountMinor: { old: 268000, new: 286000 } },
       { notes: { old: '', new: 'August–September meter cycle' } },
     );
-    expect(entries).toEqual([
-      { by: you, at: at(3), action: 'changed the notes', change: null, members: [] },
-      {
-        by: priya,
-        at: at(2),
-        action: 'changed the amount',
-        change: { kind: 'amount', before: '₹2,680.00', after: '₹2,860.00' },
-        members: [],
-      },
-      { by: sam, at: at(1), action: 'added this Expense', change: null, members: [] },
+    expect(entries.map((entry) => [entry.by, entry.at, entry.action])).toEqual([
+      [you, at(3), 'edited this Expense'],
+      [priya, at(2), 'edited this Expense'],
+      [sam, at(1), 'added this Expense'],
+    ]);
+    expect(entries.map((entry) => entry.lines.map(expenseEditLineText))).toEqual([
+      ['Notes changed'],
+      ['Amount ₹2,680.00 → ₹2,860.00'],
+      [],
     ]);
   });
 
-  it('names a new description, and lists every field an edit changed', () => {
-    const [entry] = history({
-      description: { old: 'Groceries', new: 'Weekly groceries' },
-      notes: { old: '', new: 'Same shop' },
-      tagId: { old: 'd1', new: 'd2' },
-      tag: { old: 'General', new: 'Groceries' },
-      date: { old: at(1), new: at(2) },
-    });
-    expect(entry.action).toBe('changed the description, date, Tag and notes');
-    expect(entry.change).toEqual({
-      kind: 'description',
-      before: '“Groceries”',
-      after: '“Weekly groceries”',
-    });
-  });
-
-  it('counts a new amount’s rewritten rows as the payer or split only when they really changed', () => {
-    const rows = (user: string, amount: number) => [{ user, amount, amountMinor: amount * 100 }];
-    const amountOnly = {
-      amount: { old: 90, new: 120 },
-      paidBy: { old: rows(sam._id, 90), new: rows(sam._id, 120) },
-      splitBetween: { old: rows(sam._id, 90), new: rows(sam._id, 120) },
-    };
-    expect(history(amountOnly)[0].action).toBe('changed the amount');
-    const newPayer = { ...amountOnly, paidBy: { old: rows(sam._id, 90), new: rows(you._id, 120) } };
-    expect(history(newPayer)[0].action).toBe('changed the amount and who paid');
-    const shares = (count: number) => [{ user: sam._id, amount: 90, shares: count }];
-    expect(history({ splitBetween: { old: shares(1), new: shares(2) } })[0].action).toBe(
-      'changed the split',
-    );
-    expect(history({ splitMethod: { old: 'equal', new: 'shares' } })[0].action).toBe(
-      'changed the split',
-    );
-    expect(history({ predefinedItem: { old: null, new: 'taxi' } })[0].action).toBe(
-      'edited this Expense',
-    );
-  });
-
-  it('lists each member whose payment or share changed, with the amounts before and after (#456)', () => {
+  it('lists each member whose payment or share the edit itself changed (#456)', () => {
     // Wi-Fi went from ₹999.00 paid by Priya and shared three ways to ₹1,200.00 paid by Sam and
     // shared by you and Sam; nobody's amount left the record unexplained.
-    const [entry] = history({
+    const [edit] = history({
       amount: { old: 999, new: 1200 },
       amountMinor: { old: 99900, new: 120000 },
       paidBy: { old: [row(priya._id, 99900)], new: [row(sam._id, 120000)] },
@@ -323,23 +333,46 @@ describe('an Expense’s history', () => {
         new: [row(you._id, 60000), row(sam._id, 60000)],
       },
     });
-    expect(entry.action).toBe('changed the amount, who paid and split');
-    expect(entry.members).toEqual([
-      { person: sam._id, part: 'payment', before: '₹0.00', after: '₹1,200.00' },
-      { person: priya._id, part: 'payment', before: '₹999.00', after: '₹0.00' },
-      { person: you._id, part: 'share', before: '₹333.00', after: '₹600.00' },
-      { person: sam._id, part: 'share', before: '₹333.00', after: '₹600.00' },
-      { person: priya._id, part: 'share', before: '₹333.00', after: null },
+    expect(edit.lines.map(expenseEditLineText)).toEqual([
+      'Amount ₹999.00 → ₹1,200.00',
+      'Sam Chen’s payment ₹0.00 → ₹1,200.00',
+      'Priya Shah’s payment ₹999.00 → ₹0.00',
+      'Your share ₹333.00 → ₹600.00',
+      'Sam Chen’s share ₹333.00 → ₹600.00',
+      'Priya Shah’s share ₹333.00 → Not included',
+    ]);
+    // "Not included" is a word, so only the amounts are set in the money face.
+    expect(edit.lines.at(-1)!.money).toEqual({ before: true, after: false });
+  });
+
+  it('counts money moved between the same people with a new amount as their own change', () => {
+    expect(
+      lines({
+        amount: { old: 10, new: 12 },
+        amountMinor: { old: 1000, new: 1200 },
+        paidBy: {
+          old: [row(sam._id, 500), row(priya._id, 500)],
+          new: [row(sam._id, 200), row(priya._id, 1000)],
+        },
+        splitBetween: {
+          old: [row(sam._id, 500), row(priya._id, 500)],
+          new: [row(sam._id, 200), row(priya._id, 1000)],
+        },
+      }),
+    ).toEqual([
+      'Amount ₹10.00 → ₹12.00',
+      'Sam Chen’s payment ₹5.00 → ₹2.00',
+      'Priya Shah’s payment ₹5.00 → ₹10.00',
+      'Sam Chen’s share ₹5.00 → ₹2.00',
+      'Priya Shah’s share ₹5.00 → ₹10.00',
     ]);
   });
 
-  it('lists no members for an amount the same payers and shares only followed', () => {
-    const [entry] = history({
-      amount: { old: 90, new: 120 },
-      paidBy: { old: [row(sam._id, 9000)], new: [row(sam._id, 12000)] },
-      splitBetween: { old: [row(sam._id, 9000)], new: [row(sam._id, 12000)] },
-    });
-    expect(entry).toMatchObject({ action: 'changed the amount', members: [] });
+  it('names only the payers when only they changed', () => {
+    expect(lines({ paidBy: { old: [row(sam._id, 9000)], new: [row(priya._id, 9000)] } })).toEqual([
+      'Priya Shah’s payment ₹0.00 → ₹90.00',
+      'Sam Chen’s payment ₹90.00 → ₹0.00',
+    ]);
   });
 
   it('names a member’s payment or share, with the viewer as "Your" by id beside a namesake', () => {
@@ -359,77 +392,153 @@ describe('an Expense’s history', () => {
     expect(memberMoneyLabel(change(null, 'share'), nameOf, you._id)).toBe('Former member’s share');
   });
 
-  it('counts money moved between the same people with a new amount as who paid and the split', () => {
-    const [entry] = history({
-      amount: { old: 10, new: 12 },
-      amountMinor: { old: 1000, new: 1200 },
-      paidBy: {
-        old: [row(sam._id, 500), row(priya._id, 500)],
-        new: [row(sam._id, 200), row(priya._id, 1000)],
+  it('shows an edit made before a currency change in the currency it had then', () => {
+    const entries = expenseHistory(
+      {
+        currency: 'INR',
+        createdAt: at(1),
+        editHistory: [
+          {
+            editedBy: sam,
+            editedAt: at(2),
+            changes: {
+              amount: { old: 10, new: 12 },
+              amountMinor: { old: 1000, new: 1200 },
+              paidBy: { old: [row(sam._id, 1000)], new: [row(priya._id, 1200)] },
+            },
+          },
+          { editedBy: priya, editedAt: at(3), changes: { currency: { old: 'USD', new: 'INR' } } },
+        ],
       },
-      splitBetween: {
-        old: [row(sam._id, 500), row(priya._id, 500)],
-        new: [row(sam._id, 200), row(priya._id, 1000)],
-      },
-    });
-    expect(entry.action).toBe('changed the amount, who paid and split');
-    expect(entry.members).toEqual([
-      { person: sam._id, part: 'payment', before: '₹5.00', after: '₹2.00' },
-      { person: priya._id, part: 'payment', before: '₹5.00', after: '₹10.00' },
-      { person: sam._id, part: 'share', before: '₹5.00', after: '₹2.00' },
-      { person: priya._id, part: 'share', before: '₹5.00', after: '₹10.00' },
+      names,
+    );
+    expect(entries[1].lines.map(expenseEditLineText)).toEqual([
+      'Amount $10.00 → $12.00',
+      'Priya Shah’s payment $0.00 → $12.00',
+      'Sam Chen’s payment $10.00 → $0.00',
     ]);
   });
 
-  it('says "changed who paid" when only the payers changed', () => {
-    const [entry] = history({
-      paidBy: { old: [row(sam._id, 9000)], new: [row(priya._id, 9000)] },
-    });
-    expect(entry.action).toBe('changed who paid');
+  it('says a new currency beside the amount, each amount in its own currency', () => {
+    expect(
+      lines({
+        amount: { old: 10, new: 900 },
+        amountMinor: { old: 1000, new: 90000 },
+        currency: { old: 'USD', new: 'INR' },
+      }),
+    ).toEqual(['Amount $10.00 → ₹900.00', 'Currency USD → INR']);
   });
 
-  it('shows an edit made before a currency change in the currency it had then', () => {
-    const entries = expenseHistory({
-      currency: 'INR',
-      createdAt: at(1),
-      editHistory: [
-        {
-          editedBy: sam,
-          editedAt: at(2),
-          changes: {
-            amount: { old: 10, new: 12 },
-            amountMinor: { old: 1000, new: 1200 },
-            paidBy: { old: [row(sam._id, 1000)], new: [row(priya._id, 1200)] },
-          },
+  it('says a new split method, and each share it moved', () => {
+    expect(
+      lines({
+        splitMethod: { old: 'equal', new: 'shares' },
+        splitBetween: {
+          old: [row(you._id, 600), row(sam._id, 600)],
+          new: [
+            { ...row(you._id, 400), shares: 1 },
+            { ...row(sam._id, 800), shares: 2 },
+          ],
         },
-        { editedBy: priya, editedAt: at(3), changes: { currency: { old: 'USD', new: 'INR' } } },
-      ],
-    });
-    expect(entries[1]).toMatchObject({
-      change: { kind: 'amount', before: '$10.00', after: '$12.00' },
-      members: [
-        { person: priya._id, part: 'payment', before: '$0.00', after: '$12.00' },
-        { person: sam._id, part: 'payment', before: '$10.00', after: '$0.00' },
-      ],
-    });
+      }),
+    ).toEqual([
+      'Split Equally → By shares',
+      'Your share ₹6.00 → ₹4.00',
+      'Sam Chen’s share ₹6.00 → ₹8.00',
+    ]);
+  });
+
+  it('lists no shares for a new split method whose shares only followed a new amount', () => {
+    const equal = (minor: number) => [row(you._id, minor), row(sam._id, minor)];
+    const byShares = (minor: number) => equal(minor).map((share) => ({ ...share, shares: 1 }));
+    expect(
+      lines({
+        amount: { old: 900, new: 1200 },
+        amountMinor: { old: 90000, new: 120000 },
+        splitMethod: { old: 'equal', new: 'shares' },
+        splitBetween: { old: equal(45000), new: byShares(60000) },
+      }),
+    ).toEqual(['Amount ₹900.00 → ₹1,200.00', 'Split Equally → By shares']);
+  });
+
+  it('says the split changed when its shares changed but nobody’s amount did', () => {
+    const shares = (count: number) => [
+      { user: sam._id, amount: 90, amountMinor: 9000, shares: count },
+    ];
+    expect(lines({ splitBetween: { old: shares(1), new: shares(2) } })).toEqual(['Split changed']);
+  });
+
+  it('has no line for rows stored again in another order, which changed nothing', () => {
+    const rows = [row(you._id, 600), row(sam._id, 600)];
+    expect(
+      lines({
+        paidBy: { old: rows, new: [...rows].reverse() },
+        splitBetween: { old: rows, new: [...rows].reverse() },
+      }),
+    ).toEqual([]);
+  });
+
+  it('names a Tag recorded only by its id from the Group’s Tags, or says it changed', () => {
+    const tagId = { old: 'c00000000000000000000001', new: 'c00000000000000000000002' };
+    const tags = new Map([
+      [tagId.old, 'Food'],
+      [tagId.new, 'Travel'],
+    ]);
+    const [edit] = expenseEdits(
+      { currency: 'INR', editHistory: [{ editedBy: sam, editedAt: at(2), changes: { tagId } }] },
+      { ...names, tagName: (id) => tags.get(String(id)) },
+    );
+    expect(edit.lines.map(expenseEditLineText)).toEqual(['Tag Food → Travel']);
+    expect(lines({ tagId })).toEqual(['Tag changed']);
+  });
+
+  it('says what happened to the Category, the receipt, the item, and anything else', () => {
+    expect(
+      lines({
+        moneyVersion: { old: undefined, new: 1 },
+        category: { old: 'food', new: 'transport' },
+        receiptUrl: { old: null, new: 'https://receipts.example/r1.jpg' },
+        predefinedItem: { old: null, new: 'taxi' },
+        location: { old: 'Pune', new: 'Goa' },
+      }),
+    ).toEqual([
+      'Category Food & Drink → Transport',
+      'Receipt added',
+      'Item changed',
+      'Other details changed',
+    ]);
+    const receipt = (old: string | null, now: string | null) =>
+      lines({ receiptUrl: { old, new: now } });
+    expect(receipt('https://receipts.example/r1.jpg', 'https://receipts.example/r2.jpg')).toEqual([
+      'Receipt replaced',
+    ]);
+    expect(receipt('https://receipts.example/r1.jpg', null)).toEqual(['Receipt removed']);
+  });
+
+  it('shows the years only for a date moved to another year, and no line for the same day', () => {
+    expect(
+      lines({ date: { old: '2025-12-30T00:00:00.000Z', new: '2026-01-02T00:00:00.000Z' } }),
+    ).toEqual(['Date 30 Dec 2025 → 2 Jan 2026']);
+    // An older date stored at another time of the same day, stored again at its midnight.
+    expect(
+      lines({ date: { old: '2026-10-16T09:30:00.000Z', new: '2026-10-16T00:00:00.000Z' } }),
+    ).toEqual([]);
   });
 
   it('keeps rows without a member id apart, as former members', () => {
-    const [entry] = history({
-      splitBetween: {
-        old: [row({ name: 'Gone' }, 500), row({ name: 'Also gone' }, 500)],
-        new: [row({ name: 'Gone' }, 400), row({ name: 'Also gone' }, 600)],
-      },
-    });
-    expect(entry.members.map((member) => [member.before, member.after])).toEqual([
-      ['₹5.00', '₹4.00'],
-      ['₹5.00', '₹6.00'],
-    ]);
+    expect(
+      lines({
+        splitBetween: {
+          old: [row({ name: 'Gone' }, 500), row({ name: 'Also gone' }, 500)],
+          new: [row({ name: 'Gone' }, 400), row({ name: 'Also gone' }, 600)],
+        },
+      }),
+    ).toEqual(['Former member’s share ₹5.00 → ₹4.00', 'Former member’s share ₹5.00 → ₹6.00']);
   });
 
   it('is only who added it when nothing was edited', () => {
-    expect(expenseHistory({ currency: 'INR', createdAt: at(1) })).toEqual([
-      { by: null, at: at(1), action: 'added this Expense', change: null, members: [] },
+    expect(expenseHistory({ currency: 'INR', createdAt: at(1) }, names)).toEqual([
+      { by: null, at: at(1), action: 'added this Expense', lines: [] },
     ]);
   });
 });

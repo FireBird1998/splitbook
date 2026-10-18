@@ -1,5 +1,6 @@
 import { expenseRecoveryWords } from './expense-recovery-copy';
 import {
+  Fragment,
   memo,
   useCallback,
   useLayoutEffect,
@@ -1180,20 +1181,14 @@ function RecordHistory({
 }
 const moneyFace = { fontFamily: fonts.mono, fontVariant: ['tabular-nums' as const] };
 
-/** "Amount ₹899.00 → ₹999.00", or only the values when the row's title names the change. */
-function ChangeText({
-  change,
-  implied = false,
-}: {
-  change: ExpenseHistoryChange;
-  implied?: boolean;
-}) {
+/** "Amount ₹899.00 → ₹999.00", "Receipt added" or "Notes changed", as web reads it (#515). */
+function ChangeText({ change }: { change: ExpenseHistoryChange }) {
   // Only amounts are in the money face; a word such as "Not included" stays in the text face.
   const before = change.money?.before ? moneyFace : undefined;
   const after = change.money?.after ? moneyFace : undefined;
   return (
     <>
-      {implied ? null : `${change.label} `}
+      {`${change.label} `}
       {change.before !== undefined && change.after !== undefined ? (
         <>
           <Text style={before}>{change.before}</Text>
@@ -1223,7 +1218,6 @@ const sameChange = (a: ExpenseHistoryEvent, b: ExpenseHistoryEvent) =>
     a.name === b.name &&
     a.actor === b.actor &&
     a.action === b.action &&
-    a.implied === b.implied &&
     a.at === b.at &&
     JSON.stringify(a.changes) === JSON.stringify(b.changes));
 /**
@@ -1249,7 +1243,6 @@ const ChangeRow = memo(
           actor={event.actor}
           title={event.action}
           changes={event.changes}
-          implied={event.implied}
           time={event.at}
         />
       </View>
@@ -1259,8 +1252,8 @@ const ChangeRow = memo(
 );
 
 /**
- * "{actor} {title}" with what changed and its time; a row without an actor leads with an icon.
- * One change shares the time's line, as in "₹2,680.00 → ₹2,860.00 · 29 Sep, 21:10".
+ * "{actor} {title}", then what changed, one short line per fact, then its time, as web lists
+ * them (#515); a row without an actor leads with an icon.
  */
 function HistoryRow({
   name,
@@ -1268,7 +1261,6 @@ function HistoryRow({
   icon,
   title,
   changes = [],
-  implied = false,
   time,
 }: {
   /** Who acted, for their avatar; `actor` is how the row names them ("You"). */
@@ -1277,7 +1269,6 @@ function HistoryRow({
   icon: IconName;
   title: string;
   changes?: ExpenseHistoryChange[];
-  implied?: boolean;
   time: string;
 }) {
   const theme = useTheme();
@@ -1325,20 +1316,14 @@ function HistoryRow({
             title
           )}
         </CompactText>
-        {changes.length > 1
-          ? changes.map((change, index) => (
-              <CompactText key={`${change.label}:${index}`} variant="caption" tone="secondary">
-                <ChangeText change={change} />
-              </CompactText>
-            ))
-          : null}
+        {/* One text, so a row draws no more than its changes and its time (#177). */}
         <CompactText variant="caption" tone="secondary">
-          {changes.length === 1 ? (
-            <>
-              <ChangeText change={changes[0]} implied={implied} />
-              {' · '}
-            </>
-          ) : null}
+          {changes.map((change, index) => (
+            <Fragment key={`${change.label}:${index}`}>
+              <ChangeText change={change} />
+              {'\n'}
+            </Fragment>
+          ))}
           {when}
         </CompactText>
       </View>
@@ -1426,31 +1411,8 @@ export function ExpenseRecordView({
             <View key={entry.key} style={{ gap: 4 }}>
               <Copy style={{ fontFamily: fonts.semibold }}>{entry.summary}</Copy>
               {entry.changes.map((change, index) => (
-                <Copy
-                  key={`${change.label}:${index}`}
-                  accessibilityLabel={
-                    change.before && change.after
-                      ? `${change.label} changed from ${change.before} to ${change.after}`
-                      : undefined
-                  }
-                >
-                  {change.label}
-                  {change.before && change.after ? (
-                    <>
-                      {': '}
-                      <Copy style={change.money?.before ? { fontFamily: fonts.mono } : undefined}>
-                        {change.before}
-                      </Copy>
-                      {' → '}
-                      <Copy style={change.money?.after ? { fontFamily: fonts.mono } : undefined}>
-                        {change.after}
-                      </Copy>
-                    </>
-                  ) : change.after ? (
-                    `: ${change.after}`
-                  ) : (
-                    ' changed'
-                  )}
+                <Copy key={`${change.label}:${index}`} accessibilityLabel={spokenChange(change)}>
+                  <ChangeText change={change} />
                 </Copy>
               ))}
               <Copy style={{ color: theme.textSecondary, fontSize: 13 }}>{entry.editedAt}</Copy>

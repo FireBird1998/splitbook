@@ -78,7 +78,7 @@ const wire = {
 };
 const original = parseExpenseRecord({ status: 200, data: wire }, groupId, billId);
 const context = parseExpenseContext({ status: 200, data: group });
-/** 140 fictional changes of the bill, newest first: change `n` is "Note n". */
+/** 140 fictional changes of the bill, newest first: change `n` renames it "Note n". */
 const changes = Array.from({ length: 140 }, (_, index) => ({
   _id: `d${String(index + 1).padStart(23, '0')}`,
   group: groupId,
@@ -87,7 +87,7 @@ const changes = Array.from({ length: 140 }, (_, index) => ({
   createdAt: new Date(Date.parse('2026-09-29T20:00:00.000Z') - index * 60_000).toISOString(),
   metadata: {
     expenseId: billId,
-    changes: { notes: { old: `Note ${index + 2}`, new: `Note ${index + 1}` } },
+    changes: { description: { old: `Note ${index + 2}`, new: `Note ${index + 1}` } },
   },
 }));
 /** Pages `first` to `first + 4` of the bill's changes, as the snapshot holds them. */
@@ -394,7 +394,9 @@ describe('an Expense’s changes past 5 pages (#220, M7-2)', () => {
     expect(text(history())).not.toContain('Rent');
     // One change is read again with other words, under the same id: it shows them.
     const edited = { ...events[1]!, metadata: { ...events[1]!.metadata } };
-    edited.metadata.changes = { notes: { old: 'Note 3', new: 'Meter read on the 20th' } };
+    edited.metadata.changes = {
+      description: { old: 'Note 3', new: 'Meter read on the 20th' },
+    };
     update(
       detail(
         { ...first, events: [events[0]!, edited, ...events.slice(2)] },

@@ -19,7 +19,7 @@ import { formatDateTime } from '@splitbook/shared/date';
 import { getCategory } from '@splitbook/shared/categories';
 import { moneyParticipantId } from '@splitbook/shared/exact-money';
 import { expenseEdits, FORMER_MEMBER } from '@splitbook/shared/expense-detail';
-import ExpenseHistoryMembers from './ExpenseHistoryMembers';
+import ExpenseEditLines from './ExpenseEditLines';
 
 interface Person {
   _id: string;
@@ -116,8 +116,8 @@ export default function ExpenseDetails({
     return personId && personId === userId ? 'You' : personName(person);
   };
   const category = getCategory(expense.category);
-  // Each edit as the side panel words it (#454).
-  const edits = expenseEdits(expense);
+  // Each edit as the side panel and Android word it (#454, #515).
+  const edits = expenseEdits(expense, { name: personName, viewer: userId });
 
   return (
     <Stack
@@ -248,29 +248,7 @@ export default function ExpenseDetails({
                         <strong>{youOrName(edit.by)}</strong> {edit.action} ·{' '}
                         {formatDateTime(edit.at)}
                       </Typography>
-                      {edit.change && (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ display: 'block', overflowWrap: 'anywhere' }}
-                        >
-                          <Box
-                            component="span"
-                            sx={
-                              edit.change.kind === 'amount'
-                                ? (theme) => theme.typography.money
-                                : undefined
-                            }
-                          >
-                            {edit.change.before} → {edit.change.after}
-                          </Box>
-                        </Typography>
-                      )}
-                      <ExpenseHistoryMembers
-                        members={edit.members}
-                        nameOf={personName}
-                        userId={userId}
-                      />
+                      <ExpenseEditLines lines={edit.lines} />
                     </Box>
                   ))}
                 </Stack>

@@ -1135,15 +1135,17 @@ describe('rendered edit history', () => {
       .findAll((node) => isHost(node, 'Text') && typeof node.props.accessibilityLabel === 'string')
       .map((node) => node.props.accessibilityLabel as string);
 
-    // Newest first.
-    expect(shown.indexOf('Former member changed the Tag')).toBeLessThan(
-      shown.indexOf('Alex changed the amount and who paid'),
+    // Newest first, one line per fact as History reads them (#515).
+    expect(shown.indexOf('Former member edited this Expense')).toBeLessThan(
+      shown.indexOf('Alex edited this Expense'),
     );
-    expect(labels).toContain('Amount changed from ₹8.99 to ₹10.00');
-    expect(labels).toContain('Alex’s payment changed from ₹0.00 to ₹10.00');
-    expect(labels).toContain('Former member’s payment changed from ₹8.99 to ₹0.00');
-    expect(labels).toContain('Tag changed from Snacks to Groceries');
-    expect(shown).toContain('Other details changed');
+    expect(labels).toEqual([
+      'Tag from Snacks to Groceries',
+      'Other details changed',
+      'Amount from ₹8.99 to ₹10.00',
+      'Alex’s payment from ₹0.00 to ₹10.00',
+      'Former member’s payment from ₹8.99 to ₹0.00',
+    ]);
     expect(shown).not.toMatch(/[a-f\d]{24}/);
     expect(shown).not.toMatch(/[{}"[\]]|moneyVersion|amountMinor|internalState/);
     expect(labels.join(' ')).not.toMatch(/[a-f\d]{24}/);
@@ -1165,8 +1167,8 @@ describe('rendered edit history', () => {
     const labels = root
       .findAll((node) => isHost(node, 'Text') && typeof node.props.accessibilityLabel === 'string')
       .map((node) => node.props.accessibilityLabel as string);
-    expect(text(root)).toContain('You changed the amount and who paid');
-    expect(labels).toContain('Your payment changed from ₹0.00 to ₹10.00');
+    expect(text(root)).toContain('You edited this Expense');
+    expect(labels).toContain('Your payment from ₹0.00 to ₹10.00');
   });
 });
 

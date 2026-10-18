@@ -218,8 +218,10 @@ test('Edit, Duplicate and Delete with Undo, from the panel', async ({ page }, te
   await expect(edit).toHaveCount(0);
   panel = panelOf(page, 'Panel QA picnic lunch');
   await expect(panel).toContainText('₹150.00');
-  await expect(panel).toContainText('You changed the amount and description');
-  await expect(panel).toContainText('₹100.00 → ₹150.00');
+  // One short line per fact (#515).
+  await expect(panel).toContainText('You edited this Expense');
+  await expect(panel).toContainText('Amount ₹100.00 → ₹150.00');
+  await expect(panel).toContainText('Description “Panel QA picnic” → “Panel QA picnic lunch”');
 
   // Duplicate opens the Add expense form with its entries, dated today, and saves a new Expense.
   await panel.getByRole('button', { name: 'Duplicate', exact: true }).click();

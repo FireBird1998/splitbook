@@ -292,7 +292,7 @@ const historyPage = (expenseId: string, page: number) => ({
       metadata: {
         expenseId,
         changes: {
-          notes: {
+          description: {
             old: `Fictional note ${page}-${row + 2}`,
             new: `Fictional note ${page}-${row + 1}`,
           },
@@ -888,7 +888,7 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
     const changes =
       (count: number, first = 1) =>
       () => {
-        expect(app.rows('changed the notes'), 'Changes').toBe(count);
+        expect(app.rows('edited this Expense'), 'Changes').toBe(count);
         expect(app.rows(`“Fictional note ${first}-1”`), `Page ${first} first`).toBe(1);
         expect(app.count('Load newer changes'), 'Load newer').toBe(first > 1 ? 1 : 0);
       };
