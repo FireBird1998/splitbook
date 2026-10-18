@@ -78,6 +78,9 @@ export default function ToReviewPage({
   const openRows = useRef(new Map<string, HTMLButtonElement>());
   // A fixed row moves between sections and remounts; keyboard focus follows it there.
   const refocus = useRef<string | null>(null);
+  /** A row S is saving, and the rows after and before it to move focus to once it's gone (#508). */
+  const focusAfterSave = useRef<{ id: string; after: string[]; before: string[] } | null>(null);
+  const caughtUp = useRef<HTMLHeadingElement>(null);
   const lock = useRef(false);
   const panel = useRef<ReviewPanelHandle>(null);
   const saveReadyButton = useRef<HTMLButtonElement>(null);
@@ -132,6 +135,19 @@ export default function ToReviewPage({
   const items = model?.items ?? [];
   // The Group's currency as the read names it, which the model already applied (#512).
   const currency = model?.groups[0]?.currency;
+  useEffect(() => {
+    const from = focusAfterSave.current;
+    if (!from || busy) return;
+    focusAfterSave.current = null;
+    const listed = (id: string) => items.some((item) => item.id === id);
+    // A row that's still listed wasn't saved. Saving disabled it, so focus returns to it.
+    if (listed(from.id)) refocus.current = from.id;
+    else {
+      const next = [...from.after, ...from.before].find(listed);
+      if (next) refocus.current = next;
+      else (caughtUp.current ?? heading.current)?.focus();
+    }
+  });
   useEffect(() => {
     const id = refocus.current;
     const row = id ? openRows.current.get(id) : undefined;
@@ -281,6 +297,12 @@ export default function ToReviewPage({
       void pick(item, chosen.fact, chosen.id);
     } else if (key === 's' && item.state === 'ready') {
       event.preventDefault();
+      const ids = order.map(({ id }) => id);
+      focusAfterSave.current = {
+        id: item.id,
+        after: ids.slice(index + 1),
+        before: ids.slice(0, index).reverse(),
+      };
       void saveOne(item.accountItem!.draft, false, []);
     }
   }
@@ -569,7 +591,7 @@ export default function ToReviewPage({
           )}
           {!model.counts.total && (
             <Paper variant="outlined" sx={{ p: 3 }}>
-              <Typography component="h3" variant="h6">
+              <Typography component="h3" variant="h6" ref={caughtUp} tabIndex={-1}>
                 All caught up
               </Typography>
               <Button component={Link} href={`/groups/${groupId}/expenses`}>

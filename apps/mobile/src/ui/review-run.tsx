@@ -5,6 +5,7 @@ import {
   buildToReview,
   summarizeReviewRun,
   describeDraftChange,
+  needsAmount,
   PAID_TOTAL_NEED,
   PERCENTAGE_TOTAL_NEED,
   SPLIT_TOTAL_NEED,
@@ -20,12 +21,12 @@ import { BottomSheet, Card, CompactText, Money } from './compact';
 import { Button, Copy } from './primitives';
 import { ExpenseTiles, expenseDateLabel, splitSummary, OptionalDetails } from './expense-form';
 import { DateSheet } from './date-sheet';
+import { CurrencyBadge, RequiredFieldLabel } from './expense-inputs';
 import { clockTime } from './activity-format';
 import { PayerSheet, paidBySummary } from './payer-sheet';
 import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
 import { useTheme } from './theme';
-import { CurrencyBadge } from './expense-inputs';
 import { reviewedItemsLine } from './review-run-copy';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
@@ -224,37 +225,44 @@ function ReviewRunContent({
             {source} · {day} {clockTime(item.draft.createdAt)}
           </Copy>
           <Money numberOfLines={0}>{money(values.amount, values.currency || groupCurrency)}</Money>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {groupCurrency && (values.currency || groupCurrency) === groupCurrency && (
-              <CurrencyBadge currency={groupCurrency} recorded={false} />
-            )}
+          {/* Labelled as Add expense labels them, so a filled box still says what it is (#524). */}
+          <View style={{ gap: 6 }}>
+            <RequiredFieldLabel text="Amount" invalid={needsAmount(missing)} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {groupCurrency && (values.currency || groupCurrency) === groupCurrency && (
+                <CurrencyBadge currency={groupCurrency} recorded={false} />
+              )}
+              <TextInput
+                key={`amount:${state.changed?.after.revision ?? 0}`}
+                accessibilityLabel="Amount"
+                value={typedAmount ?? form.amount}
+                editable={!locked}
+                keyboardType="decimal-pad"
+                onChangeText={(amount) => {
+                  setTypedAmount(amount);
+                  change({ amount });
+                }}
+                style={{
+                  flex: 1,
+                  color: theme.text,
+                  padding: 12,
+                  borderColor: theme.border,
+                  borderWidth: 1,
+                }}
+              />
+            </View>
+          </View>
+          <View style={{ gap: 6 }}>
+            <RequiredFieldLabel text="Description" invalid={missing.includes('what it was for')} />
             <TextInput
-              key={`amount:${state.changed?.after.revision ?? 0}`}
-              accessibilityLabel="Amount"
-              value={typedAmount ?? form.amount}
+              key={`description:${state.changed?.after.revision ?? 0}`}
+              accessibilityLabel="Description"
+              value={form.description}
               editable={!locked}
-              keyboardType="decimal-pad"
-              onChangeText={(amount) => {
-                setTypedAmount(amount);
-                change({ amount });
-              }}
-              style={{
-                flex: 1,
-                color: theme.text,
-                padding: 12,
-                borderColor: theme.border,
-                borderWidth: 1,
-              }}
+              onChangeText={(description) => change({ description })}
+              style={{ color: theme.text, padding: 12, borderColor: theme.border, borderWidth: 1 }}
             />
           </View>
-          <TextInput
-            key={`description:${state.changed?.after.revision ?? 0}`}
-            accessibilityLabel="Description"
-            value={form.description}
-            editable={!locked}
-            onChangeText={(description) => change({ description })}
-            style={{ color: theme.text, padding: 12, borderColor: theme.border, borderWidth: 1 }}
-          />
           {/* Another currency can only change to the Group's. */}
           {groupCurrency && values.currency && values.currency !== groupCurrency && (
             <Button

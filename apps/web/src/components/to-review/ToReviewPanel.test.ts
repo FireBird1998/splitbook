@@ -117,6 +117,12 @@ describe('saving an item whose amount can’t be read (#528)', () => {
   });
 });
 
+/** The split method buttons the panel shows pressed. */
+const pressedSplit = (html: string) =>
+  [...html.matchAll(/<button\b[^>]*aria-pressed="true"[^>]*>(.*?)<\/button>/g)].map(([, label]) =>
+    text(label),
+  );
+
 describe('an item in the web To review panel (#441)', () => {
   it('says each missing fact once, in its Needs line, with no repeated problem lines', () => {
     const shown = panel(
@@ -177,5 +183,29 @@ describe('the currency of an item in the web To review panel (#512)', () => {
   it('lets the member change a different currency, to the Group’s', () => {
     const html = markup(['Choose the Group currency.'], { ...values, currency: 'USD' }, []);
     expect(selects(html)).toContainEqual({ shown: '🇺🇸 USD', locked: false });
+  });
+});
+
+describe('the split method of an item in the web To review panel (#508)', () => {
+  const values = (splitMethod: string) => ({
+    description: 'Station dinner',
+    amount: 30,
+    currency: 'INR',
+    date: '2026-10-16',
+    paidBy: [{ user: alex, amount: 30 }],
+    splitMethod,
+    splitBetween: [
+      { user: alex, amount: 18 },
+      { user: sam, amount: 12 },
+    ],
+    tag: 'Food',
+  });
+
+  it('shows Unequal pressed for an item stored as unequal, as Add expense saves it', () => {
+    expect(pressedSplit(markup([], values('unequal'), []))).toEqual(['Unequal']);
+  });
+
+  it('shows Unequal pressed for an item stored as exact, as an assistant sends it', () => {
+    expect(pressedSplit(markup([], values('exact'), []))).toEqual(['Unequal']);
   });
 });

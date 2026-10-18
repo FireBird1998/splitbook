@@ -72,17 +72,48 @@ async function signOutUnreachable(page: Page) {
   return { failed };
 }
 
-const COULD_NOT_SIGN_OUT = 'Couldn’t sign out. Check your connection and try again.';
+/**
+ * Make the server refuse Sign Out, as when it couldn't end the session (SESSION_NOT_ENDED):
+ * Sam is still signed in. `answered` resolves with the refusal.
+ */
+async function signOutRefused(page: Page) {
+  await page.route('**/api/auth/sign-out', (route) =>
+    route.fulfill({
+      status: 500,
+      json: {
+        code: 'SESSION_NOT_ENDED',
+        message: 'The session could not be ended. Try signing out again.',
+      },
+    }),
+  );
+  const answered = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/api/auth/sign-out',
+  );
+  return { answered };
+}
 
 /**
- * Sam is told Sign Out couldn't reach the server (#536): announced politely by the status region,
- * and shown in the notice, so the words are on the page twice.
+ * Sam's session ends in another tab of this browser: this tab, still on the Groups list and in its
+ * account, goes to sign in, back to that list, when a read answers 401 or its session check reloads.
  */
-async function expectToldCouldNotSignOut(page: Page) {
-  await expect(page.getByRole('status').filter({ hasText: COULD_NOT_SIGN_OUT })).toHaveText(
-    COULD_NOT_SIGN_OUT,
-  );
-  await expect(page.getByText(COULD_NOT_SIGN_OUT)).toHaveCount(2);
+async function endedElsewhereGoesToSignIn(page: Page) {
+  await signOutElsewhere(page);
+  const signIn = appURL('/login?callbackUrl=%2Fgroups');
+  await runClockUntil(page, () => page.url() === signIn);
+  await expect(page).toHaveURL(signIn);
+}
+
+/** What Sam is told when Sign Out can't reach the server (#536), or the server refuses it (#550). */
+const UNREACHABLE = 'Couldn’t sign out. Check your connection and try again.';
+const REFUSED = 'Couldn’t sign out. Try again.';
+
+/**
+ * Sam is told Sign Out didn't end the session: announced politely by the status region, and shown
+ * in the notice, so the words are on the page twice.
+ */
+async function expectToldSignOutFailed(page: Page, message: string) {
+  await expect(page.getByRole('status').filter({ hasText: message })).toHaveText(message);
+  await expect(page.getByText(message)).toHaveCount(2);
 }
 
 /** Hold the landing page's document, as a slow server or network would, until released. */
@@ -136,11 +167,7 @@ test('a session ended elsewhere still sends the tab to sign in, back to the page
   await page.clock.install();
   await enterAsSam(page, ledger, '/groups');
   // Signed out from another tab of this browser: its cookie is gone here too.
-  await signOutElsewhere(page);
-  // A read answering 401, or the session check reloading the page, sends it to sign in.
-  const signIn = appURL('/login?callbackUrl=%2Fgroups');
-  await runClockUntil(page, () => page.url() === signIn);
-  await expect(page).toHaveURL(signIn);
+  await endedElsewhereGoesToSignIn(page);
 });
 
 test('a Sign Out that cannot reach the server keeps the tab, and a later ended session still goes to sign in', async ({
@@ -155,16 +182,31 @@ test('a Sign Out that cannot reach the server keeps the tab, and a later ended s
   await page.getByRole('menuitem', { name: 'Sign Out' }).click();
   await unreachable.failed;
   // Sam is told, and stays signed in on the page, with nothing left unhandled (#536).
-  await expectToldCouldNotSignOut(page);
+  await expectToldSignOutFailed(page, UNREACHABLE);
   await expect(page).toHaveURL(appURL('/groups'));
   expect(errors).toEqual([]);
 
   // Signed out from another tab later: this tab is no longer leaving, so it goes to sign in.
-  await signOutElsewhere(page);
-  // A read answering 401, or the session check reloading the page, sends it to sign in.
-  const signIn = appURL('/login?callbackUrl=%2Fgroups');
-  await runClockUntil(page, () => page.url() === signIn);
-  await expect(page).toHaveURL(signIn);
+  await endedElsewhereGoesToSignIn(page);
+});
+
+test('a Sign Out the server refuses keeps the tab signed in and says so (#550)', async ({
+  page,
+  ledger,
+}) => {
+  await page.clock.install();
+  await enterAsSam(page, ledger, '/groups');
+  const errors = pageErrors(page);
+  const refused = await signOutRefused(page);
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sign Out' }).click();
+  expect((await refused.answered).status()).toBe(500);
+  await expectToldSignOutFailed(page, REFUSED);
+  await expect(page).toHaveURL(appURL('/groups'));
+  expect(errors).toEqual([]);
+
+  // The tab stayed, in its account: a session ended later still sends it to sign in, from here.
+  await endedElsewhereGoesToSignIn(page);
 });
 
 test('a Sign Out from Settings that cannot reach the server says so and keeps the page (#536)', async ({
@@ -177,7 +219,7 @@ test('a Sign Out from Settings that cannot reach the server says so and keeps th
   const unreachable = await signOutUnreachable(page);
   await page.getByRole('button', { name: 'Sign Out' }).click();
   await unreachable.failed;
-  await expectToldCouldNotSignOut(page);
+  await expectToldSignOutFailed(page, UNREACHABLE);
   await expect(page).toHaveURL(appURL('/settings'));
   expect(errors).toEqual([]);
 });

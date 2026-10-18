@@ -127,45 +127,70 @@ export const signed = (minor) => {
   return v === 0 ? '0' : (v > 0 ? '+' : '−') + inr.format(Math.abs(v));
 };
 
-/** Counter readings on springs: each eases toward its target, or jumps there when calm. */
-export function springs(count) {
-  const shown = Array.from({ length: count }, () => ({ at: 0, rate: 0 }));
+// How long a counter takes to move an amount to another.
+const SHIFT_SECONDS = 0.5;
+
+/**
+ * The counters' readings, in minor units. Money only ever moves between two counters:
+ * `raiseAndLower` raises one and lowers the other by the same amount, eased over a moment in whole
+ * rupees. So in
+ * every frame the readings add up to what they did before, and each moves only toward where it is
+ * heading, never past it.
+ */
+export function counterReadings(count) {
+  let at = Array.from({ length: count }, () => 0);
+  let shifts = [];
+  const moved = (s) => Math.round((s.amountMinor / 100) * ease(s.t / SHIFT_SECONDS)) * 100;
+  const apply = (amountOf) =>
+    at.map((value, i) =>
+      shifts.reduce(
+        (sum, s) => sum + (s.up === i ? amountOf(s) : s.down === i ? -amountOf(s) : 0),
+        value,
+      ),
+    );
   return {
-    shown,
+    /** What each counter reads now. */
+    get shown() {
+      return apply(moved);
+    },
+    /** Where each counter is heading: its reading once every move has finished. */
+    get targets() {
+      return apply((s) => s.amountMinor);
+    },
+    /** Shows these readings at once, with nothing moving. */
     jump(values) {
-      shown.forEach((n, i) => {
-        n.at = values[i];
-        n.rate = 0;
-      });
+      at = values.slice();
+      shifts = [];
     },
-    step(target, dt, calm) {
-      shown.forEach((n, i) => {
-        if (calm) {
-          n.at = target[i];
-          n.rate = 0;
-          return;
-        }
-        for (let k = 0; k < 6; k++) {
-          n.rate += ((target[i] - n.at) * 70 - n.rate * 12) * (dt / 6);
-          n.at += n.rate * (dt / 6);
-        }
-        if (Math.abs(target[i] - n.at) < 1 && Math.abs(n.rate) < 1) {
-          n.at = target[i];
-          n.rate = 0;
-        }
-      });
+    /** Starts raising counter `up` and lowering counter `down`, each by amountMinor. */
+    raiseAndLower(up, down, amountMinor) {
+      if (up !== down && amountMinor) shifts.push({ up, down, amountMinor, t: 0 });
     },
-    /** Every reading has come to rest on its target. */
-    settledOn: (target) => shown.every((n, i) => n.at === target[i] && n.rate === 0),
+    /** Moves on by dt seconds; calm finishes every move at once. */
+    step(dt, calm) {
+      for (const s of shifts) s.t = calm ? SHIFT_SECONDS : Math.min(SHIFT_SECONDS, s.t + dt);
+      for (const s of shifts.filter((s) => s.t >= SHIFT_SECONDS)) {
+        at[s.up] += s.amountMinor;
+        at[s.down] -= s.amountMinor;
+      }
+      shifts = shifts.filter((s) => s.t < SHIFT_SECONDS);
+    },
+    /** Nothing is moving. */
+    settled: () => shifts.length === 0,
   };
 }
 
-/** Writes each counter's reading, signed, and marks its sign for the ink. */
-export function drawCounters(elements, shown) {
+/**
+ * Writes each counter's reading, signed, marks its sign for the ink, and notes where it is heading
+ * (in rupees), which check reads frame by frame.
+ */
+export function drawCounters(elements, readings) {
+  const { shown, targets } = readings;
   elements.forEach((el, i) => {
-    const text = signed(shown[i].at);
+    const text = signed(shown[i]);
     if (el.textContent !== text) el.textContent = text;
-    const v = Math.round(shown[i].at / 100);
+    const v = Math.round(shown[i] / 100);
     el.dataset.sign = v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
+    el.dataset.target = String(Math.round(targets[i] / 100));
   });
 }

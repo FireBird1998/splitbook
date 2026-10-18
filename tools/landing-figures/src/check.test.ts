@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { staleOutputs, stillDrift, vendorDrift, verifyStory } from './check.ts';
+import { counterProblems, staleOutputs, stillDrift, vendorDrift, verifyStory } from './check.ts';
 import { withPngText } from './png.ts';
 import { story } from './story.ts';
 
@@ -167,6 +167,82 @@ describe('stillDrift', () => {
     expect(stillDrift(join(dir, 'text.png'), size, 'abc')).toEqual(['text.png is not a PNG.']);
     expect(stillDrift(join(dir, 'small.png'), size, 'abc')).toEqual([
       'small.png is 1199 × 630, not 1200 × 630.',
+    ]);
+  });
+});
+
+// #511: the check reads a tour's counters in every frame it draws, in rupees, with where each is
+// heading.
+describe('counterProblems', () => {
+  const NAMES = ['You', 'Priya', 'Sam', 'Alex'];
+  const frame = (shown: number[], target: number[]) => ({ shown, target });
+  /** Frames drawn one after another, numbered from 1. */
+  const drawn = (...list: ReturnType<typeof frame>[]) =>
+    list.map((f, i) => ({ frame: i + 1, ...f }));
+
+  it('passes counters that move only toward where they are heading and always add up to zero', () => {
+    expect(
+      counterProblems(
+        drawn(
+          frame([500, -100, 300, -700], [500, -100, 300, -700]),
+          frame([300, -100, 300, -500], [0, -100, 300, -200]),
+          frame([0, -100, 300, -200], [0, -100, 300, -200]),
+          // Starting over jumps to new readings.
+          frame([0, 0, 0, 0], [0, 0, 0, 0]),
+        ),
+        NAMES,
+      ),
+    ).toEqual([]);
+  });
+
+  it('flags a counter that passes where it is heading', () => {
+    expect(
+      counterProblems(
+        drawn(
+          frame([500, -100, 300, -700], [0, -100, 300, -200]),
+          frame([-19, -100, 300, -181], [0, -100, 300, -200]),
+        ),
+        NAMES,
+      ),
+    ).toEqual([
+      "In frame 2 You's counter reads −19, past where it is heading (0).",
+      "In frame 2 Alex's counter reads −181, past where it is heading (−200).",
+    ]);
+  });
+
+  it('flags a frame whose counters do not add up to zero', () => {
+    expect(
+      counterProblems(
+        drawn(frame([3, -1, -1, -1], [0, 0, 0, 0]), frame([2, -1, -1, -1], [0, 0, 0, 0])),
+        NAMES,
+      ),
+    ).toEqual(['In frame 2 the counters add up to −1, not 0: +2, −1, −1, −1.']);
+  });
+
+  it('names the frame a reading was drawn in when only changed readings are kept', () => {
+    expect(
+      counterProblems(
+        [
+          { frame: 1, ...frame([0, 0], [0, 0]) },
+          { frame: 41, ...frame([0, 0], [500, -500]) },
+          { frame: 42, ...frame([520, -520], [500, -500]) },
+        ],
+        ['You', 'Alex'],
+      ),
+    ).toEqual([
+      "In frame 42 You's counter reads +520, past where it is heading (+500).",
+      "In frame 42 Alex's counter reads −520, past where it is heading (−500).",
+    ]);
+  });
+
+  it('flags a tour that showed no counters, and names only the first few problems', () => {
+    expect(counterProblems([], NAMES)).toEqual(['The tour drew no counters.']);
+    const off = drawn(...Array.from({ length: 8 }, () => frame([1, 0, 0, 0], [1, 0, 0, 0])));
+    expect(counterProblems(off, NAMES)).toEqual([
+      'In frame 1 the counters add up to +1, not 0: +1, 0, 0, 0.',
+      'In frame 2 the counters add up to +1, not 0: +1, 0, 0, 0.',
+      'In frame 3 the counters add up to +1, not 0: +1, 0, 0, 0.',
+      'And 5 more.',
     ]);
   });
 });

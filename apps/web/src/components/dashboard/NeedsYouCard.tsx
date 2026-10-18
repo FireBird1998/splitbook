@@ -144,14 +144,29 @@ function PaymentRow({
   );
 }
 
-/** A row still loading beside rows that have loaded. */
+/**
+ * A row still loading beside rows that have loaded. The `li` stays a plain list item, since a
+ * role on it would replace listitem (#565); the status sits inside it, as in HomeCardLoading.
+ */
 function RowLoading({ label }: { label: string }) {
   return (
-    <Box component="li" role="status" aria-label={label} aria-busy="true" sx={homeRowSx}>
-      <Skeleton variant="rounded" width={36} height={36} sx={{ borderRadius: `${RADIUS.md}px` }} />
-      <Box sx={{ flex: 1 }}>
-        <Skeleton variant="text" width="60%" />
-        <Skeleton variant="text" width="40%" />
+    <Box component="li" sx={homeRowSx}>
+      <Box
+        role="status"
+        aria-label={label}
+        aria-busy="true"
+        sx={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}
+      >
+        <Skeleton
+          variant="rounded"
+          width={36}
+          height={36}
+          sx={{ borderRadius: `${RADIUS.md}px` }}
+        />
+        <Box sx={{ flex: 1 }}>
+          <Skeleton variant="text" width="60%" />
+          <Skeleton variant="text" width="40%" />
+        </Box>
       </Box>
     </Box>
   );

@@ -143,43 +143,56 @@ var signed = (minor) => {
   const v = Math.round(minor / 100);
   return v === 0 ? "0" : (v > 0 ? "+" : "−") + inr.format(Math.abs(v));
 };
-function springs(count) {
-  const shown = Array.from({ length: count }, () => ({ at: 0, rate: 0 }));
+var SHIFT_SECONDS = 0.5;
+function counterReadings(count) {
+  let at = Array.from({ length: count }, () => 0);
+  let shifts = [];
+  const moved = (s) => Math.round(s.amountMinor / 100 * ease(s.t / SHIFT_SECONDS)) * 100;
+  const apply = (amountOf) => at.map(
+    (value, i) => shifts.reduce(
+      (sum, s) => sum + (s.up === i ? amountOf(s) : s.down === i ? -amountOf(s) : 0),
+      value
+    )
+  );
   return {
-    shown,
+    /** What each counter reads now. */
+    get shown() {
+      return apply(moved);
+    },
+    /** Where each counter is heading: its reading once every move has finished. */
+    get targets() {
+      return apply((s) => s.amountMinor);
+    },
+    /** Shows these readings at once, with nothing moving. */
     jump(values) {
-      shown.forEach((n, i) => {
-        n.at = values[i];
-        n.rate = 0;
-      });
+      at = values.slice();
+      shifts = [];
     },
-    step(target, dt, calm) {
-      shown.forEach((n, i) => {
-        if (calm) {
-          n.at = target[i];
-          n.rate = 0;
-          return;
-        }
-        for (let k = 0; k < 6; k++) {
-          n.rate += ((target[i] - n.at) * 70 - n.rate * 12) * (dt / 6);
-          n.at += n.rate * (dt / 6);
-        }
-        if (Math.abs(target[i] - n.at) < 1 && Math.abs(n.rate) < 1) {
-          n.at = target[i];
-          n.rate = 0;
-        }
-      });
+    /** Starts raising counter `up` and lowering counter `down`, each by amountMinor. */
+    raiseAndLower(up, down, amountMinor) {
+      if (up !== down && amountMinor) shifts.push({ up, down, amountMinor, t: 0 });
     },
-    /** Every reading has come to rest on its target. */
-    settledOn: (target) => shown.every((n, i) => n.at === target[i] && n.rate === 0)
+    /** Moves on by dt seconds; calm finishes every move at once. */
+    step(dt, calm) {
+      for (const s of shifts) s.t = calm ? SHIFT_SECONDS : Math.min(SHIFT_SECONDS, s.t + dt);
+      for (const s of shifts.filter((s2) => s2.t >= SHIFT_SECONDS)) {
+        at[s.up] += s.amountMinor;
+        at[s.down] -= s.amountMinor;
+      }
+      shifts = shifts.filter((s) => s.t < SHIFT_SECONDS);
+    },
+    /** Nothing is moving. */
+    settled: () => shifts.length === 0
   };
 }
-function drawCounters(elements, shown) {
+function drawCounters(elements, readings) {
+  const { shown, targets } = readings;
   elements.forEach((el, i) => {
-    const text = signed(shown[i].at);
+    const text = signed(shown[i]);
     if (el.textContent !== text) el.textContent = text;
-    const v = Math.round(shown[i].at / 100);
+    const v = Math.round(shown[i] / 100);
     el.dataset.sign = v > 0 ? "pos" : v < 0 ? "neg" : "zero";
+    el.dataset.target = String(Math.round(targets[i] / 100));
   });
 }
 
@@ -216,8 +229,7 @@ function splittingLine({ svg, held, say, announce }, D) {
       same ? `${values.length} × ${rupees(values[0])}` : `${values.length} chips`
     ];
   }
-  const readings = springs(D.xs.length);
-  let target = D.xs.map(() => 0);
+  const readings = counterReadings(D.xs.length);
   let fill = D.xs.map(() => 0);
   let beltTravel = 0;
   let phase = "idle";
@@ -258,9 +270,9 @@ function splittingLine({ svg, held, say, announce }, D) {
       setScreen([
         "DONE",
         `${D.steps.length} split`,
-        `sum ${rupees(target.reduce((a, b) => a + b, 0))}`
+        `sum ${rupees(readings.targets.reduce((a, b) => a + b, 0))}`
       ]);
-      const text2 = D.names.map((n, i) => `${n} ${signed(target[i])}`).join(" · ");
+      const text2 = D.names.map((n, i) => `${n} ${signed(readings.targets[i])}`).join(" · ");
       say(text2);
       announce(`All ${D.steps.length} Expenses split. ${text2}`);
       return;
@@ -273,7 +285,6 @@ function splittingLine({ svg, held, say, announce }, D) {
     payLamps.forEach(
       (l, i) => i === s.paidBy ? l.setAttribute("data-on", "") : l.removeAttribute("data-on")
     );
-    target[s.paidBy] += s.amountMinor;
     setScreen(screenFor(s));
     const text = `${s.title} ${rupees(s.amountMinor)} · ${D.names[s.paidBy]} paid`;
     say(text);
@@ -283,7 +294,7 @@ function splittingLine({ svg, held, say, announce }, D) {
     e = -1;
     phase = "idle";
     clock = 0;
-    target = D.xs.map(() => 0);
+    readings.jump(D.xs.map(() => 0));
     fill = D.xs.map(() => 0);
     stacks.flat().forEach((el) => el.style.display = "none");
     chips.forEach((c) => {
@@ -306,7 +317,7 @@ function splittingLine({ svg, held, say, announce }, D) {
       if (fill[c.to] < 4) stacks[c.to][fill[c.to]].style.display = "";
       fill[c.to] += 1;
     });
-    target = s.after.slice();
+    readings.jump(s.after);
     pushersY = D.xs.map(() => 0);
     liftMagazine(e + 1);
   }
@@ -475,7 +486,7 @@ function splittingLine({ svg, held, say, announce }, D) {
             c.el.style.display = "none";
             if (fill[st] < 4) stacks[st][fill[st]].style.display = "";
             fill[st] += 1;
-            target[st] -= c.amountMinor;
+            readings.raiseAndLower(D.steps[e].paidBy, st, c.amountMinor);
           }
           if (t >= 0.9) {
             pushersY[st] = 0;
@@ -493,10 +504,10 @@ function splittingLine({ svg, held, say, announce }, D) {
     } else if (phase === "idle" && clock > 1.6) {
       begin(0);
     }
-    readings.step(target, dt, calm);
+    readings.step(dt, calm);
   }
   function draw() {
-    drawCounters(counters, readings.shown);
+    drawCounters(counters, readings);
     pushers.forEach((el, i) => {
       const off = translateAlong(P, [0, pushersY[i], 0]);
       el.setAttribute("transform", off);
@@ -540,7 +551,7 @@ function splittingLine({ svg, held, say, announce }, D) {
       }
     }
   }
-  const settled = () => readings.settledOn(target);
+  const settled = () => readings.settled();
   return { restart, next, update, draw, poseStill, settled };
 }
 

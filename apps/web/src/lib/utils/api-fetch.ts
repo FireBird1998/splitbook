@@ -38,7 +38,7 @@ export function leaveExpectedAccount(): void {
   leavingAccount = true;
 }
 
-/** The sign-out never left (it could not reach the server): an ended session counts again. */
+/** The sign-out never left (unreachable, or refused): an ended session counts again. */
 export function stayInExpectedAccount(): void {
   leavingAccount = false;
 }

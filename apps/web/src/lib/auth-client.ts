@@ -39,11 +39,11 @@ export async function signInWithGoogle(callbackURL: string) {
 }
 
 /**
- * Sign out, then reload at the landing page (persona picker or marketing page). Resolves
- * 'unreachable', never throwing, when the server can't be reached: the member stays signed in on
- * this page, and the caller tells them (#536).
+ * Sign out, then reload at the landing page (persona picker or marketing page). Never throws:
+ * when the server can't be reached ('unreachable', #536) or refuses to end the session
+ * ('refused', #550), the member is still signed in, so this tab stays and the caller tells them.
  */
-export async function signOutToHome(): Promise<'leaving' | 'unreachable'> {
+export async function signOutToHome(): Promise<'leaving' | 'unreachable' | 'refused'> {
   // This tab navigates on its own; its session guard must not reload it first.
   leaveExpectedAccount();
   let result: Awaited<ReturnType<typeof authClient.signOut>>;
@@ -54,12 +54,15 @@ export async function signOutToHome(): Promise<'leaving' | 'unreachable'> {
     stayInExpectedAccount();
     return 'unreachable';
   }
-  // Unconfirmed payments are account-local data: none outlives the session (#198).
-  // A sign-out the server refused leaves the member signed in, so they stay.
-  if (!result?.error) {
-    forgetBrowserSettlementAttempts();
-    forgetBrowserTagActions();
+  // Refused (SESSION_NOT_ENDED, a bad origin, too many tries): the session lives on, so the tab
+  // stays, in its expected account too. A 401 means it had already ended, so the tab leaves.
+  if (result?.error && result.error.status !== 401) {
+    stayInExpectedAccount();
+    return 'refused';
   }
+  // Unconfirmed payments are account-local data: none outlives the session (#198).
+  forgetBrowserSettlementAttempts();
+  forgetBrowserTagActions();
   window.location.assign('/');
   return 'leaving';
 }

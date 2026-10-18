@@ -239,7 +239,8 @@ What each spec covers:
 - **Shell** (`shell.spec.ts`): the desktop sidebar, the phone drawer, the phone top bar at
   320–430 px with and without the demo badge, the theme switch and Sign out; axe on each.
 - **Theme and axe matrix** (`theme-a11y.spec.ts`): persona entry, Home and the trip workspace in
-  every project, the theme toggle and its persistence; axe fails the test on critical findings.
+  every project, Home again with Needs you's invitations read held loading (#565), the theme
+  toggle and its persistence; axe fails the test on critical findings.
 - **Home** (`home-groups.spec.ts`, `spending-chart.spec.ts`, `latest-changes.spec.ts`): "Where it
   went" and the Groups table (#308), "Your share of spending" with its Table view (#307), and
   latest changes (#309), each compared with the read it comes from.
@@ -331,7 +332,7 @@ the shared money modules its story uses or the lockfile. It runs
 `pnpm --filter @splitbook/landing-figures check`
 ([tools/landing-figures](../tools/landing-figures/README.md)): stale output or a stale still, the
 story, the vendored kit, and the audit, line ends and console of every figure page in headless
-Chrome. No database.
+Chrome, and each tour's counters in every frame it draws (#511). No database.
 
 The Playwright web servers run a **production** build in CI, so their env sets
 `ALLOW_DEMO_AUTH=true` (demo auth fails closed in production), `AUTH_RATE_LIMIT_ENABLED=false`
