@@ -54,3 +54,11 @@ At most 10 Drafts may be created per request and at most 100 active Drafts may e
 ## Duplicate handling
 
 A Draft resembling another Draft or saved Expense produces a possible-duplicate warning requiring explicit member acknowledgment before saving. Similar entries are not merged automatically or permanently blocked, because repeated expenses can be legitimate. Exact retries of the same Draft-creation request return the original Draft; this is separate from similarity detection.
+
+## Update: 19 October 2026 Group access
+
+[Spec #603](https://github.com/FireBird1998/splitbook/issues/603), the owner's 19 October Q16–Q24 decisions, supersedes this record's original blanket “all current and future Groups” consent. The chosen scope is current membership minus that connection's Excluded Groups minus Groups whose Assistant rule is Not allowed. Approval starts with all Groups ticked; Groups joined later are included. Every read and Draft tool applies the current checks, and unreachable Groups are indistinguishable from nonexistent Groups. Exclusions and Not allowed keep existing Drafts for member review; they prevent assistant access, including new Draft preparation. Membership requirements remain unchanged.
+
+Separate optional To review permission still covers the member's manual and assistant-prepared Drafts, including permanent discard. Changing this permission requires reconnecting; Group selection changes apply immediately without reconnecting. Only the member saves Expenses in Splitbook. The chosen 90-day idle connection expiry does not expire Drafts. There is no per-member rollout switch; connection and approval are the opt-in. Production waits for #603's privacy controls and acceptance.
+
+This is a chosen-model amendment, not a claim that the Group filter or expiry is implemented. See the [ADR 0005 update](0005-mcp-server-in-web-app.md#update-19-october-2026), [decision comparison](../connected-assistants/decisions.md) and [implementation evidence](../connected-assistants/research.md). Earlier dated text remains historical.
