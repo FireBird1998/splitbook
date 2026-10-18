@@ -112,6 +112,29 @@ export async function seedReviewPage(
   }
 }
 
+/**
+ * Give demo members the names a test needs, as two members sharing one name (#442). Returns a
+ * function that puts their seeded names back; the suite runs one test at a time.
+ */
+export async function renameMembers(names: Record<string, string>) {
+  const uri =
+    process.env.TO_REVIEW_TEST_MONGODB_URI ??
+    process.env.PLAYWRIGHT_DEMO_MONGODB_URI ??
+    'mongodb://127.0.0.1:27017/splitbook-demo?directConnection=true';
+  const client = await MongoClient.connect(uri);
+  const users = client.db().collection('users');
+  const seeded = await users
+    .find({ _id: { $in: Object.keys(names).map((id) => new ObjectId(id)) } })
+    .project<{ _id: ObjectId; name: string }>({ name: 1 })
+    .toArray();
+  for (const [id, name] of Object.entries(names))
+    await users.updateOne({ _id: new ObjectId(id) }, { $set: { name } });
+  return async () => {
+    for (const { _id, name } of seeded) await users.updateOne({ _id }, { $set: { name } });
+    await client.close();
+  };
+}
+
 /** Remove this suite's fictional saved records and their Activity, so later projects keep the seed's timeline. */
 export async function cleanupReviewPage() {
   await seedToReview(0); // The same loopback/database guard precedes every write.

@@ -39,6 +39,7 @@ import { useGroup } from '@/lib/hooks/use-groups';
 import { RADIUS } from '@/lib/theme/tokens';
 import { TO_REVIEW_KEY, useToReview } from './use-to-review';
 import { webReviewClient, reviewProblem } from './review-client';
+import { memberLabel } from '@splitbook/shared/activity-timeline';
 import { ReviewFacts } from './ReviewDetails';
 import ToReviewPanel, { type ReviewPanelHandle } from './ToReviewPanel';
 import ReviewRow from './ReviewRow';
@@ -159,7 +160,13 @@ export default function ToReviewPage({
   const selected = opened ? (items.find((item) => item.id === opened.id) ?? opened) : null;
   const available =
     checked && online && !!group && !groupError && !failed && read.status === 'ready';
-  const names = Object.fromEntries(group?.members.map(({ user }) => [user._id, user.name]) ?? []);
+  // Members' names for the panel, its problems and Save ready, with the viewer as "You" by id (#442).
+  const names = Object.fromEntries(
+    (group?.members ?? []).flatMap(({ user }) => {
+      const label = memberLabel(user._id, user.name, accountId);
+      return label ? [[user._id, label]] : [];
+    }),
+  );
   const context = {
     currency,
     category: group?.category,

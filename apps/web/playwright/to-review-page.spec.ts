@@ -7,7 +7,7 @@ import {
   reviewScreenshot,
   expectThemeApplied,
 } from './fixtures';
-import { cleanupReviewPage, seedReviewPage } from './to-review-seed';
+import { cleanupReviewPage, renameMembers, seedReviewPage } from './to-review-seed';
 const root = `/groups/${DEMO_GROUP_ID}`;
 const panel = (page: Page) => page.getByRole('region', { name: 'Review expense', exact: true });
 async function open(page: Page, kinds: Parameters<typeof seedReviewPage>[0]) {
@@ -140,7 +140,7 @@ test("Claude's one-payer item without a Category is Ready, shows who paid and Ot
   expect((await rows(page))[0].values).not.toHaveProperty('category');
   await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();
   const confirm = page.getByRole('dialog', { name: 'Save 1 ready?' });
-  await expect(confirm).toContainText('Paid by Alex Rivera');
+  await expect(confirm).toContainText('Paid by You');
   await expect(confirm).toContainText('Total · ₹15.00');
   await confirm.getByRole('button', { name: 'Confirm save' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
@@ -195,7 +195,7 @@ test('possible duplicate shows the matching Expense and requires the explicit ti
   await page.getByRole('button', { name: 'Review Review matching meal', exact: true }).click();
   const review = panel(page);
   await expect(review.getByRole('region', { name: 'Possible duplicates' })).toContainText(
-    'Added by Alex Rivera',
+    'Added by You',
   );
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
   await review.getByLabel("It's a different expense, save it anyway").check();
@@ -214,7 +214,7 @@ test('Save N ready confirms only ready versions and gives mixed per-item outcome
   await expect(confirm).toContainText('Review meal 2');
   await expect(confirm).not.toContainText('Review meal 3');
   await expect(confirm).toContainText('Total · ₹24.68');
-  await expect(confirm).toContainText('Paid by Alex Rivera · Split equally between Alex Rivera');
+  await expect(confirm).toContainText('Paid by You · Split equally between You');
   await expect(confirm).toContainText(
     "They'll be added to Goa Friends Trip, and Balances there will change for everyone",
   );
@@ -952,4 +952,41 @@ test('typing not yet autosaved is still kept when the page reloads', async ({ pa
   await expect
     .poll(async () => (await rows(page))[0].values.description)
     .toBe('Review edit before reload');
+});
+
+test('says You for the viewer by id, beside another member of the same name (#442)', async ({
+  page,
+}) => {
+  const alex = 'a00000000000000000000001';
+  const sam = 'a00000000000000000000002';
+  const restore = await renameMembers({ [alex]: 'Ankit Das', [sam]: 'Ankit Das' });
+  try {
+    await open(page, ['ready', 'ready']);
+    const [first, second] = await rows(page);
+    const change = async (row: typeof first, values: object) => {
+      const changed = await page.request.put(`/api/groups/${DEMO_GROUP_ID}/drafts/${row.id}`, {
+        headers: { 'X-Splitbook-Revision': String(row.revision) },
+        data: { values: { ...row.values, ...values } },
+      });
+      expect(changed.ok(), await changed.text()).toBe(true);
+    };
+    // Alex paid and split it with Sam; both are called Ankit Das.
+    await change(first, { splitBetween: [{ user: alex }, { user: sam }] });
+    // Two payers, and only the viewer's amount is missing.
+    await change(second, {
+      paidBy: [{ user: sam, amount: 6.17 }, { user: alex }],
+      splitBetween: [{ user: alex }, { user: sam }],
+    });
+    await page.reload();
+    await page.getByRole('button', { name: 'Review Review meal 2', exact: true }).click();
+    await expect(panel(page)).toContainText('The amount paid by You?');
+    await expect(panel(page)).not.toContainText('The amount paid by Ankit Das');
+    await page.getByRole('button', { name: 'Close review', exact: true }).click();
+    await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();
+    const confirm = page.getByRole('dialog', { name: 'Save 1 ready?' });
+    await expect(confirm).toContainText('Paid by You · Split equally between You, Ankit Das');
+    await confirm.getByRole('button', { name: 'Keep reviewing' }).click();
+  } finally {
+    await restore();
+  }
 });

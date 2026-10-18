@@ -56,10 +56,13 @@ function ExpenseMatch({
   groupId,
   id,
   description,
+  names,
 }: {
   groupId: string;
   id: string;
   description: string;
+  /** Members' names, with the viewer as "You". */
+  names: Readonly<Record<string, string>>;
 }) {
   const { data, error } = useSWR(
     expenseRecordKey(WEB_QUERY_ACCOUNT, groupId, id),
@@ -74,7 +77,7 @@ function ExpenseMatch({
         <Typography variant="body2">
           {formatCurrency(expense.amount, expense.currency)} ·{' '}
           {formatDate(expenseLocalDate(expense.date))} · Added by{' '}
-          {typeof author === 'object' && author?.name ? author.name : 'a member'}
+          {(typeof author === 'object' && (names[author?._id ?? ''] ?? author?.name)) || 'a member'}
         </Typography>
       ) : (
         <Typography variant="body2">
@@ -109,7 +112,7 @@ export function ReviewMatches({
       </Typography>
       {item.duplicates.map((match) =>
         match.kind === 'expense' ? (
-          <ExpenseMatch key={match.id} groupId={item.draft.groupId} {...match} />
+          <ExpenseMatch key={match.id} groupId={item.draft.groupId} names={names} {...match} />
         ) : (
           <Box key={match.id}>
             {items.find((other) => other.draft.id === match.id) ? (
