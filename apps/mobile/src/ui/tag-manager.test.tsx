@@ -38,9 +38,11 @@ function newServer() {
     ],
     /** A refusal the next Tag action gets instead of being applied. */
     refusal: null as { status: number; code: string } | null,
+    /** Whether Alex is still an admin of Harbour Flat. */
+    admin: true,
   };
 }
-const snapshot = () => ({ canManage: true, tags: structuredClone(server.tags) });
+const snapshot = () => ({ canManage: server.admin, tags: structuredClone(server.tags) });
 
 const fetch: MobileFetch = async (url, init) => {
   const path = new URL(url).pathname;
@@ -144,17 +146,18 @@ const nativeViews = () => ({
     return view;
   },
 });
-/** Whether an element shows this text anywhere inside it. */
+/** Whether an element shows this text anywhere inside it, as its text or a row's title. */
 const shows = (node: unknown, text: string): boolean =>
   node === text ||
   (Array.isArray(node) && node.some((child) => shows(child, text))) ||
   (typeof node === 'object' &&
     node !== null &&
     'props' in node &&
-    shows((node as { props: { children?: unknown } }).props.children, text));
+    ((node as { props: { title?: unknown } }).props.title === text ||
+      shows((node as { props: { children?: unknown } }).props.children, text)));
 
-/** Alex's Manage Tags at 200% text, once its Tags are read. */
-async function openManageTags() {
+/** Alex's Tags at 200% text, once they are read. */
+async function openManageTags(offline = false) {
   let cookie: string | null = null;
   let owner: string | null = null;
   const tagRequests = memoryRecords();
@@ -193,11 +196,11 @@ async function openManageTags() {
     },
   );
   await controller.signIn('alex');
-  await showManageTags();
+  await showManageTags(offline);
 }
 
-/** Manage Tags on screen, as opening it from the Group does. */
-async function showManageTags() {
+/** Tags on screen, as opening it from the Group does. */
+async function showManageTags(offline = false) {
   views = [];
   measured = [];
   vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mockClear();
@@ -207,8 +210,9 @@ async function showManageTags() {
       <TagManager
         controller={controller!}
         groupId={groupId}
+        groupName="Harbour Flat"
         accountId={alex.id}
-        offline={false}
+        offline={offline}
         onClose={vi.fn()}
       />,
       nativeViews(),
@@ -217,10 +221,74 @@ async function showManageTags() {
   await settle();
 }
 
+/** Press a control by its spoken label, and let what it starts finish. */
+const press = async (label: string) => {
+  await act(async () => labelled(label).props.onPress());
+  await settle();
+};
+/** Press a control in the sheet that's showing, such as its Cancel. */
+const pressInSheet = async (label: string) => {
+  const sheet = renderer!.root.find(
+    (node: ReactTestInstance) =>
+      String(node.type) === 'Modal' && node.props.transparent && node.props.visible,
+  );
+  await act(async () =>
+    sheet
+      .find(
+        (node: ReactTestInstance) =>
+          typeof node.type === 'string' && node.props.accessibilityLabel === label,
+      )
+      .props.onPress(),
+  );
+  await settle();
+};
+/** Whether a control with this spoken label is on screen. */
+const offered = (label: string) =>
+  renderer!.root.findAll(
+    (node: ReactTestInstance) =>
+      typeof node.type === 'string' && node.props.accessibilityLabel === label,
+  ).length > 0;
+/** Every text on screen, joined. */
+const screenText = () =>
+  renderer!.root
+    .findAll((node: ReactTestInstance) => String(node.type) === 'Text')
+    .map((node) => [node.props.children].flat().join(''))
+    .join('\n');
+/** The bottom sheet showing, by its title: one at a time. */
+const sheetTitle = () =>
+  renderer!.root
+    .findAll(
+      (node: ReactTestInstance) =>
+        String(node.type) === 'Modal' && node.props.transparent && node.props.visible,
+    )
+    .map(
+      (modal) =>
+        modal.find(
+          (node: ReactTestInstance) =>
+            String(node.type) === 'Text' && node.props.accessibilityRole === 'header',
+        ).props.children,
+    );
+/** Whether the Tag name box was focused, which raises the keyboard. */
+const typed = () =>
+  views.some(
+    (view) => view.element.props.accessibilityLabel === 'Tag name' && view.focus.mock.calls.length,
+  );
+/** What the screen reader was last moved to. */
+const announced = () =>
+  (
+    vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mock.calls.at(-1)?.[0] as
+      | NativeView
+      | undefined
+  )?.element;
+/** Long enough for a sheet to slide in and its name box to take the keyboard. */
+const sheetIn = () => act(() => new Promise((resolve) => setTimeout(resolve, 650)));
+const row = `${longName}, active. Opens Rename and Archive`;
+
 describe('Renaming a Tag (#554)', () => {
   it('opens a long name at its start, and leaves the cursor to the member while typing', async () => {
     await openManageTags();
-    await act(async () => labelled(`Rename ${longName}`).props.onPress());
+    await press(row);
+    await press('Rename, Saved Expenses show the new name');
     const box = () => labelled('Tag name');
     expect(box().props.value).toBe(longName);
     // Android otherwise opens a filled single-line box at its end, cutting off the start.
@@ -232,20 +300,21 @@ describe('Renaming a Tag (#554)', () => {
   });
 });
 
-describe('Manage Tags on a phone (#562)', () => {
+describe('Tags on a phone (#562)', () => {
   it('keeps its content inside the safe area, clear of the status bar and gesture bar', async () => {
     await openManageTags();
     const heading = renderer!.root.find(
-      (node: ReactTestInstance) =>
-        String(node.type) === 'Text' && node.props.children === 'Manage Tags',
+      (node: ReactTestInstance) => String(node.type) === 'Text' && node.props.children === 'Tags',
     );
     let area: ReactTestInstance | null = heading.parent;
     while (area && String(area.type) !== 'SafeAreaView') area = area.parent;
     expect(area, 'a SafeAreaView around the heading').not.toBeNull();
     // Every edge: a full-screen Modal draws under the status bar and the gesture bar.
     expect(area!.props.edges).toBeUndefined();
+    // The list's own scroll view, not one of its sheets'.
     const scroll = renderer!.root.find(
-      (node: ReactTestInstance) => String(node.type) === 'ScrollView',
+      (node: ReactTestInstance) =>
+        String(node.type) === 'ScrollView' && !!node.props.refreshControl,
     );
     expect(area!.findAll((node) => node === scroll)).toHaveLength(1);
     // The inset is the gap above the content now, not a fixed guess at the status bar.
@@ -253,99 +322,142 @@ describe('Manage Tags on a phone (#562)', () => {
   });
 });
 
-describe('Opening a Tag edit from low in the list (#584)', () => {
-  /** Where the view last scrolled to, and what it scrolled to: the view last measured. */
-  const scrolled = () => {
-    const to = views
-      .filter((view) => view.element.type === 'ScrollView')
-      .flatMap((view) => view.scrollTo.mock.calls)
-      .at(-1)?.[0];
-    const target = measured.at(-1);
-    return { to, target, near: target && { y: Math.max(0, target.y - 16), animated: false } };
-  };
-  /** What the screen reader was last moved to. */
-  const announced = () =>
-    (
-      vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mock.calls.at(-1)?.[0] as
-        | NativeView
-        | undefined
-    )?.element;
-  const typed = (label: string) =>
-    views.some(
-      (view) => view.element.props.accessibilityLabel === label && view.focus.mock.calls.length,
-    );
-  const press = async (label: string) => {
-    await act(async () => labelled(label).props.onPress());
-    await settle();
-  };
-
-  it('brings Rename into view and into the Tag name box, then back to the Tag on Cancel', async () => {
+describe('A Tag’s options, in sheets over the list', () => {
+  it('lists each Tag once, with its options a tap away instead of buttons under every Tag', async () => {
     await openManageTags();
-    await press(`Rename ${longName}`);
-    // The edit sits above the lists, so the view scrolls up to it from the tapped Tag.
-    expect(scrolled().to).toEqual(scrolled().near);
-    expect(shows(scrolled().target?.element, 'Rename Tag')).toBe(true);
-    expect(typed('Tag name')).toBe(true);
-    await press('Cancel Tag edit');
-    expect(scrolled().to).toEqual(scrolled().near);
-    expect(shows(scrolled().target?.element, longName)).toBe(true);
-    expect(shows(scrolled().target?.element, 'Rename Tag')).toBe(false);
+    expect(screenText()).toContain('Active · 1');
+    expect(screenText()).toContain('Archived · 1');
+    expect(offered(`Rename ${longName}`)).toBe(false);
+    expect(offered(`Archive ${longName}`)).toBe(false);
+    await press(row);
+    expect(sheetTitle()).toEqual([longName]);
+    expect(offered('Rename, Saved Expenses show the new name')).toBe(true);
+  });
+
+  it('opens Rename in its sheet with the keyboard, and goes back to the Tag on Cancel', async () => {
+    await openManageTags();
+    await press(row);
+    await press('Rename, Saved Expenses show the new name');
+    expect(sheetTitle()).toEqual(['Rename Tag']);
+    await sheetIn();
+    expect(typed()).toBe(true);
+    await pressInSheet('Cancel');
+    expect(sheetTitle()).toEqual([]);
     expect(shows(announced(), longName)).toBe(true);
-    // The cards get their buttons back, and the view stops short of the Tag until it has taken
-    // the list's new length: once it has, it goes to the Tag again.
-    vi.stubGlobal('requestAnimationFrame', (next: () => void) => next());
-    const before = measured.length;
-    act(() =>
-      renderer!.root
-        .find((node: ReactTestInstance) => String(node.type) === 'ScrollView')
-        .props.onContentSizeChange(360, 4000),
-    );
-    vi.unstubAllGlobals();
-    expect(measured.length).toBe(before + 1);
-    expect(scrolled().to).toEqual(scrolled().near);
-    expect(shows(scrolled().target?.element, longName)).toBe(true);
   });
 
-  it('shows a saved rename’s confirmation, then goes back to the renamed Tag', async () => {
+  it('confirms a saved rename in a short note, with nothing to dismiss, and goes to the Tag', async () => {
     await openManageTags();
-    await press(`Rename ${longName}`);
+    await press(row);
+    await press('Rename, Saved Expenses show the new name');
     act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
-    await press('Save Tag name');
-    // The confirmation appears above the lists, so it is brought into view, not the Tag.
-    expect(scrolled().to).toEqual(scrolled().near);
-    expect(shows(scrolled().target?.element, 'Confirmed earlier action')).toBe(true);
-    expect(shows(announced(), 'Confirmed earlier action')).toBe(true);
-    await press('Continue managing Tags');
-    expect(scrolled().to).toEqual(scrolled().near);
-    expect(shows(scrolled().target?.element, 'Weekly groceries')).toBe(true);
+    await press('Save name');
+    expect(sheetTitle()).toEqual([]);
+    expect(screenText()).toContain('Renamed to Weekly groceries');
+    expect(screenText()).not.toContain('Your change went through');
     expect(shows(announced(), 'Weekly groceries')).toBe(true);
+    // Nothing is kept on the device to check later: the change is done.
+    expect(controller!.getSnapshot().tagManager.recovery).toBeNull();
   });
 
-  it('brings Archive and Restore into view and to the screen reader, with nothing to type', async () => {
+  it('saves a name from the keyboard’s Done, and only a name that can be saved', async () => {
     await openManageTags();
-    await press(`Archive ${longName}`);
-    expect(scrolled().to).toEqual(scrolled().near);
-    expect(shows(scrolled().target?.element, 'Archive Tag?')).toBe(true);
-    expect(shows(announced(), 'Archive Tag?')).toBe(true);
-    await press('Cancel Tag edit');
+    await press(row);
+    await press('Rename, Saved Expenses show the new name');
+    // Unchanged: Done does nothing.
+    await act(async () => labelled('Tag name').props.onSubmitEditing());
+    await settle();
+    expect(sheetTitle()).toEqual(['Rename Tag']);
+    act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
+    await act(async () => labelled('Tag name').props.onSubmitEditing());
+    await settle();
+    expect(screenText()).toContain('Renamed to Weekly groceries');
+  });
+
+  it('says a name is taken as it is typed, and offers to restore an archived Tag instead', async () => {
+    await openManageTags();
+    await press('New Tag');
+    act(() => labelled('Tag name').props.onChangeText('old RENT'));
+    expect(screenText()).toContain(
+      'Old rent is archived. Restore it to keep its Expenses together.',
+    );
+    expect(offered('Create Tag')).toBe(false);
     await press('Restore Old rent');
-    expect(scrolled().to).toEqual(scrolled().near);
-    expect(shows(scrolled().target?.element, 'Restore Tag?')).toBe(true);
-    expect(shows(announced(), 'Restore Tag?')).toBe(true);
-    expect(typed('Tag name')).toBe(false);
+    expect(screenText()).toContain('Old rent restored');
+    expect(screenText()).toContain('Active · 2');
   });
 
-  it('leaves a kept, refused rename where it is when Manage Tags opens again', async () => {
+  it('restores an archived Tag in one step, with nothing to type', async () => {
     await openManageTags();
-    await press(`Rename ${longName}`);
+    await press('Old rent, archived. Opens Restore');
+    expect(sheetTitle()).toEqual(['Old rent']);
+    await press('Restore, Offer it on new Expenses again');
+    await sheetIn();
+    expect(sheetTitle()).toEqual([]);
+    expect(screenText()).toContain('Old rent restored');
+    expect(typed()).toBe(false);
+  });
+
+  it('keeps Archive from the only active Tag, saying why, and explains it before archiving', async () => {
+    await openManageTags();
+    await press(row);
+    expect(offered('Archive, Stop offering it. Saved Expenses keep it.')).toBe(false);
+    expect(screenText()).toContain('A Group needs one active Tag. Create another first.');
+    await press(`Close ${longName}`);
+    await press('Old rent, archived. Opens Restore');
+    await press('Restore, Offer it on new Expenses again');
+    await press(row);
+    await press('Archive, Stop offering it. Saved Expenses keep it.');
+    expect(sheetTitle()).toEqual([`Archive ${longName}?`]);
+    expect(screenText()).toContain('Saved Expenses keep it, with their history.');
+    expect(screenText()).toContain('Drafts using it need another Tag before they’re saved.');
+    expect(screenText()).toContain(
+      'Recurring Expenses using it pause until they get an active Tag.',
+    );
+    await press('Archive Tag');
+    expect(screenText()).toContain(`${longName} archived`);
+    expect(server.tags.find((tag) => tag.id === tagId)!.isArchived).toBe(true);
+  });
+
+  it('leaves a kept, refused rename in its sheet when Tags opens again, without the keyboard', async () => {
+    await openManageTags();
+    await press(row);
+    await press('Rename, Saved Expenses show the new name');
     act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
     server.refusal = { status: 409, code: 'AMBIGUOUS_TAG' };
-    await press('Save Tag name');
+    await press('Save name');
     act(() => renderer!.unmount());
     await showManageTags();
     expect(labelled('Tag name').props.value).toBe('Weekly groceries');
-    // Nothing was tapped, so the screen opens at its top, with no keyboard.
-    expect(scrolled().to).toBeUndefined();
-    expect(typed('Tag name')).toBe(false);
+    expect(screenText()).toContain('Not saved');
+    // Nothing was tapped, so no keyboard comes up by itself.
+    await sheetIn();
+    expect(typed()).toBe(false);
+  });
+});
+
+describe('Tags that can’t be changed here', () => {
+  it('shows them offline, read only, and says changing them needs a connection', async () => {
+    await openManageTags(true);
+    expect(screenText()).toContain(
+      'You’re offline. You can see the Tags; changing them needs a connection.',
+    );
+    expect(screenText()).toContain(longName);
+    expect(offered('New Tag')).toBe(false);
+    // Each Tag is listed, and none opens options.
+    expect(offered(row)).toBe(false);
+    expect(offered('Old rent, archived. Opens Restore')).toBe(false);
+  });
+
+  it('shows them to a member who isn’t an admin, with nothing to change', async () => {
+    server.admin = false;
+    await openManageTags();
+    expect(screenText()).toContain(
+      'Only Group admins can change Tags. You can use any active Tag on your Expenses.',
+    );
+    expect(offered('New Tag')).toBe(false);
+    expect(screenText()).toContain('Old rent');
+    expect(offered(row)).toBe(false);
+    expect(offered('Old rent, archived. Opens Restore')).toBe(false);
   });
 });

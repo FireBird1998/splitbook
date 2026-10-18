@@ -194,13 +194,15 @@ export function IconTile({
   tone = 'brand',
 }: {
   icon: IconName;
-  tone?: 'brand' | 'info' | 'warning';
+  /** `neutral` marks something set aside, such as an archived Tag. */
+  tone?: 'brand' | 'info' | 'warning' | 'neutral';
 }) {
   const theme = useTheme();
   const colors = {
     brand: [theme.brand.bg, theme.brand.main],
     info: [theme.info.bg, theme.status.info],
     warning: [theme.warning.bg, theme.status.warning],
+    neutral: [theme.surfaceMuted, theme.textSecondary],
   }[tone];
   return (
     <View
@@ -294,6 +296,7 @@ export const ListRow = memo(function ListRow({
   title,
   meta,
   metaTone = 'secondary',
+  metaLines = 1,
   trailing,
   trailingLoading = false,
   trailingWidth,
@@ -305,6 +308,8 @@ export const ListRow = memo(function ListRow({
   title: string;
   meta?: string;
   metaTone?: TextTone;
+  /** Lines the meta may take: more where it explains a choice, as in a sheet's options. */
+  metaLines?: number;
   trailing?: ReactNode;
   trailingLoading?: boolean;
   trailingWidth?: number;
@@ -323,7 +328,7 @@ export const ListRow = memo(function ListRow({
           {title}
         </CompactText>
         {meta ? (
-          <CompactText variant="caption" tone={metaTone} numberOfLines={1}>
+          <CompactText variant="caption" tone={metaTone} numberOfLines={metaLines}>
             {meta}
           </CompactText>
         ) : null}

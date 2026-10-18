@@ -38,8 +38,8 @@ interface GroupShellProps {
   onMembers: () => void;
   /** Available to the currently known admin, verified again when opened. */
   onManageTags?: () => void;
-  /** Members can check an earlier action after losing admin permission. */
-  onCheckTagAction?: () => void;
+  /** Members see the Tags, and can check an earlier action after losing admin permission. */
+  onViewTags?: () => void;
   onRefresh: () => void;
   pull: { refreshing: boolean; onRefresh: () => void };
   /** The destination's scroll view, so returning from an Expense can restore its offset. */
@@ -81,7 +81,7 @@ export function GroupShell({
   invite,
   onMembers,
   onManageTags,
-  onCheckTagAction,
+  onViewTags,
   onRefresh,
   pull,
   scrollRef,
@@ -193,15 +193,15 @@ export function GroupShell({
                   <Divider inset={66} />
                 </>
               )}
-              {onCheckTagAction && (
+              {onViewTags && (
                 <>
                   <ListRow
                     leading={<IconTile icon="pricetags-outline" />}
-                    title="Check Tag action"
-                    meta="Read the outcome of an earlier action"
+                    title="Tags"
+                    meta="See this Group’s Tags"
                     onPress={() => {
                       close();
-                      onCheckTagAction();
+                      onViewTags();
                     }}
                   />
                   <Divider inset={66} />

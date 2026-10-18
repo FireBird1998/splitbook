@@ -19,7 +19,19 @@ export interface TagManagerState {
   reviewRequired: boolean;
   busy: boolean;
   message: string;
+  /**
+   * A change the member just made on this screen, confirmed: its recovery copy is already gone,
+   * so nothing waits for them to dismiss it. An earlier action, found or checked, stays in
+   * `recovery` until they do.
+   */
+  done: Extract<TagActionResult, { state: 'applied' }> | null;
 }
+/** Said when a sent change got no reply: it may have happened, so the member checks first. */
+export const unconfirmedTagMessage =
+  'We didn’t hear back, so it may already be done. Check again before trying again.';
+/** Said once a refused change's Tag is read again: the member's typing is kept. */
+export const reviewedTagMessage =
+  'Updated to the latest. Your name is kept; save it when you’re ready.';
 export const emptyTagManager = (): TagManagerState => ({
   groupId: null,
   snapshot: null,
@@ -31,6 +43,7 @@ export const emptyTagManager = (): TagManagerState => ({
   reviewRequired: false,
   busy: false,
   message: '',
+  done: null,
 });
 
 /** A view of controller-owned reads and durable action recovery; closure drops late UI replies. */
@@ -92,11 +105,10 @@ export function tagManager({
         error instanceof RequestError
           ? ['TAG_ADMIN_REQUIRED', 'TAG_PERMISSION_UNCONFIRMED'].includes(error.code ?? '')
             ? error.message
-            : (error.serverMessage ??
-              'The action is not confirmed. Check its result before retrying.')
+            : (error.serverMessage ?? unconfirmedTagMessage)
           : error instanceof Error && !('issues' in error)
             ? error.message
-            : 'The action is not confirmed. Check its result before retrying.',
+            : unconfirmedTagMessage,
     });
   };
   const run = async (work: () => Promise<void>) => {
@@ -122,9 +134,19 @@ export function tagManager({
       ...(result.state === 'applied' ? { edit: null, reviewRequired: false, duplicate: null } : {}),
       message:
         result.state === 'not-applied'
-          ? 'No receipt is recorded for this action yet. Check again or explicitly retry the original action. This check made no changes.'
+          ? 'It hasn’t happened yet. Checking changed nothing; Try again to make the change.'
           : '',
     });
+  };
+  /**
+   * A change made here and confirmed: its recovery copy goes, and a short note says so. A reply
+   * that comes after the screen closed keeps the copy, so the next visit shows the outcome.
+   */
+  const finish = async (result: TagActionResult) => {
+    showResult(result);
+    if (result.state !== 'applied' || !mounted || !current()) return;
+    await client().acknowledge();
+    update({ recovery: null, result: null, done: result });
   };
   const setEdit = (edit: MobileTagIntent) => {
     if (!permitted() || read().recovery) return;
@@ -135,8 +157,35 @@ export function tagManager({
       reviewRequired: false,
       result: null,
       message: '',
+      done: null,
     });
   };
+  const submit = () =>
+    run(async () => {
+      const { edit, snapshot, reviewRequired } = read();
+      if (!edit || !snapshot?.canManage || reviewRequired || read().recovery) return;
+      if ('name' in edit) {
+        if (!edit.name.trim() || edit.name.trim().length > 50)
+          throw new Error('Enter a Tag name with 1–50 characters.');
+        const duplicate = snapshot.tags.find(
+          (tag) =>
+            !tag.isDeleted &&
+            tag.name.toLowerCase() === edit.name.trim().toLowerCase() &&
+            (edit.action === 'create' || tag.id !== edit.tagId),
+        );
+        if (duplicate) {
+          update({
+            duplicate,
+            message: duplicate.isArchived
+              ? 'This name belongs to an Archived Tag. Restore that Tag to keep its history.'
+              : 'An active Tag already uses this name. Choose another name.',
+          });
+          return;
+        }
+      }
+      await finish(await client().submit(edit));
+      await refresh();
+    });
   return {
     open() {
       mounted = true;
@@ -162,6 +211,13 @@ export function tagManager({
     },
     refresh: () => run(refresh),
     newTag: () => setEdit({ action: 'create', name: '' }),
+    /** An archived Tag back in use: nothing to confirm or type, so it goes straight away. */
+    restore(tag: ManagedTag) {
+      if (tag.isDeleted || !tag.isArchived || !permitted() || read().recovery) return;
+      setEdit({ action: 'restore', tagId: tag.id, expectedRevision: tag.revision });
+      return submit();
+    },
+    dismissDone: () => update({ done: null }),
     edit(tag: ManagedTag, action: 'rename' | 'archive' | 'restore') {
       if (tag.isDeleted) return;
       setEdit(
@@ -188,32 +244,7 @@ export function tagManager({
       if (!read().busy && !read().recovery)
         update({ edit: null, duplicate: null, reviewRequired: false, message: '' });
     },
-    submit: () =>
-      run(async () => {
-        const { edit, snapshot, reviewRequired } = read();
-        if (!edit || !snapshot?.canManage || reviewRequired || read().recovery) return;
-        if ('name' in edit) {
-          if (!edit.name.trim() || edit.name.trim().length > 50)
-            throw new Error('Enter a Tag name with 1–50 characters.');
-          const duplicate = snapshot.tags.find(
-            (tag) =>
-              !tag.isDeleted &&
-              tag.name.toLowerCase() === edit.name.trim().toLowerCase() &&
-              (edit.action === 'create' || tag.id !== edit.tagId),
-          );
-          if (duplicate) {
-            update({
-              duplicate,
-              message: duplicate.isArchived
-                ? 'This name belongs to an Archived Tag. Restore that Tag to keep its history.'
-                : 'An active Tag already uses this name. Choose another name.',
-            });
-            return;
-          }
-        }
-        showResult(await client().submit(edit));
-        await refresh();
-      }),
+    submit,
     check: () =>
       run(async () => {
         showResult(await client().check());
@@ -250,8 +281,7 @@ export function tagManager({
         update({
           recovery: null,
           reviewRequired: false,
-          message:
-            'Current saved state reviewed. Your entered name is kept. Submit only when ready.',
+          message: reviewedTagMessage,
         });
       }),
     restoreDuplicate: () =>
@@ -259,7 +289,7 @@ export function tagManager({
         const tag = read().duplicate;
         if (!tag || !read().snapshot?.canManage || !tag.isArchived || tag.isDeleted) return;
         if (read().recovery) await client().acknowledge();
-        showResult(
+        await finish(
           await client().submit({
             action: 'restore',
             tagId: tag.id,
