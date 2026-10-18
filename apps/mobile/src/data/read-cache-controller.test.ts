@@ -1168,7 +1168,7 @@ describe('Members and Group details reads its Group again (#238)', () => {
     },
   );
 
-  it('keeps showing an archived Group, which its members can still read', async () => {
+  it('drops an archived Group, as its own read refusing would (#578)', async () => {
     const { f, controller } = await onMembers();
     f.clock.now += 60_000;
     const refreshing = () => controller.refresh('foreground');
@@ -1178,13 +1178,13 @@ describe('Members and Group details reads its Group again (#238)', () => {
       screen: 'members',
       detail: {
         id: groupId,
-        status: 'ready',
-        data: { name: 'Maple House' },
-        refreshedAt: f.clock.now,
+        status: 'denied',
+        data: null,
+        message: 'This Group was archived, so nothing more can be saved in it.',
       },
     });
-    expect(listed(controller)).toContain(groupId);
-    expect(savedGroup(f)).toBe(true);
+    expect(listed(controller)).not.toContain(groupId);
+    expect(savedGroup(f)).toBe(false);
   });
 
   it.each([

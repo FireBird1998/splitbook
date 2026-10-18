@@ -38,6 +38,7 @@ export function toMobileGroup(value: GroupRead): MobileGroup {
     description: value.description,
     category: value.category,
     defaultCurrency: value.defaultCurrency,
+    ...(value.isArchived ? { isArchived: true as const } : {}),
     members: value.members.map(({ user, role, joinedAt }) => ({
       user: { id: user._id, name: user.name, email: user.email ?? null, image: user.image ?? null },
       role,
