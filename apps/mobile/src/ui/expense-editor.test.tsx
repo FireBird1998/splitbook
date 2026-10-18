@@ -319,6 +319,7 @@ async function render(
     revealed,
     focusCount,
     type: (label: string, text: string) => act$(() => input(label).props.onChangeText(text)),
+    enter: (label: string) => act$(() => input(label).props.onFocus()),
     leave: (label: string) => act$(() => input(label).props.onBlur()),
     press: (label: string) => act$(() => pressable(label).props.onPress()),
   };
@@ -587,6 +588,20 @@ describe('rendered Expense corrections', () => {
     ]);
     expect(text(ui.root())).not.toMatch(/"code"|"path"/);
     expect(ui.focusCount('Description, required')).toBe(1);
+  });
+
+  it('opens a saved Description at its start, and leaves the cursor to the member while typing (#525)', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId, expenseId));
+    await ui.press('Edit expense');
+    const description = () => ui.input('Description, required');
+    // Android otherwise opens a filled single-line box at its end, cutting off the start.
+    expect(description().props.selection).toEqual({ start: 0, end: 0 });
+    await ui.enter('Description, required');
+    expect(description().props.selection).toBeUndefined();
+    await ui.type('Description, required', 'Sofa cleaning service with a long name');
+    expect(description().props.selection).toBeUndefined();
+    await ui.leave('Description, required');
+    expect(description().props.selection).toEqual({ start: 0, end: 0 });
   });
 
   it('explains a disabled Save when the draft cannot be stored on the device', async () => {

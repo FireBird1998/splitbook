@@ -64,11 +64,18 @@ for (const layout of [
     await dialog.getByLabel('What was it for?').fill(description);
     const amount = dialog.getByLabel('Amount');
     await expect(amount).toHaveAttribute('step', '1');
+    const save = dialog.getByRole('button', { name: 'Save expense', exact: true });
     await amount.fill('100.5');
-    await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
-    await expect(dialog.getByText(/at most 0 decimal places/)).toBeVisible();
+    // The field says why it won't take the amount, and Save waits for one it can read (#528).
+    await expect(
+      dialog.getByText('JPY amounts have no decimal places.', { exact: true }),
+    ).toBeVisible();
+    await expect(amount).toHaveAttribute('aria-invalid', 'true');
+    await expect(save).toBeDisabled();
     await expect(amount).toHaveValue('100.5');
     await amount.fill('100');
+    await expect(amount).toHaveAttribute('aria-invalid', 'false');
+    await expect(save).toBeEnabled();
     await dialog.getByRole('button', { name: 'Advanced split options' }).click();
     await dialog.getByRole('button', { name: 'Shares', exact: true }).click();
     const weights = dialog.getByPlaceholder('1', { exact: true });
@@ -79,7 +86,7 @@ for (const layout of [
     await weights.last().scrollIntoViewIfNeeded();
     await expect(dialog.getByText(/=\s*¥34$/)).toBeVisible();
     await dialog.screenshot({ path: testInfo.outputPath(`${layout.name}-weighted-preview.png`) });
-    await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+    await save.click();
     await expect(dialog).toBeHidden();
     await expect(expenseInList(page, description)).toContainText('¥100');
     const list = await dataOf(await ledger.priya.get(`/api/groups/${group}/expenses`));

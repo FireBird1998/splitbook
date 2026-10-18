@@ -575,6 +575,25 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(tone('Amount')).toBe('negative');
     expect(tone('Description')).toBe('secondary');
   });
+  it('opens a long Description at its start until the member is in it (#525)', async () => {
+    const f = fixture({ one: true });
+    f.items()[0].draft.values!.description = 'Sofa cleaning service with a long name';
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    const description = () =>
+      tree.root.find(
+        (node) =>
+          String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Description',
+      );
+    expect(description().props.selection).toEqual({ start: 0, end: 0 });
+    await act(async () => description().props.onFocus());
+    expect(description().props.selection).toBeUndefined();
+    await act(async () => description().props.onBlur());
+    expect(description().props.selection).toEqual({ start: 0, end: 0 });
+  });
 
   it('shows "Paid by: You" when the signed-in member paid, as Add expense does (#434)', async () => {
     const f = fixture({ one: true });
@@ -614,6 +633,17 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     });
     expect(text(tree)).toContain('You ₹12.34');
     expect(text(tree)).not.toMatch(/Alex (shares|₹)/);
+  });
+  it('shows an amount with too many decimals as entered in its header (#537)', async () => {
+    const f = fixture({ one: true });
+    f.items()[0].draft.values!.amount = 10.555;
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    expect(text(tree)).toContain('₹10.555');
+    for (const shown of ['₹10.56', 'Amount needed']) expect(text(tree)).not.toContain(shown);
   });
   it('keeps a correction with the existing payer sheet and labels every control', async () => {
     const f = fixture({ one: true });

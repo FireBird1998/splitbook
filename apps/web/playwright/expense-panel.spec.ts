@@ -178,6 +178,24 @@ const browserDay = (page: Page) =>
     return `${part({ weekday: 'short' })} ${now.getDate()} ${part({ month: 'short' })} ${now.getFullYear()}`;
   });
 
+test('Edit keeps Save changes off while the amount can’t be read (#528)', async ({
+  page,
+}, testInfo) => {
+  test.skip(isPhone(testInfo), 'The panel is for computers.');
+  await enterAsPersona(page, 'alex');
+  const { groupId, expenseId } = await ownGroupWithExpense(page, testInfo);
+  await page.goto(`/groups/${groupId}/expenses?expense=${expenseId}`);
+  await panelOf(page, 'Panel QA picnic').getByRole('button', { name: 'Edit', exact: true }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit expense' });
+  const amount = edit.getByLabel('Amount');
+  const save = edit.getByRole('button', { name: 'Save changes' });
+  await amount.fill('0');
+  await expect(edit.getByText('Enter an amount above ₹0.00.', { exact: true })).toBeVisible();
+  await expect(save).toBeDisabled();
+  await amount.fill('150');
+  await expect(save).toBeEnabled();
+});
+
 test('Edit, Duplicate and Delete with Undo, from the panel', async ({ page }, testInfo) => {
   test.skip(isPhone(testInfo), 'The panel is for computers.');
   await enterAsPersona(page, 'alex');

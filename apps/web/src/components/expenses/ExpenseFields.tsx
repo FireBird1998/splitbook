@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { GroupCategory } from '@splitbook/shared/types';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
@@ -25,6 +25,7 @@ import {
   getCurrencyPrecision,
 } from '@splitbook/shared/currency';
 import { parseDecimalUnits, sumMinorAmounts } from '@splitbook/shared/exact-money';
+import { readAmountEntry } from '@splitbook/shared/amount-entry';
 import type { ExpenseSplitMethod } from '@splitbook/shared/split-calculation';
 import { type ExpenseDraftValues } from '@splitbook/shared/expense-draft';
 
@@ -88,6 +89,10 @@ export default function ExpenseFields({
     customPercentages,
     customShares,
   } = values;
+  // Why the amount can't be taken, in Record payment's words, from the one shared reading (#528).
+  const amountReasonId = useId();
+  const amountReading = readAmountEntry(amount, currency);
+  const amountReason = amountReading.status === 'invalid' ? amountReading.message : '';
   const groupNoun = getGroupTheme(groupCategory ?? 'other').nouns.singular;
   const groupNounTitle = groupNoun.charAt(0).toUpperCase() + groupNoun.slice(1);
   // Add expense locks the Group's currency. To review does too, unless the item has another one,
@@ -300,28 +305,47 @@ export default function ExpenseFields({
 
       {/* ─── Amount + Currency + Date (fast path) ─ */}
       <Stack direction={review ? 'column' : { xs: 'column', sm: 'row' }} spacing={1.5}>
-        <TextField
-          label="Amount"
-          value={amount}
-          onChange={(e) => edit({ amount: e.target.value })}
-          required
-          type="number"
-          size="small"
-          sx={{
-            flex: 1,
-            '& input': (theme) => ({
-              ...(theme.typography.money as React.CSSProperties),
-              fontSize: '1.25rem',
-              fontWeight: 600,
-            }),
-          }}
-          slotProps={{
-            htmlInput: {
-              min: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
-              step: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
-            },
-          }}
-        />
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <TextField
+            label="Amount"
+            value={amount}
+            onChange={(e) => edit({ amount: e.target.value })}
+            required
+            type="number"
+            size="small"
+            error={!!amountReason}
+            sx={{
+              '& input': (theme) => ({
+                ...(theme.typography.money as React.CSSProperties),
+                fontSize: '1.25rem',
+                fontWeight: 600,
+              }),
+            }}
+            slotProps={{
+              htmlInput: {
+                min: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
+                step: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
+                'aria-describedby': amountReason ? amountReasonId : undefined,
+              },
+            }}
+          />
+          {/* Always present, so even its first message is announced, and polite, so it never
+              interrupts typing (#528, as Record payment, #514). */}
+          <Typography
+            id={amountReasonId}
+            component="p"
+            aria-live="polite"
+            sx={{
+              m: 0,
+              mt: amountReason ? 0.5 : 0,
+              mx: 1.75,
+              fontSize: '0.75rem',
+              color: 'error.main',
+            }}
+          >
+            {amountReason}
+          </Typography>
+        </Box>
         <TextField
           select
           label="Currency"
