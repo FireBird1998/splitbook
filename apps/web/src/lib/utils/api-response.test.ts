@@ -120,6 +120,7 @@ describe('getAuthUser and the page’s expected account', () => {
     } as never);
   }
 
+  const readBalances = () => balancesRoute.GET(new Request('http://127.0.0.1/api/user/balances'));
   const expenseBody = JSON.stringify({ description: 'Synthetic dinner' });
   const postExpense = () =>
     expensesRoute.POST(
@@ -142,7 +143,7 @@ describe('getAuthUser and the page’s expected account', () => {
     request(ALEX);
     await expect(getAuthUser()).rejects.toThrow('ACCOUNT_CHANGED');
 
-    const read = await balancesRoute.GET();
+    const read = await readBalances();
     expect(read.status).toBe(419);
     const body = await read.json();
     expect(body).toMatchObject({ code: 'ACCOUNT_CHANGED', status: 419 });
@@ -163,7 +164,7 @@ describe('getAuthUser and the page’s expected account', () => {
 
   it('treats a present but empty expected account as a different account', async () => {
     request('');
-    expect((await balancesRoute.GET()).status).toBe(419);
+    expect((await readBalances()).status).toBe(419);
     expect(balanceService.getUserBalances).not.toHaveBeenCalled();
   });
 
@@ -175,7 +176,7 @@ describe('getAuthUser and the page’s expected account', () => {
       email: 'sam.demo@splitbook.local',
       image: null,
     });
-    const read = await balancesRoute.GET();
+    const read = await readBalances();
     expect(read.status).toBe(200);
     expect(await read.json()).toEqual({ data: { buckets: [] }, status: 200 });
     expect(balanceService.getUserBalances).toHaveBeenCalledWith(SAM);
@@ -186,7 +187,7 @@ describe('getAuthUser and the page’s expected account', () => {
   it('serves the session user as before when no expected account is sent', async () => {
     request();
     await expect(getAuthUser()).resolves.toMatchObject({ id: SAM });
-    const read = await balancesRoute.GET();
+    const read = await readBalances();
     expect(read.status).toBe(200);
     expect(balanceService.getUserBalances).toHaveBeenCalledWith(SAM);
     expect((await postExpense()).status).toBe(403);
@@ -197,6 +198,6 @@ describe('getAuthUser and the page’s expected account', () => {
     vi.mocked(headers).mockResolvedValue(new Headers({ 'X-Expected-Account': ALEX }));
     vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
     await expect(getAuthUser()).resolves.toBeNull();
-    expect((await balancesRoute.GET()).status).toBe(401);
+    expect((await readBalances()).status).toBe(401);
   });
 });

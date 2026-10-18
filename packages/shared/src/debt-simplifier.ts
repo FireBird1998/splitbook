@@ -1,6 +1,8 @@
 import {
   MoneyValidationError,
+  StoredMoneyError,
   assertSafeMinorAmount,
+  checkStoredMoney,
   readStoredAmountMinor,
   sumMinorAmounts,
   toMajorAmount,
@@ -44,10 +46,13 @@ export interface BalanceSettlement {
   amountMinor?: number;
 }
 
-/** Exact greedy debt simplification. A residual imbalance is an error, never hidden. */
+/**
+ * Exact greedy debt simplification. A residual imbalance is an error, never hidden: balances come
+ * from stored records, so it is a `StoredMoneyError` (#547).
+ */
 export function simplifyDebtsMinor(balances: MinorBalance[]) {
   if (sumMinorAmounts(balances.map((balance) => balance.amountMinor)) !== 0) {
-    throw new MoneyValidationError('UNBALANCED_LEDGER', 'Ledger contributions do not balance');
+    throw new StoredMoneyError('UNBALANCED_LEDGER', 'Ledger contributions do not balance');
   }
   const order = (a: MinorBalance, b: MinorBalance) =>
     b.amountMinor - a.amountMinor || a.userId.localeCompare(b.userId);
@@ -91,11 +96,22 @@ export function simplifyDebts(balances: Balance[], currency = 'INR'): Transactio
   }));
 }
 
-/** One currency per invocation. Callers must partition legacy mixed-currency records. */
+/**
+ * One currency per invocation. Callers must partition legacy mixed-currency records. It adds up
+ * stored records, so what it refuses is a `StoredMoneyError` (#547).
+ */
 export function calculateNetBalancesMinor(
   expenses: BalanceExpense[],
   settlements: BalanceSettlement[],
   currency = 'INR',
+): MinorBalance[] {
+  return checkStoredMoney(() => netBalancesMinor(expenses, settlements, currency));
+}
+
+function netBalancesMinor(
+  expenses: BalanceExpense[],
+  settlements: BalanceSettlement[],
+  currency: string,
 ): MinorBalance[] {
   const balances = new Map<string, number>();
   const add = (user: string, amount: number) => {

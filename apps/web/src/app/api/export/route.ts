@@ -2,7 +2,7 @@ import {
   error,
   forbidden,
   getAuthUser,
-  serverError,
+  failedRead,
   unauthorized,
   validationError,
 } from '@/lib/utils/api-response';
@@ -47,6 +47,6 @@ export async function GET(req: Request) {
         413,
         'EXPORT_TOO_LARGE',
       );
-    return serverError(err);
+    return failedRead(err, req);
   }
 }

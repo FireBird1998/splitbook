@@ -3,7 +3,7 @@ import {
   forbidden,
   getAuthUser,
   notFound,
-  serverError,
+  failedRead,
   success,
   unauthorized,
   routeIds,
@@ -49,6 +49,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return error('Only a Trip has a Trip summary.', 409, 'NOT_A_TRIP');
     return success(result.summary);
   } catch (err) {
-    return serverError(err);
+    return failedRead(err, req);
   }
 }

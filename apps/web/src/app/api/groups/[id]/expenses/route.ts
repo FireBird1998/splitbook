@@ -4,6 +4,7 @@ import {
   forbidden,
   success,
   serverError,
+  failedRead,
   validationError,
   error,
   readJson,
@@ -137,6 +138,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const result = await expenseService.getGroupExpenses(id, filters, user.id!);
     return success(result);
   } catch (err) {
-    return serverError(err);
+    return failedRead(err, req);
   }
 }

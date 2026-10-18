@@ -1,8 +1,8 @@
-import { getAuthUser, serverError, success, unauthorized } from '@/lib/utils/api-response';
+import { getAuthUser, failedRead, success, unauthorized } from '@/lib/utils/api-response';
 import { balanceService } from '@/lib/services/balance.service';
 
 // GET /api/user/balances — Get the signed-in user's cross-group balances by currency
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
@@ -10,6 +10,6 @@ export async function GET() {
     const balances = await balanceService.getUserBalances(user.id!);
     return success(balances);
   } catch (err) {
-    return serverError(err);
+    return failedRead(err, req);
   }
 }

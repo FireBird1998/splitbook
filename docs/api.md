@@ -46,9 +46,11 @@ that isn't one (`INVALID_ID`) or a required body that isn't JSON
 (`INVALID_JSON`), `401` unauthenticated (from a route's own `getAuthUser`
 guard), `403` not a group member or not an admin, `404` not found, `422` Zod
 validation failure or a service invariant (`CURRENCY_MISMATCH`, `INVALID_TAG`,
-`INVALID_MEMBERS`, …). The Draft routes answer an id that isn't one with `422`
-`VALIDATION_ERROR`, and the Tag routes answer both with `400`
-`INVALID_TAG_COMMAND`.
+`INVALID_MEMBERS`, …), `500` a fault on the server's side, logged, with
+`{ "error": "Internal server error", "status": 500 }`. Stored data a read
+can't use is one such fault, never the request's (#547). The Draft routes answer
+an id that isn't one with `422` `VALIDATION_ERROR`, and the Tag routes answer
+both with `400` `INVALID_TAG_COMMAND`.
 
 ---
 
@@ -519,21 +521,25 @@ A create answers **422** `VALIDATION_ERROR` with each path and message in
 only on an edit, which answers **422** with the code and the path as `field`; a
 refusal about the total itself, such as its decimals, has no `field`.
 
-Reads check stored Expenses too. The Expense list, balances, spending, insights,
-trip summaries and export refuse with **422** `UNBALANCED_LEDGER`, or another
-stored-money code, when an Expense's stored allocations don't equal its amount
-(`assertStoredExpenseMoney`); balances also do when the Group's contributions
-don't net to zero (`simplifyDebtsMinor`). An edit of such an Expense is refused
-the same way.
+Reads check stored Expenses too. When an Expense's stored allocations don't
+equal its amount (`assertStoredExpenseMoney`), or a Group's contributions don't
+net to zero (`simplifyDebtsMinor`), the Expense list, balances, spending,
+insights, trip summaries and export answer **500** with the standard
+server-error body (#547). The fault is in stored data, not in the request, so
+the server logs it once with the route, the code (`UNBALANCED_LEDGER`, or
+another stored-money code) and the ids that find the record (its Group, Expense
+or payment) as far as they are known, never member data. An edit of such an Expense still refuses with **422** and the code.
 
 The shared module's tests pin these rules (`exact-money.test.ts`,
 `split-calculation.test.ts`). Over HTTP,
 `apps/web/src/app/api/groups/[id]/expenses/missing-split-amount.integration.test.ts`
 pins a missing share (#497),
 `apps/web/src/app/api/groups/[id]/expenses/validation-details.integration.test.ts`
-the `details` shape (#538), and
+the `details` shape (#538),
 `apps/web/src/app/api/groups/[id]/drafts/review/route.integration.test.ts` a
-split that doesn't add up, as To review reports it (#506).
+split that doesn't add up, as To review reports it (#506), and
+`apps/web/src/app/api/stored-data-faults.integration.test.ts` each read's 500
+for stored money that doesn't add up (#547).
 
 ### GET /api/groups/[id]/expenses
 

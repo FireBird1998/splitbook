@@ -8,7 +8,11 @@ import Group from '@/lib/models/Group';
 import Settlement, { type ISettlementDocument } from '@/lib/models/Settlement';
 import User from '@/lib/models/User';
 import { recurringExpenseService } from './recurring-expense.service';
-import { assertStoredExpenseMoney, readStoredAmountMinor } from '@splitbook/shared/exact-money';
+import {
+  assertStoredExpenseMoney,
+  checkStoredMoney,
+  readStoredAmountMinor,
+} from '@splitbook/shared/exact-money';
 import {
   buildExpenseCsv,
   buildPaymentCsv,
@@ -365,6 +369,7 @@ export class ExportService {
     payment: Pick<
       ISettlementDocument,
       | '_id'
+      | 'group'
       | 'createdAt'
       | 'paidBy'
       | 'paidTo'
@@ -381,7 +386,10 @@ export class ExportService {
       at: payment.createdAt,
       fromId: String(payment.paidBy),
       toId: String(payment.paidTo),
-      amountMinor: readStoredAmountMinor(payment),
+      amountMinor: checkStoredMoney(() => readStoredAmountMinor(payment), {
+        groupId: String(payment.group),
+        settlementId: String(payment._id),
+      }),
       currency: payment.currency,
       note: payment.note,
       recordedById: String(payment.createdBy),

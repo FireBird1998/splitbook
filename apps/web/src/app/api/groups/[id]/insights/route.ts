@@ -3,7 +3,7 @@ import {
   forbidden,
   getAuthUser,
   notFound,
-  serverError,
+  failedRead,
   success,
   unauthorized,
   routeIds,
@@ -62,6 +62,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!insights) return notFound('Group');
     return success(insights);
   } catch (err) {
-    return serverError(err);
+    return failedRead(err, req);
   }
 }

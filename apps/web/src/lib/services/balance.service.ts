@@ -20,7 +20,11 @@ import {
   memberSuggestedPayments,
   orderSuggestedPayments,
 } from '@splitbook/shared/dashboard';
-import { assertStoredExpenseMoney, toMajorAmount } from '@splitbook/shared/exact-money';
+import {
+  assertStoredExpenseMoney,
+  checkStoredMoney,
+  toMajorAmount,
+} from '@splitbook/shared/exact-money';
 import type {
   DashboardGroupBalance,
   GroupCategory,
@@ -245,7 +249,7 @@ export class BalanceService {
         }),
       );
 
-      const balances = [...currencies].sort().flatMap((currency) => {
+      const balancesIn = (currency: string) => {
         const expenseData = expenses
           .filter((expense) => expense.currency === currency)
           .map((expense) => ({
@@ -309,6 +313,10 @@ export class BalanceService {
               : {}),
           },
         ];
+      };
+      // A fault in this Group's stored money names the Group (#547).
+      const balances = checkStoredMoney(() => [...currencies].sort().flatMap(balancesIn), {
+        groupId,
       });
 
       groupBalances.push({

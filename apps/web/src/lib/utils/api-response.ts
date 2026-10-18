@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import type { ZodError } from 'zod';
 import { auth } from '@/lib/auth';
-import { MoneyValidationError } from '@splitbook/shared/exact-money';
+import { MoneyValidationError, StoredMoneyError } from '@splitbook/shared/exact-money';
 import {
   ACCOUNT_CHANGED,
   ACCOUNT_CHANGED_STATUS,
@@ -148,7 +148,29 @@ export function serverError(err?: unknown) {
     if (messages[err.message]) return error(...messages[err.message], err.message);
   }
   console.error('Server error:', err);
+  return internalServerError();
+}
+
+function internalServerError() {
   return NextResponse.json({ error: 'Internal server error', status: 500 }, { status: 500 });
+}
+
+/**
+ * The answer to a read that failed. Stored data it can't use, such as an Expense whose money
+ * doesn't add up, is a fault on our side, never the request's (#547): it answers 500 and is logged
+ * once with the route, the code and the ids that find the record, never member data. Anything
+ * else answers as `serverError` does, so a read's own bad input is still refused.
+ */
+export function failedRead(err: unknown, req: Request) {
+  if (err instanceof StoredMoneyError) {
+    console.error('Stored data fault:', {
+      route: `${req.method} ${new URL(req.url).pathname}`,
+      code: err.code,
+      ...err.ids,
+    });
+    return internalServerError();
+  }
+  return serverError(err);
 }
 
 /**

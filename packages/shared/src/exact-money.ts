@@ -20,6 +20,44 @@ export class MoneyValidationError extends Error {
   }
 }
 
+/** The ids that find a stored record, never member data. */
+export interface StoredRecordIds {
+  groupId?: string;
+  expenseId?: string;
+  settlementId?: string;
+}
+
+/**
+ * A stored record's money that can't be used, such as allocations that don't add up to the
+ * amount (#547). Read back, it is a fault in stored data, which a read answers as a server fault.
+ * It is still a `MoneyValidationError`, name included, so a write checking a record it computes
+ * from, or is about to store, refuses as before. `ids` find the record, as far as they are known.
+ */
+export class StoredMoneyError extends MoneyValidationError {
+  constructor(
+    code: string,
+    message: string,
+    public readonly ids: StoredRecordIds = {},
+    field?: ReadonlyArray<string | number>,
+  ) {
+    super(code, message, field);
+  }
+}
+
+/**
+ * Run a check of stored money: what it refuses is a `StoredMoneyError`, with `ids` added to any
+ * it already names.
+ */
+export function checkStoredMoney<T>(check: () => T, ids: StoredRecordIds = {}): T {
+  try {
+    return check();
+  } catch (error) {
+    if (!(error instanceof MoneyValidationError)) throw error;
+    const known = error instanceof StoredMoneyError ? error.ids : {};
+    throw new StoredMoneyError(error.code, error.message, { ...ids, ...known }, error.field);
+  }
+}
+
 /** A share nobody entered in an exact or unequal split: missing, not too large to hold (#497). */
 function missingSplitAmount(field?: ReadonlyArray<string | number>) {
   return new MoneyValidationError(
@@ -121,8 +159,15 @@ export interface CompatibleMoneyRecord {
   moneyVersion?: number;
 }
 
-/** Missing/partial canonical data never silently falls back to a legacy value. */
+/**
+ * Missing/partial canonical data never silently falls back to a legacy value. What it refuses is
+ * a `StoredMoneyError`.
+ */
 export function readStoredAmountMinor(record: CompatibleMoneyRecord): number {
+  return checkStoredMoney(() => storedAmountMinor(record));
+}
+
+function storedAmountMinor(record: CompatibleMoneyRecord): number {
   getCurrencyPrecision(record.currency);
   if (record.moneyVersion === MONEY_VERSION) {
     const amountMinor = assertSafeMinorAmount(record.amountMinor as number);
@@ -156,13 +201,25 @@ export function assertUniqueMoneyParticipants(participants: Array<{ user: unknow
   }
 }
 
-/** Validate stored allocations without recomputing or repairing their historical distribution. */
+/**
+ * Validate stored allocations without recomputing or repairing their historical distribution. What
+ * it refuses is a `StoredMoneyError` naming the Expense and its Group, as far as the record has them.
+ */
 export function assertStoredExpenseMoney(
-  record: CompatibleMoneyRecord & {
-    paidBy: Array<{ user: unknown; amount?: number; amountMinor?: number }>;
-    splitBetween: Array<{ user: unknown; amount?: number; amountMinor?: number }>;
-  },
+  record: StoredExpenseMoney & { _id?: unknown; group?: unknown },
 ): void {
+  checkStoredMoney(() => checkStoredExpenseMoney(record), {
+    ...(record._id === undefined ? {} : { expenseId: String(record._id) }),
+    ...(record.group === undefined ? {} : { groupId: String(record.group) }),
+  });
+}
+
+type StoredExpenseMoney = CompatibleMoneyRecord & {
+  paidBy: Array<{ user: unknown; amount?: number; amountMinor?: number }>;
+  splitBetween: Array<{ user: unknown; amount?: number; amountMinor?: number }>;
+};
+
+function checkStoredExpenseMoney(record: StoredExpenseMoney): void {
   const total = readStoredAmountMinor(record);
   if (total <= 0)
     throw new MoneyValidationError('INVALID_MONEY_RANGE', 'Stored amount must be positive');

@@ -80,7 +80,7 @@ it('returns Home totals on a fresh instance where no other route registered the 
   expect(mongoose.modelNames()).not.toContain('User');
 
   const { GET } = await import('./route');
-  const response = await GET();
+  const response = await GET(new Request('http://localhost/api/user/balances'));
 
   expect(response.status).toBe(200);
   const { data } = await response.json();
