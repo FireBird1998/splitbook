@@ -531,7 +531,7 @@ describe('the home page route', () => {
             width: 1200,
             height: 630,
             alt: expect.stringContaining(
-              'While Groceries ₹1,000, paid by Sam, is being sorted, the bins for You, Priya, Sam and Alex read +900, +100, +500 and −500.',
+              'While Groceries ₹1,000, paid by Sam, is being sorted, the bins for You, Priya, Sam and Alex read +900, +100, −500 and −500.',
             ),
           },
         ],

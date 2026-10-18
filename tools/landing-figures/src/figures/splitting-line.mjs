@@ -1,7 +1,7 @@
 // Fig 1 · The splitting line: each Expense is a bar of chips, one chip per share. A saw cuts it, and
-// pneumatic pushers send each chip down a chute into the bin of the member it belongs to. The payer's
-// counter rises by the whole bar, each bin's counter falls by its chips, so the counters always add
-// up to zero. Every number comes from the story model, which uses Splitbook's own money code.
+// pneumatic pushers send each chip down a chute into the bin of the member it belongs to. As a chip
+// lands it carries its share from that member's counter to the payer's, so the counters always add up
+// to zero. Every number comes from the story model, which uses Splitbook's own money code.
 import * as k from '../../vendor/anatomy/kit/iso-kit.mjs';
 import * as G from '../../vendor/anatomy/kit/lathe.mjs';
 import * as A from '../../vendor/anatomy/kit/audit.mjs';
@@ -1090,9 +1090,9 @@ export function buildSplittingLine(STORY) {
     minor === 0 ? '0' : `${minor > 0 ? '+' : '−'}${inr.format(Math.abs(minor) / 100)}`;
   const lastStep = STORY.steps.at(-1);
   const payer = STORY.members.find((m) => m.id === lastStep.paidBy).name;
-  const stillCounters = STORY.members.map(
-    (m) => STORY.steps.at(-2).after[m.id] + (m.id === lastStep.paidBy ? lastStep.amountMinor : 0),
-  );
+  // No chip of the last Expense has landed yet, so the counters read what the Expenses before it
+  // left: each chip carries its share to the payer as it lands, and they always add up to zero.
+  const stillCounters = STORY.members.map((m) => STORY.steps.at(-2).after[m.id]);
   const STILL_TEXT = `A small production line that splits Expenses. A saw cuts each Expense bar into one chip per share, and pneumatic pushers send each chip down a chute into its member's bin. While ${lastStep.title} ₹${inr.format(lastStep.amountMinor / 100)}, paid by ${payer}, is being sorted, the bins for ${names} read ${andList(stillCounters.map(signed))}.`;
   return {
     id: 'splitting-line',
@@ -1107,6 +1107,8 @@ export function buildSplittingLine(STORY) {
       { mark: 'lamp', label: 'Lamp: who paid' },
     ],
     caption: 'Each Expense is cut into one chip per share, and the counters always add up to zero.',
+    // The members its counters stand for, left to right: check reads them in every frame.
+    counters: STORY.members.map((m) => m.name),
     // The poses the tour shows under reduced motion, stepping from its still: every Expense split,
     // the finished line, the idle line, then each Expense before the last.
     poses: STORY.steps.length + 2,

@@ -469,6 +469,8 @@ export function buildNettingStation(STORY) {
       to: nameOf(p.to),
       amountMinor: p.amountMinor,
     })),
+    // The members its tills stand for, left to right: check reads them in every frame.
+    counters: NAMES,
     // The poses the tour shows under reduced motion, stepping from its still: the second payment
     // made, settled, the debts again, netted, then the first payment.
     poses: PAYMENTS.length + 3,

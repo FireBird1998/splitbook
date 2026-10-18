@@ -134,8 +134,9 @@ test.describe('google auth mode', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/');
 
-    // The documented still: Groceries partway through its sort, Sam's ₹1,000 on Sam's counter.
-    await expect(counters(page)).toHaveText(['+900', '+100', '+500', '−500']);
+    // The documented still: Groceries partway through its sort with no chip landed, so the
+    // counters read what Dinner and Cab left, and add up to zero (#511).
+    await expect(counters(page)).toHaveText(['+900', '+100', '−500', '−500']);
     await expect(fig1(page)).toContainText('Groceries: each chip to the bin it belongs to');
     // Nothing moves by itself, so there is nothing to pause.
     await expect(fig1(page).getByRole('button', { name: /^(Pause|Play)$/ })).toHaveCount(0);
