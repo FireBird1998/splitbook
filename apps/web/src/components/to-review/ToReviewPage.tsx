@@ -161,7 +161,8 @@ export default function ToReviewPage({
   const available =
     checked && online && !!group && !groupError && !failed && read.status === 'ready';
   // Members' names for the panel and Save ready, with the viewer as "You" by id (#442). The
-  // pickers take `context.members` instead, with the names as members chose them.
+  // pickers take `context.members` with the names as members chose them, and mark the viewer
+  // "You" themselves, by `context.viewerId` (#591).
   const names = Object.fromEntries(
     (group?.members ?? []).flatMap(({ user }) => {
       const label = memberLabel(user._id, user.name, accountId);
@@ -173,6 +174,7 @@ export default function ToReviewPage({
   const context = {
     currency,
     category: group?.category,
+    viewerId: accountId,
     members: group?.members.map(({ user }) => ({ id: user._id, name: user.name })) ?? [],
     tags:
       group?.tags

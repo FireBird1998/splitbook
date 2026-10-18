@@ -39,6 +39,7 @@ import {
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupTagOption } from './expense-form-helpers';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
+import { memberLabel } from '@splitbook/shared/activity-timeline';
 
 export interface ExpenseFieldsProps {
   values: Omit<ExpenseDraftValues, 'splitMethod'> & {
@@ -48,7 +49,13 @@ export interface ExpenseFieldsProps {
   chooseSplitMethod: (method: ExpenseSplitMethod) => void;
   members: Array<{ user: { _id: string; name: string } }>;
   groupTags: GroupTagOption[];
+  /** Who pays when the Expense names nobody, and is called "You". */
   userId: string;
+  /**
+   * The member called "You", by id, when it isn't `userId`: To review names the viewer without
+   * making them the payer of an item that has none (#591).
+   */
+  viewerId?: string;
   groupCategory?: GroupCategory;
   isEditMode: boolean;
   review?: boolean;
@@ -66,6 +73,7 @@ export default function ExpenseFields({
   members,
   groupTags,
   userId,
+  viewerId = userId,
   groupCategory,
   isEditMode,
   currentTag,
@@ -236,7 +244,8 @@ export default function ExpenseFields({
 
   // ─── Helpers ──────────────────────────────────────
   function memberName(id: string) {
-    return id === userId ? 'You' : members.find((m) => m.user._id === id)?.user.name || 'Unknown';
+    const name = members.find((m) => m.user._id === id)?.user.name;
+    return memberLabel(id, name, viewerId) ?? 'Unknown';
   }
 
   const hasNonDefaultSplit = isAdvancedSplit({
@@ -706,7 +715,9 @@ export default function ExpenseFields({
                         sx={{ width: 110 }}
                         slotProps={{
                           htmlInput: {
-                            'aria-label': review ? `${memberName(id)}'s share` : undefined,
+                            'aria-label': review
+                              ? `${id === viewerId ? 'Your' : `${memberName(id)}'s`} share`
+                              : undefined,
                             min: 0,
                             step:
                               10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
