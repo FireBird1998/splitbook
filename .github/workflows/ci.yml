@@ -23,9 +23,11 @@ name: CI
 #   pilot/tanstack-reads, the integration branch of ADR 0006's TanStack pilot (#214 to #217),
 #   so merging main into it is checked too. A pull request into that branch runs PR checks,
 #   ratchet included, as one into main does: pull_request has no branch filter.
-# - The full suite (verify, playwright and the unit-test time-zone matrix) runs nightly, on a
-#   manual run (workflow_dispatch), and on a pull request labelled full-ci, never on a push.
-#   Browser suites stay there, out of PR checks.
+# - The full suite (verify, expense-access, playwright, journeys and the unit-test time-zone
+#   matrix) runs nightly, on a manual run (workflow_dispatch), and on a pull request labelled
+#   full-ci, never on a push. Browser suites stay there, out of PR checks. The browser
+#   journeys run as one journeys job per Playwright project, side by side, each on a freshly
+#   seeded database of its own.
 #   A nightly run is skipped when main's commit already passed the full suite in an earlier
 #   nightly or manual run.
 # - A new push to a pull request, or to a pushed branch, cancels that pull request's or
@@ -108,10 +110,11 @@ jobs:
             echo "::warning title=Nightly gate::Could not list this workflow's runs, so this nightly run tests $GITHUB_SHA anyway."
           fi
 
-  # verify, unit-time-zones and playwright are the full suite. Each repeats one condition:
-  # a nightly run the gate let through; a manual run; or a pull request labelled full-ci,
-  # when the label is added and on each push after that (adding another label, or removing
-  # any label, doesn't rerun them). A push, to main or pilot/tanstack-reads, never runs them.
+  # verify, expense-access, unit-time-zones, playwright and journeys are the full suite. Each
+  # repeats one condition: a nightly run the gate let through; a manual run; or a pull request
+  # labelled full-ci, when the label is added and on each push after that (adding another
+  # label, or removing any label, doesn't rerun them). A push, to main or pilot/tanstack-reads,
+  # never runs them.
   verify:
     needs: nightly-gate
     if: >-
@@ -218,15 +221,9 @@ jobs:
           done
           pnpm web test:group-cleanup-http
 
-      - name: Install Chromium for authenticated browser checks
+      # The expense-access suite has a job of its own, expense-access, beside this one.
+      - name: Install Chromium for the Google sign-in recovery check
         run: pnpm exec playwright install --with-deps chromium
-
-      - name: Authenticated expense access (isolated app and database)
-        run: pnpm test:expense-access
-        env:
-          # To review saves, and Tag effects with their action receipts, need transactions:
-          # use this job's replica set, not the standalone.
-          EXPENSE_ACCESS_MONGO_PORT: 27038
 
       - name: Google sign-in recovery (isolated app and database)
         run: pnpm exec playwright test --config playwright.auth-recovery.config.ts
@@ -256,9 +253,77 @@ jobs:
         with:
           name: authenticated-test-failures
           path: |
-            apps/web/output/playwright/expense-access/
             apps/web/output/playwright/auth-recovery/
             ${{ runner.temp }}/orphan-http-backend.log
+          retention-days: 7
+
+  # The authenticated expense-access suite (#476), out of verify so the two run side by side.
+  # Global setup builds and serves an isolated app of its own, on a database it mints, so this
+  # job needs no build. To review saves, and Tag effects with their action receipts, need
+  # transactions, so it gets a replica set like verify's.
+  expense-access:
+    name: Authenticated expense access
+    needs: nightly-gate
+    if: >-
+      !cancelled() && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
+        (github.event_name == 'pull_request' &&
+          contains(github.event.pull_request.labels.*.name, 'full-ci') &&
+          (github.event.action != 'labeled' && github.event.action != 'unlabeled' ||
+            github.event.action == 'labeled' && github.event.label.name == 'full-ci'))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for authenticated browser checks
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start the expense-access Mongo replica set
+        shell: bash
+        run: |
+          docker run --detach --name splitbook-access-ci --publish 127.0.0.1:27038:27017 \
+            mongo:7.0.39 mongod --replSet accessTest --bind_ip_all --setParameter enableTestCommands=1
+          for attempt in $(seq 1 30); do
+            if docker exec splitbook-access-ci mongosh --quiet --eval 'db.adminCommand({ping:1})' > /dev/null; then break; fi
+            sleep 1
+          done
+          docker exec splitbook-access-ci mongosh --quiet --eval 'rs.initiate({_id:"accessTest",members:[{_id:0,host:"127.0.0.1:27017"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec splitbook-access-ci mongosh --quiet --eval 'if (!db.hello().isWritablePrimary) quit(1)' > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker logs splitbook-access-ci
+          exit 1
+
+      - name: Authenticated expense access (isolated app and database)
+        run: pnpm test:expense-access
+        env:
+          EXPENSE_ACCESS_MONGO_PORT: 27038
+
+      - name: Upload expense-access failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expense-access-failures
+          path: apps/web/output/playwright/expense-access/
           retention-days: 7
 
   # Unit tests give the same result in every time zone (#227). PR checks and verify run
@@ -540,7 +605,7 @@ jobs:
             github.event.action == 'labeled' && github.event.label.name == 'full-ci'))
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 25
 
     defaults:
       run:
@@ -562,6 +627,8 @@ jobs:
       - name: Install Chromium for Playwright
         run: pnpm exec playwright install --with-deps chromium
 
+      # The Google suites keep splitbook-google-e2e here, and the pilot's global setup reseeds
+      # splitbook-demo, as the journeys' does.
       - name: Start transactional demo MongoDB
         run: |
           docker run --name splitbook-demo-ci -d -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
@@ -576,22 +643,9 @@ jobs:
           done
           exit 1
 
-      - name: Build
-        run: pnpm build
-        env:
-          AUTH_SECRET: test
-          PERSISTENT_DRAFTS_ENABLED: true
-          NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED: true
-          MONGODB_URI: mongodb://127.0.0.1:27017/splitbook-build
-          NEXT_PUBLIC_APP_URL: http://localhost:3100
-          AUTH_GOOGLE_ID: test
-          AUTH_GOOGLE_SECRET: test
-
-      - name: Run browser journeys (demo mode, seeded)
-        run: pnpm test:e2e
-
-      # Demo journeys exercise To review; pilot baselines cover the default product flags.
-      # The existing Drafts tab is also flag-gated and is unchanged by #405.
+      # The browser journeys, which exercise To review, build with persistent Drafts on in the
+      # journeys job; pilot baselines cover the default product flags. The existing Drafts tab
+      # is also flag-gated and is unchanged by #405.
       - name: Build default flag-off presentation for Google and pilot checks
         run: pnpm build
         env:
@@ -651,4 +705,89 @@ jobs:
             apps/web/playwright*/results/
             apps/web/playwright*/artifacts/
             apps/web/output/playwright/
+          retention-days: 7
+
+  # The browser journeys (apps/web/playwright.config.ts), one job per Playwright project, so the
+  # four run side by side. Within a project the journeys share one database and stay serial
+  # (workers: 1). Each job has a MongoDB of its own, which global setup resets and reseeds, so
+  # no project starts after another project's writes. Money journeys run in desktop-light only
+  # (#475), so that job has a few more tests than the others.
+  journeys:
+    name: Browser journeys (${{ matrix.project }})
+    needs: nightly-gate
+    if: >-
+      !cancelled() && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
+        (github.event_name == 'pull_request' &&
+          contains(github.event.pull_request.labels.*.name, 'full-ci') &&
+          (github.event.action != 'labeled' && github.event.action != 'unlabeled' ||
+            github.event.action == 'labeled' && github.event.label.name == 'full-ci'))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop-light, desktop-dark, mobile-light, mobile-dark]
+
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start transactional demo MongoDB
+        run: |
+          docker run --name splitbook-demo-ci -d -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for attempt in $(seq 1 30); do
+            if docker exec splitbook-demo-ci mongosh --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec splitbook-demo-ci mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec splitbook-demo-ci mongosh --quiet --eval 'if (!db.hello().isWritablePrimary) quit(1)'; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+
+      # The journeys exercise To review, so this build has persistent Drafts on.
+      - name: Build
+        run: pnpm build
+        env:
+          AUTH_SECRET: test
+          PERSISTENT_DRAFTS_ENABLED: true
+          NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED: true
+          MONGODB_URI: mongodb://127.0.0.1:27017/splitbook-build
+          NEXT_PUBLIC_APP_URL: http://localhost:3100
+          AUTH_GOOGLE_ID: test
+          AUTH_GOOGLE_SECRET: test
+
+      - name: Run browser journeys (demo mode, seeded, ${{ matrix.project }})
+        run: pnpm test:e2e --project=${{ matrix.project }}
+
+      - name: Upload Playwright report and review screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: |
+            apps/web/playwright/report/
+            apps/web/playwright/results/
+            apps/web/playwright/artifacts/
           retention-days: 7

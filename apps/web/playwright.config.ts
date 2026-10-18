@@ -14,6 +14,9 @@ import { defineConfig, devices } from '@playwright/test';
  * - Journeys share one demo database, seeded once in global setup, so the suite is fully
  *   serial (workers: 1): a test runs after whatever earlier tests wrote, and must not assume
  *   exact mutable balances.
+ * - CI runs one job per project (`--project`), side by side, each on a database of its own
+ *   that global setup reseeds, so a project never runs after another project's writes and a
+ *   test must not rely on them. Locally, the four run one after another on the same database.
  */
 
 const PORT = 3100;
