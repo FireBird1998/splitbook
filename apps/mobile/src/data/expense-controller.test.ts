@@ -1753,6 +1753,25 @@ describe('native Expense creation and editing', () => {
       expect([...records.keys()]).toEqual([]);
     });
 
+    it('blocks a form being filled in when a refresh reads the Group as archived', async () => {
+      let archived = false;
+      const { controller } = setup((path) =>
+        path === `/api/groups/${groupId}` && archived
+          ? Promise.resolve(json({ data: { ...group, isArchived: true }, status: 200 }))
+          : undefined,
+      );
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+      expect(controller.getSnapshot().expense.status).toBe('editing');
+      archived = true;
+      await controller.refresh();
+
+      const { expense, groups } = controller.getSnapshot();
+      expect([expense.status, expense.message]).toEqual(['blocked', archivedMessage]);
+      expect(groups.data).toEqual([]);
+    });
+
     it('treats its read like a refusal: the Group leaves Home', async () => {
       const { controller } = setup((path) =>
         path === `/api/groups/${groupId}`
