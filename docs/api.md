@@ -52,6 +52,18 @@ can't use is one such fault, never the request's (#547). The Draft routes answer
 an id that isn't one with `422` `VALIDATION_ERROR`, and the Tag routes answer
 both with `400` `INVALID_TAG_COMMAND`.
 
+**An archived Group takes no more changes (#578).** Once an admin archives a
+Group (`DELETE /api/groups/[id]`), every write to its ledger answers **409**
+`GROUP_ARCHIVED` ("This Group was archived, so nothing more can be saved in
+it.") and changes nothing: an Expense's create, edit, restore and delete, a
+payment, a To review save (`POST /api/groups/[id]/drafts/save`), and an
+assistant's `create_drafts` and `replace_draft`. The check is made inside the
+write's own Group fence, so an archive that commits first stops a racing save.
+Reads are unchanged, a member's own Drafts and discards still work, and a retry
+of an Expense, payment or To review save recorded before the archive is still
+confirmed. `apps/web/src/app/api/groups/[id]/archived-group-writes.integration.test.ts`
+pins each.
+
 ---
 
 ## Auth
@@ -470,6 +482,9 @@ created an expense, so any member can edit or delete any expense in the group.
   Per-expense currency selection is not supported.
 - every `paidBy.user` and `splitBetween.user` must be a group member
   (`INVALID_MEMBERS`).
+
+An archived Group refuses a new Expense with **409** `GROUP_ARCHIVED` (see above).
+
 - `amount` — positive, at most 10,000,000.
 
 `category` defaults to `"other"` and must be one of the Category ids in
@@ -636,6 +651,8 @@ UTC convention used by the list filter.
 
 Accepts any subset of the create body, plus `isDeleted: false` to restore a
 soft-deleted expense. Each edit appends a diff to the expense's `editHistory`.
+An archived Group refuses an edit, a restore and a `DELETE` of its Expenses
+with **409** `GROUP_ARCHIVED`.
 
 ---
 
@@ -769,7 +786,9 @@ switch off has no such document and generates exactly as before.
 **Authorization:** only the payer or the recipient may record a settlement —
 422 `FORBIDDEN_SETTLEMENT` otherwise. Payer and recipient must differ
 (`SAME_PARTY`), both must be members (`INVALID_MEMBERS`), and `currency` must
-equal the group default (`CURRENCY_MISMATCH`).
+equal the group default (`CURRENCY_MISMATCH`). An archived Group refuses a new
+payment with **409** `GROUP_ARCHIVED`; a retry of one recorded before the
+archive is still confirmed.
 
 Settlements have `createdAt` but **no `date` field**, so they cannot be
 back-dated or attributed to a past month.
