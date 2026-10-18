@@ -13,7 +13,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector';
 import type { ManagedTag, TagIntent, TagSnapshot } from '@splitbook/shared/tag-management';
 import type { MobileController } from '../data/mobile-controller';
-import { reviewedTagMessage, unconfirmedTagMessage } from '../data/tag-manager';
+import {
+  notAppliedTagMessage,
+  refreshFailedTagMessage,
+  reviewedTagChangeMessage,
+  reviewedTagMessage,
+  unconfirmedTagMessage,
+  type TagManagerState,
+} from '../data/tag-manager';
+import { useDismissAfter } from './group-snackbar';
 import { Icon, type IconName } from './primitives';
 import {
   Banner,
@@ -126,6 +134,9 @@ function TagNameBox({
         setFocused(false);
         start.onBlur();
       }}
+      // Focused, the whole name is selected, as Android's rename boxes do: typing replaces it,
+      // and a tap places the cursor. Otherwise the cursor would sit at the start (#554).
+      selectTextOnFocus
       placeholder="For example, Groceries"
       placeholderTextColor={theme.textMuted}
       autoCapitalize="sentences"
@@ -152,26 +163,38 @@ function TagNameBox({
   );
 }
 
+/** A change's short note: it stays for Android's accessibility timeout, which can extend it. */
+function DoneNote({
+  done,
+  onDismiss,
+}: {
+  done: NonNullable<TagManagerState['done']>;
+  onDismiss: () => void;
+}) {
+  useDismissAfter(done, doneShownFor, onDismiss);
+  return <Snackbar message={changed(done.receipt.intent, done.snapshot)} bottom={24} />;
+}
+
 /** A note under the name box: what the name does, or why it can't be used, and its length. */
 function NameNote({ error, hint, length }: { error?: string; hint: string; length: number }) {
   const theme = useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-      {error ? (
-        <View
-          accessibilityRole="alert"
-          style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}
-        >
-          <Icon name="alert-circle-outline" size={16} color={theme.status.negative} />
-          <CompactText variant="small" style={{ flex: 1, color: theme.status.negative }}>
-            {error}
+      {/* Always there, so the screen reader hears a clash as it appears, and when it clears. */}
+      <View accessibilityLiveRegion="polite" style={{ flex: 1 }}>
+        {error ? (
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+            <Icon name="alert-circle-outline" size={16} color={theme.status.negative} />
+            <CompactText variant="small" style={{ flex: 1, color: theme.status.negative }}>
+              {error}
+            </CompactText>
+          </View>
+        ) : (
+          <CompactText variant="caption" tone="secondary">
+            {hint}
           </CompactText>
-        </View>
-      ) : (
-        <CompactText variant="caption" tone="secondary" style={{ flex: 1 }}>
-          {hint}
-        </CompactText>
-      )}
+        )}
+      </View>
       <CompactText variant="caption" tone="muted" accessibilityLabel={`${length} of 50 characters`}>
         {length}/50
       </CompactText>
@@ -235,6 +258,15 @@ export function TagManager({
   // An edit shows in its sheet until its outcome is known: a lost reply moves to the banner.
   const editing = !recoveryOnly && edit && !unresolved && !recovery?.confirmed ? edit : null;
   const editedTag = editing && 'tagId' in editing ? tags.find((t) => t.id === editing.tagId) : null;
+  // Going offline, or losing admin, closes a Tag's options: they'd offer what can't be done.
+  useEffect(() => {
+    if (!canChange) setSelected(null);
+  }, [canChange]);
+  /** What a sheet's button is doing, so it says "Saving…" only while it saves. */
+  const [working, setWorking] = useState<'save' | 'review' | null>(null);
+  useEffect(() => {
+    if (!busy) setWorking(null);
+  }, [busy]);
 
   const discard = (then: () => void) => {
     if (manager.dirty())
@@ -270,11 +302,6 @@ export function TagManager({
     reveal(done.receipt.tagId);
     openedFrom.current = null;
   }, [done]);
-  useEffect(() => {
-    if (!done) return;
-    const timer = setTimeout(manager.dismissDone, doneShownFor);
-    return () => clearTimeout(timer);
-  }, [done, manager]);
   // A sheet closed without a change: back to the Tag it was opened from.
   useLayoutEffect(() => {
     if (editing || selected || busy || done || !openedFrom.current) return;
@@ -307,16 +334,15 @@ export function TagManager({
     setSelected(tag.id);
   };
   const row = (tag: ManagedTag, index: number) => (
-    <View
-      key={tag.id}
-      ref={(view) => {
-        rows.current.set(tag.id, view);
-      }}
-    >
+    <View key={tag.id}>
       {index > 0 && <Divider inset={66} />}
       <ListRow
+        rowRef={(view) => {
+          rows.current.set(tag.id, view);
+        }}
         leading={<IconTile icon="pricetag-outline" tone={tag.isArchived ? 'neutral' : 'brand'} />}
         title={tag.name}
+        titleLines={3}
         meta={tag.isArchived ? 'Not offered on new Expenses' : undefined}
         highlighted={done?.receipt.tagId === tag.id}
         trailing={
@@ -324,10 +350,11 @@ export function TagManager({
             <Icon name="ellipsis-vertical" size={20} color={theme.textMuted} />
           ) : undefined
         }
+        // Open while the list updates too: its options wait for the update, then act.
         onPress={canChange ? () => options(tag) : undefined}
         accessibilityLabel={
           canChange
-            ? `${tag.name}, ${tag.isArchived ? 'archived. Opens Restore' : 'active. Opens Rename and Archive'}`
+            ? `${tag.name}, ${tag.isArchived ? 'archived. Opens Restore' : active.length > 1 ? 'active. Opens Rename and Archive' : 'active. Opens Rename'}`
             : `${tag.name}, ${tag.isArchived ? 'archived' : 'active'}`
         }
       />
@@ -352,21 +379,28 @@ export function TagManager({
     : undefined;
   // A sheet's own message: a refusal to review, or what went wrong sending it.
   const sheetMessage =
-    message && !taken && !(unresolved && message === unconfirmedTagMessage) ? message : '';
+    message && !taken && message !== unconfirmedTagMessage && message !== notAppliedTagMessage
+      ? message
+      : '';
+  const reviewed = sheetMessage === reviewedTagMessage || sheetMessage === reviewedTagChangeMessage;
   const sheetBanner = reviewRequired ? (
     <Banner tone="warning" title="Not saved" message={message || 'This Tag changed.'}>
       <CompactButton
         label="See the latest"
         variant="text"
         dense
+        busy={busy && working === 'review' ? 'Checking…' : undefined}
         disabled={busy || offline}
-        onPress={() => void manager.reviewLatest()}
+        onPress={() => {
+          setWorking('review');
+          void manager.reviewLatest();
+        }}
       />
     </Banner>
   ) : sheetMessage ? (
-    <Banner tone={sheetMessage === reviewedTagMessage ? 'info' : 'error'} message={sheetMessage} />
+    <Banner tone={reviewed ? 'info' : 'error'} message={sheetMessage} />
   ) : null;
-  const sending = busy && !!editing;
+  const sending = busy && !!editing && working === 'save';
   // One sheet at a time; each draws its content only while it shows.
   const naming = !!editing && 'name' in editing;
   // Restoring needs no second step; a refused or unsent one comes back here to retry.
@@ -381,10 +415,31 @@ export function TagManager({
     !!typed &&
     !taken &&
     !(editing?.action === 'rename' && typed === editedTag?.name);
+  // Why Save can't be used yet, for the screen reader.
+  const saveHint = offline
+    ? 'Changing Tags needs a connection'
+    : reviewRequired
+      ? 'See the latest first'
+      : !typed
+        ? 'Enter a name first'
+        : taken
+          ? 'Choose a name no other Tag uses'
+          : editing?.action === 'rename' && typed === editedTag?.name
+            ? 'Change the name to save it'
+            : undefined;
+  const save = () => {
+    setWorking('save');
+    void manager.submit();
+  };
 
   // The screen's own message, when no sheet is showing it.
+  // A failed first read has its own banner, with Try again.
   const screenMessage =
-    !editing && message && !(unresolved && message === unconfirmedTagMessage) && !unresolved
+    !editing &&
+    message &&
+    message !== unconfirmedTagMessage &&
+    message !== notAppliedTagMessage &&
+    !(message === refreshFailedTagMessage && !snapshot)
       ? message
       : '';
   const confirmed = recovery?.confirmed?.state === 'applied' ? recovery.confirmed : null;
@@ -450,7 +505,7 @@ export function TagManager({
                 tone="warning"
                 title={`${changing(recovery.command.intent, snapshot)} isn’t confirmed`}
                 message={
-                  message && message !== unconfirmedTagMessage
+                  message === notAppliedTagMessage
                     ? message
                     : 'We didn’t hear back, so it may already be done. Checking changes nothing, and trying again can’t do it twice.'
                 }
@@ -558,16 +613,18 @@ export function TagManager({
             )}
           </View>
         </ScrollView>
-        {done && <Snackbar message={changed(done.receipt.intent, done.snapshot)} bottom={24} />}
+        {done && <DoneNote done={done} onDismiss={manager.dismissDone} />}
 
         <BottomSheet
-          visible={!!selectedTag && !editing}
+          visible={!!selectedTag && !editing && canChange}
           title={selectedTag?.name ?? ''}
+          titleLines={3}
           subtitle={selectedTag?.isArchived ? 'Archived Tag' : 'Active Tag'}
           doneLabel="Close"
           dismissLabel={`Close ${selectedTag?.name ?? 'the Tag'}`}
           onDone={() => setSelected(null)}
         >
+          {/* Its actions wait while the list updates: the sheet stays until one can act. */}
           {selectedTag ? (
             <Card>
               {selectedTag.isArchived ? (
@@ -576,7 +633,9 @@ export function TagManager({
                   title="Restore"
                   meta="Offer it on new Expenses again"
                   metaLines={3}
+                  disabled={busy}
                   onPress={() => {
+                    if (busy) return;
                     setSelected(null);
                     void manager.restore(selectedTag);
                   }}
@@ -588,7 +647,9 @@ export function TagManager({
                     title="Rename"
                     meta="Saved Expenses show the new name"
                     metaLines={3}
+                    disabled={busy}
                     onPress={() => {
+                      if (busy) return;
                       setSelected(null);
                       typing.current = true;
                       manager.edit(selectedTag, 'rename');
@@ -601,7 +662,9 @@ export function TagManager({
                       title="Archive"
                       meta="Stop offering it. Saved Expenses keep it."
                       metaLines={3}
+                      disabled={busy}
                       onPress={() => {
+                        if (busy) return;
                         setSelected(null);
                         manager.edit(selectedTag, 'archive');
                       }}
@@ -610,9 +673,9 @@ export function TagManager({
                     <ListRow
                       leading={<IconTile icon="archive-outline" tone="neutral" />}
                       title="Archive"
-                      meta="A Group needs one active Tag. Create another first."
+                      meta="A Group needs one active Tag. Create or restore another Tag first."
                       metaLines={3}
-                      accessibilityLabel="Archive, unavailable. A Group needs one active Tag. Create another first."
+                      accessibilityLabel="Archive, unavailable. A Group needs one active Tag. Create or restore another Tag first."
                     />
                   )}
                 </>
@@ -635,8 +698,12 @@ export function TagManager({
                 label={`Restore ${taken.name}`}
                 block
                 busy={sending ? 'Restoring…' : undefined}
-                disabled={!canChange && !reviewRequired}
-                onPress={() => void (clash ? manager.restore(taken) : manager.restoreDuplicate())}
+                disabled={offline || (!canChange && !reviewRequired)}
+                hint={offline ? 'Changing Tags needs a connection' : undefined}
+                onPress={() => {
+                  setWorking('save');
+                  void (clash ? manager.restore(taken) : manager.restoreDuplicate());
+                }}
               />
             ) : (
               <CompactButton
@@ -644,7 +711,8 @@ export function TagManager({
                 block
                 busy={sending ? 'Saving…' : undefined}
                 disabled={!canSave && !sending}
-                onPress={() => void manager.submit()}
+                hint={canSave ? undefined : saveHint}
+                onPress={save}
               />
             )
           }
@@ -662,7 +730,7 @@ export function TagManager({
                 invalid={!!nameError}
                 onChangeText={manager.enter}
                 onSubmit={() => {
-                  if (canSave) void manager.submit();
+                  if (canSave) save();
                 }}
               />
               <NameNote
@@ -680,11 +748,7 @@ export function TagManager({
 
         <BottomSheet
           visible={confirming}
-          title={
-            editing?.action === 'restore'
-              ? `Restore ${editedTag?.name ?? 'Tag'}?`
-              : `Archive ${editedTag?.name ?? 'Tag'}?`
-          }
+          title={editing?.action === 'restore' ? 'Restore this Tag?' : 'Archive this Tag?'}
           doneLabel="Cancel"
           dismissLabel="Close without changing it"
           dismissible={!sending}
@@ -702,12 +766,22 @@ export function TagManager({
                     : undefined
                 }
                 disabled={!canChange || reviewRequired}
-                onPress={() => void manager.submit()}
+                hint={
+                  offline
+                    ? 'Changing Tags needs a connection'
+                    : reviewRequired
+                      ? 'See the latest first'
+                      : undefined
+                }
+                onPress={save}
               />
             )
           }
         >
           {confirming ? sheetBanner : null}
+          {confirming && editedTag ? (
+            <CompactText variant="heading">{editedTag.name}</CompactText>
+          ) : null}
           {!confirming ? null : editing?.action === 'archive' ? (
             <>
               {archiveEffects.map((effect) => (

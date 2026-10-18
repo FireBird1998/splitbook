@@ -2287,7 +2287,7 @@ describe('Android Tag correction and close behavior', () => {
       },
     ]);
     app.server.stale = true;
-    act(() => app.pressable('Shared, active. Opens Rename and Archive').props.onPress());
+    act(() => app.pressable('Shared, active. Opens Rename').props.onPress());
     act(() => app.pressable('Rename, Saved Expenses show the new name').props.onPress());
     act(() =>
       app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.onChangeText('Villa'),
@@ -2432,7 +2432,7 @@ describe('Tag permissions and archive review in App', () => {
       },
     ]);
     app.server.lastActive = true;
-    act(() => app.pressable('Shared, active. Opens Rename and Archive').props.onPress());
+    act(() => app.pressable('Shared, active. Opens Rename').props.onPress());
     act(() => app.pressable('Archive, Stop offering it').props.onPress());
     expect(app.server.submitted).toEqual([]);
     expect(app.text()).toContain('Saved Expenses keep it, with their history.');

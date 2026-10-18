@@ -1,4 +1,4 @@
-import { Children, memo, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, memo, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import {
   Animated,
   Pressable,
@@ -301,11 +301,16 @@ export const ListRow = memo(function ListRow({
   trailingLoading = false,
   trailingWidth,
   onPress,
+  disabled = false,
   accessibilityLabel,
   highlighted = false,
+  titleLines = 1,
+  rowRef,
 }: {
   leading?: ReactNode;
   title: string;
+  /** Lines the title may take: more for a name the member typed, which can be long. */
+  titleLines?: number;
   meta?: string;
   metaTone?: TextTone;
   /** Lines the meta may take: more where it explains a choice, as in a sheet's options. */
@@ -314,8 +319,13 @@ export const ListRow = memo(function ListRow({
   trailingLoading?: boolean;
   trailingWidth?: number;
   onPress?: () => void;
+  /** A pressable row that can't be used just now, such as while its list updates. */
+  disabled?: boolean;
+  /** Read in full without `onPress` too: the row is then one stop for the screen reader. */
   accessibilityLabel?: string;
   highlighted?: boolean;
+  /** The row itself, to bring it into view or move the screen reader to it. */
+  rowRef?: Ref<View>;
 }) {
   const theme = useTheme();
   const reveal = useReveal(trailingLoading);
@@ -324,7 +334,7 @@ export const ListRow = memo(function ListRow({
     <>
       {leading}
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <CompactText weight="semibold" numberOfLines={1}>
+        <CompactText weight="semibold" numberOfLines={titleLines}>
           {title}
         </CompactText>
         {meta ? (
@@ -346,13 +356,30 @@ export const ListRow = memo(function ListRow({
     </>
   );
   const style = { ...listRow, backgroundColor: highlighted ? theme.brand.bg : undefined };
-  if (!onPress) return <View style={style}>{content}</View>;
+  if (!onPress)
+    return (
+      <View
+        ref={rowRef}
+        accessible={accessibilityLabel !== undefined || undefined}
+        accessibilityLabel={accessibilityLabel}
+        style={style}
+      >
+        {content}
+      </View>
+    );
   return (
     <Pressable
+      ref={rowRef}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? [title, meta].filter(Boolean).join(', ')}
+      accessibilityState={disabled ? { disabled } : undefined}
+      disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [style, pressed && { backgroundColor: theme.surfaceMuted }]}
+      style={({ pressed }) => [
+        style,
+        pressed && { backgroundColor: theme.surfaceMuted },
+        disabled && { opacity: 0.45 },
+      ]}
     >
       {content}
     </Pressable>

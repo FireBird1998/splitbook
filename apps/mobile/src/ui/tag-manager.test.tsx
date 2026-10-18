@@ -7,7 +7,7 @@ import type { MobileFetch } from '../data/types';
 import type { TagCommand } from '@splitbook/shared/tag-management';
 import { AccessibilityInfo } from 'react-native';
 import { setWindow } from '../test-utils/native';
-import { TagManager } from './tag-manager';
+import { TagManager, doneShownFor } from './tag-manager';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -40,7 +40,24 @@ function newServer() {
     refusal: null as { status: number; code: string } | null,
     /** Whether Alex is still an admin of Harbour Flat. */
     admin: true,
+    /** Each applied action's receipt, by its request id, for Check again. */
+    receipts: new Map<string, unknown>(),
+    /** The next applied action's reply is lost on the way back. */
+    loseReply: false,
+    /** Held until released: the next action's reply, or a read of the Tags. */
+    holdPost: null as Promise<void> | null,
+    holdRead: null as Promise<void> | null,
+    /** Reads of the Tags fail, as a server error with no message of its own. */
+    failRead: false,
   };
+}
+/** A promise and the call that settles it, to hold a reply until the test lets it go. */
+function held() {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
 }
 const snapshot = () => ({ canManage: server.admin, tags: structuredClone(server.tags) });
 
@@ -57,22 +74,47 @@ const fetch: MobileFetch = async (url, init) => {
         { code: server.refusal.code, error: 'Tag action refused', snapshot: snapshot() },
         server.refusal.status,
       );
+    await server.holdPost;
     const { intent } = command;
-    const tag = server.tags.find((tag) => 'tagId' in intent && tag.id === intent.tagId)!;
-    if (intent.action === 'rename') tag.name = intent.name;
+    let tag = server.tags.find((tag) => 'tagId' in intent && tag.id === intent.tagId);
+    if (intent.action === 'create') {
+      tag = {
+        id: 'c0000000000000000000000' + (server.tags.length + 1),
+        name: intent.name,
+        revision: -1,
+        isArchived: false,
+        isDeleted: false,
+      };
+      server.tags.push(tag);
+    }
+    if (intent.action === 'rename') tag!.name = intent.name;
     if (intent.action === 'archive' || intent.action === 'restore')
-      tag.isArchived = intent.action === 'archive';
-    tag.revision++;
+      tag!.isArchived = intent.action === 'archive';
+    tag!.revision++;
+    const receipt = { intent, tagId: tag!.id, appliedAt: '2026-10-18T10:00:00.000Z' };
+    server.receipts.set(command.requestId, receipt);
+    if (server.loseReply) {
+      server.loseReply = false;
+      throw new TypeError('Network request failed');
+    }
     return json({
-      data: {
-        state: 'applied',
-        requestId: command.requestId,
-        receipt: { intent, tagId: tag.id, appliedAt: '2026-10-18T10:00:00.000Z' },
-        snapshot: snapshot(),
-      },
+      data: { state: 'applied', requestId: command.requestId, receipt, snapshot: snapshot() },
     });
   }
-  if (path.endsWith('/tag-actions')) return json({ data: snapshot() });
+  const checked = /\/tag-actions\/([^/]+)$/.exec(path);
+  if (checked) {
+    const receipt = server.receipts.get(checked[1]);
+    return json({
+      data: receipt
+        ? { state: 'applied', requestId: checked[1], receipt, snapshot: snapshot() }
+        : { state: 'not-applied', requestId: checked[1], snapshot: snapshot() },
+    });
+  }
+  if (path.endsWith('/tag-actions')) {
+    await server.holdRead;
+    if (server.failRead) return json({}, 500);
+    return json({ data: snapshot() });
+  }
   return json({ data: {} });
 };
 
@@ -199,6 +241,18 @@ async function openManageTags(offline = false) {
   await showManageTags(offline);
 }
 
+/** The screen as the app renders it, online or not. */
+const tagsScreen = (offline: boolean) => (
+  <TagManager
+    controller={controller!}
+    groupId={groupId}
+    groupName="Harbour Flat"
+    accountId={alex.id}
+    offline={offline}
+    onClose={vi.fn()}
+  />
+);
+
 /** Tags on screen, as opening it from the Group does. */
 async function showManageTags(offline = false) {
   views = [];
@@ -206,17 +260,7 @@ async function showManageTags(offline = false) {
   vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mockClear();
   setWindow({ width: 360, height: 780, fontScale: 2 });
   act(() => {
-    renderer = create(
-      <TagManager
-        controller={controller!}
-        groupId={groupId}
-        groupName="Harbour Flat"
-        accountId={alex.id}
-        offline={offline}
-        onClose={vi.fn()}
-      />,
-      nativeViews(),
-    );
+    renderer = create(tagsScreen(offline), nativeViews());
   });
   await settle();
 }
@@ -282,12 +326,32 @@ const announced = () =>
   )?.element;
 /** Long enough for a sheet to slide in and its name box to take the keyboard. */
 const sheetIn = () => act(() => new Promise((resolve) => setTimeout(resolve, 650)));
-const row = `${longName}, active. Opens Rename and Archive`;
+/** The long-named Tag's row: "Opens Rename", or "Opens Rename and Archive" beside another. */
+const row = `${longName}, active. Opens Rename`;
+/** Press a Tag's row by the start of its spoken label: its name and state. */
+const pressRow = async (label: string) => {
+  const found = renderer!.root.find(
+    (node: ReactTestInstance) =>
+      typeof node.type === 'string' &&
+      typeof node.props.onPress === 'function' &&
+      String(node.props.accessibilityLabel ?? '').startsWith(label),
+  );
+  await act(async () => found.props.onPress());
+  await settle();
+};
+/** Whether a Tag's row offers its options: a control whose spoken label starts so. */
+const rowOffered = (label: string) =>
+  renderer!.root.findAll(
+    (node: ReactTestInstance) =>
+      typeof node.type === 'string' &&
+      typeof node.props.onPress === 'function' &&
+      String(node.props.accessibilityLabel ?? '').startsWith(label),
+  ).length > 0;
 
 describe('Renaming a Tag (#554)', () => {
   it('opens a long name at its start, and leaves the cursor to the member while typing', async () => {
     await openManageTags();
-    await press(row);
+    await pressRow(row);
     await press('Rename, Saved Expenses show the new name');
     const box = () => labelled('Tag name');
     expect(box().props.value).toBe(longName);
@@ -297,6 +361,13 @@ describe('Renaming a Tag (#554)', () => {
     expect(box().props.selection).toBeUndefined();
     act(() => box().props.onBlur());
     expect(box().props.selection).toEqual({ start: 0, end: 0 });
+  });
+
+  it('selects the whole name once focused, so typing replaces it instead of going before it', async () => {
+    await openManageTags();
+    await pressRow(row);
+    await press('Rename, Saved Expenses show the new name');
+    expect(labelled('Tag name').props.selectTextOnFocus).toBe(true);
   });
 });
 
@@ -329,14 +400,14 @@ describe('A Tag’s options, in sheets over the list', () => {
     expect(screenText()).toContain('Archived · 1');
     expect(offered(`Rename ${longName}`)).toBe(false);
     expect(offered(`Archive ${longName}`)).toBe(false);
-    await press(row);
+    await pressRow(row);
     expect(sheetTitle()).toEqual([longName]);
     expect(offered('Rename, Saved Expenses show the new name')).toBe(true);
   });
 
   it('opens Rename in its sheet with the keyboard, and goes back to the Tag on Cancel', async () => {
     await openManageTags();
-    await press(row);
+    await pressRow(row);
     await press('Rename, Saved Expenses show the new name');
     expect(sheetTitle()).toEqual(['Rename Tag']);
     await sheetIn();
@@ -348,7 +419,7 @@ describe('A Tag’s options, in sheets over the list', () => {
 
   it('confirms a saved rename in a short note, with nothing to dismiss, and goes to the Tag', async () => {
     await openManageTags();
-    await press(row);
+    await pressRow(row);
     await press('Rename, Saved Expenses show the new name');
     act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
     await press('Save name');
@@ -362,7 +433,7 @@ describe('A Tag’s options, in sheets over the list', () => {
 
   it('saves a name from the keyboard’s Done, and only a name that can be saved', async () => {
     await openManageTags();
-    await press(row);
+    await pressRow(row);
     await press('Rename, Saved Expenses show the new name');
     // Unchanged: Done does nothing.
     await act(async () => labelled('Tag name').props.onSubmitEditing());
@@ -400,15 +471,19 @@ describe('A Tag’s options, in sheets over the list', () => {
 
   it('keeps Archive from the only active Tag, saying why, and explains it before archiving', async () => {
     await openManageTags();
-    await press(row);
+    await pressRow(row);
     expect(offered('Archive, Stop offering it. Saved Expenses keep it.')).toBe(false);
-    expect(screenText()).toContain('A Group needs one active Tag. Create another first.');
+    expect(screenText()).toContain(
+      'A Group needs one active Tag. Create or restore another Tag first.',
+    );
     await press(`Close ${longName}`);
     await press('Old rent, archived. Opens Restore');
     await press('Restore, Offer it on new Expenses again');
-    await press(row);
+    await pressRow(row);
     await press('Archive, Stop offering it. Saved Expenses keep it.');
-    expect(sheetTitle()).toEqual([`Archive ${longName}?`]);
+    // A long name wraps in the body, where the title would cut it off.
+    expect(sheetTitle()).toEqual(['Archive this Tag?']);
+    expect(screenText()).toContain(longName);
     expect(screenText()).toContain('Saved Expenses keep it, with their history.');
     expect(screenText()).toContain('Drafts using it need another Tag before they’re saved.');
     expect(screenText()).toContain(
@@ -421,7 +496,7 @@ describe('A Tag’s options, in sheets over the list', () => {
 
   it('leaves a kept, refused rename in its sheet when Tags opens again, without the keyboard', async () => {
     await openManageTags();
-    await press(row);
+    await pressRow(row);
     await press('Rename, Saved Expenses show the new name');
     act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
     server.refusal = { status: 409, code: 'AMBIGUOUS_TAG' };
@@ -445,7 +520,7 @@ describe('Tags that can’t be changed here', () => {
     expect(screenText()).toContain(longName);
     expect(offered('New Tag')).toBe(false);
     // Each Tag is listed, and none opens options.
-    expect(offered(row)).toBe(false);
+    expect(rowOffered(`${longName}, active`)).toBe(false);
     expect(offered('Old rent, archived. Opens Restore')).toBe(false);
   });
 
@@ -457,7 +532,234 @@ describe('Tags that can’t be changed here', () => {
     );
     expect(offered('New Tag')).toBe(false);
     expect(screenText()).toContain('Old rent');
-    expect(offered(row)).toBe(false);
+    // Each row is still read as one, with its state.
+    expect(offered('Old rent, archived')).toBe(true);
+    expect(offered(`${longName}, active`)).toBe(true);
+    expect(rowOffered(`${longName}, active`)).toBe(false);
     expect(offered('Old rent, archived. Opens Restore')).toBe(false);
+  });
+});
+
+describe('Replies that are lost, late or slow', () => {
+  const rename = async (to: string) => {
+    await pressRow(row);
+    await press('Rename, Saved Expenses show the new name');
+    act(() => labelled('Tag name').props.onChangeText(to));
+  };
+
+  it('moves a change whose reply was lost out of its sheet, to a banner to check or retry', async () => {
+    await openManageTags();
+    await rename('Weekly groceries');
+    server.loseReply = true;
+    await press('Save name');
+    expect(sheetTitle()).toEqual([]);
+    expect(screenText()).toContain('isn’t confirmed');
+    expect(screenText()).toContain('Weekly groceries');
+    expect(offered('Check again')).toBe(true);
+    expect(offered('Try again')).toBe(true);
+    // The server did apply it: checking finds its receipt, and sends nothing.
+    await press('Check again');
+    expect(screenText()).toContain('Your change went through');
+    expect(screenText()).toContain('Renamed to Weekly groceries.');
+    await press('OK');
+    expect(screenText()).not.toContain('Your change went through');
+    expect(controller!.getSnapshot().tagManager.recovery).toBeNull();
+  });
+
+  it('keeps a reply that comes after the screen closed, and shows it on the next visit', async () => {
+    await openManageTags();
+    await rename('Weekly groceries');
+    const reply = held();
+    server.holdPost = reply.promise;
+    await press('Save name');
+    act(() => renderer!.unmount());
+    reply.release();
+    await settle();
+    await showManageTags();
+    expect(screenText()).toContain('Your change went through');
+    expect(screenText()).toContain('Renamed to Weekly groceries.');
+  });
+
+  it('holds a Tag’s options while the list updates, instead of dropping the tap', async () => {
+    await openManageTags();
+    const read = held();
+    server.holdRead = read.promise;
+    const list = renderer!.root.find(
+      (node: ReactTestInstance) =>
+        String(node.type) === 'ScrollView' && !!node.props.refreshControl,
+    );
+    act(() => list.props.refreshControl.props.onRefresh());
+    await settle();
+    // Tapped while the list updates: the options open, their actions waiting for it.
+    await pressRow(row);
+    expect(sheetTitle()).toEqual([longName]);
+    expect(labelled('Rename, Saved Expenses show the new name').props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    await press('Rename, Saved Expenses show the new name');
+    expect(sheetTitle()).toEqual([longName]);
+    read.release();
+    await settle();
+    await press('Rename, Saved Expenses show the new name');
+    expect(sheetTitle()).toEqual(['Rename Tag']);
+  });
+
+  it('closes a Tag’s options on going offline, and leaves them closed on coming back', async () => {
+    await openManageTags();
+    await pressRow(row);
+    expect(sheetTitle()).toEqual([longName]);
+    act(() => renderer!.update(tagsScreen(true)));
+    await settle();
+    expect(sheetTitle()).toEqual([]);
+    act(() => renderer!.update(tagsScreen(false)));
+    await settle();
+    expect(sheetTitle()).toEqual([]);
+  });
+});
+
+describe('The name box', () => {
+  it('says an active Tag already has the name, and holds Create until it changes', async () => {
+    await openManageTags();
+    await press('New Tag');
+    act(() => labelled('Tag name').props.onChangeText(longName.toUpperCase()));
+    expect(screenText()).toContain('An active Tag already uses this name.');
+    expect(labelled('Create Tag').props.accessibilityState.disabled).toBe(true);
+    expect(labelled('Create Tag').props.accessibilityHint).toBe('Choose a name no other Tag uses');
+    act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
+    expect(screenText()).not.toContain('An active Tag already uses this name.');
+    expect(labelled('Create Tag').props.accessibilityState.disabled).toBe(false);
+  });
+
+  it('takes 50 characters at most, and counts them', async () => {
+    await openManageTags();
+    await press('New Tag');
+    expect(labelled('Tag name').props.maxLength).toBe(50);
+    act(() => labelled('Tag name').props.onChangeText('x'.repeat(50)));
+    expect(screenText()).toContain('50/50');
+    expect(offered('50 of 50 characters')).toBe(true);
+  });
+});
+
+describe('A change’s short note', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('goes after its time', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await openManageTags();
+    await pressRow(row);
+    await press('Rename, Saved Expenses show the new name');
+    act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
+    await press('Save name');
+    expect(screenText()).toContain('Renamed to Weekly groceries');
+    act(() => {
+      vi.advanceTimersByTime(doneShownFor);
+    });
+    await settle();
+    expect(screenText()).not.toContain('Renamed to Weekly groceries');
+  });
+
+  it('stays longer when Android’s accessibility timeout asks for more time', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const recommended = vi
+      .spyOn(AccessibilityInfo, 'getRecommendedTimeoutMillis')
+      .mockResolvedValue(3 * doneShownFor);
+    await openManageTags();
+    await pressRow(row);
+    await press('Rename, Saved Expenses show the new name');
+    act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
+    await press('Save name');
+    expect(recommended).toHaveBeenCalledWith(doneShownFor);
+    act(() => {
+      vi.advanceTimersByTime(doneShownFor);
+    });
+    await settle();
+    expect(screenText()).toContain('Renamed to Weekly groceries');
+    act(() => {
+      vi.advanceTimersByTime(2 * doneShownFor);
+    });
+    await settle();
+    expect(screenText()).not.toContain('Renamed to Weekly groceries');
+    recommended.mockRestore();
+  });
+
+  it('leaves no timer behind when the screen closes first', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const set = vi.spyOn(globalThis, 'setTimeout');
+    const cleared = vi.spyOn(globalThis, 'clearTimeout');
+    await openManageTags();
+    await pressRow(row);
+    await press('Rename, Saved Expenses show the new name');
+    act(() => labelled('Tag name').props.onChangeText('Weekly groceries'));
+    await press('Save name');
+    const index = set.mock.calls.findIndex(([, delay]) => delay === doneShownFor);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const timer = set.mock.results[index]!.value;
+    act(() => renderer!.unmount());
+    expect(cleared).toHaveBeenCalledWith(timer);
+    set.mockRestore();
+    cleared.mockRestore();
+  });
+});
+
+describe('What the screen says', () => {
+  it('says a failed read is a failed refresh, not a change to check', async () => {
+    await openManageTags();
+    server.failRead = true;
+    const list = renderer!.root.find(
+      (node: ReactTestInstance) =>
+        String(node.type) === 'ScrollView' && !!node.props.refreshControl,
+    );
+    act(() => list.props.refreshControl.props.onRefresh());
+    await settle();
+    expect(screenText()).toContain('Couldn’t refresh the Tags. Pull down to try again.');
+    expect(screenText()).not.toContain('hear back');
+    // The Tags already read stay listed.
+    expect(screenText()).toContain(longName);
+  });
+
+  it('after a refused Archive, says the Tag is up to date without a name to keep', async () => {
+    await openManageTags();
+    await pressRow('Old rent, archived');
+    await press('Restore, Offer it on new Expenses again');
+    await pressRow(`${longName}, active`);
+    await press('Archive, Stop offering it. Saved Expenses keep it.');
+    server.refusal = { status: 409, code: 'TAG_CHANGED' };
+    await press('Archive Tag');
+    expect(screenText()).toContain('Not saved');
+    server.refusal = null;
+    await press('See the latest');
+    expect(screenText()).toContain('Updated to the latest. Try again when you’re ready.');
+    expect(screenText()).not.toContain('Your name is kept');
+  });
+
+  it('reads out a name clash as it appears, from a note that is always there', async () => {
+    await openManageTags();
+    await press('New Tag');
+    /** The name box's note: the one polite live region on screen. */
+    const note = () =>
+      renderer!.root.find(
+        (node: ReactTestInstance) =>
+          typeof node.type === 'string' && node.props.accessibilityLiveRegion === 'polite',
+      );
+    const says = (text: string) =>
+      note().findAll(
+        (node: ReactTestInstance) => String(node.type) === 'Text' && node.props.children === text,
+      ).length > 0;
+    const before = note();
+    expect(says('Members can pick it on new Expenses')).toBe(true);
+    act(() => labelled('Tag name').props.onChangeText(longName));
+    // The same region, now with the clash: a screen reader hears the change.
+    expect(note()).toBe(before);
+    expect(says('An active Tag already uses this name.')).toBe(true);
+  });
+
+  it('wraps a long Tag name in its row, instead of cutting it off', async () => {
+    await openManageTags();
+    const title = renderer!.root.find(
+      (node: ReactTestInstance) => String(node.type) === 'Text' && node.props.children === longName,
+    );
+    expect(title.props.numberOfLines).toBeGreaterThan(1);
   });
 });

@@ -32,6 +32,20 @@ export const unconfirmedTagMessage =
 /** Said once a refused change's Tag is read again: the member's typing is kept. */
 export const reviewedTagMessage =
   'Updated to the latest. Your name is kept; save it when you’re ready.';
+/** Said once a refused Archive or Restore is read again: there was nothing typed to keep. */
+export const reviewedTagChangeMessage = 'Updated to the latest. Try again when you’re ready.';
+/** Said when a check finds the change hasn't happened: trying again is what makes it. */
+export const notAppliedTagMessage =
+  'It hasn’t happened yet. Checking changed nothing; Try again to make the change.';
+/** Said when reading the Tags failed: a read changes nothing, so nothing is left to check. */
+export const refreshFailedTagMessage = 'Couldn’t refresh the Tags. Pull down to try again.';
+
+/** A read of the Tags that failed, told apart from a change whose reply was lost. */
+class TagReadFailed extends Error {
+  constructor(readonly reason: unknown) {
+    super(refreshFailedTagMessage);
+  }
+}
 export const emptyTagManager = (): TagManagerState => ({
   groupId: null,
   snapshot: null,
@@ -73,11 +87,26 @@ export function tagManager({
     return recovery;
   };
   const refresh = async () => {
-    const snapshot = await client().read();
+    let snapshot: TagSnapshot;
+    try {
+      snapshot = await client().read();
+    } catch (error) {
+      throw error instanceof Superseded ? error : new TagReadFailed(error);
+    }
     update({ snapshot });
   };
   const failure = (error: unknown) => {
     if (error instanceof Superseded) return;
+    if (error instanceof TagReadFailed) {
+      const reason = error.reason;
+      update({
+        message:
+          reason instanceof RequestError && reason.serverMessage
+            ? reason.serverMessage
+            : refreshFailedTagMessage,
+      });
+      return;
+    }
     const parsed =
       error instanceof RequestError
         ? tagSnapshotSchema.safeParse(Object(error.details).snapshot)
@@ -132,10 +161,7 @@ export function tagManager({
       result,
       snapshot: result.snapshot,
       ...(result.state === 'applied' ? { edit: null, reviewRequired: false, duplicate: null } : {}),
-      message:
-        result.state === 'not-applied'
-          ? 'It hasn’t happened yet. Checking changed nothing; Try again to make the change.'
-          : '',
+      message: result.state === 'not-applied' ? notAppliedTagMessage : '',
     });
   };
   /**
@@ -192,7 +218,10 @@ export function tagManager({
       publish({ ...emptyTagManager(), groupId });
       let stop: (() => void) | undefined;
       void run(async () => {
-        stop = client().watch((snapshot) => update({ snapshot }), failure);
+        stop = client().watch(
+          (snapshot) => update({ snapshot }),
+          (error) => failure(error instanceof Superseded ? error : new TagReadFailed(error)),
+        );
         const recovery = await recover();
         if (recovery?.confirmed) update({ result: recovery.confirmed });
         if (recovery?.rejected && recovery.command.intent.action !== 'delete')
@@ -274,14 +303,19 @@ export function tagManager({
         if (!edit || !read().snapshot?.canManage) return;
         if (edit.action !== 'create') {
           const tag = read().snapshot!.tags.find((tag) => tag.id === edit.tagId && !tag.isDeleted);
-          if (!tag) throw new Error('This Tag is no longer available. Your entered name is kept.');
+          if (!tag)
+            throw new Error(
+              'name' in edit
+                ? 'This Tag is no longer available. Your entered name is kept.'
+                : 'This Tag is no longer available.',
+            );
           update({ edit: { ...edit, expectedRevision: tag.revision } });
         }
         await client().acknowledge();
         update({
           recovery: null,
           reviewRequired: false,
-          message: reviewedTagMessage,
+          message: 'name' in edit ? reviewedTagMessage : reviewedTagChangeMessage,
         });
       }),
     restoreDuplicate: () =>
