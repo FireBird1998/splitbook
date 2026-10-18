@@ -9,7 +9,7 @@ import type { GroupRead } from '@splitbook/shared/group-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { groupsKey, homeBalancesKey, invitationsKey } from '@splitbook/shared/query-keys';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
-import { anchors, text } from '@/lib/test-utils/markup';
+import { anchors, listItems, text } from '@/lib/test-utils/markup';
 import { BalancesCardView, groupCountLabel } from './BalancesCard';
 import { HomeHeaderView, homeStatusLine } from './HomeHeader';
 import { HomeRow } from './HomeCard';
@@ -237,6 +237,26 @@ describe('Needs you', () => {
     const paymentsFirst = needsYou(ready(PAYMENTS), loading);
     expect(paymentsFirst).toContain('aria-label="Loading invitations"');
     expect(text(paymentsFirst)).toContain('You pay Sam Chen');
+  });
+
+  // #565: a loading row stays a list item.
+  it('keeps a loading row a list item, announcing the read inside it', () => {
+    const shape = (html: string) =>
+      listItems(html, 'Needs you').map((item) => ({
+        tag: item.tag,
+        role: item.role,
+        status: /role="status" aria-label="([^"]+)" aria-busy="true"/.exec(item.html)?.[1] ?? null,
+      }));
+
+    // An explicit role on an li replaces listitem, and the list then holds a non-item.
+    expect(shape(needsYou(loading, ready([INVITATION])))).toEqual([
+      { tag: 'li', role: null, status: 'Loading suggested payments' },
+      { tag: 'li', role: null, status: null },
+    ]);
+    expect(shape(needsYou(ready(PAYMENTS.slice(0, 1)), loading))).toEqual([
+      { tag: 'li', role: null, status: null },
+      { tag: 'li', role: null, status: 'Loading invitations' },
+    ]);
   });
 
   it('fails the payments on their own, with Try again, and never says nothing needs you', () => {
