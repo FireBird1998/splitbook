@@ -102,7 +102,7 @@ export default function ExpenseFields({
     currencyHelp =
       currency === groupCurrency
         ? `${groupNounTitle} currency`
-        : `This ${groupNoun} uses ${groupCurrency}`;
+        : `This ${groupNounTitle} uses ${groupCurrency}`;
   const [showSplitOptions, setShowSplitOptions] = useState(isEditMode);
   const [showMoreOptions, setShowMoreOptions] = useState(isEditMode);
   // ─── Derived Values ────────────────────────────────

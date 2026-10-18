@@ -15,7 +15,7 @@ const sam = 'a00000000000000000000002';
 const groupId = 'b00000000000000000000001';
 
 /** A row as the To review page shows it, from a read naming the Group's currency. */
-function row(values: Record<string, unknown>, missingFields: string[]) {
+function row(values: Record<string, unknown>, missingFields: string[], problems: string[] = []) {
   const read = {
     draft: {
       id: 'd00000000000000000000001',
@@ -30,7 +30,7 @@ function row(values: Record<string, unknown>, missingFields: string[]) {
       values,
     },
     review: 'a'.repeat(64),
-    problems: [],
+    problems,
     duplicates: [],
   } as ToReviewItem;
   const [item] = buildToReview(
@@ -109,5 +109,28 @@ describe('a row in the web To review page (#512)', () => {
     ]);
     expect(shown).toMatch(/^Fare Sep 2, 2026 · You set this aside ₹12\.50 /);
     expect(shown).not.toContain('currency');
+  });
+});
+
+describe('a row whose item is in another currency than its Group’s (#567)', () => {
+  it('says it needs the Group currency, not the expense details', () => {
+    const shown = row(
+      {
+        description: 'Station dinner',
+        amount: 30,
+        currency: 'USD',
+        date: '2026-09-02',
+        category: 'food',
+        paidBy: [{ user: alex, amount: 30 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }, { user: sam }],
+        tag: 'Food',
+      },
+      [],
+      ['CURRENCY_MISMATCH'],
+    );
+    expect(shown).toBe(
+      'Station dinner Sep 2, 2026 · You set this aside $30.00 Needs the Group currency Fix the rest',
+    );
   });
 });

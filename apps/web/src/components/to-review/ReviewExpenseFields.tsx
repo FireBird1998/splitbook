@@ -116,6 +116,7 @@ export default function ReviewExpenseFields({
       edit={edit}
       isEditMode
       groupCurrency={context.currency}
+      groupCategory={context.category}
       userId=""
       members={members.map((member) => ({ user: { _id: member.id, name: member.name } }))}
       groupTags={context.tags.map((tag) => ({ _id: tag.id, name: tag.name, isArchived: false }))}

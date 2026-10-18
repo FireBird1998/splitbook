@@ -162,6 +162,7 @@ export default function ToReviewPage({
   const names = Object.fromEntries(group?.members.map(({ user }) => [user._id, user.name]) ?? []);
   const context = {
     currency,
+    category: group?.category,
     members: group?.members.map(({ user }) => ({ id: user._id, name: user.name })) ?? [],
     tags:
       group?.tags
