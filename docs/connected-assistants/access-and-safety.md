@@ -1,6 +1,6 @@
 # Connected assistants: access and safety
 
-Updated 19 October 2026. The model below is chosen in [#603](https://github.com/FireBird1998/splitbook/issues/603). **Excluded Groups, the Assistant rule and idle expiry are not implemented at baseline `5c700703`.** [Research](research.md) separates current behavior from requirements.
+Updated 19 October 2026. The model below is chosen in [#603](https://github.com/FireBird1998/splitbook/issues/603). **Excluded Groups, the Assistant rule, idle expiry and the Disconnect confirmation are not implemented at baseline `5c700703`.** [Research](research.md) separates current behavior from requirements.
 
 ## Group access
 
@@ -10,8 +10,8 @@ Reachable Groups = current membership − the connection's Excluded Groups − G
 - The member changes Excluded Groups on the per-assistant page without reconnecting. The next call uses the new selection. Explain that answers leave unticked Groups out.
 - Only admins change the Group's Assistant rule: Allowed by default, or Not allowed. A change records an Activity event naming the admin and new rule.
 - All members see the rule. Only admins see the member, assistant name and last used for assistants that can reach the Group.
-- Every tool enforces current membership, exclusions and the rule alongside grant/revocation checks, including tools for Drafts. Lists omit unreachable Groups. Requests by id return the same “Group not found” result as a nonexistent Group; no count, name or existence hint is disclosed.
-- Exclusions and Not allowed prevent new assistant access to Drafts but keep existing Drafts for the member's To review. Leaving a Group still blocks the former member's access; it does not grant an exception for retained Drafts.
+- Every tool enforces current membership, exclusions and the rule alongside grant/revocation checks, including tools for Drafts. Lists omit unreachable Groups. Requests by id will return the same “Group not found” result as a nonexistent Group (#617; today a missing or non-member Group is refused as forbidden); no count, name or existence hint is disclosed.
+- For an Excluded or Not allowed Group, every Draft tool (list, create, replace and discard) is refused, while the member's existing Drafts stay in their To review. Leaving a Group still blocks the former member's access; it does not grant an exception for retained Drafts.
 
 ## Consent and client identity
 
@@ -30,7 +30,7 @@ Ledger access alone cannot reveal private Drafts. Consent explains permanent dis
 
 ## Lifetime and disconnect
 
-Disconnect asks for confirmation and blocks further authorized calls immediately, retaining prepared Drafts. Signature validity alone is insufficient: current grant status is checked on each call. The implemented revocation boundary rotates a connection generation; old access tokens, refresh lineage and unexchanged codes cannot acquire a new grant after reconnecting. A request already authorized may finish; completed effects are not undone. Data already delivered cannot be recalled.
+Disconnect blocks further authorized calls immediately and keeps prepared Drafts. A confirmation step before disconnecting is planned (#615); today Settings disconnects at once. Signature validity alone is insufficient: current grant status is checked on each call. The implemented revocation boundary rotates a connection generation; old access tokens, refresh lineage and unexchanged codes cannot acquire a new grant after reconnecting. A request already authorized may finish; completed effects are not undone. Data already delivered cannot be recalled.
 
 The chosen idle expiry is **90 days since last use**, with last used updated on authorized calls at most once per minute. Expired connections appear as gone and require reconnection. Token lifetimes must not end the connection earlier through disuse. Current five-minute access tokens and the provider's 30-day refresh default are not this policy; implementing and checking the 90-day lifecycle remains #618 work.
 
