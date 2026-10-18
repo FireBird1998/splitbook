@@ -27,3 +27,7 @@ This change adds installation metadata and generated icon copies, with no page l
 | ![Phone Home in light mode](phone-light.jpg) | ![Phone Home in dark mode](phone-dark.jpg) |
 
 No service worker, offline feature or in-app installation prompt is included. Signed-out launches still follow the existing sign-in flow. No public HTTP data contract or permission changes.
+
+## Manual installation confirmation
+
+Later on 19 October, the owner completed Chrome's installation confirmation for the local test build and reported: “Installed; Home opened.” This completes the pending standalone launch check above. The test app is local only; no production installation or deployment was performed.
