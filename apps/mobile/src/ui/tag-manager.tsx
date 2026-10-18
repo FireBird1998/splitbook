@@ -5,6 +5,7 @@ import { tagArchiveExplanation, type TagIntent } from '@splitbook/shared/tag-man
 import type { MobileController } from '../data/mobile-controller';
 import { Button, Copy } from './primitives';
 import { CompactText, Divider } from './compact';
+import { useStartWhileUnfocused } from './start-while-unfocused';
 import { fonts, useTheme } from './theme';
 
 const actionText = (intent: TagIntent) => {
@@ -21,6 +22,43 @@ const actionText = (intent: TagIntent) => {
       return 'Delete Tag';
   }
 };
+/** The Tag's name, which opens showing its start: its focus is kept only while it's shown. */
+function TagNameBox({
+  name,
+  editable,
+  onChangeText,
+}: {
+  name: string;
+  editable: boolean;
+  onChangeText: (name: string) => void;
+}) {
+  const theme = useTheme();
+  const start = useStartWhileUnfocused();
+  return (
+    <TextInput
+      accessibilityLabel="Tag name"
+      value={name}
+      maxLength={50}
+      editable={editable}
+      onChangeText={onChangeText}
+      selection={start.selection}
+      onFocus={start.onFocus}
+      onBlur={start.onBlur}
+      autoCapitalize="sentences"
+      returnKeyType="done"
+      style={{
+        color: theme.text,
+        fontFamily: fonts.regular,
+        fontSize: 16,
+        minHeight: 48,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: theme.borderStrong,
+        borderRadius: 12,
+      }}
+    />
+  );
+}
 export function TagManager({
   controller,
   groupId,
@@ -180,24 +218,10 @@ export function TagManager({
                       : 'Restore Tag?'}
               </CompactText>
               {'name' in edit && (
-                <TextInput
-                  accessibilityLabel="Tag name"
-                  value={edit.name}
-                  maxLength={50}
+                <TagNameBox
+                  name={edit.name}
                   editable={!busy && !offline && !!snapshot?.canManage}
                   onChangeText={manager.enter}
-                  autoCapitalize="sentences"
-                  returnKeyType="done"
-                  style={{
-                    color: theme.text,
-                    fontFamily: fonts.regular,
-                    fontSize: 16,
-                    minHeight: 48,
-                    padding: 12,
-                    borderWidth: 1,
-                    borderColor: theme.borderStrong,
-                    borderRadius: 12,
-                  }}
                 />
               )}
               {edit.action !== 'create' && (
