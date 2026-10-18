@@ -92,7 +92,7 @@ function render(element: ReactElement, reads: Reads = {}, mode: 'light' | 'dark'
 }
 
 const sidebar = (pathname: string, reads: Reads = { groups: GROUPS, balances: BALANCES }) =>
-  render(createElement(Sidebar, { user: USER, pathname }), reads);
+  render(createElement(Sidebar, { user: USER, pathname, onSignOut: () => {} }), reads);
 
 /** The sidebar's Group rows: each link's text, and what it marks current. */
 const groupRows = (html: string) =>
@@ -331,7 +331,12 @@ describe('the theme switch on a narrow phone', () => {
 
   it('sits at the drawer’s foot, after Settings and before the account, named for the mode it moves to', () => {
     const html = render(
-      createElement(Sidebar, { user: USER, pathname: '/dashboard', variant: 'drawer' }),
+      createElement(Sidebar, {
+        user: USER,
+        pathname: '/dashboard',
+        variant: 'drawer',
+        onSignOut: () => {},
+      }),
       { groups: GROUPS, balances: BALANCES },
     );
     const [button] = themeSwitches(html);

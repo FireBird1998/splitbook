@@ -15,9 +15,9 @@ const PROBLEMS = {
 export type SignOutProblem = keyof typeof PROBLEMS;
 
 /**
- * Sign Out for the Account menu and Settings. When the tab can't leave, because the server
- * can't be reached (#536) or refuses to end the session (#550), the member stays signed in on the
- * page and `problem` says why.
+ * Sign Out for the shell's account menu (kept in AppShell, #566) and Settings. When the tab can't
+ * leave, because the server can't be reached (#536) or refuses to end the session (#550), the
+ * member stays signed in on the page and `problem` says why.
  */
 export function useSignOut() {
   const [problem, setProblem] = useState<SignOutProblem | null>(null);
@@ -32,8 +32,21 @@ export function useSignOut() {
 }
 
 /**
- * Tells the member Sign Out didn't end their session. The status region is always on the page,
- * so the message is announced politely each time it appears; the Snackbar is what they see.
+ * Announces politely why Sign Out didn't end the session. It is always on the page, empty until
+ * then, so each message is announced as it appears. A modal that hides the page behind it, like
+ * the phone drawer, holds a second one, read while it is open (#566).
+ */
+export function SignOutStatus({ problem }: { problem: SignOutProblem | null }) {
+  return (
+    <Box role="status" aria-live="polite" aria-atomic="true" sx={visuallyHidden}>
+      {problem ? PROBLEMS[problem] : ''}
+    </Box>
+  );
+}
+
+/**
+ * Tells the member Sign Out didn't end their session: the status region announces it, and the
+ * Snackbar is what they see.
  */
 export function SignOutNotice({
   problem,
@@ -47,9 +60,7 @@ export function SignOutNotice({
   if (problem && problem !== shown) setShown(problem);
   return (
     <>
-      <Box role="status" aria-live="polite" aria-atomic="true" sx={visuallyHidden}>
-        {problem ? PROBLEMS[problem] : ''}
-      </Box>
+      <SignOutStatus problem={problem} />
       {/* Above any fixed bar of the page, as for the other notices. */}
       <Portal>
         <Snackbar
