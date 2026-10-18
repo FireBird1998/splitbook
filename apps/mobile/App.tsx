@@ -29,6 +29,7 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import { Outfit_400Regular } from '@expo-google-fonts/outfit/400Regular';
 import { Outfit_500Medium } from '@expo-google-fonts/outfit/500Medium';
 import { Outfit_600SemiBold } from '@expo-google-fonts/outfit/600SemiBold';
@@ -88,6 +89,8 @@ import { shownGroup } from './src/data/mobile-controller';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { PRODUCT_NAME } from './src/product';
 
+void SplashScreen.preventAutoHideAsync();
+
 export default function App() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
   const systemMode = useColorScheme() === 'dark' ? 'dark' : 'light';
@@ -107,11 +110,17 @@ export default function App() {
     IBMPlexMono_500Medium,
     ...Ionicons.font,
   });
+  const fontsReady = fontsLoaded || !!fontError;
+  useEffect(() => {
+    if (fontsReady) void SplashScreen.hideAsync();
+  }, [fontsReady]);
+  if (!fontsReady) return null;
+
   return (
     <SafeAreaProvider>
       <ThemeContext.Provider value={getSemanticTokens(mode)}>
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-        {fontsLoaded || fontError ? <SplitBook /> : <Loading label={`Opening ${PRODUCT_NAME}…`} />}
+        <SplitBook />
       </ThemeContext.Provider>
     </SafeAreaProvider>
   );

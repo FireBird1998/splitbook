@@ -8,6 +8,11 @@ vi.mock('react-native', async () => (await import('./native')).reactNative);
 vi.mock('react-native-safe-area-context', async () => (await import('./native')).safeAreaContext);
 vi.mock('@expo/vector-icons/Ionicons', async () => (await import('./native')).ionicons);
 vi.mock('@react-native-community/netinfo', async () => (await import('./native')).netInfo);
+// Native splash calls are inert in Node; launch tests override these to observe readiness.
+vi.mock('expo-splash-screen', () => ({
+  preventAutoHideAsync: async () => undefined,
+  hideAsync: async () => undefined,
+}));
 // React Native's frames, which Node doesn't have: a test runs them with `nextFrame`.
 Object.assign(globalThis, { requestAnimationFrame, cancelAnimationFrame });
 
