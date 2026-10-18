@@ -84,7 +84,7 @@ describe('the landing page with everything off', () => {
       const html = render(mode, OFF);
       expect(html).toMatch(/<h1\b[^>]*>Every shared cost, worked out to the paisa\.<\/h1>/);
       expect(text(html)).toContain(
-        'Trips, flats, couples and teams. Add what was paid, split it the way it happened, and Splitbook shows who owes whom, then settles it in the fewest payments.',
+        'Trips, flats, couples and teams. Add what was paid, split it the way it happened, and Splitbook shows who owes whom, and the fewest payments that settle it.',
       );
       // In the hero, on the web card (#446) and in the closing call to action.
       expect(text(html).match(/Sign in with Google/g)).toHaveLength(3);
@@ -519,11 +519,15 @@ describe('the home page route', () => {
   });
 
   it('describes itself for link previews', () => {
+    // The hero's promise; Splitbook works out the payments, members make them (owner copy).
+    const promise =
+      'Trips, flats, couples and teams. Add what was paid, split it the way it happened, and Splitbook shows who owes whom, and the fewest payments that settle it.';
     expect(metadata).toMatchObject({
       title: 'Splitbook · Every shared cost, worked out to the paisa',
-      description: expect.stringContaining('split it the way it happened'),
+      description: promise,
       openGraph: {
         title: 'Splitbook · Every shared cost, worked out to the paisa',
+        description: promise,
         // The light still of Fig 1, as the tour holds it under reduced motion.
         images: [
           {
