@@ -81,14 +81,15 @@ function memberMessage(message: string) {
     .replace(/requests?\b/gi, 'change')
     .replace(/collections?\b/gi, 'items');
 }
-function amountLabel(values?: ExpenseDraftValues) {
+/** An item without a currency is in its Group's (#512); without either, the amount still shows. */
+function amountLabel(values?: ExpenseDraftValues, groupCurrency?: string) {
   if (!values?.amount) return 'Amount needed';
-  // Without its currency, the amount still shows; the Needs line asks for the currency.
-  if (!values.currency) return values.amount.toLocaleString('en', { maximumFractionDigits: 3 });
+  const currency = values.currency || groupCurrency;
+  if (!currency) return values.amount.toLocaleString('en', { maximumFractionDigits: 3 });
   try {
     return formatCurrency(
-      toMajorAmount(parseAmountMinor(values.amount, values.currency), values.currency),
-      values.currency,
+      toMajorAmount(parseAmountMinor(values.amount, currency), currency),
+      currency,
     );
   } catch {
     return 'Amount needed';
@@ -104,9 +105,12 @@ function sourceLabel(item: ReviewItemModel) {
 function ItemDetails({
   item,
   label = item.label,
+  currency,
 }: {
   item: ReviewItemModel;
   label?: string | null;
+  /** The Group's currency. */
+  currency?: string;
 }) {
   const values = item.accountItem?.draft.values ?? item.deviceItem?.values;
   // An item in your account says what it needs once, in its Needs line, so a missing fact leaves
@@ -118,7 +122,7 @@ function ItemDetails({
       : needs
         ? null
         : 'Date needed';
-  const amount = amountLabel(values);
+  const amount = amountLabel(values, currency);
   return (
     <View style={{ gap: 4 }}>
       <CompactText weight="semibold">
@@ -407,6 +411,7 @@ function QuickChip({
 /** An item in your account: its open control, quick fixes, Save or Fix the rest, and ⋮. */
 function AccountRow({
   item,
+  currency,
   quick,
   names,
   disabled,
@@ -417,6 +422,8 @@ function AccountRow({
   onDelete,
 }: {
   item: ReviewItemModel;
+  /** The Group's currency. */
+  currency?: string;
   quick: ItemQuickFixes | null;
   names: Record<string, string>;
   disabled: boolean;
@@ -451,7 +458,7 @@ function AccountRow({
         style={{ minHeight: 48, paddingVertical: 4 }}
         onPress={onOpen}
       >
-        <ItemDetails item={item} label={label} />
+        <ItemDetails item={item} label={label} currency={currency} />
         {quick?.summary ? <CompactText variant="caption">{quick.summary}</CompactText> : null}
       </Pressable>
       {fixes.map((fix) => (
@@ -706,7 +713,7 @@ export function ToReviewList({
               <Button
                 label={model.ready.label}
                 disabled={disabled || model.ready.count === 0}
-                onPress={() => void client.reviewReady(model.ready.items)}
+                onPress={() => void client.reviewReady(model.ready.items, own?.currency)}
               />
               <Button
                 label="Review one at a time"
@@ -763,6 +770,7 @@ export function ToReviewList({
                           ) : (
                             <AccountRow
                               item={item}
+                              currency={own?.currency}
                               quick={quickFor(item)}
                               names={names}
                               disabled={disabled}
@@ -846,7 +854,7 @@ export function ToReviewList({
             {collection.confirmation?.items.map((item) => (
               <View key={item.draft.id} style={{ gap: 4 }}>
                 <Copy>{item.draft.values?.description || 'Expense'}</Copy>
-                <Money numberOfLines={0}>{amountLabel(item.draft.values)}</Money>
+                <Money numberOfLines={0}>{amountLabel(item.draft.values, own?.currency)}</Money>
                 <CompactText tone="secondary">
                   {item.draft.preparedBy.kind === 'assistant'
                     ? `Prepared by ${item.draft.preparedBy.name}`

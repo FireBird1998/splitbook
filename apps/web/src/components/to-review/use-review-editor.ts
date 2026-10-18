@@ -28,6 +28,8 @@ export function useReviewEditor(
   client: WebReviewClient,
   refresh: () => Promise<void>,
   names: Readonly<Record<string, string>>,
+  /** The Group's currency, for the note about a newer version. */
+  currency?: string,
 ) {
   const [draft, setDraft] = useState(initial);
   const [entries, setEntries] = useState(() => draftEntries(initial.values));
@@ -45,6 +47,7 @@ export function useReviewEditor(
    */
   const leaving = useRef(false);
   const namesRef = useRef(names);
+  const currencyRef = useRef(currency);
   const adapter = useRef({ client, refresh });
   useEffect(() => {
     adapter.current = { client, refresh };
@@ -52,10 +55,12 @@ export function useReviewEditor(
   const editQueue = useRef<ReturnType<typeof draftEditQueue<DraftEntries>> | null>(null);
   useEffect(() => {
     namesRef.current = names;
-  }, [names]);
+    currencyRef.current = currency;
+  }, [names, currency]);
   const adopt = useCallback((next: PersistedExpenseDraft, announce: boolean) => {
     if (!live.current) return;
-    if (announce) setNote(describeDraftChange(current.current, next, namesRef.current));
+    if (announce)
+      setNote(describeDraftChange(current.current, next, namesRef.current, currencyRef.current));
     current.current = next;
     input.current = draftEntries(next.values);
     editQueue.current?.clear();

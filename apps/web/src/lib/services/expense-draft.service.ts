@@ -12,6 +12,7 @@ import Expense from '@/lib/models/Expense';
 import {
   saveExpenseDraftsSchema,
   completeExpenseDraftSchema,
+  withGroupCurrency,
   type DraftReview,
   type DraftSaveOutcome,
 } from '@splitbook/shared/validators/expense-draft';
@@ -121,13 +122,18 @@ async function requireMembership(
       'members.user': scope.owner,
       deletionRequestedAt: null,
     },
-    { session, projection: { _id: 1 } },
+    { session, projection: { _id: 1, defaultCurrency: 1 } },
   );
   if (!group) throw new Error('FORBIDDEN');
+  return group.defaultCurrency as string | undefined;
 }
 
-/** Schema refinements may wait for valid fields; identify every absent fact independently. */
-function draftValidation(values: ExpenseDraftValues = {}) {
+/**
+ * Schema refinements may wait for valid fields; identify every absent fact independently. A
+ * Draft without a currency takes its Group's, so the currency is never asked for (#512).
+ */
+function draftValidation(stored: ExpenseDraftValues = {}, groupCurrency?: string) {
+  const values = withGroupCurrency(stored, groupCurrency);
   const parsed = completeExpenseDraftSchema.safeParse(values);
   const required = [
     ['description', values.description, 'Enter a description.'],
@@ -164,7 +170,7 @@ function draftValidation(values: ExpenseDraftValues = {}) {
   };
 }
 
-function present(record: DraftRecord): PersistedExpenseDraft {
+function present(record: DraftRecord, groupCurrency?: string): PersistedExpenseDraft {
   return {
     id: String(record._id),
     groupId: String(record.group),
@@ -176,7 +182,7 @@ function present(record: DraftRecord): PersistedExpenseDraft {
     ...(record.state === 'active'
       ? {
           values: record.values,
-          missingFields: draftValidation(record.values).missingFields,
+          missingFields: draftValidation(record.values, groupCurrency).missingFields,
         }
       : {}),
     createdAt: record.createdAt.toISOString(),
@@ -192,6 +198,7 @@ async function mutate<T>(
     drafts: Awaited<ReturnType<typeof collection>>,
     scope: ReturnType<typeof access>,
     session: mongoose.ClientSession,
+    groupCurrency: string | undefined,
   ) => Promise<T>,
 ) {
   const scope = access(actor, groupId);
@@ -211,14 +218,13 @@ async function mutate<T>(
         { session },
       );
     if (!account.matchedCount) throw new Error('FORBIDDEN');
-    await requireMembership(scope, session);
-    return write(drafts, scope, session);
+    const groupCurrency = await requireMembership(scope, session);
+    return write(drafts, scope, session, groupCurrency);
   });
 }
 
 function reviewValues(record: DraftRecord, group: IGroupDocument) {
-  const values = record.values ?? {};
-  const { parsed, problems } = draftValidation(values);
+  const { parsed, problems } = draftValidation(record.values, group.defaultCurrency);
   let allocation: DraftReview['allocation'];
   if (parsed.success) {
     try {
@@ -264,7 +270,7 @@ async function reviewDraft(
     .session(session ?? null)
     .lean();
   if (!group) throw new Error('FORBIDDEN');
-  const values = record.values ?? {};
+  const values = withGroupCurrency(record.values, group.defaultCurrency);
   const { problems, allocation } = reviewValues(record, group);
   const duplicates: DraftReview['duplicates'] = [];
   const warningVersions: unknown[] = [];
@@ -274,7 +280,10 @@ async function reviewDraft(
       .find({ ...scope, state: 'active', _id: { $ne: record._id } }, { session })
       .toArray();
     for (const other of otherDrafts)
-      if (other.values && isPossibleExpenseDuplicate(values, other.values)) {
+      if (
+        other.values &&
+        isPossibleExpenseDuplicate(values, withGroupCurrency(other.values, group.defaultCurrency))
+      ) {
         duplicates.push({
           kind: 'draft',
           id: String(other._id),
@@ -316,7 +325,7 @@ async function reviewDraft(
     warnings: warningVersions,
   });
   return {
-    draft: present(record),
+    draft: present(record, group.defaultCurrency),
     review,
     problems,
     duplicates,
@@ -351,8 +360,8 @@ export const expenseDraftService = {
       if (!own.length) continue;
       // Bound the one Expense query to the dates/amounts/currencies represented in this Group.
       const comparable = own.flatMap((record) => {
-        const v = record.values;
-        if (!v?.description || !v.amount || !v.currency || !v.date) return [];
+        const v = withGroupCurrency(record.values, group.defaultCurrency);
+        if (!v.description || !v.amount || !v.currency || !v.date) return [];
         const start = new Date(`${v.date.slice(0, 10)}T00:00:00.000Z`);
         return [
           {
@@ -368,13 +377,16 @@ export const expenseDraftService = {
             .lean()
         : [];
       const items = own.map((record) => {
-        const values = record.values ?? {};
+        const values = withGroupCurrency(record.values, group.defaultCurrency);
         const duplicates: DraftReview['duplicates'] = [];
         for (const other of own) {
           if (
             String(other._id) !== String(record._id) &&
             other.values &&
-            isPossibleExpenseDuplicate(values, other.values)
+            isPossibleExpenseDuplicate(
+              values,
+              withGroupCurrency(other.values, group.defaultCurrency),
+            )
           )
             duplicates.push({
               kind: 'draft',
@@ -391,7 +403,7 @@ export const expenseDraftService = {
             });
         }
         return {
-          draft: present(record),
+          draft: present(record, group.defaultCurrency),
           problems: reviewValues(record, group).problems,
           duplicates,
         };
@@ -399,6 +411,7 @@ export const expenseDraftService = {
       result.groups.push({
         groupId: String(group._id),
         groupName: group.name,
+        currency: group.defaultCurrency,
         count: items.length,
         items,
       });
@@ -414,7 +427,7 @@ export const expenseDraftService = {
     const outcomes: DraftSaveOutcome[] = [];
     for (const item of command.drafts) {
       try {
-        const expenseId = await mutate(actor, groupId, async (drafts, scope, session) => {
+        const expenseId = await mutate(actor, groupId, async (drafts, scope, session, currency) => {
           const record = await drafts.findOne(
             { ...scope, _id: new mongoose.Types.ObjectId(item.id) },
             { session },
@@ -437,7 +450,7 @@ export const expenseDraftService = {
           const preparedBy = draftAttributionSchema.parse(record.preparedBy);
           const expense = await expenseService.create(
             groupId,
-            completeExpenseDraftSchema.parse(record.values),
+            completeExpenseDraftSchema.parse(withGroupCurrency(record.values, currency)),
             actor.id,
             `draft:${item.id}`,
             preparedBy.kind === 'assistant' ? { preparedBy } : undefined,
@@ -487,7 +500,7 @@ export const expenseDraftService = {
   async list(actor: DraftActor, groupId: string) {
     const scope = access(actor, groupId);
     const drafts = await collection();
-    await requireMembership(scope);
+    const currency = await requireMembership(scope);
     // Each owner's active Drafts in this Group are bounded by the per-member limit.
     return (
       await drafts
@@ -495,14 +508,14 @@ export const expenseDraftService = {
         .sort({ createdAt: 1, _id: 1 })
         .limit(ACTIVE_DRAFTS_PER_MEMBER)
         .toArray()
-    ).map(present);
+    ).map((record) => present(record, currency));
   },
 
   async create(actor: DraftActor, groupId: string, input: unknown, key: string) {
     const command = createExpenseDraftsSchema.parse(input);
     const requestKey = draftRequestKey.parse(key);
     const requestFingerprint = fingerprintCreateCommand(command);
-    return mutate(actor, groupId, async (drafts, scope, session) => {
+    return mutate(actor, groupId, async (drafts, scope, session, currency) => {
       const replay = await drafts
         .find({ ...scope, requestKey }, { session })
         .sort({ itemIndex: 1 })
@@ -514,7 +527,7 @@ export const expenseDraftService = {
         )
           throw new Error('IDEMPOTENCY_CONFLICT');
         // A discarded item's content is gone; its minimal receipt prevents resurrection.
-        return replay.map(present);
+        return replay.map((record) => present(record, currency));
       }
       const count = await drafts.countDocuments({ ...scope, state: 'active' }, { session });
       if (count + command.drafts.length > ACTIVE_DRAFTS_PER_MEMBER)
@@ -535,7 +548,7 @@ export const expenseDraftService = {
         updatedAt: now,
       }));
       await drafts.insertMany(records, { session });
-      return records.map(present);
+      return records.map((record) => present(record, currency));
     });
   },
 
@@ -548,7 +561,7 @@ export const expenseDraftService = {
   ) {
     const values = expenseDraftValuesSchema.parse(input);
     const _id = new mongoose.Types.ObjectId(draftObjectId.parse(draftId));
-    return mutate(actor, groupId, async (drafts, scope, session) => {
+    return mutate(actor, groupId, async (drafts, scope, session, currency) => {
       const record = await drafts.findOne({ ...scope, _id, state: 'active' }, { session });
       if (!record) throw new Error('DRAFT_NOT_FOUND');
       assertExpectedRevision(record.revision, revision);
@@ -564,7 +577,7 @@ export const expenseDraftService = {
         },
         { session },
       );
-      return present({ ...record, values, updatedAt, changedBy, revision: revision + 1 });
+      return present({ ...record, values, updatedAt, changedBy, revision: revision + 1 }, currency);
     });
   },
 

@@ -6352,7 +6352,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const items = model.groups.flatMap((group) =>
       group.items.flatMap((item) =>
         item.accountItem
-          ? [{ groupId: group.groupId, groupName: group.groupName, item: item.accountItem }]
+          ? [
+              {
+                groupId: group.groupId,
+                groupName: group.groupName,
+                currency: group.currency,
+                item: item.accountItem,
+              },
+            ]
           : [],
       ),
     );

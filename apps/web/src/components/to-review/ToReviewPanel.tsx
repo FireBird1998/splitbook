@@ -63,7 +63,7 @@ export default function ToReviewPanel({
     surface.current?.focus({ preventScroll: true });
     surface.current?.scrollIntoView({ block: 'start' });
   }, []);
-  const editor = useReviewEditor(item.accountItem!.draft, client, refresh, names);
+  const editor = useReviewEditor(item.accountItem!.draft, client, refresh, names, context.currency);
   const [acknowledgedVersion, setAcknowledgedVersion] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -197,7 +197,12 @@ export default function ToReviewPanel({
         ))}
         {duplicate && (
           <>
-            <ReviewMatches item={item.accountItem!} items={items} names={names} />
+            <ReviewMatches
+              item={item.accountItem!}
+              items={items}
+              names={names}
+              currency={context.currency}
+            />
             <FormControlLabel
               control={
                 <Checkbox

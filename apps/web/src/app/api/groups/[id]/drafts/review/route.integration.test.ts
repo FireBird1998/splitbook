@@ -121,8 +121,8 @@ describe('POST /api/groups/[id]/drafts/review', () => {
     const reviewed = await reviewDrafts(groupId, samCookie, [draftId]);
 
     expect(reviewed.status).toBe(200);
+    // The Group sets the currency, so it is never asked for (#512).
     expect(reviewed.body.data[0].problems).toEqual([
-      'currency: Choose a currency.',
       'date: Choose the Expense date.',
       'paidBy: Choose who paid.',
       'splitMethod: Choose a split method.',
@@ -130,6 +130,7 @@ describe('POST /api/groups/[id]/drafts/review', () => {
       'tagId: Choose a Tag.',
     ]);
     expect(reviewed.body.data[0].draft.values).toEqual({ description: 'Taxi', amount: 450 });
+    expect(reviewed.body.data[0].draft.missingFields).not.toContain('currency');
   });
 
   it('warns that a Draft looks like an Expense already in the ledger', async () => {

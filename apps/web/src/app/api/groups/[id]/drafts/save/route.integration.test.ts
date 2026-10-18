@@ -50,7 +50,7 @@ afterAll(() => disconnectSignedIn(db));
  * Alex's and Sam's trip with an empty ledger, where Sam keeps a complete Draft of a ₹1,000.00
  * dinner Sam paid for, split equally with Alex, and has reviewed it.
  */
-async function tripWithSamsReviewedDinner(samCookie: string) {
+async function tripWithSamsReviewedDinner(samCookie: string, changes: object = {}) {
   const group = await groupService.create(
     { name: 'Coorg Weekend', category: 'trip', defaultCurrency: 'INR', alternateCurrencies: [] },
     alex,
@@ -76,6 +76,7 @@ async function tripWithSamsReviewedDinner(samCookie: string) {
           paidBy: [{ user: sam, amount: 1000 }],
           splitMethod: 'equal',
           splitBetween: [{ user: alex }, { user: sam }],
+          ...changes,
         },
       ],
     },
@@ -145,6 +146,28 @@ describe('POST /api/groups/[id]/drafts/save', () => {
       cookie: samCookie,
     });
     expect(waiting.body.data).toEqual([]);
+  });
+
+  it('saves a Draft without a currency in its Group’s currency (#512)', async () => {
+    const samCookie = await signIn('sam');
+    // An assistant left the currency out; the Group fixes it, as Add expense does.
+    const { groupId, draftId, saveCommand } = await tripWithSamsReviewedDinner(samCookie, {
+      currency: undefined,
+    });
+
+    const saved = await saveDrafts(groupId, samCookie, saveCommand);
+
+    expect(saved.body.data).toEqual([
+      { id: draftId, status: 'saved', expenseId: expect.any(String) },
+    ]);
+    const ledger = await callRoute(balances.GET, {
+      method: 'GET',
+      path: `/api/groups/${groupId}/balances`,
+      params: { id: groupId },
+      cookie: samCookie,
+    });
+    expect(ledger.body.data).toMatchObject({ currency: 'INR' });
+    expect(await debts(groupId, samCookie)).toEqual([{ from: alex, to: sam, amount: 500 }]);
   });
 
   it('records the Expense once when a save whose reply was lost is retried', async () => {

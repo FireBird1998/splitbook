@@ -242,7 +242,8 @@ export function sharedDraftCollection({
       run(async () => {
         update({ reviews: await client.review(read().selected), ack: [], outcomes: [] });
       }),
-    reviewReady: (items: ToReviewItem[]) =>
+    /** `currency` is the Group's, which ready items without their own are in (#512). */
+    reviewReady: (items: ToReviewItem[], currency?: string) =>
       run(async () => {
         if (read().pending || !items.length) return;
         update({ confirmation: null, reviews: [], outcomes: [], resultsVisible: false });
@@ -254,6 +255,7 @@ export function sharedDraftCollection({
               {
                 groupId,
                 groupName: read().context?.group.name ?? '',
+                currency,
                 count: reviews.length,
                 items: reviews,
               },

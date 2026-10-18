@@ -323,6 +323,15 @@ describe('changes while an item is open', () => {
       "Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00. You're seeing the latest version.",
     );
   });
+  it('describes an amount without a currency in the Group’s (#512)', () => {
+    const { before, after } = changed();
+    delete before.values!.currency;
+    delete after.values!.currency;
+    after.values!.amount = 2400;
+    expect(describeDraftChange(before, after, names, 'INR')).toBe(
+      "Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00. You're seeing the latest version.",
+    );
+  });
   it('formats date facts as calendar days in every host time zone', () => {
     const { before, after } = changed();
     after.values!.date = '2026-10-15';
@@ -708,5 +717,60 @@ describe('a fact that is there but wrong (#506)', () => {
       'The amount can have at most 2 decimal places.',
       'The amount must be a whole number.',
     ]);
+  });
+});
+
+describe('the Group currency (#512)', () => {
+  /** A read whose Group may set the currency, with the missingFields today's server sends. */
+  const inGroup = (values: object, currency?: string, missingFields: string[] = []) =>
+    buildToReview(
+      {
+        total: 1,
+        groups: [
+          {
+            groupId,
+            groupName: 'Weekend',
+            ...(currency ? { currency } : {}),
+            count: 1,
+            items: [{ ...item(1), draft: { ...item(1).draft, missingFields, values } }],
+          },
+        ],
+      },
+      [],
+      now,
+    ).items[0];
+  const taxiWithoutCurrency = Object.fromEntries(
+    Object.entries(item(1).draft.values!).filter(([key]) => key !== 'currency'),
+  );
+
+  it('fills an item without a currency from its Group, so it is ready', () => {
+    const model = inGroup(taxiWithoutCurrency, 'USD');
+
+    expect([model.state, model.missingFacts]).toEqual(['ready', []]);
+  });
+
+  it('never asks for the currency, only for what is really missing', () => {
+    const model = inGroup({ description: 'Taxi' }, 'USD', [
+      'amount',
+      'currency',
+      'date',
+      'paidBy',
+      'splitMethod',
+      'splitBetween',
+      'tagId',
+    ]);
+
+    expect(model.missingFacts).toEqual([
+      'the amount',
+      'the date',
+      'who paid',
+      'how to split it',
+      'who shared it',
+      'the tag',
+    ]);
+  });
+
+  it('still asks for it when the read names no Group currency', () => {
+    expect(inGroup(taxiWithoutCurrency).missingFacts).toEqual(['the currency']);
   });
 });

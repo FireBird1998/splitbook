@@ -128,7 +128,8 @@ function fixture(
   const incomplete = {
     ...row(3, 'Missing amount', 30),
     values: { description: 'Missing amount' },
-    missingFields: ['amount', 'currency', 'date'],
+    // The Group sets the currency, so the server never lists it (#512).
+    missingFields: ['amount', 'date'],
   };
   const duplicate = {
     ...review(row(4, 'Duplicate dinner', 30)),
@@ -183,6 +184,7 @@ function fixture(
                   {
                     groupId: id,
                     groupName: id === groupId ? group.name : 'Goa Friends Trip',
+                    currency: 'INR',
                     count: own.length,
                     items: own,
                   },
@@ -625,6 +627,31 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(text(tree)).not.toContain('the amount');
     expect(text(tree)).not.toContain('Choose who shared it and how');
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
+  });
+  it('shows the Group’s currency, locked, for an item without one (#512)', async () => {
+    const f = fixture({ one: true });
+    delete f.items()[0].draft.values!.currency;
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+
+    expect(
+      tree.root.findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityLabel === 'Currency INR, the Group’s currency',
+      ),
+    ).toHaveLength(1);
+    expect(text(tree)).toContain('₹12.34');
+    expect(text(tree)).not.toContain('Use INR as currency');
+    expect(text(tree)).not.toContain('the currency');
+    expect(button(tree, 'Save expense').props.disabled).toBe(false);
+    // The Group's currency is a fact the save already has, so the item saves as it is.
+    await tap(tree, 'Save expense');
+    expect(f.saves).toHaveLength(1);
+    expect(text(tree)).toContain('Saved 1');
   });
   it('shows the shared change note from a newer read, and never saves an unseen version', async () => {
     const f = fixture({ one: true });

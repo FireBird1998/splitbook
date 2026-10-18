@@ -3,6 +3,8 @@ export type DraftEntries = Record<string, string>;
 export interface DraftContext {
   members: Array<{ id: string; name: string }>;
   tags: Array<{ id: string; name: string }>;
+  /** The Group's currency, which an item without its own is in (#512). */
+  currency?: string;
 }
 export function draftEntries(values: ExpenseDraftValues = {}): DraftEntries {
   const entries: DraftEntries = {};
