@@ -1,4 +1,5 @@
 import { getCategory } from './categories';
+import { GROUP_ARCHIVED_MESSAGE } from './group-archive';
 import type { PersistedExpenseDraft } from './validators/expense-draft';
 import { formatDate } from './date';
 import { toDateParam } from './date';
@@ -409,6 +410,7 @@ export function reviewProblem(
     'This item needs another look before saving. Check the details and any possible duplicate.',
     'Some items changed or need another look. Review them before saving.',
     'Could not confirm this action. Check your connection and try again.',
+    GROUP_ARCHIVED_MESSAGE,
   ];
   if (memberMessages.includes(message)) return message;
   const path = problemPath(message);

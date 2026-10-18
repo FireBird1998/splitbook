@@ -412,6 +412,11 @@ describe('review member wording', () => {
     ])
       expect(reviewProblem(message)).toBe(message);
   });
+  it('says an archived Group’s refusal in its own words (#578)', () => {
+    expect(reviewProblem('This Group was archived, so nothing more can be saved in it.')).toBe(
+      'This Group was archived, so nothing more can be saved in it.',
+    );
+  });
   it('never forwards unrecognized server prose or code terms', () => {
     for (const message of [
       'values.paidBy.0.amount: broken',

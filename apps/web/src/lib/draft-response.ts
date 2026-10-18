@@ -20,6 +20,7 @@ export function draftError(cause: unknown) {
     cause instanceof Error &&
     [
       'FORBIDDEN',
+      'GROUP_ARCHIVED',
       'IDEMPOTENCY_CONFLICT',
       'STALE_REVISION',
       'REVISION_REQUIRED',

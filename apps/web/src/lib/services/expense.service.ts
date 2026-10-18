@@ -85,10 +85,12 @@ export interface ExpenseAccess {
 }
 
 export class ExpenseService {
-  private async requireAccessGroup({ actorId, groupId }: ExpenseAccess) {
+  private async requireAccessGroup({ actorId, groupId }: ExpenseAccess, writing = false) {
     await connectDB();
     const group = await Group.findOne({ _id: groupId, 'members.user': actorId });
     if (!group) throw new Error('FORBIDDEN');
+    // An archived Group can still be read, but takes no more changes (#578).
+    if (writing && group.isArchived) throw new Error('GROUP_ARCHIVED');
     return group;
   }
 
@@ -139,6 +141,8 @@ export class ExpenseService {
         { path: 'createdBy', select: PERSON_FIELDS },
       ]);
     }
+    // A retry of an Expense recorded before the archive is confirmed above; nothing new is (#578).
+    if (group.isArchived) throw new Error('GROUP_ARCHIVED');
     const memberIds = new Set(group.members.map((member) => String(member.user)));
     assertExpenseParticipants(memberIds, data.paidBy, data.splitBetween);
     assertGroupCurrency(group.defaultCurrency, data.currency);
@@ -153,18 +157,21 @@ export class ExpenseService {
     });
     let expense;
     try {
-      expense = await withGroupMutation(groupId, async () =>
-        Expense.create({
-          ...command,
-          preparedBy: options?.preparedBy,
-          _id: id,
-          group: groupId,
-          createdBy: userId,
-          pendingActivity: [event],
-          ...(requestKey
-            ? { creationRequest: createRequestMetadata(requestKey, command, data.tag) }
-            : {}),
-        }),
+      expense = await withGroupMutation(
+        groupId,
+        async () =>
+          Expense.create({
+            ...command,
+            preparedBy: options?.preparedBy,
+            _id: id,
+            group: groupId,
+            createdBy: userId,
+            pendingActivity: [event],
+            ...(requestKey
+              ? { creationRequest: createRequestMetadata(requestKey, command, data.tag) }
+              : {}),
+          }),
+        { ledger: true },
       );
     } catch (error) {
       if (requestKey && (error as { code?: number }).code === 11000) {
@@ -421,18 +428,21 @@ export class ExpenseService {
    * Update an expense. Handles both edits and restore (isDeleted: false).
    */
   async update(access: ExpenseAccess, data: UpdateExpenseInput, expectedRevision?: number) {
-    const group = await this.requireAccessGroup(access);
+    const group = await this.requireAccessGroup(access, true);
     // Old documents predate the revision field. Initialize atomically before loading for CAS.
-    await withGroupMutation(access.groupId, async (session) =>
-      Expense.collection.updateOne(
-        {
-          _id: new mongoose.Types.ObjectId(access.expenseId),
-          group: new mongoose.Types.ObjectId(access.groupId),
-          revision: { $exists: false },
-        },
-        { $set: { revision: 0 } },
-        { session },
-      ),
+    await withGroupMutation(
+      access.groupId,
+      async (session) =>
+        Expense.collection.updateOne(
+          {
+            _id: new mongoose.Types.ObjectId(access.expenseId),
+            group: new mongoose.Types.ObjectId(access.groupId),
+            revision: { $exists: false },
+          },
+          { $set: { revision: 0 } },
+          { session },
+        ),
+      { ledger: true },
     );
     const expense = await Expense.findOne({ _id: access.expenseId, group: access.groupId }).select(
       '+pendingActivity',
@@ -485,7 +495,7 @@ export class ExpenseService {
         }),
       );
     }
-    await withGroupMutation(access.groupId, async () => expense.save());
+    await withGroupMutation(access.groupId, async () => expense.save(), { ledger: true });
     await activityService.publishPending('expenses', expense._id, expense.pendingActivity);
     return expense.populate([
       { path: 'paidBy.user', select: PERSON_FIELDS },
@@ -496,18 +506,21 @@ export class ExpenseService {
 
   /** Soft deletion preserves identity, request keys and all audit history. */
   async delete(access: ExpenseAccess, expectedRevision?: number) {
-    await this.requireAccessGroup(access);
+    await this.requireAccessGroup(access, true);
     // Old documents predate the revision field. Initialize atomically before loading for CAS.
-    await withGroupMutation(access.groupId, async (session) =>
-      Expense.collection.updateOne(
-        {
-          _id: new mongoose.Types.ObjectId(access.expenseId),
-          group: new mongoose.Types.ObjectId(access.groupId),
-          revision: { $exists: false },
-        },
-        { $set: { revision: 0 } },
-        { session },
-      ),
+    await withGroupMutation(
+      access.groupId,
+      async (session) =>
+        Expense.collection.updateOne(
+          {
+            _id: new mongoose.Types.ObjectId(access.expenseId),
+            group: new mongoose.Types.ObjectId(access.groupId),
+            revision: { $exists: false },
+          },
+          { $set: { revision: 0 } },
+          { session },
+        ),
+      { ledger: true },
     );
     const expense = await Expense.findOne({ _id: access.expenseId, group: access.groupId }).select(
       '+pendingActivity',
@@ -525,7 +538,7 @@ export class ExpenseService {
         description: expense.description,
       }),
     );
-    await withGroupMutation(access.groupId, async () => expense.save());
+    await withGroupMutation(access.groupId, async () => expense.save(), { ledger: true });
     await activityService.publishPending('expenses', expense._id, expense.pendingActivity);
     return expense;
   }

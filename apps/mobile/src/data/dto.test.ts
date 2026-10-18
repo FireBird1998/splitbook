@@ -29,3 +29,25 @@ describe('a Group read on Android (#517)', () => {
     ]);
   });
 });
+
+describe('an archived Group read on Android (#578)', () => {
+  const read = (extra: object) =>
+    parseGroup({
+      status: 200,
+      data: {
+        _id: 'b00000000000000000000001',
+        name: 'Maple House',
+        createdBy: alex._id,
+        defaultCurrency: 'INR',
+        members: [{ user: alex, role: 'admin', joinedAt: at }],
+        createdAt: at,
+        updatedAt: at,
+        ...extra,
+      },
+    });
+
+  it('carries that it was archived, and nothing for a Group that wasn’t', () => {
+    expect(read({ isArchived: true }).isArchived).toBe(true);
+    expect('isArchived' in read({ isArchived: false })).toBe(false);
+  });
+});

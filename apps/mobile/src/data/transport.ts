@@ -1,4 +1,5 @@
 import { readSessionCookie } from './cookies';
+import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
 import type { FetchResponse, MobileFetch, MobileTimer } from './types';
 
 export const expiredMessage = 'Your session has expired. Sign in again to continue.';
@@ -80,6 +81,13 @@ export class RequestError extends Error {
     this.kind = kind ?? failureKind(status, code, networkFailure);
   }
 }
+
+/** What the member is told when a Group was archived, which takes nothing more (#578). */
+export const groupArchived = GROUP_ARCHIVED_MESSAGE;
+
+/** An archived Group refuses as a lost one does (403), with its own code and words. */
+const archivedRefusal = (details?: unknown) =>
+  new RequestError(groupArchived, 403, 'GROUP_ARCHIVED', false, null, undefined, details);
 
 /** What the member is told when a Group refuses them (403) or is gone (404). */
 export const groupRefused = (status: number) =>
@@ -195,9 +203,16 @@ export interface TransportDependencies {
   ): Promise<void>;
   /**
    * The member lost access to a Group: a 403 under `/api/groups/:id`, or a 404 on exactly
-   * `/api/groups/:id`. It finishes before the caller gets the error.
+   * `/api/groups/:id`. An archived Group counts as lost too (#578), with the code GROUP_ARCHIVED:
+   * its own read says so, or it refuses a write. It finishes before the caller gets the error.
    */
-  onGroupDenied(groupId: string, status: number, owner: number, path: string): Promise<void>;
+  onGroupDenied(
+    groupId: string,
+    status: number,
+    owner: number,
+    path: string,
+    code?: string,
+  ): Promise<void>;
   /**
    * A read of a Group or of its Expense list ended: answered, failed or cancelled once sent. The
    * server may have created due recurring Expenses for it, so that Group's Balances and Home are
@@ -413,6 +428,10 @@ export function createTransport({
         const membershipDenied =
           denied && (!tagAction || (code !== null && code !== 'TAG_ADMIN_REQUIRED'));
         if (membershipDenied && denied) await onGroupDenied(denied, response.status, owner, path);
+        if (response.status === 409 && code === 'GROUP_ARCHIVED' && deniedGroup) {
+          await onGroupDenied(deniedGroup, 403, owner, path, code);
+          throw archivedRefusal(details);
+        }
         const serverMessage =
           details &&
           typeof details === 'object' &&
@@ -444,6 +463,13 @@ export function createTransport({
       reading = true;
       const body = await response.json();
       assertLive();
+      // The Group's own read says it was archived: the app treats it as lost (#578).
+      const read =
+        (options.method ?? 'GET') === 'GET' && /^\/api\/groups\/([a-f\d]{24})(?:\?|$)/i.exec(path);
+      if (read && (body as { data?: { isArchived?: unknown } } | null)?.data?.isArchived === true) {
+        await onGroupDenied(read[1], 403, owner, path, 'GROUP_ARCHIVED');
+        throw archivedRefusal();
+      }
       if (ownsGroup && !ownsGroup()) throw new Superseded();
       return body;
     } catch (error) {

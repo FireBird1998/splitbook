@@ -245,16 +245,26 @@ export type SettlementSave =
   | { status: 'not-stored' }
   /** Nothing stored or sent: the page was rendered for another account than it sends as. */
   | { status: 'stale' }
-  /** The first send was refused with a 422: the attempt is removed, the entries are the member's to fix. */
+  /**
+   * The first send was refused with a 422, or any send because the Group was archived (#578): the
+   * attempt is removed, the entries are the member's to fix.
+   */
   | { status: 'rejected'; message: string }
   /** Possibly recorded: the attempt is kept for an explicit resend or discard. */
   | { status: 'unconfirmed'; message: string; attempt: SettlementAttempt };
 
-async function failureMessage(response: Response) {
-  const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
-  return typeof body?.error === 'string' && body.error
-    ? body.error
-    : `The server answered ${response.status}.`;
+async function failure(response: Response) {
+  const body = (await response.json().catch(() => null)) as {
+    error?: unknown;
+    code?: unknown;
+  } | null;
+  return {
+    message:
+      typeof body?.error === 'string' && body.error
+        ? body.error
+        : `The server answered ${response.status}.`,
+    code: typeof body?.code === 'string' ? body.code : null,
+  };
 }
 
 type Ready = { attempt: SettlementAttempt; firstSend: boolean };
@@ -352,8 +362,9 @@ export async function recordSettlement({
     await forget();
     return { status: 'recorded' };
   }
-  const message = await failureMessage(response);
-  if (firstSend && response.status === 422) {
+  const { message, code } = await failure(response);
+  // An archived Group refuses only after confirming an earlier send, so this one wasn't recorded.
+  if ((firstSend && response.status === 422) || code === 'GROUP_ARCHIVED') {
     await forget();
     return { status: 'rejected', message };
   }

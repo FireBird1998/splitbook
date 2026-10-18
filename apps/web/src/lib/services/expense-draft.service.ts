@@ -1,4 +1,5 @@
 import 'server-only';
+import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
 import { isPossibleExpenseDuplicate } from '@splitbook/shared/expense-duplicate';
 import mongoose from 'mongoose';
 import {
@@ -108,6 +109,8 @@ function access(actor: DraftActor, groupId: string) {
 async function requireMembership(
   scope: ReturnType<typeof access>,
   session?: mongoose.ClientSession,
+  /** A save or an assistant's preparation, which an archived Group refuses (#578). */
+  refuseArchived = false,
 ) {
   const account = await mongoose.connection
     .db!.collection('users')
@@ -122,9 +125,10 @@ async function requireMembership(
       'members.user': scope.owner,
       deletionRequestedAt: null,
     },
-    { session, projection: { _id: 1, defaultCurrency: 1 } },
+    { session, projection: { _id: 1, defaultCurrency: 1, isArchived: 1 } },
   );
   if (!group) throw new Error('FORBIDDEN');
+  if (refuseArchived && group.isArchived) throw new Error('GROUP_ARCHIVED');
   return group.defaultCurrency as string | undefined;
 }
 
@@ -200,11 +204,12 @@ async function mutate<T>(
     session: mongoose.ClientSession,
     groupCurrency: string | undefined,
   ) => Promise<T>,
+  refuseArchived = false,
 ) {
   const scope = access(actor, groupId);
   const drafts = await collection();
   await actor.authorize?.();
-  await requireMembership(scope);
+  await requireMembership(scope, undefined, refuseArchived);
   // No count-then-insert fallback: it would violate the per-member cap under concurrency.
   if (!(await supportsGroupTransactions())) throw new Error('DRAFT_TRANSACTIONS_REQUIRED');
   return withGroupMutation(String(scope.group), async (session) => {
@@ -218,9 +223,15 @@ async function mutate<T>(
         { session },
       );
     if (!account.matchedCount) throw new Error('FORBIDDEN');
-    const groupCurrency = await requireMembership(scope, session);
+    // Checked again inside the transaction, so an archive that commits first stops the write.
+    const groupCurrency = await requireMembership(scope, session, refuseArchived);
     return write(drafts, scope, session, groupCurrency);
   });
+}
+
+/** An assistant prepares nothing in an archived Group (#578); a member's own items stay theirs. */
+function prepare<T>(actor: DraftActor, groupId: string, write: Parameters<typeof mutate<T>>[2]) {
+  return mutate(actor, groupId, write, Boolean(actor.assistant));
 }
 
 function reviewValues(record: DraftRecord, group: IGroupDocument) {
@@ -422,8 +433,22 @@ export const expenseDraftService = {
     // An MCP actor is never permitted to convert a Draft, even if accidentally wired here.
     if (actor.authorize) throw new Error('FORBIDDEN');
     const command = saveExpenseDraftsSchema.parse(input);
-    await collection();
+    const drafts = await collection();
     await ensureLedgerWriteIndexes();
+    // An archived Group takes no new Expense (#578), but a retry of items saved before the
+    // archive is still confirmed below.
+    const scope = access(actor, groupId);
+    const group = await mongoose.connection
+      .db!.collection('groups')
+      .findOne(
+        { _id: scope.group, 'members.user': scope.owner, deletionRequestedAt: null },
+        { projection: { isArchived: 1 } },
+      );
+    if (group?.isArchived) {
+      const ids = command.drafts.map((item) => new mongoose.Types.ObjectId(item.id));
+      const saved = await drafts.countDocuments({ ...scope, _id: { $in: ids }, state: 'saved' });
+      if (saved < ids.length) throw new Error('GROUP_ARCHIVED');
+    }
     const outcomes: DraftSaveOutcome[] = [];
     for (const item of command.drafts) {
       try {
@@ -481,6 +506,7 @@ export const expenseDraftService = {
           (['ZodError', 'MoneyValidationError'].includes(error.name) ||
             [
               'FORBIDDEN',
+              'GROUP_ARCHIVED',
               'DRAFT_NOT_FOUND',
               'STALE_REVISION',
               'REVISION_REQUIRED',
@@ -491,7 +517,11 @@ export const expenseDraftService = {
         outcomes.push({
           id: item.id,
           status: known ? 'failed' : 'unresolved',
-          message: known ? error.message : 'Save not confirmed. Retry this same reviewed save.',
+          message: !known
+            ? 'Save not confirmed. Retry this same reviewed save.'
+            : error.message === 'GROUP_ARCHIVED'
+              ? GROUP_ARCHIVED_MESSAGE
+              : error.message,
         });
       }
     }
@@ -515,7 +545,7 @@ export const expenseDraftService = {
     const command = createExpenseDraftsSchema.parse(input);
     const requestKey = draftRequestKey.parse(key);
     const requestFingerprint = fingerprintCreateCommand(command);
-    return mutate(actor, groupId, async (drafts, scope, session, currency) => {
+    return prepare(actor, groupId, async (drafts, scope, session, currency) => {
       const replay = await drafts
         .find({ ...scope, requestKey }, { session })
         .sort({ itemIndex: 1 })
@@ -561,7 +591,7 @@ export const expenseDraftService = {
   ) {
     const values = expenseDraftValuesSchema.parse(input);
     const _id = new mongoose.Types.ObjectId(draftObjectId.parse(draftId));
-    return mutate(actor, groupId, async (drafts, scope, session, currency) => {
+    return prepare(actor, groupId, async (drafts, scope, session, currency) => {
       const record = await drafts.findOne({ ...scope, _id, state: 'active' }, { session });
       if (!record) throw new Error('DRAFT_NOT_FOUND');
       assertExpectedRevision(record.revision, revision);

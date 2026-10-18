@@ -36,6 +36,8 @@ export interface MobileGroup {
   description: string;
   category: GroupCategory;
   defaultCurrency: string;
+  /** Set when the server says it was archived: the app treats it as a Group it lost (#578). */
+  isArchived?: true;
   members: Array<{
     user: GroupMemberUser;
     role: 'admin' | 'member';

@@ -1729,6 +1729,64 @@ describe('native Expense creation and editing', () => {
     expect([...records.values()][0]).toMatchObject({ attempt: expense.attempt });
   });
 
+  describe('a Group archived on the web (#578)', () => {
+    const archivedMessage = 'This Group was archived, so nothing more can be saved in it.';
+
+    it('says so when it refuses a new Expense, blocks the form and leaves Home', async () => {
+      const { controller, records } = setup((path, init) => {
+        if (path.endsWith('/expenses') && init.method === 'POST')
+          return Promise.resolve(
+            json({ error: archivedMessage, code: 'GROUP_ARCHIVED', status: 409 }, 409),
+          );
+      });
+      await controller.signIn('alex');
+      expect(controller.getSnapshot().groups.data.map(({ id }) => id)).toEqual([groupId]);
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+      await controller.saveExpense();
+
+      const { expense, groups } = controller.getSnapshot();
+      expect([expense.status, expense.message]).toEqual(['blocked', archivedMessage]);
+      expect(groups.data).toEqual([]);
+      // Nothing of it stays pending once the form is closed.
+      await controller.closeExpense();
+      expect([...records.keys()]).toEqual([]);
+    });
+
+    it('blocks a form being filled in when a refresh reads the Group as archived', async () => {
+      let archived = false;
+      const { controller } = setup((path) =>
+        path === `/api/groups/${groupId}` && archived
+          ? Promise.resolve(json({ data: { ...group, isArchived: true }, status: 200 }))
+          : undefined,
+      );
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+      expect(controller.getSnapshot().expense.status).toBe('editing');
+      archived = true;
+      await controller.refresh();
+
+      const { expense, groups } = controller.getSnapshot();
+      expect([expense.status, expense.message]).toEqual(['blocked', archivedMessage]);
+      expect(groups.data).toEqual([]);
+    });
+
+    it('treats its read like a refusal: the Group leaves Home', async () => {
+      const { controller } = setup((path) =>
+        path === `/api/groups/${groupId}`
+          ? Promise.resolve(json({ data: { ...group, isArchived: true }, status: 200 }))
+          : undefined,
+      );
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+
+      const { expense, groups } = controller.getSnapshot();
+      expect([expense.status, expense.message]).toEqual(['blocked', archivedMessage]);
+      expect(groups.data).toEqual([]);
+    });
+  });
+
   it.each([false, true])(
     'opens legacy Expense context with omitted optional Tags: %s',
     async (omitTags) => {

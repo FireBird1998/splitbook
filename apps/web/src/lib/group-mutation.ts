@@ -68,13 +68,18 @@ export async function afterGroupCommit(work: AfterCommit): Promise<void> {
   else await work();
 }
 
-/** Every Group-owned mutation conflicts with deletion on this shared Mongo document. */
+/**
+ * Every Group-owned mutation conflicts with deletion on this shared Mongo document. A ledger
+ * write (an Expense or payment) also refuses an archived Group (#578), in the same condition,
+ * so an archive that commits first stops it; archiving writes this document too.
+ */
 export async function withGroupMutation<T>(
   groupId: string,
   write: (session?: ClientSession) => Promise<T>,
-  budget: { deadline?: number } = {},
+  budget: { deadline?: number; ledger?: boolean } = {},
 ): Promise<T> {
   const deadline = budget.deadline ?? Date.now() + 2_000;
+  const open = budget.ledger ? { isArchived: { $ne: true } } : {};
   await withinDeadline(connectDB(), deadline);
   const active = mutations.getStore();
   if (active) {
@@ -92,6 +97,7 @@ export async function withGroupMutation<T>(
         { timeoutMS: remainingTime(deadline) },
       );
     if (!group) throw new Error('FORBIDDEN');
+    if (budget.ledger && group.isArchived) throw new Error('GROUP_ARCHIVED');
     remainingTime(deadline);
     return write();
   }
@@ -101,14 +107,23 @@ export async function withGroupMutation<T>(
     maxCommitTimeMS: Math.min(1_000, remainingTime(deadline)),
   };
   const committed = await mongoose.connection.transaction(async (session) => {
+    const id = new mongoose.Types.ObjectId(groupId);
     const fenced = await db
       .collection('groups')
       .updateOne(
-        { _id: new mongoose.Types.ObjectId(groupId), deletionRequestedAt: null },
+        { _id: id, deletionRequestedAt: null, ...open },
         { $inc: { mutationSequence: 1 } },
         { session },
       );
-    if (!fenced.matchedCount) throw new Error('FORBIDDEN');
+    if (!fenced.matchedCount) {
+      // A Group that fails only the ledger condition is still there: it was archived.
+      const archived =
+        budget.ledger &&
+        (await db
+          .collection('groups')
+          .countDocuments({ _id: id, deletionRequestedAt: null }, { session }));
+      throw new Error(archived ? 'GROUP_ARCHIVED' : 'FORBIDDEN');
+    }
     remainingTime(deadline);
     // Every retried transaction owns a fresh list. Failed attempts never publish.
     const afterCommit: AfterCommit[] = [];

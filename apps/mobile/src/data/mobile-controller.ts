@@ -260,6 +260,11 @@ function refusesRetry(error: unknown) {
 }
 
 /** Human copy only: parser and schema errors are never shown to members. */
+/** An archived Group's refusal (#578): nothing was recorded, and nothing more can be. */
+function refusedAsArchived(error: unknown): error is RequestError {
+  return error instanceof RequestError && error.code === 'GROUP_ARCHIVED';
+}
+
 function expenseFailureMessage(error: unknown, fallback: string) {
   if (error instanceof RequestError || error instanceof MoneyValidationError) return error.message;
   return (error instanceof Error && rejectionMessages[error.message]) || fallback;
@@ -1002,13 +1007,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     },
     onExpired: failSession,
-    // Today's denial purge: its reads, saved copies and content on screen go.
-    onGroupDenied: (groupId, status, owner, path) =>
+    // Today's denial purge: its reads, saved copies and content on screen go. An archived Group
+    // goes the same way, as its own read refusing would (#578).
+    onGroupDenied: (groupId, status, owner, path, code) =>
       forgetGroup(
         groupId,
         status,
         owner,
-        path === `/api/groups/${groupId}` || path.includes('/tag-actions'),
+        code === 'GROUP_ARCHIVED' ||
+          path === `/api/groups/${groupId}` ||
+          path.includes('/tag-actions'),
       ),
     // Balances and Home follow every read of a Group or its Expenses (M1-5, AMEND-1); an Expense
     // list read also leaves their saved copies from before it unshown (#191).
@@ -3566,6 +3574,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         (!owns() && !(error instanceof RequestError && [403, 404, 422].includes(error.status)))
       )
         return;
+      // An archived Group refused it outright, after confirming any earlier try: nothing was
+      // recorded. The form says so and is blocked, as for a Group that was lost (#578).
+      if (refusedAsArchived(error)) {
+        publish({
+          ...snapshot,
+          expense: { ...snapshot.expense, status: 'blocked', message: error.message },
+        });
+        return;
+      }
       const denied = error instanceof RequestError && [403, 404].includes(error.status);
       publish({
         ...snapshot,
@@ -3790,6 +3807,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         (!owns() && !(error instanceof RequestError && [403, 404, 422].includes(error.status)))
       )
         return;
+      // An archived Group refused it outright, after confirming any earlier try: nothing was
+      // recorded. The form says so and is blocked, as for a Group that was lost (#578).
+      if (refusedAsArchived(error)) {
+        publish({
+          ...snapshot,
+          expense: { ...snapshot.expense, status: 'blocked', message: error.message },
+        });
+        return;
+      }
       const rejection = expenseRejectionMessage(error);
       if (mutation && rejection) {
         try {
@@ -4016,6 +4042,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         (!owns() && !(error instanceof RequestError && [403, 404, 422].includes(error.status)))
       )
         return;
+      // An archived Group refused it outright, after confirming any earlier try: nothing was
+      // recorded. The form says so and is blocked, as for a Group that was lost (#578).
+      if (refusedAsArchived(error)) {
+        publish({
+          ...snapshot,
+          expense: { ...snapshot.expense, status: 'blocked', message: error.message },
+        });
+        return;
+      }
       const rejection = expenseRejectionMessage(error);
       // Only a first send's rejection frees the draft. A retry's first try may be recorded.
       if (attempt && !editor.attempt && rejection) {
@@ -4513,6 +4548,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         (!owns() && !(error instanceof RequestError && [403, 404, 422].includes(error.status)))
       )
         return;
+      // An archived Group refused it outright, after confirming any earlier try: nothing was
+      // recorded. The form says so and is blocked, as for a Group that was lost (#578).
+      if (refusedAsArchived(error)) {
+        publish({
+          ...snapshot,
+          settlement: { ...snapshot.settlement, status: 'blocked', message: error.message },
+        });
+        return;
+      }
       const correctionCodes: Record<string, string> = {
         CURRENCY_MISMATCH: 'The Group currency changed. Close this and choose the payment again.',
         INVALID_MEMBERS:
