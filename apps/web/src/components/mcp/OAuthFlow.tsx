@@ -12,6 +12,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
+import { PRODUCT_NAME } from '@/lib/product';
 
 /**
  * The permissions a connection request asks for, as the consent screen lists them: the client,
@@ -49,7 +50,7 @@ export function ConsentPermissions({
       {details.scopes.includes(MCP_DRAFT_SCOPE) && (
         <Typography variant="body2">
           It can add, change and permanently delete items in your To review. Only you can save them
-          as Expenses, in Splitbook.
+          as Expenses, in {PRODUCT_NAME}.
         </Typography>
       )}
       {details.scopes.includes('offline_access') && (
@@ -138,7 +139,7 @@ export default function OAuthFlow({
       <Paper variant="outlined" sx={{ p: 3 }}>
         <Stack spacing={2}>
           <Typography variant="h5" component="h1">
-            {consent ? 'Connect an assistant' : 'Continue connecting to SplitBook'}
+            {consent ? 'Connect an assistant' : `Continue connecting to ${PRODUCT_NAME}`}
           </Typography>
           {error && <Alert severity="error">{error}</Alert>}
           {consent ? (

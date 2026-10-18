@@ -14,6 +14,7 @@ import {
 } from './compact';
 import { Icon, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
+import { PRODUCT_NAME } from '../product';
 
 export type SettingsAppearance = AppearanceMode;
 
@@ -96,7 +97,7 @@ export function SettingsScreen({
   return (
     <View style={{ gap: 12 }}>
       <CompactText tone="secondary">
-        Choose how SplitBook looks and manage your session.
+        Choose how {PRODUCT_NAME} looks and manage your session.
       </CompactText>
 
       <View style={{ gap: 6 }}>
@@ -214,7 +215,7 @@ export function SettingsScreen({
               Manage Group members and Tags in the connected web app.
             </CompactText>
             <CompactButton
-              label="Open SplitBook web"
+              label={`Open ${PRODUCT_NAME} web`}
               variant="tonal"
               block
               icon="open-outline"

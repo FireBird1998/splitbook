@@ -164,7 +164,7 @@ describe('Google signing in', () => {
         <SignIn
           busy={false}
           {...options}
-          message="Could not reach SplitBook. Check your connection and try again."
+          message="Could not reach Splitbook. Check your connection and try again."
           onGoogleSignIn={onGoogleSignIn}
         />,
       ),

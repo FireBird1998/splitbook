@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
-import { ConsentPermissions } from './OAuthFlow';
+import OAuthFlow, { ConsentPermissions } from './OAuthFlow';
 
 /* The consent screen's permissions, rendered to static markup with the details the server sends. */
 
@@ -23,6 +23,19 @@ const permissions = (scopes: string[]) =>
       onDraftsChange: () => {},
     }),
   );
+
+describe('the sign-in step before consent', () => {
+  it('asks the member to continue connecting to Splitbook (#595)', () => {
+    const shown = render(
+      createElement(OAuthFlow, {
+        query: '',
+        consent: false,
+        accountId: 'a00000000000000000000001',
+      }),
+    );
+    expect(shown).toContain('Continue connecting to Splitbook');
+  });
+});
 
 describe('the consent screen', () => {
   it('says an assistant that prepares items for To review can delete them for good (ADR 0008, #579)', () => {

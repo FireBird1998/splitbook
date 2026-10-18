@@ -175,7 +175,7 @@ function setup(
     if (path === '/api/auth/get-session') return json(session(selected));
     if (path === '/api/auth/sign-out')
       return json({ success: true }, 200, 'better-auth.session_token=; Max-Age=0');
-    // Like SplitBook's, Home's figures name the Groups they were worked out over (#333).
+    // Like Splitbook's, Home's figures name the Groups they were worked out over (#333).
     if (path === '/api/user/balances')
       return json({ data: { buckets: [], groups: [{ groupId, balances: [] }] }, status: 200 });
     if (/^\/api\/groups\/[a-f0-9]{24}\/balances$/.test(path))

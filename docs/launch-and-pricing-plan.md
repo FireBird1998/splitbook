@@ -1,4 +1,4 @@
-# SplitBook launch and pricing plan
+# Splitbook launch and pricing plan
 
 Updated: 11 October 2026. Status: agreed business direction; implementation and launch checks remain.
 
@@ -78,11 +78,11 @@ Annual payments arrive upfront but fund twelve months of service. Maintain a res
 
 ## Advertising and positioning
 
-Show modest advertising on free accounts, away from expense saving and settlement confirmation. Plus removes ads. Suggested message: “Ads help keep SplitBook running. Get Plus to remove ads and unlock more groups.” Do not ask users to click ads to support the app.
+Show modest advertising on free accounts, away from expense saving and settlement confirmation. Plus removes ads. Suggested message: “Ads help keep Splitbook running. Get Plus to remove ads and unlock more groups.” Do not ask users to click ads to support the app.
 
 Budget advertising revenue as zero until measured. Track actual earnings alongside any effects on retention and usability. Final ad placement, provider and privacy requirements remain to be selected.
 
-Position SplitBook as affordable group expense tracking across Android and web. It has substantial core overlap with Splitwise, but does not have full Pro parity. Search, charts and exports are implemented on web; native reporting/search/export coverage is narrower. Recurring household expenses are implemented but disabled by default. Automatic currency conversion, OCR and transaction import are outside the initial offering. [Splitwise feature reference](https://www.splitwise.com/), [Splitwise Pro reference](https://www.splitwise.com/pro)
+Position Splitbook as affordable group expense tracking across Android and web. It has substantial core overlap with Splitwise, but does not have full Pro parity. Search, charts and exports are implemented on web; native reporting/search/export coverage is narrower. Recurring household expenses are implemented but disabled by default. Automatic currency conversion, OCR and transaction import are outside the initial offering. [Splitwise feature reference](https://www.splitwise.com/), [Splitwise Pro reference](https://www.splitwise.com/pro)
 
 Splitwise's current Android subscription price in India remains unverified. Do not publish an exact savings percentage against it until the in-app Android offer is checked.
 

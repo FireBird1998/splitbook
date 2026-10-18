@@ -1,6 +1,7 @@
 import { readSessionCookie } from './cookies';
 import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
 import type { FetchResponse, MobileFetch, MobileTimer } from './types';
+import { PRODUCT_NAME } from '../product';
 
 export const expiredMessage = 'Your session has expired. Sign in again to continue.';
 export const storageMessage = 'Could not safely save your session. Please try signing in again.';
@@ -28,8 +29,8 @@ export class Superseded extends Error {}
 
 /**
  * What a failed request means, for callers to branch on instead of messages or codes (ADR 0006):
- * - `network`: SplitBook couldn't be reached: no reply arrived, its body stopped arriving, or a
- *   gateway in front of SplitBook answered 502, 503 or 504 without a SplitBook error code;
+ * - `network`: Splitbook couldn't be reached: no reply arrived, its body stopped arriving, or a
+ *   gateway in front of Splitbook answered 502, 503 or 504 without a Splitbook error code;
  * - `timeout`: the 20-second limit passed, before or after the headers;
  * - `cancelled`: the caller's own signal ended it. It is never a reason to show a saved copy. A
  *   denial whose headers arrived stays `access-denied`, even when its body read is cancelled;
@@ -110,12 +111,12 @@ const cancelled = () =>
   new RequestError('This request was cancelled.', 0, null, false, null, 'cancelled');
 
 /**
- * SplitBook couldn't be reached, so callers treat it as being offline: the saved copy, with the
- * time it was last verified. It carries no status, so nothing takes it for SplitBook's answer.
+ * Splitbook couldn't be reached, so callers treat it as being offline: the saved copy, with the
+ * time it was last verified. It carries no status, so nothing takes it for Splitbook's answer.
  */
 const unreachable = (kind: 'network' | 'timeout') =>
   new RequestError(
-    'Could not reach SplitBook. Check your connection and try again.',
+    `Could not reach ${PRODUCT_NAME}. Check your connection and try again.`,
     0,
     null,
     true,
@@ -123,7 +124,7 @@ const unreachable = (kind: 'network' | 'timeout') =>
     kind,
   );
 
-/** The statuses a gateway in front of SplitBook answers with when it can't reach SplitBook. */
+/** The statuses a gateway in front of Splitbook answers with when it can't reach Splitbook. */
 const gatewayStatuses = [502, 503, 504];
 
 export interface RequestOptions {
@@ -445,7 +446,7 @@ export function createTransport({
         // answer, so it never ends as cancelled, or a caller that still shows the read would
         // read the Group again, and be refused again, for ever.
         if (aborted === 'caller' && !denied) throw cancelled();
-        // SplitBook's own errors carry a code, so a gateway answered: SplitBook wasn't reached.
+        // Splitbook's own errors carry a code, so a gateway answered: Splitbook wasn't reached.
         if (gatewayStatuses.includes(response.status) && code === null)
           throw unreachable(aborted === 'timeout' ? 'timeout' : 'network');
         throw new RequestError(
@@ -480,7 +481,7 @@ export function createTransport({
       // headers that isn't the body's. A body that stopped arriving, or timed out, never arrived.
       if (received && aborted !== 'timeout' && (!reading || error instanceof SyntaxError))
         throw new RequestError(
-          'Could not reach SplitBook. Check your connection and try again.',
+          `Could not reach ${PRODUCT_NAME}. Check your connection and try again.`,
           0,
           null,
           false,

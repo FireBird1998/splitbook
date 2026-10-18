@@ -127,7 +127,7 @@ function setup(
         if (path.endsWith('/sign-out')) return json({ success: true });
         if (path === '/api/groups') return json({ data: [group], status: 200 });
         if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
-        // Like SplitBook's, Home's figures name the Groups they were worked out over (#333).
+        // Like Splitbook's, Home's figures name the Groups they were worked out over (#333).
         if (path === '/api/user/balances')
           return json({ data: { buckets: [], groups: named }, status: 200 });
         if (path.startsWith(`/api/groups/${groupId}/expenses?`)) return json(expensePage());

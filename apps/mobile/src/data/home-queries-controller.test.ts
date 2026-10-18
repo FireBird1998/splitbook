@@ -84,7 +84,7 @@ function fixture() {
     failGroup: 0,
     /** A status Create Group answers with, instead of the new Group. */
     refuseCreate: 0,
-    /** Home's figures name the Groups they were worked out over, as SplitBook's server does. */
+    /** Home's figures name the Groups they were worked out over, as Splitbook's server does. */
     groupFigures: true,
     /** A status the Groups list answers with, instead of the list. */
     failList: 0,
@@ -663,7 +663,7 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
       await first.signIn('alex');
       await settle();
       first.dispose();
-      // The row is whole, but what it holds isn't what SplitBook sends.
+      // The row is whole, but what it holds isn't what Splitbook sends.
       (f.rows.get(alex.id + path) as { value: unknown }).value = { status: 200, data: { a: 1 } };
       f.connect(false);
       const restarted = f.create();
@@ -1887,7 +1887,7 @@ describe('Home reads its Groups and its figures together (#333)', () => {
       home: { status: 'error', data: null, message: balancesNotOnPhone },
       offline: { active: true },
     });
-    // SplitBook can be reached again, with no reconnect event, as when a proxy comes back.
+    // Splitbook can be reached again, with no reconnect event, as when a proxy comes back.
     f.server.offline = false;
     const sent = f.calls.length;
     await controller.refreshHome();
@@ -2327,7 +2327,7 @@ describe('Home reads its Groups and its figures together (#333)', () => {
         home: { status: 'ready', restored: true, data: [{ youOwe: 30 }] },
         offline: { active: true },
       });
-      // The list lands without Maple House: Home reads its figures again, from SplitBook.
+      // The list lands without Maple House: Home reads its figures again, from Splitbook.
       const landed = published.length;
       list.release();
       await signingIn;
@@ -2421,7 +2421,7 @@ describe('Home reads its Groups and its figures together (#333)', () => {
     },
   );
 
-  describe('the payment sheet reuses only a Group its view verified from SplitBook', () => {
+  describe('the payment sheet reuses only a Group its view verified from Splitbook', () => {
     const sheetReads = [`GET ${maplePath}`, `GET ${maplePath}/balances`];
 
     it('reads the Group, then the Balances, over the view’s saved copy of the Group', async () => {
@@ -2441,7 +2441,7 @@ describe('Home reads its Groups and its figures together (#333)', () => {
         detail: { id: mapleId, refreshedAt: start },
         offline: { active: true },
       });
-      // Home's figures are read again from SplitBook, which clears offline.
+      // Home's figures are read again from Splitbook, which clears offline.
       await controller.back();
       await controller.refreshHome();
       expect(controller.getSnapshot().offline.active).toBe(false);
@@ -2457,7 +2457,7 @@ describe('Home reads its Groups and its figures together (#333)', () => {
       await controller.signIn('alex');
       await controller.openGroup(mapleId, true, 'balances');
       await controller.back();
-      // Home's pull can't reach SplitBook, though the Group the view read is still recent.
+      // Home's pull can't reach Splitbook, though the Group the view read is still recent.
       f.server.offline = true;
       await controller.refresh('pull');
       expect(controller.getSnapshot().offline.active).toBe(true);

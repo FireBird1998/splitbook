@@ -21,6 +21,7 @@ import { savingNeedsConnection } from './offline-notice';
 import { useStartWhileUnfocused } from './start-while-unfocused';
 import { Copy, Icon } from './primitives';
 import { fonts, useTheme } from './theme';
+import { PRODUCT_NAME } from '../product';
 
 export type GroupCreateDraft = GroupDraft;
 
@@ -174,7 +175,7 @@ export function GroupCreateForm({
   const [choosingCurrency, setChoosingCurrency] = useState(false);
   const [currencySearch, setCurrencySearch] = useState('');
   const locked = busy || uncertain;
-  const creating = 'Sending this Group. Keep this screen open until SplitBook confirms it.';
+  const creating = `Sending this Group. Keep this screen open until ${PRODUCT_NAME} confirms it.`;
   const noun = descriptor.nouns.singular;
   const capitalizedNoun = noun.charAt(0).toUpperCase() + noun.slice(1);
   const matchingCurrencies = CURRENCIES.filter((item) =>

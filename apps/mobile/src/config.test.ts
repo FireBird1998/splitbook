@@ -73,7 +73,7 @@ describe('native app configuration per environment', () => {
     {
       mode: 'development',
       origin: 'http://127.0.0.1:4138',
-      name: 'SplitBook Dev',
+      name: 'Splitbook Dev',
       identifier: 'com.splitbook.app.dev',
       scheme: 'splitbook-dev',
       intentFilters: [invitationFilter('http', '127.0.0.1', false, '4138')],
@@ -81,7 +81,7 @@ describe('native app configuration per environment', () => {
     {
       mode: 'staging',
       origin: 'https://staging.splitbook.test',
-      name: 'SplitBook Staging',
+      name: 'Splitbook Staging',
       identifier: 'com.splitbook.app.staging',
       scheme: 'splitbook-staging',
       intentFilters: [invitationFilter('https', 'staging.splitbook.test', true)],
@@ -89,7 +89,7 @@ describe('native app configuration per environment', () => {
     {
       mode: 'production',
       origin: 'https://splitbook.test',
-      name: 'SplitBook',
+      name: 'Splitbook',
       identifier: 'com.splitbook.app',
       scheme: 'splitbook',
       intentFilters: [invitationFilter('https', 'splitbook.test', true)],

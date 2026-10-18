@@ -1,4 +1,4 @@
-# SplitBook native client
+# Splitbook native client
 
 Expo + React Native, TypeScript, Android first. The foundation implements [ticket #50](https://github.com/FireBird1998/splitbook/issues/50): guarded local persona sign-in, API-backed Group browsing, Theme-specific headers, member lists, session restoration, foreground revalidation, and sign-out. [Ticket #52](https://github.com/FireBird1998/splitbook/issues/52) adds Group creation, Android sharing, invitation preview, and explicit joining. [The approved spec](https://github.com/FireBird1998/splitbook/issues/49) tracks the remaining native app.
 
@@ -29,7 +29,7 @@ adb reverse tcp:8081 tcp:8081
 pnpm mobile android
 ```
 
-The development build uses `com.splitbook.app.dev`. Subsequent sessions can use `NODE_OPTIONS=--dns-result-order=ipv4first pnpm mobile start --localhost --port 8081`; open SplitBook Dev and connect to `http://127.0.0.1:8081`. A debug APK is generated at `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`. Generated `android/` and `ios/` projects are ignored and regenerated from `app.config.ts`.
+The development build uses `com.splitbook.app.dev`. Subsequent sessions can use `NODE_OPTIONS=--dns-result-order=ipv4first pnpm mobile start --localhost --port 8081`; open Splitbook Dev and connect to `http://127.0.0.1:8081`. A debug APK is generated at `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`. Generated `android/` and `ios/` projects are ignored and regenerated from `app.config.ts`.
 
 Reapply both `adb reverse` commands after restarting the emulator. The IPv4 option above keeps Metro on the same loopback address as the forwarded connection on macOS.
 
@@ -84,7 +84,7 @@ After every test the stand-ins return to the file's defaults and their recorded 
 
 Shared invitations remain canonical web URLs so they can open in a browser when the app is absent. Set `EXPO_PUBLIC_INVITE_ORIGIN` to the backend's `NEXT_PUBLIC_APP_URL` origin; it defaults to `EXPO_PUBLIC_AUTH_ORIGIN`. The app accepts only that origin's `/join/<eight-hex-character-code>` links. Changing a native intent filter requires rebuilding the binary. Local HTTP links are development-only; they do not establish verified Android App Links.
 
-The future staging build uses `EXPO_PUBLIC_APP_ENV=staging`, an explicit HTTPS invitation origin, and the distinct `SplitBook Staging` / `com.splitbook.app.staging` / `splitbook-staging` identity. On that web host, set `ANDROID_APP_LINKS_ENV=staging` and `ANDROID_APP_LINKS_SHA256_CERT_FINGERPRINTS` to the actual APK signing certificate's SHA-256 fingerprint, or a comma-separated list during certificate rotation. Each fingerprint must contain 32 colon-separated hexadecimal bytes. The public `/.well-known/assetlinks.json` route publishes only the fixed staging package and validated fingerprints; missing or malformed settings return empty 404 JSON.
+The future staging build uses `EXPO_PUBLIC_APP_ENV=staging`, an explicit HTTPS invitation origin, and the distinct `Splitbook Staging` / `com.splitbook.app.staging` / `splitbook-staging` identity. On that web host, set `ANDROID_APP_LINKS_ENV=staging` and `ANDROID_APP_LINKS_SHA256_CERT_FINGERPRINTS` to the actual APK signing certificate's SHA-256 fingerprint, or a comma-separated list during certificate rotation. Each fingerprint must contain 32 colon-separated hexadecimal bytes. The public `/.well-known/assetlinks.json` route publishes only the fixed staging package and validated fingerprints; missing or malformed settings return empty 404 JSON.
 
 No real staging domain or certificate is configured here. Ticket [#60](https://github.com/FireBird1998/splitbook/issues/60) must verify that the actual host serves the JSON over HTTPS without redirects, the installed APK uses the matching signing certificate, and Android reports the domain verified. Recheck warm and cold invitation opening plus absent-app browser fallback on that deployment. The manifest and local HTTP smoke alone do not establish domain ownership. See [Expo Android App Links](https://docs.expo.dev/linking/android-app-links/) and [Android domain verification](https://developer.android.com/training/app-links/verify-applinks).
 
@@ -163,7 +163,7 @@ Resuming an ordinary draft is marked as never sent. A save that may already be r
 
 ## Record actual payments (#56)
 
-Open **Payments** in a Group to view authorized Settlement history and eligible suggested debts involving you. Review the amount actually paid; partial payments are supported. Review refreshes the suggestion while retaining your entry. An amount above the current suggestion requires a separate acknowledgment, which resets if the suggestion changes before submission. This records an existing payment; SplitBook neither transfers funds nor confirms bank/provider status.
+Open **Payments** in a Group to view authorized Settlement history and eligible suggested debts involving you. Review the amount actually paid; partial payments are supported. Review refreshes the suggestion while retaining your entry. An amount above the current suggestion requires a separate acknowledgment, which resets if the suggestion changes before submission. This records an existing payment; Splitbook neither transfers funds nor confirms bank/provider status.
 
 Recording requires an online membership/party check. SQLite stores one unresolved Settlement per Group with the exact payload and submission key before any POST. Restart and foreground refresh do not resend it. **Retry same payment record** explicitly reuses the persisted body/key; a changed balance never rewrites that attempt. Confirmed success reloads Settlement history, suggestions, and Home; opening the Group reloads its ledger. Backend Activity is recorded by the shared service; native Activity remains #57.
 

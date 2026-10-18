@@ -483,7 +483,7 @@ describe('Record payment sheet states', () => {
   it('offers Try again when the check couldn’t run, and nothing once access is refused', () => {
     const chosen = { paidBy: you, paidTo: sam, currency: 'INR', shown: 1060 };
     const known = { [you]: 'Alex Rivera', [sam]: 'Sam Chen' };
-    const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+    const unreachable = 'Could not reach Splitbook. Check your connection and try again.';
     const failed = sheet(
       base({
         status: 'error',

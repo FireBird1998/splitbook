@@ -10,6 +10,7 @@ import Typography from '@mui/material/Typography';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import Link from 'next/link';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
+import { PRODUCT_NAME } from '@/lib/product';
 
 interface Connection {
   id: string;
@@ -40,14 +41,15 @@ export function ConnectionsList({
   return (
     <>
       <Typography variant="body2">
-        Add this MCP URL in your assistant, then review the permissions in SplitBook.
+        Add this MCP URL in your assistant, then review the permissions in {PRODUCT_NAME}.
       </Typography>
       <Typography variant="body2" sx={{ overflowWrap: 'anywhere', userSelect: 'all' }}>
         {data.resource}
       </Typography>
       <Alert severity="info">
         Assistants can read your ledger. If you also let one prepare Expenses, it can add, change
-        and permanently delete items in your To review. Only you can save Expenses in SplitBook.
+        and permanently delete items in your To review. Only you can save Expenses in {PRODUCT_NAME}
+        .
       </Alert>
       {data.connections.length === 0 && (
         <Typography variant="body2">No assistants connected.</Typography>

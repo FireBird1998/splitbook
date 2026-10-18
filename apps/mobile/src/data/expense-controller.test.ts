@@ -1708,7 +1708,7 @@ describe('native Expense creation and editing', () => {
 
   it.each([
     ['permission', 'You no longer have access to this group.'],
-    ['connection', 'Could not reach SplitBook. Check your connection and try again.'],
+    ['connection', 'Could not reach Splitbook. Check your connection and try again.'],
   ])('keeps the %s failure visible alongside immutable recovery', async (failure, message) => {
     const { controller, records } = setup((path, init) => {
       if (path.endsWith('/expenses') && init.method === 'POST') {
@@ -3099,7 +3099,7 @@ describe('a retried save the server rejects', () => {
 });
 
 describe('a save that meets a gateway error (#231)', () => {
-  const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+  const unreachable = 'Could not reach Splitbook. Check your connection and try again.';
   const header = (init: RequestInit, name: string) => new Headers(init.headers).get(name);
 
   it('keeps a new Expense unconfirmed after one send, and sends it again only on Retry, with its key and body', async () => {
@@ -3121,7 +3121,7 @@ describe('a save that meets a gateway error (#231)', () => {
     expect(posts).toHaveLength(1);
     const expense = controller.getSnapshot().expense;
     expect(expense.status).toBe('uncertain');
-    // Only its message changes: SplitBook couldn't be reached, so the save may have landed.
+    // Only its message changes: Splitbook couldn't be reached, so the save may have landed.
     expect(expense.message).toBe(
       `${unreachable} This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.`,
     );
@@ -3129,7 +3129,7 @@ describe('a save that meets a gateway error (#231)', () => {
     expect(expense.attempt).toEqual(attempt);
     expect([...records.values()]).toEqual([expect.objectContaining({ attempt })]);
 
-    // Nothing is sent again by itself, even once SplitBook can be reached.
+    // Nothing is sent again by itself, even once Splitbook can be reached.
     gateway = false;
     await controller.refresh();
     expect(posts).toHaveLength(1);
@@ -3171,7 +3171,7 @@ describe('a save that meets a gateway error (#231)', () => {
       expect(header(writes[0], 'X-Splitbook-Revision')).toBe('3');
       const mutation = { kind, revision: 3, body: kind === 'edit' ? writes[0].body : '' };
       expect([...records.values()]).toEqual([expect.objectContaining({ mutation })]);
-      // Only its message changes: SplitBook couldn't be reached. Then the saved Expense is checked.
+      // Only its message changes: Splitbook couldn't be reached. Then the saved Expense is checked.
       expect(shown).toContainEqual(
         expect.objectContaining({ status: 'uncertain', mutation, message: unreachable }),
       );

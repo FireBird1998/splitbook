@@ -66,7 +66,7 @@ function phone() {
       return json({ user: alex, session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' } });
     const groups = joined ? [cedarFlat, mapleHouse] : [cedarFlat];
     if (path === '/api/groups') return json({ status: 200, data: groups });
-    // Home's figures say which Groups they cover, as SplitBook's do (#333): none here.
+    // Home's figures say which Groups they cover, as Splitbook's do (#333): none here.
     if (path === '/api/user/balances')
       return json({ status: 200, data: { buckets: [], groups: [] } });
     if (path === `/api/join/${code}` && method === 'POST') {
@@ -175,7 +175,7 @@ function phone() {
     invitation: () => invitation,
     /** This device no longer keeps Alex's saved copy of `path`, as after a change removed it. */
     forget: (path: string) => void disk.delete(alex.id + path),
-    /** The next request `METHOD /path` waits until it is answered, or can't reach SplitBook. */
+    /** The next request `METHOD /path` waits until it is answered, or can't reach Splitbook. */
     hold(request: string) {
       let arrive!: () => void, answer!: () => void, drop!: () => void;
       const reached = new Promise<void>((resolve) => {
@@ -368,7 +368,7 @@ describe('Join waits for a connection (#286)', () => {
 });
 
 describe('After a Join, Home says what is true (#332)', () => {
-  it('shows no offline banner once SplitBook confirms the join, and checks the session no more', async () => {
+  it('shows no offline banner once Splitbook confirms the join, and checks the session no more', async () => {
     const f = phone();
     const controller = f.create();
     await controller.signIn('alex');
@@ -438,7 +438,7 @@ describe('After a Join, Home says what is true (#332)', () => {
     controller.subscribe(() => published.push(controller.getSnapshot()));
     await controller.joinInvitation();
 
-    // Home shows while its Groups are read again: online, with no failure to reach SplitBook.
+    // Home shows while its Groups are read again: online, with no failure to reach Splitbook.
     const home = published.filter((state) => state.screen === 'groups');
     expect(home.length).toBeGreaterThan(0);
     expect(

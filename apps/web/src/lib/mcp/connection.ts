@@ -3,6 +3,7 @@ import { requireMcpAuth } from '@better-auth/mcp';
 import { z } from 'zod/v4';
 
 import { MCP_DRAFT_SCOPE, MCP_LEDGER_SCOPE } from './config';
+import { PRODUCT_NAME } from '@/lib/product';
 export { MCP_LEDGER_SCOPE } from './config';
 
 /**
@@ -54,7 +55,7 @@ export function createMcpConnectionHandler(
           server.registerTool(
             'connection_status',
             {
-              title: 'Check SplitBook connection',
+              title: `Check ${PRODUCT_NAME} connection`,
               description: 'Verify this connection. Returns no Group, expense or member data.',
               inputSchema: z.object({}).strict(),
               annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -64,8 +65,8 @@ export function createMcpConnectionHandler(
                 {
                   type: 'text',
                   text: register
-                    ? 'SplitBook connection verified. Use the tools permitted by your connection.'
-                    : 'SplitBook connection verified. Ledger and Draft tools are not enabled in this test.',
+                    ? `${PRODUCT_NAME} connection verified. Use the tools permitted by your connection.`
+                    : `${PRODUCT_NAME} connection verified. Ledger and Draft tools are not enabled in this test.`,
                 },
               ],
               structuredContent: { connected: true, mode: 'connection-test' },

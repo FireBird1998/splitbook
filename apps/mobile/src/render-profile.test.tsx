@@ -421,7 +421,7 @@ function backend({ expensePages = pages, activityPages = pages, payment = false 
             201,
           );
         }
-        // Home's figures say which Groups they cover, as SplitBook's do (#333): none here, so no
+        // Home's figures say which Groups they cover, as Splitbook's do (#333): none here, so no
         // Group the list leaves out, and each row's balance stays unknown, as this profile has
         // always measured it.
         if (path === '/api/user/balances')
