@@ -20,6 +20,7 @@ import { tagManagementService } from './tag-management.service';
 import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import Settlement from '@/lib/models/Settlement';
+import { PERSON_FIELDS } from './person-fields';
 
 /** Why a member can't leave yet: an open balance, or they are the last admin. */
 export class LeaveBlockedError extends Error {
@@ -76,7 +77,7 @@ export class GroupService {
       groupName: group.name,
     });
 
-    return group.populate('members.user', 'name email image');
+    return group.populate('members.user', PERSON_FIELDS);
   }
 
   /** The Group an earlier request with this key created, if the same creator sent the same data. */
@@ -90,7 +91,7 @@ export class GroupService {
     // A replay must not reveal a Group the creator no longer belongs to.
     if (!existing.members.some((member) => member.user.toString() === userId))
       throw new Error('FORBIDDEN');
-    return existing.populate('members.user', 'name email image');
+    return existing.populate('members.user', PERSON_FIELDS);
   }
 
   /**
@@ -107,7 +108,7 @@ export class GroupService {
     }
 
     return Group.find(filter)
-      .populate('members.user', 'name email image')
+      .populate('members.user', PERSON_FIELDS)
       .sort({ updatedAt: -1 })
       .lean();
   }
@@ -117,7 +118,7 @@ export class GroupService {
    */
   async getById(groupId: string) {
     await connectDB();
-    return Group.findById(groupId).populate('members.user', 'name email image').lean();
+    return Group.findById(groupId).populate('members.user', PERSON_FIELDS).lean();
   }
 
   /**
@@ -170,7 +171,7 @@ export class GroupService {
       );
       if (!changed) throw new Error('CURRENCY_LOCKED');
       await activityService.log(groupId, 'group_updated', userId, { changes });
-      return changed.populate('members.user', 'name email image');
+      return changed.populate('members.user', PERSON_FIELDS);
     }
     Object.assign(group, data);
     await withGroupMutation(groupId, async () => group.save());
@@ -179,7 +180,7 @@ export class GroupService {
       await activityService.log(groupId, 'group_updated', userId, { changes });
     }
 
-    return group.populate('members.user', 'name email image');
+    return group.populate('members.user', PERSON_FIELDS);
   }
 
   /**
@@ -249,7 +250,7 @@ export class GroupService {
       method: method || 'invite',
     });
 
-    return group.populate('members.user', 'name email image');
+    return group.populate('members.user', PERSON_FIELDS);
   }
 
   /**
@@ -297,7 +298,7 @@ export class GroupService {
       },
     });
 
-    return group.populate('members.user', 'name email image');
+    return group.populate('members.user', PERSON_FIELDS);
   }
 
   /**
@@ -342,7 +343,7 @@ export class GroupService {
       method: 'removed',
     });
 
-    return group.populate('members.user', 'name email image');
+    return group.populate('members.user', PERSON_FIELDS);
   }
 
   /**
@@ -423,7 +424,7 @@ export class GroupService {
       requestId: crypto.randomUUID(),
       intent: { action: 'create', name: name.trim() },
     });
-    return Group.findById(groupId).populate('members.user', 'name email image');
+    return Group.findById(groupId).populate('members.user', PERSON_FIELDS);
   }
 
   async updateTag(
@@ -451,7 +452,7 @@ export class GroupService {
             expectedRevision: tag.revision,
           };
     await tagManagementService.submit(groupId, userId, { requestId: crypto.randomUUID(), intent });
-    return Group.findById(groupId).populate('members.user', 'name email image');
+    return Group.findById(groupId).populate('members.user', PERSON_FIELDS);
   }
 
   async deleteTag(groupId: string, tagId: string, userId: string) {
@@ -462,7 +463,7 @@ export class GroupService {
       requestId: crypto.randomUUID(),
       intent: { action: 'delete', tagId, expectedRevision: tag.revision },
     });
-    return Group.findById(groupId).populate('members.user', 'name email image');
+    return Group.findById(groupId).populate('members.user', PERSON_FIELDS);
   }
 
   /**
@@ -502,7 +503,7 @@ export class GroupService {
       inviteCodeExpiresAt: { $gt: new Date() },
       isArchived: false,
     })
-      .populate('members.user', 'name email image')
+      .populate('members.user', PERSON_FIELDS)
       .lean();
   }
 }

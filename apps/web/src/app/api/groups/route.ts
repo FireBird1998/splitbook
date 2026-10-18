@@ -11,6 +11,7 @@ import {
 import { groupService } from '@/lib/services/group.service';
 import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { parseIdempotencyKey } from '@/lib/financial-write';
+import { isGroupAdmin, withMemberEmails } from '@/lib/group-member-emails';
 
 // POST /api/groups — Create a new group
 export async function POST(req: Request) {
@@ -28,7 +29,16 @@ export async function POST(req: Request) {
       user.id!,
       parseIdempotencyKey(req.headers.get('Idempotency-Key')),
     );
-    return success(group, 201);
+    // Its creator is its admin, so the reply sends addresses as the Group's own read does (#517).
+    const created = group.toJSON();
+    return success(
+      await withMemberEmails(
+        created,
+        { id: user.id!, email: user.email },
+        isGroupAdmin(created, user.id!),
+      ),
+      201,
+    );
   } catch (err) {
     return serverError(err);
   }
@@ -47,7 +57,11 @@ export async function GET() {
         .then(() => undefined)
         .catch(() => undefined),
     );
-    return success(groups);
+    // Each member gets their own address in the list, and nobody else's (#517).
+    const viewer = { id: user.id!, email: user.email };
+    return success(
+      await Promise.all(groups.map((group) => withMemberEmails(group, viewer, false))),
+    );
   } catch (err) {
     return serverError(err);
   }

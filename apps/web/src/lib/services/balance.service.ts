@@ -28,6 +28,7 @@ import type {
   UserBalancesResponse,
 } from '@splitbook/shared/types';
 import { recurringExpenseService } from './recurring-expense.service';
+import { PERSON_FIELDS } from './person-fields';
 
 export class BalanceService {
   /**
@@ -44,7 +45,7 @@ export class BalanceService {
       Settlement.find({ group: groupId })
         .select('group currency moneyVersion amount amountMinor paidBy paidTo')
         .lean(),
-      Group.findById(groupId).populate('members.user', 'name email image').lean(),
+      Group.findById(groupId).populate('members.user', PERSON_FIELDS).lean(),
     ]);
 
     if (!group) return null;
@@ -60,18 +61,16 @@ export class BalanceService {
     const hasMixedCurrencies = currencies.some((currency) => currency !== group.defaultCurrency);
 
     // Build user info map
-    const userMap = new Map<string, { _id: string; name: string; email: string; image?: string }>();
+    const userMap = new Map<string, { _id: string; name: string; image?: string }>();
     for (const member of group.members) {
       const user = member.user as unknown as {
         _id: { toString(): string };
         name: string;
-        email: string;
         image?: string;
       };
       userMap.set(user._id.toString(), {
         _id: user._id.toString(),
         name: user.name,
-        email: user.email,
         image: user.image,
       });
     }
@@ -99,15 +98,15 @@ export class BalanceService {
     ];
     if (formerIds.length > 0) {
       const former = await User.find({ _id: { $in: formerIds } })
-        .select('name email image')
+        .select(PERSON_FIELDS)
         .lean();
       for (const user of former) {
         const id = String(user._id);
-        userMap.set(id, { _id: id, name: user.name, email: user.email, image: user.image });
+        userMap.set(id, { _id: id, name: user.name, image: user.image });
       }
     }
 
-    const userInfo = (id: string) => userMap.get(id) || { _id: id, name: 'Unknown', email: '' };
+    const userInfo = (id: string) => userMap.get(id) || { _id: id, name: 'Unknown' };
     const byCurrency = netByCurrency.map(({ currency, netBalances: allBalances }) => {
       const netBalances = allBalances.filter(
         (balance) => balance.amount !== 0 || memberIds.has(balance.userId),
@@ -187,7 +186,7 @@ export class BalanceService {
       'members.user': userId,
       isArchived: false,
     })
-      .populate('members.user', 'name email image')
+      .populate('members.user', PERSON_FIELDS)
       .lean();
 
     await recurringExpenseService.generateDueExpensesForGroups(

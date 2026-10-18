@@ -16,8 +16,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 1249.5,
               "amountMinor": 124950
@@ -28,8 +27,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 416.5,
               "amountMinor": 41650
@@ -37,8 +35,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 416.5,
               "amountMinor": 41650
@@ -46,8 +43,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 416.5,
               "amountMinor": 41650
@@ -62,8 +58,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000001",
-            "name": "Alice Tester",
-            "email": "alice.test@splitbook-test.local"
+            "name": "Alice Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -86,8 +81,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 2860,
               "amountMinor": 286000
@@ -98,8 +92,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 953.34,
               "amountMinor": 95334
@@ -107,8 +100,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 953.33,
               "amountMinor": 95333
@@ -116,8 +108,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 953.33,
               "amountMinor": 95333
@@ -132,8 +123,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000002",
-            "name": "Bob Tester",
-            "email": "bob.test@splitbook-test.local"
+            "name": "Bob Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -156,8 +146,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 1180,
               "amountMinor": 118000
@@ -168,8 +157,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 590,
               "amountMinor": 59000
@@ -177,8 +165,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 590,
               "amountMinor": 59000
@@ -193,8 +180,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000003",
-            "name": "Carol Tester",
-            "email": "carol.test@splitbook-test.local"
+            "name": "Carol Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -217,8 +203,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 1080,
               "amountMinor": 108000
@@ -229,8 +214,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 540,
               "amountMinor": 54000
@@ -238,8 +222,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 540,
               "amountMinor": 54000
@@ -254,8 +237,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000002",
-            "name": "Bob Tester",
-            "email": "bob.test@splitbook-test.local"
+            "name": "Bob Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -278,8 +260,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 320,
               "amountMinor": 32000
@@ -290,8 +271,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 160,
               "amountMinor": 16000
@@ -299,8 +279,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 160,
               "amountMinor": 16000
@@ -308,8 +287,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 0,
               "amountMinor": 0
@@ -324,8 +302,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000003",
-            "name": "Carol Tester",
-            "email": "carol.test@splitbook-test.local"
+            "name": "Carol Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -373,8 +350,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 1249.5,
               "amountMinor": 124950
@@ -385,8 +361,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 416.5,
               "amountMinor": 41650
@@ -394,8 +369,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 416.5,
               "amountMinor": 41650
@@ -403,8 +377,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 416.5,
               "amountMinor": 41650
@@ -419,8 +392,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000001",
-            "name": "Alice Tester",
-            "email": "alice.test@splitbook-test.local"
+            "name": "Alice Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -443,8 +415,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 2860,
               "amountMinor": 286000
@@ -455,8 +426,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 953.34,
               "amountMinor": 95334
@@ -464,8 +434,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 953.33,
               "amountMinor": 95333
@@ -473,8 +442,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 953.33,
               "amountMinor": 95333
@@ -489,8 +457,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000002",
-            "name": "Bob Tester",
-            "email": "bob.test@splitbook-test.local"
+            "name": "Bob Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -513,8 +480,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 1180,
               "amountMinor": 118000
@@ -525,8 +491,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 590,
               "amountMinor": 59000
@@ -534,8 +499,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 590,
               "amountMinor": 59000
@@ -550,8 +514,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000003",
-            "name": "Carol Tester",
-            "email": "carol.test@splitbook-test.local"
+            "name": "Carol Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -628,8 +591,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 1249.5,
               "amountMinor": 124950
@@ -640,8 +602,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 416.5,
               "amountMinor": 41650
@@ -649,8 +610,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 416.5,
               "amountMinor": 41650
@@ -658,8 +618,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 416.5,
               "amountMinor": 41650
@@ -674,8 +633,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000001",
-            "name": "Alice Tester",
-            "email": "alice.test@splitbook-test.local"
+            "name": "Alice Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -723,8 +681,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 320,
               "amountMinor": 32000
@@ -735,8 +692,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 160,
               "amountMinor": 16000
@@ -744,8 +700,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 160,
               "amountMinor": 16000
@@ -753,8 +708,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 0,
               "amountMinor": 0
@@ -769,8 +723,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000003",
-            "name": "Carol Tester",
-            "email": "carol.test@splitbook-test.local"
+            "name": "Carol Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -818,8 +771,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 2860,
               "amountMinor": 286000
@@ -830,8 +782,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 953.34,
               "amountMinor": 95334
@@ -839,8 +790,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 953.33,
               "amountMinor": 95333
@@ -848,8 +798,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 953.33,
               "amountMinor": 95333
@@ -864,8 +813,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000002",
-            "name": "Bob Tester",
-            "email": "bob.test@splitbook-test.local"
+            "name": "Bob Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -888,8 +836,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 1080,
               "amountMinor": 108000
@@ -900,8 +847,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 540,
               "amountMinor": 54000
@@ -909,8 +855,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 540,
               "amountMinor": 54000
@@ -925,8 +870,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000002",
-            "name": "Bob Tester",
-            "email": "bob.test@splitbook-test.local"
+            "name": "Bob Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -974,8 +918,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 1080,
               "amountMinor": 108000
@@ -986,8 +929,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 540,
               "amountMinor": 54000
@@ -995,8 +937,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 540,
               "amountMinor": 54000
@@ -1011,8 +952,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000002",
-            "name": "Bob Tester",
-            "email": "bob.test@splitbook-test.local"
+            "name": "Bob Tester"
           },
           "isDeleted": false,
           "deletedAt": null,
@@ -1035,8 +975,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 320,
               "amountMinor": 32000
@@ -1047,8 +986,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000002",
-                "name": "Bob Tester",
-                "email": "bob.test@splitbook-test.local"
+                "name": "Bob Tester"
               },
               "amount": 160,
               "amountMinor": 16000
@@ -1056,8 +994,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000003",
-                "name": "Carol Tester",
-                "email": "carol.test@splitbook-test.local"
+                "name": "Carol Tester"
               },
               "amount": 160,
               "amountMinor": 16000
@@ -1065,8 +1002,7 @@
             {
               "user": {
                 "_id": "b00000000000000000000001",
-                "name": "Alice Tester",
-                "email": "alice.test@splitbook-test.local"
+                "name": "Alice Tester"
               },
               "amount": 0,
               "amountMinor": 0
@@ -1081,8 +1017,7 @@
           "period": null,
           "createdBy": {
             "_id": "b00000000000000000000003",
-            "name": "Carol Tester",
-            "email": "carol.test@splitbook-test.local"
+            "name": "Carol Tester"
           },
           "isDeleted": false,
           "deletedAt": null,

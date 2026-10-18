@@ -46,6 +46,7 @@ import {
   resolveTagReference,
 } from '@splitbook/shared/tag-identity';
 import { expenseDate, expenseDay } from '@splitbook/shared/expense-day';
+import { PERSON_FIELDS } from './person-fields';
 
 /**
  * The stored-amount bounds for an Expense list's amount range (#310), or null without one.
@@ -133,9 +134,9 @@ export class ExpenseService {
       );
       existing.tag = displayTagReference(group.tags, existing).tag;
       return existing.populate([
-        { path: 'paidBy.user', select: 'name email image' },
-        { path: 'splitBetween.user', select: 'name email image' },
-        { path: 'createdBy', select: 'name email image' },
+        { path: 'paidBy.user', select: PERSON_FIELDS },
+        { path: 'splitBetween.user', select: PERSON_FIELDS },
+        { path: 'createdBy', select: PERSON_FIELDS },
       ]);
     }
     const memberIds = new Set(group.members.map((member) => String(member.user)));
@@ -178,9 +179,9 @@ export class ExpenseService {
             activityService.publishPending('expenses', replay._id, replay.pendingActivity),
           );
           return replay.populate([
-            { path: 'paidBy.user', select: 'name email image' },
-            { path: 'splitBetween.user', select: 'name email image' },
-            { path: 'createdBy', select: 'name email image' },
+            { path: 'paidBy.user', select: PERSON_FIELDS },
+            { path: 'splitBetween.user', select: PERSON_FIELDS },
+            { path: 'createdBy', select: PERSON_FIELDS },
           ]);
         }
       }
@@ -190,9 +191,9 @@ export class ExpenseService {
       activityService.publishPending('expenses', expense._id, expense.pendingActivity),
     );
     return expense.populate([
-      { path: 'paidBy.user', select: 'name email image' },
-      { path: 'splitBetween.user', select: 'name email image' },
-      { path: 'createdBy', select: 'name email image' },
+      { path: 'paidBy.user', select: PERSON_FIELDS },
+      { path: 'splitBetween.user', select: PERSON_FIELDS },
+      { path: 'createdBy', select: PERSON_FIELDS },
     ]);
   }
 
@@ -289,9 +290,9 @@ export class ExpenseService {
         .sort({ [sortField]: sortOrder, createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('paidBy.user', 'name email image')
-        .populate('splitBetween.user', 'name email image')
-        .populate('createdBy', 'name email image')
+        .populate('paidBy.user', PERSON_FIELDS)
+        .populate('splitBetween.user', PERSON_FIELDS)
+        .populate('createdBy', PERSON_FIELDS)
         .lean(),
       Expense.countDocuments(query),
       Expense.find(query)
@@ -406,10 +407,10 @@ export class ExpenseService {
   async getById(access: ExpenseAccess) {
     const group = await this.requireAccessGroup(access);
     const expense = await Expense.findOne({ _id: access.expenseId, group: access.groupId })
-      .populate('paidBy.user', 'name email image')
-      .populate('splitBetween.user', 'name email image')
-      .populate('createdBy', 'name email image')
-      .populate('editHistory.editedBy', 'name email image')
+      .populate('paidBy.user', PERSON_FIELDS)
+      .populate('splitBetween.user', PERSON_FIELDS)
+      .populate('createdBy', PERSON_FIELDS)
+      .populate('editHistory.editedBy', PERSON_FIELDS)
       .lean();
     return expense
       ? { ...expense, revision: expense.revision ?? 0, ...displayTagReference(group.tags, expense) }
@@ -487,9 +488,9 @@ export class ExpenseService {
     await withGroupMutation(access.groupId, async () => expense.save());
     await activityService.publishPending('expenses', expense._id, expense.pendingActivity);
     return expense.populate([
-      { path: 'paidBy.user', select: 'name email image' },
-      { path: 'splitBetween.user', select: 'name email image' },
-      { path: 'createdBy', select: 'name email image' },
+      { path: 'paidBy.user', select: PERSON_FIELDS },
+      { path: 'splitBetween.user', select: PERSON_FIELDS },
+      { path: 'createdBy', select: PERSON_FIELDS },
     ]);
   }
 

@@ -37,7 +37,8 @@ test('authenticated Group list has the same meaning through web and native adapt
       user: {
         id: member.user._id,
         name: member.user.name,
-        email: member.user.email,
+        // A co-member comes without an address unless Sam is the Group's admin (#517).
+        email: member.user.email ?? null,
         image: member.user.image ?? null,
       },
     })),
