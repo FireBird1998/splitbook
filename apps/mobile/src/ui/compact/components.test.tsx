@@ -9,7 +9,9 @@ const {
   Badge,
   Banner,
   Chip,
+  CompactAvatar,
   CompactButton,
+  CompactText,
   GroupNavBar,
   LinearProgress,
   ListRow,
@@ -357,6 +359,24 @@ describe('Large text', () => {
       ]}
     />
   );
+
+  it('keeps both initials in a member’s avatar at 200% text, while their name grows (#589)', () => {
+    setWindow({ fontScale: 2 });
+    const root = render(
+      <>
+        <CompactAvatar name="Alex Rivera" />
+        <CompactAvatar name="Sam Chen" small />
+        <CompactText>Alex Rivera</CompactText>
+      </>,
+    );
+    const texts = root.findAll((node) => isHost(node, 'Text'));
+    const initials = texts.filter((node) => ['AR', 'SC'].includes(node.children.join('')));
+    expect(initials.map((node) => node.children.join(''))).toEqual(['AR', 'SC']);
+    // The avatar's box stays 32 dp (26 small): two letters fit it only up to about 130% text.
+    for (const node of initials) expect(node.props.maxFontSizeMultiplier).toBeLessThanOrEqual(1.3);
+    const name = one(texts.filter((node) => node.children.join('') === 'Alex Rivera'));
+    expect(name.props.maxFontSizeMultiplier).toBeUndefined();
+  });
 
   it.each([1, 1.15, 1.3, 2])(
     'keeps every tile a button and every stat announced, in order, at %sx text',
