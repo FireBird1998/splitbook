@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { createMobileController } from '../src/data';
+import type { SavedQueryRecords } from '../src/data/saved-copy-budget';
+import { expensePagePath, activityPagePath } from '@splitbook/shared/api-paths';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
+import { waitForSavedQueries } from './offline-checkpoint';
 import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
 import { observe, present, reportVerifierFailure } from './verify-report';
@@ -51,6 +55,28 @@ async function run() {
     rowsTurn = result.catch(() => undefined);
     return result;
   };
+  const savedQueries: SavedQueryRecords = {
+    load: (account, path) => inTurn(async () => (await entries(rows))[account + path] ?? null),
+    save: (account, path, value) =>
+      inTurn(async () => {
+        const saved = await entries(rows);
+        saved[account + path] = value;
+        await rows.save(saved);
+      }),
+    remove: (account, path) =>
+      inTurn(async () => {
+        const saved = await entries(rows);
+        delete saved[account + path];
+        await rows.save(saved);
+      }),
+    clear: () => inTurn(rows.clear),
+    list: (account) =>
+      inTurn(async () =>
+        Object.entries(await entries(rows))
+          .filter(([key]) => key.startsWith(account))
+          .map(([key, value]) => ({ groupId: key.slice(account.length), value })),
+      ),
+  };
   let offline = false,
     writes = 0,
     cleanup = false;
@@ -67,29 +93,7 @@ async function run() {
               .parse(await credentials.load()),
         },
         offlineIdentity: identity,
-        savedQueries: {
-          load: (account, path) =>
-            inTurn(async () => (await entries(rows))[account + path] ?? null),
-          save: (account, path, value) =>
-            inTurn(async () => {
-              const saved = await entries(rows);
-              saved[account + path] = value;
-              await rows.save(saved);
-            }),
-          remove: (account, path) =>
-            inTurn(async () => {
-              const saved = await entries(rows);
-              delete saved[account + path];
-              await rows.save(saved);
-            }),
-          clear: () => inTurn(rows.clear),
-          list: (account) =>
-            inTurn(async () =>
-              Object.entries(await entries(rows))
-                .filter(([key]) => key.startsWith(account))
-                .map(([key, value]) => ({ groupId: key.slice(account.length), value })),
-            ),
-        },
+        savedQueries,
         expenseDrafts: {
           load: draft.load,
           save: async (_account, _group, value) => draft.save(value),
@@ -138,10 +142,26 @@ async function run() {
       .parse(await alex.request(`${path}/invite-link`, 'POST', {}, 201)).data.inviteCode;
     await sam.request(`/api/join/${code}`, 'POST', undefined, 201);
     await controller.signIn('sam');
-    assert.equal(controller.getSnapshot().home.status, 'ready');
+    assert.equal(controller.getSnapshot().home.status, 'ready', 'Home after online sign-in');
+    // A ready read is displayed before the background saved-copy queue reaches disk. Wait for
+    // Home's copies now, because the later disposal cancels any copy still waiting to be written.
+    await waitForSavedQueries(savedQueries, samId, ['/api/groups', '/api/user/balances']);
     await controller.openGroup(groupId);
     await controller.selectMonth('2026-08');
+    await waitForSavedQueries(savedQueries, samId, [
+      path,
+      `${path}/balances`,
+      expensePagePath(groupId, {
+        page: 1,
+        limit: 20,
+        includeMemberBreakdown: true,
+        ...expenseMonthRange('2026-08'),
+      }),
+    ]);
     await controller.openActivity(groupId);
+    await waitForSavedQueries(savedQueries, samId, [
+      activityPagePath(groupId, { page: 1, limit: 20 }),
+    ]);
     const activity = controller.getSnapshot().activity.events.length;
     observe(activity > 0, 'Activity loaded no events to keep for offline.', { events: activity });
     controller.dispose();
@@ -149,18 +169,30 @@ async function run() {
     controller = create();
     await controller.restore();
     assert.equal(controller.getSnapshot().auth.status, 'authenticated');
-    assert.equal(controller.getSnapshot().home.status, 'ready');
+    assert.equal(controller.getSnapshot().home.status, 'ready', 'Home after offline restart');
     present(
       controller.getSnapshot().offline.refreshedAt,
       'The restored offline session said nothing about when it was last updated.',
     );
     await controller.openGroup(groupId);
     await controller.selectMonth('2026-08');
-    assert.equal(controller.getSnapshot().financial.expenses.status, 'ready');
-    assert.equal(controller.getSnapshot().financial.balances.status, 'ready');
+    assert.equal(
+      controller.getSnapshot().financial.expenses.status,
+      'ready',
+      'Saved August Expenses after offline restart',
+    );
+    assert.equal(
+      controller.getSnapshot().financial.balances.status,
+      'ready',
+      'Saved Balances after offline restart',
+    );
     const savedBalances = controller.getSnapshot().financial.balances.data;
     await controller.selectMonth('2026-07');
-    assert.equal(controller.getSnapshot().financial.balances.status, 'ready');
+    assert.equal(
+      controller.getSnapshot().financial.balances.status,
+      'ready',
+      'Saved Balances in an unvisited Month',
+    );
     assert.deepEqual(controller.getSnapshot().financial.balances.data, savedBalances);
     assert.equal(controller.getSnapshot().financial.expenses.status, 'error');
     assert.equal(controller.getSnapshot().financial.expenses.summary, null);
@@ -257,7 +289,7 @@ async function run() {
       const { expenses } = controller.getSnapshot().financial;
       if (expenses.status === 'error') assert.equal(expenses.message, notSaved);
       else {
-        assert.equal(expenses.status, 'ready');
+        assert.equal(expenses.status, 'ready', 'Expenses after a confirmed edit');
         observe(
           descriptions().includes('Lakeside dinner, edited') &&
             !descriptions().includes('Lakeside dinner'),
@@ -284,4 +316,14 @@ async function run() {
     await rm(directory, { recursive: true, force: true });
   }
 }
-void run().catch((error: unknown) => reportVerifierFailure(error));
+void run().catch((error: unknown) => {
+  reportVerifierFailure(error);
+  // Print only the verifier's source location, keeping the report's credential redaction.
+  const location =
+    error instanceof Error
+      ? error.stack
+          ?.split('\n')
+          .find((line) => /^\s+at .*[/\\]verify-offline\.ts:\d+:\d+/.test(line))
+      : undefined;
+  if (location) console.error(`  check: ${location.trim()}`);
+});
