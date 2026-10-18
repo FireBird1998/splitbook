@@ -15,7 +15,7 @@ export function playTour(root, D) {
 }
 
 /** The splitting line's scene, for runTour. */
-function splittingLine({ svg, held, say, announce }, D) {
+function splittingLine({ svg, held, say, announce, tell }, D) {
   const P = D.P;
   const q = (sel) => svg.querySelector(sel);
 
@@ -107,9 +107,7 @@ function splittingLine({ svg, held, say, announce }, D) {
       i === s.paidBy ? l.setAttribute('data-on', '') : l.removeAttribute('data-on'),
     );
     setScreen(screenFor(s));
-    const text = `${s.title} ${rupees(s.amountMinor)} · ${D.names[s.paidBy]} paid`;
-    say(text);
-    announce(text);
+    tell(`${s.title} ${rupees(s.amountMinor)} · ${D.names[s.paidBy]} paid`);
   }
 
   function restart() {
@@ -126,7 +124,7 @@ function splittingLine({ svg, held, say, announce }, D) {
     payLamps.forEach((l) => l.removeAttribute('data-on'));
     resetMagazine();
     setScreen(['READY', `${D.steps.length} Expenses`, '']);
-    say(`Line idle · ${D.steps.length} Expenses waiting`);
+    tell(`Line idle · ${D.steps.length} Expenses waiting`);
   }
 
   // the boundaries a bar is cut at, leading end first

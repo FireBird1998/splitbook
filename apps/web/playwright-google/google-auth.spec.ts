@@ -148,7 +148,8 @@ test.describe('google auth mode', () => {
 
     await tour.press('Home');
     await expect(counters(page)).toHaveText(['0', '0', '0', '0']);
-    await expect(fig1(page)).toContainText('Line idle · 3 Expenses waiting');
+    // Starting over is announced, not left saying the end (#568).
+    await expect(fig1(page).getByRole('status')).toHaveText('Line idle · 3 Expenses waiting');
 
     await tour.click();
     await expect(counters(page)).toHaveText(['+900', '−300', '−300', '−300']);
@@ -213,12 +214,15 @@ test.describe('google auth mode', () => {
     const tour = fig3(page).getByRole('group', { name: /^Live tour\./ });
     await tour.press('ArrowRight');
     await expect(tills(page)).toHaveText(['0', '−100', '+100', '0']);
+    // The payment under way lands, and the step says so (#568).
+    await expect(fig3(page).getByRole('status')).toHaveText('Pay 2 of 3 · Alex paid Sam ₹200');
     await tour.press('ArrowRight');
     await expect(tills(page)).toHaveText(['0', '0', '0', '0']);
     await expect(fig3(page).getByRole('status')).toContainText('Settled in 3 payments');
 
     await tour.press('Home');
     await expect(tills(page)).toHaveText(['+500', '−100', '+300', '−700']);
+    await expect(fig3(page).getByRole('status')).toHaveText('5 debts between 4 people');
     await tour.click();
     await expect(fig3(page)).toContainText('Netting · 5 debts become 3 payments');
     await page.clock.runFor(5_000);

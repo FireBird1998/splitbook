@@ -123,6 +123,83 @@ export function counterProblems(frames: CounterFrame[], names: readonly string[]
     : problems;
 }
 
+/** What a tour's plate reads and its live region says, which is all a screen reader hears. */
+export interface Reading {
+  readout: string;
+  status: string;
+}
+
+/** A tour just after a visitor pressed a key, and what its live region said before the key. */
+export interface StatusStep extends Reading {
+  key: string;
+  before: string;
+}
+
+/** Whether the live region says what the plate reads (it may say more). */
+export const saysWhatIsDrawn = ({ readout, status }: Reading) => status.includes(readout);
+
+/**
+ * What is wrong with what a screen reader hears as a visitor steps a tour by keyboard (#568): a
+ * step after which the live region doesn't say what the plate reads, or a → after which it says
+ * nothing new. The run must start the tour over with Home, and its → presses must come round to
+ * that restart too. Empty when every step is told as drawn.
+ */
+export function statusProblems(steps: StatusStep[]): string[] {
+  if (!steps.length) return ['The tour took no steps.'];
+  const label = (key: string) => (key === 'ArrowRight' ? '→' : key);
+  const problems = steps.flatMap((step, i) => {
+    const after = `After key ${i + 1} (${label(step.key)})`;
+    if (!saysWhatIsDrawn(step))
+      return [
+        `${after} the live region says "${step.status}", but the plate reads "${step.readout}".`,
+      ];
+    // Each → moves the tour on, so it has something new to tell.
+    if (step.key === 'ArrowRight' && step.status === step.before)
+      return [`${after} the live region says nothing new: still "${step.status}".`];
+    return [];
+  });
+  const restart = steps.filter((s) => s.key === 'Home').at(-1)?.readout;
+  if (restart === undefined) problems.push('The tour was never started over with Home.');
+  else if (!steps.some((s) => s.key === 'ArrowRight' && s.readout === restart))
+    problems.push(
+      `The → presses never came round to the restart ("${restart}"), so it went untested.`,
+    );
+  return problems;
+}
+
+/**
+ * A tour played on after a keyboard visitor paused it (#570). From the restart, the tour was paused
+ * and stepped by → `presses` times to `at`, then played; it must move on by itself and come round
+ * to its restart again.
+ */
+export interface ResumeRound {
+  presses: number;
+  at: string;
+  movedOn: boolean;
+  startedOver: boolean;
+}
+
+/**
+ * What is wrong with a tour played on after Pause and → (#570): a step it stands still at once
+ * playing again, or one it moves on from but never comes round to its restart. `rounds` covers
+ * every step → reaches from the restart while paused; none means → never came round to it.
+ */
+export function resumeProblems({
+  restart,
+  rounds,
+}: {
+  restart: string;
+  rounds: ResumeRound[];
+}): string[] {
+  if (!rounds.length) return [`Paused, → never came round to the restart ("${restart}").`];
+  return rounds.flatMap(({ presses, at, movedOn, startedOver }) => {
+    const after = `After Home, Pause, ${presses} × → and Play, the tour`;
+    if (!movedOn) return [`${after} stood still at "${at}".`];
+    if (!startedOver) return [`${after} moved on from "${at}" but never started over.`];
+    return [];
+  });
+}
+
 const filesUnder = (dir: string): string[] =>
   readdirSync(dir, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile())

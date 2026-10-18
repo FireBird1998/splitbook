@@ -11,10 +11,12 @@ const KEYS = 'Click, or press → or Space, for the next step; Home starts over.
  * button, if it has one.
  *
  * makeScene gets the SVG, `held()` (reduced motion or paused: nothing moves by itself, and each
- * step shows settled), `say(text)` for the readout and `announce(text)` for the live region. It
- * returns the scene: `restart()`, `next()`, `update(dt, calm)`, `draw()`, `poseStill()` (the
- * documented still, where the tour opens under reduced motion) and `settled()` (nothing left to
- * move while held).
+ * step shows settled), `say(text)` for the readout, `announce(text)` for the live region and
+ * `tell(text)` for both. Every step a visitor can reach, starting over included, tells what it
+ * shows, so the live region never describes a state the drawing has left (#568); only a beat
+ * within a step may just say it. It returns the scene: `restart()`, `next()`, `update(dt, calm)`,
+ * `draw()`, `poseStill()` (the documented still, where the tour opens under reduced motion) and
+ * `settled()` (nothing left to move while held).
  *
  * Returns a function that stops the tour and leaves the drawing as it is.
  */
@@ -25,14 +27,20 @@ export function runTour(root, makeScene) {
   const still = window.matchMedia('(prefers-reduced-motion: reduce)');
   let paused = false;
   const held = () => still.matches || paused;
+  const say = (text) => {
+    if (readout && readout.textContent !== text) readout.textContent = text;
+  };
+  const announce = (text) => {
+    if (status) status.textContent = text;
+  };
   const scene = makeScene({
     svg: stage.querySelector('svg'),
     held,
-    say(text) {
-      if (readout && readout.textContent !== text) readout.textContent = text;
-    },
-    announce(text) {
-      if (status) status.textContent = text;
+    say,
+    announce,
+    tell(text) {
+      say(text);
+      announce(text);
     },
   });
 

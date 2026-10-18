@@ -89,7 +89,8 @@ test('under reduced motion Fig 2 holds its still, Dinner saved and Cab waiting, 
   const status = fig2(page).getByRole('status');
   await tour.press('ArrowRight');
   await expect(waiting(page)).toHaveText('0');
-  await expect(fig2(page)).toContainText('Claude connected · To review empty');
+  // Starting over is announced too, so the live region never keeps the still's words (#568).
+  await expect(status).toHaveText('Claude connected · To review empty');
   await tour.press('ArrowRight');
   await expect(status).toHaveText('Claude prepares Dinner at Thalassa ₹2,400 · 3 × ₹800');
   await expect(waiting(page)).toHaveText('1');

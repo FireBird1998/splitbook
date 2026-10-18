@@ -3,7 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { counterProblems, staleOutputs, stillDrift, vendorDrift, verifyStory } from './check.ts';
+import {
+  counterProblems,
+  resumeProblems,
+  staleOutputs,
+  statusProblems,
+  stillDrift,
+  vendorDrift,
+  verifyStory,
+} from './check.ts';
 import { withPngText } from './png.ts';
 import { story } from './story.ts';
 
@@ -243,6 +251,134 @@ describe('counterProblems', () => {
       'In frame 2 the counters add up to +1, not 0: +1, 0, 0, 0.',
       'In frame 3 the counters add up to +1, not 0: +1, 0, 0, 0.',
       'And 5 more.',
+    ]);
+  });
+});
+
+describe('statusProblems', () => {
+  /** A key's step: what the plate reads and the live region says after it, and said before it. */
+  const step = (key: string, readout: string, status: string, before: string) => ({
+    key,
+    readout,
+    status,
+    before,
+  });
+  /** Steps one after another, each starting from what the last one said. */
+  const stepped = (...list: [key: string, readout: string, status?: string][]) =>
+    list.map(([key, readout, status = readout], i, all) =>
+      step(key, readout, status, i ? (all[i - 1]![2] ?? all[i - 1]![1]) : ''),
+    );
+  const EMPTY = 'Claude connected · To review empty';
+
+  it('passes a tour whose live region tells every step as drawn, round to the restart and Home', () => {
+    expect(
+      statusProblems(
+        stepped(
+          ['ArrowRight', 'Claude prepares Dinner ₹2,400'],
+          // The live region may say more than the plate.
+          ['ArrowRight', 'You +500 · Alex −700', 'All 3 Expenses split. You +500 · Alex −700'],
+          ['ArrowRight', EMPTY],
+          ['ArrowRight', 'Claude prepares Dinner ₹2,400'],
+          ['Home', EMPTY],
+          // Home where the tour already starts says the same again.
+          ['Home', EMPTY],
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it('flags a step whose live region still describes the step before it', () => {
+    expect(
+      statusProblems(
+        stepped(
+          ['ArrowRight', 'Cab ₹600 waits'],
+          ['ArrowRight', EMPTY, 'Cab ₹600 waits'],
+          ['ArrowRight', 'Claude prepares Dinner ₹2,400'],
+          ['Home', EMPTY, ''],
+        ),
+      ),
+    ).toEqual([
+      `After key 2 (→) the live region says "Cab ₹600 waits", but the plate reads "${EMPTY}".`,
+      `After key 4 (Home) the live region says "", but the plate reads "${EMPTY}".`,
+    ]);
+  });
+
+  it('flags a → that leaves the live region saying what it said before', () => {
+    expect(
+      statusProblems([
+        step(
+          'ArrowRight',
+          'Pay 2 of 3 · Alex pays Sam ₹200',
+          'Pay 2 of 3 · Alex pays Sam ₹200',
+          'Pay 2 of 3 · Alex pays Sam ₹200',
+        ),
+        step('ArrowRight', EMPTY, EMPTY, 'Pay 2 of 3 · Alex pays Sam ₹200'),
+        step('Home', EMPTY, EMPTY, EMPTY),
+      ]),
+    ).toEqual([
+      'After key 1 (→) the live region says nothing new: still "Pay 2 of 3 · Alex pays Sam ₹200".',
+    ]);
+  });
+
+  it('flags a run that never reached the restart by →, or never pressed Home', () => {
+    expect(statusProblems([])).toEqual(['The tour took no steps.']);
+    expect(
+      statusProblems(
+        stepped(
+          ['ArrowRight', 'One'],
+          ['ArrowRight', 'Two'],
+          ['ArrowRight', 'One'],
+          ['Home', EMPTY],
+        ),
+      ),
+    ).toEqual([`The → presses never came round to the restart ("${EMPTY}"), so it went untested.`]);
+    expect(statusProblems(stepped(['ArrowRight', EMPTY], ['ArrowRight', 'Two']))).toEqual([
+      'The tour was never started over with Home.',
+    ]);
+  });
+});
+
+describe('resumeProblems', () => {
+  const RESTART = '5 debts between 4 people';
+  const round = (presses: number, at: string, movedOn = true, startedOver = movedOn) => ({
+    presses,
+    at,
+    movedOn,
+    startedOver,
+  });
+
+  it('passes a tour that plays on from every step it was paused at, round to the restart', () => {
+    expect(
+      resumeProblems({
+        restart: RESTART,
+        rounds: [
+          round(1, 'Netting · 5 debts become 3 payments'),
+          round(2, 'Pay 1 of 3 · Alex pays You ₹500'),
+          round(3, 'Settled in 3 payments · every counter at 0'),
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it('flags a step the tour stands still at after Play, and one it never comes round from', () => {
+    expect(
+      resumeProblems({
+        restart: RESTART,
+        rounds: [
+          round(1, 'Netting · 5 debts become 3 payments'),
+          round(2, 'Pay 1 of 3 · Alex pays You ₹500', false),
+          round(3, 'Pay 2 of 3 · Alex pays Sam ₹200', true, false),
+        ],
+      }),
+    ).toEqual([
+      'After Home, Pause, 2 × → and Play, the tour stood still at "Pay 1 of 3 · Alex pays You ₹500".',
+      'After Home, Pause, 3 × → and Play, the tour moved on from "Pay 2 of 3 · Alex pays Sam ₹200" but never started over.',
+    ]);
+  });
+
+  it('flags a paused tour that → never brings round to its restart', () => {
+    expect(resumeProblems({ restart: RESTART, rounds: [] })).toEqual([
+      `Paused, → never came round to the restart ("${RESTART}").`,
     ]);
   });
 });
