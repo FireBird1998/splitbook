@@ -21,7 +21,7 @@ All paths below are relative to the repository root. Generated files come from t
 | Browser tabs                                | `apps/web/public/brand/favicon.svg` and `favicon.ico`              | ICO contains 16, 32 and 48 px             |
 | Apple touch icon                            | `apps/web/public/brand/icon-180.png`                               | 180 × 180                                 |
 | Web manifest, ordinary icons                | `apps/web/public/brand/icon-192.png`, `icon-512.png`               | 192 and 512 px                            |
-| Web manifest, maskable icons                | `assets/brand/png/maskable-192.png`, `maskable-512.png`            | Use only with `purpose: "maskable"`       |
+| Web manifest, maskable icons                | `apps/web/public/brand/maskable-192.png`, `maskable-512.png`       | Use only with `purpose: "maskable"`       |
 | Native app / iOS base / store artwork       | `apps/mobile/assets/brand/app-icon.png`                            | 1024 × 1024, RGB, fully opaque            |
 | Android adaptive foreground                 | `apps/mobile/assets/brand/android-foreground.png`                  | 1024 × 1024 with transparent padding      |
 | Android themed icon                         | `apps/mobile/assets/brand/android-monochrome.png`                  | Same geometry, black alpha mask           |
@@ -74,7 +74,7 @@ Ready-to-use copies are in `apps/web/public/brand/`. A header can use:
 
 Choose `logo-dark.svg` through the app's existing theme state on dark surfaces. Both SVGs have the same viewBox and intrinsic dimensions. If using Next Image, supply the SVG's actual width/height ratio rather than inventing dimensions.
 
-The web app already does this: use `BrandLogo` (24, 32 or 40 px, with an `href` when it links home) and `BrandMark` (decorative beside the name) from `apps/web/src/components/layout/`, which pick the light or dark artwork from the MUI theme. The root metadata in `apps/web/src/app/layout.tsx` points at `/brand/favicon.svg`, `/brand/favicon.ico` and `/brand/icon-180.png`; there is deliberately no `app/favicon.ico`, `icon.*` or `apple-icon.*` file, because those file conventions would override it. If using maskable PWA icons, copy the generated maskable assets into `public/brand` and give them a separate manifest entry with `purpose: "maskable"`.
+The web app already does this: use `BrandLogo` (24, 32 or 40 px, with an `href` when it links home) and `BrandMark` (decorative beside the name) from `apps/web/src/components/layout/`, which pick the light or dark artwork from the MUI theme. The root metadata in `apps/web/src/app/layout.tsx` points at `/brand/favicon.svg`, `/brand/favicon.ico` and `/brand/icon-180.png`; there is deliberately no `app/favicon.ico`, `icon.*` or `apple-icon.*` file, because those file conventions would override it. The root metadata also links `/manifest.webmanifest`. Its ordinary and maskable icons come from `public/brand`; the generator copies the maskable assets there, and the manifest gives them separate entries with `purpose: "maskable"`. Installing the app opens Home (`/dashboard`) in a standalone window.
 
 ## Mobile integration
 

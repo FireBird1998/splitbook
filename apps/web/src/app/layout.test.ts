@@ -62,6 +62,10 @@ describe('the app fonts (#502)', () => {
 });
 
 describe('the root metadata', () => {
+  it('links the install manifest from the layout shared by every page', () => {
+    expect(metadata.manifest).toBe('/manifest.webmanifest');
+  });
+
   it('points browsers at the brand favicon, and Apple devices at the 180 px brand icon', () => {
     expect(metadata.icons).toEqual({
       icon: [
@@ -91,5 +95,31 @@ describe('the root metadata', () => {
       default: 'Splitbook - Shared Expenses, Settled Fairly',
       template: '%s · Splitbook',
     });
+  });
+});
+
+describe('the install manifest (#607)', () => {
+  it('installs Splitbook at Home in its own window with the brand colours and icons', async () => {
+    const { default: manifest } = await import('./manifest');
+    const app = manifest();
+    expect(app).toMatchObject({
+      name: 'Splitbook',
+      short_name: 'Splitbook',
+      start_url: '/dashboard',
+      display: 'standalone',
+      background_color: '#F8F9FC',
+      theme_color: '#172033',
+    });
+    expect(app.icons).toEqual([
+      { src: '/brand/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/brand/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/brand/maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+      { src: '/brand/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ]);
+    for (const icon of app.icons ?? []) {
+      const png = readFileSync(path.join(PUBLIC, icon.src));
+      expect(png.subarray(0, 8).toString('hex'), icon.src).toBe('89504e470d0a1a0a');
+      expect(`${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`, icon.src).toBe(icon.sizes);
+    }
   });
 });

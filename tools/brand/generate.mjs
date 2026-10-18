@@ -243,6 +243,11 @@ for (const size of [180, 192, 512])
     `apps/web/public/brand/icon-${size}.png`,
     generated.get(`assets/brand/png/web-icon-${size}.png`),
   );
+for (const size of [192, 512])
+  await output(
+    `apps/web/public/brand/maskable-${size}.png`,
+    generated.get(`assets/brand/png/maskable-${size}.png`),
+  );
 await output('apps/web/public/brand/favicon.ico', generated.get('assets/brand/favicon.ico'));
 for (const name of ['app-icon', 'android-foreground', 'android-monochrome']) {
   await output(
