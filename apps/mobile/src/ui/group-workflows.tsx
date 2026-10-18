@@ -18,6 +18,7 @@ import {
   radius,
 } from './compact';
 import { savingNeedsConnection } from './offline-notice';
+import { useStartWhileUnfocused } from './start-while-unfocused';
 import { Copy, Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 
@@ -169,6 +170,7 @@ export function GroupCreateForm({
   };
   const descriptor = getGroupTheme(draft.category);
   const currency = getCurrency(draft.defaultCurrency);
+  const nameStart = useStartWhileUnfocused(() => onLeaveField('name'));
   const [choosingCurrency, setChoosingCurrency] = useState(false);
   const [currencySearch, setCurrencySearch] = useState('');
   const locked = busy || uncertain;
@@ -256,7 +258,9 @@ export function GroupCreateForm({
           error={errors.name}
           value={draft.name}
           onChangeText={(name) => onChange({ name })}
-          onBlur={() => onLeaveField('name')}
+          selection={nameStart.selection}
+          onFocus={nameStart.onFocus}
+          onBlur={nameStart.onBlur}
           maxLength={100}
           placeholder={descriptor.namePlaceholder}
           autoCapitalize="sentences"

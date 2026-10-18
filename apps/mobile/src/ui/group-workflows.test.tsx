@@ -1,9 +1,11 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setWindow } from '../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { InvitationPreview, joinNeedsConnection } = await import('./group-workflows');
+const { GroupCreateForm, InvitationPreview, joinNeedsConnection } =
+  await import('./group-workflows');
 
 // Sam's invitation to Maple House, a fictional Household.
 const preview = {
@@ -69,5 +71,48 @@ describe('An invitation while offline (#286)', () => {
     expect(action.props.accessibilityState).toEqual({ disabled: false, busy: false });
     expect(action.props.accessibilityHint).toBeUndefined();
     expect(text).not.toContain(joinNeedsConnection);
+  });
+});
+
+describe('A long Group name (#554)', () => {
+  it('opens at its start, and leaves the cursor to the member while typing', () => {
+    setWindow({ width: 360, height: 780, fontScale: 2 });
+    const onLeaveField = vi.fn();
+    act(() => {
+      renderer = create(
+        <GroupCreateForm
+          draft={{
+            name: 'Maple House shared flat with a very long name',
+            description: '',
+            category: 'home',
+            defaultCurrency: 'INR',
+            startDate: '',
+            endDate: '',
+          }}
+          onChange={vi.fn()}
+          onSubmit={vi.fn()}
+          busy={false}
+          message={null}
+          uncertain={false}
+          onCheckGroups={vi.fn()}
+          onDiscard={vi.fn()}
+          onLeaveField={onLeaveField}
+        />,
+      );
+    });
+    const name = () =>
+      renderer!.root.find(
+        (node: ReactTestInstance) =>
+          (node.type as unknown) === 'TextInput' &&
+          node.props.accessibilityLabel === 'Household name, required',
+      );
+    // Android otherwise opens a filled single-line box at its end, cutting off the start.
+    expect(name().props.selection).toEqual({ start: 0, end: 0 });
+    act(() => name().props.onFocus());
+    expect(name().props.selection).toBeUndefined();
+    act(() => name().props.onBlur());
+    expect(name().props.selection).toEqual({ start: 0, end: 0 });
+    // Leaving the box still checks the name, as before.
+    expect(onLeaveField).toHaveBeenCalledWith('name');
   });
 });
