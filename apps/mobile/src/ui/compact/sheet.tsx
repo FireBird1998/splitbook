@@ -23,6 +23,7 @@ import { CompactText } from './text';
 export function BottomSheet({
   visible,
   title,
+  titleLines = 1,
   subtitle,
   titleAccessory,
   onDone,
@@ -34,6 +35,8 @@ export function BottomSheet({
 }: {
   visible: boolean;
   title: string;
+  /** Lines the title may take: more for a name the member typed, which can be long. */
+  titleLines?: number;
   /** Text, or text runs such as an amount in the money face. */
   subtitle?: ReactNode;
   /** Shown beside the title, e.g. a Required marker. */
@@ -138,7 +141,12 @@ export function BottomSheet({
               >
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <CompactText variant="title" accessibilityRole="header" numberOfLines={1}>
+                    <CompactText
+                      variant="title"
+                      accessibilityRole="header"
+                      numberOfLines={titleLines}
+                      style={{ flexShrink: 1 }}
+                    >
                       {title}
                     </CompactText>
                     {titleAccessory}

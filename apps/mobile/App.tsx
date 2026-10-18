@@ -1143,7 +1143,7 @@ function GroupScreen() {
           ? () => setTagsOpen(true)
           : undefined
       }
-      onCheckTagAction={
+      onViewTags={
         known?.members.some((member) => member.user.id === userId && member.role !== 'admin')
           ? () => setTagsOpen(true)
           : undefined
@@ -1205,6 +1205,7 @@ function GroupScreen() {
           key={userId + group.id}
           controller={controller}
           groupId={group.id}
+          groupName={group.name}
           accountId={userId}
           recoveryOnly={
             !group.members.some((member) => member.user.id === userId && member.role === 'admin')

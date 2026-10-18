@@ -198,6 +198,8 @@ export const reactNative = {
   BackHandler: {
     addEventListener: (_type: string, listener: () => boolean) => listen(backListeners, listener),
   },
+  // No keyboard shows in a test.
+  Keyboard: { isVisible: () => false },
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   Linking: {
     addEventListener: () => ({ remove: () => undefined }),

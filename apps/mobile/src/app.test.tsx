@@ -2125,7 +2125,7 @@ it('asks before discarding a lost Group’s unconfirmed payment', async () => {
 });
 
 describe('Android Group Tag management', () => {
-  it('opens from admin Group options, creates a Tag and confirms its receipt', async () => {
+  it('opens from admin Group options, creates a Tag and confirms it in a short note', async () => {
     const app = await renderApp();
     app.device.submissionKey = '00000000-0000-4000-8000-000000000001';
     let tags = [
@@ -2185,8 +2185,9 @@ describe('Android Group Tag management', () => {
     expect(sent).toEqual([
       { requestId: app.device.submissionKey, intent: { action: 'create', name: 'Villa' } },
     ]);
-    expect(app.text()).toContain('Confirmed earlier action');
-    expect(app.text()).toContain('Villa');
+    expect(app.text()).toContain('Villa created');
+    expect(app.text()).toContain('Active · 2');
+    expect(app.text()).not.toContain('Your change went through');
     app.controller.dispose();
   });
 });
@@ -2286,19 +2287,21 @@ describe('Android Tag correction and close behavior', () => {
       },
     ]);
     app.server.stale = true;
-    act(() => app.pressable('Rename Shared').props.onPress());
+    act(() => app.pressable('Shared, active. Opens Rename').props.onPress());
+    act(() => app.pressable('Rename, Saved Expenses show the new name').props.onPress());
     act(() =>
       app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.onChangeText('Villa'),
     );
-    act(() => app.pressable('Save Tag name').props.onPress());
+    act(() => app.pressable('Save name').props.onPress());
     await settle();
     expect(app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.value).toBe('Villa');
-    expect(app.text()).toContain('Lodge');
-    expect(app.pressable('Save Tag name').props.disabled).toBe(true);
-    act(() => app.pressable('Review latest Tag state').props.onPress());
+    expect(app.text()).toContain('Not saved');
+    expect(app.text()).toContain('Currently Lodge');
+    expect(app.pressable('Save name').props.disabled).toBe(true);
+    act(() => app.pressable('See the latest').props.onPress());
     await settle();
     expect(app.server.submitted).toHaveLength(1);
-    act(() => app.pressable('Save Tag name').props.onPress());
+    act(() => app.pressable('Save name').props.onPress());
     await settle();
     expect(app.server.submitted).toEqual([
       {
@@ -2323,7 +2326,7 @@ describe('Android Tag correction and close behavior', () => {
     app.controller.dispose();
   });
 
-  it('offers explicit Restore for an archived duplicate without submitting a create', async () => {
+  it('offers Restore for an archived Tag’s name as it is typed, never sending a create', async () => {
     const app = await tagApp([
       {
         id: 'c00000000000000000000001',
@@ -2337,10 +2340,9 @@ describe('Android Tag correction and close behavior', () => {
     act(() =>
       app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.onChangeText('villa'),
     );
-    act(() => app.pressable('Create Tag').props.onPress());
     await settle();
     expect(app.server.submitted).toEqual([]);
-    expect(app.text()).toContain('Archived Tag');
+    expect(app.text()).toContain('Villa is archived. Restore it to keep its Expenses together.');
     act(() => app.pressable('Restore Villa').props.onPress());
     await settle();
     expect(app.server.submitted).toEqual([
@@ -2349,34 +2351,40 @@ describe('Android Tag correction and close behavior', () => {
         intent: { action: 'restore', tagId: 'c00000000000000000000001', expectedRevision: 3 },
       },
     ]);
+    expect(app.text()).toContain('Villa restored');
     app.controller.dispose();
   });
 
-  it('asks before discarding unsubmitted name text, including Android modal Back', async () => {
+  it('asks before discarding a typed name, including Android Back, and keeps Tags open', async () => {
     const app = await tagApp([]);
     act(() => app.pressable('New Tag').props.onPress());
     act(() =>
       app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.onChangeText('Villa'),
     );
-    const modal = app
+    // Back reaches the sheet on top: the name's.
+    const sheet = app
       .root()
       .findAll((node) => (node.type as unknown) === 'Modal')
-      .find((node) => node.props.visible && node.props.animationType === 'slide');
-    act(() => modal!.props.onRequestClose());
+      .find((node) => node.props.visible && node.props.transparent);
+    act(() => sheet!.props.onRequestClose());
     expect(Alert.alert).toHaveBeenCalledWith(
-      'Discard Tag name?',
+      'Discard this name?',
       expect.any(String),
       expect.arrayContaining([
         expect.objectContaining({ text: 'Keep editing' }),
-        expect.objectContaining({ text: 'Discard name' }),
+        expect.objectContaining({ text: 'Discard' }),
       ]),
     );
     expect(app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.value).toBe('Villa');
     expect(app.server.submitted).toEqual([]);
     const buttons = vi.mocked(Alert.alert).mock.calls.at(-1)![2]!;
-    act(() => buttons.find((button) => button.text === 'Discard name')!.onPress!());
+    act(() => buttons.find((button) => button.text === 'Discard')!.onPress!());
     await settle();
-    expect(app.text()).not.toContain('Changes need a connection.');
+    // The sheet closed; Tags stays open until its own Close.
+    expect(app.text()).toContain('Active · 0');
+    act(() => app.pressable('Close Tags').props.onPress());
+    await settle();
+    expect(app.text()).not.toContain('Active · 0');
     act(() => app.pressable('Group options').props.onPress());
     act(() => app.pressable('Manage Tags').props.onPress());
     await settle();
@@ -2387,7 +2395,7 @@ describe('Android Tag correction and close behavior', () => {
 });
 
 describe('Tag permissions and archive review in App', () => {
-  it('does not offer management to a regular member', async () => {
+  it('offers a regular member the Tags to look at, not to manage', async () => {
     const app = await renderApp();
     await settle(app.controller.openGroup(groupId));
     act(() => app.pressable('Group options').props.onPress());
@@ -2398,13 +2406,15 @@ describe('Tag permissions and archive review in App', () => {
         .findAll(
           (node) =>
             (node.type as unknown) === 'Pressable' &&
-            node.props.accessibilityLabel === 'Manage Tags',
+            String(node.props.accessibilityLabel).startsWith('Manage Tags'),
         ),
     ).toEqual([]);
+    expect(app.pressable('Tags, See this Group’s Tags')).toBeTruthy();
     app.controller.dispose();
   });
 
   it('explains archive effects before confirmation and shows a last-active rejection', async () => {
+    // Two active Tags here; another admin archives the other one first, on the server.
     const app = await tagApp([
       {
         id: 'c00000000000000000000001',
@@ -2413,12 +2423,20 @@ describe('Tag permissions and archive review in App', () => {
         isArchived: false,
         isDeleted: false,
       },
+      {
+        id: 'c00000000000000000000003',
+        name: 'Spare',
+        revision: 0,
+        isArchived: false,
+        isDeleted: false,
+      },
     ]);
     app.server.lastActive = true;
-    act(() => app.pressable('Archive Shared').props.onPress());
+    act(() => app.pressable('Shared, active. Opens Rename').props.onPress());
+    act(() => app.pressable('Archive, Stop offering it').props.onPress());
     expect(app.server.submitted).toEqual([]);
-    expect(app.text()).toContain('Saved Expenses keep this Tag and their history.');
-    expect(app.text()).toContain('Unfinished Drafts need an active Tag before saving.');
+    expect(app.text()).toContain('Saved Expenses keep it, with their history.');
+    expect(app.text()).toContain('Drafts using it need another Tag before they’re saved.');
     expect(
       app
         .root()
@@ -2428,7 +2446,7 @@ describe('Tag permissions and archive review in App', () => {
             String(node.props.accessibilityLabel).startsWith('Delete'),
         ),
     ).toEqual([]);
-    act(() => app.pressable('Confirm archive Tag').props.onPress());
+    act(() => app.pressable('Archive Tag').props.onPress());
     await settle();
     expect(app.server.submitted).toEqual([
       {
@@ -2436,8 +2454,9 @@ describe('Tag permissions and archive review in App', () => {
         intent: { action: 'archive', tagId: 'c00000000000000000000001', expectedRevision: 0 },
       },
     ]);
+    expect(app.text()).toContain('Not saved');
     expect(app.text()).toContain('Create or restore another active Tag first.');
-    expect(app.pressable('Confirm archive Tag').props.disabled).toBe(true);
+    expect(app.pressable('Archive Tag').props.disabled).toBe(true);
     app.controller.dispose();
   });
 });
@@ -2482,7 +2501,7 @@ it('lets a demoted member Check their original action after a restart without en
   act(() => app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.onChangeText('Villa'));
   act(() => app.pressable('Create Tag').props.onPress());
   await settle();
-  act(() => app.pressable('Close Manage Tags').props.onPress());
+  act(() => app.pressable('Close Tags').props.onPress());
   await settle();
   act(() => screen!.unmount());
   admin = false;
@@ -2499,12 +2518,14 @@ it('lets a demoted member Check their original action after a restart without en
       .root()
       .findAll(
         (node) =>
-          (node.type as unknown) === 'Pressable' && node.props.accessibilityLabel === 'Manage Tags',
+          (node.type as unknown) === 'Pressable' &&
+          String(node.props.accessibilityLabel).startsWith('Manage Tags'),
       ),
   ).toEqual([]);
-  act(() => app.pressable('Check Tag action').props.onPress());
+  act(() => app.pressable('Tags, See this Group’s Tags').props.onPress());
   await settle();
-  expect(app.pressable('Retry original action').props.disabled).toBe(true);
+  expect(app.text()).toContain('Creating Villa isn’t confirmed');
+  expect(app.pressable('Try again').props.disabled).toBe(true);
   expect(
     app
       .root()
@@ -2513,11 +2534,11 @@ it('lets a demoted member Check their original action after a restart without en
           (node.type as unknown) === 'Pressable' && node.props.accessibilityLabel === 'New Tag',
       ),
   ).toEqual([]);
-  act(() => app.pressable('Check action').props.onPress());
+  act(() => app.pressable('Check again').props.onPress());
   await settle();
   expect(posts).toBe(1);
-  expect(app.text()).toContain('Confirmed earlier action');
-  expect(app.text()).toContain('Renamed later');
+  expect(app.text()).toContain('Your change went through');
+  expect(app.text()).toContain('Villa created. It’s now called Renamed later.');
   expect(restarted.getSnapshot().detail.data?.id).toBe(groupId);
   restarted.dispose();
 });

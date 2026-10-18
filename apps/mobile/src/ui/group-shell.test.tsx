@@ -190,11 +190,11 @@ describe('Group shell', () => {
 
   it.each([
     ['admin', 'Manage Tags, Create, rename, archive or restore'],
-    ['member', 'Check Tag action, Read the outcome of an earlier action'],
+    ['member', 'Tags, See this Group’s Tags'],
   ] as const)('mounts the %s Tag option only while Group options are open', (role, label) => {
     const action = vi.fn();
     const { root, props } = shell(
-      role === 'admin' ? { onManageTags: action } : { onCheckTagAction: action },
+      role === 'admin' ? { onManageTags: action } : { onViewTags: action },
     );
     const sheet = () => root.find((node) => isHost(node, 'Modal'));
     const expectClosed = () => {
