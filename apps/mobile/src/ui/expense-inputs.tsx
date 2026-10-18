@@ -54,7 +54,7 @@ const RequiredFieldLabel = memo(function RequiredFieldLabel({
     </View>
   );
 });
-const CurrencyBadge = memo(function CurrencyBadge({
+export const CurrencyBadge = memo(function CurrencyBadge({
   currency,
   recorded,
 }: {

@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
+import type { ZodError } from 'zod';
 import { auth } from '@/lib/auth';
 import { MoneyValidationError } from '@splitbook/shared/exact-money';
 import {
@@ -151,11 +152,13 @@ export function serverError(err?: unknown) {
 }
 
 /**
- * Validation error response (from Zod)
+ * Validation error response. A Zod error's problems travel as `[{ path, message }]`, the same
+ * shape on every API (#538).
  */
-export function validationError(errors: unknown) {
+export function validationError(refusal: ZodError) {
+  const details = refusal.issues.map((issue) => ({ path: issue.path, message: issue.message }));
   return NextResponse.json(
-    { error: 'Validation error', code: 'VALIDATION_ERROR', details: errors, status: 422 },
+    { error: 'Validation error', code: 'VALIDATION_ERROR', details, status: 422 },
     { status: 422 },
   );
 }

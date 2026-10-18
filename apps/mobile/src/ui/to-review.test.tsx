@@ -134,7 +134,8 @@ function fixture(
   const incomplete = {
     ...row(3, 'Missing amount', 30),
     values: { description: 'Missing amount' },
-    missingFields: ['amount', 'currency', 'date'],
+    // The Group sets the currency, so the server never lists it (#512).
+    missingFields: ['amount', 'date'],
   };
   const duplicate = {
     ...review(row(4, 'Duplicate dinner', 30)),
@@ -215,6 +216,7 @@ function fixture(
                   {
                     groupId: id,
                     groupName: id === groupId ? group.name : 'Later trip',
+                    currency: 'INR',
                     count: own.length,
                     items: own,
                   },
@@ -463,6 +465,16 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       expect(text(list)).toContain('Save ready expenses?');
       expect(text(list)).not.toContain('Yesterday');
     }));
+  it('saves ready items without a currency in the Group’s (#512)', async () => {
+    const f = fixture();
+    delete f.items()[0].draft.values!.currency;
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'Save 2 ready');
+    expect(text(list)).toContain('Save ready expenses?');
+    expect(text(list)).toContain('₹12.34');
+    expect(text(list)).not.toContain('Some items changed');
+  });
   it('hides an empty Home card and renders the empty list', async () => {
     const f = fixture({ empty: true });
     await signIn(f);
@@ -485,16 +497,15 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     for (const raw of ['Edit expense details', 'Currency (e.g. INR)', 'Date (YYYY-MM-DD)'])
       expect(text(list)).not.toContain(raw);
   });
-  it('keeps showing an amount whose currency is missing (#435)', async () => {
+  it('shows an amount without a currency in the Group’s, and never asks for it (#512)', async () => {
     const f = fixture({ unpaid: true });
     const draft = f.items()[0].draft;
     delete draft.values!.currency;
     draft.values!.amount = 1234.5;
-    draft.missingFields = [...(draft.missingFields ?? []), 'currency'];
     await signIn(f);
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
-    expect(text(list)).toContain('1,234.5');
-    expect(text(list)).toContain('the currency');
+    expect(text(list)).toContain('₹1,234.50');
+    expect(text(list)).not.toContain('the currency');
     expect(text(list)).not.toContain('Amount needed');
   });
   it('names a missing date, amount or description once, in the Needs line (#435)', async () => {
@@ -502,7 +513,8 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     await signIn(f);
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     // Chips ask who paid and the Tag (#439); the Needs line names the rest, once.
-    expect(text(list)).toContain('Still needs the amount, the currency, the date');
+    expect(text(list)).toContain('Still needs the amount, the date');
+    expect(text(list)).not.toContain('the currency');
     for (const repeated of ['Amount needed', 'Date needed', 'Description needed'])
       expect(text(list)).not.toContain(repeated);
   });

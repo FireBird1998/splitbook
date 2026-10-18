@@ -11,7 +11,8 @@ import type { ExpenseContext } from './expense-draft';
 import type { ExpenseRecord } from './expense-record';
 
 export interface ReviewRunState {
-  items: { groupId: string; groupName: string; item: ToReviewItem }[];
+  /** Each item with its Group, and the Group's currency the read names (#512). */
+  items: { groupId: string; groupName: string; currency?: string; item: ToReviewItem }[];
   index: number;
   outcomes: ReviewRunOutcome[];
   context: ExpenseContext | null;
@@ -326,6 +327,7 @@ export function createReviewRun(options: {
               {
                 groupId: selected.groupId,
                 groupName: selected.groupName,
+                currency: selected.currency,
                 count: 1,
                 items: reviews,
               },

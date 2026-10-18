@@ -80,6 +80,18 @@ export const replaceExpenseDraftSchema = z.object({ values: expenseDraftValuesSc
 
 export type ExpenseDraftValues = z.infer<typeof expenseDraftValuesSchema>;
 
+/**
+ * A Draft's values as its Group saves them: one without a currency takes the Group's, as Add
+ * expense does, so it is never asked for (#512). The stored Draft keeps what was entered. This is
+ * not a guess: a Group records Expenses in its one currency only.
+ */
+export function withGroupCurrency(
+  values: ExpenseDraftValues = {},
+  currency?: string,
+): ExpenseDraftValues {
+  return values.currency || !currency ? values : { ...values, currency };
+}
+
 /** Whether a Draft has a value for a fact at all: not blank, not zero, not an empty list. */
 function hasValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0;

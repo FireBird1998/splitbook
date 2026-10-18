@@ -16,6 +16,23 @@ Helpers in `src/lib/utils/api-response.ts` produce this shape. Two exceptions ex
 today: the tag handlers hand-roll `new Response(JSON.stringify(...))` for their
 `TAG_EXISTS` / `TAG_IN_USE` cases and omit the `status` field.
 
+A body or query the route's schema refuses answers **422** `VALIDATION_ERROR`,
+with each problem in `details` as `{ path, message }`, the shape the Draft APIs
+use too (#538):
+
+```json
+{
+  "error": "Validation error",
+  "code": "VALIDATION_ERROR",
+  "status": 422,
+  "details": [{ "path": ["category"], "message": "Invalid category" }]
+}
+```
+
+Two routes refuse with a message of their own instead: an invite's email
+(`Invalid email address`) and an invitation's action (`Invalid action`), both
+**422** without `details`. Tag commands answer **400** `INVALID_TAG_COMMAND`.
+
 **Unauthenticated `/api/*` requests get `401` JSON, never a redirect.** Route
 protection lives in `src/proxy.ts` (rules in `src/lib/auth/proxy-rules.ts`); for
 API paths without a session cookie it answers `{ "error": "Unauthorized", "status": 401 }`,
@@ -453,32 +470,70 @@ created an expense, so any member can edit or delete any expense in the group.
   (`INVALID_MEMBERS`).
 - `amount` — positive, at most 10,000,000.
 
-`category` is a free string defaulting to `"other"`; the category list in
-`packages/shared/src/categories.ts` is **not** enforced by the validator.
+`category` defaults to `"other"` and must be one of the Category ids in
+`packages/shared/src/categories.ts`; any other answers **422**
+`VALIDATION_ERROR` at `["category"]` ("Invalid category"), on create and edit.
 
 `receiptUrl` is present on the model but absent from both expense schemas, so no
 API path can set it.
 
 **Notes on split calculation:**
 
-- `equal`: Server calculates equal amounts (floor plus remainder to the first
-  participant). Client just sends user IDs.
+- `equal`: Server calculates equal amounts. Client just sends user IDs. Any
+  smallest units left over go one each to the participants whose user ids sort
+  first.
 - `unequal` / `exact`: Client sends `amount` for each user, **passed through
   untouched**. A row without one is refused as a missing amount, "Enter an amount
   for each person in the split", pointing at that row (#497): a create answers
-  **422** `VALIDATION_ERROR` with the issue at `splitBetween.<i>.amount`, and an
-  edit answers **422** `MISSING_SPLIT_AMOUNT` with
-  `field: ["splitBetween", <i>, "amount"]`.
+  **422** `VALIDATION_ERROR` with the issue at
+  `["splitBetween", <i>, "amount"]`, and an edit answers **422**
+  `MISSING_SPLIT_AMOUNT` with `field: ["splitBetween", <i>, "amount"]`.
 - `percentage`: Client sends `percentage` for each user.
 - `shares`: Client sends `shares` for each user. Server calculates proportional
-  amounts.
+  amounts; for shares and percentages, leftover smallest units go to the largest
+  remainders, ties by user id.
 
-> **The server does not verify that money is conserved.** Nothing checks that
-> `sum(paidBy.amount)` or `sum(splitBetween.amount)` equals `amount`, or that
-> percentages sum to 100. Those checks exist only in the client dialogs. A
-> direct API call can therefore create an expense that breaks the group's
-> zero-sum property, and because balances are derived rather than stored, every
-> later balance read inherits it.
+**The server checks that the money adds up (#545).** Every save runs the shared
+`normalizeExpenseMoney`
+([`packages/shared/src/exact-money.ts`](../packages/shared/src/exact-money.ts))
+on the whole Expense: a create on its body, an edit that touches the money on
+the stored Expense with the change applied. No API call can store an Expense
+whose payers or split don't add up to its amount. Before it, the schema refuses
+an amount that isn't positive or is over 10,000,000, a negative row amount, a
+percentage outside 0–100, shares that aren't whole and non-negative, and an
+Expense without a payer or a split row. The money module then refuses:
+
+| Refusal                                                 | Code                        | Path                                                                           |
+| ------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------ |
+| Payers that don't add up to the amount                  | `PAYER_TOTAL_MISMATCH`      | `["paidBy"]`                                                                   |
+| The same person twice among the payers, or in the split | `DUPLICATE_PARTICIPANTS`    | `["paidBy"]` or `["splitBetween"]`                                             |
+| An exact or unequal split that doesn't add up           | `SPLIT_TOTAL_MISMATCH`      | `["splitBetween"]`                                                             |
+| A share left out of an exact or unequal split           | `MISSING_SPLIT_AMOUNT`      | `["splitBetween", <i>, "amount"]`                                              |
+| Percentages that don't make 100                         | `PERCENTAGE_TOTAL_MISMATCH` | `["splitBetween"]`                                                             |
+| Shares or percentages that are all zero                 | `INVALID_SHARES`            | `["splitBetween"]`                                                             |
+| An amount with more decimals than the currency has      | `INVALID_MONEY_PRECISION`   | `["amount"]`, `["paidBy", <i>, "amount"]` or `["splitBetween", <i>, "amount"]` |
+| A percentage with more than 2 decimals                  | `INVALID_MONEY_PRECISION`   | `["splitBetween"]`                                                             |
+
+A create answers **422** `VALIDATION_ERROR` with each path and message in
+`details`, a refusal about the total at `["amount"]`. The codes above appear
+only on an edit, which answers **422** with the code and the path as `field`; a
+refusal about the total itself, such as its decimals, has no `field`.
+
+Reads check stored Expenses too. The Expense list, balances, spending, insights,
+trip summaries and export refuse with **422** `UNBALANCED_LEDGER`, or another
+stored-money code, when an Expense's stored allocations don't equal its amount
+(`assertStoredExpenseMoney`); balances also do when the Group's contributions
+don't net to zero (`simplifyDebtsMinor`). An edit of such an Expense is refused
+the same way.
+
+The shared module's tests pin these rules (`exact-money.test.ts`,
+`split-calculation.test.ts`). Over HTTP,
+`apps/web/src/app/api/groups/[id]/expenses/missing-split-amount.integration.test.ts`
+pins a missing share (#497),
+`apps/web/src/app/api/groups/[id]/expenses/validation-details.integration.test.ts`
+the `details` shape (#538), and
+`apps/web/src/app/api/groups/[id]/drafts/review/route.integration.test.ts` a
+split that doesn't add up, as To review reports it (#506).
 
 ### GET /api/groups/[id]/expenses
 

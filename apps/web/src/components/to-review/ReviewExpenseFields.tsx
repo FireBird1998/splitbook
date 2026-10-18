@@ -2,7 +2,10 @@
 import { useState } from 'react';
 import { draftValues } from '@splitbook/shared/persistent-draft-editor';
 import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
-import { completeExpenseDraftSchema } from '@splitbook/shared/validators/expense-draft';
+import {
+  completeExpenseDraftSchema,
+  withGroupCurrency,
+} from '@splitbook/shared/validators/expense-draft';
 import { formatCurrency } from '@splitbook/shared/currency';
 import ExpenseFields from '@/components/expenses/ExpenseFields';
 import type { ExpenseDraftValues } from '@splitbook/shared/expense-draft';
@@ -40,7 +43,8 @@ export default function ReviewExpenseFields({
   const values = {
     description: entries.description ?? '',
     amount: entries.amount ?? '',
-    currency: entries.currency ?? '',
+    // Shown in the Group's currency, which saving applies, as on Add expense (#512).
+    currency: entries.currency || context.currency || '',
     // Shown as Other, which saving applies, but stored only once the member chooses.
     category: entries.category || 'other',
     date: entries.date ?? '',
@@ -98,7 +102,9 @@ export default function ReviewExpenseFields({
     if (!members.some((member) => member.id === id)) members.push({ id, name: 'Former member' });
   let preview: ReturnType<typeof normalizeExpenseMoney> | undefined;
   try {
-    const parsed = completeExpenseDraftSchema.safeParse(draftValues(entries));
+    const parsed = completeExpenseDraftSchema.safeParse(
+      withGroupCurrency(draftValues(entries), context.currency),
+    );
     if (parsed.success) preview = normalizeExpenseMoney(parsed.data);
   } catch {
     // Incomplete typing is expected. The shared form still shows its totals and missing facts.
@@ -109,6 +115,7 @@ export default function ReviewExpenseFields({
       values={values}
       edit={edit}
       isEditMode
+      groupCurrency={context.currency}
       userId=""
       members={members.map((member) => ({ user: { _id: member.id, name: member.name } }))}
       groupTags={context.tags.map((tag) => ({ _id: tag.id, name: tag.name, isArchived: false }))}

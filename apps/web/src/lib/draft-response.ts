@@ -3,10 +3,7 @@ import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-
 import { error, serverError, validationError } from '@/lib/utils/api-response';
 
 export function draftError(cause: unknown) {
-  if (cause instanceof ZodError)
-    return validationError(
-      cause.issues.map((issue) => ({ path: issue.path, message: issue.message })),
-    );
+  if (cause instanceof ZodError) return validationError(cause);
   if (cause instanceof SyntaxError) return error('Invalid JSON body', 400, 'INVALID_JSON');
   if (cause instanceof Error) {
     if (cause.message === 'DRAFTS_DISABLED')
