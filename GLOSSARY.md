@@ -55,3 +55,19 @@ _Avoid_: pending write, queued save, offline save
 **Connected assistant**:
 An external AI assistant a member has authorized to act as them in Splitbook, limited to the access that member granted and revocable at any time. Acts only as that one member.
 _Avoid_: bot, agent, integration
+
+**Excluded Group**:
+A Group a member keeps out of one Connected assistant's reach. The assistant otherwise reaches every Group the member belongs to, including Groups joined later.
+_Avoid_: hidden group, blocked group, private group
+
+**Assistant rule**:
+A Group admin's choice of whether members' Connected assistants may reach that Group at all. It limits every member's assistant, whatever each member granted.
+_Avoid_: assistant policy, AI setting
+
+**Debt**:
+What one member owes another, from just the Expenses and Settlements between the two of them, before Suggested payments simplify it.
+_Avoid_: pairwise balance, IOU
+
+**Suggested payment**:
+One of the fewest payments that settle every member's balance in a currency. Recording one is a Settlement.
+_Avoid_: simplified debt, settle-up suggestion
