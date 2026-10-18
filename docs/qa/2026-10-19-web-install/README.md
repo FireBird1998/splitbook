@@ -14,20 +14,12 @@ Issue #607. Application commit `b0bb7656`, based on `5c700703`. All data below i
 
 ## Browser evidence
 
-Desktop Chrome exposes **Install Splitbook** for the local production build at `http://127.0.0.1:64091`. The install manifest opens `/dashboard` and requests a standalone window. Confirming the actual standalone launch is pending manual verification; installability alone is not evidence that the launch check passed.
+Desktop Chrome exposes **Install Splitbook** for the local production build at `http://127.0.0.1:64091`. The install manifest opens `/dashboard` and requests a standalone window. The owner then confirmed the standalone launch (see Manual installation confirmation below).
 
-This change adds installation metadata and generated icon copies, with no page layout or theme changes. The existing Home was exercised at desktop 1440×1000 and phone 390×844 in both themes. These are post-change smoke screenshots, not a claimed visual redesign or before/after comparison.
-
-| Desktop, light                                   | Desktop, dark                                  |
-| ------------------------------------------------ | ---------------------------------------------- |
-| ![Desktop Home in light mode](desktop-light.jpg) | ![Desktop Home in dark mode](desktop-dark.jpg) |
-
-| Phone, light                                 | Phone, dark                                |
-| -------------------------------------------- | ------------------------------------------ |
-| ![Phone Home in light mode](phone-light.jpg) | ![Phone Home in dark mode](phone-dark.jpg) |
+This change adds installation metadata and generated icon copies, with no page layout or theme changes. The existing Home was exercised at desktop 1440×1000 and phone 390×844 in both themes. These are post-change smoke screenshots, not a claimed visual redesign or before/after comparison. They stay on GitHub in PR #625 (commit `162bda3b`), not in the repository.
 
 No service worker, offline feature or in-app installation prompt is included. Signed-out launches still follow the existing sign-in flow. No public HTTP data contract or permission changes.
 
 ## Manual installation confirmation
 
-Later on 19 October, the owner completed Chrome's installation confirmation for the local test build and reported: “Installed; Home opened.” This completes the pending standalone launch check above. The test app is local only; no production installation or deployment was performed.
+Later on 19 October, the owner completed Chrome's installation confirmation for the local test build and reported: “Installed; Home opened.” This completes the standalone launch check. The test app is local only; no production installation or deployment was performed.
