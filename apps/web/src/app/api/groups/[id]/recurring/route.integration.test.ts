@@ -19,7 +19,6 @@ import {
   disconnectSignedIn,
   insertDemoPersonas,
   signIn,
-  validationIssues,
 } from '@/lib/test-utils/signed-in-route';
 import { toPeriod } from '@splitbook/shared/recurring-due-periods';
 
@@ -188,11 +187,11 @@ describe('POST and GET /api/groups/[id]/recurring', () => {
 
     expect(refused.status).toBe(422);
     expect(refused.body).toMatchObject({ code: 'VALIDATION_ERROR' });
-    expect(validationIssues(refused.body)).toEqual([
+    // Each problem as { path, message }, the Draft APIs' shape (#538).
+    expect(refused.body.details).toEqual([
       {
-        code: 'custom',
-        message: 'Enter an amount for each person in the split',
         path: ['splitBetween', 1, 'amount'],
+        message: 'Enter an amount for each person in the split',
       },
     ]);
     expect(await templates(groupId, alexCookie)).toEqual([]);

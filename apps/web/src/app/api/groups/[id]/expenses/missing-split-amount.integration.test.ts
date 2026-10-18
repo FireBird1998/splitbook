@@ -20,7 +20,6 @@ import {
   disconnectSignedIn,
   insertDemoPersonas,
   signIn,
-  validationIssues,
 } from '@/lib/test-utils/signed-in-route';
 
 vi.mock('next/headers', async () => (await import('@/lib/test-utils/signed-in-route')).nextHeaders);
@@ -96,11 +95,11 @@ describe('POST /api/groups/[id]/expenses with a share left out', () => {
 
     expect(refused.status).toBe(422);
     expect(refused.body).toMatchObject({ code: 'VALIDATION_ERROR' });
-    expect(validationIssues(refused.body)).toEqual([
+    // Each problem as { path, message }, the Draft APIs' shape (#538).
+    expect(refused.body.details).toEqual([
       {
-        code: 'custom',
-        message: 'Enter an amount for each person in the split',
         path: ['splitBetween', 1, 'amount'],
+        message: 'Enter an amount for each person in the split',
       },
     ]);
     expect(await expenseCount(groupId, alexCookie)).toBe(0);
