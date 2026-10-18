@@ -10,6 +10,11 @@ import { ExpenseEditor } from './expense-editor';
 import { recordOutline, type RecordOutline } from './expense-record-view';
 import { parseExpensePage } from '../data/financial-dto';
 import { fonts } from './theme';
+import {
+  expenseEditLines,
+  expenseEditLineText,
+  type RecordedEdit,
+} from '@splitbook/shared/expense-detail';
 import { motion } from './compact';
 import { findHosts, flatten, layoutHeight } from '../test-utils/layout';
 import { setWindow, timing } from '../test-utils/native';
@@ -31,6 +36,7 @@ const ids = {
   taxi: 'b00000000000000000000006',
   tea: 'b00000000000000000000007',
   rerun: 'b00000000000000000000008',
+  groceries: 'b00000000000000000000009',
 };
 const iso = '2026-09-29T14:32:00.000Z';
 const group = {
@@ -146,6 +152,17 @@ const records: Record<string, Record<string, unknown>> = {
     createdBy: alex.id,
     updatedAt: '2026-10-06T18:40:00.000Z',
   }),
+  // The Tester's Expense (#515): ₹1,200.00 Priya paid, shared equally by three.
+  [ids.groceries]: expense(ids.groceries, {
+    description: 'Weekly groceries',
+    amount: 1200,
+    amountMinor: 120000,
+    date: '2026-10-17T00:00:00.000Z',
+    tag: 'Travel',
+    paidBy: [row(priya, 120000)],
+    splitBetween: [row(alex, 40000), row(sam, 40000), row(priya, 40000)],
+    createdBy: person(priya),
+  }),
   [ids.weekly]: expense(ids.weekly, {
     description: 'Weekly groceries',
     amount: 900,
@@ -185,6 +202,30 @@ const histories: Record<string, Record<string, unknown>[]> = {
       amountMinor: { old: 268000, new: 286000 },
     }),
     added('d00000000000000000000012', person(sam), iso),
+  ],
+  // The Tester's two edits (#515): the amount, whose payer and shares only followed it; then
+  // the description, date, Tag and notes in one save.
+  [ids.groceries]: [
+    edit('d00000000000000000000502', person(alex), '2026-10-17T11:00:00.000Z', {
+      description: { old: 'Groceries', new: 'Weekly groceries' },
+      date: { old: '2026-10-16T00:00:00.000Z', new: '2026-10-17T00:00:00.000Z' },
+      tagId: { old: 'c00000000000000000000097', new: 'c00000000000000000000098' },
+      tag: { old: 'Food', new: 'Travel' },
+      notes: { old: '', new: 'Same shop as last week' },
+    }),
+    edit('d00000000000000000000501', person(priya), '2026-10-17T10:00:00.000Z', {
+      amount: { old: 900, new: 1200 },
+      amountMinor: { old: 90000, new: 120000 },
+      paidBy: {
+        old: [{ user: priya.id, amount: 900, amountMinor: 90000 }],
+        new: [{ user: priya.id, amount: 1200, amountMinor: 120000 }],
+      },
+      splitBetween: {
+        old: [alex, sam, priya].map((user) => ({ user: user.id, amount: 300, amountMinor: 30000 })),
+        new: [alex, sam, priya].map((user) => ({ user: user.id, amount: 400, amountMinor: 40000 })),
+      },
+    }),
+    added('d00000000000000000000500', person(priya), iso),
   ],
   // Twenty notes edits, then the Expense being added: two pages.
   [ids.weekly]: [
@@ -416,7 +457,7 @@ const text = (scope: ReactTestInstance) =>
     .findAll((node) => isHost(node, 'Text'))
     .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
     .join('');
-/** Each line of text as it reads, with the runs nested in it. */
+/** Each line of text as it reads, with the runs nested in it, and a line break ending a line. */
 const lines = (scope: ReactTestInstance) => {
   const read = (node: ReactTestInstance): string =>
     node.children.map((child) => (typeof child === 'string' ? child : read(child))).join('');
@@ -425,7 +466,9 @@ const lines = (scope: ReactTestInstance) => {
       if (isHost(parent, 'Text')) return true;
     return false;
   };
-  return scope.findAll((node) => isHost(node, 'Text') && !nested(node)).map(read);
+  return scope
+    .findAll((node) => isHost(node, 'Text') && !nested(node))
+    .flatMap((node) => read(node).split('\n'));
 };
 
 let screen: ReactTestRenderer | null = null;
@@ -540,7 +583,7 @@ describe('compact Expense record', () => {
     });
     expect(ui.headings()).toContain('History');
     const history = () =>
-      ui.labels().filter((label) => /changed|added this Expense|Last changed/.test(label));
+      ui.labels().filter((label) => /edited|added this Expense|Last changed/.test(label));
     expect(history()).toEqual([
       `Last changed, ${when('2026-09-29T15:40:00.000Z')}`,
       `Sam Chen added this Expense, ${when(iso)}`,
@@ -553,7 +596,7 @@ describe('compact Expense record', () => {
     release();
     await settle();
     expect(history()).toEqual([
-      `Priya Shah changed the amount, Amount from ₹2,680.00 to ₹2,860.00, ${when('2026-09-29T15:40:00.000Z')}`,
+      `Priya Shah edited this Expense, Amount from ₹2,680.00 to ₹2,860.00, ${when('2026-09-29T15:40:00.000Z')}`,
       `Sam Chen added this Expense, ${when(iso)}`,
     ]);
     expect(text(ui.root())).not.toContain('Loading this Expense’s changes');
@@ -562,17 +605,52 @@ describe('compact Expense record', () => {
   it('lists who changed what with its before and after values, and no identifiers', async () => {
     const ui = await render(open(ids.bill));
     const shown = lines(ui.root());
-    // The title names the change, so only its values follow, with the time.
+    // One short line per fact, then the time on its own line, as web lists them (#515).
     expect(shown).toEqual(
       expect.arrayContaining([
-        'Priya Shah changed the amount',
-        `₹2,680.00 → ₹2,860.00 · ${when('2026-09-29T15:40:00.000Z')}`,
+        'Priya Shah edited this Expense',
+        'Amount ₹2,680.00 → ₹2,860.00',
+        when('2026-09-29T15:40:00.000Z'),
         'Sam Chen added this Expense',
       ]),
     );
     expect(shown).not.toContain('Last changed');
     expect(shown.join('\n')).not.toMatch(/[0-9a-f]{24}|[{}[\]]|amountMinor/);
     expect(() => ui.pressable('Load older changes')).toThrow();
+  });
+
+  it('reads the Tester’s two edits in short lines, one per fact, as web does (#515)', async () => {
+    const ui = await render(open(ids.groceries));
+    const shown = lines(ui.root());
+    const from = (first: string, count: number) =>
+      shown.slice(shown.indexOf(first), shown.indexOf(first) + count);
+    expect(from('You edited this Expense', 6)).toEqual([
+      'You edited this Expense',
+      'Description “Groceries” → “Weekly groceries”',
+      'Date 16 Oct → 17 Oct',
+      'Tag Food → Travel',
+      'Notes changed',
+      when('2026-10-17T11:00:00.000Z'),
+    ]);
+    expect(from('Priya Shah edited this Expense', 3)).toEqual([
+      'Priya Shah edited this Expense',
+      'Amount ₹900.00 → ₹1,200.00',
+      when('2026-10-17T10:00:00.000Z'),
+    ]);
+    // The lines are the shared description's, for the same edits.
+    const names = { name: () => '', viewer: alex.id };
+    const currencies = { before: 'INR', after: 'INR' };
+    for (const [first, event] of [
+      ['You edited this Expense', histories[ids.groceries][0]],
+      ['Priya Shah edited this Expense', histories[ids.groceries][1]],
+    ] as const) {
+      const { changes } = (event as { metadata: { changes: RecordedEdit['changes'] } }).metadata;
+      const shared = expenseEditLines(changes, currencies, names).map(expenseEditLineText);
+      expect(from(first, shared.length + 1).slice(1)).toEqual(shared);
+    }
+    expect(ui.labels()).toContain(
+      `You edited this Expense, Description from “Groceries” to “Weekly groceries”, Date from 16 Oct to 17 Oct, Tag from Food to Travel, Notes changed, ${when('2026-10-17T11:00:00.000Z')}`,
+    );
   });
 
   it('sets amounts in the money face, and a share that wasn’t there in the text face', async () => {
@@ -596,12 +674,12 @@ describe('compact Expense record', () => {
   it('names people who are no longer in the Group or on the Expense as former members', async () => {
     const ui = await render(open(ids.historical));
     expect(ui.labels()).toContain(
-      `Former member changed the split, Your share from ₹100.00 to ₹150.00, Former member’s share from ₹200.00 to ₹150.00, ${when('2026-09-29T15:00:00.000Z')}`,
+      `Former member edited this Expense, Your share from ₹100.00 to ₹150.00, Former member’s share from ₹200.00 to ₹150.00, ${when('2026-09-29T15:00:00.000Z')}`,
     );
     const shown = lines(ui.root());
     expect(shown).toEqual(
       expect.arrayContaining([
-        'Former member changed the split',
+        'Former member edited this Expense',
         // The signed-in member (#434).
         'Your share ₹100.00 → ₹150.00',
         'Former member’s share ₹200.00 → ₹150.00',
@@ -615,10 +693,10 @@ describe('compact Expense record', () => {
 
   it('offers Load older changes while there are more, and adds them below', async () => {
     const ui = await render(open(ids.weekly));
-    const rows = () => ui.labels().filter((label) => /changed the notes|added this/.test(label));
+    const rows = () => ui.labels().filter((label) => /edited this Expense|added this/.test(label));
     expect(rows()).toHaveLength(20);
     expect(rows()[0]).toBe(
-      `Sam Chen changed the notes, Notes from “Draft 1” to “Draft 0”, ${when('2026-09-29T20:00:00.000Z')}`,
+      `Sam Chen edited this Expense, Notes changed, ${when('2026-09-29T20:00:00.000Z')}`,
     );
     const more = ui.pressable('Load older changes');
     expect(more.props).toMatchObject({ accessibilityRole: 'button', disabled: false });
@@ -632,7 +710,7 @@ describe('compact Expense record', () => {
   it('keeps its added and last-changed times when its changes can’t be read; Try again reads them', async () => {
     const ui = await render(open(ids.bill), (harness) => harness.setUnreachable(true));
     expect(
-      ui.labels().filter((label) => /changed|added this Expense|Last changed/.test(label)),
+      ui.labels().filter((label) => /edited|added this Expense|Last changed/.test(label)),
     ).toEqual([
       `Last changed, ${when('2026-09-29T15:40:00.000Z')}`,
       `Sam Chen added this Expense, ${when(iso)}`,
@@ -647,7 +725,7 @@ describe('compact Expense record', () => {
     ui.setUnreachable(false);
     await ui.press('Try loading this Expense’s changes again');
     expect(ui.labels()).toContain(
-      `Priya Shah changed the amount, Amount from ₹2,680.00 to ₹2,860.00, ${when('2026-09-29T15:40:00.000Z')}`,
+      `Priya Shah edited this Expense, Amount from ₹2,680.00 to ₹2,860.00, ${when('2026-09-29T15:40:00.000Z')}`,
     );
     expect(text(ui.root())).not.toContain('Couldn’t load');
   });

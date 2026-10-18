@@ -121,6 +121,32 @@ A change's row is drawn again only when what it says changes, so a slide or a re
 | Open the payment sheet within 30 s |        1 |                   3 / 2 / 196 | Balances                                                                                                         |
 | Record a payment                   |        6 |      13 / 6 to 7 / 468 to 469 | Balances, `POST /api/groups/:id/settlements`, then Group, Expenses page 1, Balances and `GET /api/user/balances` |
 
+### Lowered with #515
+
+**Build:** `feat/515-shared-edit-description`, on `120ea25f`, recorded three times with `RENDER_PROFILE=record`; the three runs gave identical counts, and `main` at `96970da0` counts the same. These journeys already rendered fewer components on `main` than their ceilings allowed, and CI printed "lower the ceiling" for each; #515 (Expense history in short lines) moves no count. Only these render ceilings come down: no request, publish or commit count moved, so nothing needs a re-record.
+
+| Journey                                      | Renders before | Renders now |
+| -------------------------------------------- | -------------: | ----------: |
+| Open a Group on Expenses                     |            290 |         257 |
+| Change Month                                 |            290 |         257 |
+| Switch to Balances                           |             52 |          41 |
+| Switch to Activity                           |            163 |         141 |
+| Load the 5th Expense page (80 → 100 rows)    |            261 |         228 |
+| Load the 5th Activity page (80 → 100 events) |            159 |         137 |
+| Reopen the Group within 30 s                 |            200 |         189 |
+| Pull to refresh with 5 Expense pages         |            158 |         114 |
+| Foreground after 30 s with 5 Expense pages   |            173 |         129 |
+| Pull to refresh with 5 Activity pages        |             78 |          56 |
+| Foreground after 30 s with 5 Activity pages  |             78 |          56 |
+| Load the 6th Expense page (pages 2 to 6)     |            278 |         245 |
+| Load newer Expenses (pages 1 to 5)           |            278 |         245 |
+| Load the 6th Activity page (pages 2 to 6)    |            161 |         139 |
+| Load newer Activity (pages 1 to 5)           |            163 |         141 |
+| Open the payment sheet within 30 s           |            195 |         173 |
+| Record a payment                             |            446 |         380 |
+| Type 20 characters into Description          |            103 |          63 |
+| Type with a delayed device write             |              6 |           4 |
+
 ### Requests per journey
 
 What each journey sends, in order, at `d506f6e`. `:id` is the Household Group's id. **Group** is `GET /api/groups/:id`; **Balances** is `GET /api/groups/:id/balances`; **Expenses page N** is `GET /api/groups/:id/expenses?page=N&limit=20&includeMemberBreakdown=1` with the Month on screen as `dateFrom` and `dateTo`; **Activity page N** is `GET /api/groups/:id/activity?page=N&limit=20`. Every request but the persona sign-in is a GET.

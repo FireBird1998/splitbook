@@ -9,6 +9,9 @@ import type { GroupRead } from '@splitbook/shared/group-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { darkTokens, lightTokens } from '@/lib/theme/tokens';
 import { text } from '@/lib/test-utils/markup';
+import type { ExpenseDetailsRecord } from './ExpenseDetails';
+import { formatDateTime } from '@splitbook/shared/date';
+import { expenseEditLineText, expenseEdits } from '@splitbook/shared/expense-detail';
 import { inTimeZone } from '@/lib/test-utils/time-zone';
 
 /*
@@ -427,9 +430,11 @@ describe('an opened Expense’s details', () => {
       ),
     );
     expect(history).toContain('Show edit history (2 edits)');
-    expect(history).toContain('You changed the notes');
-    expect(history).toContain(`${ALEX.name} changed the amount, who paid and split`);
-    expect(history).toContain('₹999.00 → ₹1,200.00');
+    expect(history).toContain(
+      `You edited this Expense · ${formatDateTime(noted.editedAt)} Notes changed`,
+    );
+    expect(history).toContain(`${ALEX.name} edited this Expense`);
+    expect(history).toContain('Amount ₹999.00 → ₹1,200.00');
     // Each member whose payment or share changed, the viewer as "Your" beside the namesake.
     for (const line of [
       `${ALEX.name}’s payment ₹0.00 → ₹1,200.00`,
@@ -441,11 +446,79 @@ describe('an opened Expense’s details', () => {
     ])
       expect(history).toContain(line);
     // Newest first, as the side panel lists them.
-    expect(history.indexOf('You changed the notes')).toBeLessThan(
-      history.indexOf(`${ALEX.name} changed the amount`),
-    );
+    expect(history.indexOf('Notes changed')).toBeLessThan(history.indexOf('Amount ₹999.00'));
     // Never a stored row, a minor-unit amount or a field label.
     expect(history).not.toMatch(/\[object Object\]|99900|120000|Amount:|Paid by:|Split between:/);
+  });
+
+  it('reads the Tester’s two edits in short lines, one per fact, as Android does (#515)', () => {
+    const rows = (minor: number) =>
+      [ALEX, SAM, PRIYA].map((person) => ({
+        user: person._id,
+        amount: minor / 100,
+        amountMinor: minor,
+      }));
+    const expense: ExpenseDetailsRecord = {
+      ...EXPENSES[2],
+      editHistory: [
+        {
+          // ₹900.00 shared equally by three became ₹1,200.00: each part only followed it.
+          editedBy: PRIYA,
+          editedAt: '2026-10-17T10:00:00.000Z',
+          changes: {
+            amount: { old: 900, new: 1200 },
+            amountMinor: { old: 90000, new: 120000 },
+            paidBy: {
+              old: [{ user: PRIYA._id, amount: 900, amountMinor: 90000 }],
+              new: [{ user: PRIYA._id, amount: 1200, amountMinor: 120000 }],
+            },
+            splitBetween: { old: rows(30000), new: rows(40000) },
+          },
+        },
+        {
+          editedBy: ALEX,
+          editedAt: '2026-10-17T11:00:00.000Z',
+          changes: {
+            description: { old: 'Groceries', new: 'Weekly groceries' },
+            date: { old: '2026-10-16T00:00:00.000Z', new: '2026-10-17T00:00:00.000Z' },
+            tagId: { old: 'd00000000000000000000002', new: 'd00000000000000000000003' },
+            tag: { old: 'Food', new: 'Travel' },
+            notes: { old: '', new: 'Same shop as last week' },
+          },
+        },
+      ],
+    };
+    const html = render(
+      createElement(ExpenseDetails, {
+        id: 'opened',
+        expense,
+        userId: ALEX._id,
+        recurringExpensesEnabled: false,
+        history: 'ready',
+        onRetryHistory: vi.fn(),
+      }),
+    );
+    expect(text(html)).toContain(
+      [
+        `You edited this Expense · ${formatDateTime('2026-10-17T11:00:00.000Z')}`,
+        'Description “Groceries” → “Weekly groceries”',
+        'Date 16 Oct → 17 Oct',
+        'Tag Food → Travel',
+        'Notes changed',
+        `Priya Shah edited this Expense · ${formatDateTime('2026-10-17T10:00:00.000Z')}`,
+        'Amount ₹900.00 → ₹1,200.00',
+      ].join(' '),
+    );
+    // Each fact is its own line, as the shared description gives it.
+    const lines = [...html.matchAll(/<ul\b[^>]*>([\s\S]*?)<\/ul>/g)].map(([, list]) =>
+      [...list.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map(([, line]) => text(line)),
+    );
+    expect(lines).toEqual(
+      expenseEdits(expense, { name: () => '', viewer: ALEX._id }).map((edit) =>
+        edit.lines.map(expenseEditLineText),
+      ),
+    );
+    expect(lines).toHaveLength(2);
   });
 
   it('offers Try again when its history can’t be loaded', () => {

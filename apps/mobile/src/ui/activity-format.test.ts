@@ -73,10 +73,10 @@ describe('Expense edits in plain language', () => {
 
   it('reads like the Expense history: amounts, names and shares, never references', () => {
     const lines = describeChanges(edit, { currency: 'INR', members });
+    // Priya's payment only followed the new amount, so it has no line of its own (#515).
     expect(read(lines)).toEqual([
       'Amount ₹899.00 → ₹999.00',
       'Description “Wifi” → “Wi-Fi”',
-      'Priya Shah’s payment ₹899.00 → ₹999.00',
       'Former member’s share Not included → ₹999.00',
       'Sam Chen’s share ₹899.00 → Not included',
       'Tag Utilities → Internet',
@@ -88,7 +88,7 @@ describe('Expense edits in plain language', () => {
     const lines = describeChanges(edit, { currency: 'INR', members });
     expect(
       lines.map((line) => (line.runs ?? []).filter((run) => run.mono).map((run) => run.text)),
-    ).toEqual([['₹899.00', '₹999.00'], [], ['₹899.00', '₹999.00'], ['₹999.00'], ['₹899.00'], []]);
+    ).toEqual([['₹899.00', '₹999.00'], [], ['₹999.00'], ['₹899.00'], []]);
     expect(lines.every((line) => line.runs?.map((run) => run.text).join('') === line.text)).toBe(
       true,
     );

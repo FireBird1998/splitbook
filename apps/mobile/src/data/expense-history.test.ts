@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { expenseEditLineText } from '@splitbook/shared/expense-detail';
 import type { ActivityEvent } from './activity';
 import { describeExpenseEvents, describeExpenseHistory } from './expense-history';
 import { inTimeZone } from '../test-utils/time-zone';
@@ -44,10 +45,9 @@ const edit = (
   editedAt: iso,
   changes,
 });
+/** Each edit's lines, as both clients read them (#515). */
 const flat = (entries: ReturnType<typeof describeExpenseHistory>) =>
-  entries.flatMap((entry) =>
-    entry.changes.map((change) => [change.label, change.before, change.after].join(' | ')),
-  );
+  entries.flatMap((entry) => entry.changes.map(expenseEditLineText));
 
 describe('describeExpenseHistory', () => {
   it('formats each amount in the currency it had when the edit was made', () => {
@@ -62,13 +62,13 @@ describe('describeExpenseHistory', () => {
       ]),
     );
     expect(flat(entries)).toEqual([
-      'Currency | INR | EUR',
-      'Amount | ₹3,500.00 | €40.00',
-      'Amount | ₹3,200.00 | ₹3,500.00',
+      'Amount ₹3,500.00 → €40.00',
+      'Currency INR → EUR',
+      'Amount ₹3,200.00 → ₹3,500.00',
     ]);
     expect(entries.map((entry) => entry.summary)).toEqual([
-      'Alex changed the currency and the amount',
-      'Alex changed the amount',
+      'Alex edited this Expense',
+      'Alex edited this Expense',
     ]);
   });
 
@@ -91,10 +91,10 @@ describe('describeExpenseHistory', () => {
       ]),
     );
     expect(flat(entries)).toEqual([
-      'Split method | Shares | Equal',
-      'Alex’s share | €30.00 | €20.00',
-      'Sam’s share | Not included | €20.00',
-      'Former member’s share | €10.00 | Not included',
+      'Split By shares → Equally',
+      'Alex’s share €30.00 → €20.00',
+      'Sam’s share Not included → €20.00',
+      'Former member’s share €10.00 → Not included',
     ]);
     // "Not included" is a word, so only the amounts are set in the money font.
     expect(entries[0].changes.map((change) => change.money)).toEqual([
@@ -103,7 +103,7 @@ describe('describeExpenseHistory', () => {
       { before: false, after: true },
       { before: true, after: false },
     ]);
-    expect(entries[0].summary).toBe('Alex changed the split');
+    expect(entries[0].summary).toBe('Alex edited this Expense');
   });
 
   it('names the signed-in member "You" in its edits, beside a namesake (#434)', () => {
@@ -131,15 +131,15 @@ describe('describeExpenseHistory', () => {
       alex,
     );
     expect(flat(entries)).toEqual([
-      'Your payment | €40.00 | €30.00',
-      'Alex’s payment | €0.00 | €10.00',
-      'Your share | €40.00 | €20.00',
-      'Alex’s share | Not included | €20.00',
+      'Your payment €40.00 → €30.00',
+      'Alex’s payment €0.00 → €10.00',
+      'Your share €40.00 → €20.00',
+      'Alex’s share Not included → €20.00',
     ]);
-    expect(entries[0].summary).toBe('You changed who paid and the split');
+    expect(entries[0].summary).toBe('You edited this Expense');
   });
 
-  it('says "who paid" only when the payers or their part of the total changed (#434)', () => {
+  it('names payments only when the payers or their part of the total changed (#434, #515)', () => {
     const amount = { amount: { old: 1200, new: 1500 }, amountMinor: { old: 120000, new: 150000 } };
     const split = {
       splitBetween: {
@@ -160,11 +160,12 @@ describe('describeExpenseHistory', () => {
       },
     });
     const summary = (changes: Record<string, unknown>) =>
-      describeExpenseHistory(record([edit(changes)], 'INR'), [], [], alex)[0].summary;
-    // One payer, whose payment followed the new total.
-    expect(summary({ ...amount, ...paid([[alex, 120000]], [[alex, 150000]]), ...split })).toBe(
-      'You changed the amount and the split',
-    );
+      flat(describeExpenseHistory(record([edit(changes)], 'INR'), [], [], alex));
+    const raised = 'Amount ₹1,200.00 → ₹1,500.00';
+    // One payer, whose payment followed the new total, as the shares did: one line.
+    expect(summary({ ...amount, ...paid([[alex, 120000]], [[alex, 150000]]), ...split })).toEqual([
+      raised,
+    ]);
     // Two payers, each paying the same part of the new total.
     expect(
       summary({
@@ -180,7 +181,7 @@ describe('describeExpenseHistory', () => {
           ],
         ),
       }),
-    ).toBe('You changed the amount');
+    ).toEqual([raised]);
     // The same payers, paying different parts of it.
     expect(
       summary({
@@ -196,8 +197,8 @@ describe('describeExpenseHistory', () => {
           ],
         ),
       }),
-    ).toBe('You changed the amount and who paid');
-    // Someone joined the payers, even for nothing.
+    ).toEqual([raised, 'Your payment ₹600.00 → ₹1,000.00', 'Sam’s payment ₹600.00 → ₹500.00']);
+    // Someone joined the payers, even for nothing: nobody's amount but the new total's moved.
     expect(
       summary({
         ...amount,
@@ -209,11 +210,13 @@ describe('describeExpenseHistory', () => {
           ],
         ),
       }),
-    ).toBe('You changed the amount and who paid');
+    ).toEqual([raised, 'Your payment ₹1,200.00 → ₹1,500.00']);
     // Someone else paid.
-    expect(summary({ ...amount, ...paid([[alex, 120000]], [[sam, 150000]]) })).toBe(
-      'You changed the amount and who paid',
-    );
+    expect(summary({ ...amount, ...paid([[alex, 120000]], [[sam, 150000]]) })).toEqual([
+      raised,
+      'Sam’s payment ₹0.00 → ₹1,500.00',
+      'Your payment ₹1,200.00 → ₹0.00',
+    ]);
     // The total stayed, so the payments moved between payers.
     expect(
       summary(
@@ -225,10 +228,10 @@ describe('describeExpenseHistory', () => {
           ],
         ),
       ),
-    ).toBe('You changed who paid');
+    ).toEqual(['Your payment ₹1,200.00 → ₹600.00', 'Sam’s payment ₹0.00 → ₹600.00']);
   });
 
-  it('lists up to four changed details in the summary', () => {
+  it('is "edited this Expense", with a line only for what reads differently', () => {
     const [entry] = describeExpenseHistory(
       record([
         edit({
@@ -241,7 +244,8 @@ describe('describeExpenseHistory', () => {
         }),
       ]),
     );
-    expect(entry.summary).toBe('Alex changed the amount, the date, who paid and the split');
+    expect(entry.summary).toBe('Alex edited this Expense');
+    expect(flat([entry])).toEqual(['Amount €30.00 → €40.00']);
   });
 
   it('names editors from the Group, and anyone it no longer names as a former member', () => {
@@ -258,11 +262,8 @@ describe('describeExpenseHistory', () => {
       'Former member',
       'Sam Chen',
     ]);
-    expect(flat(entries)).toEqual([
-      'Notes | None | “Aisle”',
-      'Notes | “Window seats” | None',
-      'Notes | None | “Window seats”',
-    ]);
+    // The notes' words aren't repeated (#515).
+    expect(flat(entries)).toEqual(['Notes changed', 'Notes changed', 'Notes changed']);
   });
 
   it('shows a changed date as the day it is dated, in a zone behind UTC (#437)', () =>
@@ -272,7 +273,7 @@ describe('describeExpenseHistory', () => {
           edit({ date: { old: '2026-08-31T00:00:00.000Z', new: '2026-09-01T00:00:00.000Z' } }),
         ]),
       );
-      expect(flat([entry])).toEqual(['Date | Aug 31, 2026 | Sep 1, 2026']);
+      expect(flat([entry])).toEqual(['Date 31 Aug → 1 Sep']);
     }));
 
   it('uses labels for dates, categories and Tags, never stored values or references', () => {
@@ -294,13 +295,13 @@ describe('describeExpenseHistory', () => {
       ],
     );
     expect(flat([entry])).toEqual([
-      'Date | Aug 31, 2026 | Sep 1, 2026',
-      'Category | Food & Drink | Transport',
-      'Tag | Food | Travel',
-      'Receipt |  | Added',
-      'Notes | “Aisle” | “Aisle seats”',
+      'Date 31 Aug → 1 Sep',
+      'Tag Food → Travel',
+      'Category Food & Drink → Transport',
+      'Notes changed',
+      'Receipt added',
     ]);
-    expect(entry.summary).toBe('Alex changed 5 details');
+    expect(entry.summary).toBe('Alex edited this Expense');
     expect(JSON.stringify(entry)).not.toMatch(/[a-f\d]{24}|https?:/);
   });
 });
@@ -322,12 +323,7 @@ describe('describeExpenseEvents', () => {
   });
   const lines = (events: ReturnType<typeof describeExpenseEvents>) =>
     events.map((entry) =>
-      [
-        `${entry.actor} ${entry.action}`,
-        ...entry.changes.map((change) =>
-          [entry.implied ? '' : change.label, change.before, change.after].join(' | '),
-        ),
-      ].join(' / '),
+      [`${entry.actor} ${entry.action}`, ...entry.changes.map(expenseEditLineText)].join(' / '),
     );
 
   it('says who changed what with formatted values, naming the signed-in member "You"', () => {
@@ -361,8 +357,8 @@ describe('describeExpenseEvents', () => {
       { currentUserId: alex, people: [{ id: sam, name: 'Sam Chen' }] },
     );
     expect(lines(described)).toEqual([
-      'Sam Chen changed the amount /  | €32.00 | €40.00',
-      'You changed the split / Your share | €30.00 | €20.00 / Sam Chen’s share | Not included | €20.00',
+      'Sam Chen edited this Expense / Amount €32.00 → €40.00',
+      'You edited this Expense / Your share €30.00 → €20.00 / Sam Chen’s share Not included → €20.00',
       'Sam Chen added this Expense',
     ]);
     expect(described.map((entry) => [entry.name, entry.at])).toEqual([
@@ -378,7 +374,7 @@ describe('describeExpenseEvents', () => {
     });
   });
 
-  it('summarises an amount edit whose payer followed the total without "who paid" (#434)', () => {
+  it('says an amount edit whose payer followed the total in one line (#434, #515)', () => {
     const [entry] = describeExpenseEvents(
       [
         event('expense_updated', {
@@ -395,9 +391,8 @@ describe('describeExpenseEvents', () => {
       record([], 'INR'),
       { currentUserId: alex },
     );
-    expect(`${entry.actor} ${entry.action}`).toBe('You changed the amount');
-    // Its line still shows what the payment became.
-    expect(entry.changes.map((change) => change.label)).toEqual(['Amount', 'Your payment']);
+    expect(`${entry.actor} ${entry.action}`).toBe('You edited this Expense');
+    expect(entry.changes.map(expenseEditLineText)).toEqual(['Amount ₹1,200.00 → ₹1,500.00']);
   });
 
   it('names anyone the event, Group and Expense don’t as a former member, never by reference', () => {
@@ -426,7 +421,7 @@ describe('describeExpenseEvents', () => {
     expect(lines(described)).toEqual([
       'Former member deleted this Expense',
       'Former member restored this Expense',
-      'Former member changed who paid and the notes / Alex’s payment | €0.00 | €40.00 / Former member’s payment | €40.00 | €0.00 / Notes | None | “Window seats”',
+      'Former member edited this Expense / Alex’s payment €0.00 → €40.00 / Former member’s payment €40.00 → €0.00 / Notes changed',
       'Sam changed this Expense',
     ]);
     const shown = described.flatMap((entry) => [
@@ -453,9 +448,9 @@ describe('describeExpenseEvents', () => {
       record([]),
     );
     expect(lines(described)).toEqual([
-      'Alex changed the amount /  | €40.00 | €45.00',
-      'Alex changed the currency and the amount / Currency | INR | EUR / Amount | ₹3,500.00 | €40.00',
-      'Alex changed the amount /  | ₹3,200.00 | ₹3,500.00',
+      'Alex edited this Expense / Amount €40.00 → €45.00',
+      'Alex edited this Expense / Amount ₹3,500.00 → €40.00 / Currency INR → EUR',
+      'Alex edited this Expense / Amount ₹3,200.00 → ₹3,500.00',
     ]);
   });
 
@@ -469,7 +464,7 @@ describe('describeExpenseEvents', () => {
       [event('expense_updated', { changes: { amount: { old: 20, new: 30 } } })],
       saved,
     );
-    expect(lines(described)).toEqual(['Alex changed the amount /  | ₹20.00 | ₹30.00']);
+    expect(lines(described)).toEqual(['Alex edited this Expense / Amount ₹20.00 → ₹30.00']);
   });
 
   it('uses a currency change among the events that the record doesn’t know of yet', () => {
@@ -486,6 +481,6 @@ describe('describeExpenseEvents', () => {
       ],
       record([], 'INR'),
     );
-    expect(lines(described)[0]).toBe('Alex changed the amount /  | €40.00 | €45.00');
+    expect(lines(described)[0]).toBe('Alex edited this Expense / Amount €40.00 → €45.00');
   });
 });

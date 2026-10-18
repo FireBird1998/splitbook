@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider, getContrastRatio } from '@mui/material/styles';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatDateTime } from '@splitbook/shared/date';
+import { expenseEditLineText, expenseHistory } from '@splitbook/shared/expense-detail';
 import { nextPeriod, toPeriod } from '@splitbook/shared/recurring-due-periods';
 import { format } from 'date-fns';
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
@@ -127,6 +128,55 @@ const wifi = () =>
     recurringExpense: WIFI_TEMPLATE,
   });
 
+/**
+ * The Tester's two edits (#515): Priya raised Groceries from ₹900.00 to ₹1,200.00, which she
+ * paid and three share equally, so each part only followed it; then the viewer changed the
+ * description, date, Tag and notes in one save.
+ */
+const groceries = () =>
+  electricity({
+    _id: 'e00000000000000000000004',
+    description: 'Weekly groceries',
+    amount: 1200,
+    amountMinor: 120000,
+    date: '2026-10-17T00:00:00.000Z',
+    tag: 'Travel',
+    paidBy: [row(PRIYA, 120000)],
+    splitBetween: [row(ALEX, 40000), row(SAM, 40000), row(PRIYA, 40000)],
+    editHistory: [
+      {
+        editedBy: PRIYA,
+        editedAt: at(29, 15),
+        changes: {
+          amount: { old: 900, new: 1200 },
+          amountMinor: { old: 90000, new: 120000 },
+          paidBy: { old: [row(PRIYA, 90000)], new: [row(PRIYA, 120000)] },
+          splitBetween: {
+            old: [row(ALEX, 30000), row(SAM, 30000), row(PRIYA, 30000)],
+            new: [row(ALEX, 40000), row(SAM, 40000), row(PRIYA, 40000)],
+          },
+        },
+      },
+      {
+        editedBy: ALEX,
+        editedAt: at(30, 10),
+        changes: {
+          description: { old: 'Groceries', new: 'Weekly groceries' },
+          date: { old: '2026-10-16T00:00:00.000Z', new: '2026-10-17T00:00:00.000Z' },
+          tagId: { old: 'd00000000000000000000002', new: 'd00000000000000000000003' },
+          tag: { old: 'Food', new: 'Travel' },
+          notes: { old: '', new: 'Same shop as last week' },
+        },
+      },
+    ],
+  });
+
+/** Each edit's lines in the history, as their list items read. */
+const editLines = (html: string) =>
+  [...html.matchAll(/<ul\b[^>]*>([\s\S]*?)<\/ul>/g)].map(([, list]) =>
+    [...list.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map(([, line]) => text(line)),
+  );
+
 function render(element: ReactElement, mode: 'light' | 'dark' = 'light') {
   return renderToStaticMarkup(
     createElement(ThemeProvider, { theme: createAppTheme(mode) }, element),
@@ -203,7 +253,7 @@ describe('the side panel with an Expense open', () => {
         'Category Housing',
         'Notes August–September meter cycle',
         'History Edits keep a record',
-        `PS Priya Shah changed the amount ₹2,680.00 → ₹2,860.00 · ${formatDateTime(at(29, 15))}`,
+        `PS Priya Shah edited this Expense Amount ₹2,680.00 → ₹2,860.00 ${formatDateTime(at(29, 15))}`,
         `SC Sam Chen added this Expense ${formatDateTime(at(29, 14))}`,
         'Delete Expense',
       ].join(' '),
@@ -295,7 +345,7 @@ describe('the side panel with an Expense open', () => {
         ),
       ),
     );
-    expect(history).toContain('AR You changed the amount ₹2,680.00 → ₹2,860.00');
+    expect(history).toContain('AR You edited this Expense Amount ₹2,680.00 → ₹2,860.00');
     expect(history).toContain('AR Alex Rivera added this Expense');
   });
 
@@ -354,7 +404,7 @@ describe('the side panel with an Expense open', () => {
       }),
     );
     const history = text(html);
-    expect(history).toContain('AR Alex Rivera changed the amount, who paid and split');
+    expect(history).toContain('AR Alex Rivera edited this Expense Amount ₹2,680.00 → ₹2,860.00');
     for (const line of [
       'Sam Chen’s payment ₹0.00 → ₹2,860.00',
       'Priya Shah’s payment ₹2,680.00 → ₹0.00',
@@ -366,6 +416,38 @@ describe('the side panel with an Expense open', () => {
       'Former member’s share ₹680.00 → Not included',
     ])
       expect(history).toContain(line);
+  });
+
+  it('reads the Tester’s two edits in short lines, one per fact, as Android does (#515)', () => {
+    const html = panel(opened(groceries()));
+    const time = (iso: string) => formatDateTime(iso);
+    expect(text(html)).toContain(
+      [
+        `AR You edited this Expense`,
+        'Description “Groceries” → “Weekly groceries”',
+        'Date 16 Oct → 17 Oct',
+        'Tag Food → Travel',
+        'Notes changed',
+        time(at(30, 10)),
+        'PS Priya Shah edited this Expense',
+        'Amount ₹900.00 → ₹1,200.00',
+        time(at(29, 15)),
+      ].join(' '),
+    );
+    // Each fact is its own line, as the shared description gives it.
+    const shared = expenseHistory(groceries(), { name: () => '', viewer: ALEX._id })
+      .map((entry) => entry.lines.map(expenseEditLineText))
+      .filter((lines) => lines.length);
+    expect(editLines(html)).toEqual(shared);
+    expect(shared).toEqual([
+      [
+        'Description “Groceries” → “Weekly groceries”',
+        'Date 16 Oct → 17 Oct',
+        'Tag Food → Travel',
+        'Notes changed',
+      ],
+      ['Amount ₹900.00 → ₹1,200.00'],
+    ]);
   });
 
   it('says while its history loads, and offers Try again when it can’t be loaded', () => {
@@ -477,7 +559,7 @@ describe('the Expenses tab with an Expense open', () => {
     expect(html).toMatch(
       /data-expense-id="e00000000000000000000002"[\s\S]*?<button\b[^>]*aria-expanded="true"[^>]*aria-controls="expense-panel"/,
     );
-    expect(text(html)).toContain('PS Priya Shah changed the amount ₹2,680.00 → ₹2,860.00');
+    expect(text(html)).toContain('PS Priya Shah edited this Expense Amount ₹2,680.00 → ₹2,860.00');
   });
 
   it('shows the list’s row until the Expense’s own read arrives, its history still loading', () => {

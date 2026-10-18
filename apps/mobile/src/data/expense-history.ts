@@ -1,29 +1,15 @@
-import { getCategory } from '@splitbook/shared/categories';
 import { formatDateTime } from '@splitbook/shared/date';
-import {
-  allocationFollowedAmount,
-  memberMoneyChanges,
-  memberMoneyLabel,
-  NOT_INCLUDED,
-} from '@splitbook/shared/expense-detail';
-import { recordedMoney } from '@splitbook/shared/activity-timeline';
+import { expenseEditLines, type ExpenseEditLine } from '@splitbook/shared/expense-detail';
 import type { ActivityEvent } from './activity';
 import type { ExpenseRecord } from './expense-record';
-import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
-/** One changed value. Values are absent when only the change itself can be described. */
-export interface ExpenseHistoryChange {
-  label: string;
-  before?: string;
-  after?: string;
-  /** Which values are amounts, which the design sets in the monospace money face. */
-  money?: { before: boolean; after: boolean };
-}
+/** One fact an edit changed, as web words it too (#515). */
+export type ExpenseHistoryChange = ExpenseEditLine;
 
 export interface ExpenseHistoryEntry {
   key: string;
   editor: string;
-  /** For example "Priya Shah changed the amount and date". */
+  /** For example "Priya Shah edited this Expense". */
   summary: string;
   editedAt: string;
   changes: ExpenseHistoryChange[];
@@ -36,41 +22,15 @@ export interface ExpenseHistoryEvent {
   name: string;
   /** "You" for the signed-in member, otherwise `name`. */
   actor: string;
-  /** For example "changed the amount" or "added this Expense". */
+  /** For example "edited this Expense" or "added this Expense". */
   action: string;
   changes: ExpenseHistoryChange[];
-  /** The action already names the only change, so its label isn't repeated. */
-  implied: boolean;
   at: string;
 }
 
 const formerMember = 'Former member';
-const splitMethods: Record<string, string> = {
-  equal: 'Equal',
-  unequal: 'Unequal',
-  percentage: 'Percentage',
-  shares: 'Shares',
-  exact: 'Exact',
-};
-const nouns: Record<string, string> = {
-  description: 'the description',
-  amount: 'the amount',
-  amountMinor: 'the amount',
-  currency: 'the currency',
-  date: 'the date',
-  category: 'the category',
-  notes: 'the notes',
-  tag: 'the Tag',
-  tagId: 'the Tag',
-  paidBy: 'who paid',
-  splitBetween: 'the split',
-  splitMethod: 'the split',
-  predefinedItem: 'the item',
-  receiptUrl: 'the receipt',
-};
 
 const text = (value: unknown) => (typeof value === 'string' ? value : '');
-const quoted = (value: unknown) => (text(value).trim() ? `“${text(value).trim()}”` : 'None');
 const identity = (value: unknown): string | null =>
   typeof value === 'string'
     ? value
@@ -78,64 +38,16 @@ const identity = (value: unknown): string | null =>
       ? String(value._id)
       : null;
 
-/** The day an Expense is dated, as every viewer sees it (#437). */
-function day(value: unknown) {
-  const date = new Date(text(value));
-  return Number.isNaN(date.getTime())
-    ? 'Unknown date'
-    : expenseLocalDate(date).toLocaleDateString('en', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
-}
-
-function list(items: string[]) {
-  const unique = [...new Set(items)];
-  if (unique.length > 4) return `${unique.length} details`;
-  return unique.length > 1
-    ? `${unique.slice(0, -1).join(', ')} and ${unique[unique.length - 1]}`
-    : (unique[0] ?? 'this Expense');
-}
-
-const changedFields = (changes: Record<string, unknown>) =>
-  Object.keys(changes).filter((field) => field !== 'moneyVersion');
-type Changes = Record<string, { old?: unknown; new?: unknown }>;
-/** "the amount and the date": what an edit changed, as a member would say it. */
-const changedWhat = (changes: Changes) =>
-  list(
-    changedFields(changes)
-      .filter((field) => field !== 'paidBy' || !allocationFollowedAmount(changes, 'paidBy'))
-      .map((field) => nouns[field] ?? 'other details'),
-  );
-
-/** Each member whose payment or share changed, by the rule web uses too (#434, #456). */
-function allocation(
-  field: 'paidBy' | 'splitBetween',
-  change: { old?: unknown; new?: unknown },
-  currencies: { before: string; after: string },
-  person: (value: unknown) => string,
-  viewer?: string,
-): ExpenseHistoryChange[] {
-  // Someone missing from the split is "Not included", which is a word, not an amount.
-  return memberMoneyChanges(field, change, currencies).map((member) => ({
-    label: memberMoneyLabel(member, person, viewer),
-    before: member.before ?? NOT_INCLUDED,
-    after: member.after ?? NOT_INCLUDED,
-    money: { before: member.before !== null, after: member.after !== null },
-  }));
-}
-
 /**
- * Describes one recorded edit, field by field, in member terms. Shared by an Expense's history
- * and by Activity events, so an edit reads the same wherever it appears.
+ * Describes one recorded edit, one short line per fact, by the rule web uses too (#515). Shared
+ * by an Expense's history and by Activity events, so an edit reads the same wherever it appears.
  */
 export function describeExpenseChanges(
   changes: Record<string, { old?: unknown; new?: unknown }>,
   {
     currencies,
     person,
-    tagName = () => undefined,
+    tagName,
     viewer,
   }: {
     /** The currency before and after this edit. */
@@ -147,89 +59,7 @@ export function describeExpenseChanges(
     viewer?: string;
   },
 ): ExpenseHistoryChange[] {
-  return Object.entries(changes).flatMap(([field, change]): ExpenseHistoryChange[] => {
-    switch (field) {
-      case 'moneyVersion':
-        return [];
-      // References restate a named change; they are described only when that is missing.
-      case 'tagId': {
-        if (changes.tag) return [];
-        const before = tagName(change.old),
-          after = tagName(change.new);
-        return [before && after ? { label: 'Tag', before, after } : { label: 'Tag' }];
-      }
-      case 'amountMinor':
-        if (changes.amount) return [];
-        return [
-          {
-            label: 'Amount',
-            before: recordedMoney({ amountMinor: change.old }, currencies.before) ?? undefined,
-            after: recordedMoney({ amountMinor: change.new }, currencies.after) ?? undefined,
-            money: { before: true, after: true },
-          },
-        ];
-      case 'description':
-      case 'notes':
-      case 'predefinedItem':
-        return [
-          {
-            label:
-              field === 'predefinedItem' ? 'Item' : field === 'notes' ? 'Notes' : 'Description',
-            before: quoted(change.old),
-            after: quoted(change.new),
-          },
-        ];
-      case 'amount':
-        return [
-          {
-            label: 'Amount',
-            before: recordedMoney({ amount: change.old }, currencies.before) ?? undefined,
-            after: recordedMoney({ amount: change.new }, currencies.after) ?? undefined,
-            money: { before: true, after: true },
-          },
-        ];
-      case 'currency':
-        return [{ label: 'Currency', before: currencies.before, after: currencies.after }];
-      case 'date':
-        return [{ label: 'Date', before: day(change.old), after: day(change.new) }];
-      case 'category':
-        return [
-          {
-            label: 'Category',
-            before: getCategory(text(change.old))?.label ?? 'None',
-            after: getCategory(text(change.new))?.label ?? 'None',
-          },
-        ];
-      case 'tag':
-        return [
-          {
-            label: 'Tag',
-            before: text(change.old) || 'Historical Tag',
-            after: text(change.new) || 'Historical Tag',
-          },
-        ];
-      case 'splitMethod':
-        return [
-          {
-            label: 'Split method',
-            before: splitMethods[text(change.old)] ?? 'Unknown',
-            after: splitMethods[text(change.new)] ?? 'Unknown',
-          },
-        ];
-      case 'paidBy':
-      case 'splitBetween':
-        return allocation(field, change, currencies, person, viewer);
-      case 'receiptUrl':
-        return [
-          {
-            label: 'Receipt',
-            after: !text(change.new) ? 'Removed' : text(change.old) ? 'Replaced' : 'Added',
-          },
-        ];
-      default:
-        return [{ label: 'Other details' }];
-    }
-  });
+  return expenseEditLines(changes, currencies, { name: person, viewer, tagName });
 }
 
 /** Names member references from known people; anyone else is a former member. */
@@ -298,7 +128,7 @@ export function describeExpenseHistory(
     return {
       key: `${entry.editedAt}:${index}`,
       editor,
-      summary: `${editor} changed ${changedWhat(changes)}`,
+      summary: `${editor} edited this Expense`,
       editedAt: formatDateTime(entry.editedAt),
       changes: described,
     };
@@ -360,7 +190,6 @@ export function describeExpenseEvents(
       name,
       actor: currentUserId && event.actor?._id === currentUserId ? 'You' : name,
       changes: [],
-      implied: false,
       at: event.createdAt,
     };
     const { action, changes = {} } = event.metadata;
@@ -373,25 +202,15 @@ export function describeExpenseEvents(
         if (action === 'restored') return { ...base, action: 'restored this Expense' };
         const after = text(changes.currency?.new) || currencyAfter(event.createdAt);
         const currencies = { after, before: text(changes.currency?.old) || after };
-        const described = describeExpenseChanges(changes, {
-          currencies,
-          person,
-          tagName,
-          viewer: currentUserId,
-        });
-        const [only] = described;
-        const fields = changedFields(changes);
         return {
           ...base,
-          action: `changed ${changedWhat(changes)}`,
-          changes: described,
-          // "changed the amount" needs only "₹2,680.00 → ₹2,860.00"; a share keeps its name.
-          implied:
-            described.length === 1 &&
-            only.before !== undefined &&
-            only.after !== undefined &&
-            new Set(fields.map((field) => nouns[field])).size === 1 &&
-            !fields.some((field) => field === 'paidBy' || field === 'splitBetween'),
+          action: 'edited this Expense',
+          changes: describeExpenseChanges(changes, {
+            currencies,
+            person,
+            tagName,
+            viewer: currentUserId,
+          }),
         };
       }
       default:

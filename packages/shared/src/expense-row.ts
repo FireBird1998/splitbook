@@ -48,7 +48,7 @@ export function listedExpensePosition(
 }
 
 /** How each split method reads, as Android's form names it. */
-const SPLIT_LABELS: Record<ExpenseRead['splitMethod'], string> = {
+export const SPLIT_LABELS: Record<ExpenseRead['splitMethod'], string> = {
   equal: 'Equally',
   unequal: 'By amounts',
   exact: 'By amounts',

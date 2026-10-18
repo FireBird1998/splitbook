@@ -126,8 +126,10 @@ test('a leftover paisa is explained by the rule, never as the payer’s', async 
   );
   await expect(note).not.toContainText(/pa(id|yer)/i);
   await expect(panel).toContainText('NotesAdded the floor cleaner from the same shop');
-  await expect(panel).toContainText('Sam Chen changed the description and notes');
-  await expect(panel).toContainText(/“[^”]+” → “Weekly groceries and floor cleaner”/);
+  // One short line per fact; the notes' words aren't repeated (#515).
+  await expect(panel).toContainText('Sam Chen edited this Expense');
+  await expect(panel).toContainText(/Description “[^”]+” → “Weekly groceries and floor cleaner”/);
+  await expect(panel).toContainText('Notes changed');
   // Recurring Expenses are switched off in this suite, so nothing says an Expense repeats.
   await page.goto(`${HOUSEHOLD}?search=Flat%20rent`);
   const rent = await openFromRow(page, 'Flat rent');
@@ -218,8 +220,10 @@ test('Edit, Duplicate and Delete with Undo, from the panel', async ({ page }, te
   await expect(edit).toHaveCount(0);
   panel = panelOf(page, 'Panel QA picnic lunch');
   await expect(panel).toContainText('₹150.00');
-  await expect(panel).toContainText('You changed the amount and description');
-  await expect(panel).toContainText('₹100.00 → ₹150.00');
+  // One short line per fact (#515).
+  await expect(panel).toContainText('You edited this Expense');
+  await expect(panel).toContainText('Amount ₹100.00 → ₹150.00');
+  await expect(panel).toContainText('Description “Panel QA picnic” → “Panel QA picnic lunch”');
 
   // Duplicate opens the Add expense form with its entries, dated today, and saves a new Expense.
   await panel.getByRole('button', { name: 'Duplicate', exact: true }).click();

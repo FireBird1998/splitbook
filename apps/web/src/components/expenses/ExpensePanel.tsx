@@ -35,7 +35,7 @@ import {
 import { expensePosition, expenseRecordPosition } from '@splitbook/shared/expense-position';
 import { expenseSplitSummary } from '@splitbook/shared/expense-row';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
-import ExpenseHistoryMembers from './ExpenseHistoryMembers';
+import ExpenseEditLines from './ExpenseEditLines';
 
 /** An Expense as the list or its own read returns it; history comes from its own read. */
 export interface PanelExpense extends StoredExpenseSplit {
@@ -782,11 +782,13 @@ function History({
         Loading its history…
       </Typography>
     );
-  const entries = expenseHistory(expense);
+  const entries = expenseHistory(expense, {
+    name: (person) => nameOf(person) ?? FORMER_MEMBER,
+    viewer: userId,
+  });
   return (
     <Box component="ol" sx={{ listStyle: 'none', m: 0, p: 0 }}>
       {entries.map((entry, index) => {
-        const { change } = entry;
         const you = moneyParticipantId(entry.by) === userId;
         return (
           <Box
@@ -802,23 +804,8 @@ function History({
                 </Box>{' '}
                 {entry.action}
               </Typography>
-              <Typography sx={{ ...caption, overflowWrap: 'anywhere' }}>
-                {change && (
-                  <Box
-                    component="span"
-                    sx={change.kind === 'amount' ? (theme) => theme.typography.money : undefined}
-                  >
-                    {change.before} → {change.after}
-                  </Box>
-                )}
-                {change && ' · '}
-                {formatDateTime(entry.at)}
-              </Typography>
-              <ExpenseHistoryMembers
-                members={entry.members}
-                nameOf={(person) => nameOf(person) ?? FORMER_MEMBER}
-                userId={userId}
-              />
+              <ExpenseEditLines lines={entry.lines} />
+              <Typography sx={caption}>{formatDateTime(entry.at)}</Typography>
             </Box>
           </Box>
         );
