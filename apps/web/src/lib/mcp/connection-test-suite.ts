@@ -1020,6 +1020,10 @@ export function connectionTests(mongo = false) {
             expect(tool.description).toContain('only the member can save');
             expect(tool.description).not.toMatch(/private drafts|collection/i);
           }
+          // ADR 0008: the tool that discards an item says the delete can't be undone (#579).
+          expect(tools.find((tool) => tool.name === 'discard_draft')?.description).toMatch(
+            /^PERMANENTLY delete one unfinished item .*Content cannot be recovered\./,
+          );
           const connections = (
             await (
               await fetch(`${origin}/api/auth/mcp/connections`, {

@@ -46,14 +46,14 @@ for (const allowPreparation of [false, true]) {
     await page.goto(`/api/auth/oauth2/authorize?${query}`);
     await expect(page).toHaveURL(/\/mcp\/consent\?/);
     const permission = page.getByRole('checkbox', {
-      name: 'Also let it prepare expenses for your To review',
+      name: 'Also let it prepare Expenses for your To review',
       exact: true,
     });
     await expect(permission).toBeVisible();
     await expect(permission).not.toBeChecked();
     await expect(
       page.getByText(
-        'It can add, change and delete items in your To review. Only you can save them as expenses, in Splitbook.',
+        'It can add, change and permanently delete items in your To review. Only you can save them as Expenses, in Splitbook.',
         { exact: true },
       ),
     ).toBeVisible();

@@ -16,12 +16,75 @@ interface Connection {
   clientId: string;
   scopes: string[];
 }
+interface Connections {
+  resource: string;
+  connections: Connection[];
+  nextOffset: number | null;
+}
+
+/**
+ * Settings' Connected assistants once they have loaded: the MCP URL to add, what assistants can
+ * do, each connection with its access and Disconnect, and what disconnecting keeps.
+ */
+export function ConnectionsList({
+  data,
+  busy,
+  onRevoke,
+  onLoadMore,
+}: {
+  data: Connections;
+  busy: string | null;
+  onRevoke: (id: string) => void;
+  onLoadMore: () => void;
+}) {
+  return (
+    <>
+      <Typography variant="body2">
+        Add this MCP URL in your assistant, then review the permissions in SplitBook.
+      </Typography>
+      <Typography variant="body2" sx={{ overflowWrap: 'anywhere', userSelect: 'all' }}>
+        {data.resource}
+      </Typography>
+      <Alert severity="info">
+        Assistants can read your ledger. If you also let one prepare Expenses, it can add, change
+        and permanently delete items in your To review. Only you can save Expenses in SplitBook.
+      </Alert>
+      {data.connections.length === 0 && (
+        <Typography variant="body2">No assistants connected.</Typography>
+      )}
+      {data.connections.map((connection) => (
+        <Stack key={connection.id} spacing={1}>
+          <Typography sx={{ overflowWrap: 'anywhere' }}>{connection.clientId}</Typography>
+          <Typography variant="body2">
+            All current and future Groups · Ledger access
+            {connection.scopes.includes(MCP_DRAFT_SCOPE)
+              ? ' · To review access, including permanent deletion'
+              : ''}
+          </Typography>
+          <Button
+            variant="outlined"
+            disabled={busy !== null}
+            onClick={() => onRevoke(connection.id)}
+          >
+            Disconnect
+          </Button>
+        </Stack>
+      ))}
+      {data.nextOffset !== null && (
+        <Button disabled={busy !== null} onClick={onLoadMore}>
+          Load more connections
+        </Button>
+      )}
+      <Typography variant="body2" color="text.secondary">
+        Disconnecting blocks further requests and keeps what’s in your To review. Previously shared
+        information may remain in your assistant.
+      </Typography>
+    </>
+  );
+}
+
 export default function ConnectionsSetting({ accountId }: { accountId?: string }) {
-  const [data, setData] = useState<{
-    resource: string;
-    connections: Connection[];
-    nextOffset: number | null;
-  } | null>(null);
+  const [data, setData] = useState<Connections | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -117,48 +180,12 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
           </Alert>
         )}
         {data && (
-          <>
-            <Typography variant="body2">
-              Add this MCP URL in your assistant, then review the permissions in SplitBook.
-            </Typography>
-            <Typography variant="body2" sx={{ overflowWrap: 'anywhere', userSelect: 'all' }}>
-              {data.resource}
-            </Typography>
-            <Alert severity="info">
-              Assistants can read your ledger. With Draft permission, they can prepare, edit and
-              permanently discard your Drafts. Only you can save Expenses in SplitBook.
-            </Alert>
-            {data.connections.length === 0 && (
-              <Typography variant="body2">No assistants connected.</Typography>
-            )}
-            {data.connections.map((connection) => (
-              <Stack key={connection.id} spacing={1}>
-                <Typography sx={{ overflowWrap: 'anywhere' }}>{connection.clientId}</Typography>
-                <Typography variant="body2">
-                  All current and future Groups · Ledger access
-                  {connection.scopes.includes(MCP_DRAFT_SCOPE)
-                    ? ' · Private Draft access, including permanent discard'
-                    : ''}
-                </Typography>
-                <Button
-                  variant="outlined"
-                  disabled={busy !== null}
-                  onClick={() => void revoke(connection.id)}
-                >
-                  Disconnect
-                </Button>
-              </Stack>
-            ))}
-            {data.nextOffset !== null && (
-              <Button disabled={busy !== null} onClick={() => void loadMore()}>
-                Load more connections
-              </Button>
-            )}
-            <Typography variant="body2" color="text.secondary">
-              Disconnecting blocks further requests and keeps your Drafts. Previously shared
-              information may remain in your assistant.
-            </Typography>
-          </>
+          <ConnectionsList
+            data={data}
+            busy={busy}
+            onRevoke={(id) => void revoke(id)}
+            onLoadMore={() => void loadMore()}
+          />
         )}
       </Stack>
     </Paper>
