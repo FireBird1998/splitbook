@@ -64,6 +64,31 @@ export function formatCurrency(amount: number, currencyCode: string): string {
   }
 }
 
+/** Decimal places a number is written with: 10.555 has 3, 1.5e-7 has 8. */
+function decimalPlaces(value: number): number {
+  const [mantissa, exponent = '0'] = String(Math.abs(value)).toLowerCase().split('e');
+  return Math.max(0, (mantissa.split('.')[1] ?? '').length - Number(exponent));
+}
+
+/**
+ * Money as entered (#537): in its currency's places, or with every decimal it has when it has
+ * more, so an amount that can't be kept as it is ("₹10.555") never reads as one that can.
+ */
+export function formatCurrencyAsEntered(amount: number, currencyCode: string): string {
+  const precision = CURRENCY_CODES.includes(currencyCode) ? getCurrencyPrecision(currencyCode) : 2;
+  const places = Math.min(Math.max(precision, decimalPlaces(amount)), 20);
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: places,
+      maximumFractionDigits: places,
+    }).format(amount);
+  } catch {
+    return `${currencyCode} ${amount}`;
+  }
+}
+
 /**
  * Get currencies sorted with group currencies first
  */

@@ -10,8 +10,8 @@ import {
   PERCENTAGE_TOTAL_NEED,
   SPLIT_TOTAL_NEED,
 } from '@splitbook/shared/to-review';
-import { formatCurrency } from '@splitbook/shared/currency';
-import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
+import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { formatDate, toDateParam } from '@splitbook/shared/date';
 import type { MobileController } from '../data/mobile-controller';
 import { reviewForm, reviewFormChange } from '../data/review-form';
@@ -30,13 +30,10 @@ import { useTheme } from './theme';
 import { reviewedItemsLine } from './review-run-copy';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
+/** As entered, never rounded: the Needs line says when it has too many decimals (#537). */
 function money(amount: number | undefined, currency: string | undefined) {
   if (amount === undefined || !currency) return 'Amount needed';
-  try {
-    return formatCurrency(toMajorAmount(parseAmountMinor(amount, currency), currency), currency);
-  } catch {
-    return 'Amount needed';
-  }
+  return formatCurrencyAsEntered(amount, currency);
 }
 export function ReviewRunOverlay({ controller }: { controller: MobileController }) {
   const snapshot = useMobileSnapshot(

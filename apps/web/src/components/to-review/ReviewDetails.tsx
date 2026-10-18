@@ -4,7 +4,7 @@ import Typography from '@mui/material/Typography';
 import useSWR from 'swr';
 import { expenseRecordKey } from '@splitbook/shared/query-keys';
 import { formatDate } from '@splitbook/shared/date';
-import { formatCurrency } from '@splitbook/shared/currency';
+import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import { reviewDate, reviewSplitMethod } from '@splitbook/shared/to-review';
 import type { ExpenseDraftValues, DraftReview } from '@splitbook/shared/validators/expense-draft';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
@@ -20,7 +20,7 @@ export function reviewSource(item: ToReviewItem) {
 export function reviewAmount(values: ExpenseDraftValues = {}, groupCurrency?: string) {
   const currency = values.currency || groupCurrency;
   return values.amount !== undefined && currency
-    ? formatCurrency(values.amount, currency)
+    ? formatCurrencyAsEntered(values.amount, currency)
     : 'Amount missing';
 }
 export function ReviewFacts({
