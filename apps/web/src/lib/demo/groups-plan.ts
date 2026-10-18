@@ -6,9 +6,9 @@
  * Group with a different member mix. Everything is fictional.
  *
  * Every date is a UTC calendar day (`YYYY-MM-DD`), the shape the web form sends, counted back
- * from the run date, so the same run date always gives the same plan and the last six months
- * always hold data. Monthly bills fall on days 2–28, never on the first or last day of a
- * month, so they stay in the same Month for a viewer in any time zone.
+ * from the run date, so the same run date always gives the same plan and the Household has data
+ * in each of the seven Months before the run date's. Monthly bills fall on days 2–28, never on
+ * the first or last day of a month, so they stay in the same Month for a viewer in any time zone.
  *
  * Who owes whom is chosen so each persona's Home makes sense next to the Goa trip, without
  * changing any figure the existing demo journeys check:
@@ -155,6 +155,11 @@ function noonDaysAgo(days: number, now: Date): Date {
   return new Date(date.getTime() - days * DAY_MS);
 }
 
+/** Noon UTC on day `day` of the month `monthsAgo` before the run date's, as `noonDaysAgo`. */
+function noonInMonth(monthsAgo: number, day: number, now: Date): Date {
+  return new Date(`${calendarDayInMonth(monthsAgo, day, now)}T12:00:00.000Z`);
+}
+
 const equalSplit = (members: string[]): DemoSplitRow[] => members.map((user) => ({ user }));
 
 function shared(
@@ -185,6 +190,11 @@ function shared(
 
 /** Months of monthly bills before the current one. With the recurring Months, seven in all. */
 const HOUSEHOLD_MONTHS = 6;
+/**
+ * The Month the Household's history starts in, counted back: the one before the monthly bills,
+ * so Insights always has six whole earlier Months to compare last Month with (#556).
+ */
+const HOUSEHOLD_FIRST_MONTH = HOUSEHOLD_MONTHS + 1;
 
 const GROCERY_DESCRIPTIONS = [
   'Weekly groceries',
@@ -193,8 +203,13 @@ const GROCERY_DESCRIPTIONS = [
   'Milk, eggs and bread',
 ] as const;
 
-/** One grocery run every nine days, from 200 days ago to 2 days ago. */
-const GROCERY_DAYS_AGO = Array.from({ length: 23 }, (_, index) => 200 - index * 9);
+/**
+ * The first grocery run is on a fixed day of the Household's first Month, not a count of days
+ * back, so it stays in that Month whatever the run date's day. Then one run every nine days,
+ * from 191 days ago to 2 days ago.
+ */
+const FIRST_GROCERY_DAY = 14;
+const GROCERY_DAYS_AGO = Array.from({ length: 22 }, (_, index) => 191 - index * 9);
 const GROCERY_AMOUNTS = [
   2860, 1240, 3720, 980, 2415, 1365, 3105, 1150, 2790, 1680, 3480, 1025, 2655, 1430, 3890, 1210,
   2940, 1575, 3335, 1090, 2575, 1460, 1865,
@@ -244,11 +259,21 @@ function householdPlan(now: Date): DemoGroupPlan {
     }
   }
 
-  GROCERY_DAYS_AGO.forEach((daysAgo, index) => {
+  const groceryRuns = [
+    {
+      key: 'groceries-first',
+      date: calendarDayInMonth(HOUSEHOLD_FIRST_MONTH, FIRST_GROCERY_DAY, now),
+    },
+    ...GROCERY_DAYS_AGO.map((daysAgo) => ({
+      key: `groceries-${daysAgo}`,
+      date: calendarDaysAgo(daysAgo, now),
+    })),
+  ];
+  groceryRuns.forEach(({ key, date }, index) => {
     expenses.push(
       shared(
-        `groceries-${daysAgo}`,
-        calendarDaysAgo(daysAgo, now),
+        key,
+        date,
         GROCERY_DESCRIPTIONS[index % GROCERY_DESCRIPTIONS.length],
         GROCERY_AMOUNTS[index],
         GROCERY_PAYERS[index % GROCERY_PAYERS.length],
@@ -389,7 +414,8 @@ function householdPlan(now: Date): DemoGroupPlan {
     currency: DEMO_GROUPS_CURRENCY,
     adminId: priya,
     memberIds: [priya, alex, sam],
-    joinedAt: noonDaysAgo(215, now),
+    // Before the first grocery run.
+    joinedAt: noonInMonth(HOUSEHOLD_FIRST_MONTH, 1, now),
     startDate: null,
     endDate: null,
     expenses,
