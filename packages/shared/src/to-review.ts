@@ -60,6 +60,14 @@ const labels: Record<ToReviewState, string> = {
 export const SPLIT_TOTAL_NEED = 'the split to add up to the total';
 export const PAID_TOTAL_NEED = 'the amounts paid to add up to the total';
 export const PERCENTAGE_TOTAL_NEED = 'the percentages to add up to 100%';
+/** Whether an item's missing facts ask for its amount: missing, or with too many decimals. */
+export const needsAmount = (missingFacts: readonly string[]) =>
+  missingFacts.some(
+    (fact) =>
+      fact === facts.amount ||
+      fact === 'a whole-number amount' ||
+      fact.startsWith('an amount with'),
+  );
 
 const DECIMALS = /^Amount supports at most (\d+) decimal places$/;
 
