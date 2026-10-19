@@ -787,6 +787,266 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
   );
 });
 
+// The navigation map: Edit → × → back to the record, keeping the edit (owner decision for #664,
+// 2026-10-20). An edit begun anywhere else, and a new Expense, still close to the Group.
+describe('Closing an edit begun on an Expense’s record (#664)', () => {
+  /** Edit pressed on the record opened from August's Expenses, with one entry changed. */
+  async function editedOnRecord(server = ledger()) {
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    await controller.openExpense(householdId, expenseId, { scrollY: 75 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Electricity bill' });
+    return { server, controller };
+  }
+  /** The record, as the ledger saved it at `revision`, with the kept edit offered beside it. */
+  const keptOnRecord = ({
+    revision,
+    ...saved
+  }: {
+    revision: number;
+    description: string;
+    notes?: string;
+  }) => ({
+    screen: 'expense',
+    snackbar: null,
+    expense: {
+      status: 'detail',
+      requestedExpenseId: expenseId,
+      mutation: null,
+      message: null,
+      draft: { ...saved, original: { _id: expenseId, revision, ...saved } },
+      groupDraft: {
+        description: 'Electricity bill',
+        original: { _id: expenseId, revision: 0, description: 'Electricity' },
+      },
+    },
+  });
+
+  it('× returns to the record, which shows the saved Expense and offers the kept edit', async () => {
+    const { server, controller } = await editedOnRecord();
+    // Sam saves a note meanwhile: the record shows the Expense as it is saved now.
+    Object.assign(server.records.get(expenseId)!, { notes: 'Meter read', revision: 1 });
+    const sent = server.requests.length;
+
+    await controller.back();
+
+    expect(controller.getSnapshot()).toMatchObject(
+      keptOnRecord({ description: 'Electricity', notes: 'Meter read', revision: 1 }),
+    );
+    // The record is read again, as any open of it is; nothing is sent.
+    expect(
+      server.requests
+        .slice(sent)
+        .filter(({ method }) => method === 'GET')
+        .map(({ path }) => path),
+    ).toContain(`/api/groups/${householdId}/expenses/${expenseId}`);
+    expect(server.writes()).toEqual([]);
+    // The edit is kept on this device, as on every close.
+    expect([...server.drafts.values()]).toMatchObject([
+      { draft: { description: 'Electricity bill', original: { _id: expenseId, revision: 0 } } },
+    ]);
+
+    // Back from the record still returns where it opened from, and the Group offers the edit.
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'expenses',
+      financial: { month: '2026-08' },
+      restoreScroll: { y: 75 },
+      keptDraft: {
+        groupId: householdId,
+        draft: { description: 'Electricity bill', edit: true },
+        unconfirmed: false,
+      },
+    });
+  });
+
+  it('× returns to the record with nothing kept when nothing was changed', async () => {
+    const { server, controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { status: 'detail', groupDraft: null, draft: { description: 'Electricity' } },
+    });
+    expect(server.drafts.size).toBe(0);
+    await controller.editExpense();
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+  });
+
+  it('Resume on the record continues the edit, which still returns there on × and on Save', async () => {
+    const { server, controller } = await editedOnRecord();
+    await controller.back();
+    controller.resumeExpenseDraft();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      groupDraft: null,
+      draft: { description: 'Electricity bill', original: { _id: expenseId } },
+    });
+
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject(
+      keptOnRecord({ description: 'Electricity', revision: 0 }),
+    );
+
+    controller.resumeExpenseDraft();
+    await controller.saveExpense();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: {
+        status: 'detail',
+        groupDraft: null,
+        message: 'Expense updated.',
+        draft: { description: 'Electricity bill', original: { revision: 1 } },
+      },
+    });
+    expect(server.drafts.size).toBe(0);
+  });
+
+  it('Discard on the record removes the kept edit and leaves the saved Expense', async () => {
+    const { server, controller } = await editedOnRecord();
+    await controller.back();
+    await controller.discardExpenseDraft();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: {
+        status: 'detail',
+        groupDraft: null,
+        draft: { description: 'Electricity', original: { _id: expenseId, revision: 0 } },
+      },
+    });
+    expect(server.drafts.size).toBe(0);
+    expect(server.writes()).toEqual([]);
+    // Edit starts again from the saved values, and Back still returns where the record opened.
+    await controller.editExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      draft: { description: 'Electricity' },
+    });
+    await controller.back();
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      financial: { month: '2026-08' },
+      restoreScroll: { y: 75 },
+      keptDraft: null,
+    });
+  });
+
+  // Kept edits are stored on the device, so they survive a restart. Where × goes is this open's
+  // memory: after a restart the kept edit is reached from Home's draft row, the Group's banner or
+  // the Expense's row, which close to the Group (#635), and an edit begun on the record then
+  // returns to it again.
+  it('keeps the edit through a restart, offered as before; one begun on the record then returns there', async () => {
+    const { server, controller } = await editedOnRecord();
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject(
+      keptOnRecord({ description: 'Electricity', revision: 0 }),
+    );
+    controller.dispose();
+
+    const restarted = server.create();
+    await restarted.restore();
+    await restarted.openGroup(householdId);
+    expect(restarted.getSnapshot().keptDraft).toMatchObject({
+      draft: { description: 'Electricity bill', edit: true },
+    });
+    await restarted.openExpense(householdId, expenseId);
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'resume',
+      draft: { description: 'Electricity bill' },
+    });
+    restarted.resumeExpenseDraft();
+    await restarted.back();
+    expect(restarted.getSnapshot()).toMatchObject({ screen: 'group', detail: { id: householdId } });
+    expect(server.writes()).toEqual([]);
+
+    // With the kept edit discarded, Edit on the record after the restart returns there again.
+    expect(await restarted.discardKeptDraft()).toBe(true);
+    await restarted.openExpense(householdId, expenseId);
+    await restarted.editExpense();
+    await restarted.updateExpenseDraft({ description: 'Electricity bill' });
+    await restarted.back();
+    expect(restarted.getSnapshot()).toMatchObject(
+      keptOnRecord({ description: 'Electricity', revision: 0 }),
+    );
+    expect(server.writes()).toEqual([]);
+  });
+
+  // Owner decision 3: these keep today's close behaviour, landing on the Group's Expenses.
+  it.each(['Home’s draft row', 'the Group’s kept-draft banner', 'its row on the Group'] as const)(
+    '× on a kept edit resumed from %s still lands on the Group',
+    async (from) => {
+      const { server, controller } = await editedOnRecord();
+      await controller.back();
+      expect(controller.getSnapshot().expense.status).toBe('detail');
+      await controller.back();
+      expect(controller.getSnapshot().screen).toBe('group');
+      if (from === 'Home’s draft row') {
+        await controller.back();
+        await controller.openExpense(householdId, expenseId);
+        controller.resumeExpenseDraft();
+      } else if (from === 'the Group’s kept-draft banner') await controller.resumeKeptDraft();
+      else {
+        await controller.openExpense(householdId, expenseId);
+        controller.resumeExpenseDraft();
+      }
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'editing',
+        draft: { description: 'Electricity bill' },
+      });
+      await controller.updateExpenseDraft({ description: 'Electricity bill, August' });
+
+      await controller.back();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        destination: 'expenses',
+        detail: { id: householdId },
+        // From Home the Group opens at its default Month; otherwise where it was.
+        financial: { month: from === 'Home’s draft row' ? '2026-09' : '2026-08' },
+        keptDraft: { draft: { description: 'Electricity bill, August', edit: true } },
+      });
+      expect(server.writes()).toEqual([]);
+    },
+  );
+
+  it('× on a new Expense still lands on the Group', async () => {
+    const { server, controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    await controller.openExpense(householdId, undefined, { scrollY: 40 });
+    await fillNewExpense(controller);
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      financial: { month: '2026-08' },
+      restoreScroll: { y: 40 },
+      keptDraft: { draft: { description: 'Weekly groceries', edit: false } },
+    });
+    expect(server.writes()).toEqual([]);
+  });
+
+  it('× on a change that may already be saved still lands on the Group, to check it there', async () => {
+    const { server, controller } = await editedOnRecord();
+    server.faultNextWrite('request');
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      mutation: { kind: 'edit', revision: 0 },
+    });
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      financial: { month: '2026-08' },
+      keptDraft: { unconfirmed: true },
+    });
+    expect(server.drafts.size).toBe(1);
+  });
+});
+
 describe('Returning to an Expense beyond the first page', () => {
   // 25 August Expenses: the oldest is the last row of page 2.
   async function secondPage() {
