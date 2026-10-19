@@ -155,11 +155,13 @@ export default function ExportView({ userId, preselectedGroupId }: ExportViewPro
   const preview = useExportPreview(
     userId,
     previewUrl,
-    selected.length === 0
-      ? 'Pick at least one Group.'
-      : format === 'statement' && selected.length !== 1
-        ? 'Choose exactly one Group.'
-        : 'Finish the period to preview.',
+    !groups
+      ? 'Loading Groups…'
+      : selected.length === 0
+        ? 'Pick at least one Group.'
+        : format === 'statement' && selected.length !== 1
+          ? 'Choose exactly one Group.'
+          : 'Finish the period to preview.',
   );
 
   /** Any change of choice starts over: the last download's status no longer applies. */

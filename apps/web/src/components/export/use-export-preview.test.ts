@@ -92,3 +92,23 @@ it('retries a failed preview and rejects malformed successful replies', async ()
     message: 'The export preview could not be read.',
   });
 });
+
+it('shows loading while Retry retains the previous SWR error', async () => {
+  api.mockResolvedValueOnce(Response.json({}, { status: 500 }));
+  await act(async () => {
+    renderer = create(view('/api/export?pending-retry'));
+  });
+  await advance(300);
+  expect(result.state.status).toBe('error');
+  let finish!: (response: Response) => void;
+  api.mockImplementationOnce(
+    () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await act(async () => result.retry());
+  expect(result.state.status).toBe('loading');
+  await act(async () => finish(Response.json(payload('recovered'))));
+  expect(result.state.status).toBe('ready');
+});

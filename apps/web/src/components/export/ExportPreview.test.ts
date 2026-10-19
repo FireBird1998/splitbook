@@ -64,7 +64,7 @@ it('keeps no-selection, loading, empty and retryable preview failures distinct',
   expect(empty).not.toContain('<table');
 });
 
-it('shows backup file counts and labels unsupported categories as not exported', () => {
+it('shows only backup contents and states the accepted backup omission', () => {
   const html = render({
     status: 'ready',
     data: {
@@ -79,28 +79,24 @@ it('shows backup file counts and labels unsupported categories as not exported',
       sizeBytes: 1200,
       earliestMonth: '2026-04',
       historyIncluded: true,
+      paymentsIncluded: true,
+      deletedExpensesIncluded: true,
       counts: {
         members: 3,
         expenses: 86,
         payments: 3,
         deletedExpenses: 1,
         editHistoryEntries: 4,
-        recurringExpenses: 0,
-        activityEvents: 0,
       },
-      unsupported: ['recurringExpenses', 'activityEvents'],
     },
   });
   expect(text(html)).toContain('splitbook-1-groups-backup.json');
-  expect(text(html)).toContain('Approximately 1,200 bytes');
+  expect(text(html)).toContain('Approximately 1.2 KB');
   expect(text(html)).toContain('3 Members');
   expect(text(html)).toContain('86 Expenses since April 2026, each with its edit history');
   expect(text(html)).toContain('3 Payments');
   expect(text(html)).toContain('1 Deleted Expense');
-  expect(text(html)).toContain('0 Recurring Expenses exported');
-  expect(text(html)).toContain(
-    'Recurring Expenses and Activity events are not included in this backup format.',
-  );
+  expect(text(html)).toContain('Not included: recurring Expense templates and Activity history.');
 });
 
 it('renders statement period figures, named people and bounded expense rows as a document', () => {
@@ -158,4 +154,44 @@ it('renders statement period figures, named people and bounded expense rows as a
   expect(text(html)).toContain('Groceries');
   expect(text(html)).toContain('…and 6 more Expenses');
   expect(text(html)).toContain('Amounts in INR, never converted');
+});
+
+it('says nothing to export yet for an empty All time export', () => {
+  expect(
+    text(
+      render({ status: 'ready', data: { ...csv, from: null, to: null, empty: true, files: [] } }),
+    ),
+  ).toContain('Nothing to export yet.');
+});
+it('hides Payments and Deleted Expenses when excluded from the backup', () => {
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'json',
+      sizeBytes: 2000000,
+      earliestMonth: null,
+      historyIncluded: false,
+      paymentsIncluded: false,
+      deletedExpensesIncluded: false,
+      counts: { members: 2, expenses: 1, payments: 0, deletedExpenses: 0, editHistoryEntries: 0 },
+    },
+  });
+  expect(text(html)).not.toContain('0 Payments');
+  expect(text(html)).not.toContain('0 Deleted Expenses');
+  expect(text(html)).toContain('Approximately 2 MB');
+});
+
+it('names the zip and explains blank Amount cells for edit rows', () => {
+  const data: ExportPreview = {
+    ...csv,
+    fileName: 'export.zip',
+    files: [
+      { ...csv.files[0], header: ['Amount', 'Edited at'] },
+      { ...csv.files[0], name: 'payments.csv', kind: 'payments' },
+    ],
+  };
+  const html = text(render({ status: 'ready', data }));
+  expect(html).toContain('In one zip, export.zip');
+  expect(html).toContain('Edit rows leave Amount blank.');
 });

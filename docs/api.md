@@ -1221,14 +1221,14 @@ JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
   including the leading apostrophe protecting spreadsheet formulas. Queries,
   column order, exact money formatting and row order use the download builders.
 - JSON carries `fileName`, approximate `sizeBytes`, `earliestMonth`,
-  `historyIncluded` and exported `counts` (`members`, active `expenses`,
-  `payments`, `deletedExpenses`, `editHistoryEntries`, `recurringExpenses`,
-  `activityEvents`). Counts come from the actual backup contents. Members are
-  unique account ids across the selected Groups. `earliestMonth` is the first
-  active Expense Month, or null. The existing `splitbook-backup/1` format has
-  **no Recurring Expense template or Activity event arrays**: those exported
-  counts are zero and `unsupported` explicitly lists `recurringExpenses` and
-  `activityEvents`. Zero does not mean the Groups contain no such records.
+  `historyIncluded`, `paymentsIncluded`, `deletedExpensesIncluded` and exported
+  `counts` (`members`, active `expenses`, `payments`, `deletedExpenses`,
+  `editHistoryEntries`). Counts come from the built backup object in one pass;
+  its bytes are serialized once for the download and size. Members are unique
+  account ids across selected Groups. `earliestMonth` is the first active
+  Expense Month, or null. Include flags control which lines the preview shows.
+  The owner accepted the existing backup scope. The preview states:
+  "Not included: recurring Expense templates and Activity history."
   Optional Expense edit history remains supported; the file format is unchanged.
 - Statement requires `format=statement&preview=1` and exactly one Group. It
   projects the canonical printable statement builder into `statement`, with

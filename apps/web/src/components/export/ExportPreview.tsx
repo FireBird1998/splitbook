@@ -96,17 +96,23 @@ export default function ExportPreviewPanel({
       <Typography id="export-preview-heading" component="h2" variant="h6">
         Preview
       </Typography>
-      {data && (
+      {
         <Typography
           variant="body2"
           color="text.secondary"
           noWrap
-          title={`${data.groupNames.join(', ')} · ${previewPeriod(data)} · ${formats[data.format]}`}
+          title={
+            data
+              ? `${data.groupNames.join(', ')} · ${previewPeriod(data)} · ${formats[data.format]}`
+              : undefined
+          }
           sx={{ mb: 2 }}
         >
-          {data.groupNames.join(', ')} · {previewPeriod(data)} · {formats[data.format]}
+          {data
+            ? `${data.groupNames.join(', ')} · ${previewPeriod(data)} · ${formats[data.format]}`
+            : '\u00a0'}
         </Typography>
-      )}
+      }
       {state.status === 'idle' && <Typography color="text.secondary">{state.message}</Typography>}
       {state.status === 'loading' && (
         <Box role="status">
@@ -223,7 +229,9 @@ export default function ExportPreviewPanel({
         </Box>
       )}
       {data?.empty && (
-        <Typography color="text.secondary">Nothing to export for this period.</Typography>
+        <Typography color="text.secondary">
+          {data.from || data.to ? 'Nothing to export for this period.' : 'Nothing to export yet.'}
+        </Typography>
       )}
       {data?.format === 'json' && (
         <Box sx={{ mt: 2 }}>
@@ -231,7 +239,12 @@ export default function ExportPreviewPanel({
             {data.fileName}
           </Typography>
           <Typography color="text.secondary">
-            Approximately {data.sizeBytes.toLocaleString('en-US')} bytes
+            Approximately{' '}
+            {(data.sizeBytes / (data.sizeBytes >= 1_000_000 ? 1_000_000 : 1_000)).toLocaleString(
+              'en-US',
+              { maximumFractionDigits: 1 },
+            )}{' '}
+            {data.sizeBytes >= 1_000_000 ? 'MB' : 'KB'}
           </Typography>
           <Box component="ul" sx={{ pl: 2.5 }}>
             <li>{data.counts.members} Members</li>
@@ -242,18 +255,28 @@ export default function ExportPreviewPanel({
                 : ''}
               {data.historyIncluded ? ', each with its edit history' : ''}
             </li>
-            <li>{data.counts.payments} Payments</li>
-            <li>
-              {data.counts.deletedExpenses} Deleted{' '}
-              {data.counts.deletedExpenses === 1 ? 'Expense' : 'Expenses'}
-            </li>
-            <li>0 Recurring Expenses exported</li>
-            <li>0 Activity events exported</li>
+            {data.paymentsIncluded && <li>{data.counts.payments} Payments</li>}
+            {data.deletedExpensesIncluded && (
+              <li>
+                {data.counts.deletedExpenses} Deleted{' '}
+                {data.counts.deletedExpenses === 1 ? 'Expense' : 'Expenses'}
+              </li>
+            )}
           </Box>
           <Typography variant="body2" color="text.secondary">
-            Recurring Expenses and Activity events are not included in this backup format.
+            Not included: recurring Expense templates and Activity history.
           </Typography>
         </Box>
+      )}
+      {data?.format === 'csv' && data.files.length > 1 && (
+        <Typography variant="body2" color="text.secondary">
+          In one zip, {data.fileName}
+        </Typography>
+      )}
+      {data?.format === 'csv' && data.files.some((file) => file.header.includes('Edited at')) && (
+        <Typography variant="body2" color="text.secondary">
+          Edit rows leave Amount blank.
+        </Typography>
       )}
       {!data?.empty &&
         data?.format === 'csv' &&

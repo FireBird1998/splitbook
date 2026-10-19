@@ -1,4 +1,4 @@
-import { backupSchema, buildBackup, type BackupGroupInput } from '@splitbook/shared/export-backup';
+import { buildBackup, type BackupGroupInput } from '@splitbook/shared/export-backup';
 import { buildStatement } from '@splitbook/shared/statement';
 import { Types } from 'mongoose';
 import { zipSync } from 'fflate';
@@ -237,11 +237,30 @@ export class ExportService {
       };
     }
     if (request.format === 'json') {
-      const file = await this.backup(userId, request);
-      const backup = backupSchema.parse(JSON.parse(new TextDecoder().decode(file.body)));
-      const expenses = backup.groups.flatMap((group) => group.expenses);
-      const active = expenses.filter((expense) => !expense.deleted);
-      const months = active.map((expense) => expense.date.slice(0, 7)).sort();
+      const { backup, ...file } = await this.buildBackupFile(userId, request);
+      const members = new Set<string>();
+      const counts = {
+        members: 0,
+        expenses: 0,
+        payments: 0,
+        deletedExpenses: 0,
+        editHistoryEntries: 0,
+      };
+      let earliestMonth: string | null = null;
+      for (const group of backup.groups) {
+        for (const member of group.members) members.add(member.id);
+        counts.payments += group.settlements.length;
+        for (const expense of group.expenses) {
+          counts.editHistoryEntries += expense.edits?.length ?? 0;
+          if (expense.deleted) counts.deletedExpenses++;
+          else {
+            counts.expenses++;
+            const month = expense.date.slice(0, 7);
+            if (!earliestMonth || month < earliestMonth) earliestMonth = month;
+          }
+        }
+      }
+      counts.members = members.size;
       return {
         format: 'json',
         groupNames: backup.groups.map((group) => group.name),
@@ -252,23 +271,11 @@ export class ExportService {
         fileName: file.fileName,
         sizeBytes: file.body.byteLength,
         empty: backup.groups.length === 0,
-        earliestMonth: months[0] ?? null,
+        earliestMonth,
         historyIncluded: request.include.includes('history'),
-        counts: {
-          members: new Set(
-            backup.groups.flatMap((group) => group.members.map((member) => member.id)),
-          ).size,
-          expenses: active.length,
-          deletedExpenses: expenses.length - active.length,
-          payments: backup.groups.reduce((count, group) => count + group.settlements.length, 0),
-          editHistoryEntries: expenses.reduce(
-            (count, expense) => count + (expense.edits?.length ?? 0),
-            0,
-          ),
-          recurringExpenses: 0,
-          activityEvents: 0,
-        },
-        unsupported: ['recurringExpenses', 'activityEvents'],
+        paymentsIncluded: request.include.includes('payments'),
+        deletedExpensesIncluded: request.include.includes('deleted'),
+        counts,
       };
     }
     const data = await this.load(userId, request, EXPORT_MAX_ROWS);
@@ -432,8 +439,17 @@ export class ExportService {
   async backup(
     userId: string,
     request: ExportRequest,
-    { maxRows = EXPORT_MAX_ROWS } = {},
+    options: { maxRows?: number } = {},
   ): Promise<ExportDownload> {
+    const { backup: _backup, ...file } = await this.buildBackupFile(userId, request, options);
+    return file;
+  }
+
+  private async buildBackupFile(
+    userId: string,
+    request: ExportRequest,
+    { maxRows = EXPORT_MAX_ROWS } = {},
+  ) {
     if (request.from || request.to) throw new Error('BACKUP_ALL_TIME');
     const data = await this.load(userId, request, maxRows);
     const backup = buildBackup(this.backupGroups(data), {
@@ -441,6 +457,7 @@ export class ExportService {
       include: request.include,
     });
     return {
+      backup,
       fileName: `splitbook-${data.ordered.length}-groups-backup.json`,
       contentType: 'application/json; charset=utf-8',
       body: new TextEncoder().encode(JSON.stringify(backup, null, 2) + '\n'),

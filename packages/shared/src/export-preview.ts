@@ -37,16 +37,15 @@ export const backupPreviewSchema = z.object({
     .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
     .nullable(),
   historyIncluded: z.boolean(),
+  paymentsIncluded: z.boolean(),
+  deletedExpensesIncluded: z.boolean(),
   counts: z.object({
     members: count,
     expenses: count,
     payments: count,
     deletedExpenses: count,
     editHistoryEntries: count,
-    recurringExpenses: z.literal(0),
-    activityEvents: z.literal(0),
   }),
-  unsupported: z.tuple([z.literal('recurringExpenses'), z.literal('activityEvents')]),
 });
 const minor = z.number().int().refine(Number.isSafeInteger);
 export const statementPreviewSchema = z.object({

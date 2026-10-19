@@ -14,7 +14,7 @@ export function useExportPreview(userId: string, url: string | null, idleMessage
     return () => window.clearTimeout(timer);
   }, [url]);
   const current = url !== null && url === settledUrl;
-  const { data, error, mutate } = useSWR(
+  const { data, error, mutate, isValidating } = useSWR(
     current ? ['export-preview', userId, url] : null,
     async ([, , path]) => {
       const response = await apiFetch(path);
@@ -33,10 +33,12 @@ export function useExportPreview(userId: string, url: string | null, idleMessage
     ? { status: 'idle', message: idleMessage }
     : !current
       ? { status: 'loading' }
-      : error
-        ? { status: 'error', message: error.message }
-        : data
-          ? { status: 'ready', data }
-          : { status: 'loading' };
+      : isValidating
+        ? { status: 'loading' }
+        : error
+          ? { status: 'error', message: error.message }
+          : data
+            ? { status: 'ready', data }
+            : { status: 'loading' };
   return { state, retry: () => void mutate() };
 }
