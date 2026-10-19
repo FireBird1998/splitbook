@@ -318,6 +318,23 @@ describe('Expense rows', () => {
       );
     }));
 
+  it('replaces an empty list with loading after a save, then highlights its first Expense', () => {
+    const { root } = view({
+      state: financial({ data: [], status: 'loading', changed: true }),
+    });
+    expect(text(root)).not.toContain('No expenses');
+    expect(labelled(root, 'Loading September 2026 expenses')).toHaveLength(1);
+    remount();
+    const loaded = view({
+      state: financial({ data: [groceries] }),
+      savedExpenseId: groceries.id,
+    });
+    expect(text(loaded.root)).not.toContain('No expenses');
+    expect(buttons(loaded.root).filter((label) => label?.endsWith('just saved'))).toEqual([
+      'Weekly groceries, ₹1,249.50, You paid, Groceries, you lent ₹833.00, just saved',
+    ]);
+  });
+
   it('marks the Expense just saved', () => {
     const { root } = view({ savedExpenseId: groceries.id });
     const marked = buttons(root).filter((label) => label?.endsWith('just saved'));

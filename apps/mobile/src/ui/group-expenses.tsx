@@ -627,7 +627,7 @@ export const GroupExpensesView = memo(
           wraps every state of the list, so the Card that showed its skeleton stays the Card that
           fades its rows in. */}
         <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
-          {!listed ? (
+          {!listed || (expenses.changed && expenses.data.length === 0) ? (
             expenses.status === 'error' && offline ? (
               <NotAvailableOffline
                 compact
