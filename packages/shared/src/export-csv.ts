@@ -27,9 +27,14 @@ export const CSV_BOM = '﻿';
  */
 const FORMULA_START = /^[=+\-@\t\r]/;
 
+/** Cell text as a spreadsheet reads it, also used by JSON previews. */
+export function spreadsheetCellText(value: string): string {
+  return FORMULA_START.test(value) ? `'${value}` : value;
+}
+
 /** One cell: guarded against formulas, then quoted when it holds a comma, a quote or a line break. */
 export function csvCell(value: string): string {
-  const text = FORMULA_START.test(value) ? `'${value}` : value;
+  const text = spreadsheetCellText(value);
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

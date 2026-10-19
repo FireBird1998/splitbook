@@ -4,11 +4,13 @@
  * recurring Expenses, the window, the CSVs and the zip run against stored records.
  */
 
+import { exportPreviewSchema } from '@splitbook/shared/export-preview';
 import { backupSchema } from '@splitbook/shared/export-backup';
 import { unzipSync } from 'fflate';
 import { Types } from 'mongoose';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Group from '@/lib/models/Group';
+import Activity from '@/lib/models/Activity';
 import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import Settlement from '@/lib/models/Settlement';
@@ -859,4 +861,212 @@ describe('export recovery and whole-trip statement bounds', () => {
     expect(period.currencies[0].paymentTotalMinor).toBe(0);
     expect(period.currencies[0].people.map((row) => row.balanceMinor)).toEqual([80, -80]);
   });
+});
+
+describe('Export preview (#611)', () => {
+  it('previews the same guarded CSV headers and first rows as the downloaded file', async () => {
+    const id = await createGroup('Preview Trip', alice, [bob]);
+    for (let index = 0; index < 7; index++)
+      await addExpense(
+        id,
+        alice,
+        index === 6 ? '=Tickets, "return"' : `Meal ${index}`,
+        10.01,
+        alice,
+        [alice, bob],
+      );
+    const path = exportOf([id], { include: ['shares'] });
+    const file = await csv(alice, path);
+    const answer = await request(alice, `${path}&preview=1`);
+    expect(answer.headers.get('content-type')).toContain('application/json');
+    expect(answer.headers.get('content-disposition')).toBeNull();
+    expect(answer.headers.get('cache-control')).toBe('no-store');
+    const preview = json(answer);
+    exportPreviewSchema.parse(preview);
+    const rows = parseCsv(file.text);
+    expect(preview).toMatchObject({ format: 'csv', empty: false, groupNames: ['Preview Trip'] });
+    expect(preview.files[0]).toEqual({
+      name: file.fileName,
+      kind: 'expenses',
+      header: rows[0],
+      rows: rows.slice(1, 6),
+      totalRows: 7,
+    });
+  });
+});
+
+it('previews only backup contents even when the Group has recurring templates and Activity', async () => {
+  vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'true');
+  const { groupId: id } = await householdWithRentDue();
+  vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'false');
+  const item = await addExpense(
+    id,
+    alice,
+    'Preview dinner',
+    10.01,
+    alice,
+    [alice, bob],
+    '2026-04-12',
+  );
+  await expenseService.update(
+    { actorId: alice, groupId: id, expenseId: item },
+    { notes: 'Receipt checked' },
+    0,
+  );
+  const deleted = await addExpense(id, alice, 'Removed item', 1, alice, [alice, bob], '2026-05-01');
+  await expenseService.delete({ actorId: alice, groupId: id, expenseId: deleted }, 0);
+  await settlementService.create(id, { paidTo: alice, amount: 1, currency: 'INR' }, bob);
+  expect(await RecurringExpense.countDocuments({ group: id })).toBeGreaterThan(0);
+  expect(await Activity.countDocuments({ group: id })).toBeGreaterThan(0);
+  const path = `/api/export?groups=${id}&format=json&include=payments,history,deleted`;
+  const file = await request(alice, path);
+  const backup = backupSchema.parse(json(file));
+  expect(backup.groups[0]).not.toHaveProperty('recurringExpenses');
+  expect(backup.groups[0]).not.toHaveProperty('activity');
+  const answer = await request(alice, `${path}&preview=1`);
+  const preview = json(answer);
+  exportPreviewSchema.parse(preview);
+  expect(preview).toMatchObject({
+    format: 'json',
+    historyIncluded: true,
+    unsupported: ['recurringExpenses', 'activityEvents'],
+  });
+  const groups = backup.groups;
+  expect(preview.counts).toEqual({
+    members: new Set(groups.flatMap((g) => g.members.map((m) => m.id))).size,
+    expenses: groups.flatMap((g) => g.expenses).filter((e) => !e.deleted).length,
+    payments: groups.flatMap((g) => g.settlements).length,
+    deletedExpenses: groups.flatMap((g) => g.expenses).filter((e) => e.deleted).length,
+    editHistoryEntries: groups
+      .flatMap((g) => g.expenses)
+      .reduce((n, e) => n + (e.edits?.length ?? 0), 0),
+    recurringExpenses: 0,
+    activityEvents: 0,
+  });
+  expect(preview.earliestMonth).toBe('2026-04');
+  expect(preview.sizeBytes).toBe(file.bytes.byteLength);
+  expect(preview.fileName).toBe('splitbook-1-groups-backup.json');
+});
+
+it('previews statement period contributions and first rows from the printable statement', async () => {
+  const id = await createGroup('Maple House', alice, [bob], { category: 'home' });
+  await addExpense(id, alice, 'Outside the period', 999, alice, [alice, bob], '2026-08-01');
+  for (let index = 0; index < 7; index++)
+    await addExpense(id, alice, `Dinner ${index}`, 10.01, alice, [alice, bob], '2026-09-20');
+  for (const [amount, createdAt] of [
+    [1.23, '2026-09-15T12:00:00Z'],
+    [2.5, '2026-08-15T12:00:00Z'],
+  ] as const) {
+    const payment = await settlementService.create(
+      id,
+      { paidTo: alice, amount, currency: 'INR' },
+      bob,
+    );
+    await Settlement.collection.updateOne(
+      { _id: payment!._id },
+      { $set: { createdAt: new Date(createdAt) } },
+    );
+  }
+  const options: ExportRequest = {
+    groupIds: [id],
+    include: ['payments'],
+    from: '2026-09-01',
+    to: '2026-09-30',
+    format: 'csv',
+    timeZone: 'Asia/Kolkata',
+  };
+  const printed = await exportService.statement(bob, options);
+  const response = await request(
+    bob,
+    `/api/export?groups=${id}&format=statement&preview=1&from=2026-09-01&to=2026-09-30&tz=Asia%2FKolkata`,
+  );
+  expect(response.status).toBe(200);
+  const preview = json(response);
+  exportPreviewSchema.parse(preview);
+  expect(preview).toMatchObject({ format: 'statement', empty: false });
+  expect(preview.statement).toMatchObject({
+    name: 'Maple House',
+    theme: 'home',
+    from: options.from,
+    to: options.to,
+  });
+  const bucket = preview.statement.currencies[0];
+  expect(bucket).toMatchObject({
+    currency: 'INR',
+    spentMinor: 7007,
+    expenseCount: 7,
+    paymentCount: 1,
+    paymentTotalMinor: 123,
+  });
+  expect(bucket.people).toEqual(
+    printed.currencies[0].people.map(({ id, name, paidMinor, shareMinor, netMinor }) => ({
+      id,
+      name,
+      paidMinor,
+      shareMinor,
+      netMinor,
+    })),
+  );
+  expect(bucket.expenses).toEqual(
+    printed.currencies[0].expenses
+      .slice(0, 5)
+      .map(({ id, date, description, tag, amountMinor }) => ({
+        id,
+        date,
+        description,
+        tag,
+        amountMinor,
+      })),
+  );
+  expect(bucket.people.map((p: { name: string }) => p.name)).toEqual([
+    'Alice Tester',
+    'Bob Tester',
+  ]);
+});
+
+it('preview refusals match downloads for no Groups, anonymous and nonmembers', async () => {
+  const id = await createGroup('Private preview', alice);
+  for (const format of ['csv', 'json']) {
+    for (const [actor, query, expected] of [
+      [alice, `format=${format}`, 422],
+      [null, `groups=${id}&format=${format}`, 401],
+      [bob, `groups=${id}&format=${format}`, 403],
+    ] as const) {
+      const download = await request(actor, `/api/export?${query}`);
+      const preview = await request(actor, `/api/export?${query}&preview=1`);
+      expect(preview.status).toBe(expected);
+      expect(preview.status).toBe(download.status);
+      expect(json(preview)).toEqual(json(download));
+    }
+  }
+  expect((await request(bob, `/api/export?groups=${id}&format=statement&preview=1`)).status).toBe(
+    403,
+  );
+});
+
+it('all preview formats return the real oversized refusal before preparing data', async () => {
+  const id = await createGroup('Large preview', alice);
+  await Expense.collection.insertMany(
+    Array.from({ length: 50_001 }, () => ({ group: new Types.ObjectId(id), isDeleted: false })),
+  );
+  for (const format of ['csv', 'json', 'statement']) {
+    const answer = await request(alice, `/api/export?groups=${id}&format=${format}&preview=1`);
+    expect(answer.status).toBe(413);
+    expect(json(answer)).toMatchObject({ code: 'EXPORT_TOO_LARGE', status: 413 });
+    expect(answer.headers.get('content-disposition')).toBeNull();
+  }
+});
+
+it('previews an empty period without leaking Expenses outside it', async () => {
+  const id = await createGroup('Empty September', alice, [bob]);
+  await addExpense(id, alice, 'August only', 12, alice, [alice, bob], '2026-08-01');
+  for (const format of ['csv', 'statement']) {
+    const answer = await request(
+      alice,
+      `/api/export?groups=${id}&format=${format}&preview=1&from=2026-09-01&to=2026-09-30`,
+    );
+    expect(answer.status).toBe(200);
+    expect(json(answer)).toMatchObject({ format, empty: true });
+    expect(new TextDecoder().decode(answer.bytes)).not.toContain('August only');
+  }
 });

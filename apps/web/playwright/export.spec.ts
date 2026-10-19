@@ -59,7 +59,9 @@ test('from the sidebar: pick one Group and all time, and download its Expenses a
   await page.getByRole('button', { name: 'Clear all' }).click();
   await expect(page.locator('#export-file')).toHaveText('Pick at least one Group.');
   await expect(page.getByRole('button', { name: 'Download CSV' })).toBeDisabled();
-  await expect(page.getByText('Nothing to export yet')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Preview', exact: true })).toContainText(
+    'Pick at least one Group.',
+  );
 
   await groups.getByRole('checkbox', { name: new RegExp(DEMO_TRIP_NAME) }).check();
   await page.getByLabel('Period').selectOption('all');
@@ -148,4 +150,58 @@ test('a Group header’s Export opens the page with that Group picked', async ({
   await expect(groups.getByRole('checkbox', { checked: true })).toHaveCount(1);
   await expect(groups.getByRole('checkbox', { name: new RegExp(DEMO_TRIP_NAME) })).toBeChecked();
   await expect(page.getByRole('button', { name: 'Select all' })).toBeVisible();
+});
+
+test('preview follows Groups, period, include and format choices with recovery', async ({
+  page,
+}) => {
+  await enterAsPersona(page, 'alex');
+  await page.goto(`/export?group=${DEMO_GROUP_ID}`);
+  const preview = page.getByRole('region', { name: 'Preview', exact: true });
+  await page.getByLabel('Period', { exact: true }).selectOption('all');
+  await expect(preview.getByRole('table').first()).toBeVisible();
+  await expect(preview).toContainText('Trip SIM cards');
+  const include = page.getByRole('group', { name: 'Include', exact: true });
+  await include.getByRole('checkbox', { name: 'Payments', exact: true }).uncheck();
+  await expect(preview.getByRole('table')).toHaveCount(1);
+  await include.getByRole('checkbox', { name: 'Shares per person', exact: true }).uncheck();
+  await expect(
+    preview.getByRole('columnheader', { name: 'Alex Rivera share', exact: true }),
+  ).toHaveCount(0);
+  await page.getByLabel('Format', { exact: true }).selectOption('statement');
+  await expect(preview).toContainText('Member');
+  await expect(preview).toContainText('Amounts in INR, never converted');
+  await expect(preview.getByRole('rowheader', { name: 'Alex Rivera', exact: true })).toBeVisible();
+  await page.getByLabel('Period', { exact: true }).selectOption('custom');
+  await page.getByLabel('From', { exact: true }).fill('2000-01-01');
+  await page.getByLabel('To', { exact: true }).fill('2000-01-31');
+  await expect(preview).toContainText('Nothing to export for this period.');
+  await page.getByLabel('Format', { exact: true }).selectOption('json');
+  await expect(preview).toContainText('Approximately');
+  await expect(preview).toContainText(
+    'Recurring Expenses and Activity events are not included in this backup format.',
+  );
+  await expect(page.getByLabel('Period', { exact: true })).toBeDisabled();
+
+  const failPreview = async (route: import('@playwright/test').Route) => {
+    if (new URL(route.request().url()).searchParams.get('preview') === '1')
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+    else await route.continue();
+  };
+  await page.route('**/api/export?**', failPreview);
+  await include.getByRole('checkbox', { name: 'Edit history', exact: true }).check();
+  await expect(preview.getByRole('alert')).toContainText('The export couldn’t be prepared.');
+  await page.unroute('**/api/export?**', failPreview);
+  await preview.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(preview).toContainText('each with its edit history');
+  await page
+    .getByRole('group', { name: 'Groups', exact: true })
+    .getByRole('checkbox', { name: new RegExp(DEMO_TRIP_NAME) })
+    .uncheck();
+  await expect(preview).toContainText('Pick at least one Group.');
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
 });

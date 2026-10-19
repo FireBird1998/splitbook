@@ -1,4 +1,4 @@
-import { buildBackup, type BackupGroupInput } from '@splitbook/shared/export-backup';
+import { backupSchema, buildBackup, type BackupGroupInput } from '@splitbook/shared/export-backup';
 import { buildStatement } from '@splitbook/shared/statement';
 import { Types } from 'mongoose';
 import { zipSync } from 'fflate';
@@ -17,6 +17,7 @@ import {
   buildExpenseCsv,
   buildPaymentCsv,
   serializeCsv,
+  spreadsheetCellText,
   zonedDay,
   expenseDay,
   type ExportExpense,
@@ -27,6 +28,7 @@ import {
   planExportFiles,
   type ExportRequest,
 } from '@splitbook/shared/export-request';
+import { EXPORT_PREVIEW_ROWS, type ExportPreview } from '@splitbook/shared/export-preview';
 import { displayTagReference } from '@splitbook/shared/tag-identity';
 
 /** An export over `EXPORT_MAX_ROWS`: refused before any file is built. */
@@ -118,43 +120,8 @@ export class ExportService {
     { maxRows = EXPORT_MAX_ROWS }: { maxRows?: number } = {},
   ): Promise<ExportDownload> {
     const { ordered, expenses, payments, names } = await this.load(userId, request, maxRows);
-    const include = new Set(request.include);
-
-    const plan = planExportFiles(
-      ordered.map((group) => group.name),
-      request,
-    );
-    const contents = plan.files.map((file) => {
-      const group = ordered[file.group];
-      const id = String(group._id);
-      if (file.kind === 'payments') {
-        const csv = buildPaymentCsv({
-          payments: payments
-            .filter((payment) => String(payment.group) === id)
-            .map((payment) => this.toExportPayment(payment)),
-          names,
-          timeZone: request.timeZone,
-        });
-        return serializeCsv(csv.header, csv.rows);
-      }
-      const csv = buildExpenseCsv({
-        expenses: expenses
-          .filter((expense) => String(expense.group) === id)
-          .map((expense) => this.toExportExpense(expense, group.tags)),
-        members: group.members.map((member) => {
-          const memberId = String(member.user);
-          return { id: memberId, name: names[memberId] };
-        }),
-        names,
-        options: {
-          shares: include.has('shares'),
-          deleted: include.has('deleted'),
-          history: include.has('history'),
-          timeZone: request.timeZone,
-        },
-      });
-      return serializeCsv(csv.header, csv.rows);
-    });
+    const { plan, tables } = this.csvTables({ ordered, expenses, payments, names }, request);
+    const contents = tables.map((table) => serializeCsv(table.header, table.rows));
 
     const encoder = new TextEncoder();
     if (!plan.zipped)
@@ -176,6 +143,152 @@ export class ExportService {
       contentType: 'application/zip',
       body,
       files: plan.files.length,
+    };
+  }
+
+  private csvTables(data: Awaited<ReturnType<ExportService['load']>>, request: ExportRequest) {
+    const { ordered, expenses, payments, names } = data;
+    const include = new Set(request.include);
+
+    const plan = planExportFiles(
+      ordered.map((group) => group.name),
+      request,
+    );
+    const tables = plan.files.map((file) => {
+      const group = ordered[file.group];
+      const id = String(group._id);
+      if (file.kind === 'payments') {
+        const csv = buildPaymentCsv({
+          payments: payments
+            .filter((payment) => String(payment.group) === id)
+            .map((payment) => this.toExportPayment(payment)),
+          names,
+          timeZone: request.timeZone,
+        });
+        return csv;
+      }
+      const csv = buildExpenseCsv({
+        expenses: expenses
+          .filter((expense) => String(expense.group) === id)
+          .map((expense) => this.toExportExpense(expense, group.tags)),
+        members: group.members.map((member) => {
+          const memberId = String(member.user);
+          return { id: memberId, name: names[memberId] };
+        }),
+        names,
+        options: {
+          shares: include.has('shares'),
+          deleted: include.has('deleted'),
+          history: include.has('history'),
+          timeZone: request.timeZone,
+        },
+      });
+      return csv;
+    });
+
+    return { plan, tables };
+  }
+
+  async preview(userId: string, request: ExportRequest): Promise<ExportPreview> {
+    if (request.format === 'statement') {
+      const statement = await this.statement(userId, request);
+      return {
+        format: 'statement',
+        groupNames: [statement.name],
+        generatedAt: new Date().toISOString(),
+        from: statement.from,
+        to: statement.to,
+        timeZone: statement.timeZone,
+        empty: statement.currencies.every(
+          (bucket) => bucket.expenseCount === 0 && bucket.payments.length === 0,
+        ),
+        statement: {
+          id: statement.id,
+          name: statement.name,
+          theme: statement.theme,
+          defaultCurrency: statement.defaultCurrency,
+          from: statement.from,
+          to: statement.to,
+          timeZone: statement.timeZone,
+          currencies: statement.currencies.map((bucket) => ({
+            currency: bucket.currency,
+            spentMinor: bucket.spentMinor,
+            expenseCount: bucket.expenseCount,
+            paymentTotalMinor: bucket.paymentTotalMinor,
+            paymentCount: bucket.payments.length,
+            people: bucket.people.map(({ id, name, paidMinor, shareMinor, netMinor }) => ({
+              id,
+              name,
+              paidMinor,
+              shareMinor,
+              netMinor,
+            })),
+            expenses: bucket.expenses
+              .slice(0, EXPORT_PREVIEW_ROWS)
+              .map(({ id, date, description, tag, amountMinor }) => ({
+                id,
+                date,
+                description,
+                tag,
+                amountMinor,
+              })),
+          })),
+        },
+      };
+    }
+    if (request.format === 'json') {
+      const file = await this.backup(userId, request);
+      const backup = backupSchema.parse(JSON.parse(new TextDecoder().decode(file.body)));
+      const expenses = backup.groups.flatMap((group) => group.expenses);
+      const active = expenses.filter((expense) => !expense.deleted);
+      const months = active.map((expense) => expense.date.slice(0, 7)).sort();
+      return {
+        format: 'json',
+        groupNames: backup.groups.map((group) => group.name),
+        generatedAt: backup.exportedAt,
+        from: null,
+        to: null,
+        timeZone: request.timeZone,
+        fileName: file.fileName,
+        sizeBytes: file.body.byteLength,
+        empty: backup.groups.length === 0,
+        earliestMonth: months[0] ?? null,
+        historyIncluded: request.include.includes('history'),
+        counts: {
+          members: new Set(
+            backup.groups.flatMap((group) => group.members.map((member) => member.id)),
+          ).size,
+          expenses: active.length,
+          deletedExpenses: expenses.length - active.length,
+          payments: backup.groups.reduce((count, group) => count + group.settlements.length, 0),
+          editHistoryEntries: expenses.reduce(
+            (count, expense) => count + (expense.edits?.length ?? 0),
+            0,
+          ),
+          recurringExpenses: 0,
+          activityEvents: 0,
+        },
+        unsupported: ['recurringExpenses', 'activityEvents'],
+      };
+    }
+    const data = await this.load(userId, request, EXPORT_MAX_ROWS);
+    const { plan, tables } = this.csvTables(data, request);
+    return {
+      format: 'csv',
+      groupNames: data.ordered.map((group) => group.name),
+      generatedAt: new Date().toISOString(),
+      from: request.from ?? null,
+      to: request.to ?? null,
+      timeZone: request.timeZone,
+      fileName: plan.download,
+      empty: tables.every((table) => table.rows.length === 0),
+      files: tables.map((table, index) => ({
+        name: plan.files[index].name,
+        kind: plan.files[index].kind,
+        header: table.header.map(spreadsheetCellText),
+        rows: table.rows.slice(0, EXPORT_PREVIEW_ROWS).map((row) => row.map(spreadsheetCellText)),
+        totalRows: table.rows.length,
+      })),
     };
   }
 

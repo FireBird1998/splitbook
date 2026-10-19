@@ -183,7 +183,15 @@ export const searchPath = (searchQuery: string) =>
  * An export's files (#317): `groups` as ids joined by commas, the window's two days (left out
  * for all time), the includes joined by commas, the format and the viewer's time zone.
  */
-export const exportPath = ({ groupIds, from, to, include, format, timeZone }: ExportRequest) =>
+export const exportPath = ({
+  groupIds,
+  from,
+  to,
+  include,
+  format,
+  timeZone,
+  preview,
+}: ExportRequest) =>
   `/api/export${query([
     ['groups', groupIds.join(',')],
     ['from', from],
@@ -191,6 +199,7 @@ export const exportPath = ({ groupIds, from, to, include, format, timeZone }: Ex
     ['include', include.join(',')],
     ['format', format],
     ['tz', timeZone],
+    ['preview', preview ? '1' : undefined],
   ])}`;
 
 export const toReviewPath = () => '/api/user/to-review';

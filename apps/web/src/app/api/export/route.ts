@@ -23,6 +23,11 @@ export async function GET(req: Request) {
     const parsed = parseExportQuery(new URL(req.url).searchParams);
     if (!parsed.success) return validationError(parsed.error);
 
+    if (parsed.data.preview)
+      return Response.json(await exportService.preview(user.id, parsed.data), {
+        headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
+      });
+
     const download = await (parsed.data.format === 'json'
       ? exportService.backup(user.id, parsed.data)
       : exportService.csv(user.id, parsed.data));

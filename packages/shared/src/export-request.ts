@@ -14,7 +14,7 @@ export const EXPORT_INCLUDES = ['payments', 'shares', 'deleted', 'history'] as c
 export type ExportInclude = (typeof EXPORT_INCLUDES)[number];
 
 /** Download formats. JSON backups always cover all time. */
-export const EXPORT_FORMATS = ['csv', 'json'] as const;
+export const EXPORT_FORMATS = ['csv', 'json', 'statement'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /** The most Groups one request may name. */
@@ -38,6 +38,8 @@ export interface ExportRequest {
   format: ExportFormat;
   /** The viewer's IANA time zone: the calendar a payment's or an edit's time is read in. */
   timeZone: string;
+  /** JSON preview instead of an attachment. */
+  preview?: boolean;
 }
 
 const CALENDAR_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -98,7 +100,16 @@ const exportQuery = z
       .transform(list)
       .pipe(z.array(z.enum(EXPORT_INCLUDES))),
     format: z.enum(EXPORT_FORMATS).default('csv'),
+    preview: z.literal('1').optional(),
     tz: z.string().refine(isTimeZone, { message: 'Unknown time zone' }).default('UTC'),
+  })
+  .refine((query) => query.format !== 'statement' || query.preview === '1', {
+    message: 'Open the printable statement, or request preview=1',
+    path: ['format'],
+  })
+  .refine((query) => query.format !== 'statement' || query.groups.length === 1, {
+    message: 'Choose exactly one Group for a statement',
+    path: ['groups'],
   })
   .refine((query) => query.format !== 'json' || (!query.from && !query.to), {
     message: 'JSON backups cover all time; omit from and to',
@@ -131,15 +142,17 @@ export function parseExportQuery(values: QueryValues) {
     include: value('include'),
     format: value('format') || undefined,
     tz: value('tz') || undefined,
+    preview: value('preview'),
   });
   if (!parsed.success) return parsed;
-  const { groups, from, to, include, format, tz } = parsed.data;
+  const { groups, from, to, include, format, tz, preview } = parsed.data;
   const request: ExportRequest = {
     groupIds: groups,
     ...(from && to ? { from, to } : {}),
     include: EXPORT_INCLUDES.filter((name) => include.includes(name)),
     format,
     timeZone: tz,
+    ...(preview ? { preview: true } : {}),
   };
   return { success: true as const, data: request };
 }

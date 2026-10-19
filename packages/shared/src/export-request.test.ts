@@ -233,3 +233,25 @@ it('refuses a period on an all-time JSON backup', () => {
   request.delete('to');
   expect(parseExportQuery(values)).toMatchObject({ success: true, data: { format: 'json' } });
 });
+
+it('round trips each preview format and keeps statement previews to one Group', () => {
+  for (const format of ['csv', 'json', 'statement'] as const) {
+    const request: ExportRequest = {
+      groupIds: [MAPLE],
+      include: [],
+      format,
+      timeZone: 'UTC',
+      preview: true,
+    };
+    expect(parseExportQuery(values(queryOf(exportPath(request))))).toEqual({
+      success: true,
+      data: request,
+    });
+  }
+  expect(parseExportQuery(values({ groups: MAPLE, format: 'statement' })).success).toBe(false);
+  expect(
+    parseExportQuery(values({ groups: `${MAPLE},${GOA}`, format: 'statement', preview: '1' }))
+      .success,
+  ).toBe(false);
+  expect(parseExportQuery(values({ groups: MAPLE, preview: 'true' })).success).toBe(false);
+});
