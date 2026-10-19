@@ -2708,4 +2708,73 @@ describe('App after Android recreates the activity (#634)', () => {
     });
     expect(previews).toBe(1);
   });
+
+  // An activity Android destroyed while the process lived (Don't keep activities, or a task
+  // swiped away) is created again by a newly tapped link, which arrives as the new activity's
+  // launch link: Android sends no new-intent event for it.
+  it('opens a new link that starts the activity again, and the same link only once', async () => {
+    const previews = { deadbeef: 0, cafef00d: 0 };
+    const invitation = (code: keyof typeof previews, name: string) => {
+      previews[code] += 1;
+      return json({
+        data: { _id: 'a00000000000000000000020', name, category: 'home', memberCount: 2 },
+        status: 200,
+      });
+    };
+    setInitialURL('http://localhost:4138/join/deadbeef');
+    const app = await renderApp((path, init) => {
+      if (init.method && init.method !== 'GET') return undefined;
+      if (path === '/api/join/deadbeef') return invitation('deadbeef', 'Cedar Flat');
+      if (path === '/api/join/cafef00d') return invitation('cafef00d', 'Birch Lane');
+    });
+    expect(app.text()).toContain('Cedar Flat');
+    await app.press('Not now');
+    expect(app.controller.getSnapshot().screen).toBe('groups');
+
+    // The same launch link, on a recreated activity: already handled.
+    await app.recreate();
+    expect(app.controller.getSnapshot().screen).toBe('groups');
+    expect(previews).toEqual({ deadbeef: 1, cafef00d: 0 });
+
+    // A new activity, started by another link.
+    setInitialURL('http://localhost:4138/join/cafef00d');
+    await app.recreate();
+    expect(app.controller.getSnapshot().screen).toBe('invite');
+    expect(app.text()).toContain('You’re invited');
+    expect(app.text()).toContain('Birch Lane');
+    expect(previews).toEqual({ deadbeef: 1, cafef00d: 1 });
+  });
+
+  it('keeps the Record payment sheet open over Balances', async () => {
+    // Alex is a member too, so Sam's debt to Alex is a payment Sam can record.
+    const both = {
+      ...group,
+      members: [
+        ...group.members,
+        { user: { ...alex, email: 'alex@x.test' }, role: 'member', joinedAt: iso },
+      ],
+    };
+    const app = await renderApp((path) =>
+      path === '/api/groups'
+        ? json({ data: [both], status: 200 })
+        : path === `/api/groups/${groupId}`
+          ? json({ data: both, status: 200 })
+          : undefined,
+    );
+    await app.press('Open Maple House');
+    await app.press('Balances');
+    await app.press('Record your payment to Alex');
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: { groupId },
+    });
+
+    await app.recreate();
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      destination: 'balances',
+      settlement: { groupId },
+    });
+    expect(app.text()).toContain('Record payment');
+  });
 });
