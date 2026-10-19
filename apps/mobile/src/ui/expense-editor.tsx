@@ -34,6 +34,7 @@ import {
   expenseDraftChanged,
   expenseContextPending,
   expenseFieldLabels,
+  expenseTagPending,
   expenseFields,
   expenseMoney,
   refusedRetryNotice,
@@ -616,6 +617,8 @@ function ExpenseTask({
   const checking = state.contextCheck;
   const pendingContext = expenseContextPending(state, offline);
   const financialLocked = locked || pendingContext;
+  // Offline, the Tag is picked from the Group's saved Tags, a new Expense's too (#638).
+  const tagLocked = locked || expenseTagPending(state, offline);
   const checkNotice = checking ? contextNotices[checking.status] : null;
   const checkingMessage = checkNotice?.message ?? '';
   const invalidMembers =
@@ -837,6 +840,7 @@ function ExpenseTask({
               currentUserId={currentUserId}
               locked={locked}
               financialLocked={financialLocked}
+              tagLocked={tagLocked}
               correction={correction}
               section={section}
               onOpen={openTile}
@@ -845,6 +849,7 @@ function ExpenseTask({
             <ExpenseTiles
               locked={locked}
               financialLocked={financialLocked}
+              tagLocked={tagLocked}
               errors={{ ...errors, tag: errors.tag ?? tagReport.error }}
               values={{
                 date: expenseDateLabel(draft.date),
@@ -1078,7 +1083,7 @@ function ExpenseTask({
           tagId={draft.tagId}
           error={tagReport.error}
           notice={tagNotice}
-          locked={financialLocked}
+          locked={tagLocked}
           onChoose={(tagId) => {
             onChange({ tagId });
             setSheet(null);

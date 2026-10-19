@@ -374,7 +374,7 @@ describe('Group Tag actions through the public controller', () => {
     const first = device.boot();
     await first.signIn('alex');
     const manager = first.groupTags(groupId);
-    expect((await manager.read()).canManage).toBe(true);
+    expect((await manager.read()).snapshot.canManage).toBe(true);
     device.server.lostReply = true;
     await expect(manager.submit({ action: 'create', name: ' Villa ' })).rejects.toThrow();
     first.dispose();

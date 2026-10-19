@@ -12,8 +12,10 @@ import {
   type QueryFunctionContext,
   type QueryState,
 } from '@tanstack/query-core';
+import { tagActionsPath } from '@splitbook/shared/api-paths';
 import { currentMonthKey } from '@splitbook/shared/date';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
+import { tagSnapshotSchema } from '@splitbook/shared/tag-management';
 import {
   expensePageKey,
   groupBalancesKey,
@@ -362,6 +364,11 @@ export function createGroupQueries(session: GroupSession) {
   const pagePath = (key: QueryKey, page: number) =>
     queryKeyPath(key).replace('/expenses?', `/expenses?page=${page}&`);
   const isList = (key: QueryKey) => queryKeyPath(key).includes('/expenses?');
+  /** The Group's Tags, as the Tags screen reads them: one of the Group's own rows (#638). */
+  const isTags = (key: QueryKey) =>
+    key[0] === 'group' && queryKeyPath(key) === tagActionsPath(key[3] as string);
+  /** The Tags in a Tags answer, or a decoder's error. */
+  const tagsOf = (value: unknown) => tagSnapshotSchema.parse(Object(value).data);
 
   /** The Group view on screen, or under the Record payment sheet; null anywhere else. */
   const onScreen = () => {
@@ -393,6 +400,7 @@ export function createGroupQueries(session: GroupSession) {
    */
   const readable = (key: QueryKey, value: unknown) => {
     try {
+      if (isTags(key)) return Boolean(tagsOf(value));
       if (key[0] === 'group') return lists(groupOf(value));
       if (key[0] === 'balances') return Boolean(balancesOf(value));
       return Boolean(pageOf(value, key[3] as string, currencyOf(key[3] as string)));
@@ -527,13 +535,15 @@ export function createGroupQueries(session: GroupSession) {
    * One read of `path`: sends it, or when Splitbook can't be reached, answers with the row saved
    * here for that path and its own time, offline (M4-5). `accept` checks an answer before it is
    * kept. Only its query's removal cancels it, never leaving the view: an answer still current
-   * shows wherever it lands.
+   * shows wherever it lands. `send` replaces the session's read for a screen with a request of
+   * its own, as Tags has.
    */
   const fetchOne = async (
     key: QueryKey,
     path: string,
     run: Run,
     accept: (value: unknown) => Promise<void> | void,
+    send?: (signal?: AbortSignal) => Promise<unknown>,
   ): Promise<Envelope> => {
     if (run.before) await run.before.catch(() => undefined);
     const owner = session.generation(),
@@ -542,7 +552,7 @@ export function createGroupQueries(session: GroupSession) {
     const obsolete = () => !session.current(owner) || !owns();
     let value: unknown;
     try {
-      value = await session.read(path, owner, run.abort?.signal);
+      value = await (send ? send(run.abort?.signal) : session.read(path, owner, run.abort?.signal));
       run.answered = true;
     } catch (error) {
       run.answered = true;
@@ -595,6 +605,20 @@ export function createGroupQueries(session: GroupSession) {
     run.reading = fetchOne(key, queryKeyPath(key), run, (value) => void balancesOf(value));
     return run.reading as Promise<Envelope>;
   };
+  /**
+   * The Group's Tags, read by the Tags screen with its own request (`send`), which tells a
+   * refusal of the Tag role apart from one of the Group (#638). Answered as the Group's other
+   * reads are: saved as one of its rows, and offline from that row, with its own time.
+   */
+  const readTags =
+    (send: (signal?: AbortSignal) => Promise<unknown>) =>
+    ({ queryKey }: QueryFunctionContext) => {
+      const key = queryKey as QueryKey,
+        run: Run = { answered: false, reading: Promise.resolve() };
+      track(key, run);
+      run.reading = fetchOne(key, queryKeyPath(key), run, (value) => void tagsOf(value), send);
+      return run.reading as Promise<Envelope>;
+    };
   /**
    * A page of a Month's Expenses. When a later page of a read can't be read, the list ends there
    * (`failed`), keeping the pages read before it; offline, the page's saved copy answers for it.
@@ -1435,6 +1459,11 @@ export function createGroupQueries(session: GroupSession) {
      * Expense, #220): one key per resource, read and saved one way.
      */
     groupOptions: (groupId: string) => groupOptions(groupId),
+    /**
+     * The query function for the Group's Tags (#638): its answers are saved as the Group's
+     * `tag-actions` row, retired with its other rows, and answer for it offline.
+     */
+    tagsQuery: (send: (signal?: AbortSignal) => Promise<unknown>) => readTags(send),
     /**
      * Load more: the next older page. Past 5 pages the window slides and the newest page drops; a
      * page that couldn't be read before is read again, in its place.

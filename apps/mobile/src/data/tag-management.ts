@@ -7,10 +7,25 @@ import {
   type TagActionResult,
   type TagCommand,
   type TagIntent,
+  type TagSnapshot,
 } from '@splitbook/shared/tag-management';
 import { RequestError } from './transport';
 
 export type MobileTagIntent = Exclude<TagIntent, { action: 'delete' }>;
+/**
+ * The Tags as a read answered them (#638): the server's answer, or this phone's saved copy
+ * (`saved`), each with when it was read. A saved copy is never presented as current.
+ */
+export interface TagRead {
+  snapshot: TagSnapshot;
+  refreshedAt: number;
+  saved: boolean;
+}
+const shownSchema = z.object({
+  source: z.enum(['network', 'saved']),
+  refreshedAt: z.number().finite().nonnegative(),
+  value: z.unknown(),
+});
 const recordSchema = z
   .object({
     command: tagCommandSchema,
@@ -20,6 +35,15 @@ const recordSchema = z
   .refine((record) => record.command.intent.action !== 'delete');
 export type TagRecovery = z.infer<typeof recordSchema>;
 const data = (value: unknown) => z.object({ data: z.unknown() }).parse(value).data;
+/** A read of the Tags as its query holds it: the answer, where it came from, and when. */
+export function tagRead(value: unknown): TagRead {
+  const shown = shownSchema.parse(value);
+  return {
+    snapshot: tagSnapshotSchema.parse(data(shown.value)),
+    refreshedAt: shown.refreshedAt,
+    saved: shown.source === 'saved',
+  };
+}
 
 /** Durable exact intent, independent of the manager view. No read ever sends a write. */
 export function tagManagement({
@@ -111,11 +135,15 @@ export function tagManagement({
   return {
     recovery,
     pending: async () => (await recovery())?.command ?? null,
+    /**
+     * The Tags, read: a read sends no change, so it needs no connection. Offline, this phone's
+     * saved copy answers, with its own time (#638).
+     */
     read: async () => {
-      online();
-      const snapshot = tagSnapshotSchema.parse(data(await read()));
       current();
-      return snapshot;
+      const shown = tagRead(await read());
+      current();
+      return shown;
     },
     submit: (intent: MobileTagIntent) =>
       run(async () => {

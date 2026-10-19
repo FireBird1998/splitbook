@@ -171,6 +171,16 @@ export function expenseContextPending(editor: ExpenseEditor, offline: boolean) {
   // still waits for the live check, and a new provisional form never invents financial choices.
   return !!check && !(offline && !check.initialize && check.status !== 'checking');
 }
+/**
+ * Whether choosing the Tag waits for the Group's live check. Offline, once the form shows the
+ * Group's saved copy, the member picks from its saved Tags, on a new Expense too (#638): a Tag
+ * is the member's own choice, never a default the check would replace, and Save still checks
+ * it live. Reconnecting waits for the live check, as every financial choice does.
+ */
+export function expenseTagPending(editor: ExpenseEditor, offline: boolean) {
+  const check = editor.contextCheck;
+  return !!check && !(offline && check.status !== 'checking');
+}
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;
 export type ExpenseField = (typeof expenseFields)[number];
 export type ExpenseFieldErrors = Partial<Record<ExpenseField, string>>;

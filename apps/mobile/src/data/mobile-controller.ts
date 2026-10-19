@@ -1,7 +1,6 @@
 import { tagActionsPath, tagActionCheckPath } from '@splitbook/shared/api-paths';
-import { tagSnapshotSchema, type TagSnapshot } from '@splitbook/shared/tag-management';
 import { emptyTagManager, tagManager } from './tag-manager';
-import { tagManagement } from './tag-management';
+import { tagManagement, tagRead, type TagRead } from './tag-management';
 import { createReviewRun } from './review-run';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
 import {
@@ -66,6 +65,7 @@ import {
   expenseCorrectionSummary,
   expenseContextPending,
   expenseDraftChanged,
+  expenseTagPending,
   expenseFields,
   parseCreatedExpenseId,
   parseExpenseContext,
@@ -3002,12 +3002,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     if (expenseContextPending(snapshot.expense, snapshot.offline.active)) {
-      const { amount, description, date, notes } = patch;
+      const { amount, description, date, notes, tagId } = patch;
+      // Offline, the Tag comes from the Group's saved Tags, a new Expense's too (#638).
+      const tagged = !expenseTagPending(snapshot.expense, snapshot.offline.active);
       patch = {
         ...(amount !== undefined ? { amount } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(date !== undefined ? { date } : {}),
         ...(notes !== undefined ? { notes } : {}),
+        ...(tagId !== undefined && tagged ? { tagId } : {}),
       };
     }
     const lease = accountStorage();
@@ -6250,9 +6253,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         throw new Error('Tag changes need a connection. Connect, then check or retry explicitly.');
     };
     const path = tagActionsPath(groupId);
-    const tagRequest = async (target: string, options?: RequestOptions) => {
+    /** `send` sends it: as it is, or as a display read, which checks the session first offline. */
+    const tagRequest = async (target: string, options?: RequestOptions, send = request) => {
       try {
-        return await request(target, owner, options);
+        return await send(target, owner, options);
       } catch (error) {
         if (!(error instanceof RequestError) || error.status !== 403 || error.code !== null)
           throw error;
@@ -6287,10 +6291,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const queryKey = tagActionsKey(at, groupId);
     const options = {
       queryKey,
-      queryFn: ({ signal }: { signal: AbortSignal }) => {
+      // One of the Group's saved reads (#638): saved as its row, retired with its other rows, and
+      // offline answered from that row with its own time. Read as every view reads, with the
+      // session checked first while offline.
+      queryFn: groupQueries.tagsQuery((signal) => {
         ensure();
-        return tagRequest(path, { signal });
-      },
+        return tagRequest(path, { signal }, (target, by, sent) =>
+          session.read(target, by, sent?.signal),
+        );
+      }),
+      // A saved copy is never fresh, and neither is a read of them: each open reads them again.
       staleTime: 0,
       retry: false,
       networkMode: 'always' as const,
@@ -6335,7 +6345,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     return {
       ...client,
-      watch(onSnapshot: (snapshot: TagSnapshot) => void, onError: (error: unknown) => void) {
+      watch(onSnapshot: (shown: TagRead) => void, onError: (error: unknown) => void) {
         const observer = new QueryObserver(queryClient, options);
         const rebind = () => {
           try {
@@ -6349,7 +6359,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           try {
             ensure();
             if (result.error) onError(result.error);
-            else if (result.data) onSnapshot(tagSnapshotSchema.parse(Object(result.data).data));
+            else if (result.data) onSnapshot(tagRead(result.data));
           } catch (error) {
             onError(error);
           }

@@ -152,6 +152,7 @@ export const AmountDescriptionCard = memo(function AmountDescriptionCard({
 export const ExpenseTiles = memo(function ExpenseTiles({
   locked,
   financialLocked = locked,
+  tagLocked = financialLocked,
   errors,
   values,
   correction,
@@ -160,6 +161,8 @@ export const ExpenseTiles = memo(function ExpenseTiles({
 }: {
   locked: boolean;
   financialLocked?: boolean;
+  /** Offline, the Tag can be chosen from the saved Tags while other choices wait (#638). */
+  tagLocked?: boolean;
   errors: Partial<Record<'date' | 'payers' | 'split' | 'tag', string>>;
   values: {
     date: ReturnType<typeof expenseDateLabel>;
@@ -207,7 +210,7 @@ export const ExpenseTiles = memo(function ExpenseTiles({
           value={values.tag}
           required
           error={errors.tag}
-          locked={financialLocked}
+          locked={tagLocked}
           onPress={() => onOpen('tag')}
         />
       </TileGrid>
