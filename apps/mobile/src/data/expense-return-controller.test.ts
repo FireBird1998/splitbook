@@ -1668,22 +1668,16 @@ describe('An edit or delete whose answer was lost (#232)', () => {
     expect(restarted.getSnapshot().financial.balances.changed).toBeFalsy();
     await restarted.openExpense(householdId, expenseId);
     restarted.resumeExpenseDraft();
-    await restarted.reconcileExpense();
-    // Confirmed, on the record it was opened from (#635): Back returns to Balances, read again.
-    expect(restarted.getSnapshot()).toMatchObject({
-      screen: 'expense',
-      expense: { status: 'detail', message: 'Expense updated.' },
-    });
+    // Resumed after the restart, not begun on the record: the check returns to the Group (#635).
     const balances = server.hold('GET', new RegExp(`/api/groups/${householdId}/balances$`));
-    const returning = restarted.back();
+    const checking = restarted.reconcileExpense();
     await balances.reached;
     expect(restarted.getSnapshot()).toMatchObject({
       screen: 'group',
-      destination: 'balances',
       financial: { balances: { changed: true } },
     });
     balances.release();
-    await returning;
+    await checking;
     expect(restarted.getSnapshot().financial.balances.changed).toBeFalsy();
   });
   it('removes the Group’s older saved copies when a check after a restart confirms the edit', async () => {
@@ -1718,9 +1712,9 @@ describe('An edit or delete whose answer was lost (#232)', () => {
     await restarted.openExpense(householdId, expenseId);
     restarted.resumeExpenseDraft();
     await restarted.reconcileExpense();
-    // On the record it was opened from (#635).
+    // Resumed after the restart, not begun on the record: back on the Group (#635).
     expect(restarted.getSnapshot().expense).toMatchObject({
-      status: 'detail',
+      status: 'saved',
       message: 'Expense updated.',
     });
     expect(sent(server)).toEqual([ledgerWrite('PATCH')]);

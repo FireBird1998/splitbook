@@ -934,30 +934,22 @@ describe('native Expense creation and editing', () => {
       expect(writes).toBe(1);
       // Revision 3 + 1, holding the description sent, or deleted: the member's own change.
       await restarted.reconcileExpense();
-      // An edit opened on its record returns there (#635); a deletion returns to the Group.
-      expect(restarted.getSnapshot()).toMatchObject(
-        kind === 'delete'
-          ? {
-              screen: 'group',
-              expense: {
-                status: 'saved',
-                mutation: null,
-                draft: null,
-                message: 'Expense deleted.',
-              },
-              snackbar: { message: 'Expense deleted · Original dinner' },
-            }
-          : {
-              screen: 'expense',
-              expense: {
-                status: 'detail',
-                mutation: null,
-                draft: { description: 'Saved correction', original: { revision: 4 } },
-                message: 'Expense updated.',
-              },
-              snackbar: null,
-            },
-      );
+      // Resumed after the restart, not begun on the record: back on the Group (#635).
+      expect(restarted.getSnapshot()).toMatchObject({
+        screen: 'group',
+        expense: {
+          status: 'saved',
+          mutation: null,
+          draft: null,
+          message: kind === 'delete' ? 'Expense deleted.' : 'Expense updated.',
+        },
+        snackbar: {
+          message:
+            kind === 'delete'
+              ? 'Expense deleted · Original dinner'
+              : 'Expense updated · Saved correction',
+        },
+      });
       expect(records.size).toBe(0);
       await restarted.saveExpense();
       await restarted.deleteExpense();
@@ -1207,11 +1199,8 @@ describe('native Expense creation and editing', () => {
     expect(restarted.getSnapshot().expense.draft?.original?.revision).toBe(4);
     await restarted.saveExpense();
     expect(writes).toEqual(['3', '4']);
-    // Saved, back on the record it was opened from (#635).
-    expect(restarted.getSnapshot().expense).toMatchObject({
-      status: 'detail',
-      message: 'Expense updated.',
-    });
+    // Resumed after the restart, not begun on the record: back on the Group (#635).
+    expect(restarted.getSnapshot().expense.status).toBe('saved');
   });
 
   it('edits metadata with the displayed revision and preserves historical rounding and timestamp', async () => {
@@ -3326,11 +3315,8 @@ describe('an edit that meets a newer saved Expense', () => {
     });
     expect(Object.keys(patches[1].body)).not.toContain('description');
     expect(Object.keys(patches[1].body)).not.toContain('category');
-    // Saved, back on the record it was opened from (#635).
-    expect(restarted.getSnapshot().expense).toMatchObject({
-      status: 'detail',
-      message: 'Expense updated.',
-    });
+    // Resumed after the restart, not begun on the record: back on the Group (#635).
+    expect(restarted.getSnapshot().expense.status).toBe('saved');
   });
 
   it('sends the member’s own amount only once they choose to keep it', async () => {

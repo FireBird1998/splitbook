@@ -305,7 +305,8 @@ async function run() {
       assert.equal(writes.length, count);
       await controller.reviewLatestExpense();
       await controller.saveExpense();
-      assert.equal(controller.getSnapshot().expense.status, 'detail');
+      // Resumed after the restart, not begun on the record: back on the Group (#635).
+      assert.equal(controller.getSnapshot().expense.status, 'saved');
       assert.equal((await read()).notes, 'My stale note');
       console.log(
         'PASS: two editors, stale revision, restart, explicit review and retained draft.',
@@ -326,9 +327,10 @@ async function run() {
       assert.equal(writes.length, count);
       // #232: the saved Expense is one revision on and holds the note sent: Alex's own edit.
       await controller.reconcileExpense();
-      assert.equal(controller.getSnapshot().expense.status, 'detail');
+      // Resumed after the restart, not begun on the record: back on the Group (#635).
+      assert.equal(controller.getSnapshot().expense.status, 'saved');
       assert.equal(controller.getSnapshot().expense.message, 'Expense updated.');
-      assert.equal(controller.getSnapshot().screen, 'expense');
+      assert.equal(controller.getSnapshot().screen, 'group');
       assert.equal(writes.length, count);
       assert.equal(await drafts.load(), null);
       assert.equal((await read()).notes, 'Committed recovery note');

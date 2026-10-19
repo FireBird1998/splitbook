@@ -2957,6 +2957,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: 'editing',
           message: null,
           groupDraft: null,
+          beganOnRecord: false,
         },
       });
       return;
@@ -2966,6 +2967,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...snapshot,
       expense: {
         ...editor,
+        // A resumed edit wasn't begun on the record: it returns to the Group when saved (#635).
+        beganOnRecord: false,
         status: editor.attempt || editor.mutation ? 'uncertain' : 'editing',
         // Resuming answers the resume prompt, so its notices no longer apply. A save that
         // may already be recorded keeps explaining why it stays locked.
@@ -3432,10 +3435,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !canEditExpense(editor.draft.original)
     )
       return;
-    // Nothing is stored until an entry changes. A saved edit's note stays with its record.
+    // Nothing is stored until an entry changes. Its save returns to this record (#635); a saved
+    // edit's note stays with the record.
     publish({
       ...snapshot,
-      expense: { ...editor, status: 'editing', ...(editor.receiptId ? { message: null } : {}) },
+      expense: {
+        ...editor,
+        status: 'editing',
+        beganOnRecord: true,
+        ...(editor.receiptId ? { message: null } : {}),
+      },
     });
   };
 
@@ -3464,8 +3473,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
   /**
    * The form shows a confirmed edit or delete saved, then returns to its Group, which says so.
-   * An edit begun on the Expense's record returns to that record instead, as `saved`, and says so
-   * there; Back then goes to the Group (#635).
+   * An edit begun on the Expense's record (Edit pressed there, `beganOnRecord`) returns to that
+   * record instead, as `saved`, and says so there; Back then goes to the Group (#635).
    */
   const showConfirmedChange = async (
     groupId: string,
@@ -3475,7 +3484,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     context: ExpenseContext | null,
     saved: ExpenseRecord | null = null,
   ) => {
-    if (kind === 'edit' && saved && snapshot.expense.requestedExpenseId === original._id) {
+    const { beganOnRecord, requestedExpenseId } = snapshot.expense;
+    if (kind === 'edit' && saved && beganOnRecord && requestedExpenseId === original._id) {
       const shown = draftFromExpense(saved);
       publish({
         ...snapshot,
@@ -3486,6 +3496,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           mutation: null,
           latest: null,
           status: 'detail',
+          beganOnRecord: false,
           receiptId: original._id,
           persistence: 'saved',
           validation: emptyExpenseValidation(),

@@ -117,6 +117,12 @@ export interface ExpenseEditor {
   mutation: ExpenseMutation | null;
   latest: ExpenseRecord | null;
   requestedExpenseId: string | null;
+  /**
+   * Edit was pressed on this open's record: a confirmed save returns to that record (#635). Every
+   * other way into the form leaves it unset: a new Expense, and an edit resumed from Home, the
+   * Group or an Expense's row, land on the Group.
+   */
+  beganOnRecord?: boolean;
   receiptId: string | null;
   persistence: 'saved' | 'saving' | 'error';
   /** Incoming link held until entries can be kept or explicitly discarded; never a write. */
