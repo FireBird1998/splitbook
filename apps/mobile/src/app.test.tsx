@@ -12,7 +12,13 @@ import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { createMobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
-import { backListenerCount, emitAppState, pressBack, setWindow } from './test-utils/native';
+import {
+  backListenerCount,
+  emitAppState,
+  pressBack,
+  setInitialURL,
+  setWindow,
+} from './test-utils/native';
 import { GroupExpensesView } from './ui/group-expenses';
 import { GroupActivity } from './ui/group-activity';
 
@@ -339,16 +345,22 @@ const settle = (pending?: Promise<unknown>) =>
     for (let tick = 0; tick < 10; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
-async function renderApp() {
-  const harness = backend();
-  await harness.controller.signIn('sam');
-  runtime.controller = harness.controller;
-  await act(async () => {
+/** Mounts the App over the controller under test. */
+const mount = () =>
+  act(async () => {
     // Host stand-ins have no native methods; the Group view's scroll requests are recorded.
     screen = create(<App />, {
       createNodeMock: () => ({ scrollTo: native.scrollTo, focus: () => undefined }),
     });
   });
+
+/** `handler`: the server's answers from the start, for what the App reads as it mounts. */
+async function renderApp(handler?: Handler) {
+  const harness = backend();
+  if (handler) harness.use(handler);
+  await harness.controller.signIn('sam');
+  runtime.controller = harness.controller;
+  await mount();
   await settle();
   const root = () => screen!.root;
   const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
@@ -418,6 +430,16 @@ async function renderApp() {
     },
     /** Android reports the app returning to the foreground. */
     foreground: () => emitAppState('active'),
+    /**
+     * Android recreates the activity, as a font size or dark mode change does (#634): React
+     * Native unmounts the App and mounts it again in the same JavaScript runtime, over the same
+     * controller.
+     */
+    recreate: async () => {
+      act(() => screen!.unmount());
+      await mount();
+      await settle();
+    },
   };
 }
 
@@ -2549,4 +2571,210 @@ it('lets a demoted member Check their original action after a restart without en
   expect(app.text()).toContain('Villa created. It’s now called Renamed later.');
   expect(restarted.getSnapshot().detail.data?.id).toBe(groupId);
   restarted.dispose();
+});
+
+// A font size change, and on some phones a dark mode change, makes Android recreate the activity.
+// React Native then mounts the App again in the same JavaScript runtime, over the controller that
+// still holds where the member is (#634).
+describe('App after Android recreates the activity (#634)', () => {
+  it('stays on the Group’s Balances on the Month chosen, and reads them again as on a return to the app', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Previous month');
+    await app.press('Balances');
+    const reads: string[] = [];
+    app.use((path) => {
+      reads.push(path);
+      return undefined;
+    });
+    // Past the display freshness window, so a return to the foreground reads again.
+    app.clock.now += 31_000;
+
+    await app.recreate();
+    // The session isn't checked again; what the screen shows is read again.
+    expect(reads).not.toContain('/api/auth/get-session');
+    expect(reads).toContain(`/api/groups/${groupId}/balances`);
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      detail: { id: groupId },
+      financial: { groupId, month: '2026-08' },
+    });
+    expect(app.text()).toContain('You owe₹30.00');
+    await app.press('Expenses');
+    expect(app.text()).toContain('August 2026');
+    expect(app.text()).toContain('August rent');
+  });
+
+  it('keeps Add expense open with its entries', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Add expense');
+    await app.type('Amount, required', '19.99');
+    await app.type('Description, required', 'Phone beta dinner');
+
+    await app.recreate();
+    expect(app.controller.getSnapshot().screen).toBe('expense');
+    const field = (label: string) =>
+      app
+        .root()
+        .find((node) => node.props.accessibilityLabel === label && typeof node.type === 'string');
+    expect(field('Amount, required').props.value).toBe('19.99');
+    expect(field('Description, required').props.value).toBe('Phone beta dinner');
+    expect(await app.androidBack()).toBe(true);
+    expect(app.text()).toContain('Draft: Phone beta dinner');
+  });
+
+  it('keeps an Expense’s record open', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    app.use((path) =>
+      path === `/api/groups/${groupId}/expenses/${september._id}`
+        ? json({ status: 200, data: { ...september, revision: 0, isDeleted: false } })
+        : undefined,
+    );
+    await app.press('September groceries');
+    expect(app.text()).toContain('You paid your share');
+
+    await app.recreate();
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { status: 'detail', requestedExpenseId: september._id },
+    });
+    expect(app.text()).toContain('You paid your share');
+  });
+
+  it('keeps Settings open', async () => {
+    const app = await renderApp();
+    await app.press('Account and settings');
+
+    await app.recreate();
+    expect(app.controller.getSnapshot().screen).toBe('settings');
+    expect(app.text()).toContain('Expense drafts');
+  });
+
+  it('keeps the Group’s Tags open, and closing them returns to the Group', async () => {
+    const app = await tagApp([
+      {
+        id: 'c00000000000000000000001',
+        name: 'Shared',
+        revision: 0,
+        isArchived: false,
+        isDeleted: false,
+      },
+    ]);
+    expect(app.text()).toContain('Active · 1');
+
+    await app.recreate();
+    expect(app.text()).toContain('Active · 1');
+    act(() => app.pressable('Close Tags').props.onPress());
+    await settle();
+    expect(() => app.pressable('Close Tags')).toThrow();
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { id: groupId },
+    });
+    app.controller.dispose();
+  });
+
+  it('never opens the link that started the app a second time', async () => {
+    const joinedId = 'a00000000000000000000020';
+    let previews = 0;
+    setInitialURL('http://localhost:4138/join/deadbeef');
+    const app = await renderApp((path, init) => {
+      if (path === '/api/join/deadbeef') {
+        if (init.method === 'POST') return json({ data: { groupId: joinedId }, status: 201 }, 201);
+        previews += 1;
+        return json({
+          data: { _id: joinedId, name: 'Cedar Flat', category: 'home', memberCount: 2 },
+          status: 200,
+        });
+      }
+      if (path === `/api/groups/${joinedId}`)
+        return json({ data: { ...group, _id: joinedId, name: 'Cedar Flat' }, status: 200 });
+    });
+    expect(app.text()).toContain('You’re invited');
+    await app.press('Join Group');
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { id: joinedId },
+    });
+
+    await app.recreate();
+    expect(app.text()).not.toContain('You’re invited');
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { id: joinedId },
+    });
+    expect(previews).toBe(1);
+  });
+
+  // An activity Android destroyed while the process lived (Don't keep activities, or a task
+  // swiped away) is created again by a newly tapped link, which arrives as the new activity's
+  // launch link: Android sends no new-intent event for it.
+  it('opens a new link that starts the activity again, and the same link only once', async () => {
+    const previews = { deadbeef: 0, cafef00d: 0 };
+    const invitation = (code: keyof typeof previews, name: string) => {
+      previews[code] += 1;
+      return json({
+        data: { _id: 'a00000000000000000000020', name, category: 'home', memberCount: 2 },
+        status: 200,
+      });
+    };
+    setInitialURL('http://localhost:4138/join/deadbeef');
+    const app = await renderApp((path, init) => {
+      if (init.method && init.method !== 'GET') return undefined;
+      if (path === '/api/join/deadbeef') return invitation('deadbeef', 'Cedar Flat');
+      if (path === '/api/join/cafef00d') return invitation('cafef00d', 'Birch Lane');
+    });
+    expect(app.text()).toContain('Cedar Flat');
+    await app.press('Not now');
+    expect(app.controller.getSnapshot().screen).toBe('groups');
+
+    // The same launch link, on a recreated activity: already handled.
+    await app.recreate();
+    expect(app.controller.getSnapshot().screen).toBe('groups');
+    expect(previews).toEqual({ deadbeef: 1, cafef00d: 0 });
+
+    // A new activity, started by another link.
+    setInitialURL('http://localhost:4138/join/cafef00d');
+    await app.recreate();
+    expect(app.controller.getSnapshot().screen).toBe('invite');
+    expect(app.text()).toContain('You’re invited');
+    expect(app.text()).toContain('Birch Lane');
+    expect(previews).toEqual({ deadbeef: 1, cafef00d: 1 });
+  });
+
+  it('keeps the Record payment sheet open over Balances', async () => {
+    // Alex is a member too, so Sam's debt to Alex is a payment Sam can record.
+    const both = {
+      ...group,
+      members: [
+        ...group.members,
+        { user: { ...alex, email: 'alex@x.test' }, role: 'member', joinedAt: iso },
+      ],
+    };
+    const app = await renderApp((path) =>
+      path === '/api/groups'
+        ? json({ data: [both], status: 200 })
+        : path === `/api/groups/${groupId}`
+          ? json({ data: both, status: 200 })
+          : undefined,
+    );
+    await app.press('Open Maple House');
+    await app.press('Balances');
+    await app.press('Record your payment to Alex');
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: { groupId },
+    });
+
+    await app.recreate();
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      destination: 'balances',
+      settlement: { groupId },
+    });
+    expect(app.text()).toContain('Record payment');
+  });
 });

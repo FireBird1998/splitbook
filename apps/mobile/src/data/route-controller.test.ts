@@ -791,6 +791,50 @@ describe('Back, route by route (#216)', () => {
   });
 });
 
+// The snapshot holds them, so they stay open when Android recreates the activity and the App
+// mounts again over the same controller (#634).
+describe('A Group’s Tags, over its view (#634)', () => {
+  it('open only over the Group shown, stay through its reads, and close with Close', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    controller.openTags(tripId);
+    expect(controller.getSnapshot().tagsOpenFor).toBeNull();
+    controller.openTags(householdId);
+    expect(controller.getSnapshot().tagsOpenFor).toBe(householdId);
+    await controller.refresh('retry');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { id: householdId, status: 'ready' },
+      tagsOpenFor: householdId,
+    });
+    controller.closeTags();
+    expect(controller.getSnapshot().tagsOpenFor).toBeNull();
+  });
+
+  it('close once the member leaves the Group, and stay closed on a return', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    controller.openTags(householdId);
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({ screen: 'groups', tagsOpenFor: null });
+    await controller.openGroup(householdId);
+    expect(controller.getSnapshot().tagsOpenFor).toBeNull();
+  });
+
+  it('close when the Group refuses the member', async () => {
+    const { controller, server } = await signedIn();
+    await controller.openGroup(householdId);
+    controller.openTags(householdId);
+    server.refused.add(householdId);
+    await controller.refresh('retry');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { id: householdId, status: 'denied' },
+      tagsOpenFor: null,
+    });
+  });
+});
+
 describe('Moving around never writes (#216)', () => {
   it('sends only reads across every navigation command and every Back', async () => {
     const { controller, requests, writesSince } = await signedIn();
