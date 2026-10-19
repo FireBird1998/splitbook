@@ -87,9 +87,9 @@ test('Home lists the latest changes across Groups, newest first, with an edit as
   await expectNoSeriousA11yViolations(page, testInfo, 'home-latest-changes');
   await reviewScreenshot(page, testInfo, 'home-latest-changes');
 
-  // An entry leads to its Group.
+  // An entry leads to its Group's Activity (#644).
   await edited.getByRole('link').click();
-  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}`);
+  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}/activity`);
   await expect(page.getByRole('main').getByText(DEMO_TRIP_NAME).first()).toBeVisible();
 });
 
