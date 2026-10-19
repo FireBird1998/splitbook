@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { ToReviewHomeCard } from '../ui/to-review';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
@@ -126,7 +129,10 @@ function fixture() {
     lost: boolean;
     late: boolean;
   }[] = [];
-  const connection = new Set<(state: { isConnected: boolean | null }) => void>();
+  let connectionState: { isConnected: boolean | null; isInternetReachable?: boolean | null } = {
+    isConnected: true,
+  };
+  const connection = new Set<(state: typeof connectionState) => void>();
   const records = (map: Map<string, unknown>) => ({
     load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
     save: async (account: string, key: string, value: unknown) => {
@@ -196,6 +202,8 @@ function fixture() {
     const user = signedIn(init);
     if (path.endsWith('/get-session'))
       return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
+    if (path === '/api/user/to-review')
+      return json({ status: 200, data: { total: 0, groups: [] } });
     if (path === listPath && method === 'POST') {
       if (server.refuseCreate) return json({}, server.refuseCreate);
       // Alex creates Zed Club, as its admin; the list holds it from now on.
@@ -287,7 +295,7 @@ function fixture() {
           // As NetInfo does, a new listener hears the connection as it is now.
           addEventListener: (listener) => {
             connection.add(listener);
-            listener({ isConnected: !server.offline });
+            listener(connectionState);
             return () => connection.delete(listener);
           },
         },
@@ -416,9 +424,10 @@ function fixture() {
     /** The next load of this path's row fails, as a read of the device's storage can. */
     failLoadOnce: (path: string) => void failOnce.add(path),
     /** NetInfo reports the device's connection. */
-    connect(isConnected: boolean) {
-      server.offline = !isConnected;
-      connection.forEach((listener) => listener({ isConnected }));
+    connect(isConnected: boolean, isInternetReachable?: boolean | null) {
+      server.offline = !isConnected || isInternetReachable === false;
+      connectionState = { isConnected, isInternetReachable };
+      connection.forEach((listener) => listener(connectionState));
     },
     /** This account's row for `path`, if this device has one. */
     row: (path: string, account = alex.id) =>
@@ -432,6 +441,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 const later = (ms: number) => vi.setSystemTime(Date.now() + ms);
@@ -538,6 +548,78 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
       offline: { active: false, refreshedAt: null },
     });
   });
+
+  it('clears Home offline after a cold offline start and a live Group read, without manual Refresh', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await settle();
+    first.dispose();
+    f.connect(false);
+    const controller = f.create();
+    await controller.restore();
+    expect(controller.getSnapshot().offline.active).toBe(true);
+    // A live read confirms recovery even before a connectivity event reaches the app.
+    f.server.offline = false;
+    await controller.openGroup(mapleId);
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'ready', restored: false });
+    await controller.back();
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      offline: { active: false, refreshedAt: null },
+      home: { status: 'ready', restored: false },
+    });
+    controller.dispose();
+  });
+
+  it.each(['internet returns', 'foreground'] as const)(
+    'clears a cold offline Home without manual Refresh when %s',
+    async (recovery) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+      const f = fixture();
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      // Wi-Fi may be connected before it has internet; NetInfo reports both separately.
+      f.connect(true, false);
+      const controller = f.create();
+      await controller.restore();
+      await settle();
+      expect(controller.getSnapshot().offline.active).toBe(true);
+      expect(controller.getSnapshot().toReview.offline).toBe(true);
+      // Render the real card: its own offline state can outlive the Home banner's.
+      const reviewNote = () => {
+        let card!: ReactTestRenderer;
+        act(() => {
+          card = create(createElement(ToReviewHomeCard, { controller }));
+        });
+        const shown = JSON.stringify(card.toJSON());
+        act(() => card.unmount());
+        return shown;
+      };
+      expect(reviewNote()).toContain("You're offline.");
+      const sent = f.calls.length;
+      if (recovery === 'internet returns') f.connect(true, true);
+      else {
+        f.server.offline = false;
+        await controller.refresh('foreground');
+      }
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'groups',
+        offline: { active: false, refreshedAt: null },
+        groups: { status: 'ready', restored: false },
+        home: { status: 'ready', restored: false },
+        toReview: { status: 'ready', offline: false },
+      });
+      expect(reviewNote()).not.toContain("You're offline.");
+      expect(f.calls.slice(sent).some(({ path }) => path === '/api/user/to-review')).toBe(true);
+      expect(f.calls.slice(sent).every(({ method }) => method === 'GET')).toBe(true);
+      controller.dispose();
+    },
+  );
 
   it('reads again on reconnect only the queries Home shows, only past their stale time, and sends no write', async () => {
     const f = fixture();

@@ -668,7 +668,7 @@ describe('opening an Expense: what is already known shows at once (loading-state
     expect(text(screen!.root)).toContain(
       'This Expense isn’t saved on this phone. Connect to load it.',
     );
-    expect(text(screen!.root)).not.toContain('What’s shown was saved');
+    expect(text(screen!.root)).not.toContain('Some of what’s shown was saved');
     expect(
       screen!.root.findAll((node) => isHost(node, 'Pressable') && /Try again/.test(text(node))),
     ).toHaveLength(1);

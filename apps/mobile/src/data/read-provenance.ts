@@ -78,6 +78,7 @@ export function readProvenance(client: QueryClient) {
         return error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
       });
       const active = offline || unavailable || times.length > 0;
+      // Deliberately name the oldest saved copy still shown, rather than a newer card.
       const refreshedAt = times.length ? Math.min(...times) : null;
       return next.offline.active === active && next.offline.refreshedAt === refreshedAt
         ? next

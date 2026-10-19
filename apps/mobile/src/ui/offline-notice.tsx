@@ -32,7 +32,7 @@ export function OfflineNotice({
           title="You’re offline"
           message={
             savedShown
-              ? `What’s shown was saved on this device${state.refreshedAt === null ? '' : ` at ${refreshedLabel(state.refreshedAt)}`} and may have changed since.`
+              ? `Some of what’s shown was saved on this device${state.refreshedAt === null ? '' : ` at ${refreshedLabel(state.refreshedAt)}`} and may have changed since.`
               : 'Connect to load the latest.'
           }
         >

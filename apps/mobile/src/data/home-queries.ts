@@ -276,6 +276,8 @@ export interface HomeSession {
   publish(next: Partial<MobileSnapshot>): void;
   /** Home shows in a signed-in session. */
   shows(): boolean;
+  /** No live session check has succeeded since the last offline answer. */
+  offline(): boolean;
   lease(): AccountStorageLease | null;
   /** The account lease's own checks, at write time: still this account, with no clean-up. */
   owns(accountId: string): boolean;
@@ -665,8 +667,10 @@ export function createHomeQueries(session: HomeSession) {
     {
       queryKey: keys()[0],
       queryFn: queryFn(acceptList, () => session.snapshot().groups.data.length > 0),
-      // Showing Home again reads the list only when it has none; focus, reconnect and a pull do.
-      refetchOnMount: false,
+      // A saved list is never current. Returning from a live Group read must replace it too,
+      // or its old offline answer keeps Home's connection notice beside live balances (#669).
+      // Without a confirmed connection, keep the saved answer until focus, reconnect or Retry.
+      refetchOnMount: (query) => query.state.data?.source === 'saved' && !session.offline(),
     },
     {
       queryKey: keys()[1],
@@ -930,7 +934,8 @@ export function createHomeQueries(session: HomeSession) {
     /**
      * Returning to the foreground and reconnecting are TanStack's focus and online events (M1-4,
      * M1-6): they reach only the queries a screen observes, and those past their stale time read
-     * again. NetInfo only says when the device reconnects; a failed read still decides "offline".
+     * again. Connectivity drives the online manager; reachability recovery only requests reads.
+     * A failed read still decides "offline" (ADR 0006).
      * Returns what stops listening.
      */
     listen(focus: typeof focusManager, online: typeof onlineManager, netInfo?: NetworkState) {
@@ -954,9 +959,18 @@ export function createHomeQueries(session: HomeSession) {
       const own = {};
       if (netInfo) {
         wired.set(online, own);
-        online.setEventListener((setOnline) =>
-          netInfo.addEventListener(({ isConnected }) => setOnline(isConnected !== false)),
-        );
+        online.setEventListener((setOnline) => {
+          let reachable: boolean | null | undefined;
+          return netInfo.addEventListener(({ isConnected, isInternetReachable }) => {
+            const recovered = reachable === false && isInternetReachable === true;
+            reachable = isInternetReachable;
+            const wasOnline = online.isOnline();
+            setOnline(isConnected !== false);
+            // Unvalidated Wi-Fi can still reach the API. Reachability only prompts reads;
+            // it must not refuse an explicit write or duplicate the connectivity event.
+            if (recovered && wasOnline && online.isOnline()) client.getQueryCache().onOnline();
+          });
+        });
       }
       return () => {
         stops.forEach((stopListening) => stopListening());

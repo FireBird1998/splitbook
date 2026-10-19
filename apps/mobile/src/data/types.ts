@@ -591,9 +591,14 @@ export type GoogleIdentityResult =
   | { status: 'cancelled' }
   | { status: 'error'; message: string };
 
-/** What NetInfo tells the app: only whether the device has a connection (ADR 0006, M1-4). */
+/** Connectivity drives the online manager; reachability recovery only prompts reads (ADR 0006). */
 export interface NetworkState {
-  addEventListener(listener: (state: { isConnected: boolean | null }) => void): () => void;
+  addEventListener(
+    listener: (state: {
+      isConnected: boolean | null;
+      isInternetReachable?: boolean | null;
+    }) => void,
+  ): () => void;
 }
 
 export interface MobileDependencies {
