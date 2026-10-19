@@ -3,7 +3,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
-import { useTheme, type SxProps, type Theme } from '@mui/material/styles';
+import type { SxProps, Theme } from '@mui/material/styles';
+import artwork from './BrandArtwork.module.css';
 import { PRODUCT_NAME } from '@/lib/product';
 
 /** Both logo variants share this viewBox (public/brand/logo-*.svg). */
@@ -33,22 +34,26 @@ interface BrandLogoProps {
  * so a flex parent's stretch can't distort it.
  */
 export default function BrandLogo({ height = 32, href, onClick, linkSx }: BrandLogoProps) {
-  const dark = useTheme().palette.mode === 'dark';
   const logo = (
-    <Image
-      src={dark ? '/brand/logo-dark.svg' : '/brand/logo-light.svg'}
-      alt={href ? `${PRODUCT_NAME} home` : PRODUCT_NAME}
-      width={LOGO_WIDTH}
-      height={LOGO_HEIGHT}
-      loading="eager"
-      style={{
-        display: 'block',
-        width: brandLogoWidth(height),
-        height,
-        flexShrink: 0,
-        objectFit: 'contain',
-      }}
-    />
+    <>
+      {(['light', 'dark'] as const).map((mode) => (
+        <Image
+          key={mode}
+          className={artwork[mode]}
+          src={mode === 'dark' ? '/brand/logo-dark.svg' : '/brand/logo-light.svg'}
+          alt={href ? `${PRODUCT_NAME} home` : PRODUCT_NAME}
+          width={LOGO_WIDTH}
+          height={LOGO_HEIGHT}
+          loading="eager"
+          style={{
+            width: brandLogoWidth(height),
+            height,
+            flexShrink: 0,
+            objectFit: 'contain',
+          }}
+        />
+      ))}
+    </>
   );
 
   if (!href) return logo;

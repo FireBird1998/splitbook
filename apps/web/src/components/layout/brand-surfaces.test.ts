@@ -42,9 +42,16 @@ afterEach(() => {
 });
 
 const MODES = ['light', 'dark'] as const;
-const logo = (mode: ThemeMode) => `/brand/logo-${mode}.svg`;
-const mark = (mode: ThemeMode) =>
-  mode === 'dark' ? '/brand/mark-on-dark.svg' : '/brand/mark-indigo.svg';
+const logos = (alt: string, height: string) =>
+  MODES.map((mode) => ({
+    src: `/brand/logo-${mode}.svg`,
+    alt,
+    height,
+  }));
+const marks = (alt: string, height: string) => [
+  { src: '/brand/mark-indigo.svg', alt, height },
+  { src: '/brand/mark-on-dark.svg', alt, height },
+];
 
 function render(mode: ThemeMode, element: ReactElement): string {
   return renderToStaticMarkup(
@@ -52,7 +59,7 @@ function render(mode: ThemeMode, element: ReactElement): string {
   );
 }
 
-/** Each brand image as a reader meets it: artwork, name and displayed height. */
+/** Both variants are server-rendered; CSS chooses the visible one before hydration. */
 function brand(html: string) {
   return brandImages(html).map(({ src, alt, style }) => ({ src, alt, height: style.height }));
 }
@@ -68,7 +75,7 @@ describe('the shell', () => {
           onSignOut: () => {},
         }),
       );
-      expect(brand(html)).toEqual([{ src: logo(mode), alt: 'Splitbook home', height: '32px' }]);
+      expect(brand(html)).toEqual([...logos('Splitbook home', '32px')]);
       expect(links(html)[0]).toBe('/dashboard');
       expect(text(html)).not.toContain('Splitbook');
     }
@@ -87,10 +94,7 @@ describe('the shell', () => {
       );
       // Below 360 px CSS shows the 32 px mark in the logo's place (phone-top-bar.ts): a
       // decorative image in a link that carries the name.
-      expect(brand(html)).toEqual([
-        { src: logo(mode), alt: 'Splitbook home', height: '32px' },
-        { src: mark(mode), alt: '', height: '32px' },
-      ]);
+      expect(brand(html)).toEqual([...logos('Splitbook home', '32px'), ...marks('', '32px')]);
       expect(links(html)).toEqual(['/dashboard', '/dashboard']);
       expect(html).toMatch(
         /<a\b(?=[^>]*href="\/dashboard")(?=[^>]*aria-label="Splitbook home")[^>]*>/,
@@ -103,7 +107,7 @@ describe('sign in', () => {
   it('shows the 40 px logo, named Splitbook, above Welcome back', () => {
     for (const mode of MODES) {
       const html = render(mode, createElement(LoginForm));
-      expect(brand(html)).toEqual([{ src: logo(mode), alt: 'Splitbook', height: '40px' }]);
+      expect(brand(html)).toEqual([...logos('Splitbook', '40px')]);
       expect(links(html)).toEqual([]);
       expect(text(html)).toMatch(/^Welcome back! Sign in to continue\. Sign in with Google/);
     }
@@ -120,7 +124,7 @@ describe('sign in', () => {
     const page = (await LoginPage()) as ReactElement<{ fallback: ReactElement }>;
     for (const mode of MODES) {
       const html = render(mode, page.props.fallback);
-      expect(brand(html)).toEqual([{ src: mark(mode), alt: 'Splitbook', height: '48px' }]);
+      expect(brand(html)).toEqual([...marks('Splitbook', '48px')]);
       expect(text(html)).toBe('Loading...');
     }
   });
@@ -128,7 +132,7 @@ describe('sign in', () => {
   it('shows the 40 px logo above the demo personas', () => {
     for (const mode of MODES) {
       const html = render(mode, createElement(DemoPersonaPicker));
-      expect(brand(html)).toEqual([{ src: logo(mode), alt: 'Splitbook', height: '40px' }]);
+      expect(brand(html)).toEqual([...logos('Splitbook', '40px')]);
       expect(text(html)).toContain('Enter as a persona');
     }
   });
@@ -141,10 +145,7 @@ describe('the landing page', () => {
   it('leads with the logo linking home, and closes with the decorative mark beside the name', () => {
     for (const mode of MODES) {
       const html = render(mode, createElement(LandingPage, { live }));
-      expect(brand(html)).toEqual([
-        { src: logo(mode), alt: 'Splitbook home', height: '32px' },
-        { src: mark(mode), alt: '', height: '24px' },
-      ]);
+      expect(brand(html)).toEqual([...logos('Splitbook home', '32px'), ...marks('', '24px')]);
       expect(links(html)[0]).toBe('/');
       expect(text(html)).toContain('Splitbook · shared expenses, settled fairly.');
     }
@@ -197,7 +198,7 @@ describe('the invite page', () => {
       expect(html).toMatch(
         /^.*?<header\b[^>]*>(?:<style\b[^>]*>[^<]*<\/style>)*<a\b[^>]*href="\/"/,
       );
-      expect(brand(html)).toEqual([{ src: logo(mode), alt: 'Splitbook home', height: '32px' }]);
+      expect(brand(html)).toEqual([...logos('Splitbook home', '32px')]);
     }
   });
 });

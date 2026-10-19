@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import Box from '@mui/material/Box';
-import { useTheme } from '@mui/material/styles';
 import { FONT_MONO } from '@/lib/theme/tokens';
 import { tours } from './generated/tours';
 
@@ -24,7 +23,6 @@ interface FigureTourProps {
  */
 export default function FigureTour({ id, labelledBy, children }: FigureTourProps) {
   const ref = useRef<HTMLElement>(null);
-  const mode = useTheme().palette.mode;
 
   useEffect(() => {
     const root = ref.current;
@@ -58,7 +56,6 @@ export default function FigureTour({ id, labelledBy, children }: FigureTourProps
       ref={ref}
       component="figure"
       className="iso"
-      data-theme={mode}
       aria-labelledby={labelledBy}
       style={FIGURE_FONT}
       sx={{ m: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}

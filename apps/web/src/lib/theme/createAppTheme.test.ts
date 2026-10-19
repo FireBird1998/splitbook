@@ -1,4 +1,7 @@
-import { getContrastRatio, getLuminance, hexToRgb } from '@mui/material/styles';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { Paper, Tabs, Tab, ThemeProvider } from '@mui/material';
+import { createTheme, getContrastRatio, getLuminance, hexToRgb } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { createAppTheme } from './createAppTheme';
 
@@ -80,11 +83,13 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
   });
 
   it('styles every chart from the theme: grid, axes and tooltip', () => {
-    const { components, palette } = createAppTheme(mode);
-    expect(components?.MuiChartsGrid?.styleOverrides?.line).toMatchObject({
+    const theme = createAppTheme(mode);
+    const { components, palette } = theme;
+    const resolve = (style: unknown) => (typeof style === 'function' ? style({ theme }) : style);
+    expect(resolve(components?.MuiChartsGrid?.styleOverrides?.line)).toMatchObject({
       stroke: palette.chart.grid,
     });
-    expect(components?.MuiChartsTooltip?.styleOverrides?.paper).toMatchObject({
+    expect(resolve(components?.MuiChartsTooltip?.styleOverrides?.paper)).toMatchObject({
       backgroundColor: palette.inverse.bg,
       color: palette.inverse.text,
     });
@@ -101,4 +106,29 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
     expect(negative).toBe(palette.error.main);
     expect(positive).not.toBe(negative);
   });
+});
+
+it('server-rendered Paper and tabs use scheme variables before preference adoption', () => {
+  const theme = createTheme({
+    ...createAppTheme('light'),
+    cssVariables: { colorSchemeSelector: '[data-theme="%s"]' },
+    colorSchemes: {
+      light: { palette: createAppTheme('light').palette },
+      dark: { palette: createAppTheme('dark').palette },
+    },
+  });
+  const html = renderToStaticMarkup(
+    createElement(
+      ThemeProvider,
+      { theme },
+      createElement(
+        Paper,
+        { variant: 'outlined' },
+        createElement(Tabs, { value: 0 }, createElement(Tab, { label: 'Expenses' })),
+      ),
+    ),
+  );
+  expect(html).toContain('border-color:var(--mui-palette-divider)');
+  expect(html).toContain('background-color:var(--mui-palette-surface-muted)');
+  expect(html).toContain('color:var(--mui-palette-text-primary)');
 });

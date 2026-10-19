@@ -99,12 +99,10 @@ describe('the landing page with everything off', () => {
       expect(
         brandImages(html).map(({ src, alt, style }) => ({ src, alt, height: style.height })),
       ).toEqual([
-        { src: `/brand/logo-${mode}.svg`, alt: 'Splitbook home', height: '32px' },
-        {
-          src: mode === 'dark' ? '/brand/mark-on-dark.svg' : '/brand/mark-indigo.svg',
-          alt: '',
-          height: '24px',
-        },
+        { src: '/brand/logo-light.svg', alt: 'Splitbook home', height: '32px' },
+        { src: '/brand/logo-dark.svg', alt: 'Splitbook home', height: '32px' },
+        { src: '/brand/mark-indigo.svg', alt: '', height: '24px' },
+        { src: '/brand/mark-on-dark.svg', alt: '', height: '24px' },
       ]);
       expect(anchors(html)[0].href).toBe('/');
       expect(text(html)).toContain('Splitbook · shared expenses, settled fairly.');
@@ -325,10 +323,9 @@ describe('Fig 1 in the hero', () => {
         assistants: { available: true, canPrepare: true },
         toReview: true,
       });
-      // One themed plate per figure on the page, each in the page's theme.
-      expect([...html.matchAll(/\sdata-theme="(\w+)"/g)].map((m) => m[1])).toEqual(
-        svgImages(html).map(() => mode),
-      );
+      // Figures inherit the pre-paint root choice, even while the JS theme is still light.
+      expect(html).not.toMatch(/<figure\b[^>]*data-theme=/);
+      expect(html).toContain(':root[data-theme="light"] .iso');
     }
   });
 });

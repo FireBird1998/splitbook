@@ -10,7 +10,7 @@ import BrandMark from './BrandMark';
 
 /*
  * The brand kit in the web app (docs/design/brand/README.md): the real logo and mark artwork,
- * the light or dark variant from the MUI theme, and the alt text the brand standard asks for.
+ * both CSS-selected variants, and the alt text the brand standard asks for.
  */
 
 function render(mode: ThemeMode, element: ReactElement): string {
@@ -19,17 +19,22 @@ function render(mode: ThemeMode, element: ReactElement): string {
   );
 }
 
-/** The one image a brand component renders. */
+/** Both variants keep the same accessible name and dimensions; CSS chooses the visible one. */
 function image(html: string) {
   const images = brandImages(html);
-  expect(images).toHaveLength(1);
+  expect(images).toHaveLength(2);
+  expect(images[1].alt).toBe(images[0].alt);
+  expect(images[1].style).toEqual(images[0].style);
   return images[0];
 }
 
 describe('the Splitbook logo', () => {
-  it('shows the light artwork on a light theme and the dark artwork on a dark one', () => {
-    expect(image(render('light', createElement(BrandLogo))).src).toBe('/brand/logo-light.svg');
-    expect(image(render('dark', createElement(BrandLogo))).src).toBe('/brand/logo-dark.svg');
+  it('renders both logo variants even while the initial JS mode is light', () => {
+    for (const mode of ['light', 'dark'] as const)
+      expect(brandImages(render(mode, createElement(BrandLogo))).map(({ src }) => src)).toEqual([
+        '/brand/logo-light.svg',
+        '/brand/logo-dark.svg',
+      ]);
   });
 
   it('is named Splitbook on its own, and is a link named Splitbook home when it leads home', () => {
@@ -62,9 +67,12 @@ describe('the Splitbook logo', () => {
 });
 
 describe('the Splitbook mark', () => {
-  it('shows the indigo artwork on a light theme and the on-dark artwork on a dark one', () => {
-    expect(image(render('light', createElement(BrandMark))).src).toBe('/brand/mark-indigo.svg');
-    expect(image(render('dark', createElement(BrandMark))).src).toBe('/brand/mark-on-dark.svg');
+  it('renders both mark variants even while the initial JS mode is light', () => {
+    for (const mode of ['light', 'dark'] as const)
+      expect(brandImages(render(mode, createElement(BrandMark))).map(({ src }) => src)).toEqual([
+        '/brand/mark-indigo.svg',
+        '/brand/mark-on-dark.svg',
+      ]);
   });
 
   it('is decorative beside the visible name, and named Splitbook when it stands alone', () => {

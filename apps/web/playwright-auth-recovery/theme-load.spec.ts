@@ -38,7 +38,47 @@ for (const preference of ['stored', 'system'] as const) {
       { preference, key: THEME_STORAGE_KEY },
     );
     const checkLoad = async (path: string) => {
-      await page.goto(`${base}${path}`);
+      // Hold the client bundles so these assertions observe the server's first paint,
+      // before React can adopt the preference or repair an artwork variant.
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const scripts = '**/_next/static/**/*.js';
+      await page.route(scripts, async (route) => {
+        await held;
+        await route.continue();
+      });
+      try {
+        await page.goto(`${base}${path}`, { waitUntil: 'commit' });
+        await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(14, 16, 22)');
+        const brand = page.locator('img[src^="/brand/"]:visible');
+        await expect(brand.first()).toBeVisible();
+        const sources = await brand.evaluateAll((images) =>
+          images.map((image) => image.getAttribute('src')),
+        );
+        for (const source of sources)
+          expect(
+            ['/brand/mark-on-dark.svg', '/brand/logo-dark.svg'],
+            `brand before hydration: ${path}`,
+          ).toContain(source);
+        if (path === '/') {
+          await expect(page.locator('figure.iso').first()).toBeVisible();
+          const papers = await page
+            .locator('figure.iso')
+            .evaluateAll((figures) =>
+              figures.map((figure) =>
+                getComputedStyle(figure).getPropertyValue('--anatomy-paper').trim(),
+              ),
+            );
+          for (const paper of papers) expect(paper, 'figure before hydration').toBe('#131313');
+        }
+      } finally {
+        release();
+        await page.waitForLoadState('load');
+        await page.unrouteAll({ behavior: 'wait' });
+      }
+      await page.waitForLoadState('load');
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
       await page.waitForFunction(
         () => (window as unknown as { themeSamples: unknown[] }).themeSamples.length >= 60,
@@ -91,3 +131,34 @@ for (const preference of ['stored', 'system'] as const) {
     await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(14, 16, 22)');
   });
 }
+
+test('a light-theme toggle before preference adoption switches to dark', async ({ page }) => {
+  const base = process.env.EXPENSE_ACCESS_BASE_URL!;
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.addInitScript((key) => {
+    localStorage.removeItem(key);
+    // Let hydration finish, but hold the frame that adopts the initial preference.
+    window.requestAnimationFrame = () => 1;
+  }, THEME_STORAGE_KEY);
+  const token = signTestIdToken(
+    {
+      sub: 'auth-recovery-user',
+      email: 'auth-recovery@splitbook.test',
+      name: 'Auth Recovery User',
+    },
+    process.env.AUTH_RECOVERY_TEST_ID_TOKEN_SECRET!,
+  );
+  expect(
+    (
+      await page.request.post(`${base}/api/auth/sign-in/social`, {
+        data: { provider: 'google', idToken: { token } },
+      })
+    ).status(),
+  ).toBe(200);
+  await page.goto(`${base}/dashboard`);
+  await page.waitForLoadState('networkidle');
+  // A forced click does not wait for animation frames to establish layout stability.
+  await page.getByRole('button', { name: 'Switch to dark mode' }).click({ force: true });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  expect(await page.evaluate((key) => localStorage.getItem(key), THEME_STORAGE_KEY)).toBe('dark');
+});

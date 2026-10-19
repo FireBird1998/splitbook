@@ -45,19 +45,19 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
   // value; the stored/system preference is adopted right after hydration.
   // (Initializing from getInitialMode() during hydration leaves React with a
   // mismatch it refuses to patch — theme state and document attribute diverge.)
-  const [preference, setMode] = useState<ThemeMode | null>(null);
+  const [preference, setPreference] = useState<ThemeMode | null>(null);
   const mode = preference ?? 'light';
 
   useEffect(() => {
     // Defer out of the effect phase: adopting the preference synchronously
     // here would cascade a render during hydration settlement.
-    const frame = requestAnimationFrame(() => setMode(getInitialMode()));
+    const frame = requestAnimationFrame(() => setPreference(getInitialMode()));
     return () => cancelAnimationFrame(frame);
   }, []);
 
   const toggleTheme = () => {
-    setMode((prev) => {
-      const next = prev === 'light' ? 'dark' : 'light';
+    setPreference((prev) => {
+      const next = (prev ?? 'light') === 'light' ? 'dark' : 'light';
       localStorage.setItem(THEME_STORAGE_KEY, next);
       return next;
     });

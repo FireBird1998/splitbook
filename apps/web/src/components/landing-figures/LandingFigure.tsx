@@ -43,7 +43,15 @@ export default function LandingFigure({ figure }: { figure: Figure }) {
   const titleId = `fig-${figure.number}-title`;
   return (
     <FigureTour id={figure.id} labelledBy={titleId}>
-      <style dangerouslySetInnerHTML={{ __html: figureCss + figure.css }} />
+      {/* The generated kit targets a local theme. Let the pre-paint root select it instead. */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: (figureCss + figure.css).replaceAll(
+            '.iso[data-theme="light"]',
+            ':root[data-theme="light"] .iso',
+          ),
+        }}
+      />
       <Box
         sx={{
           bgcolor: 'var(--anatomy-paper)',
