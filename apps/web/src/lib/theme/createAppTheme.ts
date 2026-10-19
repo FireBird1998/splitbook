@@ -5,8 +5,14 @@ import { FONT_MONO, FONT_UI, RADIUS, getSemanticTokens, type ThemeMode } from '.
 
 declare module '@mui/material/styles' {
   interface Palette {
-    status: { positive: string; negative: string; warning: string; info: string };
-    surface: { muted: string; elevated: string; hover: string };
+    status: {
+      positive: string;
+      negative: string;
+      warning: string;
+      info: string;
+      infoHover: string;
+    };
+    surface: { muted: string; elevated: string; hover: string; shadowSm: string; shadowMd: string };
     border: { strong: string };
     tint: {
       brand: string;
@@ -29,8 +35,20 @@ declare module '@mui/material/styles' {
   }
 
   interface PaletteOptions {
-    status?: { positive?: string; negative?: string; warning?: string; info?: string };
-    surface?: { muted?: string; elevated?: string; hover?: string };
+    status?: {
+      positive?: string;
+      negative?: string;
+      warning?: string;
+      info?: string;
+      infoHover?: string;
+    };
+    surface?: {
+      muted?: string;
+      elevated?: string;
+      hover?: string;
+      shadowSm?: string;
+      shadowMd?: string;
+    };
     border?: { strong?: string };
     tint?: {
       brand?: string;
@@ -124,6 +142,8 @@ export function createAppTheme(mode: ThemeMode): Theme {
         muted: tokens.surfaceMuted,
         elevated: tokens.bgElevated,
         hover: tokens.surfaceHover,
+        shadowSm: tokens.shadowSm,
+        shadowMd: tokens.shadowMd,
       },
       border: { strong: tokens.borderStrong },
       tint: {
@@ -135,7 +155,11 @@ export function createAppTheme(mode: ThemeMode): Theme {
       },
       strip: { ...tokens.strip },
       focus: { main: tokens.focus, ring: tokens.focusRing },
-      status: { ...tokens.status },
+      status: {
+        ...tokens.status,
+        infoHover:
+          mode === 'light' ? darken(tokens.status.info, 0.15) : lighten(tokens.status.info, 0.1),
+      },
       chart: { ...tokens.chart },
       inverse: { ...tokens.inverse },
       diverging: { ...tokens.diverging },
@@ -176,7 +200,7 @@ export function createAppTheme(mode: ThemeMode): Theme {
     shadows,
     components: {
       MuiCssBaseline: {
-        styleOverrides: {
+        styleOverrides: (theme) => ({
           '@keyframes panel-in': {
             from: { opacity: 0, transform: 'translateY(8px)' },
             to: { opacity: 1, transform: 'translateY(0)' },
@@ -186,9 +210,9 @@ export function createAppTheme(mode: ThemeMode): Theme {
             to: { opacity: 1 },
           },
           ':focus-visible': {
-            outline: `2px solid ${tokens.focus}`,
+            outline: `2px solid ${(theme.vars ?? theme).palette.focus.main}`,
             outlineOffset: 2,
-            boxShadow: `0 0 0 4px ${tokens.focusRing}`,
+            boxShadow: `0 0 0 4px ${(theme.vars ?? theme).palette.focus.ring}`,
           },
           '@media (prefers-reduced-motion: reduce)': {
             '*, *::before, *::after': {
@@ -200,30 +224,27 @@ export function createAppTheme(mode: ThemeMode): Theme {
               scrollBehavior: 'auto !important',
             },
           },
-        },
+        }),
       },
       MuiButton: {
         defaultProps: { disableElevation: true },
         styleOverrides: {
-          root: {
+          root: ({ theme }) => ({
             borderRadius: RADIUS.sm,
             minHeight: 44,
             variants: [
               {
                 props: { variant: 'contained', color: 'info' },
                 style: {
-                  backgroundColor: tokens.status.info,
-                  color: tokens.info.contrastText,
+                  backgroundColor: (theme.vars ?? theme).palette.status.info,
+                  color: (theme.vars ?? theme).palette.info.contrastText,
                   '&:hover': {
-                    backgroundColor:
-                      mode === 'light'
-                        ? darken(tokens.status.info, 0.15)
-                        : lighten(tokens.status.info, 0.1),
+                    backgroundColor: (theme.vars ?? theme).palette.status.infoHover,
                   },
                 },
               },
             ],
-          },
+          }),
           sizeSmall: { minHeight: 36 },
           sizeLarge: { minHeight: 48 },
         },
@@ -240,18 +261,18 @@ export function createAppTheme(mode: ThemeMode): Theme {
       },
       MuiPaper: {
         styleOverrides: {
-          outlined: {
-            borderColor: tokens.border,
+          outlined: ({ theme }) => ({
+            borderColor: (theme.vars ?? theme).palette.divider,
             borderRadius: RADIUS.md,
-          },
+          }),
         },
       },
       MuiCard: {
         styleOverrides: {
-          root: {
+          root: ({ theme }) => ({
             borderRadius: RADIUS.md,
-            boxShadow: tokens.shadowSm,
-          },
+            boxShadow: (theme.vars ?? theme).palette.surface.shadowSm,
+          }),
         },
       },
       MuiDialog: {
@@ -269,33 +290,33 @@ export function createAppTheme(mode: ThemeMode): Theme {
       },
       MuiTabs: {
         styleOverrides: {
-          root: {
+          root: ({ theme }) => ({
             minHeight: 0,
             width: 'fit-content',
             maxWidth: '100%',
             padding: 3,
             borderRadius: RADIUS.sm,
-            backgroundColor: tokens.surfaceMuted,
-          },
+            backgroundColor: (theme.vars ?? theme).palette.surface.muted,
+          }),
           indicator: { display: 'none' },
           flexContainer: { gap: 2 },
         },
       },
       MuiTab: {
         styleOverrides: {
-          root: {
+          root: ({ theme }) => ({
             minHeight: 40,
             minWidth: 0,
             padding: '8px 14px',
             borderRadius: 6,
             fontWeight: 600,
-            color: tokens.textSecondary,
+            color: (theme.vars ?? theme).palette.text.secondary,
             '&.Mui-selected': {
-              color: tokens.text,
-              backgroundColor: tokens.surface,
-              boxShadow: tokens.shadowSm,
+              color: (theme.vars ?? theme).palette.text.primary,
+              backgroundColor: (theme.vars ?? theme).palette.background.paper,
+              boxShadow: (theme.vars ?? theme).palette.surface.shadowSm,
             },
-          },
+          }),
         },
       },
       MuiListItemButton: {
@@ -322,10 +343,18 @@ export function createAppTheme(mode: ThemeMode): Theme {
         },
       },
       MuiFormLabel: {
-        styleOverrides: { root: { '&.Mui-error': { color: tokens.status.negative } } },
+        styleOverrides: {
+          root: ({ theme }) => ({
+            '&.Mui-error': { color: (theme.vars ?? theme).palette.status.negative },
+          }),
+        },
       },
       MuiFormHelperText: {
-        styleOverrides: { root: { '&.Mui-error': { color: tokens.status.negative } } },
+        styleOverrides: {
+          root: ({ theme }) => ({
+            '&.Mui-error': { color: (theme.vars ?? theme).palette.status.negative },
+          }),
+        },
       },
       MuiAlert: {
         styleOverrides: {
@@ -336,43 +365,48 @@ export function createAppTheme(mode: ThemeMode): Theme {
       },
       MuiMenu: {
         styleOverrides: {
-          paper: {
+          paper: ({ theme }) => ({
             borderRadius: RADIUS.md,
-            border: `1px solid ${tokens.border}`,
-          },
+            border: `1px solid ${(theme.vars ?? theme).palette.divider}`,
+          }),
         },
       },
       // Charts (design canvas "Web portal"): a hairline grid, a baseline in the strong border,
       // tick labels in text colours, and tooltips on the inverse surface. Series colours come
       // from `palette.chart` in each chart.
       MuiChartsGrid: {
-        styleOverrides: { line: { stroke: tokens.chart.grid, shapeRendering: 'crispEdges' } },
+        styleOverrides: {
+          line: ({ theme }) => ({
+            stroke: (theme.vars ?? theme).palette.chart.grid,
+            shapeRendering: 'crispEdges',
+          }),
+        },
       },
       MuiChartsXAxis: {
         styleOverrides: {
-          root: {
-            '& .MuiChartsAxis-line': { stroke: tokens.borderStrong },
-            '& .MuiChartsAxis-tickLabel': { fill: tokens.textSecondary },
-          },
+          root: ({ theme }) => ({
+            '& .MuiChartsAxis-line': { stroke: (theme.vars ?? theme).palette.border.strong },
+            '& .MuiChartsAxis-tickLabel': { fill: (theme.vars ?? theme).palette.text.secondary },
+          }),
         },
       },
       MuiChartsYAxis: {
         styleOverrides: {
-          root: {
-            '& .MuiChartsAxis-line': { stroke: tokens.borderStrong },
-            '& .MuiChartsAxis-tickLabel': { fill: tokens.textMuted },
-          },
+          root: ({ theme }) => ({
+            '& .MuiChartsAxis-line': { stroke: (theme.vars ?? theme).palette.border.strong },
+            '& .MuiChartsAxis-tickLabel': { fill: (theme.vars ?? theme).palette.text.disabled },
+          }),
         },
       },
       MuiChartsTooltip: {
         styleOverrides: {
-          paper: {
-            backgroundColor: tokens.inverse.bg,
-            color: tokens.inverse.text,
+          paper: ({ theme }) => ({
+            backgroundColor: (theme.vars ?? theme).palette.inverse.bg,
+            color: (theme.vars ?? theme).palette.inverse.text,
             border: 0,
             borderRadius: 10,
-            boxShadow: tokens.shadowMd,
-          },
+            boxShadow: (theme.vars ?? theme).palette.surface.shadowMd,
+          }),
         },
       },
     },

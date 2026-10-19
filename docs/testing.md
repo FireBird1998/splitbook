@@ -14,10 +14,13 @@ the work that followed it. When a file count below drifts, the commands still ho
 | Android HTTP verifiers  | `apps/mobile/scripts/verify-*.ts`                                             | 11            | a backend of the run's own (`pnpm swarm up`)                      | `pnpm mobile verify:all`                                                    | PR checks                           |
 | Tooling                 | `tools/swarm`, `tools/landing-figures`                                        | 6 and 3       | Vitest                                                            | `pnpm --filter @splitbook/swarm test`                                       | PR checks, time-zone matrix, verify |
 | Expense access          | `apps/web/playwright-expense-access/`                                         | 29 specs      | Playwright, HTTP and Chromium, an isolated app and database       | `pnpm web test:expense-access`                                              | expense-access                      |
-| Google sign-in recovery | `apps/web/playwright-auth-recovery/`                                          | 1 spec        | Playwright, an isolated app in Google mode                        | `pnpm web exec playwright test --config playwright.auth-recovery.config.ts` | verify                              |
+| Sign-in recovery/theme  | `apps/web/playwright-auth-recovery/`                                          | 2 specs       | Playwright, an isolated app in Google mode                        | `pnpm web exec playwright test --config playwright.auth-recovery.config.ts` | verify                              |
 | Browser journeys        | `apps/web/playwright/`                                                        | 26 specs      | Playwright, four theme projects, the seeded `splitbook-demo`      | `pnpm web test:e2e`                                                         | journeys, one job per project       |
 | Google sign-in journeys | `apps/web/playwright-google/`                                                 | 2 specs       | Playwright, `AUTH_MODE=google`                                    | `pnpm web test:e2e:google`, then `pnpm web test:e2e:google:assistants`      | playwright                          |
 | Component lab and pilot | `playwright-design-system/`, `playwright-pilot/`, `playwright-production-ui/` | 1, 4, 1 specs | Playwright; in CI the lab and pilot use a Linux browser container | `pnpm web test:design-system`, `test:pilot`, `test:production-ui`           | playwright                          |
+
+The sign-in recovery suite also checks theme first paint and hydration; CI runs the recovery
+and theme specs in separately named steps.
 
 Three Playwright configs are not CI steps: `playwright.auth-production.config.ts` (production
 sign-in journeys, run by hand), `playwright.connect-chatgpt.config.ts` (its spec also runs in the

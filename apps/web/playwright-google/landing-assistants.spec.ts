@@ -63,7 +63,7 @@ test('the assistants section fits a phone without sideways scroll, in dark', asy
   await expect(section(page).getByRole('heading', { level: 2 })).toBeVisible();
   await fig2(page).scrollIntoViewIfNeeded();
   await expect(fig2Drawing(page)).toBeVisible();
-  await expect(fig2(page)).toHaveAttribute('data-theme', 'dark');
+  await expect(fig2(page)).toHaveCSS('--anatomy-paper', '#131313');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );

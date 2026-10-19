@@ -222,11 +222,14 @@ jobs:
           pnpm web test:group-cleanup-http
 
       # The expense-access suite has a job of its own, expense-access, beside this one.
-      - name: Install Chromium for the Google sign-in recovery check
+      - name: Install Chromium for sign-in recovery and theme checks
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Google sign-in recovery (isolated app and database)
-        run: pnpm exec playwright test --config playwright.auth-recovery.config.ts
+        run: pnpm exec playwright test --config playwright.auth-recovery.config.ts auth-recovery.spec.ts
+
+      - name: Theme first paint and hydration (isolated app and database)
+        run: pnpm exec playwright test --config playwright.auth-recovery.config.ts theme-load.spec.ts
 
       - name: Build
         run: pnpm build

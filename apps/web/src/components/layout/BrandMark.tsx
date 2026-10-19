@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useTheme } from '@mui/material/styles';
+import artwork from './BrandArtwork.module.css';
 import { PRODUCT_NAME } from '@/lib/product';
 
 /** The mark's square artwork (public/brand/mark-*.svg). */
@@ -22,23 +22,27 @@ interface BrandMarkProps {
 
 /** The Splitbook mark: indigo, or the on-dark indigo on a dark theme. */
 export default function BrandMark({ size = 24, decorative = true }: BrandMarkProps) {
-  const dark = useTheme().palette.mode === 'dark';
   const displayed = Math.max(BRAND_MARK_MIN_SIZE, size);
 
   return (
-    <Image
-      src={dark ? '/brand/mark-on-dark.svg' : '/brand/mark-indigo.svg'}
-      alt={decorative ? '' : PRODUCT_NAME}
-      width={MARK_SIZE}
-      height={MARK_SIZE}
-      loading="eager"
-      style={{
-        display: 'block',
-        width: displayed,
-        height: displayed,
-        flexShrink: 0,
-        objectFit: 'contain',
-      }}
-    />
+    <>
+      {(['light', 'dark'] as const).map((mode) => (
+        <Image
+          key={mode}
+          className={artwork[mode]}
+          src={mode === 'dark' ? '/brand/mark-on-dark.svg' : '/brand/mark-indigo.svg'}
+          alt={decorative ? '' : PRODUCT_NAME}
+          width={MARK_SIZE}
+          height={MARK_SIZE}
+          loading="eager"
+          style={{
+            width: displayed,
+            height: displayed,
+            flexShrink: 0,
+            objectFit: 'contain',
+          }}
+        />
+      ))}
+    </>
   );
 }
