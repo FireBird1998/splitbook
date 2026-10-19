@@ -428,7 +428,7 @@ async function phoneItem(f: ReturnType<typeof fixture>) {
 }
 
 describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s', (mode) => {
-  it('renders waiting then the shared Home count, Group banner and ready navigation', async () => {
+  it('shows the Home card only after items arrive, then keeps it during refresh', async () => {
     let release!: () => void;
     const f = fixture({
       held: new Promise<void>((resolve) => {
@@ -437,10 +437,16 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     });
     await signIn(f);
     const home = await render(<ToReviewHomeCard controller={f.controller} />, mode);
-    expect(text(home)).toContain('Checking what’s waiting');
+    expect(home.toJSON()).toBeNull();
     await act(async () => {
       release();
       await f.controller.refreshToReview();
+    });
+    expect(text(home)).toContain('To review · 4');
+    await act(async () => {
+      const refreshing = f.controller.refreshToReview();
+      expect(f.controller.toReviewModel().counts.total).toBe(4);
+      await refreshing;
     });
     expect(text(home)).toContain('To review · 4');
     expect(text(home)).toContain('4 from Claude');
@@ -474,6 +480,38 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(text(list)).toContain('Save ready expenses?');
     expect(text(list)).toContain('₹12.34');
     expect(text(list)).not.toContain('Some items changed');
+  });
+  it('draws no empty Home card on launch or refresh while the check is pending', async () => {
+    let release!: () => void;
+    const options = {
+      empty: true,
+      held: new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    };
+    const f = fixture(options);
+    const home = await render(<ToReviewHomeCard controller={f.controller} />, mode);
+    expect(home.toJSON()).toBeNull();
+    await signIn(f);
+    expect(home.toJSON()).toBeNull();
+    await act(async () => {
+      release();
+      await f.controller.refreshToReview();
+    });
+    expect(home.toJSON()).toBeNull();
+    options.held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let refreshing!: Promise<void>;
+    await act(async () => {
+      refreshing = f.controller.refreshToReview();
+    });
+    expect(home.toJSON()).toBeNull();
+    await act(async () => {
+      release();
+      await refreshing;
+    });
+    expect(home.toJSON()).toBeNull();
   });
   it('hides an empty Home card and renders the empty list', async () => {
     const f = fixture({ empty: true });
