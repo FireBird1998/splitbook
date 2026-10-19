@@ -5,8 +5,9 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import SegmentedControl from '@/components/charts/SegmentedControl';
 import MoneyText from '@/components/common/MoneyText';
+import { TabCard } from './TabCard';
 
-export interface DebtRead {
+export interface Debt {
   from: { _id: string; name: string };
   to: { _id: string; name: string };
   amount: number;
@@ -17,7 +18,7 @@ interface Props {
   currency: string;
   viewerId: string;
   /** Missing on older replies; the existing Suggested view remains available. */
-  debts?: DebtRead[];
+  debts?: Debt[];
   suggestedCount: number;
   children?: ReactNode;
   initialView?: View;
@@ -33,22 +34,33 @@ export default function SettleUpViews({
   initialView = 'suggested',
 }: Props) {
   const [view, setView] = useState<View>(initialView);
-  if (debts === undefined || suggestedCount === 0) return children;
-  const fewer = suggestedCount < debts.length;
+  const hasViews = debts !== undefined && suggestedCount > 0;
+  const showingSuggested = !hasViews || view === 'suggested';
+  const fewer = hasViews && suggestedCount < debts.length;
   return (
-    <>
-      <Box sx={{ px: 2.5, pb: 2 }}>
-        <SegmentedControl
-          label="Settle up view"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'suggested', label: 'Suggested' },
-            { value: 'before', label: 'Before simplifying' },
-          ]}
-        />
-      </Box>
-      {view === 'suggested' ? (
+    <TabCard
+      headingId="settle-up-heading"
+      title="Settle up"
+      subtitle={
+        showingSuggested && suggestedCount > 0
+          ? `${currency} · Record one once it’s paid`
+          : currency
+      }
+    >
+      {hasViews && (
+        <Box sx={{ px: 2.5, pb: 2 }}>
+          <SegmentedControl
+            label="Settle up view"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'suggested', label: 'Suggested' },
+              { value: 'before', label: 'Before simplifying' },
+            ]}
+          />
+        </Box>
+      )}
+      {showingSuggested ? (
         children
       ) : (
         <Box
@@ -56,7 +68,7 @@ export default function SettleUpViews({
           aria-label="Debts before simplifying"
           sx={{ listStyle: 'none', m: 0, p: 0 }}
         >
-          {debts.map((debt) => (
+          {debts?.map((debt) => (
             <Box
               component="li"
               key={`${debt.from._id}-${debt.to._id}`}
@@ -80,10 +92,10 @@ export default function SettleUpViews({
       {fewer && (
         <Typography sx={{ m: 0, px: 2.5, pb: 2.5, fontSize: '0.875rem', color: 'text.secondary' }}>
           {suggestedCount} {suggestedCount === 1 ? 'payment settles' : 'payments settle'} the same{' '}
-          {debts.length} {debts.length === 1 ? 'debt' : 'debts'}. Everyone ends settled up either
+          {debts?.length} {debts?.length === 1 ? 'debt' : 'debts'}. Everyone ends settled up either
           way.
         </Typography>
       )}
-    </>
+    </TabCard>
   );
 }

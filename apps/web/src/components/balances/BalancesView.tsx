@@ -43,11 +43,11 @@ import type { GroupRead } from '@splitbook/shared/group-read';
 import { fetchWebBalances, fetchWebRead } from '@/lib/web-read';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import type { SettlementAttempt } from '@/lib/settlement-attempts';
-import { TabCard, PersonAvatar } from './TabCard';
+import { PersonAvatar } from './TabCard';
 import PaymentsTable, { type PaymentRead, type PaymentsState } from './PaymentsTable';
 import EveryoneCard, { type EveryoneState } from './EveryoneCard';
 import type { EveryonePerson } from './everyone-chart';
-import SettleUpViews, { type DebtRead } from './SettleUpViews';
+import SettleUpViews, { type Debt } from './SettleUpViews';
 
 const MIXED_CURRENCY_WARNING =
   'This ledger contains multiple currencies. Each balance is shown separately, without conversion.';
@@ -66,13 +66,17 @@ interface BalancePerson {
 /** Someone the read names; null for an account it can no longer identify. */
 type ReadPerson = BalancePerson | null | undefined;
 
-type SuggestedPayment = DebtRead;
+interface SuggestedPayment {
+  from: { _id: string; name: string };
+  to: { _id: string; name: string };
+  amount: number;
+}
 
 interface CurrencyFigures {
   currency: string;
   balances: Array<{ user: BalancePerson; balance: number }>;
   debts: SuggestedPayment[];
-  debtsBeforeSimplifying?: DebtRead[];
+  debtsBeforeSimplifying?: Debt[];
 }
 
 interface BalancesRead {
@@ -414,188 +418,180 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   })();
 
   const settleUpCard = (
-    <TabCard
-      headingId="settle-up-heading"
-      title="Settle up"
-      subtitle={debts.length > 0 ? `${currency} · Record one once it’s paid` : currency}
+    <SettleUpViews
+      key={`${groupId}:${currency}`}
+      currency={currency}
+      viewerId={userId}
+      debts={(shownBucket ?? read)?.debtsBeforeSimplifying}
+      suggestedCount={debts.length}
     >
-      <SettleUpViews
-        key={`${groupId}:${currency}`}
-        currency={currency}
-        viewerId={userId}
-        debts={(shownBucket ?? read)?.debtsBeforeSimplifying}
-        suggestedCount={debts.length}
-      >
-        {debts.length === 0 ? (
-          <Typography
-            sx={{ m: 0, px: 2.5, pb: 2.5, fontSize: '0.875rem', color: 'text.secondary' }}
+      {debts.length === 0 ? (
+        <Typography sx={{ m: 0, px: 2.5, pb: 2.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+          Everyone is settled up in {currency}.
+        </Typography>
+      ) : (
+        <>
+          <Box
+            component="ul"
+            aria-label="Suggested payments"
+            sx={{ listStyle: 'none', m: 0, p: 0 }}
           >
-            Everyone is settled up in {currency}.
-          </Typography>
-        ) : (
-          <>
-            <Box
-              component="ul"
-              aria-label="Suggested payments"
-              sx={{ listStyle: 'none', m: 0, p: 0 }}
-            >
-              {debts.map((debt, index) => {
-                const involved = canRecordSettlement(userId, debt.from._id, debt.to._id);
-                const recordable = involved && currency === groupCurrency;
-                const inForm =
-                  recordable && formPair.from === debt.from._id && formPair.to === debt.to._id;
-                const payer = displayName(debt.from);
-                const payee = displayName(debt.to);
-                const title =
-                  debt.from._id === userId
-                    ? `You pay ${payee}`
-                    : debt.to._id === userId
-                      ? `${payer} pays you`
-                      : `${payer} pays ${payee}`;
-                let amountMinor: number | null = null;
-                try {
-                  amountMinor = readLegacyAmountMinor(debt.amount, currency);
-                } catch {
-                  amountMinor = null;
-                }
-                const after =
-                  shownLedger && amountMinor
-                    ? previewSettlement(shownLedger, {
-                        paidBy: debt.from._id,
-                        paidTo: debt.to._id,
-                        amountMinor,
-                      })
-                    : null;
-                const sub = inForm
-                  ? 'In the form'
-                  : !involved
-                    ? `Only ${firstName(debt.from.name)} or ${firstName(debt.to.name)} can record it`
-                    : after?.paidTo.afterMinor === 0
-                      ? debt.to._id === userId
+            {debts.map((debt, index) => {
+              const involved = canRecordSettlement(userId, debt.from._id, debt.to._id);
+              const recordable = involved && currency === groupCurrency;
+              const inForm =
+                recordable && formPair.from === debt.from._id && formPair.to === debt.to._id;
+              const payer = displayName(debt.from);
+              const payee = displayName(debt.to);
+              const title =
+                debt.from._id === userId
+                  ? `You pay ${payee}`
+                  : debt.to._id === userId
+                    ? `${payer} pays you`
+                    : `${payer} pays ${payee}`;
+              let amountMinor: number | null = null;
+              try {
+                amountMinor = readLegacyAmountMinor(debt.amount, currency);
+              } catch {
+                amountMinor = null;
+              }
+              const after =
+                shownLedger && amountMinor
+                  ? previewSettlement(shownLedger, {
+                      paidBy: debt.from._id,
+                      paidTo: debt.to._id,
+                      amountMinor,
+                    })
+                  : null;
+              const sub = inForm
+                ? 'In the form'
+                : !involved
+                  ? `Only ${firstName(debt.from.name)} or ${firstName(debt.to.name)} can record it`
+                  : after?.paidTo.afterMinor === 0
+                    ? debt.to._id === userId
+                      ? 'Then you’re settled up'
+                      : `Then ${firstName(debt.to.name)} is settled up`
+                    : after?.paidBy.afterMinor === 0
+                      ? debt.from._id === userId
                         ? 'Then you’re settled up'
-                        : `Then ${firstName(debt.to.name)} is settled up`
-                      : after?.paidBy.afterMinor === 0
-                        ? debt.from._id === userId
-                          ? 'Then you’re settled up'
-                          : `Then ${firstName(debt.from.name)} is settled up`
-                        : 'Either of you can record it';
-                return (
-                  <Box
-                    component="li"
-                    key={`${debt.from._id}-${debt.to._id}-${index}`}
-                    sx={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      alignItems: 'center',
-                      gap: 1.5,
-                      minHeight: 60,
-                      px: 2.5,
-                      py: 1,
-                      bgcolor: inForm ? 'tint.brand' : 'transparent',
-                      '& + li': { borderTop: 1, borderColor: 'divider' },
-                    }}
-                  >
-                    <Box aria-hidden sx={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                      <PersonAvatar name={debt.from.name} />
-                      <Box
-                        component="svg"
-                        viewBox="0 0 24 24"
-                        sx={{
-                          width: 16,
-                          height: 16,
-                          fill: 'none',
-                          stroke: 'currentColor',
-                          strokeWidth: 1.8,
-                          strokeLinecap: 'round',
-                          strokeLinejoin: 'round',
-                          color: 'text.disabled',
-                        }}
-                      >
-                        <path d="M5 12h14M13 6l6 6-6 6" />
-                      </Box>
-                      <PersonAvatar name={debt.to.name} />
-                    </Box>
+                        : `Then ${firstName(debt.from.name)} is settled up`
+                      : 'Either of you can record it';
+              return (
+                <Box
+                  component="li"
+                  key={`${debt.from._id}-${debt.to._id}-${index}`}
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    minHeight: 60,
+                    px: 2.5,
+                    py: 1,
+                    bgcolor: inForm ? 'tint.brand' : 'transparent',
+                    '& + li': { borderTop: 1, borderColor: 'divider' },
+                  }}
+                >
+                  <Box aria-hidden sx={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    <PersonAvatar name={debt.from.name} />
                     <Box
+                      component="svg"
+                      viewBox="0 0 24 24"
                       sx={{
-                        flex: '1 1 160px',
-                        minWidth: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '1px',
+                        width: 16,
+                        height: 16,
+                        fill: 'none',
+                        stroke: 'currentColor',
+                        strokeWidth: 1.8,
+                        strokeLinecap: 'round',
+                        strokeLinejoin: 'round',
+                        color: 'text.disabled',
                       }}
                     >
-                      <Typography
-                        sx={{ m: 0, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}
-                      >
-                        {title}
-                      </Typography>
-                      <Typography sx={{ m: 0, fontSize: '0.75rem', color: 'text.secondary' }}>
-                        {sub}
-                      </Typography>
+                      <path d="M5 12h14M13 6l6 6-6 6" />
                     </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 'auto' }}>
-                      <MoneyText
-                        amount={debt.amount}
-                        currency={currency}
-                        tone="neutral"
-                        sx={{ fontSize: '1rem', fontWeight: 500 }}
-                      />
-                      {recordable && (
-                        <Button
-                          variant={inForm ? 'outlined' : 'contained'}
-                          disableElevation
-                          aria-label={
-                            debt.from._id === userId
-                              ? `Record your payment to ${debt.to.name}`
-                              : `Record ${debt.from.name}’s payment to you`
-                          }
-                          onClick={() =>
-                            openForm({
-                              from: debt.from._id,
-                              to: debt.to._id,
-                              amount:
-                                amountMinor === null ? '' : amountInputText(amountMinor, currency),
-                              purpose: 'record',
-                              focus: 'amount',
-                            })
-                          }
-                          sx={{
-                            minHeight: 40,
-                            borderRadius: '12px',
-                            px: 2,
-                            flexShrink: 0,
-                            ...(inForm
-                              ? {
-                                  bgcolor: 'background.paper',
-                                  borderColor: 'border.strong',
-                                  color: 'text.primary',
-                                }
-                              : {
-                                  bgcolor: 'tint.brand',
-                                  color: 'primary.main',
-                                  '&:hover': { bgcolor: 'tint.brand' },
-                                }),
-                          }}
-                        >
-                          Record
-                        </Button>
-                      )}
-                    </Box>
+                    <PersonAvatar name={debt.to.name} />
                   </Box>
-                );
-              })}
-            </Box>
-            <Box sx={{ mx: 2.5, borderTop: 1, borderColor: 'divider' }} />
-            <Typography
-              sx={{ m: 0, px: 2.5, pt: 1.5, pb: 2, fontSize: '0.875rem', color: 'text.secondary' }}
-            >
-              After {debts.length === 1 ? 'this payment' : `these ${debts.length} payments`},
-              everyone in {group.name} is settled up in {currency}.
-            </Typography>
-          </>
-        )}
-      </SettleUpViews>
-    </TabCard>
+                  <Box
+                    sx={{
+                      flex: '1 1 160px',
+                      minWidth: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '1px',
+                    }}
+                  >
+                    <Typography
+                      sx={{ m: 0, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}
+                    >
+                      {title}
+                    </Typography>
+                    <Typography sx={{ m: 0, fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {sub}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 'auto' }}>
+                    <MoneyText
+                      amount={debt.amount}
+                      currency={currency}
+                      tone="neutral"
+                      sx={{ fontSize: '1rem', fontWeight: 500 }}
+                    />
+                    {recordable && (
+                      <Button
+                        variant={inForm ? 'outlined' : 'contained'}
+                        disableElevation
+                        aria-label={
+                          debt.from._id === userId
+                            ? `Record your payment to ${debt.to.name}`
+                            : `Record ${debt.from.name}’s payment to you`
+                        }
+                        onClick={() =>
+                          openForm({
+                            from: debt.from._id,
+                            to: debt.to._id,
+                            amount:
+                              amountMinor === null ? '' : amountInputText(amountMinor, currency),
+                            purpose: 'record',
+                            focus: 'amount',
+                          })
+                        }
+                        sx={{
+                          minHeight: 40,
+                          borderRadius: '12px',
+                          px: 2,
+                          flexShrink: 0,
+                          ...(inForm
+                            ? {
+                                bgcolor: 'background.paper',
+                                borderColor: 'border.strong',
+                                color: 'text.primary',
+                              }
+                            : {
+                                bgcolor: 'tint.brand',
+                                color: 'primary.main',
+                                '&:hover': { bgcolor: 'tint.brand' },
+                              }),
+                        }}
+                      >
+                        Record
+                      </Button>
+                    )}
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+          <Box sx={{ mx: 2.5, borderTop: 1, borderColor: 'divider' }} />
+          <Typography
+            sx={{ m: 0, px: 2.5, pt: 1.5, pb: 2, fontSize: '0.875rem', color: 'text.secondary' }}
+          >
+            After {debts.length === 1 ? 'this payment' : `these ${debts.length} payments`}, everyone
+            in {group.name} is settled up in {currency}.
+          </Typography>
+        </>
+      )}
+    </SettleUpViews>
   );
 
   // Everyone's position in the currency shown (#313): loading and failing with the balances,

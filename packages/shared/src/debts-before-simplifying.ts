@@ -14,6 +14,8 @@ export interface Debt {
   amountMinor: number;
 }
 
+const compareIds = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 /**
  * Round each share with the existing largest-remainder rule, then reconcile payer totals.
  * A rounding unit may move only between a cell's floor and ceiling. Alternating paths
@@ -26,7 +28,7 @@ function expenseAllocations(expense: BalanceExpense, currency: string) {
       user: String(payer.user),
       shares: readStoredAmountMinor({ ...payer, currency, moneyVersion: expense.moneyVersion }),
     }))
-    .sort((a, b) => a.user.localeCompare(b.user));
+    .sort((a, b) => compareIds(a.user, b.user));
   const shares = expense.splitBetween
     .map((share) => ({
       user: String(share.user),
@@ -36,7 +38,7 @@ function expenseAllocations(expense: BalanceExpense, currency: string) {
         moneyVersion: expense.moneyVersion,
       }),
     }))
-    .sort((a, b) => a.user.localeCompare(b.user));
+    .sort((a, b) => compareIds(a.user, b.user));
   const total = sumMinorAmounts(paid.map((payer) => payer.shares));
   if (total !== sumMinorAmounts(shares.map((share) => share.amountMinor))) {
     throw new MoneyValidationError('UNBALANCED_LEDGER', 'Ledger contributions do not balance');
@@ -73,7 +75,7 @@ function expenseAllocations(expense: BalanceExpense, currency: string) {
           .sort(
             (a, b) =>
               Number(b.row.user === paid[column].user) - Number(a.row.user === paid[column].user) ||
-              a.row.user.localeCompare(b.row.user),
+              compareIds(a.row.user, b.row.user),
           );
         for (const { row, rowIndex } of orderedRows) {
           if (end >= 0) break;
@@ -153,5 +155,5 @@ export function calculateDebtsMinor(
             amountMinor: -pair.amountMinor,
           },
     )
-    .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
+    .sort((a, b) => compareIds(a.from, b.from) || compareIds(a.to, b.to));
 }

@@ -4,19 +4,19 @@ import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
-import SettleUpViews, { type DebtRead } from './SettleUpViews';
+import SettleUpViews, { type Debt } from './SettleUpViews';
 
 const alex = { _id: 'alex', name: 'Alex Rivera' };
 const sam = { _id: 'sam', name: 'Sam Chen' };
 const priya = { _id: 'priya', name: 'Priya Shah' };
-const debts: DebtRead[] = [
+const debts: Debt[] = [
   { from: alex, to: sam, amount: 880 },
   { from: alex, to: priya, amount: 600 },
   { from: priya, to: sam, amount: 180 },
 ];
 function render(
   initialView: 'suggested' | 'before' = 'suggested',
-  list: DebtRead[] | undefined = debts,
+  list: Debt[] | undefined = debts,
   suggestedCount = 2,
   viewerId = 'alex',
   legacy = false,
@@ -52,9 +52,17 @@ function render(
 }
 
 describe('Settle up views', () => {
+  it('shows the paid-payment subtitle only in Suggested', () => {
+    expect(text(render())).toContain('INR · Record one once it’s paid');
+    expect(text(render('before'))).not.toContain('Record one once it’s paid');
+    expect(text(render('before', debts, 0))).not.toContain('Record one once it’s paid');
+    expect(text(render('before', undefined, 2, 'alex', true))).toContain(
+      'Record one once it’s paid',
+    );
+  });
   it('keeps the settled-up message and hides the switch even if pairwise Debts form a cycle', () => {
     const html = render('before', debts, 0);
-    expect(text(html)).toBe('Everyone is settled up in INR.');
+    expect(text(html)).toContain('Everyone is settled up in INR.');
     expect(html).not.toContain('aria-pressed');
   });
   it('starts on Suggested with a labelled toggle and preserves the existing actions', () => {

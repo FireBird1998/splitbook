@@ -8,6 +8,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import mongoose from 'mongoose';
 import Expense from '@/lib/models/Expense';
+import Settlement from '@/lib/models/Settlement';
+import { StoredMoneyError } from '@splitbook/shared/exact-money';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { settlementService } from '@/lib/services/settlement.service';
@@ -68,6 +70,35 @@ function balanceOf(balances: LeanBalance[], userId: string): number {
 }
 
 describe('balance integrity integration', () => {
+  it('names the Group when stored Settlement money prevents calculating Debts', async () => {
+    const groupId = await createTrip();
+    await groupService.addMember(groupId, bob);
+    await addEqualExpense(groupId, alice, 100, [alice, bob]);
+    const payment = await settlementService.create(
+      groupId,
+      { paidTo: alice, amount: 20, currency: 'INR' },
+      bob,
+    );
+    await Settlement.collection.updateOne({ _id: payment._id }, { $unset: { amountMinor: '' } });
+    await expect(balanceService.getGroupBalances(groupId)).rejects.toMatchObject({
+      constructor: StoredMoneyError,
+      ids: { groupId },
+    });
+  });
+  it('can omit the Debt calculation while preserving Suggested payments', async () => {
+    const groupId = await createTrip();
+    await groupService.addMember(groupId, bob);
+    await addEqualExpense(groupId, alice, 100, [alice, bob]);
+    const normal = await balanceService.getGroupBalances(groupId);
+    const suggested = await balanceService.getGroupBalances(groupId, {
+      includeDebtsBeforeSimplifying: false,
+    });
+    expect(suggested!.debts).toEqual(normal!.debts);
+    expect(suggested!.balances).toEqual(normal!.balances);
+    expect(suggested).not.toHaveProperty('debtsBeforeSimplifying');
+    for (const bucket of suggested!.byCurrency)
+      expect(bucket).not.toHaveProperty('debtsBeforeSimplifying');
+  });
   it('names a former member whose pairwise Debts form a zero-balance cycle', async () => {
     const groupId = await createTrip();
     await groupService.addMember(groupId, bob);

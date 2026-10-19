@@ -922,24 +922,154 @@ gets `403` and nothing is materialized.
 {
   "data": {
     "balances": [
-      { "user": { "_id": "...", "name": "John" }, "balance": -30.0 },
-      { "user": { "_id": "...", "name": "Jane" }, "balance": 50.0 },
-      { "user": { "_id": "...", "name": "Bob" }, "balance": -20.0 }
+      {
+        "user": {
+          "_id": "...",
+          "name": "John"
+        },
+        "balance": -30.0
+      },
+      {
+        "user": {
+          "_id": "...",
+          "name": "Jane"
+        },
+        "balance": 50.0
+      },
+      {
+        "user": {
+          "_id": "...",
+          "name": "Bob"
+        },
+        "balance": -20.0
+      }
     ],
     "debts": [
       {
-        "from": { "_id": "...", "name": "John" },
-        "to": { "_id": "...", "name": "Jane" },
+        "from": {
+          "_id": "...",
+          "name": "John"
+        },
+        "to": {
+          "_id": "...",
+          "name": "Jane"
+        },
         "amount": 30.0
       },
       {
-        "from": { "_id": "...", "name": "Bob" },
-        "to": { "_id": "...", "name": "Jane" },
+        "from": {
+          "_id": "...",
+          "name": "Bob"
+        },
+        "to": {
+          "_id": "...",
+          "name": "Jane"
+        },
         "amount": 20.0
       }
     ],
     "currency": "EUR",
-    "hasMixedCurrencies": false
+    "hasMixedCurrencies": false,
+    "debtsBeforeSimplifying": [
+      {
+        "from": {
+          "_id": "...",
+          "name": "John"
+        },
+        "to": {
+          "_id": "...",
+          "name": "Jane"
+        },
+        "amount": 30.0
+      },
+      {
+        "from": {
+          "_id": "...",
+          "name": "Bob"
+        },
+        "to": {
+          "_id": "...",
+          "name": "Jane"
+        },
+        "amount": 20.0
+      }
+    ],
+    "byCurrency": [
+      {
+        "balances": [
+          {
+            "user": {
+              "_id": "...",
+              "name": "John"
+            },
+            "balance": -30.0
+          },
+          {
+            "user": {
+              "_id": "...",
+              "name": "Jane"
+            },
+            "balance": 50.0
+          },
+          {
+            "user": {
+              "_id": "...",
+              "name": "Bob"
+            },
+            "balance": -20.0
+          }
+        ],
+        "debts": [
+          {
+            "from": {
+              "_id": "...",
+              "name": "John"
+            },
+            "to": {
+              "_id": "...",
+              "name": "Jane"
+            },
+            "amount": 30.0
+          },
+          {
+            "from": {
+              "_id": "...",
+              "name": "Bob"
+            },
+            "to": {
+              "_id": "...",
+              "name": "Jane"
+            },
+            "amount": 20.0
+          }
+        ],
+        "currency": "EUR",
+        "debtsBeforeSimplifying": [
+          {
+            "from": {
+              "_id": "...",
+              "name": "John"
+            },
+            "to": {
+              "_id": "...",
+              "name": "Jane"
+            },
+            "amount": 30.0
+          },
+          {
+            "from": {
+              "_id": "...",
+              "name": "Bob"
+            },
+            "to": {
+              "_id": "...",
+              "name": "Jane"
+            },
+            "amount": 20.0
+          }
+        ]
+      }
+    ]
   }
 }
 ```

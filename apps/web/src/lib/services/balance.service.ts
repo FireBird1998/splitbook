@@ -39,7 +39,7 @@ export class BalanceService {
   /**
    * Calculate balances for a group.
    */
-  async getGroupBalances(groupId: string) {
+  async getGroupBalances(groupId: string, { includeDebtsBeforeSimplifying = true } = {}) {
     await connectDB();
 
     // Get all non-deleted expenses and settlements
@@ -83,11 +83,17 @@ export class BalanceService {
     const memberIds = new Set(userMap.keys());
     const netByCurrency = currencies.map((currency) => ({
       currency,
-      debtsBeforeSimplifying: calculateDebtsMinor(
-        expensesIn(expenses, currency),
-        settlementsIn(settlements, currency),
-        currency,
-      ),
+      debtsBeforeSimplifying: includeDebtsBeforeSimplifying
+        ? checkStoredMoney(
+            () =>
+              calculateDebtsMinor(
+                expensesIn(expenses, currency),
+                settlementsIn(settlements, currency),
+                currency,
+              ),
+            { groupId },
+          )
+        : undefined,
       netBalances: calculateNetBalances(
         expensesIn(expenses, currency),
         settlementsIn(settlements, currency),
@@ -103,7 +109,7 @@ export class BalanceService {
           ...netBalances
             .filter((balance) => balance.amount !== 0 && !userMap.has(balance.userId))
             .map((balance) => balance.userId),
-          ...debtsBeforeSimplifying
+          ...(debtsBeforeSimplifying ?? [])
             .flatMap((debt) => [debt.from, debt.to])
             .filter((id) => !userMap.has(id)),
         ]),
@@ -136,11 +142,15 @@ export class BalanceService {
             to: userInfo(debt.to),
             amount: debt.amount,
           })),
-          debtsBeforeSimplifying: debtsBeforeSimplifying.map((debt) => ({
-            from: userInfo(debt.from),
-            to: userInfo(debt.to),
-            amount: toMajorAmount(debt.amountMinor, currency),
-          })),
+          ...(debtsBeforeSimplifying === undefined
+            ? {}
+            : {
+                debtsBeforeSimplifying: debtsBeforeSimplifying.map((debt) => ({
+                  from: userInfo(debt.from),
+                  to: userInfo(debt.to),
+                  amount: toMajorAmount(debt.amountMinor, currency),
+                })),
+              }),
         };
       },
     );

@@ -6,7 +6,7 @@
 
 The Settle up card defaults to Suggested and preserves its existing rows, Record
 actions and closing line. Before simplifying shows pairwise Debt sentences and
-exact money, without Record actions. The count note appears in both views only
+exact money, without Record actions or the paid-payment subtitle. The count note appears in both views only
 when Suggested uses fewer payments. A settled-up Group keeps its existing message
 and hides the switch. An older reply without the new list keeps Suggested.
 
@@ -37,13 +37,14 @@ presented as the behavioral proofs above.
 
 ## Verification
 
-- Shared calculation: nine cases, including the two worked examples, opposite
+- Shared calculation: ten cases, including the two worked examples, opposite
   Expenses, partial/opposite/excess Settlements, zero-pair removal, currency refusal,
-  and 800 deterministic generated ledgers. Every member's net of Debts matched
-  their balance; reversing payer/share input order preserved the output.
+  and 800 deterministic generated ledgers, each with several Expenses and six Settlements
+  across three pairs in both directions. Every member's net of Debts matched
+  their balance; reversing Expense, Settlement and payer/share input order preserved the output.
 - Shared contract: 34 cases, accepting old and new replies and refusing malformed
   optional lists.
-- Settle up component: eight cases covering both views, defaults, labels, exact
+- Settle up component: nine cases covering both views, defaults, labels, exact
   amounts, no Record, note presence/absence, singular wording, settled-up and legacy
   replies.
 - Route and balance-integrity integration: the worked example, recurring Expense
@@ -58,5 +59,19 @@ presented as the behavioral proofs above.
 Local browser verification is blocked by a saved origin permission, including
 after the owner approved access and reported changing the setting. No alternate
 browser or local origin was used to bypass that denial. The required CI browser
-matrix runs against its own isolated build; its results and review images will be
-linked in the PR after completion. Screenshots and logs are not committed.
+matrix runs against its own isolated build; its results and review images are
+linked in the PR’s CI reports. Screenshots and logs are not committed.
+
+## QA follow-up
+
+- `orders member IDs by code unit regardless of locale` failed with lowercase `a`
+  before uppercase `Z`; code-unit sorting fixes the order independently of locale.
+- `shows the paid-payment subtitle only in Suggested` failed before the card header
+  moved into the component that owns the view. It now covers Suggested, Before,
+  settled-up and legacy replies.
+- `can omit the Debt calculation while preserving Suggested payments` failed because
+  the opt-out still returned Debts. The assistant read now opts out of the calculation;
+  the regular Balances read still includes it.
+- `names the Group when stored Settlement money prevents calculating Debts` failed
+  with empty error ids when the new calculation lacked its stored-money boundary.
+  It now reports the Group id with the stored-data error.

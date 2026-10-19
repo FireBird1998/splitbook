@@ -16,6 +16,17 @@ const expense = (paid: [string, number][], shares: [string, number][]): BalanceE
 });
 
 describe('Debts before simplifying', () => {
+  it('orders member IDs by code unit regardless of locale', () => {
+    expect(
+      calculateDebtsMinor(
+        [expense([['z', 100]], [['a', 100]]), expense([['z', 100]], [['Z', 100]])],
+        [],
+      ),
+    ).toEqual([
+      { from: 'Z', to: 'z', amountMinor: 100 },
+      { from: 'a', to: 'z', amountMinor: 100 },
+    ]);
+  });
   it.each(['INR', 'USD', 'JPY', 'EUR'])(
     'keeps every member net equal to the ledger balance in %s',
     (currency) => {
@@ -27,37 +38,59 @@ describe('Debts before simplifying', () => {
       };
       const ids = ['alex', 'sam', 'priya', 'jo', 'lee'];
       for (let run = 0; run < 200; run += 1) {
-        const total = 1 + random(50000);
-        const partition = () => {
-          const cuts = [0, total, ...ids.slice(1).map(() => random(total + 1))].sort(
-            (a, b) => a - b,
-          );
-          return ids.map((id, i) => [id, cuts[i + 1] - cuts[i]] as [string, number]);
-        };
         const participant = ([user, amountMinor]: [string, number]) => ({
           user,
           amountMinor,
           amount: toMajorAmount(amountMinor, currency),
         });
-        const entry = {
-          currency,
-          moneyVersion: 1,
-          paidBy: partition().map(participant),
-          splitBetween: partition().map(participant),
-        };
-        const amountMinor = random(2000);
-        const settlements = [
-          {
+        const entries: BalanceExpense[] = Array.from({ length: 3 + random(6) }, () => {
+          const total = 1 + random(50000);
+          const partition = () => {
+            const cuts = [0, total, ...ids.slice(1).map(() => random(total + 1))].sort(
+              (a, b) => a - b,
+            );
+            return ids.map((id, i) => [id, cuts[i + 1] - cuts[i]] as [string, number]);
+          };
+          return {
             currency,
             moneyVersion: 1,
-            paidBy: 'sam',
-            paidTo: 'jo',
-            amount: toMajorAmount(amountMinor, currency),
-            amountMinor,
-          },
-        ];
-        const debts = calculateDebtsMinor([entry], settlements, currency);
-        for (const balance of calculateNetBalancesMinor([entry], settlements, currency)) {
+            paidBy: partition().map(participant),
+            splitBetween: partition().map(participant),
+          };
+        });
+        // Each generated ledger accumulates several pairs, with Expenses and
+        // Settlements in both directions, in addition to the uneven multi-payer rows.
+        for (let i = 0; i < 3; i += 1) {
+          const pair = [ids[i], ids[i + 1]];
+          for (const [from, to] of [pair, [...pair].reverse()]) {
+            const amountMinor = 1 + random(2000);
+            entries.push({
+              currency,
+              moneyVersion: 1,
+              paidBy: [participant([to, amountMinor])],
+              splitBetween: [participant([from, amountMinor])],
+            });
+          }
+        }
+        const settlements = ids.slice(0, 3).flatMap((from, i) => {
+          const to = ids[i + 1];
+          return [
+            [from, to],
+            [to, from],
+          ].map(([paidBy, paidTo]) => {
+            const amountMinor = 1 + random(2000);
+            return {
+              currency,
+              moneyVersion: 1,
+              paidBy,
+              paidTo,
+              amount: toMajorAmount(amountMinor, currency),
+              amountMinor,
+            };
+          });
+        });
+        const debts = calculateDebtsMinor(entries, settlements, currency);
+        for (const balance of calculateNetBalancesMinor(entries, settlements, currency)) {
           const net = debts.reduce(
             (sum, debt) =>
               sum +
@@ -77,14 +110,12 @@ describe('Debts before simplifying', () => {
         ).toBe(true);
         expect(
           calculateDebtsMinor(
-            [
-              {
-                ...entry,
-                paidBy: [...entry.paidBy].reverse(),
-                splitBetween: [...entry.splitBetween].reverse(),
-              },
-            ],
-            settlements,
+            [...entries].reverse().map((entry) => ({
+              ...entry,
+              paidBy: [...entry.paidBy].reverse(),
+              splitBetween: [...entry.splitBetween].reverse(),
+            })),
+            [...settlements].reverse(),
             currency,
           ),
         ).toEqual(debts);

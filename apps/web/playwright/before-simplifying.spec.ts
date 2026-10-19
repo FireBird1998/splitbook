@@ -23,6 +23,7 @@ test('Household switches between Suggested payments and Debts before simplifying
   await expectThemeApplied(page, testInfo);
   const card = page.getByRole('region', { name: 'Settle up', exact: true });
   await expect(card.getByRole('list', { name: 'Suggested payments', exact: true })).toBeVisible();
+  await expect(card.getByText(/Record one once it’s paid/)).toBeVisible();
   await reviewScreenshot(page, testInfo, 'balances-suggested');
   const response = await page.request.get(`/api/groups/${HOUSEHOLD_ID}/balances`);
   expect(response.ok()).toBe(true);
@@ -39,6 +40,7 @@ test('Household switches between Suggested payments and Debts before simplifying
   await toggle.getByRole('button', { name: 'Before simplifying', exact: true }).click();
   const list = card.getByRole('list', { name: 'Debts before simplifying', exact: true });
   await expect(list).toBeVisible();
+  await expect(card.getByText(/Record one once it’s paid/)).toHaveCount(0);
   await expect(list.getByRole('listitem')).toHaveCount(before.length);
   for (const debt of before) {
     const payer = debt.from._id === DEMO_PERSONA_IDS.alex ? 'You owe' : `${debt.from.name} owes`;
