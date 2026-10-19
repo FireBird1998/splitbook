@@ -32,6 +32,9 @@ import {
   Snackbar,
   SummaryStats,
   TopBar,
+  denseHitSlop,
+  touch,
+  useLargeText,
 } from './compact';
 import { useDismissAfter } from './group-snackbar';
 import { groupIcon } from './group-icon';
@@ -125,10 +128,15 @@ function ItemRow({
   disabled?: boolean;
 }) {
   const theme = useTheme();
+  // At large text the amount goes under the title, on a line of its own: beside it, a narrow
+  // column would break the number in two (₹1,4 / 80.00).
+  const large = useLargeText();
   const values = item.accountItem?.draft.values ?? item.deviceItem?.values;
   // An item in your account says what it needs once, in its Needs line, so a missing fact leaves
-  // its place empty here rather than saying it again (#435).
-  const needs = !!item.accountItem;
+  // its place empty here rather than saying it again (#435). A save still waiting for its reply
+  // isn't asked for anything: it shows what it has.
+  const retained = item.id.startsWith('save:');
+  const needs = !!item.accountItem || retained;
   const date =
     values?.date && Number.isFinite(new Date(values.date).getTime())
       ? recentDay(expenseLocalDate(values.date))
@@ -136,13 +144,20 @@ function ItemRow({
         ? null
         : 'Date needed';
   const amount = amountLabel(values, currency);
+  const shownAmount = needs && amount === 'Amount needed' ? null : amount;
   const content = (
     <>
       <SourceTile item={item} />
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
         <CompactText weight="semibold" numberOfLines={2}>
-          {values?.description || (needs ? 'Expense to review' : 'Description needed')}
+          {values?.description ||
+            (retained
+              ? 'Save awaiting confirmation'
+              : needs
+                ? 'Expense to review'
+                : 'Description needed')}
         </CompactText>
+        {large && shownAmount ? <Money>{shownAmount}</Money> : null}
         <CompactText variant="caption" tone="secondary">
           {sourceLabel(item)}
           {date ? ` · ${date}` : ''}
@@ -154,8 +169,8 @@ function ItemRow({
           </CompactText>
         )}
       </View>
-      <View style={{ alignItems: 'flex-end', gap: 1, maxWidth: '40%' }}>
-        {!(needs && amount === 'Amount needed') && <Money numberOfLines={0}>{amount}</Money>}
+      <View style={{ alignItems: 'flex-end', gap: 1 }}>
+        {!large && shownAmount ? <Money>{shownAmount}</Money> : null}
         {trailing ? (
           <CompactText variant="small" weight="semibold" tone="brand">
             {trailing}
@@ -388,7 +403,8 @@ export function ToReviewHomeCard({
                 </View>
               }
               accessibilityLabel={`${group.groupName}, ${group.counts.total} to review`}
-              onPress={disabled ? undefined : () => void controller.openToReview(group.groupId)}
+              disabled={disabled}
+              onPress={() => void controller.openToReview(group.groupId)}
             />
           </View>
         ))}
@@ -518,8 +534,9 @@ function QuickChip({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      hitSlop={denseHitSlop}
       style={({ pressed }) => ({
-        minHeight: 44,
+        minHeight: touch.dense,
         paddingHorizontal: 14,
         justifyContent: 'center',
         borderRadius: 12,
@@ -782,6 +799,7 @@ export function ToReviewList({
   const [more, setMore] = useState<{ item: ReviewItemModel; fact: QuickFixFact } | null>(null);
   const moreFix = more ? quickFor(more.item)?.fixes.find((fix) => fix.fact === more.fact) : null;
   // An item's ⋮ options, then its delete confirmation: sheets, as the rest of the app has.
+  const [pulled, setPulled] = useState(false);
   const [menu, setMenu] = useState<{ item: ReviewItemModel; confirm: boolean } | null>(null);
   const menuTitle = menu?.item.accountItem?.draft.values?.description || 'Expense to review';
   const payers = quickContext ? bulkPayerItems(model.items) : [];
@@ -824,9 +842,11 @@ export function ToReviewList({
           keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
-              refreshing={false}
+              refreshing={pulled}
               onRefresh={() => {
-                if (!collection.busy && !state.offline) void controller.refreshToReview();
+                if (collection.busy || state.offline) return;
+                setPulled(true);
+                void controller.refreshToReview().finally(() => setPulled(false));
               }}
               tintColor={theme.brand.main}
               colors={[theme.brand.main]}
@@ -845,34 +865,15 @@ export function ToReviewList({
               tone="error"
               message="This Group isn’t available. You may no longer be a member of this Group."
             />
-          ) : loaded ? (
-            <View style={{ alignItems: 'center', gap: 10, paddingTop: 72, paddingHorizontal: 12 }}>
-              <View
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 20,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: theme.positive.bg,
-                }}
-              >
-                <Icon name="checkmark" size={30} color={theme.status.positive} />
-              </View>
-              <CompactText variant="title" accessibilityRole="header">
-                All caught up
-              </CompactText>
-              <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
-                Nothing is waiting in {groupName}. When Claude prepares expenses, or you choose
-                Finish later, they appear here.
-              </CompactText>
-              <CompactButton label="Back to Expenses" variant="tonal" onPress={close} />
-            </View>
           ) : (
             <>
-              <CompactText variant="small" tone="secondary" style={{ paddingHorizontal: 2 }}>
-                Only you see these. Balances stay the same until you save.
-              </CompactText>
+              {/* What went wrong or waits stays said above the list, or above its empty state:
+                  an item changed elsewhere can empty the list as it explains why. */}
+              {!loaded && (
+                <CompactText variant="small" tone="secondary" style={{ paddingHorizontal: 2 }}>
+                  Only you see these. Balances stay the same until you save.
+                </CompactText>
+              )}
               {state.offline && <Banner tone="offline" message={`${offlineMessage}.`} />}
               {state.toReview.recoveryMessage && (
                 <Banner tone="warning" message={memberMessage(state.toReview.recoveryMessage)}>
@@ -917,102 +918,131 @@ export function ToReviewList({
                   )}
                 />
               )}
-              <Card>
-                <SummaryStats
-                  stats={[
-                    {
-                      value: String(model.counts.ready),
-                      label: 'ready to save',
-                      tone: 'positive',
-                    },
-                    {
-                      value: String(model.counts.needsDetails),
-                      label: 'needs details',
-                      tone: 'warning',
-                    },
-                    {
-                      value: String(model.counts.onThisPhone),
-                      label: 'on this phone',
-                      tone: 'secondary',
-                    },
-                  ]}
-                />
-                <View style={{ gap: 8, paddingHorizontal: 14, paddingBottom: 14 }}>
-                  <CompactButton
-                    label={model.ready.label}
-                    block
-                    disabled={disabled || model.ready.count === 0}
-                    onPress={() => void client.reviewReady(model.ready.items, own?.currency)}
-                  />
-                  <CompactButton
-                    label="Review one at a time"
-                    variant="tonal"
-                    block
-                    disabled={disabled || !model.items.some((item) => item.accountItem)}
-                    onPress={() => void controller.startReviewRun(groupId)}
-                  />
-                </View>
-              </Card>
-              {sections.map(([kind, label]) => {
-                const items = model.items.filter((item) => item.state === kind);
-                if (!items.length) return null;
-                return (
-                  <View key={kind} style={{ gap: 6 }}>
-                    <SectionHeader title={`${label} · ${items.length}`} />
-                    {kind === 'needs-details' && payers.length >= 2 && (
-                      <Banner
-                        tone="info"
-                        title="Who paid?"
-                        message={`${payers.length} items still need a payer.`}
-                      >
-                        <CompactButton
-                          label={`You for all ${payers.length}`}
-                          variant="text"
-                          dense
-                          disabled={disabled}
-                          onPress={() =>
-                            void client.payAll(
-                              payers.flatMap((item) =>
-                                item.accountItem ? [item.accountItem.draft] : [],
-                              ),
-                              viewerId,
-                            )
-                          }
-                        />
-                      </Banner>
-                    )}
-                    <Card>
-                      {items.map((item, index) => (
-                        <View key={item.id}>
-                          {index > 0 && <Divider inset={rowInset} />}
-                          {item.deviceItem ? (
-                            <PhoneItem
-                              item={item}
-                              controller={controller}
-                              disabled={collection.busy}
-                            />
-                          ) : (
-                            <AccountRow
-                              item={item}
-                              currency={own?.currency}
-                              quick={quickFor(item)}
-                              names={names}
-                              disabled={disabled}
-                              onOpen={() => openItem(item)}
-                              onFill={(fact, option) => fill(item, fact, option)}
-                              onMore={(fact) => setMore({ item, fact })}
-                              onSave={() => {
-                                if (item.accountItem) void client.saveOne(item.accountItem);
-                              }}
-                              onMenu={() => setMenu({ item, confirm: false })}
-                            />
-                          )}
-                        </View>
-                      ))}
-                    </Card>
+              {loaded ? (
+                <View
+                  style={{ alignItems: 'center', gap: 10, paddingTop: 72, paddingHorizontal: 12 }}
+                >
+                  <View
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 20,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: theme.positive.bg,
+                    }}
+                  >
+                    <Icon name="checkmark" size={30} color={theme.status.positive} />
                   </View>
-                );
-              })}
+                  <CompactText variant="title" accessibilityRole="header">
+                    All caught up
+                  </CompactText>
+                  <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
+                    Nothing is waiting in {groupName}. When Claude prepares expenses, or you choose
+                    Finish later, they appear here.
+                  </CompactText>
+                  <CompactButton label="Back to Expenses" variant="tonal" onPress={close} />
+                </View>
+              ) : (
+                <>
+                  <Card>
+                    <SummaryStats
+                      stats={[
+                        {
+                          value: String(model.counts.ready),
+                          label: 'ready to save',
+                          tone: 'positive',
+                        },
+                        {
+                          value: String(model.counts.needsDetails),
+                          label: 'needs details',
+                          tone: 'warning',
+                        },
+                        {
+                          value: String(model.counts.onThisPhone),
+                          label: 'on this phone',
+                          tone: 'secondary',
+                        },
+                      ]}
+                    />
+                    <View style={{ gap: 8, paddingHorizontal: 14, paddingBottom: 14 }}>
+                      <CompactButton
+                        label={model.ready.label}
+                        block
+                        disabled={disabled || model.ready.count === 0}
+                        onPress={() => void client.reviewReady(model.ready.items, own?.currency)}
+                      />
+                      <CompactButton
+                        label="Review one at a time"
+                        variant="tonal"
+                        block
+                        disabled={disabled || !model.items.some((item) => item.accountItem)}
+                        onPress={() => void controller.startReviewRun(groupId)}
+                      />
+                    </View>
+                  </Card>
+                  {sections.map(([kind, label]) => {
+                    const items = model.items.filter((item) => item.state === kind);
+                    if (!items.length) return null;
+                    return (
+                      <View key={kind} style={{ gap: 6 }}>
+                        <SectionHeader title={`${label} · ${items.length}`} />
+                        {kind === 'needs-details' && payers.length >= 2 && (
+                          <Banner
+                            tone="info"
+                            title="Who paid?"
+                            message={`${payers.length} items still need a payer.`}
+                          >
+                            <CompactButton
+                              label={`You for all ${payers.length}`}
+                              variant="text"
+                              dense
+                              disabled={disabled}
+                              onPress={() =>
+                                void client.payAll(
+                                  payers.flatMap((item) =>
+                                    item.accountItem ? [item.accountItem.draft] : [],
+                                  ),
+                                  viewerId,
+                                )
+                              }
+                            />
+                          </Banner>
+                        )}
+                        <Card>
+                          {items.map((item, index) => (
+                            <View key={item.id}>
+                              {index > 0 && <Divider inset={rowInset} />}
+                              {item.deviceItem ? (
+                                <PhoneItem
+                                  item={item}
+                                  controller={controller}
+                                  disabled={collection.busy}
+                                />
+                              ) : (
+                                <AccountRow
+                                  item={item}
+                                  currency={own?.currency}
+                                  quick={quickFor(item)}
+                                  names={names}
+                                  disabled={disabled}
+                                  onOpen={() => openItem(item)}
+                                  onFill={(fact, option) => fill(item, fact, option)}
+                                  onMore={(fact) => setMore({ item, fact })}
+                                  onSave={() => {
+                                    if (item.accountItem) void client.saveOne(item.accountItem);
+                                  }}
+                                  onMenu={() => setMenu({ item, confirm: false })}
+                                />
+                              )}
+                            </View>
+                          ))}
+                        </Card>
+                      </View>
+                    );
+                  })}
+                </>
+              )}
             </>
           )}
         </ScrollView>

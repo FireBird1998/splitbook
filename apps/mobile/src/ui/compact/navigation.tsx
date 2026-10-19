@@ -17,6 +17,7 @@ export function TopBar({
   status,
   actions,
   prominent = true,
+  subtitleLines = 1,
 }: {
   title: string;
   subtitle?: string;
@@ -26,6 +27,8 @@ export function TopBar({
   actions?: ReactNode;
   /** Screen titles use the title size; tasks such as the Expense form use the heading size. */
   prominent?: boolean;
+  /** Lines the subtitle may take, as a run's place across Groups at large text. */
+  subtitleLines?: number;
 }) {
   const theme = useTheme();
   return (
@@ -58,7 +61,7 @@ export function TopBar({
           {title}
         </CompactText>
         {subtitle ? (
-          <CompactText variant="caption" tone="secondary" numberOfLines={1}>
+          <CompactText variant="caption" tone="secondary" numberOfLines={subtitleLines}>
             {subtitle}
           </CompactText>
         ) : null}

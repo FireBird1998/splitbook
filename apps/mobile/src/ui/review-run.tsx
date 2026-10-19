@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Alert, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   buildToReview,
@@ -30,6 +38,8 @@ import {
   IconTile,
   Money,
   TopBar,
+  denseHitSlop,
+  touch,
 } from './compact';
 import { Icon } from './primitives';
 import {
@@ -87,14 +97,17 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
   return (
     <Modal visible animationType="slide" onRequestClose={close}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <ReviewRunContent
-          key={`${snapshot.run.index}:${snapshot.run.changed?.after.revision ?? 0}`}
-          controller={controller}
-          state={snapshot.run}
-          offline={snapshot.offline}
-          userId={snapshot.user.id}
-          close={close}
-        />
+        {/* The keyboard leaves room for what's typed: the run shrinks above it. */}
+        <KeyboardAvoidingView behavior="height" style={{ flex: 1 }}>
+          <ReviewRunContent
+            key={`${snapshot.run.index}:${snapshot.run.changed?.after.revision ?? 0}`}
+            controller={controller}
+            state={snapshot.run}
+            offline={snapshot.offline}
+            userId={snapshot.user.id}
+            close={close}
+          />
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
   );
@@ -121,6 +134,7 @@ function RunScreen({
       <TopBar
         title={top.title}
         subtitle={top.subtitle}
+        subtitleLines={2}
         prominent={false}
         leading={{ kind: 'close', label: 'Close review', onPress: top.close }}
         actions={
@@ -452,6 +466,8 @@ function ReviewRunContent({
         }
       >
         <RunSource assistant={assistant} title={sourceTitle} detail={sourceDetail} />
+        {/* The item is locked until its save is checked: this says why, as Check again waits. */}
+        {state.pending && !offline && <Banner tone="warning" standing message={reason ?? ''} />}
         {offline && <Banner tone="offline" message="Connect to change or save this" />}
         {state.changed && (
           <Banner
@@ -583,6 +599,7 @@ function ReviewRunContent({
           <Banner
             tone="warning"
             standing
+            heading
             title="Possible duplicate"
             message="Save it only if it's a different expense."
           >
@@ -624,7 +641,13 @@ function ReviewRunContent({
                 accessibilityState={{ checked: state.acknowledged, disabled: locked }}
                 disabled={locked}
                 onPress={machine.acknowledge}
-                style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 }}
+                hitSlop={denseHitSlop}
+                style={{
+                  minHeight: touch.dense,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
               >
                 <View
                   style={{

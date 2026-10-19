@@ -16,6 +16,7 @@ import { savedQueriesIn } from '../test-utils/saved-queries';
 import { setWindow } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import { ToReviewHomeCard, ToReviewGroupBanner, ToReviewList, ToReviewOverlay } from './to-review';
+import { ReviewRunOverlay } from './review-run';
 import { ContinueDrafts } from './home';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -766,6 +767,57 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       release();
     }
   });
+  it('keeps what went wrong above an empty list, never only "All caught up" (#646)', async () => {
+    const f = fixture({ empty: true });
+    vi.spyOn(f.requests, 'list').mockRejectedValue(new Error('SQLITE_IOERR'));
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    expect(text(list)).toContain('Could not check this phone for unfinished saves');
+    expect(button(list, 'Check this phone again')).toBeDefined();
+  });
+  it('says why a run is locked while a lost save in its Group waits to be checked (#646)', async () => {
+    const f = fixture({ lost: true });
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'Save 2 ready');
+    await tap(list, 'Confirm save 2 ready');
+    await act(async () => {
+      await f.controller.startReviewRun(groupId);
+    });
+    const run = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    expect(button(run, 'Check again')).toBeDefined();
+    expect(text(run)).toContain("We didn't hear back, so it may already be saved");
+  });
+  it('keeps Home’s rows as buttons, disabled while Home checks (#646)', async () => {
+    const f = fixture();
+    await signIn(f);
+    await act(async () => {
+      await f.controller.refreshToReview();
+    });
+    const home = await render(<ToReviewHomeCard controller={f.controller} disabled />, mode);
+    const row = button(home, 'Maple House, 4 to review');
+    expect(row.props.accessibilityRole).toBe('button');
+    expect(row.props.disabled).toBe(true);
+  });
+  it('puts an amount on its own line at large text, so it never breaks in two (#646)', async () => {
+    const f = fixture();
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    // 130% is large text: the amount sits under the title, in the same column.
+    const amount = list.root.findAll(
+      (node) =>
+        String(node.type) === 'Text' &&
+        typeof node.props.children === 'string' &&
+        node.props.children.startsWith('₹'),
+    )[0]!;
+    // The view that holds it: the row's text column, with the title.
+    let column = amount.parent;
+    while (column && String(column.type) !== 'View') column = column.parent;
+    expect(
+      column!.findAll((node) => String(node.type) === 'Text' && node.props.numberOfLines === 2),
+      'the title beside it',
+    ).toHaveLength(1);
+  });
   it('keeps an empty Home recovery error and explicit local retry visible until storage recovers', async () => {
     const f = fixture({ empty: true });
     const listing = vi.spyOn(f.requests, 'list').mockRejectedValue(new Error('SQLITE_IOERR'));
@@ -1052,6 +1104,15 @@ describe('To review quick fixes on Android (#439)', () => {
     expect(f.items().find((entry) => entry.draft.id === lunch)!.draft.values).not.toHaveProperty(
       'paidBy',
     );
+  });
+  it('gives each one-tap chip a 48 dp target (#646)', async () => {
+    const f = fixture();
+    payerMissing(f);
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    const chip = button(list, 'You, suggested');
+    expect(chip.props.style({ pressed: false }).minHeight).toBe(44);
+    expect(chip.props.hitSlop).toEqual({ top: 2, bottom: 2, left: 2, right: 2 });
   });
   it('⋮ offers Open and Delete in a sheet, and Delete asks first', async () => {
     const f = fixture();
