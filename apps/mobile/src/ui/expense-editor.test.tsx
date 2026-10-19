@@ -6,7 +6,14 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { flatten, layoutHeight } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  largeTextWindows,
+  layoutHeight,
+  layoutWidth,
+  unreadText,
+} from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { savedQueriesIn } from '../test-utils/saved-queries';
@@ -1710,5 +1717,53 @@ describe('an unexpected rendering error in the Expense task (#187)', () => {
     expect(ui.pressable('Keep draft and return to the Group')).toBeTruthy();
     expect(await ui.stored()).toMatchObject({ mutation: { kind: 'edit' } });
     expect(ui.writes).toHaveLength(1);
+  });
+});
+
+// #639: at 200% on a 360dp phone, the Add expense header's draft status squeezed "Add expense"
+// and its Group to dots, and to "Add …" on a 412dp phone. The status goes under the title where
+// they can't share its line, and the title and Group take the lines they need.
+describe('the Add expense header at large text (#639)', () => {
+  it.each(largeTextWindows)(
+    'reads in full with its draft status, $width dp at $fontScale× text',
+    async (size) => {
+      setWindow(size);
+      const form = await render((controller) => controller.openExpense(groupId));
+      await form.type('Amount, required', '42.50');
+      await form.type('Description, required', 'QA matrix dinner');
+      const [bar] = findHosts(
+        screen!.toJSON(),
+        (props, type) => type === 'View' && flatten(props.style).minHeight === 64,
+      );
+      const drawn = (node: ReactTestRendererJSON | string): string =>
+        typeof node === 'string' ? node : (node.children ?? []).map(drawn).join('');
+      expect(drawn(bar!)).toContain('Draft saved');
+      expect(unreadText(bar!, size.fontScale, size.width)).toEqual([]);
+    },
+  );
+});
+
+// #639 device check: at 200% and density 420, Add expense's Description placeholder, "What was it
+// for? e.g. Groceries", wrapped in its one-line box and its second line was cut in half. At large
+// text it says only "What was it for?", which fits the box's line; at 100% it keeps its example.
+describe('the Description placeholder at large text (#639)', () => {
+  it.each([
+    { width: 360, height: 640, fontScale: 1 },
+    { width: 412, height: 915, fontScale: 1 },
+    ...largeTextWindows,
+  ])('fits its box’s one line, $width dp at $fontScale× text', async (size) => {
+    setWindow(size);
+    const form = await render((controller) => controller.openExpense(groupId));
+    const box = form.input('Description, required');
+    const placeholder = String(box.props.placeholder);
+    if (size.fontScale === 1) expect(placeholder).toBe('What was it for? e.g. Groceries');
+    // The placeholder as one line of the box's text, inside a padded Card inset 16dp from the
+    // screen's edges.
+    const line = {
+      type: 'Text',
+      props: { style: flatten(box.props.style) },
+      children: [placeholder],
+    } as unknown as ReactTestRendererJSON;
+    expect(layoutWidth(line, size.fontScale)).toBeLessThanOrEqual(size.width - 32 - 2 - 28);
   });
 });

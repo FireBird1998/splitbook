@@ -107,6 +107,25 @@ export const LARGE_TEXT_SCALE = 1.3;
 export const isLargeText = (fontScale: number) =>
   Math.round(fontScale * 100) >= Math.round(LARGE_TEXT_SCALE * 100);
 
+/**
+ * From this Android font scale, a row's title and details take as many lines as they need: at
+ * 200%, one line held "QA Eu.." of a Group's name and "Members and Group d…" (#639). Below it, as
+ * at 130%, a long name in a row is still cut once, as the compact design has it (#332). Top bar
+ * and sheet titles wrap from `LARGE_TEXT_SCALE`.
+ */
+export const LARGEST_TEXT_SCALE = 1.5;
+export const isLargestText = (fontScale: number) =>
+  Math.round(fontScale * 100) >= Math.round(LARGEST_TEXT_SCALE * 100);
+
+/**
+ * The least a line's text keeps beside what follows it at large text: six of the body text's em,
+ * room for a long word (117dp at 130%, 162dp at 200%). Where less is left, what follows goes onto
+ * a line of its own, rather than squeezing the text into a column that breaks its words in two
+ * ("ALL-T / IME BAL / ANCE", #639).
+ */
+export const largeTextColumn = (fontScale: number) =>
+  6 * scaledSp(textVariants.body.fontSize as number, fontScale);
+
 /** A downward drag dismisses a sheet (which behaves like Done) when it travels or flings far enough. */
 export const SHEET_DISMISS_DISTANCE = 80;
 export const SHEET_DISMISS_VELOCITY = 0.8;

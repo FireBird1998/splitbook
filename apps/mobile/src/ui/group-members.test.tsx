@@ -1,9 +1,22 @@
 import type { ReactElement } from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LeaveGroupState, MobileGroup } from '../data/types';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
-import { hairSpace, labelRuns, largeTextWindows } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  hairSpace,
+  labelRuns,
+  largeTextWindows,
+  unreadText,
+} from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { ThemeContext } from './theme';
 
@@ -367,4 +380,45 @@ describe.each(['light', 'dark'] as const)('Members at large text in %s (#639)', 
       expect(labelRuns(root, 'Members · 3')).toEqual([['Members · 3', hairSpace]]);
     },
   );
+});
+
+// #639: at 200% on a 360dp phone, the Group's details broke their values mid-word beside their
+// labels ("Mon / th" beside "Expenses shown by", "dev / elopment"), and the title read "Members
+// and det…". A value goes under its label where it would be left too narrow a column.
+describe.each(['light', 'dark'] as const)('Members’ details at large text in %s (#639)', (mode) => {
+  it.each(largeTextWindows)('read in full, $width dp at $fontScale× text', (size) => {
+    setWindow(size);
+    act(() => {
+      renderer = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <GroupMembers
+            group={{
+              ...household,
+              description: 'Fictional isolated data for native development only.',
+            }}
+            currentUserId={you}
+            back={{ label: 'Back to Group', onPress: vi.fn() }}
+            invite={{ onPress: vi.fn(), disabled: false, offline: false }}
+            leave={leaveActions()}
+          />
+        </ThemeContext.Provider>,
+      );
+    });
+    const tree = renderer!.toJSON() as ReactTestRendererJSON;
+    const [bar] = findHosts(
+      tree,
+      (props, type) => type === 'View' && flatten(props.style).minHeight === 64,
+    );
+    // The details, in the first Card, inset 16dp from the screen's edges.
+    const [details] = findHosts(
+      tree,
+      (props) =>
+        flatten(props.style).borderRadius === 14 && flatten(props.style).overflow === 'hidden',
+    );
+    expect(
+      findHosts(details!, (props) => props.accessibilityLabel === 'Expenses shown by: Month'),
+    ).toHaveLength(1);
+    expect(unreadText(bar!, size.fontScale, size.width)).toEqual([]);
+    expect(unreadText(details!, size.fontScale, size.width - 32)).toEqual([]);
+  });
 });

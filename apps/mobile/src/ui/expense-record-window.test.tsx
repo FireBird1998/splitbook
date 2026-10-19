@@ -15,7 +15,7 @@ import {
 } from '../data/expense-draft';
 import { parseExpenseRecord } from '../data/expense-record';
 import { parseExpensePage } from '../data/financial-dto';
-import { findHosts, flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
+import { findHosts, flatten, layoutHeight, layoutWidth, unreadText } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { Divider, TopBar } from './compact';
 import { ExpenseEditor } from './expense-editor';
@@ -564,22 +564,28 @@ describe('opening an Expense: what is already known shows at once (loading-state
       (child): child is ReactTestRendererJSON => typeof child !== 'string',
     );
     const titles = parts.find((part) => flatten(part.props.style).flex === 1)!;
-    const style = flatten(bar.props.style);
-    // What the title and the Group have: the bar less its padding, gaps and everything else in it.
-    const room =
-      width -
-      Number(style.paddingLeft) -
-      Number(style.paddingRight) -
-      Number(style.gap) * (parts.length - 1) -
-      parts
-        .filter((part) => part !== titles)
-        .reduce((sum, part) => sum + layoutWidth(part, scale, width), 0) -
-      2 * Number(flatten(titles.props.style).paddingHorizontal);
     const [title, subtitle] = findHosts(titles, (_, type) => type === 'Text');
     expect(title!.children).toEqual(['Expense']);
     expect(subtitle!.children).toEqual(['Maple House']);
-    expect(layoutWidth(title!, scale)).toBeLessThanOrEqual(room);
-    expect(layoutWidth(subtitle!, scale)).toBeLessThanOrEqual(room);
+    if (flatten(titles.props.style).flexWrap === 'wrap') {
+      // At large text the title shares its line with the status only where it keeps its room,
+      // and the status goes under it otherwise (#639): nothing in the bar is cut.
+      expect(unreadText(bar, scale, width)).toEqual([]);
+    } else {
+      const style = flatten(bar.props.style);
+      // What the title and the Group have: the bar less its padding, gaps and everything else.
+      const room =
+        width -
+        Number(style.paddingLeft) -
+        Number(style.paddingRight) -
+        Number(style.gap) * (parts.length - 1) -
+        parts
+          .filter((part) => part !== titles)
+          .reduce((sum, part) => sum + layoutWidth(part, scale, width), 0) -
+        2 * Number(flatten(titles.props.style).paddingHorizontal);
+      expect(layoutWidth(title!, scale)).toBeLessThanOrEqual(room);
+      expect(layoutWidth(subtitle!, scale)).toBeLessThanOrEqual(room);
+    }
     expect(pressables('Back to Group')).toHaveLength(1);
     expect(pressables('Expense options')).toHaveLength(1);
     // The cue is named "Refreshing" either way; on a narrow phone it is the sync mark alone.

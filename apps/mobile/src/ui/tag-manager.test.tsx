@@ -1,5 +1,11 @@
 import type { ReactElement } from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { AccountGroupRecordStore } from '../data/account-record-storage';
@@ -7,7 +13,14 @@ import type { MobileFetch } from '../data/types';
 import type { TagCommand } from '@splitbook/shared/tag-management';
 import { AccessibilityInfo } from 'react-native';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
-import { hairSpace, labelRuns, largeTextWindows } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  hairSpace,
+  labelRuns,
+  largeTextWindows,
+  unreadText,
+} from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import { TagManager, doneShownFor } from './tag-manager';
@@ -763,7 +776,8 @@ describe('What the screen says', () => {
     const title = renderer!.root.find(
       (node: ReactTestInstance) => String(node.type) === 'Text' && node.props.children === longName,
     );
-    expect(title.props.numberOfLines).toBeGreaterThan(1);
+    // At 200% it takes as many lines as it needs (#639).
+    expect(title.props.numberOfLines).toBe(0);
   });
 });
 
@@ -791,6 +805,43 @@ describe.each(['light', 'dark'] as const)('Tags at large text in %s (#639)', (mo
       await showTagsAt(size, mode);
       for (const label of ['Active · 1', 'Archived · 1', 'New Tag'])
         expect(labelRuns(renderer!.root, label), label).toEqual([[label, hairSpace]]);
+    },
+  );
+});
+
+/** The visible sheet's header: its title, any subtitle, and its action. */
+const sheetHeader = () => {
+  const [modal] = findHosts(
+    renderer!.toJSON(),
+    (props, type) => type === 'Modal' && props.transparent === true && props.visible === true,
+  );
+  const [area] = findHosts(modal!, (props) => props.testID === 'sheet-drag-area');
+  return area!.children![1] as ReactTestRendererJSON;
+};
+
+// #639: at 200% on a 360dp phone a long Tag's name stopped after three lines in its row, and in
+// its options' title. From 150% it takes the lines it needs; at 130% three lines still hold it.
+// The Rename sheet's "Currently …" subtitle reads in full beside Cancel at every size: its
+// second line in the QA screenshot was covered by the keyboard's floating suggestion, which the
+// layout can't move.
+describe.each(['light', 'dark'] as const)('a long Tag at large text in %s (#639)', (mode) => {
+  it.each(largeTextWindows)(
+    'reads in full in its row, its options and Rename, $width dp at $fontScale× text',
+    async (size) => {
+      await showTagsAt(size, mode);
+      const rows = findHosts(
+        renderer!.toJSON(),
+        (props, type) => type === 'Pressable' && flatten(props.style).minHeight === 60,
+      );
+      expect(rows.length).toBeGreaterThan(0);
+      // Each row lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
+      for (const tagRow of rows)
+        expect(unreadText(tagRow, size.fontScale, size.width - 34)).toEqual([]);
+      await pressRow(row);
+      expect(unreadText(sheetHeader(), size.fontScale, size.width)).toEqual([]);
+      await press('Rename, Saved Expenses show the new name');
+      expect(sheetTitle()).toEqual(['Rename Tag']);
+      expect(unreadText(sheetHeader(), size.fontScale, size.width)).toEqual([]);
     },
   );
 });

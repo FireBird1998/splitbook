@@ -50,7 +50,7 @@ import {
   OptionalDetails,
 } from './expense-form';
 import { DateSheet } from './date-sheet';
-import { CurrencyBadge, RequiredFieldLabel } from './expense-inputs';
+import { CurrencyBadge, RequiredFieldLabel, useDescriptionPlaceholder } from './expense-inputs';
 import { clockTime } from './activity-format';
 import { recentDay, spellDay } from './day-format';
 import { PayerSheet, paidBySummary } from './payer-sheet';
@@ -292,6 +292,7 @@ function ReviewRunContent({
   const [typedAmount, setTypedAmount] = useState<string | null>(null);
   const [sheet, setSheet] = useState<'date' | 'payers' | 'split' | 'tag' | null>(null);
   const descriptionStart = useStartWhileUnfocused();
+  const descriptionPlaceholder = useDescriptionPlaceholder();
   if (!selected) {
     const summary = summarizeReviewRun(state.outcomes);
     return (
@@ -523,7 +524,7 @@ function ReviewRunContent({
                 accessibilityLabel="Description"
                 value={form.description}
                 editable={!locked}
-                placeholder="What was it for? e.g. Groceries"
+                placeholder={descriptionPlaceholder}
                 placeholderTextColor={theme.textMuted}
                 selectionColor={theme.brand.main}
                 onChangeText={(description) => change({ description })}

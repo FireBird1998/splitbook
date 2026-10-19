@@ -1,7 +1,22 @@
 import type { ReactElement } from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hairSpace, labelRuns } from '../../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  hairSpace,
+  labelRuns,
+  largeTextWindows,
+  layoutHeight,
+  unreadText,
+} from '../../test-utils/layout';
 import { setWindow } from '../../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -16,6 +31,8 @@ const {
   FieldMarker,
   FloatingAction,
   GroupNavBar,
+  IconButton,
+  IconTile,
   LinearProgress,
   ListRow,
   RowAmount,
@@ -28,6 +45,7 @@ const {
   TileGrid,
   TopBar,
 } = await import('./index');
+const { ThemeContext } = await import('../theme');
 
 let renderer: ReactTestRenderer | undefined;
 afterEach(() => {
@@ -491,5 +509,183 @@ describe('labels as wide as their words keep room to spare (#639)', () => {
   ])('%s', (_part, element, labels) => {
     const root = render(element);
     for (const label of labels) expect(labelRuns(root, label), label).toEqual([[label, hairSpace]]);
+  });
+});
+
+// #639, at 200% text: a top bar's status squeezed "Add expense" and its Group to dots, a Group's
+// subtitle lost its currency, a block button's words and amount ran past both its edges, a row's
+// balance squeezed its Group's name to "QA Eu..", and an options row read "Members and Group
+// d…". As the layout estimate lays them out, every text in these parts reads in full at 200% on
+// 360 and 412dp phones. At 130% a long name may still end at its line, cut once as the compact
+// design has it (#332), but no word breaks in two and nothing runs past its row.
+describe.each(['light', 'dark'] as const)('compact parts at large text in %s (#639)', (mode) => {
+  const noop = () => undefined;
+  /** Each part, and how much narrower than the screen it lays out. */
+  const parts: [string, number, ReactElement][] = [
+    [
+      'a top bar with a status',
+      0,
+      <TopBar
+        key="status"
+        title="Add expense"
+        subtitle="Maple House · INR"
+        prominent={false}
+        leading={{ kind: 'close', label: 'Back to Group', onPress: noop }}
+        status={<Badge label="Kept on this phone" />}
+        actions={<IconButton icon="ellipsis-vertical-outline" label="Options" onPress={noop} />}
+      />,
+    ],
+    [
+      'a Group’s top bar',
+      0,
+      <TopBar
+        key="group"
+        title="Maple House"
+        subtitle="Household · 3 members · INR"
+        leading={{ kind: 'back', label: 'Back', onPress: noop }}
+        actions={
+          <>
+            <IconButton icon="person-add-outline" label="Invite" onPress={noop} />
+            <IconButton icon="ellipsis-vertical" label="Group options" onPress={noop} />
+          </>
+        }
+      />,
+    ],
+    [
+      'a block button with an amount',
+      40,
+      <CompactButton key="button" label="Record payment" amount="₹1,000.00" block onPress={noop} />,
+    ],
+    [
+      'a row with a balance',
+      34,
+      <ListRow
+        key="balance"
+        leading={<IconTile icon="airplane-outline" />}
+        title="Kochi to Alleppey"
+        meta="Trip · 28 Aug – 2 Sep · 3 members"
+        trailing={<RowAmount amount="₹8,661.00" tone="negative" caption="you owe" />}
+      />,
+    ],
+    [
+      'a row of options',
+      42,
+      <ListRow
+        key="options"
+        leading={<IconTile icon="people-outline" />}
+        title="Members and Group details"
+        meta="Theme, currency, members and Invite"
+        onPress={noop}
+      />,
+    ],
+    [
+      'a section’s title beside its action',
+      32,
+      <SectionHeader
+        key="header"
+        title="Groups · 7"
+        trailing={<CompactButton label="New Group" icon="add" variant="text" onPress={noop} />}
+      />,
+    ],
+  ];
+  it.each(largeTextWindows)('read in full, $width dp at $fontScale× text', (size) => {
+    setWindow(size);
+    for (const [part, inset, element] of parts) {
+      render(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>{element}</ThemeContext.Provider>,
+      );
+      const tree = renderer!.toJSON() as ReactTestRendererJSON;
+      expect(
+        unreadText(tree, size.fontScale, size.width - inset, { cutOnce: size.fontScale < 1.5 }),
+        part,
+      ).toEqual([]);
+      act(() => renderer!.unmount());
+      renderer = undefined;
+    }
+  });
+});
+
+// #639 review: at large text a part that can't share its line goes onto a line of its own at the
+// row's end, as a row's balance does: a section's action (New Group, New Tag, Invite) and a top
+// bar's status, where they were at 100%, not under the title at the start.
+describe('a part on a line of its own keeps to the row’s end (#639)', () => {
+  const noop = () => undefined;
+  /** A line that wraps: its style, the title's part and the part after it. */
+  const parts = (row: ReactTestRendererJSON) => {
+    const [first, second] = (row.children ?? []) as ReactTestRendererJSON[];
+    return {
+      row: flatten(row.props.style),
+      first: flatten(first!.props.style),
+      title: first!,
+      second,
+    };
+  };
+  it('a section’s action, under a title it doesn’t fit beside at 200% on a 360dp phone', () => {
+    setWindow({ width: 360, height: 640, fontScale: 2 });
+    render(
+      <SectionHeader
+        title="Groups · 12"
+        trailing={<CompactButton label="New Group" icon="add" variant="text" onPress={noop} />}
+      />,
+    );
+    const row = renderer!.toJSON() as ReactTestRendererJSON;
+    const { title, second } = parts(row);
+    // On a line of its own: the title's line, the gap, then the button's.
+    const room = 360 - 32 - 4;
+    expect(layoutHeight(row, 2, 360 - 32)).toBe(
+      layoutHeight(title, 2, room) + 8 + layoutHeight(second!, 2, room),
+    );
+    // A lone part keeps to the end; the title's margin takes what its own line leaves.
+    const { row: style, first } = parts(row);
+    expect(style.justifyContent).toBe('flex-end');
+    expect(first.marginRight).toBe('auto');
+  });
+  it.each(largeTextWindows)(
+    'a top bar’s status, beside its title or under it at the end, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      render(
+        <TopBar
+          title="Add expense"
+          subtitle="Maple House · INR"
+          prominent={false}
+          leading={{ kind: 'close', label: 'Back to Group', onPress: noop }}
+          status={<Badge label="Kept on this phone" />}
+          actions={<IconButton icon="ellipsis-vertical-outline" label="Options" onPress={noop} />}
+        />,
+      );
+      const [line] = findHosts(
+        renderer!.toJSON() as ReactTestRendererJSON,
+        (props) => flatten(props.style).flexWrap === 'wrap',
+      );
+      const { row: style, first } = parts(line!);
+      // The title fills its line, and a status on a line of its own keeps to the end.
+      expect(first.flex).toBe(1);
+      expect(style.justifyContent).toBe('flex-end');
+    },
+  );
+});
+
+// #639 device check: at 200% and density 420, Home's "New Group" put its "+" on a line of its own
+// above the words, with room to spare beside them: a button that wrapped its parts tipped over on
+// a fraction of a pixel. A button keeps its icon and words on one line, and its words wrap inside
+// themselves, so the icon stays beside the first line.
+describe('a button with an icon at 200% text (#639)', () => {
+  const noop = () => undefined;
+  it.each([360, 412])('keeps its icon on its words’ first line, %sdp', (width) => {
+    setWindow({ width, height: 640, fontScale: 2 });
+    render(<CompactButton label="New Group" icon="add" variant="text" onPress={noop} />);
+    const button = renderer!.toJSON() as ReactTestRendererJSON;
+    const [icon, words] = button.children as ReactTestRendererJSON[];
+    expect(icon!.type).toBe('Ionicons');
+    expect(flatten(button.props.style).flexWrap).not.toBe('wrap');
+    expect(flatten(words!.props.style)).toMatchObject({ flexShrink: 1, minWidth: 0 });
+    // In less room than the icon and both words need, the words wrap beside the icon.
+    const room = 140;
+    const style = flatten(button.props.style);
+    const beside = room - 2 * (style.paddingHorizontal as number) - 18 - (style.gap as number);
+    expect(layoutHeight(button, 2, room)).toBe(
+      Math.max(style.minHeight as number, layoutHeight(words!, 2, beside)),
+    );
   });
 });

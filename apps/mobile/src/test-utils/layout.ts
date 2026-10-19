@@ -20,9 +20,16 @@ type Style = Record<string, unknown>;
  * overflows the row, so their text wraps. The widths are estimates from character counts, so
  * check anything close to a line's end on a device too.
  *
- * Enough to show that content takes its skeleton's place at the same height (#331).
+ * Enough to show that content takes its skeleton's place at the same height (#331). `watch`
+ * hears each text with the width it lays out in, and each row its children run past, as
+ * `unreadText` reads them.
  */
-export function layoutHeight(node: Node | string | null, fontScale = 1, width?: number): number {
+export function layoutHeight(
+  node: Node | string | null,
+  fontScale = 1,
+  width?: number,
+  watch?: LayoutWatch,
+): number {
   if (node === null || typeof node === 'string') return 0;
   const style = flatten(node.props.style);
   if (style.display === 'none') return 0;
@@ -47,6 +54,7 @@ export function layoutHeight(node: Node | string | null, fontScale = 1, width?: 
       const needed =
         room > 0 ? Math.max(1, Math.ceil(textWidth(node, fontScale, true) / room - 1e-6)) : 1;
       const limit = Number(node.props.numberOfLines) || Infinity;
+      if (width !== undefined) watch?.text?.(node, room);
       return box(scaledSp(number(style.lineHeight), fontScale) * Math.min(needed, limit));
     }
     case 'Ionicons':
@@ -60,7 +68,7 @@ export function layoutHeight(node: Node | string | null, fontScale = 1, width?: 
   const outer = (child: Node, room: number | undefined) => {
     const own = flatten(child.props.style);
     return (
-      layoutHeight(child, fontScale, room) +
+      layoutHeight(child, fontScale, room, watch) +
       edge(own, 'Top', 'margin') +
       edge(own, 'Bottom', 'margin')
     );
@@ -100,6 +108,9 @@ export function layoutHeight(node: Node | string | null, fontScale = 1, width?: 
       if (over <= 0 || giving <= 0) return span(child);
       return Math.max(0, span(child) - (over * shrink(child) * span(child)) / giving);
     };
+    // What still runs past the row once its children have shrunk as far as they can.
+    const past = members.reduce((sum, child) => sum + width(child), gaps) - inner!;
+    if (past > 0.5) watch?.overflow?.(node, past);
     return Math.max(0, ...members.map((child) => outer(child, width(child))));
   };
   if (row && inner !== undefined) {
@@ -167,6 +178,62 @@ export function layoutWidth(node: Node | string | null, fontScale = 1, room = 0)
     }
   }
   return Math.max(minimum, content + horizontal(style));
+}
+
+/** What `layoutHeight` tells a watcher as it lays a tree out. */
+interface LayoutWatch {
+  /** A text, and the room inside its box it lays out in. */
+  text?: (node: Node, room: number) => void;
+  /** A row whose children run `by` dp past its edge, even after shrinking. */
+  overflow?: (row: Node, by: number) => void;
+}
+
+/**
+ * The texts in a tree that don't read in full, as `layoutHeight` lays it out `width` wide at
+ * this text size: one that needs more lines than it may take (`numberOfLines`), so its end is
+ * cut; one with a word wider than its line, which Android breaks in two ("ALL-T / IME"); and
+ * each text in a row whose children run past its edge. Each says why. Empty when every text
+ * reads in full. With `cutOnce`, a text may end at its line limit, as a long name does below
+ * 150% text (#332): only broken words and rows run past count. The widths are estimates (see
+ * `layoutWidth`), so check close calls on a device.
+ */
+export function unreadText(
+  node: Node | null,
+  fontScale: number,
+  width: number,
+  { cutOnce = false }: { cutOnce?: boolean } = {},
+) {
+  const found = new Set<string>();
+  const words = (text: Node) =>
+    runs(text, {})
+      .map(({ characters }) => characters)
+      .join('');
+  layoutHeight(node, fontScale, width, {
+    text: (text, room) => {
+      const said = words(text).replaceAll(hairSpace, '');
+      // A text that stops growing (`maxFontSizeMultiplier`), as an avatar's initials do (#589).
+      const scale = Math.min(fontScale, Number(text.props.maxFontSizeMultiplier) || Infinity);
+      const lines = Math.max(1, Math.ceil(textWidth(text, scale, true) / room - 1e-6));
+      const limit = Number(text.props.numberOfLines) || Infinity;
+      if (lines > limit && !cutOnce)
+        found.add(`"${said}" needs ${lines} lines, and may take ${limit}`);
+      const widest = Math.max(
+        0,
+        ...runs(text, {}).flatMap(({ characters, style }) =>
+          characters.split(/\s+/).map((word) => runWidth(word, style, scale)),
+        ),
+      );
+      if (widest > room + 0.5)
+        found.add(`"${said}" has a word ${Math.round(widest)}dp wide in ${Math.round(room)}dp`);
+    },
+    overflow: (row, by) => {
+      for (const text of findHosts(row, (_props, type) => type === 'Text'))
+        found.add(
+          `"${words(text).replaceAll(hairSpace, '')}" runs ${Math.round(by)}dp past its row`,
+        );
+    },
+  });
+  return [...found];
 }
 
 /** Every host node under `node`, depth first, whose props match. */
@@ -262,22 +329,37 @@ function textWidth(node: Node, fontScale: number, hanging = false) {
     parts[index]!.characters = parts[index]!.characters.trimEnd();
     if (parts[index]!.characters) break;
   }
-  return parts.reduce((width, { characters, style }) => {
-    const size = scaledSp(number(style.fontSize), fontScale);
-    const mono = String(style.fontFamily ?? '').includes('Mono');
-    // Outfit's bold is wider than the weights the advances were fitted to.
-    const weight = String(style.fontFamily ?? '').includes('Bold') ? 1.09 : 1;
-    return [...characters].reduce(
-      (sum, character) =>
-        sum + size * (mono ? 0.6 : outfitAdvance(character) * weight) + number(style.letterSpacing),
-      width,
-    );
-  }, 0);
+  return parts.reduce(
+    (width, { characters, style }) => width + runWidth(characters, style, fontScale),
+    0,
+  );
 }
 
-/** A text's characters in runs, each in the style its nesting gives it. */
+/** One run of characters in its style, estimated as `textWidth` measures them. */
+function runWidth(characters: string, style: Style, fontScale: number) {
+  const size = scaledSp(number(style.fontSize), fontScale);
+  const mono = String(style.fontFamily ?? '').includes('Mono');
+  // Outfit's bold is wider than the weights the advances were fitted to.
+  const weight = String(style.fontFamily ?? '').includes('Bold') ? 1.09 : 1;
+  return [...characters].reduce(
+    (sum, character) =>
+      sum + size * (mono ? 0.6 : outfitAdvance(character) * weight) + number(style.letterSpacing),
+    0,
+  );
+}
+
+/**
+ * A text's characters in runs, each in the style its nesting gives it, and in capitals where
+ * its style draws them so (an overline: "Changes in this Group" is about 8% wider in capitals).
+ */
 function runs(node: Node | string, outer: Style): { characters: string; style: Style }[] {
-  if (typeof node === 'string') return [{ characters: node, style: outer }];
+  if (typeof node === 'string')
+    return [
+      {
+        characters: outer.textTransform === 'uppercase' ? node.toUpperCase() : node,
+        style: outer,
+      },
+    ];
   const style = { ...outer, ...flatten(node.props.style) };
   return (node.children ?? []).flatMap((child) => runs(child, style));
 }

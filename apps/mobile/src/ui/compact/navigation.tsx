@@ -4,11 +4,17 @@ import { Pressable, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
 import { IconButton } from './controls';
+import { useTextColumn } from './layout';
 import { CompactText } from './text';
 
 /**
  * The compact top bar: an optional back or close action, a title with a one-line subtitle,
  * an optional status (e.g. "Draft saved") and trailing actions.
+ *
+ * At large text (from 130%) the title and subtitle take as many lines as they need, and the
+ * status goes under them, at the bar's end, where it would leave them less than
+ * `largeTextColumn` beside it: at 200% on a 360dp phone, "Kept on this phone" squeezed "Add
+ * expense" and its Group to dots, and a Group's subtitle lost its currency (#639).
  */
 export function TopBar({
   title,
@@ -31,6 +37,23 @@ export function TopBar({
   subtitleLines?: number;
 }) {
   const theme = useTheme();
+  const column = useTextColumn();
+  const heading = (
+    <View style={{ flex: 1, minWidth: column && status ? column : 0, paddingHorizontal: 4 }}>
+      <CompactText
+        variant={prominent ? 'title' : 'heading'}
+        accessibilityRole="header"
+        numberOfLines={column ? 0 : 1}
+      >
+        {title}
+      </CompactText>
+      {subtitle ? (
+        <CompactText variant="caption" tone="secondary" numberOfLines={column ? 0 : subtitleLines}>
+          {subtitle}
+        </CompactText>
+      ) : null}
+    </View>
+  );
   return (
     <View
       style={{
@@ -52,21 +75,30 @@ export function TopBar({
           disabled={leading.disabled}
         />
       ) : null}
-      <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 4 }}>
-        <CompactText
-          variant={prominent ? 'title' : 'heading'}
-          accessibilityRole="header"
-          numberOfLines={1}
+      {column && status ? (
+        // The status beside the title while both fit, under it where they don't.
+        <View
+          style={{
+            flex: 1,
+            minWidth: 0,
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            alignContent: 'center',
+            // The title fills its line; a status on a line of its own keeps to the end.
+            justifyContent: 'flex-end',
+            rowGap: 2,
+          }}
         >
-          {title}
-        </CompactText>
-        {subtitle ? (
-          <CompactText variant="caption" tone="secondary" numberOfLines={subtitleLines}>
-            {subtitle}
-          </CompactText>
-        ) : null}
-      </View>
-      {status}
+          {heading}
+          {status}
+        </View>
+      ) : (
+        <>
+          {heading}
+          {status}
+        </>
+      )}
       {actions}
     </View>
   );

@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { CompactButton } from './controls';
+import { useTextColumn } from './layout';
 import { radius, shouldDismissSheet } from './scale';
 import { CompactText } from './text';
 
@@ -23,7 +24,7 @@ import { CompactText } from './text';
 export function BottomSheet({
   visible,
   title,
-  titleLines = 1,
+  titleLines = 0,
   subtitle,
   titleAccessory,
   onDone,
@@ -35,7 +36,11 @@ export function BottomSheet({
 }: {
   visible: boolean;
   title: string;
-  /** Lines the title may take: more for a name the member typed, which can be long. */
+  /**
+   * Lines the title may take; by default, as many as it needs, as "Finish this expense later?"
+   * needs two on a 360dp phone (#639). At large text, a title always takes as many as it needs,
+   * and Done goes under it where it would leave it less than `largeTextColumn`.
+   */
   titleLines?: number;
   /** Text, or text runs such as an amount in the money face. */
   subtitle?: ReactNode;
@@ -51,6 +56,16 @@ export function BottomSheet({
   footer?: ReactNode;
 }) {
   const theme = useTheme();
+  const column = useTextColumn();
+  const doneButton = (
+    <CompactButton
+      label={doneLabel}
+      variant="text"
+      dense
+      disabled={!dismissible}
+      onPress={onDone}
+    />
+  );
   const drag = useRef(new Animated.Value(0)).current;
   // The pan responder is created once; it reads the latest Done handler through this ref.
   const done = useRef(onDone);
@@ -137,14 +152,17 @@ export function BottomSheet({
                   gap: 8,
                   paddingLeft: 20,
                   paddingRight: 8,
+                  // At 200% on a 360dp phone, "Keep editing" beside "Finish this expense
+                  // later?" broke "expense" in two (#639).
+                  ...(column ? { flexWrap: 'wrap', alignContent: 'center', rowGap: 0 } : {}),
                 }}
               >
-                <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={{ flex: 1, minWidth: column ?? 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <CompactText
                       variant="title"
                       accessibilityRole="header"
-                      numberOfLines={titleLines}
+                      numberOfLines={column ? 0 : titleLines}
                       style={{ flexShrink: 1 }}
                     >
                       {title}
@@ -157,13 +175,8 @@ export function BottomSheet({
                     </CompactText>
                   ) : null}
                 </View>
-                <CompactButton
-                  label={doneLabel}
-                  variant="text"
-                  dense
-                  disabled={!dismissible}
-                  onPress={onDone}
-                />
+                {/* On a line of its own, Done keeps to the header's end. */}
+                {column ? <View style={{ marginLeft: 'auto' }}>{doneButton}</View> : doneButton}
               </View>
             </View>
             <ScrollView

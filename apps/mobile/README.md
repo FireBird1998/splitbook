@@ -80,6 +80,10 @@ Tests change the stand-ins only through the helpers in `native.ts`:
 
 After every test the stand-ins return to the file's defaults and their recorded calls are cleared, so tests pass in any order. This state is per file because Vitest's default `isolate: true` gives each test file its own modules. With isolation turned off, one file's window and listeners would carry into the next.
 
+### Layout at large text
+
+`src/test-utils/layout.ts` estimates how a rendered tree lays out from its styles: `layoutHeight` and `layoutWidth`, and `unreadText`, which lists each text that doesn't read in full (one that needs more lines than it may take, a word wider than its line, a row its children run past). A large-text check renders a screen at each of `largeTextWindows` (360×640 and 412×915 dp, at 130% and 200%) and expects `unreadText` to be empty; at 130% it passes `cutOnce`, as a long name in a row may still end at its line there (#332, #639). The widths come from character counts, so a device check follows for anything close to a line's end.
+
 ## Android invitation links
 
 Shared invitations remain canonical web URLs so they can open in a browser when the app is absent. Set `EXPO_PUBLIC_INVITE_ORIGIN` to the backend's `NEXT_PUBLIC_APP_URL` origin; it defaults to `EXPO_PUBLIC_AUTH_ORIGIN`. The app accepts only that origin's `/join/<eight-hex-character-code>` links. Changing a native intent filter requires rebuilding the binary. Local HTTP links are development-only; they do not establish verified Android App Links.

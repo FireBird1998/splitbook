@@ -15,6 +15,7 @@ import {
   ListRow,
   SectionHeader,
   TopBar,
+  useTextColumn,
 } from './compact';
 import { Icon, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
@@ -56,6 +57,10 @@ function DetailRow({
   value: string;
   children: ReactNode;
 }) {
+  // At large text the value goes onto a line of its own, at the row's end, where the label
+  // would leave it less than `largeTextColumn`: at 200% on a 360dp phone, "Month" broke into
+  // "Mon / th" beside "Expenses shown by" (#639).
+  const column = useTextColumn();
   return (
     <View
       accessible
@@ -68,9 +73,12 @@ function DetailRow({
         gap: 16,
         paddingVertical: 12,
         paddingHorizontal: 14,
+        ...(column ? { flexWrap: 'wrap', alignContent: 'center', rowGap: 4 } : {}),
       }}
     >
-      <CompactText tone="secondary">{label}</CompactText>
+      <CompactText tone="secondary" style={column ? { flexShrink: 1 } : undefined}>
+        {label}
+      </CompactText>
       <View
         style={{
           flexShrink: 1,
@@ -78,6 +86,7 @@ function DetailRow({
           alignItems: 'center',
           justifyContent: 'flex-end',
           gap: 6,
+          ...(column ? { flex: 1, minWidth: column } : {}),
         }}
       >
         {children}

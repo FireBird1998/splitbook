@@ -22,6 +22,7 @@ import {
   TileGrid,
   progressHeight,
   radius,
+  useLargestText,
 } from './compact';
 import { inPlace } from './financial-views';
 import { Field, FieldError } from './group-workflows';
@@ -217,6 +218,7 @@ export function RecordPaymentSheet({
   // An unconfirmed payment found on this phone waits for the check as Retry.
   const retrying = checking && state.attempt !== null;
 
+  const largest = useLargestText();
   const footer =
     figures || status === 'error' ? (
       <>
@@ -230,6 +232,9 @@ export function RecordPaymentSheet({
           <CompactButton
             label={retrying ? 'Retry payment' : 'Record payment'}
             amount={retrying ? undefined : amountLabel}
+            // From 150% the amount goes under the words: beside them at 200% on a 360dp phone,
+            // "Record payment ₹1,000.00" ran past both edges (#639).
+            amountBelow={largest}
             busy={status === 'saving' ? 'Recording payment…' : undefined}
             block
             disabled={checking || waitingForTick}

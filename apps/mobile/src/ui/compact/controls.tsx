@@ -18,6 +18,8 @@ export function BusyMark({ color }: { color: string }) {
  * Primary, tonal (brand.bg) or text button. `amount` renders a monospace value after the label,
  * as in "Save expense ₹1,249.50". Disabled buttons should carry a `hint` saying why.
  * `destructive` uses the coral status colour instead of the brand, as for Leave Group.
+ * `amountBelow` puts the amount under the words, in one centred column, as a long label and its
+ * amount need at the largest text sizes (Record payment's, #639).
  *
  * `busy` is what the button is doing, as in "Saving expense…": a spinner and that label take
  * the label's place, at full strength, and screen readers hear the busy label with the busy
@@ -39,6 +41,7 @@ export function CompactButton({
   hint,
   accessibilityLabel,
   busy,
+  amountBelow = false,
 }: {
   label: string;
   onPress: () => void;
@@ -52,6 +55,7 @@ export function CompactButton({
   hint?: string;
   accessibilityLabel?: string;
   busy?: string;
+  amountBelow?: boolean;
 }) {
   const theme = useTheme();
   const tones = destructive
@@ -59,15 +63,33 @@ export function CompactButton({
     : { main: theme.brand.main, bg: theme.brand.bg };
   const color = variant === 'primary' ? theme.brand.contrastText : tones.main;
   const size = dense ? 14 : 15;
+  // Room to spare (#331): a button as wide as its words, opened again, otherwise wrapped its last
+  // word out of sight ("Skip for now" read "Skip for"). Wider than the button, as at 200% text,
+  // the words wrap inside themselves, beside the icon, rather than run past its edges (#639).
+  const words = (
+    <CompactText
+      weight="semibold"
+      spare
+      style={{ color, fontSize: size, flexShrink: 1, minWidth: 0, textAlign: 'center' }}
+    >
+      {label}
+    </CompactText>
+  );
+  const money = amount ? <Money style={{ color }}>{amount}</Money> : null;
   const content = (
     <>
       {icon ? <Icon name={icon} size={18} color={color} /> : null}
-      {/* Room to spare (#331): a button as wide as its words, opened again, otherwise wrapped its
-          last word out of sight ("Skip for now" read "Skip for"). */}
-      <CompactText weight="semibold" spare style={{ color, fontSize: size }}>
-        {label}
-      </CompactText>
-      {amount ? <Money style={{ color }}>{amount}</Money> : null}
+      {amountBelow && money ? (
+        <View style={{ flexShrink: 1, minWidth: 0, alignItems: 'center' }}>
+          {words}
+          {money}
+        </View>
+      ) : (
+        <>
+          {words}
+          {money}
+        </>
+      )}
     </>
   );
   return (
@@ -84,6 +106,8 @@ export function CompactButton({
         alignSelf: block ? 'stretch' : 'flex-start',
         borderRadius: radius.tile,
         paddingHorizontal: variant === 'text' ? 12 : dense ? 14 : 18,
+        // One line: the icon stays beside the words' first line. A row that wrapped its parts
+        // tipped over on a fraction of a pixel and put "New Group"'s "+" above the words (#639).
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',

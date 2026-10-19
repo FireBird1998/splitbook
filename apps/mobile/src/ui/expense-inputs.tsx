@@ -3,7 +3,7 @@ import { TextInput, View } from 'react-native';
 import type { ExpenseDraft, ExpenseField } from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
 import { Field, FieldError } from './group-workflows';
-import { CompactText, FieldMarker, radius } from './compact';
+import { CompactText, FieldMarker, radius, useLargeText } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 import { useStartWhileUnfocused } from './start-while-unfocused';
@@ -164,6 +164,14 @@ export function AmountField({
     </View>
   );
 }
+/**
+ * What the Description box says while empty. At large text it leaves out its example, which at
+ * 200% wrapped in the one-line box and was cut in half (#639); "What was it for?" fits its line.
+ */
+export function useDescriptionPlaceholder() {
+  return useLargeText() ? 'What was it for?' : 'What was it for? e.g. Groceries';
+}
+
 export function DescriptionField({
   draft,
   locked,
@@ -175,6 +183,7 @@ export function DescriptionField({
 }: ExpenseInputProps) {
   const theme = useTheme();
   const start = useStartWhileUnfocused(() => onLeave('description'));
+  const placeholder = useDescriptionPlaceholder();
   const input = {
     color: theme.text,
     paddingVertical: 4,
@@ -191,7 +200,7 @@ export function DescriptionField({
           maxLength={200}
           returnKeyType="done"
           editable={!locked}
-          placeholder="What was it for? e.g. Groceries"
+          placeholder={placeholder}
           placeholderTextColor={theme.textMuted}
           selectionColor={theme.brand.main}
           accessibilityLabel="Description, required"

@@ -6,7 +6,15 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { findHosts, layoutHeight } from '../test-utils/layout';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import {
+  findHosts,
+  flatten,
+  largeTextWindows,
+  layoutHeight,
+  unreadText,
+} from '../test-utils/layout';
+import { setWindow } from '../test-utils/native';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityEvent, ActivityState } from '../data/activity';
 import type { MobileGroup } from '../data/types';
@@ -17,6 +25,7 @@ const { GroupShell } = await import('./group-shell');
 const { FloatingAction } = await import('./compact');
 const { GroupActivity } = await import('./group-activity');
 const { clockTime } = await import('./activity-format');
+const { ThemeContext } = await import('./theme');
 
 const you = 'a00000000000000000000001';
 const group: MobileGroup = {
@@ -485,3 +494,57 @@ describe('Group Activity', () => {
     expect(amounts(root)).toEqual(['₹899.00', '₹999.00', '₹899.00', '₹499.50', '₹499.50']);
   });
 });
+
+// #639: at 200% the Group's top bar dropped "INR" from "Household · 3 members · INR", and Group
+// options read "Members and Group d…" and "Create, rename, archive o…". The bar's title and
+// subtitle take the lines they need at large text, and so do the options from 150%; at 130% an
+// option may still be cut once (#332), but no word breaks in two.
+describe.each(['light', 'dark'] as const)(
+  'the Group’s top bar and options at large text in %s (#639)',
+  (mode) => {
+    it.each(largeTextWindows)('read in full, $width dp at $fontScale× text', (size) => {
+      setWindow(size);
+      const root = render(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <GroupShell
+            group={{ ...group, name: 'QA 19 Oct' }}
+            destination="expenses"
+            onDestination={vi.fn()}
+            back={{ label: 'Back to Home', onPress: vi.fn() }}
+            invite={{ onPress: vi.fn(), disabled: false, offline: false }}
+            onMembers={vi.fn()}
+            onManageTags={vi.fn()}
+            onRefresh={vi.fn()}
+            pull={{ refreshing: false, onRefresh: vi.fn() }}
+          >
+            {null}
+          </GroupShell>
+        </ThemeContext.Provider>,
+      );
+      const [bar] = findHosts(
+        renderer!.toJSON(),
+        (props, type) => type === 'View' && flatten(props.style).minHeight === 64,
+      );
+      expect(text(byRole(root, 'header')[0]!)).toBe('QA 19 Oct');
+      expect(unreadText(bar!, size.fontScale, size.width)).toEqual([]);
+
+      press(one(byRole(root, 'button', 'Group options')));
+      const [modal] = findHosts(
+        renderer!.toJSON(),
+        (props, type) => type === 'Modal' && props.visible === true,
+      );
+      const [header] = findHosts(modal!, (props) => props.testID === 'sheet-drag-area');
+      const [options] = findHosts(
+        modal!,
+        (props) =>
+          flatten(props.style).borderRadius === 14 && flatten(props.style).overflow === 'hidden',
+      );
+      expect(findHosts(options!, (_props, type) => type === 'Pressable')).toHaveLength(3);
+      expect(unreadText(header!, size.fontScale, size.width)).toEqual([]);
+      // The sheet's body is padded 20dp on each side.
+      expect(
+        unreadText(options!, size.fontScale, size.width - 40, { cutOnce: size.fontScale < 1.5 }),
+      ).toEqual([]);
+    });
+  },
+);
