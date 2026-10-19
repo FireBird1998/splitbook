@@ -668,15 +668,21 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
     await controller.editExpense();
     await controller.updateExpenseDraft({ description: 'Lake dinner' });
     await controller.saveExpense();
+    // Back on the record it was opened from (#635), which reads it and its changes again; Back
+    // then reads the Group's view again.
     expect(controller.getSnapshot()).toMatchObject({
-      screen: 'group',
-      expense: { status: 'saved' },
+      screen: 'expense',
+      expense: { status: 'detail', draft: { description: 'Lake dinner' } },
     });
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('group');
     expect(f.server.ledger).toBe(1);
 
     // Only what was read again after the edit is saved for Maple House; Cabin Weekend is untouched.
     expect(Object.keys(f.savedOf(mapleId)).sort()).toEqual([
       'Balances',
+      'Dinner',
+      'Dinner history',
       'Expenses 2026-09 page 1',
       'Group',
     ]);
@@ -692,7 +698,7 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
       august: notSaved,
       balances: [31],
       activity: notSaved,
-      record: recordNotSaved,
+      record: 'Lake dinner',
     };
     f.server.offline = true;
     expect(await readOffline(controller)).toEqual(edited);
@@ -787,11 +793,14 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
     await controller.editExpense();
     await controller.updateExpenseDraft({ description: 'Lake dinner' });
     await controller.saveExpense();
+    // Back on the record it was opened from (#635); Back then reads the Group's view again.
     expect(controller.getSnapshot()).toMatchObject({
       auth: { status: 'authenticated', user: { id: alex.id } },
-      screen: 'group',
-      expense: { status: 'saved' },
+      screen: 'expense',
+      expense: { status: 'detail' },
     });
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('group');
     expect(f.calls.filter((call) => call.path.endsWith('/sign-out'))).toEqual([]);
     // The older copies are still on this device, but this session no longer trusts them.
     expect(Object.keys(f.savedOf(mapleId))).toContain('Expenses 2026-08 page 1');
@@ -807,7 +816,8 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
       august: notSaved,
       balances: [31],
       activity: notSaved,
-      record: recordNotSaved,
+      // Read again on its record after the change (#635): never the copy from before it.
+      record: 'Lake dinner',
     });
     expect(controller.getSnapshot().auth.status).toBe('authenticated');
   });
@@ -826,16 +836,14 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
     await controller.editExpense();
     await controller.updateExpenseDraft({ description: 'Lake dinner' });
     await controller.saveExpense();
-    expect(controller.getSnapshot().expense.status).toBe('saved');
+    // On the record it was opened from (#635), which reads it and its changes again.
+    expect(controller.getSnapshot().expense.status).toBe('detail');
     expect(f.server.ledger).toBe(1);
     activity.release();
     await reading;
 
-    expect(Object.keys(f.savedOf(mapleId)).sort()).toEqual([
-      'Balances',
-      'Expenses 2026-09 page 1',
-      'Group',
-    ]);
+    // Only the record and its changes were read after the edit, on the record (#635).
+    expect(Object.keys(f.savedOf(mapleId)).sort()).toEqual(['Dinner', 'Dinner history', 'Group']);
     f.server.offline = true;
     expect((await readOffline(controller)).activity).toBe(notSaved);
   });
@@ -985,13 +993,11 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
     await settle();
     write.release();
     await Promise.all([saving, reading]);
-    expect(controller.getSnapshot().expense.status).toBe('saved');
+    // On the record it was opened from (#635), which reads it and its changes again.
+    expect(controller.getSnapshot().expense.status).toBe('detail');
 
-    expect(Object.keys(f.savedOf(mapleId)).sort()).toEqual([
-      'Balances',
-      'Expenses 2026-09 page 1',
-      'Group',
-    ]);
+    // Only the record and its changes were read after the edit, on the record (#635).
+    expect(Object.keys(f.savedOf(mapleId)).sort()).toEqual(['Dinner', 'Dinner history', 'Group']);
     f.server.offline = true;
     expect((await readOffline(controller)).activity).toBe(notSaved);
   });
@@ -1133,7 +1139,8 @@ describe('stored unconfirmed changes remove older copies before a restart (#282)
       await controller.restore();
       expect(controller.getSnapshot().auth.status).toBe('authenticated');
       const shown = await readOffline(controller);
-      expect(shown.record).toBe(recordNotSaved);
+      // Read again on its record after the change (#635): never the copy from before it.
+      expect(shown.record).toBe('Lake dinner');
       expect(shown.august).toBe(notSaved);
       expect(shown.activity).toBe(notSaved);
     }

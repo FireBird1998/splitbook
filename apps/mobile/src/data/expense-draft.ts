@@ -117,6 +117,18 @@ export interface ExpenseEditor {
   mutation: ExpenseMutation | null;
   latest: ExpenseRecord | null;
   requestedExpenseId: string | null;
+  /**
+   * Edit was pressed on this open's record: a confirmed save returns to that record (#635). Every
+   * other way into the form leaves it unset: a new Expense, and an edit resumed from Home, the
+   * Group or an Expense's row, land on the Group.
+   */
+  beganOnRecord?: boolean;
+  /**
+   * The Month an edit just saved on this record belongs to, in a Group with Months: its note
+   * offers "View in {Month}", which opens the Group's Expenses there with the row highlighted
+   * (owner decision for #655). Null or unset otherwise; Edit clears it with the note.
+   */
+  viewMonth?: string | null;
   receiptId: string | null;
   persistence: 'saved' | 'saving' | 'error';
   /** Incoming link held until entries can be kept or explicitly discarded; never a write. */

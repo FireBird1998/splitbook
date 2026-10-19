@@ -424,7 +424,8 @@ export interface MobileSnapshot {
   screen: Route['screen'];
   /**
    * The Group destination shown while `screen` is 'group'. Back from an Expense task returns
-   * to the destination it opened from; a confirmed change returns to Expenses.
+   * to the destination it opened from; a confirmed change returns to Expenses, except an edit
+   * begun on its record, which returns to that record (#635).
    */
   destination: GroupDestination;
   expense: ExpenseEditor;

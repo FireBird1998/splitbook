@@ -313,7 +313,12 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
     await controller.editExpense();
     await controller.updateExpenseDraft({ description: 'Lakeside dinner, edited' });
     await controller.saveExpense();
-    assert.equal(controller.getSnapshot().expense.status, 'saved');
+    // Saved, back on the record it was opened from (#635), which reads it again; Back then
+    // reads the Group's August Expenses again, as the save itself once did.
+    assert.equal(controller.getSnapshot().expense.status, 'detail');
+    assert.equal(controller.getSnapshot().expense.message, 'Expense updated.');
+    await controller.back();
+    assert.equal(controller.getSnapshot().screen, 'group');
     const notSaved = 'This view was not saved on this device. Connect to load it.';
     const readOffline = async () => {
       await controller.openExpense(groupId!, expenseId);

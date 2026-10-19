@@ -1,4 +1,5 @@
 import { expenseRecoveryWords } from './expense-recovery-copy';
+import { monthLabel } from './group-expenses';
 import {
   Fragment,
   memo,
@@ -173,6 +174,7 @@ export function ExpenseRecordScreen({
   onLoadOlderHistory,
   onLoadNewerHistory,
   onRetryHistory,
+  onViewMonth,
   reveal = null,
   outlined = false,
 }: {
@@ -195,6 +197,11 @@ export function ExpenseRecordScreen({
   onLoadNewerHistory?: () => void;
   /** Reads the Expense's changes again after they couldn't be read. */
   onRetryHistory?: () => void;
+  /**
+   * After an edit saved here: the Group's Expenses at the Month the Expense now belongs to, with
+   * its row highlighted (#655).
+   */
+  onViewMonth?: () => void;
   /** The record fades in where its skeleton was, when it opened over one. */
   reveal?: Reveal | null;
   /**
@@ -313,9 +320,20 @@ export function ExpenseRecordScreen({
           </Banner>
         ) : null}
         {state.message && state.status !== 'delete-review' ? (
-          <CompactText variant="small" accessibilityRole="alert">
-            {expenseRecoveryWords(state.message)}
-          </CompactText>
+          state.viewMonth && onViewMonth ? (
+            // An edit saved here: the Month it now belongs to, as the Expenses tab spells it.
+            <Banner tone="info" message={expenseRecoveryWords(state.message)}>
+              <CompactButton
+                label={`View in ${monthLabel(state.viewMonth)}`}
+                variant="text"
+                onPress={onViewMonth}
+              />
+            </Banner>
+          ) : (
+            <CompactText variant="small" accessibilityRole="alert">
+              {expenseRecoveryWords(state.message)}
+            </CompactText>
+          )
         ) : null}
         {readTime}
       </>

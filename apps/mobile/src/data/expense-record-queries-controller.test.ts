@@ -905,12 +905,27 @@ describe('after a write (M2-2)', () => {
       await controller.saveExpense();
       f.server.loseWrites = false;
       f.server.offline = false;
+      // A confirmed edit is back on its record (#635).
       expect(controller.getSnapshot().expense.status).toBe(
-        outcome === 'confirmed' ? 'saved' : 'uncertain',
+        outcome === 'confirmed' ? 'detail' : 'uncertain',
       );
       await settle();
-      expect(f.savedRows(`${maplePath}/expenses/`)).toEqual([]);
-      expect(f.savedRows(`${maplePath}/activity?`)).toEqual([]);
+      if (outcome === 'unconfirmed') {
+        expect(f.savedRows(`${maplePath}/expenses/`)).toEqual([]);
+        expect(f.savedRows(`${maplePath}/activity?`)).toEqual([]);
+      } else {
+        // Only what the record shown read after the change is kept: the edited Expense and its
+        // changes. Dinner's row from before it is gone.
+        expect(f.savedRows(`${maplePath}/expenses/`).map(({ path }) => path)).toEqual([
+          recordPath(billId),
+        ]);
+        expect(JSON.stringify(f.savedRows(recordPath(billId))[0].value)).toContain(
+          'Meter read on the 20th',
+        );
+        expect(f.savedRows(`${maplePath}/activity?`).map(({ path }) => path)).toEqual([
+          expect.stringContaining(`expenseId=${billId}`),
+        ]);
+      }
       expect(controller.getSnapshot().auth.status).toBe('authenticated');
     },
   );

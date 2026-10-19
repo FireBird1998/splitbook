@@ -436,6 +436,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * is confirmed; `confirmed` keeps it true to the Group's view as its reads land (#219).
    */
   let confirmation: Confirmation | null = null;
+  /** Each Group's latest confirmed change, which a highlight after it compares reads with. */
+  const ledgerChanges = new Map<string, number>();
   let offlineSession = false;
   const freshness = dependencies.displayFreshnessMs ?? DISPLAY_FRESHNESS_MS;
   /** A saved copy is never fresh (ADR 0006, AMEND-2). */
@@ -2966,6 +2968,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: 'editing',
           message: null,
           groupDraft: null,
+          beganOnRecord: false,
         },
       });
       return;
@@ -2975,6 +2978,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...snapshot,
       expense: {
         ...editor,
+        // A resumed edit wasn't begun on the record: it returns to the Group when saved (#635).
+        beganOnRecord: false,
         status: editor.attempt || editor.mutation ? 'uncertain' : 'editing',
         // Resuming answers the resume prompt, so its notices no longer apply. A save that
         // may already be recorded keeps explaining why it stays locked.
@@ -3254,6 +3259,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const refreshLedgerViews = async (groupId: string, owner: number, returned: boolean) => {
     const change = groupQueries.changed(groupId);
+    ledgerChanges.set(groupId, change);
     if (confirmation?.snackbar.groupId === groupId) confirmation.change = change;
     ledgerChanged(groupId);
     if (returned || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
@@ -3300,7 +3306,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const expenseOrigin = (groupId: string) =>
     route.screen === 'expense' && route.returnTo?.groupId === groupId ? route.returnTo : null;
   /**
-   * A confirmed change returns to Expenses, where the change shows, whatever the task began on.
+   * A confirmed change returns to Expenses, where the change shows, whatever the task began on;
+   * an edit begun on its record returns to that record instead (`showConfirmedChange`, #635).
    * A new Expense in a list that had slid past the newest page returns to it, at the top, where
    * it sorts and its highlight can show (#215). An edit or a delete keeps the window where it was
    * and reads its pages again, so the edited row shows where the member left it (owner decision
@@ -3420,6 +3427,33 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await openGroup(to.groupId);
   };
 
+  /**
+   * "View in {Month}" beside the note of an edit saved on its record (owner decision for #655):
+   * the Group's Expenses at the Month the Expense now belongs to, read again, with the edited row
+   * highlighted as on a return after a confirmed edit (#219) once that read lists it.
+   */
+  const viewRecordMonth = async () => {
+    if (route.screen !== 'expense' || expenseNavigationBlocked()) return;
+    const { groupId, viewMonth, receiptId, draft, status } = snapshot.expense;
+    if (status !== 'detail' || !groupId || !viewMonth || !receiptId || !draft) return;
+    const to = returnView(groupId, 'expenses', {
+      groupId,
+      month: viewMonth,
+      scrollY: 0,
+      pages: 1,
+      destination: 'expenses',
+      activityPages: 1,
+    });
+    returnToGroup(to, {
+      groupId,
+      message: `Expense updated · ${draft.description.trim()}`,
+      viewMonth: null,
+      expenseId: receiptId,
+    });
+    if (confirmation) confirmation.change = ledgerChanges.get(groupId) ?? Infinity;
+    await openGroup(groupId);
+  };
+
   const viewSnackbarMonth = async () => {
     if (snapshot.snackbar?.viewToReview) return openToReview(snapshot.snackbar.groupId);
     const month = snapshot.snackbar?.viewMonth;
@@ -3440,8 +3474,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !canEditExpense(editor.draft.original)
     )
       return;
-    // Nothing is stored until an entry changes.
-    publish({ ...snapshot, expense: { ...editor, status: 'editing' } });
+    // Nothing is stored until an entry changes. Its save returns to this record (#635); a saved
+    // edit's note stays with the record.
+    publish({
+      ...snapshot,
+      expense: {
+        ...editor,
+        status: 'editing',
+        beganOnRecord: true,
+        ...(editor.receiptId ? { message: null, viewMonth: null } : {}),
+      },
+    });
   };
 
   /**
@@ -3467,14 +3510,49 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       )
         await storage.remove(lease.accountId, groupId);
     });
-  /** The form shows a confirmed edit or delete saved, then returns to its Group, which says so. */
+  /**
+   * The form shows a confirmed edit or delete saved, then returns to its Group, which says so.
+   * An edit begun on the Expense's record (Edit pressed there, `beganOnRecord`) returns to that
+   * record instead, as `saved`, and says so there; Back then goes to the Group (#635).
+   */
   const showConfirmedChange = async (
     groupId: string,
     kind: ExpenseMutation['kind'],
     draft: ExpenseDraft,
     original: ExpenseRecord,
     context: ExpenseContext | null,
+    saved: ExpenseRecord | null = null,
   ) => {
+    const { beganOnRecord, requestedExpenseId } = snapshot.expense;
+    if (kind === 'edit' && saved && beganOnRecord && requestedExpenseId === original._id) {
+      const shown = draftFromExpense(saved);
+      // Only a Group with Months offers one; one not read here offers none, as on the Group.
+      const viewMonth =
+        context?.group.category === 'home' && /^\d{4}-\d{2}-\d{2}$/.test(shown.date)
+          ? shown.date.slice(0, 7)
+          : null;
+      publish({
+        ...snapshot,
+        expense: {
+          ...snapshot.expense,
+          draft: shown,
+          preview: previewExpense(shown),
+          mutation: null,
+          latest: null,
+          status: 'detail',
+          beganOnRecord: false,
+          receiptId: original._id,
+          persistence: 'saved',
+          validation: emptyExpenseValidation(),
+          known: null,
+          message: 'Expense updated.',
+          viewMonth,
+        },
+      });
+      const invitation = openWaitingInvitation();
+      if (invitation) await invitation;
+      return;
+    }
     publish({
       ...snapshot,
       expense: {
@@ -3562,8 +3640,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             draft,
             original,
             snapshot.expense.context,
+            latest,
           );
-        await refreshLedgerViews(groupId, owner, view === route && owns());
+        // The Group reads again where it shows; its record, returned to, reads by itself.
+        await refreshLedgerViews(groupId, owner, false);
         return;
       }
       publish({
@@ -3791,8 +3871,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ...(kind === 'edit' ? { serializedBody: mutation.body } : {}),
         },
       );
-      if (kind === 'edit') parseExpenseRecord(response, groupId, original._id);
-      else {
+      // An edit's answer is the Expense as saved: its record shows it (#635).
+      const saved = kind === 'edit' ? parseExpenseRecord(response, groupId, original._id) : null;
+      if (kind === 'delete') {
         const deleted = parseExpenseRecord(
           await request(`/api/groups/${groupId}/expenses/${original._id}`, owner),
           groupId,
@@ -3804,7 +3885,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       completed = true;
       if (!current(owner) || view !== route || !owns()) return;
       refreshed = true;
-      await showConfirmedChange(groupId, kind, draft, original, context);
+      await showConfirmedChange(groupId, kind, draft, original, context, saved);
       await refreshLedgerViews(
         groupId,
         owner,
@@ -6757,6 +6838,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openExpense,
     closeExpense,
     viewSnackbarMonth,
+    viewRecordMonth,
     dismissSnackbar,
     resumeExpenseDraft,
     updateExpenseDraft,

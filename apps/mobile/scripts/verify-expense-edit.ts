@@ -264,7 +264,9 @@ async function run() {
       await controller.editExpense();
       await controller.updateExpenseDraft({ description: 'Metadata correction' });
       await controller.saveExpense();
-      assert.equal(controller.getSnapshot().expense.status, 'saved');
+      // Saved, back on the record it was opened from (#635).
+      assert.equal(controller.getSnapshot().expense.status, 'detail');
+      assert.equal(controller.getSnapshot().expense.message, 'Expense updated.');
       let current = await read();
       assert.equal(current.description, 'Metadata correction');
       assert.equal(current.date, initial.date);
@@ -303,6 +305,7 @@ async function run() {
       assert.equal(writes.length, count);
       await controller.reviewLatestExpense();
       await controller.saveExpense();
+      // Resumed after the restart, not begun on the record: back on the Group (#635).
       assert.equal(controller.getSnapshot().expense.status, 'saved');
       assert.equal((await read()).notes, 'My stale note');
       console.log(
@@ -324,6 +327,7 @@ async function run() {
       assert.equal(writes.length, count);
       // #232: the saved Expense is one revision on and holds the note sent: Alex's own edit.
       await controller.reconcileExpense();
+      // Resumed after the restart, not begun on the record: back on the Group (#635).
       assert.equal(controller.getSnapshot().expense.status, 'saved');
       assert.equal(controller.getSnapshot().expense.message, 'Expense updated.');
       assert.equal(controller.getSnapshot().screen, 'group');
@@ -345,7 +349,7 @@ async function run() {
         { status: 200, code: null },
         { status: 409, code: 'STALE_REVISION' },
       ]);
-      assert.equal(controller.getSnapshot().expense.status, 'saved');
+      assert.equal(controller.getSnapshot().expense.status, 'detail');
       assert.equal(controller.getSnapshot().expense.message, 'Expense updated.');
       assert.equal(await drafts.load(), null);
       const afterResend = await read();

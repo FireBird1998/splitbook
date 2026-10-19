@@ -617,6 +617,176 @@ describe('Returning from an Expense', () => {
   });
 });
 
+// The navigation map: Edit → Save → back to the record. A new Expense still lands on the Group.
+describe('Saving an edit begun on an Expense’s record (#635)', () => {
+  it('returns to that record, updated, with the note; Back then goes to the Group it opened from', async () => {
+    const { server, controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    await controller.openExpense(householdId, expenseId, { scrollY: 75 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Electricity bill' });
+    const sent = server.requests.length;
+    await controller.saveExpense();
+
+    expect(server.records.get(expenseId)).toMatchObject({
+      description: 'Electricity bill',
+      revision: 1,
+    });
+    expect(server.drafts.size).toBe(0);
+    // The record and its changes are read again after the edit, so its history can show it.
+    const reads = server.requests
+      .slice(sent)
+      .filter(({ method }) => method === 'GET')
+      .map(({ path }) => path.split('&')[0]);
+    expect(reads).toContain(`/api/groups/${householdId}/expenses/${expenseId}`);
+    expect(reads).toContain(`/api/groups/${householdId}/activity?expenseId=${expenseId}`);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      snackbar: null,
+      expense: {
+        status: 'detail',
+        requestedExpenseId: expenseId,
+        mutation: null,
+        message: 'Expense updated.',
+        draft: {
+          description: 'Electricity bill',
+          original: { _id: expenseId, revision: 1, description: 'Electricity bill' },
+        },
+      },
+    });
+
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'expenses',
+      detail: { id: householdId },
+      financial: { month: '2026-08' },
+      restoreScroll: { y: 75 },
+    });
+    expect(controller.getSnapshot().financial.expenses.data.map((row) => row.description)).toEqual([
+      'Electricity bill',
+    ]);
+  });
+
+  // Owner decision (#655): the note offers the Month the edited Expense is in, which opens the
+  // Group's Expenses there with the row highlighted, as after a resumed edit (#219, #104).
+  it('offers View in the edited Expense’s Month beside the note', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Electricity bill' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      message: 'Expense updated.',
+      viewMonth: '2026-08',
+    });
+  });
+
+  it('View in its Month opens Expenses at that Month with the edited row highlighted', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    await controller.openExpense(householdId, expenseId, { scrollY: 75 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ date: '2026-09-02' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      viewMonth: '2026-09',
+    });
+
+    await controller.viewRecordMonth();
+    const shown = controller.getSnapshot();
+    expect(shown).toMatchObject({
+      screen: 'group',
+      destination: 'expenses',
+      financial: { groupId: householdId, month: '2026-09' },
+      snackbar: {
+        groupId: householdId,
+        message: 'Expense updated · Electricity',
+        viewMonth: null,
+        expenseId,
+      },
+    });
+    expect(shown.financial.expenses.data.map((row) => row.id)).toContain(expenseId);
+  });
+
+  it('starts the next edit from the saved values, without the note', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Electricity bill' });
+    await controller.saveExpense();
+
+    await controller.editExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      message: null,
+      draft: { description: 'Electricity bill', original: { revision: 1 } },
+    });
+    expect(controller.getSnapshot().expense.viewMonth ?? null).toBeNull();
+  });
+
+  it('lands on the Group after an edit resumed from the Group, as a new Expense does', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Electricity bill' });
+    // Back keeps the edit as the Group's draft, which the Group offers to resume.
+    await controller.back();
+    await controller.openExpense(householdId);
+    controller.resumeExpenseDraft();
+    await controller.saveExpense();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      financial: { month: '2026-08' },
+      snackbar: { message: 'Expense updated · Electricity bill' },
+    });
+  });
+
+  // Home's draft row and the Expense's row both open the Expense the kept edit is of: the open
+  // asks for that Expense, but Edit was never pressed on its record.
+  it.each([
+    ['Home’s draft row', true],
+    ['its row on the Group', false],
+  ] as const)(
+    'lands on the Group after a kept edit is resumed from %s, as before',
+    async (_from, fromHome) => {
+      const { controller } = await signedIn();
+      await controller.openGroup(householdId);
+      await controller.selectMonth('2026-08');
+      await controller.openExpense(householdId, expenseId);
+      await controller.editExpense();
+      await controller.updateExpenseDraft({ description: 'Electricity bill' });
+      // Back keeps the edit on this device.
+      await controller.back();
+      if (fromHome) await controller.back();
+      await controller.openExpense(householdId, expenseId);
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'resume',
+        requestedExpenseId: expenseId,
+      });
+      controller.resumeExpenseDraft();
+      await controller.saveExpense();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        expense: { status: 'saved', message: 'Expense updated.' },
+        snackbar: { message: 'Expense updated · Electricity bill' },
+        financial: { month: fromHome ? '2026-09' : '2026-08' },
+      });
+      // No record to offer a Month from: the Group's own Snackbar says what changed.
+      expect(controller.getSnapshot().expense.viewMonth ?? null).toBeNull();
+    },
+  );
+});
+
 describe('Returning to an Expense beyond the first page', () => {
   // 25 August Expenses: the oldest is the last row of page 2.
   async function secondPage() {
@@ -652,15 +822,17 @@ describe('Returning to an Expense beyond the first page', () => {
     expect(server.pagesRead().slice(reads + 2)).toEqual([1, 2]);
   });
 
-  it('reads the same pages again after an edit or a new Expense is saved', async () => {
+  it('reads the same pages again on Back from an edited record, and after a new Expense is saved', async () => {
     const { server, controller, last } = await secondPage();
     await controller.openExpense(householdId, last.id, { scrollY: 2200 });
     await controller.editExpense();
     await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
-    let reads = server.pagesRead().length;
     await controller.saveExpense();
+    // The edit is back on its record (#635); Back returns to the list where it began.
+    expect(controller.getSnapshot().expense.status).toBe('detail');
+    let reads = server.pagesRead().length;
+    await controller.back();
     let shown = controller.getSnapshot();
-    expect(shown.snackbar?.message).toBe('Expense updated · Seeded, corrected');
     expect(shown.restoreScroll).toMatchObject({ y: 2200 });
     expect(shown.financial.expenses.data).toHaveLength(25);
     expect(shown.financial.expenses.data.find((row) => row.id === last.id)?.description).toBe(
@@ -699,11 +871,12 @@ describe('Returning to an Expense beyond the first page', () => {
     expect(financial.expenses.data.map((row) => row.id)).toContain(last.id);
   });
 
+  // A new Expense returns to the Group as it is saved; an edit returns to its record (#635), so
+  // its Back is the return read above.
   it('keeps the range when a foreground refresh supersedes the read after a save', async () => {
     const { server, controller, last } = await secondPage();
-    await controller.openExpense(householdId, last.id, { scrollY: 2200 });
-    await controller.editExpense();
-    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    await controller.openExpense(householdId, undefined, { scrollY: 2200 });
+    await fillNewExpense(controller, { date: '2026-08-02' });
     const pageTwo = server.hold('GET', /\/expenses\?page=2&/);
     const saving = controller.saveExpense();
     await pageTwo.reached;
@@ -711,12 +884,11 @@ describe('Returning to an Expense beyond the first page', () => {
     pageTwo.release();
     await Promise.all([saving, refreshing]);
 
-    const { financial, snackbar } = controller.getSnapshot();
-    expect(snackbar?.message).toBe('Expense updated · Seeded, corrected');
-    expect(financial.expenses.data).toHaveLength(25);
-    expect(financial.expenses.data.find((row) => row.id === last.id)?.description).toBe(
-      'Seeded, corrected',
-    );
+    const { financial, snackbar, restoreScroll } = controller.getSnapshot();
+    expect(snackbar?.message).toBe('Expense saved · Weekly groceries');
+    expect(restoreScroll).toMatchObject({ y: 2200 });
+    expect(financial.expenses.data).toHaveLength(26);
+    expect(financial.expenses.data.map((row) => row.id)).toContain(last.id);
   });
 
   it('drops the range when the member changes Month before it is shown', async () => {
@@ -773,12 +945,56 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
     expect(expenses).toMatchObject({ firstPage: 2, pagination: { page: 6 } });
     return { server, controller, last: expenses.data.at(-1)! };
   }
+  /**
+   * An edit resumed from the Group as its draft, which returns to the Group as it is saved. One
+   * begun on the record returns to the record, and Back then returns to the window (#635).
+   */
+  async function resumedEdit(
+    controller: ReturnType<typeof createMobileController>,
+    id: string,
+    patch: Partial<ExpenseDraft>,
+  ) {
+    await controller.openExpense(householdId, id, { scrollY: 6100 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft(patch);
+    await controller.back();
+    await controller.openExpense(householdId, undefined, { scrollY: 6100 });
+    controller.resumeExpenseDraft();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      requestedExpenseId: null,
+      draft: { original: { _id: id } },
+    });
+  }
 
-  it('keeps the window after an edit, reads its pages again, and highlights the edited row', async () => {
+  it('keeps the window on Back from a record edited there, and reads its pages again', async () => {
     const { server, controller, last } = await slid();
     await controller.openExpense(householdId, last.id, { scrollY: 6100 });
     await controller.editExpense();
     await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      message: 'Expense updated.',
+    });
+    const reads = server.pagesRead().length;
+    await controller.back();
+    const shown = controller.getSnapshot();
+    expect(shown).toMatchObject({
+      restoreScroll: { y: 6100 },
+      snackbar: null,
+      financial: { expenses: { firstPage: 2, pagination: { page: 6 } } },
+    });
+    expect(shown.financial.expenses.data).toHaveLength(100);
+    expect(shown.financial.expenses.data.find((row) => row.id === last.id)?.description).toBe(
+      'Seeded, corrected',
+    );
+    expect(server.pagesRead().slice(reads)).toEqual([2, 3, 4, 5, 6]);
+  });
+
+  it('keeps the window after an edit resumed from the Group, reads its pages again, and highlights the edited row', async () => {
+    const { server, controller, last } = await slid();
+    await resumedEdit(controller, last.id, { description: 'Seeded, corrected' });
     const reads = server.pagesRead().length;
     await controller.saveExpense();
     const shown = controller.getSnapshot();
@@ -801,9 +1017,7 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
   // before the edit, while it is read again, or once that read failed (#219).
   it('highlights no row before the window’s read after an edit lands, or while it runs', async () => {
     const { server, controller, last } = await slid();
-    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
-    await controller.editExpense();
-    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    await resumedEdit(controller, last.id, { description: 'Seeded, corrected' });
     const states: MobileSnapshot[] = [];
     controller.subscribe(() => states.push(controller.getSnapshot()));
     const reread = server.hold('GET', /\/expenses\?page=2&/);
@@ -828,9 +1042,7 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
 
   it('highlights no row, and says the list couldn’t be updated, when the window’s read after an edit fails', async () => {
     const { server, controller, last } = await slid();
-    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
-    await controller.editExpense();
-    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    await resumedEdit(controller, last.id, { description: 'Seeded, corrected' });
     server.failNextPage(2);
     await controller.saveExpense();
     const shown = controller.getSnapshot();
@@ -844,10 +1056,8 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
 
   it('highlights no row when the edit moves the Expense out of the window', async () => {
     const { controller, last } = await slid();
-    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
-    await controller.editExpense();
     // Dated after every other August Expense, it sorts onto page 1, before the window.
-    await controller.updateExpenseDraft({ date: '2026-08-31' });
+    await resumedEdit(controller, last.id, { date: '2026-08-31' });
     await controller.saveExpense();
     const shown = controller.getSnapshot();
     expect(shown.financial.expenses).toMatchObject({
@@ -964,6 +1174,8 @@ describe('Saving into the same or another Month', () => {
     });
   });
 
+  // An edit resumed from the Group returns there; one begun on the record returns to the record,
+  // which shows the new date (#635).
   it('offers the new Month after an edit moves an Expense, and a Month change ends the offer', async () => {
     const { controller } = await signedIn();
     await controller.openGroup(householdId);
@@ -971,6 +1183,9 @@ describe('Saving into the same or another Month', () => {
     await controller.openExpense(householdId, expenseId);
     await controller.editExpense();
     await controller.updateExpenseDraft({ date: '2026-09-02' });
+    await controller.back();
+    await controller.openExpense(householdId);
+    controller.resumeExpenseDraft();
     await controller.saveExpense();
     expect(controller.getSnapshot()).toMatchObject({
       financial: { month: '2026-08' },
@@ -1104,11 +1319,16 @@ describe('Draft and save recovery', () => {
     const patches = server.writes().filter((request) => request.method === 'PATCH');
     expect(patches).toHaveLength(2);
     expect(server.records.get(expenseId)!.description).toBe('Electricity bill');
+    // Saved, on the record it was opened from (#635); Back returns to the originating Month.
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { status: 'detail', message: 'Expense updated.' },
+    });
+    await controller.back();
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',
       financial: { month: '2026-08' },
       restoreScroll: { y: 75 },
-      snackbar: { message: 'Expense updated · Electricity bill', viewMonth: null },
     });
   });
 
@@ -1176,14 +1396,23 @@ describe('An edit or delete whose answer was lost (#232)', () => {
         revision: 1,
         editHistory: [expect.anything()],
       });
-      // Finished as if the answer had arrived: nothing is left to check or send.
+      // Finished as if the answer had arrived: nothing is left to check or send. The record it
+      // was opened from shows it (#635).
       expect(server.drafts.size).toBe(0);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'expense',
+        expense: {
+          status: 'detail',
+          mutation: null,
+          draft: { description: 'Electricity bill', original: { revision: 1 } },
+          message: 'Expense updated.',
+        },
+      });
+      await controller.back();
       expect(controller.getSnapshot()).toMatchObject({
         screen: 'group',
         financial: { month: '2026-08' },
         restoreScroll: { y: 75 },
-        expense: { status: 'saved', mutation: null, draft: null, message: 'Expense updated.' },
-        snackbar: { message: 'Expense updated · Electricity bill', viewMonth: null },
       });
       // The Group's Expenses were read again and show the change.
       expect(
@@ -1238,10 +1467,11 @@ describe('An edit or delete whose answer was lost (#232)', () => {
     });
     expect(server.records.get(expenseId)).toMatchObject({ amountMinor: 4500, revision: 1 });
     expect(server.drafts.size).toBe(0);
+    // On the record it was opened from (#635).
     expect(controller.getSnapshot()).toMatchObject({
-      screen: 'group',
-      expense: { status: 'saved', mutation: null, message: 'Expense updated.' },
-      snackbar: { message: 'Expense updated · Electricity' },
+      screen: 'expense',
+      expense: { status: 'detail', mutation: null, message: 'Expense updated.' },
+      snackbar: null,
     });
   });
 
@@ -1339,9 +1569,10 @@ describe('An edit or delete whose answer was lost (#232)', () => {
     'confirms when another member saved the very same change at the next revision (%s)',
     async (_field, edit) => {
       const { server, controller } = await metFirst(edit, () => undefined);
+      // On the record it was opened from (#635).
       expect(controller.getSnapshot()).toMatchObject({
-        screen: 'group',
-        expense: { status: 'saved', mutation: null, message: 'Expense updated.' },
+        screen: 'expense',
+        expense: { status: 'detail', mutation: null, message: 'Expense updated.' },
       });
       expect(server.drafts.size).toBe(0);
     },
@@ -1400,9 +1631,10 @@ describe('An edit or delete whose answer was lost (#232)', () => {
 
     expect(sent(server)).toEqual([ledgerWrite('PATCH')]);
     expect(server.records.get(expenseId)).toMatchObject({ tagId: rentTagId, revision: 1 });
+    // On the record it was opened from (#635).
     expect(controller.getSnapshot()).toMatchObject({
-      screen: 'group',
-      expense: { status: 'saved', message: 'Expense updated.' },
+      screen: 'expense',
+      expense: { status: 'detail', message: 'Expense updated.' },
     });
     expect(server.drafts.size).toBe(0);
   });
@@ -1485,6 +1717,7 @@ describe('An edit or delete whose answer was lost (#232)', () => {
     expect(restarted.getSnapshot().financial.balances.changed).toBeFalsy();
     await restarted.openExpense(householdId, expenseId);
     restarted.resumeExpenseDraft();
+    // Resumed after the restart, not begun on the record: the check returns to the Group (#635).
     const balances = server.hold('GET', new RegExp(`/api/groups/${householdId}/balances$`));
     const checking = restarted.reconcileExpense();
     await balances.reached;
@@ -1528,6 +1761,7 @@ describe('An edit or delete whose answer was lost (#232)', () => {
     await restarted.openExpense(householdId, expenseId);
     restarted.resumeExpenseDraft();
     await restarted.reconcileExpense();
+    // Resumed after the restart, not begun on the record: back on the Group (#635).
     expect(restarted.getSnapshot().expense).toMatchObject({
       status: 'saved',
       message: 'Expense updated.',
