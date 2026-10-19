@@ -548,3 +548,62 @@ describe.each(['light', 'dark'] as const)(
     });
   },
 );
+
+// #670: Group options tells the truth about saved Tags and retrying a read offline.
+describe.each(['light', 'dark'] as const)('Group options connectivity in %s at 130%', (mode) => {
+  it.each([false, true])('describes available actions without clipping, offline=%s', (offline) => {
+    const size = { width: 360, height: 800, fontScale: 1.3, scale: 1 };
+    setWindow(size);
+    const onManageTags = vi.fn();
+    const onRefresh = vi.fn();
+    const root = render(
+      <ThemeContext.Provider value={getSemanticTokens(mode)}>
+        <GroupShell
+          group={group}
+          destination="expenses"
+          onDestination={vi.fn()}
+          back={{ label: 'Back to Home', onPress: vi.fn() }}
+          invite={{ onPress: vi.fn(), disabled: false, offline }}
+          onMembers={vi.fn()}
+          onManageTags={onManageTags}
+          onRefresh={onRefresh}
+          pull={{ refreshing: false, onRefresh: vi.fn() }}
+        >
+          {null}
+        </GroupShell>
+      </ThemeContext.Provider>,
+    );
+    press(one(byRole(root, 'button', 'Group options')));
+    const tagsLabel = offline
+      ? 'Manage Tags, See the saved Tags; changing them needs a connection'
+      : 'Manage Tags, Create, rename, archive or restore';
+    const refreshLabel = offline
+      ? 'Refresh, Refreshing needs a connection'
+      : 'Refresh, Check for the latest changes';
+    const tags = one(byRole(root, 'button', tagsLabel));
+    const refresh = one(byRole(root, 'button', refreshLabel));
+    expect(tags.props.accessibilityState?.disabled).not.toBe(true);
+    expect(refresh.props.accessibilityState?.disabled).not.toBe(true);
+    const [modal] = findHosts(
+      renderer!.toJSON(),
+      (props, type) => type === 'Modal' && props.visible === true,
+    );
+    const [options] = findHosts(
+      modal!,
+      (props) =>
+        flatten(props.style).borderRadius === 14 && flatten(props.style).overflow === 'hidden',
+    );
+    expect(unreadText(options!, size.fontScale, size.width - 40, { cutOnce: true })).toEqual([]);
+    if (offline) {
+      for (const label of [tagsLabel, refreshLabel]) {
+        const [row] = findHosts(options!, (props) => props.accessibilityLabel === label);
+        expect(unreadText(row!, size.fontScale, size.width - 40)).toEqual([]);
+      }
+    }
+    press(tags);
+    expect(onManageTags).toHaveBeenCalledOnce();
+    press(one(byRole(root, 'button', 'Group options')));
+    press(one(byRole(root, 'button', refreshLabel)));
+    expect(onRefresh).toHaveBeenCalledOnce();
+  });
+});

@@ -184,7 +184,12 @@ export function GroupShell({
                   <ListRow
                     leading={<IconTile icon="pricetags-outline" />}
                     title="Manage Tags"
-                    meta="Create, rename, archive or restore"
+                    meta={
+                      invite.offline
+                        ? 'See the saved Tags; changing them needs a connection'
+                        : 'Create, rename, archive or restore'
+                    }
+                    metaLines={invite.offline ? 0 : 1}
                     onPress={() => {
                       close();
                       onManageTags();
@@ -219,7 +224,10 @@ export function GroupShell({
               <ListRow
                 leading={<IconTile icon="refresh-outline" />}
                 title="Refresh"
-                meta="Check for the latest changes"
+                meta={
+                  invite.offline ? 'Refreshing needs a connection' : 'Check for the latest changes'
+                }
+                metaLines={invite.offline ? 0 : 1}
                 onPress={() => {
                   close();
                   onRefresh();
