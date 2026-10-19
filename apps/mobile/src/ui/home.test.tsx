@@ -11,7 +11,7 @@ import type {
 import { ContinueDrafts, HomeBalances, HomeGroups, HomeTopBar } from './home';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { ThemeContext } from './theme';
-import { flatten } from '../test-utils/layout';
+import { flatten, hairSpace, labelRuns, largeTextWindows } from '../test-utils/layout';
 import { refreshedLabel } from './refresh-feedback';
 import { setFileWindow, setWindow } from '../test-utils/native';
 
@@ -354,4 +354,31 @@ describe('Home Groups', () => {
     expect(headers(again.root)).toEqual(['Groups · 0']);
     expect(text(again.root)).toContain('A shared space starts here.');
   });
+});
+
+// #639: on the emulator at density 160, Home's "Groups · 7" drew "Groups ·" and a settled
+// Group's "Settled up" drew "Settled", at 100% and 130%: each label is as wide as its words, and
+// Android, laying it out again to draw it, wrapped its last word out of sight. They keep room to
+// spare, as do the captions under the balances.
+describe.each(['light', 'dark'] as const)('Home Groups at large text in %s (#639)', (mode) => {
+  it.each(largeTextWindows)(
+    'keeps the count, the captions and Settled up whole, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      const root = render(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <HomeGroups
+            groups={{ status: 'ready', data: groupsList, message: null, loaded: true }}
+            byGroup={home().byGroup}
+            newGroupLabel="New Group"
+            onNewGroup={vi.fn()}
+            onOpen={vi.fn()}
+            onRetry={vi.fn()}
+          />
+        </ThemeContext.Provider>,
+      );
+      for (const label of ['Groups · 4', 'Settled up', 'you owe', 'New Group'])
+        expect(labelRuns(root, label), label).toEqual([[label, hairSpace]]);
+    },
+  );
 });

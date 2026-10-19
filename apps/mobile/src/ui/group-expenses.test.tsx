@@ -11,6 +11,10 @@ import { GroupExpensesView, expenseDays } from './group-expenses';
 import { inTimeZone } from '../test-utils/time-zone';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { refreshedLabel } from './refresh-feedback';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { hairSpace, labelRuns, largeTextWindows } from '../test-utils/layout';
+import { setWindow } from '../test-utils/native';
+import { ThemeContext } from './theme';
 
 // #116: the Expenses destination's summary, rows, pagination and draft states, rendered.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -774,4 +778,44 @@ describe('A kept draft', () => {
     expect(text(root)).not.toContain('Draft:');
     expect(buttons(root)).not.toContain('Resume draft');
   });
+});
+
+// #639: on the emulator at density 160 and 130% text, the Month bar's "All time" drew "All": the
+// button is as wide as its words, and Android, laying them out again to draw them, wrapped
+// "time" out of sight. Its words keep room to spare, as every button's have since #656.
+describe.each(['light', 'dark'] as const)('the Month bar at large text in %s (#639)', (mode) => {
+  it.each(largeTextWindows)(
+    'keeps All time and This month whole, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      for (const [month, label] of [
+        ['2026-09', 'All time'],
+        [null, 'This month'],
+      ] as const) {
+        act(() => {
+          screen = create(
+            <ThemeContext.Provider value={getSemanticTokens(mode)}>
+              <GroupExpensesView
+                group={group()}
+                currentUserId={you}
+                state={financial({}, month)}
+                kept={null}
+                savedExpenseId={null}
+                now={now}
+                onSelectMonth={vi.fn()}
+                onRefreshExpenses={vi.fn()}
+                onLoadMore={vi.fn()}
+                onLoadNewer={vi.fn()}
+                onOpenExpense={vi.fn()}
+                onResumeDraft={vi.fn()}
+                onDiscardDraft={vi.fn()}
+              />
+            </ThemeContext.Provider>,
+          );
+        });
+        expect(labelRuns(screen!.root, label), label).toEqual([[label, hairSpace]]);
+        remount();
+      }
+    },
+  );
 });

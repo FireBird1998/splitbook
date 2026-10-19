@@ -1,4 +1,4 @@
-import type { ReactTestRendererJSON } from 'react-test-renderer';
+import type { ReactTestInstance, ReactTestRendererJSON } from 'react-test-renderer';
 import { scaledSp } from '../ui/compact/scale';
 
 type Node = ReactTestRendererJSON;
@@ -198,7 +198,33 @@ const inFlow = (node: Node) =>
       typeof child !== 'string' && flatten(child.props.style).position !== 'absolute',
   );
 
-const hairSpace = String.fromCodePoint(0x200a);
+/** The room to spare a label as wide as its words keeps after them (`CompactText`'s `spare`). */
+export const hairSpace = String.fromCodePoint(0x200a);
+
+/**
+ * The phones and text sizes the large-text checks lay screens out at (#639): 360×640 and
+ * 412×915 dp, each at 130% and at 200% text.
+ */
+export const largeTextWindows = [
+  { width: 360, height: 640, fontScale: 1.3 },
+  { width: 360, height: 640, fontScale: 2 },
+  { width: 412, height: 915, fontScale: 1.3 },
+  { width: 412, height: 915, fontScale: 2 },
+];
+
+/**
+ * The runs of each text under `root` whose words are `label`, with or without the room it keeps
+ * to spare: `[label, hairSpace]` for a label that keeps it, `[label]` for one that doesn't.
+ */
+export function labelRuns(root: ReactTestInstance, label: string) {
+  return root
+    .findAll(
+      (node) =>
+        String(node.type) === 'Text' &&
+        node.children.join('').replace(new RegExp(`${hairSpace}$`), '') === label,
+    )
+    .map((node) => node.children);
+}
 
 /**
  * Outfit's advance, as a fraction of the font size, by kind of character. Fitted to seven texts

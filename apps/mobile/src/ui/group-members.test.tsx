@@ -2,6 +2,10 @@ import type { ReactElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LeaveGroupState, MobileGroup } from '../data/types';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { hairSpace, labelRuns, largeTextWindows } from '../test-utils/layout';
+import { setWindow } from '../test-utils/native';
+import { ThemeContext } from './theme';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -338,4 +342,28 @@ it('warns the final member explicitly and labels the irreversible confirmation',
   expect(props.leave.onConfirm).toHaveBeenCalledOnce();
   act(() => one(byRole(modal, 'button', 'Cancel')).props.onPress());
   expect(props.leave.onCancel).toHaveBeenCalledOnce();
+});
+
+// #639: on the emulator at density 160, "Members · 3" drew "Members ·": the title is as wide as
+// its words, and Android, laying it out again to draw it, wrapped the count out of sight. It
+// keeps room to spare.
+describe.each(['light', 'dark'] as const)('Members at large text in %s (#639)', (mode) => {
+  it.each(largeTextWindows)(
+    'keeps the members’ count whole, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      const root = render(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <GroupMembers
+            group={household}
+            currentUserId={you}
+            back={{ label: 'Back to Group', onPress: vi.fn() }}
+            invite={{ onPress: vi.fn(), disabled: false, offline: false }}
+            leave={leaveActions()}
+          />
+        </ThemeContext.Provider>,
+      );
+      expect(labelRuns(root, 'Members · 3')).toEqual([['Members · 3', hairSpace]]);
+    },
+  );
 });

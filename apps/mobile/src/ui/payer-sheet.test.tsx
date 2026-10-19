@@ -10,9 +10,17 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { ExpenseDraft } from '../data/expense-draft';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
-import { findHosts, layoutHeight } from '../test-utils/layout';
+import {
+  findHosts,
+  hairSpace,
+  labelRuns,
+  largeTextWindows,
+  layoutHeight,
+} from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { ExpenseEditor } from './expense-editor';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { ThemeContext } from './theme';
 
 // #122: the Who paid sheet, rendered over the Expense form through the real controller.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -168,13 +176,17 @@ afterEach(() => {
   screen = null;
 });
 
-async function render(draft: Partial<ExpenseDraft> = {}) {
+async function render(draft: Partial<ExpenseDraft> = {}, mode: 'light' | 'dark' = 'light') {
   const harness = backend();
   await harness.controller.signIn('alex');
   await harness.controller.openExpense(groupId);
   await harness.controller.updateExpenseDraft({ description: 'Weekly groceries', tagId, ...draft });
   await act(async () => {
-    screen = create(<EditorScreen controller={harness.controller} />);
+    screen = create(
+      <ThemeContext.Provider value={getSemanticTokens(mode)}>
+        <EditorScreen controller={harness.controller} />
+      </ThemeContext.Provider>,
+    );
   });
   const root = () => screen!.root;
   /** The mounted Who paid sheet's Modal. */
@@ -504,6 +516,22 @@ describe('Who paid at 200% text with the keyboard open (#637)', () => {
       expect(drawnText(remainder!)).toContain(status.split('. ')[0]);
       // And the sheet still says Done or Back keeps the entries.
       expect(text(ui.sheet())).toContain('Entries stay in your draft. Done or Back keeps them.');
+    },
+  );
+});
+
+// #639: on the emulator at density 160, Who paid's "One person" drew "One": each option is as
+// wide as its words, and Android, laying them out again to draw them, wrapped "person" out of
+// sight. Both options keep room to spare.
+describe.each(['light', 'dark'] as const)('Who paid at large text in %s (#639)', (mode) => {
+  it.each(largeTextWindows)(
+    'keeps both options whole, $width dp at $fontScale× text',
+    async (size) => {
+      setWindow(size);
+      const ui = await render({}, mode);
+      await ui.open();
+      for (const label of ['One person', 'Several people'])
+        expect(labelRuns(ui.sheet(), label), label).toEqual([[label, hairSpace]]);
     },
   );
 });

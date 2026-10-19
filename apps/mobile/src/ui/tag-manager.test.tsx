@@ -6,7 +6,10 @@ import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import type { MobileFetch } from '../data/types';
 import type { TagCommand } from '@splitbook/shared/tag-management';
 import { AccessibilityInfo } from 'react-native';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { hairSpace, labelRuns, largeTextWindows } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
+import { ThemeContext } from './theme';
 import { TagManager, doneShownFor } from './tag-manager';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -762,4 +765,32 @@ describe('What the screen says', () => {
     );
     expect(title.props.numberOfLines).toBeGreaterThan(1);
   });
+});
+
+/** Alex's Tags read, then laid out again at this size and in this appearance. */
+async function showTagsAt(size: (typeof largeTextWindows)[number], mode: 'light' | 'dark') {
+  await openManageTags();
+  setWindow(size);
+  act(() =>
+    renderer!.update(
+      <ThemeContext.Provider value={getSemanticTokens(mode)}>
+        {tagsScreen(false)}
+      </ThemeContext.Provider>,
+    ),
+  );
+  await settle();
+}
+
+// #639: on the emulator at density 160, "ACTIVE · 6" drew "ACTIVE ·" and "ARCHIVED · 3"
+// "ARCHIVED ·", at 100% and 130%: each section's title is as wide as its words, and Android,
+// laying it out again to draw it, wrapped the count out of sight. They keep room to spare.
+describe.each(['light', 'dark'] as const)('Tags at large text in %s (#639)', (mode) => {
+  it.each(largeTextWindows)(
+    'keeps each section’s count whole, $width dp at $fontScale× text',
+    async (size) => {
+      await showTagsAt(size, mode);
+      for (const label of ['Active · 1', 'Archived · 1', 'New Tag'])
+        expect(labelRuns(renderer!.root, label), label).toEqual([[label, hairSpace]]);
+    },
+  );
 });
