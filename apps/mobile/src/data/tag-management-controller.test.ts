@@ -321,6 +321,28 @@ describe('Group Tag actions through the public controller', () => {
     },
   );
 
+  it.each([false, true])(
+    'checks Group membership when a read of the Tags meets an unreadable denial: access lost %s (#638)',
+    async (accessLost) => {
+      const device = phone();
+      const controller = device.boot();
+      await controller.signIn('alex');
+      const manager = controller.groupTags(groupId);
+      device.server.denial = 'unreadable';
+      device.server.groupDenied = accessLost;
+      // Reads go as display reads now, through the same Tag refusal check as changes.
+      if (accessLost) await expect(manager.read()).rejects.toThrow();
+      else
+        await expect(manager.read()).rejects.toMatchObject({
+          code: 'TAG_PERMISSION_UNCONFIRMED',
+        });
+      expect(controller.getSnapshot().groups.data.some((group) => group.id === groupId)).toBe(
+        !accessLost,
+      );
+      expect(device.server.submitted).toEqual([]);
+    },
+  );
+
   it('does not submit when the exact intent cannot be stored', async () => {
     const device = phone();
     const controller = device.boot();

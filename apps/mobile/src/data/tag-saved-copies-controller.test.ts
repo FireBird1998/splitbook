@@ -34,6 +34,10 @@ function fixture() {
     left: false,
     /** The next Tag change is applied, and its reply lost on the way back. */
     loseTagReply: false,
+    /** Each applied Tag change's receipt, by its request id, for Check again. */
+    receipts: new Map<string, unknown>(),
+    /** Reads of the Tags wait for this before they're answered. */
+    holdRead: null as Promise<void> | null,
     tags: [
       { id: foodId, name: 'Food', revision: 0, isArchived: false, isDeleted: false },
       { id: rentId, name: 'Rent', revision: 0, isArchived: false, isDeleted: false },
@@ -170,6 +174,8 @@ function fixture() {
       if (intent.action === 'archive' || intent.action === 'restore')
         tag.isArchived = intent.action === 'archive';
       tag.revision += 1;
+      const receipt = { intent, tagId: tag.id, appliedAt: iso };
+      server.receipts.set(command.requestId, receipt);
       if (server.loseTagReply) {
         server.loseTagReply = false;
         throw new TypeError('Network request failed');
@@ -179,12 +185,25 @@ function fixture() {
         data: {
           state: 'applied',
           requestId: command.requestId,
-          receipt: { intent, tagId: tag.id, appliedAt: iso },
+          receipt,
           snapshot: snapshot(),
         },
       });
     }
-    if (path === tagsPath) return json({ status: 200, data: snapshot() });
+    if (path === tagsPath) {
+      await server.holdRead;
+      return json({ status: 200, data: snapshot() });
+    }
+    if (path.startsWith(`${tagsPath}/`)) {
+      const requestId = path.slice(tagsPath.length + 1);
+      const receipt = server.receipts.get(requestId);
+      return json({
+        status: 200,
+        data: receipt
+          ? { state: 'applied', requestId, receipt, snapshot: snapshot() }
+          : { state: 'not-applied', requestId, snapshot: snapshot() },
+      });
+    }
     if (path.startsWith(`${maplePath}/expenses`)) return json(emptyPage);
     if (path === `${maplePath}/balances`)
       return json({
@@ -301,6 +320,9 @@ async function readTagsOnline(f: Fixture) {
   return { controller, tags };
 }
 
+/** Lets answers and saved-copy writes already under way finish. */
+const settled = () => new Promise((resolve) => setTimeout(resolve, 50));
+
 /** The app is closed, the phone goes offline, and the app starts again. */
 async function restartOffline(f: Fixture, controller: Controller) {
   controller.dispose();
@@ -415,6 +437,55 @@ describe('a Group’s Tags in its Saved copy (#638)', () => {
     } finally {
       restarted.dispose();
     }
+  });
+});
+
+describe('Tags are never kept while a change made here is unconfirmed (#638)', () => {
+  it('shows them, but keeps none, until Check again confirms the change', async () => {
+    const f = fixture();
+    const { controller, tags } = await readTagsOnline(f);
+    const food = tags.state().snapshot!.tags.find((item) => item.name === 'Food')!;
+    f.server.loseTagReply = true;
+    // The read after the lost reply is answered once this phone has cleared its older copies.
+    let answer!: () => void;
+    f.server.holdRead = new Promise<void>((resolve) => (answer = resolve));
+    tags.manager.edit(food, 'rename');
+    tags.manager.enter('Meals');
+    await tags.manager.submit();
+    expect(tags.state().recovery).toMatchObject({ command: { intent: { name: 'Meals' } } });
+    expect(tags.state().recovery?.confirmed).toBeUndefined();
+    f.server.holdRead = null;
+    answer();
+    // Read again after the lost reply, which the server had applied: shown, never kept, since
+    // this phone can't yet say whether the change it holds is in them.
+    await vi.waitFor(() =>
+      expect(tags.state().snapshot?.tags.map((item) => item.name)).toEqual(['Meals', 'Rent']),
+    );
+    await settled();
+    expect(f.savedTags()).toBeNull();
+    tags.close();
+    // Offline in the same session, the Tags read after the reply show as that read, never as
+    // this phone's copy, beside the change to check: they say this phone keeps none.
+    f.server.offline = true;
+    const offline = await openTags(controller);
+    expect(offline.state()).toMatchObject({
+      snapshot: { tags: [{ name: 'Meals' }, { name: 'Rent' }] },
+      saved: false,
+      message: 'Couldn’t refresh the Tags, and this phone no longer keeps a copy of them.',
+      recovery: { command: { intent: { action: 'rename', name: 'Meals' } } },
+    });
+    expect(f.savedTags()).toBeNull();
+    offline.close();
+    // Online again, Check again confirms the change, and the Tags read after it are kept.
+    f.server.offline = false;
+    const online = await openTags(controller);
+    await online.manager.check();
+    expect(online.state().recovery?.confirmed).toMatchObject({ state: 'applied' });
+    await vi.waitFor(() =>
+      expect(f.savedTags()?.tags.map((item) => item.name)).toEqual(['Meals', 'Rent']),
+    );
+    online.close();
+    controller.dispose();
   });
 });
 
