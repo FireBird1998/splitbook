@@ -126,7 +126,10 @@ function fixture() {
     lost: boolean;
     late: boolean;
   }[] = [];
-  const connection = new Set<(state: { isConnected: boolean | null }) => void>();
+  let connectionState: { isConnected: boolean | null; isInternetReachable?: boolean | null } = {
+    isConnected: true,
+  };
+  const connection = new Set<(state: typeof connectionState) => void>();
   const records = (map: Map<string, unknown>) => ({
     load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
     save: async (account: string, key: string, value: unknown) => {
@@ -287,7 +290,7 @@ function fixture() {
           // As NetInfo does, a new listener hears the connection as it is now.
           addEventListener: (listener) => {
             connection.add(listener);
-            listener({ isConnected: !server.offline });
+            listener(connectionState);
             return () => connection.delete(listener);
           },
         },
@@ -416,9 +419,10 @@ function fixture() {
     /** The next load of this path's row fails, as a read of the device's storage can. */
     failLoadOnce: (path: string) => void failOnce.add(path),
     /** NetInfo reports the device's connection. */
-    connect(isConnected: boolean) {
-      server.offline = !isConnected;
-      connection.forEach((listener) => listener({ isConnected }));
+    connect(isConnected: boolean, isInternetReachable?: boolean | null) {
+      server.offline = !isConnected || isInternetReachable === false;
+      connectionState = { isConnected, isInternetReachable };
+      connection.forEach((listener) => listener(connectionState));
     },
     /** This account's row for `path`, if this device has one. */
     row: (path: string, account = alex.id) =>
@@ -562,6 +566,37 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
     });
     controller.dispose();
   });
+
+  it.each(['internet returns', 'foreground'] as const)(
+    'clears a cold offline Home without manual Refresh when %s',
+    async (recovery) => {
+      const f = fixture();
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      // Wi-Fi may be connected before it has internet; NetInfo reports both separately.
+      f.connect(true, false);
+      const controller = f.create();
+      await controller.restore();
+      expect(controller.getSnapshot().offline.active).toBe(true);
+      const sent = f.calls.length;
+      if (recovery === 'internet returns') f.connect(true, true);
+      else {
+        f.server.offline = false;
+        await controller.refresh('foreground');
+      }
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'groups',
+        offline: { active: false, refreshedAt: null },
+        groups: { status: 'ready', restored: false },
+        home: { status: 'ready', restored: false },
+      });
+      expect(f.calls.slice(sent).every(({ method }) => method === 'GET')).toBe(true);
+      controller.dispose();
+    },
+  );
 
   it('reads again on reconnect only the queries Home shows, only past their stale time, and sends no write', async () => {
     const f = fixture();
