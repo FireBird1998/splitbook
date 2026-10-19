@@ -627,7 +627,7 @@ export const GroupExpensesView = memo(
           wraps every state of the list, so the Card that showed its skeleton stays the Card that
           fades its rows in. */}
         <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
-          {!listed || (expenses.changed && expenses.data.length === 0) ? (
+          {!listed ? (
             expenses.status === 'error' && offline ? (
               <NotAvailableOffline
                 compact
@@ -688,11 +688,29 @@ export const GroupExpensesView = memo(
             </Card>
           ) : (
             <Card padded>
-              <CompactText weight="semibold">
-                {state.month ? `No expenses in ${monthLabel(state.month)}` : 'No expenses yet'}
+              <CompactText
+                weight="semibold"
+                accessibilityLabel={
+                  expenses.changed && expenses.status !== 'error'
+                    ? `Loading ${scope} expenses`
+                    : undefined
+                }
+                accessibilityLiveRegion={expenses.changed ? 'polite' : undefined}
+              >
+                {expenses.changed
+                  ? expenses.status === 'error'
+                    ? 'Expenses need an update'
+                    : 'Updating expenses…'
+                  : state.month
+                    ? `No expenses in ${monthLabel(state.month)}`
+                    : 'No expenses yet'}
               </CompactText>
               <CompactText variant="small" tone="secondary">
-                {state.month ? 'Try another Month or All time.' : 'Expenses you add appear here.'}
+                {expenses.changed
+                  ? 'Waiting for the updated list.'
+                  : state.month
+                    ? 'Try another Month or All time.'
+                    : 'Expenses you add appear here.'}
               </CompactText>
             </Card>
           )}
