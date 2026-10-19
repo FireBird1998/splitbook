@@ -47,7 +47,7 @@ describe('offline banner', () => {
     expect(banner.props.accessibilityLiveRegion).toBe('polite');
     // Try again ends in a hair space (#331), which a reader doesn't hear.
     expect(text(banner).trim()).toBe(
-      `You’re offlineSome of what's shown was saved on this device at ${refreshedLabel(savedAt)} and may have changed since.Try again`,
+      `You’re offlineSome of what’s shown was saved on this device at ${refreshedLabel(savedAt)} and may have changed since.Try again`,
     );
     act(() => byRole(root, 'button', 'Try again')[0].props.onPress());
     expect(onRetry).toHaveBeenCalledOnce();
