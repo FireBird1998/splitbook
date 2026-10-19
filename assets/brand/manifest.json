@@ -1092,6 +1092,54 @@
       "sha256": "ec5b010c04e121d38cdcc10efaf0bcbfc2db78ce86df122bfb9396963142995a"
     },
     {
+      "file": "apps/mobile/assets/brand/logo-light.png",
+      "bytes": 2202,
+      "sha256": "d99e7ac358b3d90f5e49e382d14cc50522f792f908901d34f1683837eaa301ba",
+      "width": 124,
+      "height": 32,
+      "alpha": true
+    },
+    {
+      "file": "apps/mobile/assets/brand/logo-light@2x.png",
+      "bytes": 4246,
+      "sha256": "45c86d0a4fcff1c433edb2e793857f5dd1410895532c6a0317721b6b64fbbdef",
+      "width": 249,
+      "height": 64,
+      "alpha": true
+    },
+    {
+      "file": "apps/mobile/assets/brand/logo-light@3x.png",
+      "bytes": 6434,
+      "sha256": "6b0311e8488b32711e45901f72871e44ea6d6c23448e68884b788e401f75eafc",
+      "width": 373,
+      "height": 96,
+      "alpha": true
+    },
+    {
+      "file": "apps/mobile/assets/brand/logo-dark.png",
+      "bytes": 1790,
+      "sha256": "5c6f25a9f69b4bda5e22739b76a4600c7f544e4f9b1f1cb4d96b670d1ac86a73",
+      "width": 124,
+      "height": 32,
+      "alpha": true
+    },
+    {
+      "file": "apps/mobile/assets/brand/logo-dark@2x.png",
+      "bytes": 3611,
+      "sha256": "2f9b521a2722bc8154d092fcd9dda1e079bd3cd166894f10a8aa1e2b3f28b9ea",
+      "width": 249,
+      "height": 64,
+      "alpha": true
+    },
+    {
+      "file": "apps/mobile/assets/brand/logo-dark@3x.png",
+      "bytes": 5532,
+      "sha256": "cd1b55b62e271a6dcac7c63ce82c3e0f92f6a10601fb4e922294afbdea3f9522",
+      "width": 373,
+      "height": 96,
+      "alpha": true
+    },
+    {
       "file": "docs/design/brand/brand-board.svg",
       "bytes": 227820,
       "sha256": "ed56d42b86925259e03aeeffb9bd778226ba7d749ff1394640c17c71241c0e68"

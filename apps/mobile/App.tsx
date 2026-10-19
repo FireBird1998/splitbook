@@ -228,6 +228,10 @@ function AuthenticationScreen() {
   );
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
   const feedback = state;
+  const showsSignIn =
+    configurationReady &&
+    !authenticated &&
+    !['restoring', 'error', 'sign-out-unconfirmed'].includes(state.auth.status);
   const joining = state.invitation.status === 'joining';
   const waiting = !configurationReady
     ? null
@@ -240,48 +244,54 @@ function AuthenticationScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
         {/* Shrinks so the wordmark and its short status never push Settings off screen. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
-          {state.screen !== 'groups' ? (
-            // Disabled while joining: the join finishes and opens its Group.
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Back to Groups"
-              accessibilityState={{ disabled: joining }}
-              disabled={joining}
-              onPress={controller.back}
-              style={{
-                minWidth: 48,
-                minHeight: 48,
-                justifyContent: 'center',
-                opacity: joining ? 0.4 : 1,
-              }}
-            >
-              <Icon name="arrow-back-outline" color={theme.text} />
-            </Pressable>
-          ) : (
-            <View
-              style={{
-                backgroundColor: theme.brand.main,
-                width: 32,
-                height: 36,
-                borderRadius: 9,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-            >
-              <Copy
-                style={{ color: theme.brand.contrastText, fontFamily: fonts.bold, fontSize: 22 }}
+        {!showsSignIn || state.screen !== 'groups' ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
+            {state.screen !== 'groups' ? (
+              // Disabled while joining: the join finishes and opens its Group.
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to Groups"
+                accessibilityState={{ disabled: joining }}
+                disabled={joining}
+                onPress={controller.back}
+                style={{
+                  minWidth: 48,
+                  minHeight: 48,
+                  justifyContent: 'center',
+                  opacity: joining ? 0.4 : 1,
+                }}
               >
-                s
+                <Icon name="arrow-back-outline" color={theme.text} />
+              </Pressable>
+            ) : (
+              <View
+                style={{
+                  backgroundColor: theme.brand.main,
+                  width: 32,
+                  height: 36,
+                  borderRadius: 9,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <Copy
+                  style={{ color: theme.brand.contrastText, fontFamily: fonts.bold, fontSize: 22 }}
+                >
+                  s
+                </Copy>
+              </View>
+            )}
+            {!showsSignIn && (
+              <Copy style={{ fontFamily: fonts.semibold, fontSize: 23, letterSpacing: -0.6 }}>
+                splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
               </Copy>
-            </View>
-          )}
-          <Copy style={{ fontFamily: fonts.semibold, fontSize: 23, letterSpacing: -0.6 }}>
-            splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
-          </Copy>
-          {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
-          <RefreshStatus visible={feedback.quiet} />
-        </View>
+            )}
+            {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
+            <RefreshStatus visible={feedback.quiet} />
+          </View>
+        ) : (
+          <View />
+        )}
         {authenticated && state.screen !== 'settings' ? (
           <Pressable
             accessibilityRole="button"
@@ -682,7 +692,13 @@ const HomeScreen = memo(function HomeScreen() {
   const feedback = selected;
   const { checking } = feedback;
   const status = useMemo(
-    () => <RefreshStatus visible={feedback.quiet || checking} checking={checking} />,
+    () => (
+      <RefreshStatus
+        visible={feedback.quiet || checking}
+        checking={checking}
+        refreshLabel="Updating…"
+      />
+    ),
     [feedback.quiet, checking],
   );
   const refresh = useCallback(() => void controller.refresh(), []);

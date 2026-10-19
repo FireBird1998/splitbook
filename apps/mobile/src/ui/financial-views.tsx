@@ -19,9 +19,11 @@ import { useTheme } from './theme';
 export function RefreshStatus({
   visible,
   checking = false,
+  refreshLabel = 'Refreshing…',
 }: {
   visible: boolean;
   checking?: boolean;
+  refreshLabel?: string;
 }) {
   const large = useLargeText();
   if (!visible) return null;
@@ -34,7 +36,7 @@ export function RefreshStatus({
         adjustsFontSizeToFit
         style={{ fontSize: 13, lineHeight: 20 }}
       >
-        {checking ? 'Checking…' : 'Refreshing…'}
+        {checking ? 'Checking…' : refreshLabel}
       </StatusText>
     </View>
   );

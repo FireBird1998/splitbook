@@ -1,3 +1,4 @@
+import { brandLogoSize } from './brand-logo';
 import type { ReactElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +9,9 @@ import type {
   MobileSnapshot,
 } from '../data/types';
 import { ContinueDrafts, HomeBalances, HomeGroups, HomeTopBar } from './home';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { ThemeContext } from './theme';
+import { flatten } from '../test-utils/layout';
 import { refreshedLabel } from './refresh-feedback';
 import { setFileWindow, setWindow } from '../test-utils/native';
 
@@ -113,16 +117,53 @@ const announced = (root: ReactTestInstance) =>
 const headers = (root: ReactTestInstance) =>
   root
     .findAll((node) => typeof node.type === 'string' && node.props.accessibilityRole === 'header')
-    .map((node) => node.children.filter((child) => typeof child === 'string').join(''));
+    .map(
+      (node) =>
+        node.props.accessibilityLabel ??
+        node.children.filter((child) => typeof child === 'string').join(''),
+    );
 
 describe('Home top bar', () => {
+  it.each(
+    (['light', 'dark'] as const).flatMap((mode) =>
+      [1, 1.3, 2].map((fontScale) => ({ mode, fontScale })),
+    ),
+  )(
+    'shows the $mode artwork once as the fixed-size Splitbook heading at $fontScale text',
+    ({ mode, fontScale }) => {
+      setWindow({ fontScale });
+      const root = render(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <HomeTopBar userName="Alex Rivera" onRefresh={vi.fn()} onAccount={vi.fn()} />
+        </ThemeContext.Provider>,
+      );
+      const logos = root.findAll(
+        (node) => typeof node.type === 'string' && node.props.accessibilityLabel === 'Splitbook',
+      );
+      expect(logos).toHaveLength(1);
+      expect(logos[0]!.type).toBe('Image');
+      expect(logos[0]!.props).toMatchObject({
+        accessible: true,
+        accessibilityRole: 'header',
+        resizeMode: 'contain',
+      });
+      expect(String(logos[0]!.props.source)).toContain(`logo-${mode}.png`);
+      expect(flatten(logos[0]!.props.style)).toMatchObject({
+        height: 32,
+        width: brandLogoSize.width,
+        flexShrink: 0,
+      });
+      expect(text(root)).not.toContain('splitbook');
+    },
+  );
+
   it('keeps a refresh action and opens Account from the avatar', () => {
     const onRefresh = vi.fn(),
       onAccount = vi.fn();
     const root = render(
       <HomeTopBar userName="Alex Rivera" onRefresh={onRefresh} onAccount={onAccount} />,
     );
-    expect(headers(root)).toEqual(['splitbook']);
+    expect(headers(root)).toEqual(['Splitbook']);
     act(() => button(root, 'Refresh Home').props.onPress());
     act(() => button(root, 'Account and settings').props.onPress());
     expect(onRefresh).toHaveBeenCalledTimes(1);

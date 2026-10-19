@@ -206,6 +206,7 @@ export const reactNative = {
     getInitialURL: async () => null,
     openURL: spies.openURL,
   },
+  Image: 'Image',
   Modal: 'Modal',
   // Hands its config straight through as the handlers, so a test can drive a drag.
   PanResponder: { create: (config: object) => ({ panHandlers: config }) },

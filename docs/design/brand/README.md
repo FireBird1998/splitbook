@@ -10,22 +10,23 @@ The owner selected the [Equal share concept](../logo-concepts/2026-10-01/02-equa
 
 All paths below are relative to the repository root. Generated files come from the sources in `assets/brand/`; update those sources and regenerate to keep every copy consistent.
 
-| Use                                         | Asset                                                              | Standard display                          |
-| ------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
-| Website header, light surface               | `assets/brand/svg/logo-light.svg`                                  | 32 px high; compact 24 px; large 40–48 px |
-| Website header, dark surface                | `assets/brand/svg/logo-dark.svg`                                   | Same dimensions as light                  |
-| Tight navigation, loading UI                | `assets/brand/svg/mark-indigo.svg` or `mark-on-dark.svg`           | 24, 32, 40 or 48 px                       |
-| Large centered branding                     | `assets/brand/svg/stacked-light.svg` or `stacked-dark.svg`         | At least 200 px wide                      |
-| Single-color print or restricted palette    | `logo-ink.svg`, `logo-white.svg`, `mark-ink.svg`, `mark-white.svg` | Select for background contrast            |
-| Existing symbol alongside separate logotype | `assets/brand/svg/wordmark-light.svg` or `wordmark-dark.svg`       | At least 16 px high                       |
-| Browser tabs                                | `apps/web/public/brand/favicon.svg` and `favicon.ico`              | ICO contains 16, 32 and 48 px             |
-| Apple touch icon                            | `apps/web/public/brand/icon-180.png`                               | 180 × 180                                 |
-| Web manifest, ordinary icons                | `apps/web/public/brand/icon-192.png`, `icon-512.png`               | 192 and 512 px                            |
-| Web manifest, maskable icons                | `apps/web/public/brand/maskable-192.png`, `maskable-512.png`       | Use only with `purpose: "maskable"`       |
-| Native app / iOS base / store artwork       | `apps/mobile/assets/brand/app-icon.png`                            | 1024 × 1024, RGB, fully opaque            |
-| Android adaptive foreground                 | `apps/mobile/assets/brand/android-foreground.png`                  | 1024 × 1024 with transparent padding      |
-| Android themed icon                         | `apps/mobile/assets/brand/android-monochrome.png`                  | Same geometry, black alpha mask           |
-| Native splash, light and dark               | `apps/mobile/assets/brand/splash-light.png`, `splash-dark.png`     | 1152 × 1152 = the 288 dp splash icon @4x  |
+| Use                                         | Asset                                                                                     | Standard display                          |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Website header, light surface               | `assets/brand/svg/logo-light.svg`                                                         | 32 px high; compact 24 px; large 40–48 px |
+| Website header, dark surface                | `assets/brand/svg/logo-dark.svg`                                                          | Same dimensions as light                  |
+| Tight navigation, loading UI                | `assets/brand/svg/mark-indigo.svg` or `mark-on-dark.svg`                                  | 24, 32, 40 or 48 px                       |
+| Large centered branding                     | `assets/brand/svg/stacked-light.svg` or `stacked-dark.svg`                                | At least 200 px wide                      |
+| Single-color print or restricted palette    | `logo-ink.svg`, `logo-white.svg`, `mark-ink.svg`, `mark-white.svg`                        | Select for background contrast            |
+| Existing symbol alongside separate logotype | `assets/brand/svg/wordmark-light.svg` or `wordmark-dark.svg`                              | At least 16 px high                       |
+| Browser tabs                                | `apps/web/public/brand/favicon.svg` and `favicon.ico`                                     | ICO contains 16, 32 and 48 px             |
+| Apple touch icon                            | `apps/web/public/brand/icon-180.png`                                                      | 180 × 180                                 |
+| Web manifest, ordinary icons                | `apps/web/public/brand/icon-192.png`, `icon-512.png`                                      | 192 and 512 px                            |
+| Web manifest, maskable icons                | `apps/web/public/brand/maskable-192.png`, `maskable-512.png`                              | Use only with `purpose: "maskable"`       |
+| Native app / iOS base / store artwork       | `apps/mobile/assets/brand/app-icon.png`                                                   | 1024 × 1024, RGB, fully opaque            |
+| Android adaptive foreground                 | `apps/mobile/assets/brand/android-foreground.png`                                         | 1024 × 1024 with transparent padding      |
+| Android themed icon                         | `apps/mobile/assets/brand/android-monochrome.png`                                         | Same geometry, black alpha mask           |
+| Native splash, light and dark               | `apps/mobile/assets/brand/splash-light.png`, `splash-dark.png`                            | 1152 × 1152 = the 288 dp splash icon @4x  |
+| Android in-app logo, light and dark         | `apps/mobile/assets/brand/logo-light.png`, `logo-dark.png` and their `@2x`/`@3x` siblings | 32 dp high at every system text size      |
 
 The primary app icon is white on Ink. The indigo app-icon SVG is an alternate for marketing; keep a release's launcher identity consistent. Rounded corners on the overview are mask previews. Native upload files are full squares; the operating system supplies its mask.
 

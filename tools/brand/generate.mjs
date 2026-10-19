@@ -262,6 +262,13 @@ for (const name of ['splash-light', 'splash-dark'])
   );
 for (const name of ['mark-indigo', 'mark-white'])
   await output(`apps/mobile/assets/brand/${name}.svg`, assets.get(name));
+// React Native resolves these density siblings from the base filename at 32 dp.
+for (const mode of ['light', 'dark'])
+  for (const density of config.sizes.pixelDensities)
+    await output(
+      `apps/mobile/assets/brand/logo-${mode}${density === 1 ? '' : `@${density}x`}.png`,
+      generated.get(`assets/brand/png/logo-${mode}-h32@${density}x.png`),
+    );
 
 // An outlined, font-independent contact sheet for human review.
 let board = rect(0, 0, 1600, 1500, c.paper);

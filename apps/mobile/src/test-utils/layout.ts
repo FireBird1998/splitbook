@@ -188,8 +188,8 @@ const hairSpace = String.fromCodePoint(0x200a);
  * rerun 3 e" as a 130% heading 141.0dp (141.4); and "Shares differ by the smallest unit so the
  * whole amount is shared." fits a 349dp line at 100%, as it did there. The ellipsis and bold
  * come from the #332 device check (2026-10-07): "Refreshing…" in 13sp measured 72dp at 100%
- * (this gives 71.9) and 96.8dp at 130% (95.1); the bold 24sp wordmark "splitbook." 104.5dp at
- * 100% (104.1) and 114dp at 130% (115.1).
+ * (this gives 71.9) and 96.8dp at 130% (95.1). Home’s logo now uses the fixed
+ * image width from brandLogoSize, read directly from its style rather than measured as text.
  */
 function outfitAdvance(character: string) {
   // A hair space, as a badge keeps after its label: 4px of a 32px label there.
