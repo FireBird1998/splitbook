@@ -79,6 +79,8 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
   let loseResponses = 0;
   let writeFault: 'request' | 'reply' | 'resend' | null = null;
   let failPage: number | null = null;
+  /** Reads that answer with a server error once each, by path. */
+  const failReads: RegExp[] = [];
   let nextId = 2;
   const holds: { match: (method: string, path: string) => boolean; wait: Promise<void> }[] = [];
   const person = (id: string) => ({
@@ -276,6 +278,11 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
       body: String(init.body ?? ''),
     });
     if (offline) throw new TypeError('Network request failed');
+    const failing = method === 'GET' && failReads.findIndex((route) => route.test(pathname));
+    if (failing !== false && failing >= 0) {
+      failReads.splice(failing, 1);
+      return json({ status: 500 }, 500);
+    }
     const held = holds.find((hold) => hold.match(method, pathname + search));
     if (held) {
       holds.splice(holds.indexOf(held), 1);
@@ -409,6 +416,10 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
     /** The next read of this Expense page fails with a server error. */
     failNextPage: (page: number) => {
       failPage = page;
+    },
+    /** The next read of a path `route` matches fails with a server error. */
+    failNextRead: (route: RegExp) => {
+      failReads.push(route);
     },
     pagesRead: () =>
       requests
@@ -940,6 +951,99 @@ describe('Closing an edit begun on an Expense’s record (#664)', () => {
       restoreScroll: { y: 75 },
       keptDraft: null,
     });
+  });
+
+  it('Discard on the record removes only that kept edit; a draft kept in another Group stays', async () => {
+    const { server, controller } = await signedIn();
+    await controller.openGroup(tripId);
+    await controller.openExpense(tripId);
+    await fillNewExpense(controller, { description: 'Beach snacks' });
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({ screen: 'group', detail: { id: tripId } });
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Electricity bill' });
+    await controller.back();
+    expect(controller.getSnapshot().expense.groupDraft).toMatchObject({
+      description: 'Electricity bill',
+    });
+
+    await controller.discardExpenseDraft();
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'detail', groupDraft: null });
+    expect([...server.drafts.keys()]).toEqual([`${people[0].id}:${tripId}`]);
+    await controller.openGroup(tripId);
+    expect(controller.getSnapshot().keptDraft).toMatchObject({
+      groupId: tripId,
+      draft: { description: 'Beach snacks', edit: false },
+    });
+    expect(server.writes()).toEqual([]);
+  });
+
+  // Offline, the record shows this phone's saved copy, as any record does offline (#59, #220).
+  it('× while offline returns to the record’s saved copy, saying so, with the kept edit offered', async () => {
+    const { server, controller } = await editedOnRecord(ledger({ savedCopies: true }));
+    server.goOffline();
+    await controller.back();
+    // The saved-data notice says when the copy shown was saved.
+    expect(controller.getSnapshot()).toMatchObject({
+      ...keptOnRecord({ description: 'Electricity', revision: 0 }),
+      offline: { active: true, refreshedAt: Date.parse(iso), message: null },
+    });
+    expect(server.writes()).toEqual([]);
+    expect([...server.drafts.values()]).toMatchObject([
+      { draft: { description: 'Electricity bill' } },
+    ]);
+  });
+
+  // QA's review of #671: Try again reopens the record × meant to return to, not the edit's form.
+  it.each([
+    ['Try again', (controller: ReturnType<typeof createMobileController>) => controller.refresh()],
+    [
+      'the notice’s Retry',
+      (controller: ReturnType<typeof createMobileController>) =>
+        controller.openExpense(householdId, expenseId),
+    ],
+  ] as const)(
+    '%s, after the record couldn’t be opened, returns to it with the kept edit beside it',
+    async (_retry, retry) => {
+      const { server, controller } = await editedOnRecord();
+      server.failNextRead(new RegExp(`^/api/groups/${householdId}$`));
+      await controller.back();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'expense',
+        expense: { status: 'blocked', draft: null, requestedExpenseId: expenseId },
+      });
+
+      await retry(controller);
+      expect(controller.getSnapshot()).toMatchObject(
+        keptOnRecord({ description: 'Electricity', revision: 0 }),
+      );
+      // Where the record opened from is kept too.
+      await controller.back();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        financial: { month: '2026-08' },
+        restoreScroll: { y: 75 },
+      });
+      expect(server.writes()).toEqual([]);
+    },
+  );
+
+  // QA's review of #671: a double tap on × is one close.
+  it('ignores a second × while the record it returns to is opening', async () => {
+    const { server, controller } = await editedOnRecord();
+    await Promise.all([controller.back(), controller.back()]);
+    expect(controller.getSnapshot()).toMatchObject(
+      keptOnRecord({ description: 'Electricity', revision: 0 }),
+    );
+    // Once the record shows, Back leaves it for the Group, as from any record.
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      financial: { month: '2026-08' },
+    });
+    expect(server.writes()).toEqual([]);
   });
 
   // Kept edits are stored on the device, so they survive a restart. Where × goes is this open's
