@@ -539,6 +539,30 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
     });
   });
 
+  it('clears Home offline after a cold offline start and a live Group read, without manual Refresh', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await settle();
+    first.dispose();
+    f.connect(false);
+    const controller = f.create();
+    await controller.restore();
+    expect(controller.getSnapshot().offline.active).toBe(true);
+    // A live read confirms recovery even before a connectivity event reaches the app.
+    f.server.offline = false;
+    await controller.openGroup(mapleId);
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'ready', restored: false });
+    await controller.back();
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      offline: { active: false, refreshedAt: null },
+      home: { status: 'ready', restored: false },
+    });
+    controller.dispose();
+  });
+
   it('reads again on reconnect only the queries Home shows, only past their stale time, and sends no write', async () => {
     const f = fixture();
     const controller = f.create();
