@@ -28,7 +28,6 @@ import {
   type SettlementAttempt,
 } from '@/lib/settlement-attempts';
 import {
-  OVERPAY_TICK,
   RECORD_PAYMENT_FOOTNOTE,
   amountInputText,
   checkNewPayment,
@@ -64,7 +63,7 @@ export interface RecordPaymentStart {
   /** The amount field's text, such as a suggestion's "1060.00". */
   amount?: string;
   note?: string;
-  /** Whether "I meant to pay more than suggested" starts ticked. */
+  /** Whether the overpayment acknowledgement starts ticked. */
   ack?: boolean;
   /**
    * `record` a payment; `check` a stored one that may already be recorded, which never becomes
@@ -720,7 +719,7 @@ export default function RecordPaymentForm({
                     size="small"
                   />
                 }
-                label={OVERPAY_TICK}
+                label={check.overpayTick}
                 slotProps={{ typography: { sx: { fontSize: '0.875rem', fontWeight: 600 } } }}
                 sx={{ minHeight: 40, ml: -0.75, mr: 0 }}
               />
