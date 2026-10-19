@@ -441,8 +441,12 @@ export class ExportService {
     request: ExportRequest,
     options: { maxRows?: number } = {},
   ): Promise<ExportDownload> {
-    const { backup: _backup, ...file } = await this.buildBackupFile(userId, request, options);
-    return file;
+    const { fileName, contentType, body, files } = await this.buildBackupFile(
+      userId,
+      request,
+      options,
+    );
+    return { fileName, contentType, body, files };
   }
 
   private async buildBackupFile(

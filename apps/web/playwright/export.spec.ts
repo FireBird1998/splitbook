@@ -179,7 +179,7 @@ test('preview follows Groups, period, include and format choices with recovery',
   await page.getByLabel('Format', { exact: true }).selectOption('json');
   await expect(preview).toContainText('Approximately');
   await expect(preview).toContainText(
-    'Recurring Expenses and Activity events are not included in this backup format.',
+    'Not included: recurring Expense templates and Activity history.',
   );
   await expect(page.getByLabel('Period', { exact: true })).toBeDisabled();
 

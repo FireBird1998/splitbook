@@ -1093,15 +1093,15 @@ describe('Export preview (#611)', () => {
       counts: { payments: 0, deletedExpenses: 0 },
     });
   });
-});
 
-it('preview returns JSON without download headers for every format', async () => {
-  const id = await createGroup('Red preview', alice);
-  await addExpense(id, alice, 'Dinner', 10, alice, [alice]);
-  for (const format of ['csv', 'json', 'statement']) {
-    const answer = await request(alice, `/api/export?groups=${id}&format=${format}&preview=1`);
-    expect(answer.headers.get('content-disposition')).toBeNull();
-    expect(answer.headers.get('content-type')).toContain('application/json');
-    expect(json(answer)).toMatchObject({ format, groupNames: ['Red preview'] });
-  }
+  it('preview returns JSON without download headers for every format', async () => {
+    const id = await createGroup('Red preview', alice);
+    await addExpense(id, alice, 'Dinner', 10, alice, [alice]);
+    for (const format of ['csv', 'json', 'statement']) {
+      const answer = await request(alice, `/api/export?groups=${id}&format=${format}&preview=1`);
+      expect(answer.headers.get('content-disposition')).toBeNull();
+      expect(answer.headers.get('content-type')).toContain('application/json');
+      expect(json(answer)).toMatchObject({ format, groupNames: ['Red preview'] });
+    }
+  });
 });
