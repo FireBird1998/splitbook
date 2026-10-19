@@ -86,7 +86,11 @@ export function Banner({
           {message}
         </CompactText>
         {children ? (
-          <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, marginLeft: -4 }}>
+          // Its actions go onto a second line where large text leaves no room beside each other,
+          // as "Resume draft" and "Discard draft" do at 130% on a 360dp phone (#664).
+          <View
+            style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4, marginLeft: -4 }}
+          >
             {children}
           </View>
         ) : null}

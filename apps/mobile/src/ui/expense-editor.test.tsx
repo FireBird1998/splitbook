@@ -1409,6 +1409,35 @@ describe('compact Expense form', () => {
     expect(ui.writes).toEqual([]);
   });
 
+  // #664: × on an edit begun on the record returns to that record, and its label says so, in the
+  // To review rollout's words too ("item"). A new Expense still names the Group.
+  it.each([
+    ['off', 'draft'],
+    ['on', 'item'],
+  ] as const)(
+    'names the Expense on an edit begun on its record, and the Group on a new one (review flag %s)',
+    async (flag, word) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', flag === 'on' ? 'true' : 'false');
+      try {
+        const edit = await render(async (controller) => {
+          await controller.openExpense(groupId, expenseId);
+          await controller.editExpense();
+        });
+        await edit.type('Description, required', 'Weekly groceries and milk');
+        expect(() => edit.pressable(`Back to Group, keeping your ${word}`)).toThrow();
+        await edit.press(`Back to the Expense, keeping your ${word}`);
+        expect(calls.close).toHaveBeenCalledOnce();
+        act(() => screen?.unmount());
+
+        const added = await render((controller) => controller.openExpense(groupId));
+        expect(() => added.pressable(`Back to the Expense, keeping your ${word}`)).toThrow();
+        expect(added.pressable(`Back to Group, keeping your ${word}`)).toBeTruthy();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it('says “Draft saved” only while the entries differ from the saved Expense', async () => {
     const ui = await render(async (controller) => {
       await controller.openExpense(groupId, expenseId);
@@ -1705,6 +1734,30 @@ describe('an unexpected rendering error in the Expense task (#187)', () => {
     await ui.type('Description, required', 'Boom');
     await ui.press('Keep draft and return to the Group');
     expect(ui.controller.getSnapshot().screen).toBe('group');
+    expect(await ui.stored()).toMatchObject({ draft: { description: 'Boom' } });
+    expect(ui.writes).toEqual([]);
+  });
+
+  // #664: an edit begun on the record returns there, as × does, and both say so.
+  it('keeps an edit begun on the record and returns to that record', async () => {
+    quiet();
+    const ui = await crashing(typedBoom, async (controller) => {
+      await controller.openExpense(groupId, expenseId);
+      await controller.editExpense();
+    });
+    await ui.type('Description, required', 'Boom');
+    expect(problem(ui.root())).toHaveLength(1);
+    expect(() => ui.pressable('Keep draft and return to the Group')).toThrow();
+    expect(ui.pressable('Back to the Expense, keeping your draft')).toBeTruthy();
+    await ui.press('Keep draft and return to the Expense');
+    expect(ui.controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: {
+        status: 'detail',
+        draft: { description: 'Weekly groceries' },
+        groupDraft: { description: 'Boom' },
+      },
+    });
     expect(await ui.stored()).toMatchObject({ draft: { description: 'Boom' } });
     expect(ui.writes).toEqual([]);
   });

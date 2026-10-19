@@ -2709,6 +2709,58 @@ describe('Save straight after the last keystroke', () => {
     });
   });
 
+  // #664: an edit begun on its record closes to that record, once its entries are stored.
+  it('waits for the draft write before × returns an edit begun on the record to its record', async () => {
+    const { controller, records, hold, release } = held();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    hold();
+    const typing = controller.updateExpenseDraft({ description: 'Dinner' });
+    const leaving = controller.back();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { status: 'editing', persistence: 'saving' },
+    });
+
+    release();
+    await Promise.all([typing, leaving]);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: {
+        status: 'detail',
+        draft: { description: 'Original dinner' },
+        groupDraft: { description: 'Dinner', original: { _id: expenseId } },
+      },
+    });
+    expect(records.get(`${memberIds[0]}:${groupId}`)).toMatchObject({
+      draft: { description: 'Dinner', original: { _id: expenseId } },
+    });
+  });
+
+  it('keeps an edit begun on the record open, with the error, when × waits on a failed draft write', async () => {
+    const { controller, events, hold, release } = held(true);
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    hold();
+    const typing = controller.updateExpenseDraft({ description: 'Dinner' });
+    const leaving = controller.back();
+    release();
+    await Promise.all([typing, leaving]);
+    expect(events).toEqual([]);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: {
+        status: 'editing',
+        persistence: 'error',
+        groupDraft: null,
+        draft: { description: 'Dinner', original: { _id: expenseId } },
+      },
+    });
+  });
+
   it.each(['new', 'edit'] as const)(
     'sends a %s Expense once when Save follows a Back still waiting for the draft write',
     async (kind) => {

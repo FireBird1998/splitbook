@@ -123,9 +123,10 @@ export interface ExpenseEditor {
   latest: ExpenseRecord | null;
   requestedExpenseId: string | null;
   /**
-   * Edit was pressed on this open's record: a confirmed save returns to that record (#635). Every
-   * other way into the form leaves it unset: a new Expense, and an edit resumed from Home, the
-   * Group or an Expense's row, land on the Group.
+   * Edit was pressed on this open's record: a confirmed save returns to that record (#635), and
+   * so does × (`closesToRecord`, #664). Resume on that record keeps it. Every other way into the
+   * form leaves it unset: a new Expense, and an edit resumed from Home, the Group or an Expense's
+   * row, land on the Group.
    */
   beganOnRecord?: boolean;
   /**
@@ -145,9 +146,15 @@ export interface ExpenseEditor {
   returnTo: GroupReturnContext | null;
   /**
    * The Group's ordinary draft while another, saved Expense is read. That record opens
-   * read-only; Edit and Delete wait until the draft is finished or discarded.
+   * read-only; Edit and Delete wait until the draft is finished or discarded. Also this record's
+   * own kept edit, after × returned to it (`recordKeepsEdit`, #664).
    */
   groupDraft: ExpenseDraft | null;
+  /**
+   * This task is the record × returned to, with the edit begun on it kept beside it (#664).
+   * Opening the same task again, as Try again, Retry and Discard do, keeps it that record.
+   */
+  keptEdit?: boolean;
   /**
    * The entries a new Expense's draft started from, stored with the draft so it is compared
    * with the same start after a restart or a change of day. Null when unknown, as for drafts
@@ -168,6 +175,33 @@ export interface ExpenseEditor {
    * its last page of changes: the top bar says so, and its changes' page controls wait (#220).
    */
   refreshing?: boolean;
+}
+/**
+ * × and Back keep the edit and return to the Expense's record, not the Group (owner decision for
+ * #664): an ordinary edit begun on this open's record, open for editing, also once "Keep my
+ * version for review" has rebased it. A save or change that may already be recorded (its
+ * conflict too, which keeps the change to check) and a form its Group or Expense refused return to
+ * the Group as before.
+ */
+export function closesToRecord(editor: ExpenseEditor) {
+  const original = editor.draft?.original;
+  return (
+    !!editor.beganOnRecord &&
+    !!original &&
+    original._id === editor.requestedExpenseId &&
+    editor.status === 'editing' &&
+    !editor.attempt &&
+    !editor.mutation &&
+    !editor.accessLost
+  );
+}
+/**
+ * The record shows the saved Expense, and beside it this Expense's own kept edit, which × kept
+ * there: the record offers to resume or discard it, as a kept edit is offered on its form (#664).
+ */
+export function recordKeepsEdit(editor: ExpenseEditor) {
+  const kept = editor.groupDraft?.original;
+  return editor.status === 'detail' && !!kept && kept._id === editor.requestedExpenseId;
 }
 /** Correctable Expense inputs, in the order they appear on screen. */
 export function expenseContextPending(editor: ExpenseEditor, offline: boolean) {

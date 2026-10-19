@@ -25,6 +25,7 @@ import { readExpenseMoney } from '@splitbook/shared/expense-money-edit';
 import {
   draftFromExpense,
   expenseMoney,
+  recordKeepsEdit,
   type ExpenseEditor as Editor,
 } from '../data/expense-draft';
 import type { ExpenseHistoryState } from '../data/activity';
@@ -155,9 +156,53 @@ function recordTime(iso: string, now = Date.now()) {
 }
 
 /**
+ * A draft kept on this device, offered to resume or discard: on the form a kept draft opens on,
+ * and on the record of the Expense it edits, once × kept it there (#664).
+ */
+export function UnfinishedDraft({
+  message,
+  onResume,
+  onDiscard,
+}: {
+  message?: string | null;
+  onResume: () => void;
+  onDiscard?: () => void;
+}) {
+  return (
+    <Banner
+      tone="info"
+      title={expenseRecoveryWords('Unfinished draft')}
+      message={
+        message ?? 'Nothing has been sent. Resume your entries or discard them to start again.'
+      }
+    >
+      <CompactButton
+        label={
+          process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
+            ? 'Continue editing'
+            : expenseRecoveryWords('Resume draft')
+        }
+        variant="tonal"
+        dense
+        onPress={onResume}
+      />
+      {onDiscard ? (
+        <CompactButton
+          label={expenseRecoveryWords('Discard draft')}
+          variant="text"
+          dense
+          onPress={onDiscard}
+        />
+      ) : null}
+    </Banner>
+  );
+}
+
+/**
  * A saved Expense, read-only: what it was for, the member's position, who owes what, its
  * details and its history. Edit is in the top bar and Delete in ⋮, behind the existing
- * confirmation. While the Group holds another draft, both wait for it.
+ * confirmation. While the Group holds another draft, or an edit of this Expense that × kept
+ * here (#664), both wait for it.
  */
 export function ExpenseRecordScreen({
   state,
@@ -170,6 +215,7 @@ export function ExpenseRecordScreen({
   onDelete,
   onCancelDelete,
   onResume,
+  onDiscard,
   onRefresh,
   onLoadOlderHistory,
   onLoadNewerHistory,
@@ -191,6 +237,8 @@ export function ExpenseRecordScreen({
   onCancelDelete: () => void;
   /** Opens the Group's draft that holds Edit and Delete. */
   onResume: () => void;
+  /** Discards this Expense's kept edit, once the app confirms it (#664). */
+  onDiscard?: () => void;
   onRefresh: () => void;
   onLoadOlderHistory?: () => void;
   /** Reads the changes before the window, once it has slid past the newest (#220). */
@@ -300,7 +348,10 @@ export function ExpenseRecordScreen({
   const lead =
     state.groupDraft || (state.message && state.status !== 'delete-review') || readTime ? (
       <>
-        {state.groupDraft ? (
+        {/* This Expense's own edit, which × kept here: offered as a kept edit is on its form. */}
+        {recordKeepsEdit(state) ? (
+          <UnfinishedDraft onResume={onResume} onDiscard={onDiscard} />
+        ) : state.groupDraft ? (
           <Banner
             tone="info"
             message={expenseRecoveryWords(

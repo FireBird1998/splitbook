@@ -5,7 +5,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { findHosts, flatten, layoutHeight } from './test-utils/layout';
+import { findHosts, flatten, layoutHeight, unreadText } from './test-utils/layout';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
@@ -1408,6 +1408,145 @@ describe('App return from an Expense', () => {
         });
         expect(app.text()).toContain('August 2026');
         expect(screen!.root.findByType(GroupExpensesView).props.savedExpenseId).toBe(september._id);
+      } finally {
+        runtime.appearance = appearance;
+      }
+    },
+  );
+
+  // Owner decision for #664: × on an edit begun on the record returns to that record, keeping the
+  // edit, which the record offers beside the saved Expense. Every other close names the Group.
+  it.each(['light', 'dark'] as const)(
+    'names where × goes on each path, and offers the kept edit on the record, in %s at 130% text',
+    async (mode) => {
+      setWindow({ width: 360, height: 640, fontScale: 1.3 });
+      const appearance = runtime.appearance;
+      runtime.appearance = { ...appearance, mode };
+      try {
+        const app = await renderApp();
+        app.use((path) =>
+          path === `/api/groups/${groupId}/expenses/${september._id}`
+            ? json({ status: 200, data: { ...september, revision: 0, isDeleted: false } })
+            : undefined,
+        );
+        /** The ×'s label: an icon button, named for TalkBack only. */
+        const close = () =>
+          app
+            .root()
+            .findAll(
+              (node) =>
+                (node.type as unknown) === 'Pressable' &&
+                /, keeping your /.test(String(node.props.accessibilityLabel)),
+            )
+            .map((node) => node.props.accessibilityLabel as string);
+        const pressClose = async () => {
+          const [button] = app
+            .root()
+            .findAll(
+              (node) =>
+                (node.type as unknown) === 'Pressable' &&
+                /, keeping your /.test(String(node.props.accessibilityLabel)),
+            );
+          await settle(Promise.resolve(button.props.onPress()));
+        };
+        const drawn = (node: ReactTestRendererJSON | string): string =>
+          typeof node === 'string' ? node : (node.children ?? []).map(drawn).join('');
+        /** The top bar, which keeps the title and Group beside × at this size (#639). */
+        const topBar = () =>
+          findHosts(
+            screen!.toJSON(),
+            (props, type) => type === 'View' && flatten(props.style).minHeight === 64,
+          )[0] as ReactTestRendererJSON;
+        await app.press('Open Maple House');
+
+        // A new Expense: back to the Group.
+        await app.press('Add expense');
+        expect(close()).toEqual(['Back to Group, keeping your draft']);
+        expect(unreadText(topBar(), 1.3, 360, { cutOnce: true })).toEqual([]);
+        await pressClose();
+        expect(app.controller.getSnapshot().screen).toBe('group');
+
+        // Edit on the record: back to the Expense.
+        await app.press('September groceries');
+        await app.press('Edit expense');
+        await app.type('Description, required', 'September groceries and milk');
+        expect(close()).toEqual(['Back to the Expense, keeping your draft']);
+        expect(unreadText(topBar(), 1.3, 360, { cutOnce: true })).toEqual([]);
+        await pressClose();
+        expect(app.controller.getSnapshot()).toMatchObject({
+          screen: 'expense',
+          expense: {
+            status: 'detail',
+            draft: { description: 'September groceries' },
+            groupDraft: { description: 'September groceries and milk' },
+          },
+        });
+        // The saved Expense, not the edit, with the edit offered as a kept one is today.
+        expect(app.text()).toContain('September groceries');
+        expect(app.text()).not.toContain('September groceries and milk');
+        expect(app.text()).toContain('Unfinished draft');
+        expect(app.pressable('Resume draft').props.accessibilityRole).toBe('button');
+        expect(app.pressable('Discard draft').props.accessibilityRole).toBe('button');
+        const [offer] = findHosts(
+          screen!.toJSON(),
+          (props, type) =>
+            type === 'View' &&
+            flatten(props.style).backgroundColor === getSemanticTokens(mode).info.bg,
+        ).filter((node) => drawn(node as ReactTestRendererJSON).includes('Unfinished draft'));
+        expect(offer).toBeDefined();
+        // In the record's column, inset 16dp from each edge.
+        expect(unreadText(offer, 1.3, 360 - 32, { cutOnce: true })).toEqual([]);
+        expect(unreadText(topBar(), 1.3, 360, { cutOnce: true })).toEqual([]);
+        // A font size or dark mode change recreates the activity: the record and offer stay.
+        await app.recreate();
+        expect(app.text()).toContain('Unfinished draft');
+
+        // Resumed there, the edit still closes to the Expense.
+        await app.press('Resume draft');
+        expect(close()).toEqual(['Back to the Expense, keeping your draft']);
+        await pressClose();
+        expect(app.controller.getSnapshot().expense).toMatchObject({
+          status: 'detail',
+          groupDraft: { description: 'September groceries and milk' },
+        });
+        // Back from the record goes to the Group, which offers the kept edit.
+        expect(await app.androidBack()).toBe(true);
+        expect(app.text()).toContain('Draft: September groceries and milk');
+
+        // The Expense's row, with its kept edit: back to the Group.
+        await app.press('September groceries');
+        expect(app.text()).toContain('Unfinished draft');
+        expect(close()).toEqual(['Back to Group, keeping your draft']);
+        await app.press('Resume draft');
+        expect(close()).toEqual(['Back to Group, keeping your draft']);
+        await pressClose();
+        expect(app.controller.getSnapshot().screen).toBe('group');
+
+        // The Group's kept-draft banner: back to the Group.
+        const [banner] = app
+          .root()
+          .findAll(
+            (node) =>
+              (node.type as unknown) === 'Pressable' &&
+              node.props.accessibilityLabel === 'Resume draft',
+          );
+        await settle(Promise.resolve(banner.props.onPress()));
+        expect(app.controller.getSnapshot().expense.status).toBe('editing');
+        expect(close()).toEqual(['Back to Group, keeping your draft']);
+        expect(unreadText(topBar(), 1.3, 360, { cutOnce: true })).toEqual([]);
+        await pressClose();
+        expect(app.controller.getSnapshot().screen).toBe('group');
+
+        // Home's draft row: back to the Group.
+        expect(await app.androidBack()).toBe(true);
+        await app.press('Draft, September groceries and milk');
+        await app.press('Resume draft');
+        expect(close()).toEqual(['Back to Group, keeping your draft']);
+        await pressClose();
+        expect(app.controller.getSnapshot()).toMatchObject({
+          screen: 'group',
+          detail: { id: groupId },
+        });
       } finally {
         runtime.appearance = appearance;
       }

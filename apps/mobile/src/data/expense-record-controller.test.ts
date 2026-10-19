@@ -254,6 +254,12 @@ describe('Opening an Expense record', () => {
     await controller.editExpense();
     expect(controller.getSnapshot().expense.status).toBe('editing');
 
+    // × returns to the record Edit was pressed on (#664); Back from there returns to Activity.
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { status: 'detail', returnTo: { destination: 'activity', scrollY: 600 } },
+    });
     await controller.back();
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',

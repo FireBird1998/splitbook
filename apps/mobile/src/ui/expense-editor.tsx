@@ -13,6 +13,7 @@ import {
   ExpenseRecordScreen,
   ExpenseRecordSkeleton,
   ExpenseRecordView,
+  UnfinishedDraft,
   type RecordOutline,
 } from './expense-record-view';
 import {
@@ -30,6 +31,7 @@ import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { expenseDifferences } from '@splitbook/shared/expense-review';
 import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import {
+  closesToRecord,
   draftFromExpense,
   expenseDraftChanged,
   expenseContextPending,
@@ -79,6 +81,17 @@ import { savingNeedsConnection } from './offline-notice';
 import { spellMoment } from './day-format';
 import { useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
+
+/**
+ * × on the form: where it goes, keeping the draft. An edit begun on the Expense's record returns
+ * there (#664); every other form, to the Group.
+ */
+const closeLabel = (state: Editor) =>
+  expenseRecoveryWords(
+    closesToRecord(state)
+      ? 'Back to the Expense, keeping your draft'
+      : 'Back to Group, keeping your draft',
+  );
 
 /** The form for a draft, rather than loading, a notice or a saved record. */
 const showsForm = ({ draft, status }: Editor) =>
@@ -172,6 +185,7 @@ export function ExpenseEditor(props: Parameters<typeof ExpenseTask>[0]) {
         <ExpenseProblem
           draft={form}
           unconfirmed={form ? unconfirmed : null}
+          toRecord={form && closesToRecord(state)}
           onKeep={props.onClose}
           onDiscard={
             form && !unconfirmed && ['editing', 'resume'].includes(state.status)
@@ -190,11 +204,14 @@ export function ExpenseEditor(props: Parameters<typeof ExpenseTask>[0]) {
 function ExpenseProblem({
   draft,
   unconfirmed,
+  toRecord = false,
   onKeep,
   onDiscard,
 }: {
   draft: boolean;
   unconfirmed: 'save' | 'edit' | 'delete' | null;
+  /** Keep returns to the Expense's record, as × does on an edit begun there (#664). */
+  toRecord?: boolean;
   onKeep?: () => void;
   onDiscard?: () => void;
 }) {
@@ -216,7 +233,11 @@ function ExpenseProblem({
             ? {
                 kind: 'close',
                 label: draft
-                  ? expenseRecoveryWords('Back to Group, keeping your draft')
+                  ? expenseRecoveryWords(
+                      toRecord
+                        ? 'Back to the Expense, keeping your draft'
+                        : 'Back to Group, keeping your draft',
+                    )
                   : 'Back to Group',
                 onPress: onKeep,
               }
@@ -229,7 +250,11 @@ function ExpenseProblem({
             <CompactButton
               label={draft ? expenseRecoveryWords('Keep draft') : 'Back to Group'}
               accessibilityLabel={
-                draft ? expenseRecoveryWords('Keep draft and return to the Group') : 'Back to Group'
+                draft
+                  ? expenseRecoveryWords(
+                      `Keep draft and return to the ${toRecord ? 'Expense' : 'Group'}`,
+                    )
+                  : 'Back to Group'
               }
               variant="tonal"
               dense
@@ -290,7 +315,10 @@ function ExpenseTask({
    * says "draft" only then, even before the draft itself is read (#334).
    */
   kept?: boolean;
-  /** Close or Back: returns to the Group and keeps the draft on this device. */
+  /**
+   * Close or Back: keeps the draft on this device and returns to the Group, or to the Expense's
+   * record for an edit begun there (#664).
+   */
   onClose?: () => void;
   /** Shown above the content, such as the offline notice. */
   notice?: ReactNode;
@@ -477,11 +505,7 @@ function ExpenseTask({
         leading={
           onClose
             ? form
-              ? {
-                  kind: 'close',
-                  label: expenseRecoveryWords('Back to Group, keeping your draft'),
-                  onPress: onClose,
-                }
+              ? { kind: 'close', label: closeLabel(state), onPress: onClose }
               : { kind: 'back', label: 'Back to Group', onPress: onClose }
             : undefined
         }
@@ -604,6 +628,7 @@ function ExpenseTask({
         onDelete={onDelete}
         onCancelDelete={onCancelDelete}
         onResume={onResume}
+        onDiscard={onDiscard}
         onRefresh={onRefresh ?? onRetry}
         onLoadOlderHistory={onLoadOlderHistory}
         onLoadNewerHistory={onLoadNewerHistory}
@@ -744,31 +769,11 @@ function ExpenseTask({
               />
             </Banner>
           ) : state.status === 'resume' ? (
-            <Banner
-              tone="info"
-              title={expenseRecoveryWords('Unfinished draft')}
-              message={
-                (state.message && expenseRecoveryWords(state.message)) ??
-                'Nothing has been sent. Resume your entries or discard them to start again.'
-              }
-            >
-              <CompactButton
-                label={
-                  process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
-                    ? 'Continue editing'
-                    : expenseRecoveryWords('Resume draft')
-                }
-                variant="tonal"
-                dense
-                onPress={onResume}
-              />
-              <CompactButton
-                label={expenseRecoveryWords('Discard draft')}
-                variant="text"
-                dense
-                onPress={onDiscard}
-              />
-            </Banner>
+            <UnfinishedDraft
+              message={state.message && expenseRecoveryWords(state.message)}
+              onResume={onResume}
+              onDiscard={onDiscard}
+            />
           ) : null}
           {conflict ? (
             <>
