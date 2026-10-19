@@ -92,14 +92,21 @@ import { PRODUCT_NAME } from './src/product';
 void SplashScreen.preventAutoHideAsync();
 
 /**
- * Each controller's start: its session restored and, after that, the link that opened the app.
- * It runs once per controller, not once per mount. Android recreates the activity on a change it
- * doesn't hand to the running one, such as the font size (#634), and React Native then mounts
- * the App again in the same JavaScript runtime, over the controller that still holds where the
- * member is. Starting again would restore the session afresh on Home, losing the screen, and
- * open that link a second time.
+ * Each controller's start, its session restored once per controller rather than once per mount,
+ * and the last link it handled. Android recreates the activity on a change it doesn't hand to
+ * the running one, such as the font size (#634), and React Native then mounts the App again in
+ * the same JavaScript runtime, over the controller that still holds where the member is.
+ * Restoring again would start the session afresh on Home, losing the screen.
+ *
+ * Each mount reads the activity's launch link: a recreated activity keeps the one it was
+ * launched with, already handled, but one Android destroyed while the process lived (Don't keep
+ * activities, or a task swiped away) is created again by a newly tapped link, with no new-intent
+ * event for it. Only a link other than the last one handled opens.
  */
-const startups = new WeakMap<MobileController, Promise<void>>();
+const startups = new WeakMap<
+  MobileController,
+  { restored: Promise<void>; lastLink: string | null }
+>();
 
 export default function App() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
@@ -146,21 +153,21 @@ function SplitBook() {
   useEffect(() => {
     if (!configurationReady) return;
     const started = startups.get(controller);
-    const startup = started ?? controller.restore();
-    startups.set(controller, startup);
+    const start = started ?? { restored: controller.restore(), lastLink: null };
+    startups.set(controller, start);
     const openLink = (url: string) => {
+      start.lastLink = url;
       // Expo's own development launcher URL is not a Group invitation.
       if (url.includes('://expo-development-client/') || url.startsWith('exp+splitbook:')) return;
-      void startup.then(() => controller.openInvitation(url));
+      void start.restored.then(() => controller.openInvitation(url));
     };
     const links = Linking.addEventListener('url', ({ url }) => openLink(url));
+    void Linking.getInitialURL().then((url) => {
+      if (url && url !== start.lastLink) openLink(url);
+    });
     // Mounted again over a started controller: the recreated activity may have resumed before
     // these listeners were back, so the screen the member is on reads again, as on any return.
     if (started) void controller.refresh('foreground');
-    else
-      void Linking.getInitialURL().then((url) => {
-        if (url) openLink(url);
-      });
     const appState = AppState.addEventListener('change', (next) => {
       if (next === 'active') void controller.refresh('foreground');
     });
