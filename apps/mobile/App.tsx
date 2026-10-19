@@ -7,7 +7,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   useSyncExternalStore,
   type RefObject,
 } from 'react';
@@ -86,11 +85,21 @@ import { spellDay } from './src/ui/day-format';
 import { GroupActivity } from './src/ui/group-activity';
 import { GroupMembers } from './src/ui/group-members';
 import type { MobileGroup, MobileSnapshot } from './src/data/types';
-import { shownGroup } from './src/data/mobile-controller';
+import { shownGroup, type MobileController } from './src/data/mobile-controller';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { PRODUCT_NAME } from './src/product';
 
 void SplashScreen.preventAutoHideAsync();
+
+/**
+ * Each controller's start: its session restored and, after that, the link that opened the app.
+ * It runs once per controller, not once per mount. Android recreates the activity on a change it
+ * doesn't hand to the running one, such as the font size (#634), and React Native then mounts
+ * the App again in the same JavaScript runtime, over the controller that still holds where the
+ * member is. Starting again would restore the session afresh on Home, losing the screen, and
+ * open that link a second time.
+ */
+const startups = new WeakMap<MobileController, Promise<void>>();
 
 export default function App() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
@@ -136,16 +145,22 @@ function SplitBook() {
   );
   useEffect(() => {
     if (!configurationReady) return;
-    const startup = controller.restore();
+    const started = startups.get(controller);
+    const startup = started ?? controller.restore();
+    startups.set(controller, startup);
     const openLink = (url: string) => {
       // Expo's own development launcher URL is not a Group invitation.
       if (url.includes('://expo-development-client/') || url.startsWith('exp+splitbook:')) return;
       void startup.then(() => controller.openInvitation(url));
     };
     const links = Linking.addEventListener('url', ({ url }) => openLink(url));
-    void Linking.getInitialURL().then((url) => {
-      if (url) openLink(url);
-    });
+    // Mounted again over a started controller: the recreated activity may have resumed before
+    // these listeners were back, so the screen the member is on reads again, as on any return.
+    if (started) void controller.refresh('foreground');
+    else
+      void Linking.getInitialURL().then((url) => {
+        if (url) openLink(url);
+      });
     const appState = AppState.addEventListener('change', (next) => {
       if (next === 'active') void controller.refresh('foreground');
     });
@@ -846,7 +861,6 @@ const unlistedGroup = (id: string): MobileGroup => ({
 
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen() {
-  const [tagsOpen, setTagsOpen] = useState(false);
   const state = useMobileSnapshot(
     controller,
     (snapshot) => ({
@@ -864,6 +878,7 @@ function GroupScreen() {
       keptDraft: snapshot.keptDraft,
       snackbar: snapshot.snackbar,
       pendingPayment: snapshot.pendingPayment,
+      tagsOpenFor: snapshot.tagsOpenFor,
       home: snapshot.home,
       dayKey: currentDayKey(),
       feedback: refreshFeedback(snapshot),
@@ -1166,12 +1181,12 @@ function GroupScreen() {
       }}
       onManageTags={
         known?.members.some((member) => member.user.id === userId && member.role === 'admin')
-          ? () => setTagsOpen(true)
+          ? () => controller.openTags(known.id)
           : undefined
       }
       onViewTags={
         known?.members.some((member) => member.user.id === userId && member.role !== 'admin')
-          ? () => setTagsOpen(true)
+          ? () => controller.openTags(known.id)
           : undefined
       }
       onMembers={() => controller.openMembers(origin())}
@@ -1226,7 +1241,7 @@ function GroupScreen() {
         </>
       }
     >
-      {group && tagsOpen && (
+      {group && state.tagsOpenFor === group.id && (
         <TagManager
           key={userId + group.id}
           controller={controller}
@@ -1238,7 +1253,7 @@ function GroupScreen() {
           }
           offline={state.offline.active}
           onClose={() => {
-            setTagsOpen(false);
+            controller.closeTags();
             void controller.refresh();
           }}
         />

@@ -310,6 +310,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     auth,
     sharedDraftCollection: emptySharedDraftCollection(),
     tagManager: emptyTagManager(),
+    tagsOpenFor: null,
     toReview: emptyToReview(),
     offline: { active: false, refreshedAt: null, message: null },
     pull: null,
@@ -587,6 +588,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       (next.screen !== 'group' || next.detail.id !== next.toReview.groupId)
     )
       next = { ...next, toReview: { ...next.toReview, groupId: null } };
+    // Likewise a Group's Tags, which close with its view or the member's access to it.
+    if (
+      next.tagsOpenFor &&
+      (next.screen !== 'group' ||
+        next.detail.id !== next.tagsOpenFor ||
+        next.detail.status === 'denied')
+    )
+      next = { ...next, tagsOpenFor: null };
     next = projectFreshness(next);
     snapshot = next;
     listeners.forEach((listener) => listener());
@@ -6116,6 +6125,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
+  /** A Group's Tags, a screen over its view: opened from the Group's options. */
+  const openTags = (groupId: string) => {
+    if (snapshot.screen === 'group' && snapshot.detail.id === groupId)
+      publish({ ...snapshot, tagsOpenFor: groupId });
+  };
+  const closeTags = () => {
+    if (snapshot.tagsOpenFor) publish({ ...snapshot, tagsOpenFor: null });
+  };
+
   const manageTags = (groupId: string) => {
     const owner = generation;
     let client: ReturnType<typeof groupTags> | undefined;
@@ -6704,6 +6722,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     closeToReview,
     toReviewModel: (groupId?: string) => mobileToReview(snapshot, now(), groupId),
     refreshToReview,
+    openTags,
+    closeTags,
     manageTags,
     groupTags,
     keepExpenseAsSharedDraft,

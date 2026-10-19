@@ -17,6 +17,7 @@ const connectionListeners: ((state: { isConnected: boolean | null }) => void)[] 
 const backListeners: (() => boolean)[] = [];
 const reduceMotionListeners: ((enabled: boolean) => void)[] = [];
 let reduceMotion = false;
+let initialURL: string | null = null;
 
 /**
  * Sets the window every test in this file starts from; call it at the top of the file.
@@ -45,6 +46,11 @@ export function emitConnection(isConnected: boolean) {
 /** Android's hardware or gesture Back; returns whether a listener handled it. */
 export function pressBack() {
   return backListeners.some((listener) => listener());
+}
+
+/** The link that opened the app, which `Linking.getInitialURL` answers with; none unless set. */
+export function setInitialURL(url: string | null) {
+  initialURL = url;
 }
 
 /** How many Back listeners are registered, e.g. to check the App is listening at all. */
@@ -148,6 +154,7 @@ export function resetNative() {
   appStateListeners.length = 0;
   connectionListeners.length = 0;
   backListeners.length = 0;
+  initialURL = null;
   // The kit listens for reduce motion for the life of the app, here a file: it hears the
   // setting go back off, as it would on a device, instead of losing its listener.
   if (reduceMotion) setReduceMotion(false);
@@ -203,7 +210,7 @@ export const reactNative = {
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   Linking: {
     addEventListener: () => ({ remove: () => undefined }),
-    getInitialURL: async () => null,
+    getInitialURL: async () => initialURL,
     openURL: spies.openURL,
   },
   Image: 'Image',

@@ -384,6 +384,11 @@ export interface PendingInvitationStore {
 
 export interface MobileSnapshot {
   tagManager: TagManagerState;
+  /**
+   * The Group whose Tags screen is open over its view. Leaving that view closes it, and it stays
+   * open when Android recreates the activity, which mounts the App again (#634).
+   */
+  tagsOpenFor: string | null;
   sharedDraftCollection: SharedDraftCollectionState;
   toReview: ToReviewState;
   offline: { active: boolean; refreshedAt: number | null; message: string | null };
