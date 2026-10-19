@@ -16,12 +16,13 @@ import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
 import { observe, present, reportVerifierFailure } from './verify-report';
 
-/** Test controls stop at the first restored snapshot; normal CLI verification runs every stage. */
+/** Test controls exercise offline restoration; normal CLI verification runs every stage. */
 interface OfflineVerificationOptions {
   waitForCopies?: typeof waitForSavedQueries;
   writeSavedQuery?: (path: string, write: () => Promise<void>) => Promise<void>;
   checkpointRead?: (path: string) => void;
   afterOfflineRestart?: (snapshot: MobileSnapshot) => 'stop' | void;
+  afterOfflineViews?: () => 'stop' | void;
   beforeCleanup?: () => void;
 }
 
@@ -186,7 +187,22 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
         ...expenseMonthRange('2026-08'),
       }),
     ]);
-    await controller.openActivity(groupId);
+    let stopObservingActivity = () => {};
+    const activityReady = new Promise<void>((done) => {
+      stopObservingActivity = controller.subscribe(() => {
+        if (controller.getSnapshot().activity.status === 'ready') {
+          done();
+        }
+      });
+    });
+    // Activity may display before its command finishes draining the account's disk lease.
+    // Checkpoint that displayed page without requiring the held disk write to finish first.
+    const openingActivity = controller.openActivity(groupId);
+    try {
+      await Promise.race([activityReady, openingActivity]);
+    } finally {
+      stopObservingActivity();
+    }
     await waitForCopies(checkpointRows, samId, [activityPagePath(groupId, { page: 1, limit: 20 })]);
     const activity = controller.getSnapshot().activity.events.length;
     observe(activity > 0, 'Activity loaded no events to keep for offline.', { events: activity });
@@ -225,6 +241,7 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
     assert.equal(controller.getSnapshot().financial.expenses.summary, null);
     await controller.openActivity(groupId);
     assert.equal(controller.getSnapshot().activity.events.length, activity);
+    if (options.afterOfflineViews?.() === 'stop') return;
     await controller.openExpense(groupId);
     await controller.updateExpenseDraft({ description: 'Prepared offline', amount: '12.00' });
     await controller.saveExpense();

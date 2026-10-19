@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { MobileSnapshot } from '../src/data/types';
+import { expensePagePath, activityPagePath } from '@splitbook/shared/api-paths';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
+import { waitForSavedQueries } from './offline-checkpoint';
 import { verifyOffline } from './verify-offline';
 
 const alex = {
@@ -116,47 +118,69 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-async function restartWithHeldHomeWrite(skipWaits: boolean) {
+async function restartWithHeldWrites(skipStage?: number | 'all') {
   vi.stubEnv('MOBILE_VERIFY_URL', 'http://127.0.0.1:4145');
   vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => fictionalHttp(input, init));
-  let release!: () => void;
-  const held = new Promise<void>((done) => {
-    release = done;
-  });
-  let snapshot: MobileSnapshot | undefined;
+  const heldPaths = [
+    '/api/user/balances',
+    `/api/groups/${groupId}`,
+    expensePagePath(groupId, {
+      page: 1,
+      limit: 20,
+      includeMemberBreakdown: true,
+      ...expenseMonthRange('2026-08'),
+    }),
+    activityPagePath(groupId, { page: 1, limit: 20 }),
+  ];
+  const releases = new Map<string, () => void>();
+  const held = new Map(
+    heldPaths.map((path) => [
+      path,
+      new Promise<void>((done) => {
+        releases.set(path, done);
+      }),
+    ]),
+  );
+  let stage = 0;
+  let reachedOfflineViews = false;
   await verifyOffline({
-    ...(skipWaits ? { waitForCopies: async () => {} } : {}),
+    waitForCopies: async (rows, account, paths) => {
+      const currentStage = stage++;
+      if (skipStage === 'all' || skipStage === currentStage) return;
+      await waitForSavedQueries(rows, account, paths, 1_000);
+    },
     writeSavedQuery: async (path, write) => {
-      if (path === '/api/user/balances') await held;
+      await held.get(path);
       await write();
     },
-    // Release the disk at the actual checkpoint's first read. If its calls are removed or
-    // made no-ops, nothing releases this write until after offline restoration observed it.
-    checkpointRead: () => release(),
-    afterOfflineRestart: (restored) => {
-      snapshot = restored;
-      release();
+    // Only a checkpoint reading this exact row can release its disk write.
+    // Other checkpoints, preview reads and offline fallback cannot free it.
+    checkpointRead: (path) => releases.get(path)?.(),
+    afterOfflineViews: () => {
+      reachedOfflineViews = true;
       return 'stop';
     },
-    beforeCleanup: () => release(),
+    beforeCleanup: () => {
+      for (const release of releases.values()) release();
+    },
   });
-  return snapshot;
+  return reachedOfflineViews;
 }
 
 describe('the actual offline verifier’s file-backed restart (#629)', () => {
-  it('restores unavailable Home when the verifier skips its Saved copy waits', async () => {
-    expect(await restartWithHeldHomeWrite(true)).toMatchObject({
-      auth: { status: 'authenticated', user: { id: sam.id } },
-      home: { status: 'error', data: null },
-      offline: { active: true },
-    });
-  });
+  it.each([
+    ['Home', 0, /Home after offline restart/],
+    ['Month', 1, /Saved August Expenses after offline restart/],
+    ['Activity', 2, /Expected values to be strictly equal/],
+    ['all', 'all', /Home after offline restart/],
+  ] as const)(
+    'red-first: rejects offline restoration without the %s wait',
+    async (_name, stage, message) => {
+      await expect(restartWithHeldWrites(stage)).rejects.toThrow(message);
+    },
+  );
 
-  it('restores ready Home when the verifier waits for its file-backed Saved copies', async () => {
-    expect(await restartWithHeldHomeWrite(false)).toMatchObject({
-      auth: { status: 'authenticated', user: { id: sam.id } },
-      home: { status: 'ready', data: [] },
-      offline: { active: true },
-    });
+  it('restores Home, Group, Month and Activity only after their own file-backed checkpoints', async () => {
+    expect(await restartWithHeldWrites()).toBe(true);
   });
 });
