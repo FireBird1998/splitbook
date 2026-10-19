@@ -1467,6 +1467,7 @@ const ExpenseScreen = memo(function ExpenseScreen() {
       onLoadOlderHistory={() => void controller.loadOlderExpenseHistory()}
       onLoadNewerHistory={() => void controller.loadNewerExpenseHistory()}
       onRetryHistory={() => void controller.refreshExpenseHistory()}
+      onViewMonth={() => void controller.viewRecordMonth()}
       onAcceptCurrent={() =>
         Alert.alert('Use the saved version?', 'Your version is removed from this device.', [
           { text: 'Keep my version', style: 'cancel' },

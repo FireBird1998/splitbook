@@ -277,6 +277,7 @@ function ExpenseTask({
   onLoadOlderHistory,
   onLoadNewerHistory,
   onRetryHistory,
+  onViewMonth,
   outline,
 }: {
   controller?: MobileController;
@@ -327,6 +328,8 @@ function ExpenseTask({
   /** Its newer changes, once the window of changes has slid past the newest (#220). */
   onLoadNewerHistory?: () => void;
   onRetryHistory?: () => void;
+  /** The record's "View in {Month}", after an edit saved there (#655). */
+  onViewMonth?: () => void;
   /** What the list row an Expense opens from already says, so its skeleton takes its shape. */
   outline?: RecordOutline | null;
 }) {
@@ -604,6 +607,7 @@ function ExpenseTask({
         onLoadOlderHistory={onLoadOlderHistory}
         onLoadNewerHistory={onLoadNewerHistory}
         onRetryHistory={onRetryHistory}
+        onViewMonth={onViewMonth}
         reveal={recordReveal}
         outlined={outlined.current}
       />

@@ -997,9 +997,11 @@ describe('a save made while the window has slid (#215)', () => {
     await controller.editExpense();
     await controller.updateExpenseDraft({ description: 'Lake dinner' });
     await controller.saveExpense();
+    // Its note offers the Expense's Month, which is how to reach its row (#655); Back stays a
+    // return to Activity.
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'expense',
-      expense: { status: 'detail', message: 'Expense updated.' },
+      expense: { status: 'detail', message: 'Expense updated.', viewMonth: '2026-09' },
     });
     let sent = f.calls.length;
     await controller.back();

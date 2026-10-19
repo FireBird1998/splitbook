@@ -9,6 +9,7 @@ import { findHosts, flatten, layoutHeight } from './test-utils/layout';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { createMobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
@@ -1322,47 +1323,74 @@ describe('App return from an Expense', () => {
 
   // Owner decision (#655): the record's note offers "View in {Month}", which opens Expenses at
   // the edited Expense's Month with its row highlighted.
-  it('offers View in the edited Expense’s Month on its record, a full-size button at 130% text that opens Expenses there with the row highlighted', async () => {
-    setWindow({ fontScale: 1.3 });
-    const app = await renderApp();
-    const moved = { ...september, date: '2026-08-15T00:00:00.000Z', revision: 1, isDeleted: false };
-    let edited = false;
-    app.use((path, init) => {
-      if (path === `/api/groups/${groupId}/expenses/${september._id}`) {
-        if (init.method === 'PATCH') edited = true;
-        return json({
-          status: 200,
-          data: edited ? moved : { ...september, revision: 0, isDeleted: false },
+  it.each(['light', 'dark'] as const)(
+    'offers View in the edited Expense’s Month on its record, a full-size button at 130%% text in %s, that opens Expenses there with the row highlighted',
+    async (mode) => {
+      setWindow({ fontScale: 1.3 });
+      const appearance = runtime.appearance;
+      runtime.appearance = { ...appearance, mode };
+      try {
+        const app = await renderApp();
+        const moved = {
+          ...september,
+          date: '2026-08-15T00:00:00.000Z',
+          revision: 1,
+          isDeleted: false,
+        };
+        let edited = false;
+        app.use((path, init) => {
+          if (path === `/api/groups/${groupId}/expenses/${september._id}`) {
+            if (init.method === 'PATCH') edited = true;
+            return json({
+              status: 200,
+              data: edited ? moved : { ...september, revision: 0, isDeleted: false },
+            });
+          }
+          if (path.includes('/expenses?') && edited) {
+            const from = new URL(path, 'http://local').searchParams.get('dateFrom');
+            return json(
+              page(from === expenseMonthRange('2026-08').dateFrom ? [august, moved] : []),
+            );
+          }
         });
-      }
-      if (path.includes('/expenses?') && edited) {
-        const from = new URL(path, 'http://local').searchParams.get('dateFrom');
-        return json(page(from === expenseMonthRange('2026-08').dateFrom ? [august, moved] : []));
-      }
-    });
-    await app.press('Open Maple House');
-    await app.press('September groceries');
-    await app.press('Edit expense');
-    await settle(app.controller.updateExpenseDraft({ date: '2026-08-15' }));
-    await app.press('Save changes');
-    expect(app.controller.getSnapshot()).toMatchObject({
-      screen: 'expense',
-      expense: { status: 'detail', viewMonth: '2026-08' },
-    });
-    expect(app.text()).toContain('Expense updated.');
-    const action = app.pressable('View in August');
-    expect(action.props.accessibilityRole).toBe('button');
-    expect(action.props.style({ pressed: false }).minHeight).toBe(48);
+        await app.press('Open Maple House');
+        await app.press('September groceries');
+        await app.press('Edit expense');
+        await settle(app.controller.updateExpenseDraft({ date: '2026-08-15' }));
+        await app.press('Save changes');
+        expect(app.controller.getSnapshot()).toMatchObject({
+          screen: 'expense',
+          expense: { status: 'detail', viewMonth: '2026-08' },
+        });
+        expect(app.text()).toContain('Expense updated.');
+        // The Month as the Expenses tab spells it, on the note's own colours in this appearance.
+        const action = app.pressable('View in August 2026');
+        expect(action.props.accessibilityLabel).toBe('View in August 2026');
+        expect(action.props.accessibilityRole).toBe('button');
+        expect(action.props.style({ pressed: false }).minHeight).toBe(48);
+        const note = app
+          .root()
+          .findAll(
+            (node) =>
+              typeof node.type === 'string' &&
+              flatten(node.props.style).backgroundColor === getSemanticTokens(mode).info.bg,
+          )
+          .find((node) => node.findAll((inner) => inner === action).length > 0);
+        expect(note).toBeDefined();
 
-    await app.press('View in August');
-    expect(app.controller.getSnapshot()).toMatchObject({
-      screen: 'group',
-      destination: 'expenses',
-      financial: { month: '2026-08' },
-    });
-    expect(app.text()).toContain('August 2026');
-    expect(screen!.root.findByType(GroupExpensesView).props.savedExpenseId).toBe(september._id);
-  });
+        await app.press('View in August 2026');
+        expect(app.controller.getSnapshot()).toMatchObject({
+          screen: 'group',
+          destination: 'expenses',
+          financial: { month: '2026-08' },
+        });
+        expect(app.text()).toContain('August 2026');
+        expect(screen!.root.findByType(GroupExpensesView).props.savedExpenseId).toBe(september._id);
+      } finally {
+        runtime.appearance = appearance;
+      }
+    },
+  );
 
   it('the top-bar back arrow names the Group it returns to', async () => {
     const app = await renderApp();
