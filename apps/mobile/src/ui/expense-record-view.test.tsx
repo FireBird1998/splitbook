@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
-import { deviceLocale } from '../test-utils/device-locale';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { emptyExpenseEditor } from '../data/expense-draft';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
@@ -475,7 +475,7 @@ const lines = (scope: ReactTestInstance) => {
 let screen: ReactTestRenderer | null = null;
 // A US phone, whose own order is month first: the record still puts the day first (#640).
 beforeEach(() => {
-  deviceLocale('en-US');
+  mockDeviceLocale('en-US');
 });
 afterEach(() => {
   act(() => screen?.unmount());

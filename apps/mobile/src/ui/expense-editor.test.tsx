@@ -8,7 +8,7 @@ import {
 } from 'react-test-renderer';
 import { flatten, layoutHeight } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
-import { deviceLocale } from '../test-utils/device-locale';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
@@ -1153,7 +1153,7 @@ describe('rendered edit history', () => {
   });
 
   it('dates the saved record and its history day first, on a US phone too (#640)', async () => {
-    deviceLocale('en-US');
+    mockDeviceLocale('en-US');
     await act(async () => {
       screen = create(
         <ExpenseRecordView
@@ -1169,7 +1169,7 @@ describe('rendered edit history', () => {
     const moment = (value: string) => {
       const date = new Date(value);
       const month = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[date.getMonth()];
-      const clock = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const clock = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
       return `${date.getDate()} ${month} ${date.getFullYear()}, ${clock}`;
     };
     // The Expense's own date is a calendar day (#437); the rest are moments on this device.
@@ -1206,6 +1206,8 @@ describe('compact Expense form', () => {
   it.each([1, 1.3])(
     'keeps editable input positions when the saved-copy offline notice clears at %sx text',
     async (scale) => {
+      // The notice's saved time is measured as an English phone writes it ("10:42 AM").
+      mockDeviceLocale('en-US');
       setWindow({ fontScale: scale });
       let disconnected = false;
       let held = false;

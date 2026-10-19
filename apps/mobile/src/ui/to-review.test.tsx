@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
-import { deviceLocale } from '../test-utils/device-locale';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { onlineManager, focusManager } from '@tanstack/query-core';
 import { Alert } from 'react-native';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
@@ -467,7 +467,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       expect(text(list)).not.toContain('Yesterday');
     }));
   it('dates an older item day first, on a US phone too (#640)', async () => {
-    deviceLocale('en-US');
+    mockDeviceLocale('en-US');
     const f = fixture();
     f.items()[0].draft.values!.date = '2026-10-10';
     await signIn(f);

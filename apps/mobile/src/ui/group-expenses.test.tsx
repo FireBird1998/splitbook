@@ -9,7 +9,7 @@ import type {
 } from '../data/types';
 import { GroupExpensesView, expenseDays } from './group-expenses';
 import { inTimeZone } from '../test-utils/time-zone';
-import { deviceLocale } from '../test-utils/device-locale';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { refreshedLabel } from './refresh-feedback';
 
 // #116: the Expenses destination's summary, rows, pagination and draft states, rendered.
@@ -279,7 +279,7 @@ describe('Expenses summary', () => {
 describe('Expense rows', () => {
   it('sit under day headings and say what the member lent or owes', () => {
     // A US phone too: day first, and Yesterday named like Today (#640).
-    deviceLocale('en-US');
+    mockDeviceLocale('en-US');
     const { root, onOpenExpense } = view();
     expect(headings(root)).toEqual(
       expect.arrayContaining(['Today · Wed 30 Sep', 'Yesterday · Tue 29 Sep', 'Sun 27 Sep']),
@@ -303,7 +303,7 @@ describe('Expense rows', () => {
 
   it('sit under the day they are dated, in a zone behind UTC (#437)', () =>
     inTimeZone('Pacific/Pago_Pago', () => {
-      deviceLocale('en-US');
+      mockDeviceLocale('en-US');
       const stored = { ...groceries, date: new Date('2026-09-28T00:00:00.000Z') };
       // Midday on the 30th there, so the 28th is neither today nor yesterday.
       const [day] = expenseDays([stored], new Date(2026, 8, 30, 12).getTime());

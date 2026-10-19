@@ -6,7 +6,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ExpenseWindowSummary,
   GroupFinancialState,
@@ -15,6 +15,7 @@ import type {
   MobileGroup,
 } from '../data/types';
 import { findHosts, flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { setFileWindow, setWindow, timing } from '../test-utils/native';
 import { motion } from './compact';
 import { GroupBalancesView, settledIn } from './group-balances';
@@ -29,10 +30,13 @@ setFileWindow({ width: 360, height: 640 });
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const at = new Date(2026, 8, 30, 10, 42);
-// Figures read today say "Updated 10:42 AM", as a fresh load does.
+// Figures read today say "Updated 10:42 AM", as a fresh load does on an English phone.
 beforeAll(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 8, 30, 12));
+});
+beforeEach(() => {
+  mockDeviceLocale('en-US');
 });
 afterAll(() => vi.useRealTimers());
 const you = 'a00000000000000000000001';

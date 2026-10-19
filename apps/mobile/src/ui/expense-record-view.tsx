@@ -557,7 +557,7 @@ export function ExpenseRecordScreen({
  */
 export interface RecordOutline {
   description: string;
-  /** The second line: "Tue, Sep 29, 2026 · Utilities". */
+  /** The second line: "Tue 29 Sep 2026 · Utilities". */
   meta: string;
   amount: string;
   /**
@@ -584,7 +584,7 @@ export interface RecordOutline {
  */
 const typicalRecord: RecordOutline = {
   description: 'Weekly groceries',
-  meta: 'Tue, Sep 29, 2026 · Groceries',
+  meta: 'Tue 29 Sep 2026 · Groceries',
   amount: '₹2,400.00',
   badge: { label: 'You lent Sam ₹1,200.00', tone: 'positive' },
   people: [

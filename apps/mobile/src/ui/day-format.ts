@@ -1,18 +1,39 @@
 import { gregorianLocale, toDateParam } from '@splitbook/shared/date';
 
-/** The device's locale, e.g. "en-IN" or "fa-IR". */
-export const deviceLocale = () => Intl.DateTimeFormat().resolvedOptions().locale;
+/** The phone's locale, e.g. "en-IN" or "fa-IR", and its time zone. */
+export interface PhoneCalendar {
+  locale: string;
+  timeZone?: string;
+}
+
+let reading: PhoneCalendar | null = null;
+/**
+ * The phone's locale and time zone. Reading them builds a formatter, which is slow on Hermes, so
+ * one reading serves every date spelled in the same turn of the event loop, such as a render or
+ * a Date sheet's Month. The next turn reads them again, so a phone that changes its language or
+ * zone is followed.
+ */
+export function readPhoneCalendar(): PhoneCalendar {
+  if (!reading) {
+    const { locale, timeZone } = Intl.DateTimeFormat().resolvedOptions();
+    reading = { locale, timeZone };
+    void Promise.resolve().then(() => {
+      reading = null;
+    });
+  }
+  return reading;
+}
 
 const formats = new Map<string, Intl.DateTimeFormat>();
 /**
  * Spells dates in the device's language on the Gregorian calendar that Splitbook's dates use,
  * whatever the locale's own (fa-IR's is Persian). If a platform can't, they're Gregorian in
  * English. Hermes takes the calendar from the locale's `-u-ca-` extension. A formatter keeps the
- * zone it was made in, so each is kept for the device's zone at the time, and a phone that
+ * zone it was made in, so each is kept for the phone's zone at the time, and a phone that
  * changes zone gets new ones.
  */
 export function gregorianDateFormat(options: Intl.DateTimeFormatOptions) {
-  const { locale, timeZone } = Intl.DateTimeFormat().resolvedOptions();
+  const { locale, timeZone } = readPhoneCalendar();
   const zoned: Intl.DateTimeFormatOptions = { timeZone, ...options };
   const key = `${locale} ${JSON.stringify(zoned)}`;
   let format = formats.get(key);
@@ -41,11 +62,19 @@ export interface DaySpelling {
   timeZone?: string;
 }
 
+const english = (locale: string) => /^en(?:[-_]|$)/i.test(locale);
+
 /**
  * A day as Android spells it, day first whatever order the device locale uses (#640):
  * "Mon 19 Oct", "19 Oct 2026" or "Monday 19 October 2026", on US phones too. The words and digits
- * are the device's, on the Gregorian calendar. A locale that writes the month as a number, such
- * as Japanese or Korean, keeps its own order, since "19 10" would read as neither.
+ * are the device's, on the Gregorian calendar.
+ *
+ * Only a locale that puts the month before the day is rebuilt from its parts, and English
+ * always, so every English phone reads the same, without commas. A locale that is already day
+ * first keeps its own words between them ("lunes, 19 de octubre de 2026", "Mo., 19. Okt."),
+ * and one that writes the month as a number, such as Japanese or Korean, keeps its own order,
+ * since "19 10" would read as neither. A platform that can't give the parts gets the locale's
+ * own spelling.
  */
 export function spellDay(
   date: Date,
@@ -58,19 +87,26 @@ export function spellDay(
     ...(year ? { year: 'numeric' } : {}),
     ...(timeZone ? { timeZone } : {}),
   });
-  const parts = format.formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((each) => each.type === type)?.value;
-  const named = part('month');
-  if (!named || /\p{Nd}/u.test(named)) return format.format(date);
-  return [weekday && part('weekday'), part('day'), named, year && part('year')]
-    .filter(Boolean)
-    .join(' ');
+  try {
+    const parts = format.formatToParts(date);
+    const at = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.findIndex((each) => each.type === type);
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts[at(type)]?.value;
+    const named = part('month');
+    const monthFirst = at('month') < at('day');
+    if (named && !/\p{Nd}/u.test(named) && (monthFirst || english(readPhoneCalendar().locale)))
+      return [weekday && part('weekday'), part('day'), named, year && part('year')]
+        .filter(Boolean)
+        .join(' ');
+  } catch {
+    // No formatToParts on this platform.
+  }
+  return format.format(date);
 }
 
 /** "1:44 PM", or "13:44", as the device's clock reads. */
 export const spellTime = (date: Date) =>
-  date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  gregorianDateFormat({ hour: 'numeric', minute: '2-digit' }).format(date);
 
 /** A moment, its day first: "19 Oct, 1:44 PM", or as `spelling` spells the day. */
 export const spellMoment = (date: Date, spelling: DaySpelling = {}) =>

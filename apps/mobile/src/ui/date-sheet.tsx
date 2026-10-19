@@ -8,7 +8,7 @@ import {
   type CalendarDay,
 } from '@splitbook/shared/date';
 import { BottomSheet, Chip, CompactText, IconButton, touch } from './compact';
-import { deviceLocale, gregorianDateFormat, spellDay } from './day-format';
+import { gregorianDateFormat, readPhoneCalendar, spellDay } from './day-format';
 import { useTheme } from './theme';
 
 /** "Monday 19 October 2026": how the sheet names a day, day first on every phone (#640). */
@@ -49,13 +49,11 @@ export function DateSheet({
   const locale = useMemo(() => {
     const narrow = gregorianDateFormat({ weekday: 'narrow' });
     return {
-      firstWeekday: localeFirstWeekday(deviceLocale()),
+      firstWeekday: localeFirstWeekday(readPhoneCalendar().locale),
       // 7 January 2024 was a Sunday.
       weekdays: Array.from({ length: 7 }, (_, weekday) =>
         narrow.format(new Date(2024, 0, 7 + weekday)),
       ),
-      month: gregorianDateFormat({ month: 'long', year: 'numeric' }),
-      number: gregorianDateFormat({ day: 'numeric' }),
     };
   }, []);
   const [month, setMonth] = useState(() => monthOf(value));
@@ -67,14 +65,17 @@ export function DateSheet({
   const now = new Date();
   const today = toDateParam(now);
   const yesterday = toDateParam(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
-  // The editor re-renders on every keystroke; only a new Month or date is spelled out again.
+  // The editor re-renders on every keystroke; only a new Month or date is spelled out again,
+  // and all of it from one reading of the phone's locale and zone.
   const calendar = useMemo(() => {
+    const heading = gregorianDateFormat({ month: 'long', year: 'numeric' });
+    const digits = gregorianDateFormat({ day: 'numeric' });
     const [year, number] = month.split('-').map(Number);
     const grid = monthGrid(month, { firstWeekday: locale.firstWeekday, today, selected: value });
     const chosen = localDay(value);
     return {
       ...grid,
-      title: locale.month.format(new Date(year, number - 1, 1)),
+      title: heading.format(new Date(year, number - 1, 1)),
       // Always six rows, so the arrows stay put from Month to Month.
       weeks: Array.from({ length: 6 }, (_, row) =>
         (grid.weeks[row] ?? Array<CalendarDay | null>(7).fill(null)).map((cell) => {
@@ -82,7 +83,7 @@ export function DateSheet({
           const date = new Date(year, number - 1, cell.day);
           return {
             ...cell,
-            number: locale.number.format(date),
+            number: digits.format(date),
             label: `${fullDay(date)}${cell.today ? ', today' : ''}`,
           };
         }),

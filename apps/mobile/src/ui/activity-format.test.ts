@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseActivityPage, type ActivityEvent } from '../data/activity';
-import { deviceLocale } from '../test-utils/device-locale';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import {
   activityDays,
   dayLabel,
@@ -25,7 +25,7 @@ const event = (overrides: Partial<ActivityEvent>): ActivityEvent => ({
 
 describe('Activity days', () => {
   it('labels today and yesterday, and dates older days day-first on a US phone (#640)', () => {
-    deviceLocale('en-US');
+    mockDeviceLocale('en-US');
     expect(dayLabel(new Date(at(30, 1)), now)).toBe('Today');
     expect(dayLabel(new Date(at(29, 23)), now)).toBe('Yesterday');
     expect(dayLabel(new Date(at(27)), now)).toBe('Sun 27 Sep');
@@ -331,7 +331,7 @@ describe('Group edits in plain language', () => {
   });
 
   it('leads with the first change and lists every change for the detail', () => {
-    deviceLocale('en-US');
+    mockDeviceLocale('en-US');
     const line = edit({
       name: { old: 'Maple House', new: 'Maple Flat' },
       description: { old: '', new: 'Flat 302' },

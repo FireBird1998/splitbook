@@ -196,6 +196,16 @@ describe('Date sheet calendar', () => {
     expect(sheet.footer()).toBe('Wednesday 30 September 2026');
   });
 
+  it('reads the phone’s locale and zone once for a whole Month (#640)', async () => {
+    const readings = deviceLocale('en-IN');
+    const sheet = render('2026-09-15');
+    await Promise.resolve();
+    readings.mockClear();
+    sheet.press('Next month');
+    expect(sheet.days()).toHaveLength(31);
+    expect(readings).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps a Persian-calendar locale on the Gregorian dates it lays out', () => {
     deviceLocale('fa-IR');
     const sheet = render('2026-09-15');

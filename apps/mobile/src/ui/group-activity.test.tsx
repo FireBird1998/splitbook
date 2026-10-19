@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyActivity, type ActivityEvent, type ActivityState } from '../data/activity';
 import { flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
-import { deviceLocale } from '../test-utils/device-locale';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { GroupActivity } from './group-activity';
 import { refreshedLabel } from './refresh-feedback';
 
@@ -490,9 +490,9 @@ describe('offline with nothing shown (#222, the loading-state audit)', () => {
 
 describe('an event’s detail', () => {
   it('says when it happened day first, on a US phone too (#640)', () => {
-    deviceLocale('en-US');
+    mockDeviceLocale('en-US');
     render({ state: activity({ selected: event(1) }) });
-    const clock = new Date(2026, 8, 30, 11, 0).toLocaleTimeString([], {
+    const clock = new Date(2026, 8, 30, 11, 0).toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
     });
