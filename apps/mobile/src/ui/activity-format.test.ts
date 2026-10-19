@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseActivityPage, type ActivityEvent } from '../data/activity';
+import { deviceLocale } from '../test-utils/device-locale';
 import {
   activityDays,
   dayLabel,
@@ -23,12 +24,12 @@ const event = (overrides: Partial<ActivityEvent>): ActivityEvent => ({
 });
 
 describe('Activity days', () => {
-  it('labels today and yesterday, and dates older days', () => {
+  it('labels today and yesterday, and dates older days day-first on a US phone (#640)', () => {
+    deviceLocale('en-US');
     expect(dayLabel(new Date(at(30, 1)), now)).toBe('Today');
     expect(dayLabel(new Date(at(29, 23)), now)).toBe('Yesterday');
-    const older = dayLabel(new Date(at(27)), now);
-    expect(older).not.toMatch(/Today|Yesterday/);
-    expect(older).toContain('27');
+    expect(dayLabel(new Date(at(27)), now)).toBe('Sun 27 Sep');
+    expect(dayLabel(new Date(2025, 11, 31, 10), now)).toBe('Wed 31 Dec 2025');
   });
 
   it('keeps newest-first order and starts a new group at each local day', () => {
@@ -330,6 +331,7 @@ describe('Group edits in plain language', () => {
   });
 
   it('leads with the first change and lists every change for the detail', () => {
+    deviceLocale('en-US');
     const line = edit({
       name: { old: 'Maple House', new: 'Maple Flat' },
       description: { old: '', new: 'Flat 302' },
@@ -343,7 +345,7 @@ describe('Group edits in plain language', () => {
         'Name “Maple House” → “Maple Flat”',
         'Description None → “Flat 302”',
         'Theme Household → Trip',
-        'Start date None → Oct 1, 2026',
+        'Start date None → 1 Oct 2026',
       ],
     });
   });

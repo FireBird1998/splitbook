@@ -82,6 +82,7 @@ import { groupFields } from './src/data/group-draft';
 import { GroupShell } from './src/ui/group-shell';
 import { GroupBalancesView, recordWaitsForDetails, settledIn } from './src/ui/group-balances';
 import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
+import { spellDay } from './src/ui/day-format';
 import { GroupActivity } from './src/ui/group-activity';
 import { GroupMembers } from './src/ui/group-members';
 import type { MobileGroup, MobileSnapshot } from './src/data/types';
@@ -1339,7 +1340,7 @@ function GroupScreen() {
           visible
           state={state.settlement}
           currentUserId={userId}
-          today={`Today, ${new Date().toLocaleDateString('en', { month: 'short', day: 'numeric' })}`}
+          today={`Today, ${spellDay(new Date())}`}
           onChange={controller.updateSettlement}
           onLeaveField={controller.touchSettlementField}
           onAcknowledge={controller.acknowledgeSettlement}

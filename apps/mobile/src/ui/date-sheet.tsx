@@ -2,40 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import {
   currentMonthKey,
-  gregorianLocale,
   localeFirstWeekday,
   monthGrid,
   toDateParam,
   type CalendarDay,
 } from '@splitbook/shared/date';
 import { BottomSheet, Chip, CompactText, IconButton, touch } from './compact';
+import { deviceLocale, gregorianDateFormat, spellDay } from './day-format';
 import { useTheme } from './theme';
 
-/** The device's locale, e.g. "en-IN" or "fa-IR". */
-const deviceLocale = () => Intl.DateTimeFormat().resolvedOptions().locale;
-
-const formats = new Map<string, Intl.DateTimeFormat>();
-/**
- * Spells dates in the device's language on the Gregorian calendar that Splitbook's dates use,
- * whatever the locale's own (fa-IR's is Persian). If a platform can't, they're Gregorian in
- * English. Hermes takes the calendar from the locale's `-u-ca-` extension.
- */
-export function gregorianDateFormat(options: Intl.DateTimeFormatOptions) {
-  const locale = deviceLocale();
-  const key = `${locale} ${JSON.stringify(options)}`;
-  let format = formats.get(key);
-  if (!format) {
-    try {
-      format = new Intl.DateTimeFormat(gregorianLocale(locale), options);
-    } catch {
-      // A locale tag the platform rejects.
-    }
-    if (format?.resolvedOptions().calendar !== 'gregory')
-      format = new Intl.DateTimeFormat('en-u-ca-gregory', options);
-    formats.set(key, format);
-  }
-  return format;
-}
+/** "Monday 19 October 2026": how the sheet names a day, day first on every phone (#640). */
+const fullDay = (date: Date) => spellDay(date, { weekday: 'long', month: 'long', year: true });
 
 /** A YYYY-MM-DD string as a local date, or null when that day doesn't exist. */
 function localDay(value: string) {
@@ -79,7 +56,6 @@ export function DateSheet({
       ),
       month: gregorianDateFormat({ month: 'long', year: 'numeric' }),
       number: gregorianDateFormat({ day: 'numeric' }),
-      day: gregorianDateFormat({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
     };
   }, []);
   const [month, setMonth] = useState(() => monthOf(value));
@@ -107,11 +83,11 @@ export function DateSheet({
           return {
             ...cell,
             number: locale.number.format(date),
-            label: `${locale.day.format(date)}${cell.today ? ', today' : ''}`,
+            label: `${fullDay(date)}${cell.today ? ', today' : ''}`,
           };
         }),
       ),
-      chosen: chosen ? locale.day.format(chosen) : 'Choose a date',
+      chosen: chosen ? fullDay(chosen) : 'Choose a date',
     };
   }, [month, today, value, locale]);
   const choose = (date: string) => {

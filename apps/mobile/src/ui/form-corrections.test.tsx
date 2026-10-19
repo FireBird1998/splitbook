@@ -231,7 +231,7 @@ function PaymentSheet({ controller }: { controller: MobileController }) {
       visible={state.screen === 'settlement'}
       state={state.settlement}
       currentUserId={sam.id}
-      today="Today, Sep 28"
+      today="Today, 28 Sep"
       onChange={controller.updateSettlement}
       onLeaveField={controller.touchSettlementField}
       onAcknowledge={controller.acknowledgeSettlement}

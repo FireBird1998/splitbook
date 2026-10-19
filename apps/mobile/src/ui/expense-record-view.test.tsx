@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
+import { deviceLocale } from '../test-utils/device-locale';
 import { emptyExpenseEditor } from '../data/expense-draft';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
@@ -472,6 +473,10 @@ const lines = (scope: ReactTestInstance) => {
 };
 
 let screen: ReactTestRenderer | null = null;
+// A US phone, whose own order is month first: the record still puts the day first (#640).
+beforeEach(() => {
+  deviceLocale('en-US');
+});
 afterEach(() => {
   act(() => screen?.unmount());
   screen = null;
@@ -524,8 +529,12 @@ const shownBeforeHistory = (id: string) => async (controller: MobileController) 
   for (let tick = 0; tick < 50 && controller.getSnapshot().expense.status !== 'detail'; tick++)
     await new Promise((resolve) => setTimeout(resolve, 0));
 };
-const when = (value: string) =>
-  `${new Date(value).toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${clockTime(value)}`;
+const months = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
+/** "29 Sep, 8:02 PM": when something happened, day first. */
+const when = (value: string) => {
+  const date = new Date(value);
+  return `${date.getDate()} ${months[date.getMonth()]}, ${clockTime(value)}`;
+};
 
 describe('compact Expense record', () => {
   it('shows what it was for, the member’s position and who owes what', async () => {
@@ -567,13 +576,7 @@ describe('compact Expense record', () => {
   it('shows the day it is dated, in a zone behind UTC (#437)', () =>
     inTimeZone('Pacific/Pago_Pago', async () => {
       const ui = await render(open(ids.bill));
-      const day = new Date(2026, 8, 29).toLocaleDateString([], {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
-      expect(text(ui.root())).toContain(day);
+      expect(text(ui.root())).toContain('Tue 29 Sep 2026');
     }));
 
   it('shows when it was added and last changed while its changes load', async () => {

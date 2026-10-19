@@ -4,6 +4,7 @@ import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { expenseMoney, type ExpenseDraft } from '../data/expense-draft';
 import { ThemeContext } from './theme';
 import { setWindow } from '../test-utils/native';
+import { deviceLocale } from '../test-utils/device-locale';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -145,6 +146,22 @@ describe('Expense date label', () => {
     expect(expenseDateLabel('2025-09-24', now)).toEqual({
       shown: '۲۴ سپتامبر ۲۰۲۵',
       spoken: 'چهارشنبه ۲۴ سپتامبر ۲۰۲۵',
+    });
+  });
+
+  it('puts the day first on a US phone, as the rest of the app does (#640)', () => {
+    deviceLocale('en-US');
+    expect(expenseDateLabel('2026-09-30', now)).toEqual({
+      shown: 'Today, 30 Sep',
+      spoken: 'Today, Wednesday 30 September 2026',
+    });
+    expect(expenseDateLabel('2026-09-29', now)).toEqual({
+      shown: 'Tue 29 Sep',
+      spoken: 'Yesterday, Tuesday 29 September 2026',
+    });
+    expect(expenseDateLabel('2025-09-24', now)).toEqual({
+      shown: '24 Sep 2025',
+      spoken: 'Wednesday 24 September 2025',
     });
   });
 

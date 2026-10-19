@@ -35,6 +35,7 @@ import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
 import { useTheme } from './theme';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { nearDay, spellDay } from './day-format';
 
 const categoryIcons: Record<string, IconName> = {
   food: 'restaurant-outline',
@@ -58,16 +59,17 @@ export function monthLabel(month: string | null) {
 const localDayKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-/** "Today · Wed 30 Sep", or "Tue 29 Sep", with the year when it isn't this year. */
+/**
+ * "Today · Wed 30 Sep", "Yesterday · Tue 29 Sep" or "Sun 27 Sep", day first on every phone,
+ * with the year when it isn't this year (#640).
+ */
 export function expenseDayLabel(date: Date, now: number) {
-  const today = new Date(now);
-  const label = date.toLocaleDateString([], {
+  const label = spellDay(date, {
     weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    ...(date.getFullYear() === today.getFullYear() ? {} : { year: 'numeric' }),
+    year: date.getFullYear() !== new Date(now).getFullYear(),
   });
-  return localDayKey(date) === localDayKey(today) ? `Today · ${label}` : label;
+  const near = nearDay(date, now);
+  return near ? `${near} · ${label}` : label;
 }
 
 /** Expenses keep the server's newest-first order, grouped under the day they are dated (#437). */
