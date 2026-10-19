@@ -151,7 +151,7 @@ export function SectionHeader({
   below?: boolean;
 }) {
   const heading = (
-    <CompactText variant="overline" accessibilityRole="header">
+    <CompactText variant="overline" accessibilityRole="header" spare>
       {title}
     </CompactText>
   );
@@ -402,7 +402,7 @@ export function RowAmount({
     <>
       {amount ? <Money tone={tone}>{amount}</Money> : null}
       {caption ? (
-        <CompactText variant="caption" tone={captionTone} numberOfLines={1}>
+        <CompactText variant="caption" tone={captionTone} numberOfLines={1} spare>
           {caption}
         </CompactText>
       ) : null}

@@ -147,6 +147,7 @@ export function GroupNavBar({
               variant="caption"
               tone={selected ? 'primary' : 'secondary'}
               weight={selected ? 'semibold' : 'medium'}
+              spare
             >
               {destination.label}
             </CompactText>

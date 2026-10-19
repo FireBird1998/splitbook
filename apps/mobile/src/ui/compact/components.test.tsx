@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { hairSpace, labelRuns } from '../../test-utils/layout';
 import { setWindow } from '../../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -12,9 +13,13 @@ const {
   CompactAvatar,
   CompactButton,
   CompactText,
+  FieldMarker,
+  FloatingAction,
   GroupNavBar,
   LinearProgress,
   ListRow,
+  RowAmount,
+  SectionHeader,
   SegmentedControl,
   SelectorTile,
   Snackbar,
@@ -163,7 +168,8 @@ describe('Selector tile', () => {
       />,
     );
     const tile = one(byRole(root, 'button', 'Date: Yesterday, Thursday, 1 October 2026'));
-    expect(text(tile)).toBe('Date Thu 1 Oct');
+    // The label keeps a hair space to spare (#639).
+    expect(text(tile)).toBe('Date \u200a Thu 1 Oct');
   });
 });
 
@@ -400,4 +406,90 @@ describe('Large text', () => {
       expect(text(root)).toContain('Your share ₹6,140.00');
     },
   );
+});
+
+// #639: Android lays a label out again to draw it and can need a fraction of a pixel more than
+// React Native measured; a label as wide as its words then wraps its last word out of its
+// one-line box. At density 160, "Groups · 7" drew "Groups ·", "ACTIVE · 6" "ACTIVE ·", "One
+// person" "One" and "Settled up" "Settled". Every compact part that sizes a label to its words
+// keeps room to spare after it, a hair space, as a Badge and a button do (#331).
+describe('labels as wide as their words keep room to spare (#639)', () => {
+  const noop = () => undefined;
+  it.each<[string, ReactElement, string[]]>([
+    [
+      'a section’s title beside its action',
+      <SectionHeader
+        key="header"
+        title="Groups · 7"
+        trailing={<CompactButton label="New Group" icon="add" variant="text" onPress={noop} />}
+      />,
+      ['Groups · 7', 'New Group'],
+    ],
+    [
+      'a section’s title over its note',
+      <SectionHeader key="below" title="Changes in this Group" below trailing={null} />,
+      ['Changes in this Group'],
+    ],
+    [
+      'a segmented control’s options',
+      <SegmentedControl
+        key="segments"
+        label="How many people paid"
+        options={[
+          { value: 'one', label: 'One person' },
+          { value: 'several', label: 'Several people' },
+        ]}
+        value="several"
+        onChange={noop}
+      />,
+      ['One person', 'Several people'],
+    ],
+    [
+      'a chip, chosen or not',
+      <>
+        <Chip label="Equal" selected role="radio" onPress={noop} />
+        <Chip label="By amounts" role="radio" onPress={noop} />
+      </>,
+      ['Equal', 'By amounts'],
+    ],
+    [
+      'a selector tile’s label',
+      <SelectorTile key="tile" icon="wallet-outline" label="Paid by" value="You" onPress={noop} />,
+      ['Paid by'],
+    ],
+    ['a field’s marker', <FieldMarker key="marker" kind="required" />, ['Required']],
+    [
+      'the add button',
+      <FloatingAction key="fab" label="Add expense" icon="add" onPress={noop} />,
+      ['Add expense'],
+    ],
+    [
+      'a snackbar’s action',
+      <Snackbar key="snackbar" message="Expense saved" action={{ label: 'View', onPress: noop }} />,
+      ['View'],
+    ],
+    [
+      'the Group’s destinations',
+      <GroupNavBar key="nav" groupName="Maple House" value="expenses" onChange={noop} />,
+      ['Expenses', 'Balances', 'Activity'],
+    ],
+    [
+      'a row’s caption under its amount',
+      <ListRow
+        key="row"
+        title="Studio Lunch Club"
+        trailing={<RowAmount amount="₹62.30" tone="positive" caption="owed to you" />}
+      />,
+      ['owed to you'],
+    ],
+    [
+      'a text button',
+      <CompactButton key="button" label="All time" variant="text" onPress={noop} />,
+      ['All time'],
+    ],
+    ['a badge', <Badge key="badge" label="Adds up" tone="positive" />, ['Adds up']],
+  ])('%s', (_part, element, labels) => {
+    const root = render(element);
+    for (const label of labels) expect(labelRuns(root, label), label).toEqual([[label, hairSpace]]);
+  });
 });

@@ -1470,7 +1470,8 @@ describe('compact Expense form', () => {
     expect(openSheet(ui.root(), 'September 2026')).toBe(false);
     const label = expenseDateLabel('2026-09-15');
     expect(ui.tile('Date').props.accessibilityLabel).toBe(`Date: ${label.spoken}`);
-    expect(text(ui.tile('Date'))).toBe(`Date${label.shown}`);
+    // The tile's label keeps a hair space to spare (#639).
+    expect(text(ui.tile('Date'))).toBe(`Date\u200a${label.shown}`);
     expect(ui.controller.getSnapshot().expense.draft?.date).toBe('2026-09-15');
     expect(ui.writes).toEqual([]);
   });

@@ -316,7 +316,8 @@ describe('Group Activity', () => {
   it('groups events under day headings, newest first', () => {
     const { root } = activity(ready());
     const headings = byRole(root, 'header').map(text);
-    expect(headings[0]).toBe('Changes in this Group');
+    // A section's title keeps a hair space to spare (#639).
+    expect(headings[0]).toBe('Changes in this Group\u200a');
     expect(headings.slice(1, 3)).toEqual(['Today', 'Yesterday']);
     expect(headings).toHaveLength(4);
   });

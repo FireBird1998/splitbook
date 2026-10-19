@@ -388,7 +388,8 @@ describe('the header says when its events were read, whole, at any text size (#2
     const search = (node: ReactTestRendererJSON): ReactTestRendererJSON | null => {
       for (const child of node.children ?? []) {
         if (typeof child === 'string') continue;
-        if (child.type === 'Text' && child.children?.join('') === 'Changes in this Group')
+        // The title keeps a hair space to spare (#639).
+        if (child.type === 'Text' && child.children?.join('') === 'Changes in this Group\u200a')
           return node;
         const found = search(child);
         if (found) return found;

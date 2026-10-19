@@ -584,7 +584,8 @@ describe('compact Expense record', () => {
     const ui = await render(shownBeforeHistory(ids.bill), (harness) => {
       release = harness.holdHistory();
     });
-    expect(ui.headings()).toContain('History');
+    // A section's title keeps a hair space to spare (#639).
+    expect(ui.headings()).toContain('History\u200a');
     const history = () =>
       ui.labels().filter((label) => /edited|added this Expense|Last changed/.test(label));
     expect(history()).toEqual([
