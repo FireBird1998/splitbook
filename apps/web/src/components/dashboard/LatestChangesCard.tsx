@@ -58,10 +58,9 @@ function initials(name: string) {
 }
 
 /**
- * Where an entry leads: its Group's page, which holds the Group's Activity. Neither the
- * Activity tab nor an Expense has an address of its own yet (#305, #311).
+ * Each entry opens its Group’s Activity tab, where the member can read the change in context.
  */
-const latestChangeHref = (event: UserActivityEventRead) => `/groups/${event.group._id}`;
+const latestChangeHref = (event: UserActivityEventRead) => `/groups/${event.group._id}/activity`;
 
 export type LatestChangesState =
   | { status: 'loading' }
