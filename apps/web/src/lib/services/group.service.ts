@@ -16,6 +16,7 @@ import { recurringExpenseService } from './recurring-expense.service';
 import { buildDefaultGroupTags } from '@splitbook/shared/default-tags';
 import type { CreateGroupInput, UpdateGroupInput } from '@splitbook/shared/validators/group';
 import crypto from 'crypto';
+import { cache } from 'react';
 import { tagManagementService } from './tag-management.service';
 import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
@@ -35,6 +36,26 @@ export class LeaveBlockedError extends Error {
 }
 
 export class GroupService {
+  /** Request-scoped title read: authorize and project the name in one query. */
+  getMemberName = cache(async (groupId: string, userId: string) => {
+    await connectDB();
+    return Group.findOne({ _id: groupId, 'members.user': userId })
+      .select('name -_id')
+      .lean<{ name: string }>();
+  });
+
+  /** A valid public invitation may name its Group without loading its members. */
+  getInviteName = cache(async (code: string) => {
+    await connectDB();
+    return Group.findOne({
+      inviteCode: code,
+      inviteCodeExpiresAt: { $gt: new Date() },
+      isArchived: false,
+    })
+      .select('name -_id')
+      .lean<{ name: string }>();
+  });
+
   /**
    * Create a new group. The creator becomes the admin.
    * Seeds active default tags so the first expense is never blocked.

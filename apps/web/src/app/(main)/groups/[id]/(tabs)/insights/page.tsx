@@ -1,3 +1,4 @@
+import { groupTabMetadata } from '@/lib/group-page-metadata';
 import GroupInsightsTab from '@/components/insights/GroupInsightsTab';
 import InsightsForTheme from '@/components/trip-summary/InsightsForTheme';
 import TripSummaryTab from '@/components/trip-summary/TripSummaryTab';
@@ -13,4 +14,8 @@ export default function GroupInsightsPage() {
       months={<GroupInsightsTab recurringExpensesEnabled={recurringExpensesEnabled()} />}
     />
   );
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  return groupTabMetadata(params, 'insights');
 }
