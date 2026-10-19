@@ -62,6 +62,7 @@ import {
 import { TagSheet, inactiveTagReport } from './tag-sheet';
 import { PayerSheet, paidBySummary } from './payer-sheet';
 import {
+  ActionBar,
   AmountDescriptionCard,
   ExpenseTiles,
   OptionalDetails,
@@ -652,6 +653,13 @@ function ExpenseTask({
   const invalid = expenseFields.filter((field) => errors[field]);
   const summary = state.validation.submitted && invalid.length > 0;
   const canSave = state.status === 'editing' || state.status === 'saving';
+  // A new Expense can be kept in To review: in the bar under Save, as the design has it.
+  const later =
+    process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' &&
+    controller &&
+    !draft.original ? (
+      <FinishLater controller={controller} />
+    ) : null;
   const tagName = (id: string) =>
     !id
       ? 'No Tag'
@@ -992,7 +1000,9 @@ function ExpenseTask({
             blocked={checking ? checkingMessage : offline ? 'Checking needs a connection.' : null}
             onSave={state.attempt ? onSave : onReconcile}
             secondary={onClose && { label: 'Keep for later', onPress: onClose }}
-          />
+          >
+            {later}
+          </SaveBar>
         ) : conflict ? (
           <SaveBar
             label="Keep my version for review"
@@ -1018,12 +1028,13 @@ function ExpenseTask({
             secondary={
               reviewing ? { label: 'Go to What’s different', onPress: showReview } : undefined
             }
-          />
+          >
+            {later}
+          </SaveAction>
+        ) : later ? (
+          <ActionBar>{later}</ActionBar>
         ) : null,
       )}
-      {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' &&
-        controller &&
-        !draft.original && <FinishLater controller={controller} />}
       {sheet === 'date' ? (
         <DateSheet
           visible={sheet === 'date'}

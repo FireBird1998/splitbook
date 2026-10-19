@@ -553,6 +553,71 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     expect(f.controller.getSnapshot().screen).toBe('group');
     expect(f.controller.getSnapshot().snackbar?.message).toBe('Kept in To review');
   });
+  it('sits in the Save bar, under Save, with its note under the button', async () => {
+    const f = fixture({ empty: true });
+    await signIn(f);
+    await enter(f);
+    const editor = await form(f, mode);
+    const later = button(editor, 'Finish later');
+    // The bar is the one view on its surface with a line along its top.
+    let bar = later.parent;
+    while (bar && !(bar.props.style && bar.props.style.borderTopWidth === 1)) bar = bar.parent;
+    expect(bar, 'Finish later inside the Save bar').toBeTruthy();
+    const save = bar!.findAll(
+      (node) =>
+        String(node.type) === 'Pressable' &&
+        String(node.props.accessibilityLabel).startsWith('Save expense'),
+    );
+    expect(save, 'Save in the same bar').toHaveLength(1);
+    // In the bar's reading order: Save, Finish later, then what Finish later does.
+    const order = bar!
+      .findAll(
+        (node) =>
+          (String(node.type) === 'Pressable' && !!node.props.accessibilityLabel) ||
+          String(node.type) === 'Text',
+      )
+      .map((node) =>
+        String(node.type) === 'Pressable'
+          ? String(node.props.accessibilityLabel)
+          : node.children.filter((child) => typeof child === 'string').join(''),
+      );
+    const at = (label: string) => order.findIndex((entry) => entry.startsWith(label));
+    expect(at('Save expense')).toBeLessThan(at('Finish later'));
+    expect(at('Finish later')).toBeLessThan(at('Keeps it in To review'));
+    // Full width, as Save is.
+    expect(later.props.style({ pressed: false }).alignSelf).toBe('stretch');
+  });
+  it('asks on Back with full-width Finish later and Delete, and one Keep editing', async () => {
+    const f = fixture({ empty: true });
+    await signIn(f);
+    await enter(f);
+    const editor = await form(f, mode);
+    await act(async () => {
+      await f.controller.back();
+    });
+    const sheet = editor.root.find(
+      (node) => String(node.type) === 'Modal' && node.props.transparent && node.props.visible,
+    );
+    const labelled = (label: string) =>
+      sheet.findAll(
+        (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label,
+      );
+    expect(labelled('Keep editing'), 'one Keep editing').toHaveLength(1);
+    const later = labelled('Finish later');
+    const remove = labelled('Delete');
+    expect(later).toHaveLength(1);
+    expect(remove).toHaveLength(1);
+    // Full width, the main choice first and filled, Delete in the warning colour.
+    expect(later[0]!.props.style({ pressed: false }).alignSelf).toBe('stretch');
+    expect(remove[0]!.props.style({ pressed: false }).alignSelf).toBe('stretch');
+    const theme = getSemanticTokens(mode);
+    expect(later[0]!.props.style({ pressed: false }).backgroundColor).toBe(theme.brand.main);
+    const order = sheet
+      .findAll((node) => String(node.type) === 'Pressable' && !!node.props.accessibilityLabel)
+      .map((node) => String(node.props.accessibilityLabel));
+    expect(order.indexOf('Finish later')).toBeLessThan(order.indexOf('Delete'));
+  });
+
   it('asks on Back and lets the member keep editing, delete, or Finish later', async () => {
     const f = fixture({ empty: true });
     await signIn(f);
