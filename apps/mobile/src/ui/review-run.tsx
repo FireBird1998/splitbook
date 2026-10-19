@@ -13,7 +13,7 @@ import {
 import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { groupNounTitle } from '@splitbook/shared/group-themes';
-import { formatDate, toDateParam } from '@splitbook/shared/date';
+import { toDateParam } from '@splitbook/shared/date';
 import type { MobileController } from '../data/mobile-controller';
 import { reviewForm, reviewFormChange } from '../data/review-form';
 import type { ExpenseDraft } from '../data/expense-draft';
@@ -24,6 +24,7 @@ import { ExpenseTiles, expenseDateLabel, splitSummary, OptionalDetails } from '.
 import { DateSheet } from './date-sheet';
 import { CurrencyBadge, RequiredFieldLabel } from './expense-inputs';
 import { clockTime } from './activity-format';
+import { recentDay, spellDay } from './day-format';
 import { PayerSheet, paidBySummary } from './payer-sheet';
 import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
@@ -184,7 +185,7 @@ function ReviewRunContent({
       ? 'today'
       : toDateParam(created) === toDateParam(yesterday)
         ? 'yesterday'
-        : formatDate(created);
+        : spellDay(created, { year: true });
   const source =
     item.draft.preparedBy.kind === 'assistant'
       ? `Prepared by ${item.draft.preparedBy.name} · from your chat`
@@ -340,7 +341,7 @@ function ReviewRunContent({
                     .map((expense) => (
                       <View key={expense._id}>
                         <Copy>
-                          {formatDate(expenseLocalDate(expense.date))} ·{' '}
+                          {recentDay(expenseLocalDate(expense.date))} ·{' '}
                           {money(expense.amount, expense.currency)}
                         </Copy>
                         <Copy>

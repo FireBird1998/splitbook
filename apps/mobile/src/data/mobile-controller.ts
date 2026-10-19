@@ -8,6 +8,7 @@ import {
   createToReviewQueries,
   draftRequestRecoveries,
   emptyToReview,
+  finishLaterOffline,
   mobileToReview,
 } from './to-review';
 import {
@@ -4374,7 +4375,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     });
   };
-  /** "I meant to pay more than suggested": Record waits for it above the suggestion. */
+  /**
+   * "I meant to pay more than suggested", or "Priya Shah paid more than suggested" for the member
+   * being paid: Record waits for it above the suggestion.
+   */
   const acknowledgeSettlement = (acknowledged = true) => {
     if (
       snapshot.screen === 'settlement' &&
@@ -6577,8 +6581,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             groupId: editor.groupId,
             viewMonth: null,
             viewToReview: true,
-            message:
-              "You're offline, so it stays on this phone. It shows in To review as 'On this phone'.",
+            message: finishLaterOffline,
           },
         });
         await toReviewQueries.refresh();

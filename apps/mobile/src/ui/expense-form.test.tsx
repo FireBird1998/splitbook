@@ -4,6 +4,7 @@ import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { expenseMoney, type ExpenseDraft } from '../data/expense-draft';
 import { ThemeContext } from './theme';
 import { setWindow } from '../test-utils/native';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -148,6 +149,22 @@ describe('Expense date label', () => {
     });
   });
 
+  it('puts the day first on a US phone, as the rest of the app does (#640)', () => {
+    mockDeviceLocale('en-US');
+    expect(expenseDateLabel('2026-09-30', now)).toEqual({
+      shown: 'Today, 30 Sep',
+      spoken: 'Today, Wednesday 30 September 2026',
+    });
+    expect(expenseDateLabel('2026-09-29', now)).toEqual({
+      shown: 'Tue 29 Sep',
+      spoken: 'Yesterday, Tuesday 29 September 2026',
+    });
+    expect(expenseDateLabel('2025-09-24', now)).toEqual({
+      shown: '24 Sep 2025',
+      spoken: 'Wednesday 24 September 2025',
+    });
+  });
+
   it('says Today and Yesterday, and dates other days', () => {
     expect(expenseDateLabel('2026-09-30', now).shown).toMatch(/^Today, /);
     expect(expenseDateLabel('2026-09-30', now).spoken).toMatch(/^Today, .*2026/);
@@ -165,6 +182,8 @@ describe('Expense date label', () => {
   it.each(['2026-09-30', '2026-09-29', '2026-09-24', '2026-01-31', '2025-12-31', '2027-05-17'])(
     'keeps %s short enough for a half-width tile and speaks it in full',
     (date) => {
+      // English's longest short months, as on an Indian phone: "Sept".
+      mockDeviceLocale('en-IN');
       const { shown, spoken } = expenseDateLabel(date, now);
       expect(shown.length).toBeLessThanOrEqual(14);
       expect(shown).not.toContain('Yesterday');

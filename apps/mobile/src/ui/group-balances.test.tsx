@@ -302,7 +302,7 @@ describe('Record payment sheet states', () => {
         visible
         state={state}
         currentUserId={you}
-        today="Today, Oct 1"
+        today="Today, 1 Oct"
         onChange={calls.change}
         onLeaveField={calls.leave}
         onAcknowledge={() => undefined}
@@ -322,7 +322,7 @@ describe('Record payment sheet states', () => {
       keyboardType: 'decimal-pad',
       editable: true,
     });
-    expect(labelled(root, 'Date: Today, Oct 1')).toHaveLength(1);
+    expect(labelled(root, 'Date: Today, 1 Oct')).toHaveLength(1);
     expect(labelled(root, 'Note, optional: Add a note')).toHaveLength(1);
     expect(labelled(root, 'Record payment ₹1,060.00')[0].props.disabled).toBe(false);
     expect(labelled(root, 'Close without recording')).toHaveLength(1);
@@ -541,5 +541,19 @@ describe('Record payment sheet states', () => {
     expect(
       labelled(root, 'I meant to pay more than suggested')[0].props.accessibilityState,
     ).toEqual({ checked: false });
+  });
+
+  it('asks the member being paid to confirm what the payer paid, not what they meant (#640)', () => {
+    const { root } = sheet(
+      base({ draft: { paidBy: sam, paidTo: you, currency: 'INR', amount: '1200', note: '' } }),
+    );
+    expect(text(root)).toContain('That’s ₹140.00 more than suggested.');
+    expect(labelled(root, 'I meant to pay more than suggested')).toHaveLength(0);
+    expect(labelled(root, 'Sam Chen paid more than suggested')[0].props.accessibilityState).toEqual(
+      { checked: false },
+    );
+    const record = labelled(root, 'Record payment ₹1,200.00')[0];
+    expect(record.props.disabled).toBe(true);
+    expect(record.props.accessibilityHint).toBe('Tick “Sam Chen paid more than suggested” first.');
   });
 });

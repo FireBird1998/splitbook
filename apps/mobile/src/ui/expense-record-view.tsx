@@ -39,6 +39,7 @@ import {
   type ExpenseRecordPosition,
 } from '@splitbook/shared/expense-position';
 import { clockTime } from './activity-format';
+import { spellDay, spellMoment } from './day-format';
 import {
   Badge,
   Banner,
@@ -84,14 +85,11 @@ const categoryIcons: Record<string, IconName> = {
   education: 'school-outline',
 };
 
-/** "Tue, Sep 29, 2026", as the record's second line starts: the day it is dated (#437). */
+/** "Tue 29 Sep 2026", as the record's second line starts: the day it is dated (#437, #640). */
 const recordDay = (date: string | Date) =>
-  expenseLocalDate(date).toLocaleDateString([], {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  spellDay(expenseLocalDate(date), { weekday: 'short', year: true });
+/** "29 Sep 2026, 8:02 PM": when something happened to the saved record. */
+const recordMoment = (iso: string | Date) => spellMoment(new Date(iso), { year: true });
 
 /** The record's badge for the member's position: "You lent Sam ₹5.00", "You paid your share". */
 function positionLabel(position: ExpenseRecordPosition, other: string, amount: string) {
@@ -151,11 +149,7 @@ const narrowBar = 380;
 /** "29 Sep, 20:02", with the year when it isn't this year. */
 function recordTime(iso: string, now = Date.now()) {
   const date = new Date(iso);
-  const day = date.toLocaleDateString([], {
-    day: 'numeric',
-    month: 'short',
-    ...(date.getFullYear() === new Date(now).getFullYear() ? {} : { year: 'numeric' }),
-  });
+  const day = spellDay(date, { year: date.getFullYear() !== new Date(now).getFullYear() });
   return `${day}, ${clockTime(iso)}`;
 }
 
@@ -563,7 +557,7 @@ export function ExpenseRecordScreen({
  */
 export interface RecordOutline {
   description: string;
-  /** The second line: "Tue, Sep 29, 2026 · Utilities". */
+  /** The second line: "Tue 29 Sep 2026 · Utilities". */
   meta: string;
   amount: string;
   /**
@@ -590,7 +584,7 @@ export interface RecordOutline {
  */
 const typicalRecord: RecordOutline = {
   description: 'Weekly groceries',
-  meta: 'Tue, Sep 29, 2026 · Groceries',
+  meta: 'Tue 29 Sep 2026 · Groceries',
   amount: '₹2,400.00',
   badge: { label: 'You lent Sam ₹1,200.00', tone: 'positive' },
   people: [
@@ -1367,7 +1361,7 @@ export function ExpenseRecordView({
         {amount(money.amount)} · {record.currency}
       </Copy>
       <Copy>
-        {expenseLocalDate(record.date).toLocaleDateString()} · {record.category}
+        {recordDay(record.date)} · {record.category}
       </Copy>
       <Copy>Tag: {record.tag || 'Historical Tag'}</Copy>
       {record.notes ? <Copy>Notes: {record.notes}</Copy> : null}
@@ -1387,7 +1381,7 @@ export function ExpenseRecordView({
         </Copy>
       ))}
       <Copy>
-        Created {new Date(record.createdAt).toLocaleString()}
+        Created {recordMoment(record.createdAt)}
         {record.createdBy
           ? ` by ${typeof record.createdBy === 'object' ? (record.createdBy.name ?? 'Former member') : name(record.createdBy)}`
           : ''}
@@ -1397,9 +1391,9 @@ export function ExpenseRecordView({
       {record.recurringExpense ? (
         <Copy>Recurring Expense{record.period ? ` · ${record.period}` : ''}</Copy>
       ) : null}
-      {record.deletedAt ? <Copy>Deleted {new Date(record.deletedAt).toLocaleString()}</Copy> : null}
+      {record.deletedAt ? <Copy>Deleted {recordMoment(record.deletedAt)}</Copy> : null}
       <Copy>Revision {record.revision}</Copy>
-      <Copy>Last updated {new Date(record.updatedAt).toLocaleString()}</Copy>
+      <Copy>Last updated {recordMoment(record.updatedAt)}</Copy>
       <View style={{ gap: 12 }}>
         <Copy accessibilityRole="header" style={{ fontFamily: fonts.semibold }}>
           Edit history
@@ -1415,7 +1409,9 @@ export function ExpenseRecordView({
                   <ChangeText change={change} />
                 </Copy>
               ))}
-              <Copy style={{ color: theme.textSecondary, fontSize: 13 }}>{entry.editedAt}</Copy>
+              <Copy style={{ color: theme.textSecondary, fontSize: 13 }}>
+                {recordMoment(entry.editedAt)}
+              </Copy>
             </View>
           ))
         )}

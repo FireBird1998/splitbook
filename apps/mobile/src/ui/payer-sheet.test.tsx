@@ -1,9 +1,17 @@
 import { useSyncExternalStore } from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ExpenseDraft } from '../data/expense-draft';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
+import { findHosts, layoutHeight } from '../test-utils/layout';
+import { setWindow } from '../test-utils/native';
 import { ExpenseEditor } from './expense-editor';
 
 // #122: the Who paid sheet, rendered over the Expense form through the real controller.
@@ -150,6 +158,9 @@ const text = (scope: ReactTestInstance) =>
     .findAll((node) => isHost(node, 'Text'))
     .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
     .join('');
+/** All the text in a rendered tree, in order. */
+const drawnText = (node: ReactTestRendererJSON | string): string =>
+  typeof node === 'string' ? node : (node.children ?? []).map(drawnText).join('');
 
 let screen: ReactTestRenderer | null = null;
 afterEach(() => {
@@ -197,6 +208,11 @@ async function render(draft: Partial<ExpenseDraft> = {}) {
   return {
     ...harness,
     sheet,
+    /** The Who paid sheet as rendered, for its layout. */
+    drawn: () =>
+      findHosts(screen!.toJSON(), (_, type) => type === 'Modal').find((modal) =>
+        drawnText(modal).startsWith('Who paid?'),
+      )!,
     hasSheet: () =>
       root().findAll((node) => isHost(node, 'Modal') && text(node).startsWith('Who paid?')).length >
       0,
@@ -435,4 +451,59 @@ describe('Who paid sheet', () => {
     expect(ui.status()).toBe('₹4.00 still to assign. ₹6.00 of ₹10.00 entered.');
     expect(ui.writes).toEqual([]);
   });
+});
+
+// #637: what a 360×640 phone leaves the sheet with the keyboard open, as the 19 October sweep
+// measured it at 200% text. Gboard's decimal pad and its toolbar start 341dp down, so the sheet,
+// at most 90% of the room above them, is 307dp tall. Each amount box there is 64dp: Android's
+// own padding around its 200% line, which `layoutHeight` doesn't measure in a TextInput.
+const keyboardTop = 341;
+const amountBox = 64;
+
+describe('Who paid at 200% text with the keyboard open (#637)', () => {
+  it.each([
+    ['more than the total', '50', '₹5.00 more than the total. ₹55.00 of ₹50.00 entered.'],
+    ['still to assign', '40', '₹5.00 still to assign. ₹45.00 of ₹50.00 entered.'],
+  ])(
+    'keeps the focused amount fully above the keyboard while "%s" shows',
+    async (_, yours, status) => {
+      setWindow({ width: 360, height: 640, fontScale: 2 });
+      const ui = await render({
+        amount: '50',
+        multiPayer: true,
+        payers: [{ user: alexId, amount: yours }],
+      });
+      await ui.open();
+      await ui.type('What Priya Shah paid', '5');
+      expect(ui.status()).toBe(status);
+
+      // The handle and title, the list and the footer, as the sheet stacks them.
+      const sheet = ui.drawn();
+      const [frame] = findHosts(sheet, (_props, type) => type === 'SafeAreaView');
+      const [top, list, footer] = frame!.children as ReactTestRendererJSON[];
+      expect(list!.type).toBe('ScrollView');
+      const room = 0.9 * keyboardTop - layoutHeight(top!, 2, 360) - layoutHeight(footer!, 2, 360);
+      // Priya's row: her name beside the amount she is typing.
+      const [row] = findHosts(list!, (_props, type) => type === 'View').filter((view) =>
+        view.children?.some(
+          (child) =>
+            typeof child !== 'string' &&
+            child.type === 'TextInput' &&
+            child.props.accessibilityLabel === 'What Priya Shah paid',
+        ),
+      );
+      expect(drawnText(row!)).toBe('PSPriya Shah');
+      // Android scrolls the focused box into the list's room; all of the row has to fit there.
+      expect(room).toBeGreaterThanOrEqual(Math.max(amountBox, layoutHeight(row!, 2, 320)));
+
+      // The footer still says, in full, how far the entries are from the total.
+      const [remainder] = findHosts(
+        footer!,
+        (props, type) => type === 'View' && props.accessibilityLabel === status,
+      );
+      expect(drawnText(remainder!)).toContain(status.split('. ')[0]);
+      // And the sheet still says Done or Back keeps the entries.
+      expect(text(ui.sheet())).toContain('Entries stay in your draft. Done or Back keeps them.');
+    },
+  );
 });

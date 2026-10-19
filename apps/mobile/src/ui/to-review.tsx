@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
-import { formatDate } from '@splitbook/shared/date';
 import {
   memberProblems,
   summarizeReviewRun,
@@ -24,6 +23,7 @@ import { Copy } from './primitives';
 import { fonts, useTheme } from './theme';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { recentDay } from './day-format';
 
 const offlineMessage =
   "You're offline. What Claude prepared and what you set aside show up when you're back online";
@@ -111,7 +111,7 @@ function ItemDetails({
   const needs = !!item.accountItem;
   const date =
     values?.date && Number.isFinite(new Date(values.date).getTime())
-      ? formatDate(expenseLocalDate(values.date))
+      ? recentDay(expenseLocalDate(values.date))
       : needs
         ? null
         : 'Date needed';
@@ -208,7 +208,7 @@ export function ToReviewHomeCard({
   const model = controller.toReviewModel();
   if (
     !state.offline &&
-    state.toReview.status === 'ready' &&
+    state.toReview.status !== 'error' &&
     model.counts.total === 0 &&
     !state.toReview.recoveryMessage
   )
@@ -854,7 +854,7 @@ export function ToReviewList({
                     : 'Set aside by you'}
                 </CompactText>
                 {item.draft.values?.date && (
-                  <Copy>{formatDate(expenseLocalDate(item.draft.values.date))}</Copy>
+                  <Copy>{recentDay(expenseLocalDate(item.draft.values.date))}</Copy>
                 )}
                 {collection.reviews.find((review) => review.draft.id === item.draft.id)
                   ?.allocation &&

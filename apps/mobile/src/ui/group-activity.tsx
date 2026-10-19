@@ -22,6 +22,7 @@ import {
   SectionHeader,
 } from './compact';
 import { readTime } from './financial-views';
+import { spellMoment } from './day-format';
 import { NotAvailableOffline } from './offline-notice';
 import { fonts, useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
@@ -493,14 +494,8 @@ function ActivityDetail({
   onClose,
 }: GroupActivityProps & { event: ActivityEvent }) {
   const line = describeActivity(event, { currentUserId, currency, members });
-  const when = new Date(event.createdAt).toLocaleString([], {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  // "Mon 19 Oct 2026, 1:44 PM", day first on every phone (#640).
+  const when = spellMoment(new Date(event.createdAt), { weekday: 'short', year: true });
   const check = recordCheck[state.target.status];
   return (
     <View style={{ gap: 12 }}>
