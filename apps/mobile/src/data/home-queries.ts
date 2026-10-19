@@ -934,7 +934,8 @@ export function createHomeQueries(session: HomeSession) {
     /**
      * Returning to the foreground and reconnecting are TanStack's focus and online events (M1-4,
      * M1-6): they reach only the queries a screen observes, and those past their stale time read
-     * again. NetInfo only says when the device reconnects; a failed read still decides "offline".
+     * again. Connectivity drives the online manager; reachability recovery only requests reads.
+     * A failed read still decides "offline" (ADR 0006).
      * Returns what stops listening.
      */
     listen(focus: typeof focusManager, online: typeof onlineManager, netInfo?: NetworkState) {
@@ -958,11 +959,18 @@ export function createHomeQueries(session: HomeSession) {
       const own = {};
       if (netInfo) {
         wired.set(online, own);
-        online.setEventListener((setOnline) =>
-          netInfo.addEventListener(({ isConnected, isInternetReachable }) =>
-            setOnline(isConnected !== false && isInternetReachable !== false),
-          ),
-        );
+        online.setEventListener((setOnline) => {
+          let reachable: boolean | null | undefined;
+          return netInfo.addEventListener(({ isConnected, isInternetReachable }) => {
+            const recovered = reachable === false && isInternetReachable === true;
+            reachable = isInternetReachable;
+            const wasOnline = online.isOnline();
+            setOnline(isConnected !== false);
+            // Unvalidated Wi-Fi can still reach the API. Reachability only prompts reads;
+            // it must not refuse an explicit write or duplicate the connectivity event.
+            if (recovered && wasOnline && online.isOnline()) client.getQueryCache().onOnline();
+          });
+        });
       }
       return () => {
         stops.forEach((stopListening) => stopListening());
