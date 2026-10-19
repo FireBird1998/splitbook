@@ -6,6 +6,7 @@ import {
   ACTIVE_DRAFTS_PER_MEMBER,
   DRAFT_GROUP_LIMIT_MESSAGE,
 } from '@splitbook/shared/validators/expense-draft';
+import { View } from 'react-native';
 import { BottomSheet, CompactButton, CompactText } from './compact';
 
 /** A small subscriber keeps status and account counts outside the form's render budget. */
@@ -35,12 +36,8 @@ export function FinishLater({ controller }: { controller: MobileController }) {
     void controller.keepExpenseAsSharedDraft();
   };
   return (
-    <>
-      <CompactText variant="small" tone="secondary">
-        {offline
-          ? "You're offline, so it stays on this phone. It shows in To review as 'On this phone'."
-          : 'Keeps it in To review. Only you can see it.'}
-      </CompactText>
+    // In the Save bar, under Save: a full-width button with what it does under it.
+    <View style={{ gap: 4 }}>
       {full && (
         <>
           <CompactText variant="small" tone="warning">
@@ -62,39 +59,47 @@ export function FinishLater({ controller }: { controller: MobileController }) {
       <CompactButton
         label={editor.finishLaterPending ? 'Check again' : 'Finish later'}
         variant="tonal"
+        block
         disabled={busy || !!full}
         onPress={finish}
       />
+      <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+        {offline
+          ? "You're offline, so it stays on this phone. It shows in To review as 'On this phone'."
+          : 'Keeps it in To review. Only you can see it.'}
+      </CompactText>
       {editor.closePrompt && (
         <BottomSheet
           visible={!!editor.closePrompt}
           title="Finish this expense later?"
+          // Keep editing is the sheet's own header action, once: as in every other sheet.
           doneLabel="Keep editing"
           onDone={controller.cancelExpenseClose}
+          footer={
+            <>
+              <CompactButton
+                label="Finish later"
+                block
+                disabled={busy || !!full}
+                onPress={finish}
+              />
+              <CompactButton
+                label="Delete"
+                variant="text"
+                destructive
+                block
+                disabled={busy || editor.finishLaterPending}
+                onPress={() => void controller.deleteExpenseAndClose()}
+              />
+            </>
+          }
         >
           <CompactText>
             Keep it for later, or delete these entries. Nothing in the Group changes.
           </CompactText>
           {full && <CompactText tone="warning">{DRAFT_GROUP_LIMIT_MESSAGE}</CompactText>}
-          <CompactButton
-            label="Finish later"
-            variant="tonal"
-            disabled={busy || !!full}
-            onPress={finish}
-          />
-          <CompactButton
-            label="Delete"
-            destructive
-            disabled={busy || editor.finishLaterPending}
-            onPress={() => void controller.deleteExpenseAndClose()}
-          />
-          <CompactButton
-            label="Keep editing"
-            variant="text"
-            onPress={controller.cancelExpenseClose}
-          />
         </BottomSheet>
       )}
-    </>
+    </View>
   );
 }

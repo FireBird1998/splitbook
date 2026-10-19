@@ -732,25 +732,8 @@ export const OptionalDetails = memo(function OptionalDetails({
   );
 });
 
-/** Pinned under the form, above the keyboard; it names the amount once that is valid. */
-export function SaveBar({
-  label,
-  amount,
-  busy,
-  blocked,
-  onSave,
-  secondary,
-}: {
-  label: string;
-  amount?: string;
-  /** While saving, what Save says it's doing, beside a spinner, e.g. "Saving expense…". */
-  busy?: string;
-  /** Why Save is unavailable, also spoken as its hint. */
-  blocked: string | null;
-  onSave: () => void;
-  /** A quieter alternative under the main action, such as "Keep for later". */
-  secondary?: { label: string; onPress: () => void };
-}) {
+/** The bar pinned under a form, above the keyboard: its own surface, with a line along its top. */
+export function ActionBar({ children }: { children: ReactNode }) {
   const theme = useTheme();
   return (
     <View
@@ -764,6 +747,35 @@ export function SaveBar({
         backgroundColor: theme.bgElevated,
       }}
     >
+      {children}
+    </View>
+  );
+}
+
+/** Pinned under the form, above the keyboard; it names the amount once that is valid. */
+export function SaveBar({
+  label,
+  amount,
+  busy,
+  blocked,
+  onSave,
+  secondary,
+  children,
+}: {
+  label: string;
+  amount?: string;
+  /** While saving, what Save says it's doing, beside a spinner, e.g. "Saving expense…". */
+  busy?: string;
+  /** Why Save is unavailable, also spoken as its hint. */
+  blocked: string | null;
+  onSave: () => void;
+  /** A quieter alternative under the main action, such as "Keep for later". */
+  secondary?: { label: string; onPress: () => void };
+  /** More under Save, in the bar itself, such as Finish later and what it does. */
+  children?: ReactNode;
+}) {
+  return (
+    <ActionBar>
       {/* Above Save: the bar grows upward from the bottom of the screen, so Save stays put. */}
       {blocked ? (
         <CompactText variant="small" tone="secondary">
@@ -782,6 +794,7 @@ export function SaveBar({
       {secondary ? (
         <CompactButton label={secondary.label} variant="text" block onPress={secondary.onPress} />
       ) : null}
-    </View>
+      {children}
+    </ActionBar>
   );
 }
