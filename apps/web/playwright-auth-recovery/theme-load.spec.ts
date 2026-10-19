@@ -196,3 +196,52 @@ for (const attribute of ['missing', 'invalid'] as const) {
       expect(paper).toBe('#fbfbfa');
   });
 }
+
+for (const mode of ['dark', 'light'] as const) {
+  test(`Home avatar rings use ${mode} colours before preference adoption`, async ({ page }) => {
+    const base = process.env.EXPENSE_ACCESS_BASE_URL!;
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.addInitScript(
+      ({ key, mode }) => {
+        localStorage.setItem(key, mode);
+        // Home's rows only exist after client reads. Hold preference adoption while
+        // those reads finish: their first paint must already use the root's palette.
+        window.requestAnimationFrame = () => 1;
+      },
+      { key: THEME_STORAGE_KEY, mode },
+    );
+    const token = signTestIdToken(
+      {
+        sub: 'auth-recovery-user',
+        email: 'auth-recovery@splitbook.test',
+        name: 'Auth Recovery User',
+      },
+      process.env.AUTH_RECOVERY_TEST_ID_TOKEN_SECRET!,
+    );
+    expect(
+      (
+        await page.request.post(`${base}/api/auth/sign-in/social`, {
+          data: { provider: 'google', idToken: { token } },
+        })
+      ).status(),
+    ).toBe(200);
+    expect(
+      (
+        await page.request.post(`${base}/api/groups`, {
+          data: { name: `Avatar ring ${mode}`, category: 'trip', defaultCurrency: 'INR' },
+        })
+      ).status(),
+    ).toBe(201);
+    await page.goto(`${base}/dashboard`);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', mode);
+    const ring = page
+      .getByRole('region', { name: 'Groups', exact: true })
+      .locator('.MuiAvatar-root')
+      .first();
+    await expect(ring).toBeVisible();
+    await expect(ring).toHaveCSS(
+      'box-shadow',
+      mode === 'dark' ? 'rgb(24, 27, 38) 0px 0px 0px 2px' : 'rgb(255, 255, 255) 0px 0px 0px 2px',
+    );
+  });
+}
