@@ -688,11 +688,31 @@ export const GroupExpensesView = memo(
             </Card>
           ) : (
             <Card padded>
-              <CompactText weight="semibold">
-                {state.month ? `No expenses in ${monthLabel(state.month)}` : 'No expenses yet'}
+              <CompactText
+                weight="semibold"
+                accessibilityLabel={
+                  expenses.changed && expenses.status !== 'error'
+                    ? `Loading ${scope} expenses`
+                    : undefined
+                }
+                accessibilityLiveRegion={expenses.changed ? 'polite' : undefined}
+              >
+                {expenses.changed
+                  ? expenses.status === 'error'
+                    ? 'Expenses need an update'
+                    : 'Updating expenses…'
+                  : state.month
+                    ? `No expenses in ${monthLabel(state.month)}`
+                    : 'No expenses yet'}
               </CompactText>
               <CompactText variant="small" tone="secondary">
-                {state.month ? 'Try another Month or All time.' : 'Expenses you add appear here.'}
+                {expenses.changed
+                  ? expenses.status === 'error'
+                    ? 'Pull down to try again.'
+                    : 'Waiting for the updated list.'
+                  : state.month
+                    ? 'Try another Month or All time.'
+                    : 'Expenses you add appear here.'}
               </CompactText>
             </Card>
           )}

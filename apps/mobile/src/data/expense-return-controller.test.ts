@@ -876,6 +876,22 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
   });
 });
 describe('Saving into the same or another Month', () => {
+  it('shows and highlights the first Expense after saving into an empty Group without a manual refresh', async () => {
+    const { server, controller } = await signedIn();
+    server.records.clear();
+    await controller.openGroup(tripId);
+    expect(controller.getSnapshot().financial.expenses.data).toEqual([]);
+    await controller.openExpense(tripId);
+    await fillNewExpense(controller);
+    await controller.saveExpense();
+    const shown = controller.getSnapshot();
+    expect(shown.screen).toBe('group');
+    expect(shown.financial.expenses.data).toHaveLength(1);
+    expect(shown.financial.expenses.data[0].description).toBe('Weekly groceries');
+    expect(shown.snackbar?.expenseId).toBe(shown.financial.expenses.data[0].id);
+    controller.dispose();
+  });
+
   it('stays on the current Month and confirms a save in that Month', async () => {
     const { server, controller } = await signedIn();
     await controller.openGroup(householdId);
