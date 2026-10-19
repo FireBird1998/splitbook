@@ -11,6 +11,7 @@ import {
   flatten,
   largeTextWindows,
   layoutHeight,
+  layoutWidth,
   unreadText,
 } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
@@ -1740,4 +1741,29 @@ describe('the Add expense header at large text (#639)', () => {
       expect(unreadText(bar!, size.fontScale, size.width)).toEqual([]);
     },
   );
+});
+
+// #639 device check: at 200% and density 420, Add expense's Description placeholder, "What was it
+// for? e.g. Groceries", wrapped in its one-line box and its second line was cut in half. At large
+// text it says only "What was it for?", which fits the box's line; at 100% it keeps its example.
+describe('the Description placeholder at large text (#639)', () => {
+  it.each([
+    { width: 360, height: 640, fontScale: 1 },
+    { width: 412, height: 915, fontScale: 1 },
+    ...largeTextWindows,
+  ])('fits its box’s one line, $width dp at $fontScale× text', async (size) => {
+    setWindow(size);
+    const form = await render((controller) => controller.openExpense(groupId));
+    const box = form.input('Description, required');
+    const placeholder = String(box.props.placeholder);
+    if (size.fontScale === 1) expect(placeholder).toBe('What was it for? e.g. Groceries');
+    // The placeholder as one line of the box's text, inside a padded Card inset 16dp from the
+    // screen's edges.
+    const line = {
+      type: 'Text',
+      props: { style: flatten(box.props.style) },
+      children: [placeholder],
+    } as unknown as ReactTestRendererJSON;
+    expect(layoutWidth(line, size.fontScale)).toBeLessThanOrEqual(size.width - 32 - 2 - 28);
+  });
 });

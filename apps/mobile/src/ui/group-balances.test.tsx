@@ -680,3 +680,51 @@ describe('Balances at 100% text keep their shape (#639)', () => {
     },
   );
 });
+
+// #639 device check: a button keeps its parts on one line, so Record payment puts its amount
+// under its words from 150% text, by design, rather than wrapping it there by a fraction of a
+// pixel. At 130% it stays beside them.
+describe('Record payment’s amount at large text (#639)', () => {
+  it.each([
+    [1.3, 'beside'],
+    [2, 'under'],
+  ] as const)('at %s× text, the amount sits %s the words', (fontScale, place) => {
+    setWindow({ width: 360, height: 640, fontScale });
+    render(
+      <RecordPaymentSheet
+        visible
+        state={{
+          ...emptySettlement(),
+          groupId: 'b00000000000000000000001',
+          group: group(),
+          balances: [inr],
+          suggested: 1000,
+          draft: { paidBy: you, paidTo: sam, currency: 'INR', amount: '1000', note: '' },
+          status: 'editing',
+        }}
+        currentUserId={you}
+        today="Today, 1 Oct"
+        onChange={vi.fn()}
+        onLeaveField={vi.fn()}
+        onAcknowledge={() => undefined}
+        onRecord={vi.fn()}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const [button] = findHosts(
+      screen!.toJSON() as ReactTestRendererJSON,
+      (props, type) =>
+        type === 'Pressable' && props.accessibilityLabel === 'Record payment ₹1,000.00',
+    );
+    const parts = (button!.children ?? []) as ReactTestRendererJSON[];
+    expect(flatten(button!.props.style).flexWrap).not.toBe('wrap');
+    if (place === 'beside') expect(parts.map((part) => part.type)).toEqual(['Text', 'Text']);
+    else {
+      // One column, centred in the button: the words, then the amount.
+      expect(parts).toHaveLength(1);
+      expect(flatten(parts[0]!.props.style).alignItems).toBe('center');
+      expect(findHosts(parts[0]!, (_props, type) => type === 'Text')).toHaveLength(2);
+    }
+  });
+});

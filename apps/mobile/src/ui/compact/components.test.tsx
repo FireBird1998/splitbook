@@ -665,3 +665,27 @@ describe('a part on a line of its own keeps to the row’s end (#639)', () => {
     },
   );
 });
+
+// #639 device check: at 200% and density 420, Home's "New Group" put its "+" on a line of its own
+// above the words, with room to spare beside them: a button that wrapped its parts tipped over on
+// a fraction of a pixel. A button keeps its icon and words on one line, and its words wrap inside
+// themselves, so the icon stays beside the first line.
+describe('a button with an icon at 200% text (#639)', () => {
+  const noop = () => undefined;
+  it.each([360, 412])('keeps its icon on its words’ first line, %sdp', (width) => {
+    setWindow({ width, height: 640, fontScale: 2 });
+    render(<CompactButton label="New Group" icon="add" variant="text" onPress={noop} />);
+    const button = renderer!.toJSON() as ReactTestRendererJSON;
+    const [icon, words] = button.children as ReactTestRendererJSON[];
+    expect(icon!.type).toBe('Ionicons');
+    expect(flatten(button.props.style).flexWrap).not.toBe('wrap');
+    expect(flatten(words!.props.style)).toMatchObject({ flexShrink: 1, minWidth: 0 });
+    // In less room than the icon and both words need, the words wrap beside the icon.
+    const room = 140;
+    const style = flatten(button.props.style);
+    const beside = room - 2 * (style.paddingHorizontal as number) - 18 - (style.gap as number);
+    expect(layoutHeight(button, 2, room)).toBe(
+      Math.max(style.minHeight as number, layoutHeight(words!, 2, beside)),
+    );
+  });
+});
