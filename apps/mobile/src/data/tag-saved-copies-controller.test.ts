@@ -43,6 +43,12 @@ function fixture() {
     tagLoadDelay: 0,
     /** This phone can't remove saved copies. */
     failRemoval: false,
+    /** Sam belongs to Maple House too. */
+    samMember: false,
+    /** This phone's listing of its kept Tag changes waits for this. */
+    holdKeys: null as Promise<void> | null,
+    /** How often this phone has listed its kept Tag changes. */
+    keysListed: 0,
     tags: [
       { id: foodId, name: 'Food', revision: 0, isArchived: false, isDeleted: false },
       { id: rentId, name: 'Rent', revision: 0, isArchived: false, isDeleted: false },
@@ -85,6 +91,11 @@ function fixture() {
     attempts = memory();
   const tagRequests = {
     ...kept,
+    keys: async (account: string) => {
+      server.keysListed += 1;
+      await server.holdKeys;
+      return kept.keys!(account);
+    },
     load: async (account: string, id: string) => {
       await new Promise((resolve) => setTimeout(resolve, server.tagLoadDelay));
       return kept.load(account, id);
@@ -165,7 +176,7 @@ function fixture() {
         session: { userId: user.id, expiresAt: '2030-01-01T00:00:00.000Z' },
       });
     if (path.endsWith('/sign-out')) return json({ success: true });
-    const member = user === alex && !server.revoked && !server.left;
+    const member = (user === alex || server.samMember) && !server.revoked && !server.left;
     if (path === '/api/groups')
       return json({ status: 200, data: member && !server.unlisted ? [group()] : [] });
     if (path === '/api/user/balances')
@@ -300,7 +311,20 @@ function fixture() {
   /** Whether this phone keeps any saved copy of Maple House for this account. */
   const keepsMaple = (account = alex.id) =>
     [...cache.keys()].some((key) => key.startsWith(account + maplePath));
-  return { create, server, cache, sizes, savedTags, keepsMaple, tagRequests, requests };
+  return {
+    create,
+    server,
+    cache,
+    sizes,
+    savedTags,
+    keepsMaple,
+    tagRequests,
+    requests,
+    /** The session cookie is gone, as after a 401: this account's data stays on disk. */
+    forgetCookie: () => {
+      cookie = null;
+    },
+  };
 }
 type Fixture = ReturnType<typeof fixture>;
 type Controller = ReturnType<Fixture['create']>;
@@ -459,7 +483,118 @@ describe('a Group’s Tags in its Saved copy (#638)', () => {
   });
 });
 
+/** A rename of Food kept on this phone, unresolved, as if the app was killed while it was sent. */
+const keepRename = (f: Fixture, confirmed = false) =>
+  f.tagRequests.save(alex.id, mapleId, {
+    command: {
+      requestId: '00000000-0000-4000-8000-000000000099',
+      intent: { action: 'rename', tagId: foodId, expectedRevision: 0, name: 'Meals' },
+    },
+    ...(confirmed
+      ? {
+          confirmed: {
+            state: 'applied',
+            requestId: '00000000-0000-4000-8000-000000000099',
+            receipt: {
+              intent: { action: 'rename', tagId: foodId, expectedRevision: 0, name: 'Meals' },
+              tagId: foodId,
+              appliedAt: iso,
+            },
+            snapshot: {
+              canManage: true,
+              tags: [
+                { id: foodId, name: 'Meals', revision: 1, isArchived: false, isDeleted: false },
+              ],
+            },
+          },
+        }
+      : {}),
+  });
+
 describe('Tags are never kept while a change made here is unconfirmed (#638)', () => {
+  it('holds them back after an offline start, once the phone reconnects, though read before the kept change', async () => {
+    const f = fixture();
+    const { controller, tags } = await readTagsOnline(f);
+    tags.close();
+    await keepRename(f);
+    // An offline start notes the kept change; no session check runs until the phone reconnects.
+    const restarted = await restartOffline(f, controller);
+    try {
+      f.server.offline = false;
+      f.server.tagLoadDelay = 300;
+      const again = await openTags(restarted);
+      expect(again.state().snapshot?.tags.map((tag) => tag.name)).toEqual(['Food', 'Rent']);
+      await settled();
+      expect(f.savedTags()).toBeNull();
+      again.close();
+    } finally {
+      restarted.dispose();
+    }
+  });
+
+  it('holds them back when the same account signs in again with its data still here', async () => {
+    const f = fixture();
+    const { controller, tags } = await readTagsOnline(f);
+    tags.close();
+    await keepRename(f);
+    controller.dispose();
+    // Signed out by a 401: the cookie goes, the account's data stays, and the member signs in.
+    f.forgetCookie();
+    const restarted = f.create();
+    await restarted.restore();
+    expect(restarted.getSnapshot().auth.status).toBe('signed-out');
+    try {
+      await restarted.signIn('alex');
+      f.server.tagLoadDelay = 300;
+      const again = await openTags(restarted);
+      expect(again.state().recovery).toMatchObject({ command: { intent: { name: 'Meals' } } });
+      await settled();
+      expect(f.savedTags()).toBeNull();
+      again.close();
+    } finally {
+      restarted.dispose();
+    }
+  });
+
+  it('marks nothing for the next account when a start is overtaken while it lists kept changes', async () => {
+    const f = fixture();
+    f.server.samMember = true;
+    const { controller, tags } = await readTagsOnline(f);
+    tags.close();
+    await keepRename(f);
+    controller.dispose();
+    let release!: () => void;
+    f.server.holdKeys = new Promise<void>((resolve) => (release = resolve));
+    const listed = f.server.keysListed;
+    const restarted = f.create();
+    const restoring = restarted.restore().catch(() => undefined);
+    try {
+      await vi.waitFor(() => expect(f.server.keysListed).toBeGreaterThan(listed));
+      // Sam signs in on this phone while Alex's start is still listing Alex's kept changes.
+      const switching = restarted.signIn('sam');
+      await settled();
+      f.server.holdKeys = null;
+      release();
+      await restoring;
+      await switching;
+      expect(restarted.getSnapshot().auth.user?.id).toBe(sam.id);
+      // Nothing of Alex's holds back Sam's Tags: offline, a new Expense takes one of them.
+      await restarted.openGroup(mapleId);
+      await vi.waitFor(() => expect(f.cache.has(sam.id + maplePath)).toBe(true));
+      f.server.offline = true;
+      await restarted.refresh();
+      expect(restarted.getSnapshot().offline.active).toBe(true);
+      await restarted.openExpense(mapleId);
+      const { expense } = restarted.getSnapshot();
+      expect(expense.contextCheck).toMatchObject({ status: 'saved' });
+      expect(expense.contextCheck?.tagChange).toBeUndefined();
+      await restarted.updateExpenseDraft({ tagId: foodId });
+      expect(restarted.getSnapshot().expense.draft?.tagId).toBe(foodId);
+    } finally {
+      restarted.dispose();
+    }
+  });
+
   it('keeps none after a restart, though the Tags are read before the kept change is', async () => {
     const f = fixture();
     const { controller, tags } = await readTagsOnline(f);
@@ -603,12 +738,7 @@ describe('saved Tags are retired with the Group’s other saved copies (#638)', 
     const { controller, tags } = await readTagsOnline(f);
     tags.close();
     // A change kept before the app was killed: it may have reached the server.
-    await f.tagRequests.save(alex.id, mapleId, {
-      command: {
-        requestId: '00000000-0000-4000-8000-000000000099',
-        intent: { action: 'rename', tagId: foodId, expectedRevision: 0, name: 'Meals' },
-      },
-    });
+    await keepRename(f);
     expect(f.savedTags()).not.toBeNull();
     controller.dispose();
     f.server.offline = true;
@@ -693,6 +823,60 @@ describe('a new Expense offline takes one of the Group’s saved Tags (#638)', (
         'Meals',
         'Rent',
       ]);
+      await restarted.updateExpenseDraft({ tagId: foodId });
+      expect(restarted.getSnapshot().expense.draft?.tagId).toBe(foodId);
+    } finally {
+      restarted.dispose();
+    }
+  });
+
+  it('offers the Group’s own Tags when its saved read is the newer one', async () => {
+    const f = fixture();
+    const { controller, tags } = await readTagsOnline(f);
+    tags.close();
+    // Another admin renames Food; this phone reads the Group after it, and not the Tags.
+    f.server.tags[0].name = 'Meals';
+    await controller.refresh();
+    await vi.waitFor(() =>
+      expect(
+        (
+          f.cache.get(alex.id + maplePath) as { value: { data: { tags: { name: string }[] } } }
+        ).value.data.tags.map((tag) => tag.name),
+      ).toEqual(['Meals', 'Rent']),
+    );
+    expect(f.savedTags()?.tags.map((tag) => tag.name)).toEqual(['Food', 'Rent']);
+    const restarted = await restartOffline(f, controller);
+    try {
+      await restarted.openGroup(mapleId);
+      await restarted.openExpense(mapleId);
+      expect(restarted.getSnapshot().expense.context?.tags.map((tag) => tag.name)).toEqual([
+        'Meals',
+        'Rent',
+      ]);
+    } finally {
+      restarted.dispose();
+    }
+  });
+
+  it('offers the saved Tags after a start that finds a confirmed change kept here', async () => {
+    const f = fixture();
+    const { controller, tags } = await readTagsOnline(f);
+    tags.close();
+    await keepRename(f, true);
+    // The start removes the Group's older copies for the kept change; once reconnected, the
+    // Group is read and saved again, then the phone goes offline.
+    const restarted = await restartOffline(f, controller);
+    try {
+      f.server.offline = false;
+      await restarted.openGroup(mapleId);
+      await vi.waitFor(() => expect(f.cache.has(alex.id + maplePath)).toBe(true));
+      f.server.offline = true;
+      await restarted.refresh();
+      expect(restarted.getSnapshot().offline.active).toBe(true);
+      await restarted.openExpense(mapleId);
+      const { expense } = restarted.getSnapshot();
+      expect(expense.contextCheck).toMatchObject({ status: 'saved' });
+      expect(expense.contextCheck?.tagChange).toBeUndefined();
       await restarted.updateExpenseDraft({ tagId: foodId });
       expect(restarted.getSnapshot().expense.draft?.tagId).toBe(foodId);
     } finally {
