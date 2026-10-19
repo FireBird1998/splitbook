@@ -335,6 +335,15 @@ describe('Expense rows', () => {
     ]);
   });
 
+  it('says to pull to retry when the list read after a save fails, not that it is waiting', () => {
+    const { root } = view({
+      state: financial({ data: [], status: 'error', changed: true }),
+    });
+    expect(text(root)).toContain('Expenses need an update');
+    expect(text(root)).toContain('Pull down to try again.');
+    expect(text(root)).not.toContain('Waiting for the updated list.');
+  });
+
   it('marks the Expense just saved', () => {
     const { root } = view({ savedExpenseId: groceries.id });
     const marked = buttons(root).filter((label) => label?.endsWith('just saved'));

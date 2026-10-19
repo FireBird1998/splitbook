@@ -707,7 +707,9 @@ export const GroupExpensesView = memo(
               </CompactText>
               <CompactText variant="small" tone="secondary">
                 {expenses.changed
-                  ? 'Waiting for the updated list.'
+                  ? expenses.status === 'error'
+                    ? 'Pull down to try again.'
+                    : 'Waiting for the updated list.'
                   : state.month
                     ? 'Try another Month or All time.'
                     : 'Expenses you add appear here.'}
