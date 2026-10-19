@@ -66,7 +66,10 @@ test('Home lists the latest changes across Groups, newest first, with an edit as
   await expect(added).toContainText('₹240.00');
   for (const entry of [deleted, edited, added]) {
     await expect(entry).toContainText(`${DEMO_TRIP_NAME} · Today at`);
-    await expect(entry.getByRole('link')).toHaveAttribute('href', `/groups/${DEMO_GROUP_ID}`);
+    await expect(entry.getByRole('link')).toHaveAttribute(
+      'href',
+      `/groups/${DEMO_GROUP_ID}/activity`,
+    );
   }
   // Newest first. Other journeys may write to Alex's Groups meanwhile, so only the order is fixed.
   const texts = await entries.allTextContents();
@@ -84,9 +87,9 @@ test('Home lists the latest changes across Groups, newest first, with an edit as
   await expectNoSeriousA11yViolations(page, testInfo, 'home-latest-changes');
   await reviewScreenshot(page, testInfo, 'home-latest-changes');
 
-  // An entry leads to its Group.
+  // An entry leads to its Group's Activity (#644).
   await edited.getByRole('link').click();
-  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}`);
+  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}/activity`);
   await expect(page.getByRole('main').getByText(DEMO_TRIP_NAME).first()).toBeVisible();
 });
 
