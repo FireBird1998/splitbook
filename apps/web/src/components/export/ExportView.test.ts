@@ -83,6 +83,8 @@ function view(overrides: Partial<ViewProps> = {}, mode: 'light' | 'dark' = 'ligh
   });
   const names = request ? request.groupIds.map((g) => OPTIONS.find((o) => o.id === g)!.name) : [];
   const props: ViewProps = {
+    preview: { status: 'idle', message: 'Pick at least one Group.' },
+    onRetryPreview: vi.fn(),
     groups: { status: 'ready', groups: OPTIONS },
     onRetryGroups: vi.fn(),
     selected,
@@ -162,18 +164,12 @@ describe('the Export page', () => {
     expect(text(all)).toContain('Clear all');
   });
 
-  it('lists the files and their columns, in the documented order', () => {
-    const html = view({ include: { ...DEFAULT_INCLUDE, deleted: true, history: true } });
-    expect(text(html)).toContain(
-      'maple-house-2026-09-expenses.csv Expenses · Maple House maple-house-2026-09-payments.csv Payments · Maple House',
-    );
-    expect(text(html)).toContain(
-      'Expenses columns Date Description Category Tag Paid by Split Amount Currency Notes ' +
-        'Expense ID one share column per person Deleted at Deleted by Edited at Edited by Change',
-    );
-    expect(text(html)).toContain(
-      'Payments columns Date Recorded at From To Amount Currency Note Recorded by Payment ID',
-    );
+  it('places the live preview beside the export form', () => {
+    const html = view({ preview: { status: 'loading' } });
+    expect(text(html)).toContain('New export');
+    expect(text(html)).toContain('Preview');
+    expect(text(html)).toContain('Loading preview…');
+    expect(html).toContain('aria-labelledby="export-preview-heading"');
   });
 
   it('says "Pick at least one Group" and keeps Download off while no Group is picked', () => {
@@ -182,7 +178,7 @@ describe('the Export page', () => {
     expect(downloadButton(html)).toMatch(/\bdisabled=""/);
     expect(downloadButton(html)).toContain('aria-describedby="export-file"');
     expect(html).toMatch(/id="export-file"[^>]*>Pick at least one Group\./);
-    expect(text(html)).toContain('Nothing to export yet');
+    expect(text(html)).toContain('Preview');
   });
 
   it('keeps Download on once a Group is picked', () => {

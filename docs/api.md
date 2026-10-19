@@ -1355,7 +1355,8 @@ there are several, or with `format=json` one JSON backup of every chosen Group
 | `from`    | no       | First day of the window, `YYYY-MM-DD`, inclusive                                                      |
 | `to`      | no       | Last day of the window, `YYYY-MM-DD`, inclusive. Give both `from` and `to`, or neither for all time   |
 | `include` | no       | Any of `payments`, `shares`, `deleted`, `history`, joined by commas                                   |
-| `format`  | no       | `csv` (the default), or `json` for the backup, which always covers all time                           |
+| `format`  | no       | `csv` (default), `json` (all-time backup), or `statement` (one Group, preview only)                   |
+| `preview` | no       | `1` returns a bounded JSON preview instead of an attachment                                           |
 | `tz`      | no       | The viewer's IANA time zone, `UTC` by default: the calendar payments, edits and deletions are read in |
 
 A query it can't read (no Groups, an id that isn't one, half a window, a window
@@ -1365,6 +1366,40 @@ shared path builder is
 `exportPath`; `parseExportQuery` and `planExportFiles` are in
 `@splitbook/shared/export-request`, and the CSV builders in
 `@splitbook/shared/export-csv`.
+
+**Preview (#611).** Add `preview=1` to the same request. The response is `200`
+JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
+`exportPreviewSchema` in `@splitbook/shared/export-preview` defines the reply:
+
+- All formats carry `format`, `groupNames`, `generatedAt`, `from`, `to`,
+  `timeZone` and `empty`.
+- CSV carries `fileName` and `files`: each file has `name`, `kind`, `header`,
+  at most five `rows`, and `totalRows`. Cells match parsed download cells,
+  including the leading apostrophe protecting spreadsheet formulas. Queries,
+  column order, exact money formatting and row order use the download builders.
+- JSON carries `fileName`, approximate `sizeBytes`, `earliestMonth`,
+  `historyIncluded`, `paymentsIncluded`, `deletedExpensesIncluded` and exported
+  `counts` (`members`, active `expenses`, `payments`, `deletedExpenses`,
+  `editHistoryEntries`). Counts come from the built backup object in one pass;
+  its bytes are serialized once for the download and size. Members are unique
+  account ids across selected Groups. `earliestMonth` is the first active
+  Expense Month, or null. Include flags control which lines the preview shows.
+  The owner accepted the existing backup scope. The preview states:
+  "Not included: recurring Expense templates and Activity history."
+  Optional Expense edit history remains supported; the file format is unchanged.
+- Statement requires `format=statement&preview=1` and exactly one Group. It
+  projects the canonical printable statement builder into `statement`, with
+  its header and currency buckets: `spentMinor`, `expenseCount`,
+  `paymentTotalMinor`, `paymentCount`, named `people` (Paid, Share, Net in
+  minor units for the period), and up to five first `expenses`. Currency buckets
+  remain separate; current all-time balances are not period contributions.
+  The existing printable page still supplies print/save as PDF.
+
+Preview uses the same membership check and real row limit as its download or
+printable statement. No Groups remains 422, a missing session 401, nonmembership
+403, and too many rows 413 with `EXPORT_TOO_LARGE`. Statement row limits include
+its all-time inputs, as the printable statement does. A JSON backup with Group
+metadata has contents even when there are no Expenses.
 
 **Access.** Every Group must be one the member belongs to today, the same check
 as the Group reads. If any Group in the request is one they never joined, have

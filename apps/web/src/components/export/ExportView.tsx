@@ -1,5 +1,7 @@
 'use client';
 
+import ExportPreviewPanel, { type PreviewState } from './ExportPreview';
+import { useExportPreview } from './use-export-preview';
 import ExportFormatOptions, { type ExportChoice } from './ExportFormatOptions';
 import BackupOption from './BackupOption';
 import StatementOption from './StatementOption';
@@ -16,18 +18,11 @@ import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import ErrorState from '@/components/common/ErrorState';
 import { useGroups } from '@/lib/hooks/use-groups';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { exportPath } from '@splitbook/shared/api-paths';
-import {
-  DELETED_COLUMNS,
-  EDIT_COLUMNS,
-  EXPENSE_COLUMNS,
-  PAYMENT_COLUMNS,
-} from '@splitbook/shared/export-csv';
 import {
   EXPORT_INCLUDES,
   planExportFiles,
@@ -153,6 +148,22 @@ export default function ExportView({ userId, preselectedGroupId }: ExportViewPro
       }
     : null;
 
+  const previewUrl =
+    request && (format !== 'statement' || selected.length === 1)
+      ? exportPath({ ...request, format, preview: true })
+      : null;
+  const preview = useExportPreview(
+    userId,
+    previewUrl,
+    !groups
+      ? 'Loading Groups…'
+      : selected.length === 0
+        ? 'Pick at least one Group.'
+        : format === 'statement' && selected.length !== 1
+          ? 'Choose exactly one Group.'
+          : 'Finish the period to preview.',
+  );
+
   /** Any change of choice starts over: the last download's status no longer applies. */
   const change = (apply: () => void) => {
     apply();
@@ -191,6 +202,8 @@ export default function ExportView({ userId, preselectedGroupId }: ExportViewPro
 
   return (
     <ExportPageView
+      preview={preview.state}
+      onRetryPreview={preview.retry}
       groups={groupsState}
       onRetryGroups={() => void mutate()}
       selected={selected}
@@ -226,6 +239,8 @@ export default function ExportView({ userId, preselectedGroupId }: ExportViewPro
 }
 
 export interface ExportPageViewProps {
+  preview: PreviewState;
+  onRetryPreview: () => void;
   format?: ExportChoice;
   onFormat?: (format: ExportChoice) => void;
   statementRequest?: ExportRequest | null;
@@ -280,7 +295,17 @@ export function ExportPageView(props: ExportPageViewProps) {
           retryLabel="Try again"
         />
       ) : (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2.5, alignItems: 'flex-start' }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1fr)',
+              lg: 'minmax(300px, 0.7fr) minmax(0, 1.3fr)',
+            },
+            gap: 2.5,
+            alignItems: 'start',
+          }}
+        >
           <Card
             id="export-new"
             title="New export"
@@ -289,20 +314,7 @@ export function ExportPageView(props: ExportPageViewProps) {
           >
             <ExportForm {...props} />
           </Card>
-          <Card
-            id="export-files"
-            title="Files"
-            subtitle="What the download holds"
-            sx={{ flex: '999 1 520px', minWidth: 0 }}
-          >
-            {props.format === 'json' ? (
-              <BackupOption />
-            ) : props.format === 'statement' ? (
-              <StatementOption request={props.statementRequest ?? null} />
-            ) : (
-              <FilesSummary plan={props.plan} include={props.include} groups={props.groups} />
-            )}
-          </Card>
+          <ExportPreviewPanel state={props.preview} onRetry={props.onRetryPreview} />
         </Box>
       )}
     </Box>
@@ -619,6 +631,8 @@ function ExportForm(props: ExportPageViewProps) {
         </Box>
       </Box>
 
+      {props.format === 'statement' && <StatementOption request={props.statementRequest ?? null} />}
+      {props.format === 'json' && <BackupOption />}
       {props.format !== 'statement' ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Button
@@ -715,148 +729,5 @@ function DownloadStatus({ download, onRetry }: { download: DownloadState; onRetr
         <ErrorState message={download.message} onRetry={onRetry} retryLabel="Try again" />
       ) : null}
     </>
-  );
-}
-
-const KIND_LABELS = { expenses: 'Expenses', payments: 'Payments' } as const;
-
-function FilesSummary({
-  plan,
-  include,
-  groups,
-}: {
-  plan: ExportFiles | null;
-  include: Readonly<Record<ExportInclude, boolean>>;
-  groups: ExportGroupsState;
-}) {
-  if (groups.status !== 'ready')
-    return groups.status === 'loading' ? <Skeleton variant="rounded" height={160} /> : null;
-  if (!plan)
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 1,
-          px: 3,
-          py: 6,
-          borderRadius: CONTROL_RADIUS,
-          bgcolor: 'surface.muted',
-          textAlign: 'center',
-        }}
-      >
-        <Box
-          aria-hidden
-          sx={{
-            width: 36,
-            height: 36,
-            borderRadius: '11px',
-            bgcolor: 'tint.brand',
-            color: 'primary.main',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <InsertDriveFileOutlinedIcon sx={{ fontSize: 18 }} />
-        </Box>
-        <Typography sx={{ fontWeight: 600, color: 'text.primary' }}>
-          Nothing to export yet
-        </Typography>
-        <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>
-          {groups.groups.length === 0 ? 'Join or start a Group first.' : 'Pick at least one Group.'}
-        </Typography>
-      </Box>
-    );
-
-  const expenseColumns = [
-    ...EXPENSE_COLUMNS,
-    ...(include.shares ? ['one share column per person'] : []),
-    ...(include.deleted ? DELETED_COLUMNS : []),
-    ...(include.history ? EDIT_COLUMNS : []),
-  ];
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-      <Box>
-        {plan.zipped ? (
-          <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', mb: 0.5 }}>
-            In one zip, <FileName>{plan.download}</FileName>:
-          </Typography>
-        ) : null}
-        <Box component="ul" aria-label="Files" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-          {plan.files.map((file) => (
-            <Box
-              component="li"
-              key={file.name}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                minHeight: 52,
-                py: 0.75,
-                '& + li': { borderTop: 1, borderColor: 'divider' },
-              }}
-            >
-              <InsertDriveFileOutlinedIcon
-                aria-hidden
-                sx={{ fontSize: 18, color: 'text.secondary' }}
-              />
-              <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                <Typography component="span" sx={{ fontSize: '0.8125rem', color: 'text.primary' }}>
-                  <FileName>{file.name}</FileName>
-                </Typography>
-                <Typography component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                  {KIND_LABELS[file.kind]} · {plan.groupNames[file.group]}
-                </Typography>
-              </Box>
-            </Box>
-          ))}
-        </Box>
-      </Box>
-
-      <ColumnList title="Expenses columns" columns={expenseColumns} />
-      {include.payments ? <ColumnList title="Payments columns" columns={PAYMENT_COLUMNS} /> : null}
-
-      <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>
-        Amounts are exact numbers, with the currency in its own column, and people appear by name.
-        {include.history
-          ? ' Edit rows leave Amount blank, so its total counts each Expense once.'
-          : ''}
-      </Typography>
-    </Box>
-  );
-}
-
-function ColumnList({ title, columns }: { title: string; columns: readonly string[] }) {
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-      <Typography component="h3" sx={sectionHeadingSx}>
-        {title}
-      </Typography>
-      <Box
-        component="ol"
-        sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, m: 0, p: 0, listStyle: 'none' }}
-      >
-        {columns.map((column) => (
-          <Box
-            component="li"
-            key={column}
-            sx={{
-              px: 1,
-              py: 0.25,
-              borderRadius: '6px',
-              bgcolor: 'surface.muted',
-              color: 'text.secondary',
-              fontSize: '0.75rem',
-              fontWeight: 500,
-            }}
-          >
-            {column}
-          </Box>
-        ))}
-      </Box>
-    </Box>
   );
 }

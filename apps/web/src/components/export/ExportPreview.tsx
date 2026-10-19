@@ -1,0 +1,320 @@
+'use client';
+import type { ReactNode } from 'react';
+import Box from '@mui/material/Box';
+import LinearProgress from '@mui/material/LinearProgress';
+import MoneyText from '@/components/common/MoneyText';
+import { toMajorAmount } from '@splitbook/shared/exact-money';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import ErrorState from '@/components/common/ErrorState';
+import Typography from '@mui/material/Typography';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import type { ExportPreview } from '@splitbook/shared/export-preview';
+import { exportWindowSlug } from '@splitbook/shared/export-request';
+import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
+
+export type PreviewState =
+  | { status: 'idle'; message: string }
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; data: ExportPreview };
+
+export function previewPeriod(data: Pick<ExportPreview, 'from' | 'to'>) {
+  if (!data.from || !data.to) return 'All time';
+  const slug = exportWindowSlug({ from: data.from, to: data.to });
+  return /^\d{4}-\d{2}$/.test(slug)
+    ? new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
+        new Date(`${slug}-15T12:00:00Z`),
+      )
+    : `${data.from} – ${data.to}`;
+}
+function PreviewTable({
+  label,
+  headers,
+  children,
+}: {
+  label: string;
+  headers: string[];
+  children: ReactNode;
+}) {
+  return (
+    <Box
+      role="region"
+      aria-label={label}
+      tabIndex={0}
+      sx={{
+        overflowX: 'auto',
+        maxWidth: '100%',
+        '&:focus-visible': { outline: '2px solid', outlineColor: 'focus.main', outlineOffset: 2 },
+      }}
+    >
+      <Table
+        size="small"
+        aria-label={label}
+        sx={{ minWidth: 'max-content', '& td, & th': { whiteSpace: 'nowrap' } }}
+      >
+        <TableHead>
+          <TableRow>
+            {headers.map((header, i) => (
+              <TableCell key={i} component="th" scope="col" sx={{ whiteSpace: 'nowrap' }}>
+                {header}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>{children}</TableBody>
+      </Table>
+    </Box>
+  );
+}
+const formats = { csv: 'CSV', json: 'Full backup', statement: 'Statement' } as const;
+export default function ExportPreviewPanel({
+  state,
+  onRetry,
+}: {
+  state: PreviewState;
+  onRetry: () => void;
+}) {
+  const data = state.status === 'ready' ? state.data : null;
+  return (
+    <Box
+      component="section"
+      aria-labelledby="export-preview-heading"
+      aria-busy={state.status === 'loading' || undefined}
+      sx={{
+        minWidth: 0,
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: `${RADIUS.lg}px`,
+        bgcolor: 'background.paper',
+        p: 2.5,
+      }}
+    >
+      <Typography id="export-preview-heading" component="h2" variant="h6">
+        Preview
+      </Typography>
+      {
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          noWrap
+          title={
+            data
+              ? `${data.groupNames.join(', ')} · ${previewPeriod(data)} · ${formats[data.format]}`
+              : undefined
+          }
+          sx={{ mb: 2 }}
+        >
+          {data
+            ? `${data.groupNames.join(', ')} · ${previewPeriod(data)} · ${formats[data.format]}`
+            : '\u00a0'}
+        </Typography>
+      }
+      {state.status === 'idle' && <Typography color="text.secondary">{state.message}</Typography>}
+      {state.status === 'loading' && (
+        <Box role="status">
+          <LinearProgress aria-label="Loading export preview" sx={{ my: 2 }} />
+          <Typography color="text.secondary">Loading preview…</Typography>
+        </Box>
+      )}
+      {state.status === 'error' && (
+        <ErrorState message={state.message} onRetry={onRetry} retryLabel="Retry" />
+      )}
+      {data?.format === 'statement' && (
+        <Box
+          component="article"
+          sx={{
+            mt: 2,
+            p: { xs: 1.5, sm: 2.5 },
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: `${RADIUS.md}px`,
+          }}
+        >
+          <Typography component="h3" variant="h6">
+            {data.statement.name} · Statement · {previewPeriod(data)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {getGroupTheme(data.statement.theme).label} · {data.statement.defaultCurrency} ·
+            Generated{' '}
+            {new Intl.DateTimeFormat('en-US', {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+              timeZone: data.timeZone,
+            }).format(new Date(data.generatedAt))}{' '}
+            ({data.timeZone})
+          </Typography>
+          {data.statement.currencies.map((bucket) => (
+            <Box key={bucket.currency} sx={{ mt: 2 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 2 }}>
+                <Box>
+                  <Typography variant="body2">Spent</Typography>
+                  <MoneyText
+                    amount={toMajorAmount(bucket.spentMinor, bucket.currency)}
+                    currency={bucket.currency}
+                    tone="neutral"
+                  />
+                </Box>
+                <Box>
+                  <Typography variant="body2">Expenses</Typography>
+                  <Typography>{bucket.expenseCount}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="body2">Payments</Typography>
+                  <Typography component="span">{bucket.paymentCount} · </Typography>
+                  <MoneyText
+                    amount={toMajorAmount(bucket.paymentTotalMinor, bucket.currency)}
+                    currency={bucket.currency}
+                    tone="neutral"
+                  />
+                </Box>
+              </Box>
+              <PreviewTable
+                label={`${bucket.currency} period contributions`}
+                headers={['Member', 'Paid', 'Share', 'Net']}
+              >
+                {bucket.people.map((person) => (
+                  <TableRow key={person.id}>
+                    <TableCell component="th" scope="row">
+                      {person.name}
+                    </TableCell>
+                    {[person.paidMinor, person.shareMinor, person.netMinor].map((minor, i) => (
+                      <TableCell key={i}>
+                        <MoneyText
+                          amount={toMajorAmount(minor, bucket.currency)}
+                          currency={bucket.currency}
+                          tone="neutral"
+                        />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </PreviewTable>
+              {bucket.expenses.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <PreviewTable
+                    label={`${bucket.currency} first Expenses`}
+                    headers={['Date', 'Description', 'Tag', 'Amount']}
+                  >
+                    {bucket.expenses.map((expense) => (
+                      <TableRow key={expense.id}>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{expense.date}</TableCell>
+                        <TableCell>{expense.description}</TableCell>
+                        <TableCell>{expense.tag}</TableCell>
+                        <TableCell>
+                          <MoneyText
+                            amount={toMajorAmount(expense.amountMinor, bucket.currency)}
+                            currency={bucket.currency}
+                            tone="neutral"
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </PreviewTable>
+                </Box>
+              )}
+              {bucket.expenseCount > bucket.expenses.length && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  …and {bucket.expenseCount - bucket.expenses.length} more Expenses
+                </Typography>
+              )}
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+                Amounts in {bucket.currency}, never converted
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
+      {data?.empty && (
+        <Typography color="text.secondary">
+          {data.from || data.to ? 'Nothing to export for this period.' : 'Nothing to export yet.'}
+        </Typography>
+      )}
+      {data?.format === 'json' && (
+        <Box sx={{ mt: 2 }}>
+          <Typography sx={{ fontFamily: FONT_MONO, overflowWrap: 'anywhere' }}>
+            {data.fileName}
+          </Typography>
+          <Typography color="text.secondary">
+            Approximately{' '}
+            {(data.sizeBytes / (data.sizeBytes >= 1_000_000 ? 1_000_000 : 1_000)).toLocaleString(
+              'en-US',
+              { maximumFractionDigits: 1 },
+            )}{' '}
+            {data.sizeBytes >= 1_000_000 ? 'MB' : 'KB'}
+          </Typography>
+          <Box component="ul" sx={{ pl: 2.5 }}>
+            <li>{data.counts.members} Members</li>
+            <li>
+              {data.counts.expenses} Expenses
+              {data.earliestMonth
+                ? ` since ${new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${data.earliestMonth}-15T12:00:00Z`))}`
+                : ''}
+              {data.historyIncluded ? ', each with its edit history' : ''}
+            </li>
+            {data.paymentsIncluded && <li>{data.counts.payments} Payments</li>}
+            {data.deletedExpensesIncluded && (
+              <li>
+                {data.counts.deletedExpenses} Deleted{' '}
+                {data.counts.deletedExpenses === 1 ? 'Expense' : 'Expenses'}
+              </li>
+            )}
+          </Box>
+          <Typography variant="body2" color="text.secondary">
+            Not included: recurring Expense templates and Activity history.
+          </Typography>
+        </Box>
+      )}
+      {data?.format === 'csv' && data.files.length > 1 && (
+        <Typography variant="body2" color="text.secondary">
+          In one zip, {data.fileName}
+        </Typography>
+      )}
+      {data?.format === 'csv' && data.files.some((file) => file.header.includes('Edited at')) && (
+        <Typography variant="body2" color="text.secondary">
+          Edit rows leave Amount blank.
+        </Typography>
+      )}
+      {!data?.empty &&
+        data?.format === 'csv' &&
+        data.files.map((file) => (
+          <Box key={file.name} sx={{ mt: 2 }}>
+            <Typography
+              component="h3"
+              variant="subtitle2"
+              sx={{ fontFamily: FONT_MONO, overflowWrap: 'anywhere', mb: 1 }}
+            >
+              {file.name}
+            </Typography>
+            <PreviewTable label={`${file.name} preview`} headers={file.header}>
+              {file.rows.map((row, i) => (
+                <TableRow key={i}>
+                  {row.map((cell, column) => (
+                    <TableCell
+                      key={column}
+                      sx={{
+                        whiteSpace: 'nowrap',
+                        ...(/^(Amount)$| share$/.test(file.header[column])
+                          ? { fontFamily: FONT_MONO, fontVariantNumeric: 'tabular-nums' }
+                          : {}),
+                      }}
+                    >
+                      {cell}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </PreviewTable>
+            {file.totalRows > file.rows.length && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                …and {file.totalRows - file.rows.length} more rows
+              </Typography>
+            )}
+          </Box>
+        ))}
+    </Box>
+  );
+}
