@@ -665,8 +665,9 @@ export function createHomeQueries(session: HomeSession) {
     {
       queryKey: keys()[0],
       queryFn: queryFn(acceptList, () => session.snapshot().groups.data.length > 0),
-      // Showing Home again reads the list only when it has none; focus, reconnect and a pull do.
-      refetchOnMount: false,
+      // A saved list is never current. Returning from a live Group read must replace it too,
+      // or its old offline answer keeps Home's connection notice beside live balances (#669).
+      refetchOnMount: (query) => query.state.data?.source === 'saved',
     },
     {
       queryKey: keys()[1],
