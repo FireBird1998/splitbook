@@ -256,7 +256,8 @@ export function TagManager({
   const typing = useRef(false);
 
   const unresolved = !!recovery && !recovery.confirmed && !recovery.rejected;
-  const canChange = !offline && !recoveryOnly && !!snapshot?.canManage && !recovery;
+  // A saved copy offers no change: its revisions and permission wait for a live read (#638).
+  const canChange = !offline && !saved && !recoveryOnly && !!snapshot?.canManage && !recovery;
   const tags = snapshot?.tags.filter((tag) => !tag.isDeleted) ?? [];
   const active = tags.filter((tag) => !tag.isArchived);
   const archived = tags.filter((tag) => tag.isArchived);

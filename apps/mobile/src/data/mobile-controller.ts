@@ -26,6 +26,7 @@ import {
   groupKey,
   groupsKey,
   homeBalancesKey,
+  queryKeyPath,
   tagActionsKey,
   type QueryKey,
 } from '@splitbook/shared/query-keys';
@@ -657,6 +658,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     toReviewQueries.reset();
     tagOwners.clear();
     tagFlights.clear();
+    unconfirmedTags.clear();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
     groupQueries.reset();
@@ -1339,10 +1341,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /**
    * Saved copies are kept only for Groups the latest Groups list holds, or that Home has gained
    * since (a Group just created). One the list leaves out, such as an archived Group the member
-   * can still open, is shown but never saved.
+   * can still open, is shown but never saved. A Group's Tags aren't kept while this phone holds a
+   * Tag change for it that isn't confirmed or refused: a read then may or may not include it, so
+   * it shows but is never saved (#638), as a restart quarantines them (#282).
    */
   const savable = (key: QueryKey) => {
     const id = key.length === 5 ? key[3] : null;
+    if (id && unconfirmedTags.has(id) && queryKeyPath(key) === tagActionsPath(id)) return false;
     return (
       !id ||
       !listedGroups ||
@@ -2051,6 +2056,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const forgetGroup = (groupId: string, status: number, owner: number, financialRefusal = true) => {
     if (!current(owner)) return Promise.resolve();
     tagOwners.delete(groupId);
+    // Its kept Tag change goes with its other records; the next open reads what is left.
+    unconfirmedTags.delete(groupId);
     if (financialRefusal) {
       lostGroups.add(groupId);
       if (snapshot.screen === 'expense' && snapshot.expense.groupId === groupId)
@@ -6231,6 +6238,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const tagOwners = new Map<string, object>();
   const tagFlights = new Map<string, { active: boolean }>();
+  /** Groups whose kept Tag change, read or stored this session, is neither confirmed nor refused. */
+  const unconfirmedTags = new Set<string>();
+  /** Notes whether a Tag change kept for a Group is still unresolved, as it is read or stored. */
+  const noteTagRecord = (groupId: string, record: unknown) => {
+    const kept = record as { confirmed?: unknown; rejected?: unknown } | null;
+    if (kept && !kept.confirmed && !kept.rejected) unconfirmedTags.add(groupId);
+    else unconfirmedTags.delete(groupId);
+  };
   const groupTags = (groupId: string) => {
     objectId.parse(groupId);
     const owner = generation;
@@ -6316,19 +6331,24 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return dependencies.newSubmissionKey();
       },
       load: () =>
-        lease.write(() => {
+        lease.write(async () => {
           ensure();
-          return storage.load(lease.accountId, groupId);
+          const record = await storage.load(lease.accountId, groupId);
+          noteTagRecord(groupId, record);
+          return record;
         }),
+      // Noted before the write: a Tags read answering meanwhile is never kept (#638).
       save: (record) =>
         lease.write(() => {
           ensure();
+          noteTagRecord(groupId, record);
           return storage.save(lease.accountId, groupId, record);
         }),
       remove: () =>
-        lease.write(() => {
+        lease.write(async () => {
           ensure();
-          return storage.remove(lease.accountId, groupId);
+          await storage.remove(lease.accountId, groupId);
+          noteTagRecord(groupId, null);
         }),
       read: async () => {
         const owns = queryOwner(queryClient, queryKey);

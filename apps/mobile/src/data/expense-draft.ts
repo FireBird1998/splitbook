@@ -172,10 +172,11 @@ export function expenseContextPending(editor: ExpenseEditor, offline: boolean) {
   return !!check && !(offline && !check.initialize && check.status !== 'checking');
 }
 /**
- * Whether choosing the Tag waits for the Group's live check. Offline, once the form shows the
- * Group's saved copy, the member picks from its saved Tags, on a new Expense too (#638): a Tag
- * is the member's own choice, never a default the check would replace, and Save still checks
- * it live. Reconnecting waits for the live check, as every financial choice does.
+ * Whether choosing the Tag waits for the Group's live check. Offline, once that check has
+ * answered from what this phone knows (the Group's saved copy, or a read earlier in this
+ * session) or failed, the member picks from those Tags, on a new Expense too (#638): a Tag is
+ * the member's own choice, never a default the check would replace, and Save still checks it
+ * live. Reconnecting waits for the live check, as every financial choice does.
  */
 export function expenseTagPending(editor: ExpenseEditor, offline: boolean) {
   const check = editor.contextCheck;
