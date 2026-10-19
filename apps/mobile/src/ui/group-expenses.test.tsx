@@ -1,4 +1,10 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ExpenseWindowSummary,
@@ -12,7 +18,14 @@ import { inTimeZone } from '../test-utils/time-zone';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { refreshedLabel } from './refresh-feedback';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
-import { hairSpace, labelRuns, largeTextWindows } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  hairSpace,
+  labelRuns,
+  largeTextWindows,
+  unreadText,
+} from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { ThemeContext } from './theme';
 
@@ -818,4 +831,47 @@ describe.each(['light', 'dark'] as const)('the Month bar at large text in %s (#6
       }
     },
   );
+});
+
+// #639: at 200% an Expense's row read "QA cylinde.." and "You paid · Uti.." beside its amount. Its
+// description and details take the lines they need from 150%, and the amount goes under them
+// where it would leave them too narrow a column. At 130% a long description is still cut once
+// (#332), but no word breaks in two.
+describe.each(['light', 'dark'] as const)('Expense rows at large text in %s (#639)', (mode) => {
+  it.each(largeTextWindows)('read in full, $width dp at $fontScale× text', (size) => {
+    setWindow(size);
+    act(() => {
+      screen = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <GroupExpensesView
+            group={group()}
+            currentUserId={you}
+            state={financial()}
+            kept={null}
+            savedExpenseId={null}
+            now={now}
+            onSelectMonth={vi.fn()}
+            onRefreshExpenses={vi.fn()}
+            onLoadMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onOpenExpense={vi.fn()}
+            onResumeDraft={vi.fn()}
+            onDiscardDraft={vi.fn()}
+          />
+        </ThemeContext.Provider>,
+      );
+    });
+    const rows = findHosts(
+      screen!.toJSON(),
+      (props, type) => type === 'Pressable' && flatten(props.style).minHeight === 60,
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    // Each row lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
+    for (const row of rows)
+      expect(
+        unreadText(row as ReactTestRendererJSON, size.fontScale, size.width - 34, {
+          cutOnce: size.fontScale < 1.5,
+        }),
+      ).toEqual([]);
+  });
 });

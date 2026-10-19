@@ -560,47 +560,72 @@ describe('A Household’s Balances', () => {
   // #219 device check: at 360dp with 130% text, "Record one once it’s paid" ran past the screen's
   // edge beside the section's title, and "Record once updated" did too. The caption takes the
   // room the title leaves, wrapping there, and the reason Record waits takes the caption's place.
+  // #639: at 360dp and 200% that room was a column a letter wide, and the title sat out of sight
+  // in the middle of the tall row; where the title leaves less than the caption's longest word,
+  // the caption goes on a line of its own under it.
   it.each([
-    [360, 1],
-    [360, 1.3],
-    [412, 1.3],
-    [360, 2],
-  ])('the payments’ caption fits beside its title, %sdp wide at %s× text', (width, scale) => {
-    setWindow({ width, fontScale: scale });
-    const room = width - 32;
-    /** The header row, its title, and how tall it lays out, with its caption. */
-    const header = (after: boolean) => {
-      act(() => {
-        renderer = create(changed(after));
-      });
-      const [row] = findHosts(renderer!.toJSON(), (props, type) => {
-        const style = flatten(props.style);
-        return type === 'View' && style.flexDirection === 'row' && style.minHeight === 32;
-      }).filter((node) =>
-        findHosts(node, (_props, type) => type === 'Text').some((title) =>
-          (title.children ?? []).includes('Suggested payments'),
-        ),
-      );
-      const [title, caption] = row!.children as ReactTestRendererJSON[];
-      const style = flatten(row!.props.style);
-      const inner = room - 2 * (style.paddingHorizontal as number);
-      const measured = {
-        height: layoutHeight(row!, scale, room),
-        // The room the title leaves the caption, and the caption laid out in that room alone.
-        left: inner - layoutWidth(title!, scale) - (style.gap as number),
-        caption: caption!,
+    [360, 1, 'beside'],
+    [360, 1.3, 'beside'],
+    [412, 1.3, 'beside'],
+    [360, 2, 'under'],
+    [412, 2, 'under'],
+  ])(
+    'the payments’ caption fits beside its title, %sdp wide at %s× text, or %s it',
+    (width, scale, place) => {
+      setWindow({ width, fontScale: scale });
+      const room = width - 32;
+      /** The header row, its title, and how tall it lays out, with its caption. */
+      const header = (after: boolean) => {
+        act(() => {
+          renderer = create(changed(after));
+        });
+        const [row] = findHosts(renderer!.toJSON(), (props, type) => {
+          const style = flatten(props.style);
+          return type === 'View' && style.flexDirection === 'row' && style.minHeight === 32;
+        }).filter((node) =>
+          findHosts(node, (_props, type) => type === 'Text').some((title) =>
+            (title.children ?? []).includes('Suggested payments'),
+          ),
+        );
+        const [title, caption] = row!.children as ReactTestRendererJSON[];
+        const style = flatten(row!.props.style);
+        const inner = room - 2 * (style.paddingHorizontal as number);
+        const measured = {
+          height: layoutHeight(row!, scale, room),
+          // The room the title leaves the caption, and the caption laid out in that room alone.
+          left: inner - layoutWidth(title!, scale) - (style.gap as number),
+          // The least the caption keeps beside the title.
+          least: flatten(caption!.props.style).minWidth as number,
+          title: title!,
+          caption: caption!,
+          inner,
+          gap: style.gap as number,
+        };
+        act(() => renderer!.unmount());
+        renderer = undefined;
+        return measured;
       };
-      act(() => renderer!.unmount());
-      renderer = undefined;
-      return measured;
-    };
-    const read = header(false);
-    // Laid out in the room the title leaves, wrapping there: never past the screen's edge.
-    expect(read.left).toBeGreaterThan(0);
-    expect(read.height).toBe(Math.max(32, layoutHeight(read.caption, scale, read.left)));
-    // While Record waits, its reason takes the caption's place: the row keeps its height.
-    expect(header(true).height).toBe(read.height);
-  });
+      const read = header(false);
+      expect(read.left >= read.least ? 'beside' : 'under').toBe(place);
+      if (place === 'beside') {
+        // Laid out in the room the title leaves, wrapping there: never past the screen's edge.
+        expect(read.left).toBeGreaterThan(0);
+        expect(read.height).toBe(Math.max(32, layoutHeight(read.caption, scale, read.left)));
+      } else {
+        // On a line of its own under the title, the width of the screen's content.
+        expect(read.height).toBe(
+          Math.max(
+            32,
+            layoutHeight(read.title, scale, read.inner) +
+              read.gap +
+              layoutHeight(read.caption, scale, read.inner),
+          ),
+        );
+      }
+      // While Record waits, its reason takes the caption's place: the row keeps its height.
+      expect(header(true).height).toBe(read.height);
+    },
+  );
 
   it('reads Home’s last balances: settled only when known and nothing is owed', () => {
     expect(settledIn(undefined)).toBe(false);

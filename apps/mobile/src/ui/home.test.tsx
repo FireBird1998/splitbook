@@ -1,6 +1,12 @@
 import { brandLogoSize } from './brand-logo';
 import type { ReactElement } from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ExpenseDraftSummary,
@@ -11,7 +17,7 @@ import type {
 import { ContinueDrafts, HomeBalances, HomeGroups, HomeTopBar } from './home';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { ThemeContext } from './theme';
-import { flatten, hairSpace, labelRuns, largeTextWindows } from '../test-utils/layout';
+import { flatten, hairSpace, labelRuns, largeTextWindows, unreadText } from '../test-utils/layout';
 import { refreshedLabel } from './refresh-feedback';
 import { setFileWindow, setWindow } from '../test-utils/native';
 
@@ -383,3 +389,44 @@ describe.each(['light', 'dark'] as const)('Home Groups at large text in %s (#639
     },
   );
 });
+
+// #639: at 200% a Group's row read "QA Eu.." and "Genera.." beside its balance. A row's name and
+// details take the lines they need from 150%, and its balance goes under them where it would
+// leave them too narrow a column. At 130% a long name is still cut once (#332), but no word
+// breaks in two.
+describe.each(['light', 'dark'] as const)(
+  'Home’s Group rows at large text in %s (#639)',
+  (mode) => {
+    it.each(largeTextWindows)('read in full, $width dp at $fontScale× text', (size) => {
+      setWindow(size);
+      act(() => {
+        renderer = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <HomeGroups
+              groups={{
+                status: 'ready',
+                data: [
+                  ...groupsList,
+                  group('b00000000000000000000009', 'Alex private test Group', 'other', 1),
+                ],
+                message: null,
+                loaded: true,
+              }}
+              byGroup={home().byGroup}
+              newGroupLabel="New Group"
+              onNewGroup={vi.fn()}
+              onOpen={vi.fn()}
+              onRetry={vi.fn()}
+            />
+          </ThemeContext.Provider>,
+        );
+      });
+      // Home's content is inset 16dp on each side.
+      expect(
+        unreadText(renderer!.toJSON() as ReactTestRendererJSON, size.fontScale, size.width - 32, {
+          cutOnce: size.fontScale < 1.5,
+        }),
+      ).toEqual([]);
+    });
+  },
+);

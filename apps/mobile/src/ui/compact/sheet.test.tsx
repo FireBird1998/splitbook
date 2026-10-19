@@ -1,6 +1,13 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
+import { findHosts, largeTextWindows, unreadText } from '../../test-utils/layout';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { spring } from '../../test-utils/native';
+import { setWindow, spring } from '../../test-utils/native';
 
 // The PanResponder stand-in hands its config straight through, so tests can drive a drag.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -160,4 +167,46 @@ describe('Bottom sheet structure', () => {
     const { root } = sheet(vi.fn(), false);
     expect(root.find((node) => isHost(node, 'Modal')).props.visible).toBe(false);
   });
+});
+
+// #639: sheet and dialog titles were cut to one line, "Finish this expense late…" at 100% on a
+// 360dp phone, "Delete this Expe…" and "Save ready expe…" at 200%. A title takes as many lines as
+// it needs, beside Done, and a subtitle such as Rename Tag's "Currently …" too.
+describe('Bottom sheet titles read in full (#639)', () => {
+  /** Each sheet's title, its action, and any subtitle, as the app shows them. */
+  const titles: [string, string, string?][] = [
+    ['Finish this expense later?', 'Keep editing'],
+    ['Delete this Expense?', 'Cancel'],
+    ['Save 3 expenses?', 'Cancel'],
+    ['Record payment', 'Close'],
+    ['Rename Tag', 'Cancel', 'Currently QA Internet and broadband long name test 45ch'],
+  ];
+  /** The sheet's header: its title, any subtitle, and Done. */
+  const header = () =>
+    findHosts(renderer!.toJSON(), (props) => props.testID === 'sheet-drag-area')[0]!
+      .children![1] as ReactTestRendererJSON;
+  it.each([{ width: 360, height: 640, fontScale: 1 }, ...largeTextWindows])(
+    'beside its action, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      for (const [title, action, subtitle] of titles) {
+        act(() => {
+          renderer = create(
+            <BottomSheet
+              visible
+              title={title}
+              subtitle={subtitle}
+              doneLabel={action}
+              onDone={vi.fn()}
+            >
+              <CompactText>Body</CompactText>
+            </BottomSheet>,
+          );
+        });
+        expect(unreadText(header(), size.fontScale, size.width), title).toEqual([]);
+        act(() => renderer!.unmount());
+        renderer = undefined;
+      }
+    },
+  );
 });

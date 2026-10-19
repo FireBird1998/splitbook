@@ -1,4 +1,10 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { emptySettlement, type SettlementState } from '../data/settlement';
@@ -10,6 +16,9 @@ import {
   recordWaitsForDetails,
 } from './group-balances';
 import type { PendingPayment } from '../data/settlement';
+import { findHosts, largeTextWindows, unreadText } from '../test-utils/layout';
+import { setWindow } from '../test-utils/native';
+import { ThemeContext } from './theme';
 import {
   RecordPaymentSheet,
   recordPaymentFootnote,
@@ -556,4 +565,74 @@ describe('Record payment sheet states', () => {
     expect(record.props.disabled).toBe(true);
     expect(record.props.accessibilityHint).toBe('Tick “Sam Chen paid more than suggested” first.');
   });
+});
+
+// #639: at 200% on a 360dp phone, the balance card's title broke mid-word beside its time ("ALL-T
+// / IME BAL / ANCE"), "Suggested payments" sat out of sight in the middle of a row its caption
+// made tall, the caption "Record one once it’s paid" was a column a letter wide, and the Record
+// payment sheet cut its title and ran its button's words and amount past both edges. As the
+// layout estimate lays them out, each reads in full at 130% and 200% on 360 and 412dp phones.
+describe.each(['light', 'dark'] as const)('Balances at large text in %s (#639)', (mode) => {
+  const themed = (element: React.ReactElement) => (
+    <ThemeContext.Provider value={getSemanticTokens(mode)}>{element}</ThemeContext.Provider>
+  );
+  it.each(largeTextWindows)(
+    'read in full, with the payments and everyone’s position, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      render(
+        themed(
+          <GroupBalancesView
+            group={group()}
+            currentUserId={you}
+            state={financial()}
+            pending={null}
+            offline={false}
+            onRecord={vi.fn()}
+            onCheckPayment={vi.fn()}
+            onRefreshBalances={() => undefined}
+          />,
+        ),
+      );
+      // The screen's content is inset 16dp on each side.
+      const tree = screen!.toJSON() as ReactTestRendererJSON;
+      expect(unreadText(tree, size.fontScale, size.width - 32)).toEqual([]);
+    },
+  );
+  it.each(largeTextWindows)(
+    'the Record payment sheet’s title and button read in full, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      render(
+        themed(
+          <RecordPaymentSheet
+            visible
+            state={{
+              ...emptySettlement(),
+              groupId: 'b00000000000000000000001',
+              group: group(),
+              balances: [inr],
+              suggested: 1000,
+              draft: { paidBy: you, paidTo: sam, currency: 'INR', amount: '1000', note: '' },
+              status: 'editing',
+            }}
+            currentUserId={you}
+            today="Today, 1 Oct"
+            onChange={vi.fn()}
+            onLeaveField={vi.fn()}
+            onAcknowledge={() => undefined}
+            onRecord={vi.fn()}
+            onRetry={vi.fn()}
+            onClose={vi.fn()}
+          />,
+        ),
+      );
+      const tree = screen!.toJSON() as ReactTestRendererJSON;
+      const [frame] = findHosts(tree, (_props, type) => type === 'SafeAreaView');
+      const [top, , footer] = frame!.children as ReactTestRendererJSON[];
+      // The sheet's header, edge to edge, and its footer with Record payment.
+      expect(unreadText(top!, size.fontScale, size.width)).toEqual([]);
+      expect(unreadText(footer!, size.fontScale, size.width)).toEqual([]);
+    },
+  );
 });

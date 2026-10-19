@@ -1,7 +1,14 @@
 import type { ReactElement } from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hairSpace, labelRuns } from '../../test-utils/layout';
+import { hairSpace, labelRuns, largeTextWindows, unreadText } from '../../test-utils/layout';
 import { setWindow } from '../../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -16,6 +23,8 @@ const {
   FieldMarker,
   FloatingAction,
   GroupNavBar,
+  IconButton,
+  IconTile,
   LinearProgress,
   ListRow,
   RowAmount,
@@ -28,6 +37,7 @@ const {
   TileGrid,
   TopBar,
 } = await import('./index');
+const { ThemeContext } = await import('../theme');
 
 let renderer: ReactTestRenderer | undefined;
 afterEach(() => {
@@ -491,5 +501,98 @@ describe('labels as wide as their words keep room to spare (#639)', () => {
   ])('%s', (_part, element, labels) => {
     const root = render(element);
     for (const label of labels) expect(labelRuns(root, label), label).toEqual([[label, hairSpace]]);
+  });
+});
+
+// #639, at 200% text: a top bar's status squeezed "Add expense" and its Group to dots, a Group's
+// subtitle lost its currency, a block button's words and amount ran past both its edges, a row's
+// balance squeezed its Group's name to "QA Eu..", and an options row read "Members and Group
+// d…". As the layout estimate lays them out, every text in these parts reads in full at 200% on
+// 360 and 412dp phones. At 130% a long name may still end at its line, cut once as the compact
+// design has it (#332), but no word breaks in two and nothing runs past its row.
+describe.each(['light', 'dark'] as const)('compact parts at large text in %s (#639)', (mode) => {
+  const noop = () => undefined;
+  /** Each part, and how much narrower than the screen it lays out. */
+  const parts: [string, number, ReactElement][] = [
+    [
+      'a top bar with a status',
+      0,
+      <TopBar
+        key="status"
+        title="Add expense"
+        subtitle="Maple House · INR"
+        prominent={false}
+        leading={{ kind: 'close', label: 'Back to Group', onPress: noop }}
+        status={<Badge label="Kept on this phone" />}
+        actions={<IconButton icon="ellipsis-vertical-outline" label="Options" onPress={noop} />}
+      />,
+    ],
+    [
+      'a Group’s top bar',
+      0,
+      <TopBar
+        key="group"
+        title="Maple House"
+        subtitle="Household · 3 members · INR"
+        leading={{ kind: 'back', label: 'Back', onPress: noop }}
+        actions={
+          <>
+            <IconButton icon="person-add-outline" label="Invite" onPress={noop} />
+            <IconButton icon="ellipsis-vertical" label="Group options" onPress={noop} />
+          </>
+        }
+      />,
+    ],
+    [
+      'a block button with an amount',
+      40,
+      <CompactButton key="button" label="Record payment" amount="₹1,000.00" block onPress={noop} />,
+    ],
+    [
+      'a row with a balance',
+      34,
+      <ListRow
+        key="balance"
+        leading={<IconTile icon="airplane-outline" />}
+        title="Kochi to Alleppey"
+        meta="Trip · 28 Aug – 2 Sep · 3 members"
+        trailing={<RowAmount amount="₹8,661.00" tone="negative" caption="you owe" />}
+      />,
+    ],
+    [
+      'a row of options',
+      42,
+      <ListRow
+        key="options"
+        leading={<IconTile icon="people-outline" />}
+        title="Members and Group details"
+        meta="Theme, currency, members and Invite"
+        onPress={noop}
+      />,
+    ],
+    [
+      'a section’s title beside its action',
+      32,
+      <SectionHeader
+        key="header"
+        title="Groups · 7"
+        trailing={<CompactButton label="New Group" icon="add" variant="text" onPress={noop} />}
+      />,
+    ],
+  ];
+  it.each(largeTextWindows)('read in full, $width dp at $fontScale× text', (size) => {
+    setWindow(size);
+    for (const [part, inset, element] of parts) {
+      render(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>{element}</ThemeContext.Provider>,
+      );
+      const tree = renderer!.toJSON() as ReactTestRendererJSON;
+      expect(
+        unreadText(tree, size.fontScale, size.width - inset, { cutOnce: size.fontScale < 1.5 }),
+        part,
+      ).toEqual([]);
+      act(() => renderer!.unmount());
+      renderer = undefined;
+    }
   });
 });

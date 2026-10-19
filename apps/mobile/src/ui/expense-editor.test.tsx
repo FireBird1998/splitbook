@@ -6,7 +6,13 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { flatten, layoutHeight } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  largeTextWindows,
+  layoutHeight,
+  unreadText,
+} from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { savedQueriesIn } from '../test-utils/saved-queries';
@@ -1711,4 +1717,27 @@ describe('an unexpected rendering error in the Expense task (#187)', () => {
     expect(await ui.stored()).toMatchObject({ mutation: { kind: 'edit' } });
     expect(ui.writes).toHaveLength(1);
   });
+});
+
+// #639: at 200% on a 360dp phone, the Add expense header's draft status squeezed "Add expense"
+// and its Group to dots, and to "Add …" on a 412dp phone. The status goes under the title where
+// they can't share its line, and the title and Group take the lines they need.
+describe('the Add expense header at large text (#639)', () => {
+  it.each(largeTextWindows)(
+    'reads in full with its draft status, $width dp at $fontScale× text',
+    async (size) => {
+      setWindow(size);
+      const form = await render((controller) => controller.openExpense(groupId));
+      await form.type('Amount, required', '42.50');
+      await form.type('Description, required', 'QA matrix dinner');
+      const [bar] = findHosts(
+        screen!.toJSON(),
+        (props, type) => type === 'View' && flatten(props.style).minHeight === 64,
+      );
+      const drawn = (node: ReactTestRendererJSON | string): string =>
+        typeof node === 'string' ? node : (node.children ?? []).map(drawn).join('');
+      expect(drawn(bar!)).toContain('Draft saved');
+      expect(unreadText(bar!, size.fontScale, size.width)).toEqual([]);
+    },
+  );
 });
