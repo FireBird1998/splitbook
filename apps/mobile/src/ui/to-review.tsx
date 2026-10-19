@@ -208,7 +208,7 @@ export function ToReviewHomeCard({
   const model = controller.toReviewModel();
   if (
     !state.offline &&
-    state.toReview.status === 'ready' &&
+    state.toReview.status !== 'error' &&
     model.counts.total === 0 &&
     !state.toReview.recoveryMessage
   )
