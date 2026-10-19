@@ -776,7 +776,8 @@ describe('What the screen says', () => {
     const title = renderer!.root.find(
       (node: ReactTestInstance) => String(node.type) === 'Text' && node.props.children === longName,
     );
-    expect(title.props.numberOfLines).toBeGreaterThan(1);
+    // At 200% it takes as many lines as it needs (#639).
+    expect(title.props.numberOfLines).toBe(0);
   });
 });
 

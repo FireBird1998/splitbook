@@ -12,10 +12,30 @@ import {
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
 import { usePulse, useReveal, useSweep, sweepTrack, type Reveal } from './motion';
-import { isLargeText, lineBox, radius, space, type LineKind } from './scale';
+import {
+  isLargeText,
+  isLargestText,
+  largeTextColumn,
+  lineBox,
+  radius,
+  space,
+  type LineKind,
+} from './scale';
 import { CompactText, Money, type TextTone } from './text';
 
 export const useLargeText = () => isLargeText(useWindowDimensions().fontScale);
+
+/** From 150% text, titles and labels take as many lines as they need (`LARGEST_TEXT_SCALE`). */
+export const useLargestText = () => isLargestText(useWindowDimensions().fontScale);
+
+/**
+ * At large text, the least room a line's text keeps beside what follows it (`largeTextColumn`);
+ * undefined below large text, where lines keep their compact shape.
+ */
+export const useTextColumn = () => {
+  const { fontScale } = useWindowDimensions();
+  return isLargeText(fontScale) ? largeTextColumn(fontScale) : undefined;
+};
 
 /** The height one line of `kind` takes at the current text size; see `lineBox`. */
 export const useLineBox = (kind: LineKind) => lineBox(kind, useWindowDimensions().fontScale);
@@ -139,7 +159,9 @@ export function Divider({ inset = 14 }: { inset?: number }) {
 /**
  * An overline title with an optional trailing action or note. With `below`, the note goes under
  * the title, at every width and text size: never cut at the screen's edge beside a long title,
- * and in a line as tall as a badge, so nothing below moves as the note changes (#222).
+ * and in a line as tall as a badge, so nothing below moves as the note changes (#222). Without
+ * it, the trailing part goes onto a line of its own where it doesn't fit beside the title, and a
+ * title wider than the screen wraps (#639).
  */
 export function SectionHeader({
   title,
@@ -151,7 +173,7 @@ export function SectionHeader({
   below?: boolean;
 }) {
   const heading = (
-    <CompactText variant="overline" accessibilityRole="header" spare>
+    <CompactText variant="overline" accessibilityRole="header" spare style={{ flexShrink: 1 }}>
       {title}
     </CompactText>
   );
@@ -167,7 +189,10 @@ export function SectionHeader({
       style={{
         minHeight: 32,
         flexDirection: 'row',
+        flexWrap: 'wrap',
         alignItems: 'center',
+        // One line is centred in the header's height, as without wrapping.
+        alignContent: 'center',
         justifyContent: 'space-between',
         gap: space.gap,
         paddingHorizontal: 2,
@@ -270,6 +295,13 @@ const listRow = {
   alignItems: 'center' as const,
   gap: 12,
 };
+/** A list row at large text: its trailing value can go onto a line of its own. */
+const largeRow = {
+  flexWrap: 'wrap' as const,
+  // One line is centred in the row's height, as without wrapping.
+  alignContent: 'center' as const,
+  rowGap: 4,
+};
 /** Where a list row's trailing value sits, and its skeleton: an amount over its caption. */
 const trailingBox = { alignItems: 'flex-end' as const, gap: 1 };
 
@@ -286,6 +318,11 @@ function TrailingSkeleton() {
 /**
  * A compact row: leading icon or avatar, a one-line title and meta, and a trailing value.
  * Pressable rows need an accessibility label that states everything the row shows.
+ *
+ * At large text (from 130%) the trailing value goes onto a line of its own, at the row's end,
+ * where it would leave the text less than `largeTextColumn` beside it, and from 150% the title
+ * and meta take as many lines as they need: at 200% on a 360dp phone, "Kochi to Alleppey" read
+ * "Kochi.." beside its balance (#639).
  *
  * While `trailingLoading` is set, an amount's skeleton holds the trailing value's place, so the
  * title is laid out as it will be; when it clears, the value fades in where the skeleton was.
@@ -329,16 +366,18 @@ export const ListRow = memo(function ListRow({
 }) {
   const theme = useTheme();
   const reveal = useReveal(trailingLoading);
+  const column = useTextColumn();
+  const whole = useLargestText();
   const after = trailingLoading ? <TrailingSkeleton /> : trailing;
   const content = (
     <>
       {leading}
-      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <CompactText weight="semibold" numberOfLines={titleLines}>
+      <View style={{ flex: 1, minWidth: column ?? 0, gap: 1 }}>
+        <CompactText weight="semibold" numberOfLines={whole ? 0 : titleLines}>
           {title}
         </CompactText>
         {meta ? (
-          <CompactText variant="caption" tone={metaTone} numberOfLines={metaLines}>
+          <CompactText variant="caption" tone={metaTone} numberOfLines={whole ? 0 : metaLines}>
             {meta}
           </CompactText>
         ) : null}
@@ -346,16 +385,23 @@ export const ListRow = memo(function ListRow({
       {after ? (
         <FadeIn
           reveal={reveal}
-          style={
-            trailingWidth === undefined ? trailingBox : [trailingBox, { minWidth: trailingWidth }]
-          }
+          style={[
+            trailingBox,
+            trailingWidth === undefined ? undefined : { minWidth: trailingWidth },
+            // On a line of its own, it keeps to the row's end.
+            column ? { marginLeft: 'auto' } : undefined,
+          ]}
         >
           {after}
         </FadeIn>
       ) : null}
     </>
   );
-  const style = { ...listRow, backgroundColor: highlighted ? theme.brand.bg : undefined };
+  const style = {
+    ...listRow,
+    ...(column ? largeRow : undefined),
+    backgroundColor: highlighted ? theme.brand.bg : undefined,
+  };
   if (!onPress)
     return (
       <View

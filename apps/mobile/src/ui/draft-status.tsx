@@ -53,7 +53,7 @@ export function DraftStatus({
       style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4 }}
     >
       <Icon name={icon} size={16} color={color} />
-      <CompactText variant="caption" style={{ color }}>
+      <CompactText variant="caption" spare style={{ color }}>
         {text}
       </CompactText>
     </View>

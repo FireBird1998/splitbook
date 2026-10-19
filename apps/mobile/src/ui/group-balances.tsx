@@ -1,4 +1,5 @@
-import { View } from 'react-native';
+import type { ReactNode } from 'react';
+import { View, useWindowDimensions } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
@@ -17,6 +18,11 @@ import {
   SkeletonOf,
   SkeletonText,
   StatusText,
+  largeTextColumn,
+  scaledSp,
+  textVariants,
+  useLargestText,
+  useTextColumn,
 } from './compact';
 import { inPlace, ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -138,6 +144,16 @@ function PendingPaymentNotice({
   );
 }
 
+/**
+ * The balance card's title beside its time: it takes the line's room, and keeps
+ * `largeTextColumn` of it, so where the time leaves it less, the time goes under it. At 200% on
+ * a 360dp phone the time squeezed it into a column that broke its words ("ALL-T / IME BAL /
+ * ANCE", #639). Its skeleton keeps the same shape.
+ */
+function useBalanceTitle() {
+  return { flex: 1, minWidth: largeTextColumn(useWindowDimensions().fontScale) };
+}
+
 function MemberBalanceCard({
   bucket,
   currentUserId,
@@ -160,11 +176,12 @@ function MemberBalanceCard({
   const own = bucket.balances.find(({ user }) => user.id === currentUserId)?.balance ?? 0;
   const tone = getMoneyTone(own);
   const label = tone === 'negative' ? 'You owe' : tone === 'positive' ? 'You’re owed' : null;
+  const title = useBalanceTitle();
   return (
     <Card padded>
       <View style={{ gap: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
+          <CompactText variant="overline" accessibilityRole="header" style={title}>
             All-time balance · {bucket.currency}
           </CompactText>
           <ReadTime
@@ -226,6 +243,9 @@ function SuggestedPayments({
 }) {
   const reason = offline ? recordNeedsConnection : unavailable;
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const column = useTextColumn();
+  const whole = useLargestText();
   return (
     <View style={{ gap: 6 }}>
       <SectionHeader
@@ -234,8 +254,15 @@ function SuggestedPayments({
           // The caption takes the room the title leaves, wrapping there rather than running past
           // the screen's edge at large text. While a change keeps Record waiting, its reason
           // takes the caption's place at once, in a box the caption holds, so nothing moves
-          // (#219); the full reason is Record's hint.
-          <View style={{ flex: 1, minWidth: 0 }}>
+          // (#219); the full reason is Record's hint. It keeps room for its longest word,
+          // "Record", four of its em: with less beside the title, as at 200%, it goes on a line
+          // of its own under it, where it was a column a letter wide (#639).
+          <View
+            style={{
+              flex: 1,
+              minWidth: 4 * scaledSp(textVariants.caption.fontSize as number, fontScale),
+            }}
+          >
             {inPlace({
               holds:
                 locked && !offline ? (
@@ -273,6 +300,10 @@ function SuggestedPayments({
                   gap: 10,
                   paddingVertical: 8,
                   paddingHorizontal: 14,
+                  // At large text, Record goes onto a line of its own where it would leave the
+                  // payment less than `largeTextColumn`: at 200% on a 360dp phone the amount read
+                  // "₹1,0…" beside it (#639).
+                  ...(column ? { flexWrap: 'wrap', alignContent: 'center', rowGap: 4 } : {}),
                 }}
               >
                 <View
@@ -287,32 +318,34 @@ function SuggestedPayments({
                 <View
                   accessible
                   accessibilityLabel={`${title}, ${amount}`}
-                  style={{ flex: 1, minWidth: 0, gap: 1 }}
+                  style={{ flex: 1, minWidth: column ?? 0, gap: 1 }}
                 >
-                  <CompactText weight="semibold" numberOfLines={2}>
+                  <CompactText weight="semibold" numberOfLines={whole ? 0 : 2}>
                     {title}
                   </CompactText>
                   <Money>{amount}</Money>
                 </View>
-                <CompactButton
-                  label="Record"
-                  variant="tonal"
-                  dense
-                  disabled={offline || locked || unavailable !== null}
-                  hint={
-                    offline
-                      ? recordNeedsConnection
-                      : locked
-                        ? recordWaitsForBalances
-                        : (unavailable ?? undefined)
-                  }
-                  accessibilityLabel={
-                    youPay
-                      ? `Record your payment to ${payment.recipient}`
-                      : `Record ${payment.payer}’s payment to you`
-                  }
-                  onPress={() => onRecord(payment.paidBy, payment.paidTo, payment.currency)}
-                />
+                <Trailing column={column}>
+                  <CompactButton
+                    label="Record"
+                    variant="tonal"
+                    dense
+                    disabled={offline || locked || unavailable !== null}
+                    hint={
+                      offline
+                        ? recordNeedsConnection
+                        : locked
+                          ? recordWaitsForBalances
+                          : (unavailable ?? undefined)
+                    }
+                    accessibilityLabel={
+                      youPay
+                        ? `Record your payment to ${payment.recipient}`
+                        : `Record ${payment.payer}’s payment to you`
+                    }
+                    onPress={() => onRecord(payment.paidBy, payment.paidTo, payment.currency)}
+                  />
+                </Trailing>
               </View>
             </View>
           );
@@ -331,6 +364,11 @@ function SuggestedPayments({
   );
 }
 
+/** What ends a row: at large text, on a line of its own, it keeps to the row's end. */
+function Trailing({ column, children }: { column: number | undefined; children: ReactNode }) {
+  return column ? <View style={{ marginLeft: 'auto' }}>{children}</View> : children;
+}
+
 function Everyone({
   bucket,
   currentUserId,
@@ -341,6 +379,8 @@ function Everyone({
   title: string;
 }) {
   const theme = useTheme();
+  const column = useTextColumn();
+  const whole = useLargestText();
   const largest = Math.max(...bucket.balances.map(({ balance }) => Math.abs(balance)), 0);
   // The member's own row last, as in the design: the others first.
   const rows = [...bucket.balances].sort(
@@ -375,11 +415,13 @@ function Everyone({
                     gap: 12,
                     paddingVertical: 8,
                     paddingHorizontal: 14,
+                    // As a list row lays out at large text (#639).
+                    ...(column ? { flexWrap: 'wrap', alignContent: 'center', rowGap: 4 } : {}),
                   }}
                 >
                   <CompactAvatar name={user.name} />
-                  <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
-                    <CompactText weight="semibold" numberOfLines={1}>
+                  <View style={{ flex: 1, minWidth: column ?? 0, gap: 6 }}>
+                    <CompactText weight="semibold" numberOfLines={whole ? 0 : 1}>
                       {name}
                     </CompactText>
                     {tone !== 'neutral' && largest > 0 ? (
@@ -394,7 +436,13 @@ function Everyone({
                       />
                     ) : null}
                   </View>
-                  <View style={{ alignItems: 'flex-end', gap: 1 }}>
+                  <View
+                    style={{
+                      alignItems: 'flex-end',
+                      gap: 1,
+                      marginLeft: column ? 'auto' : undefined,
+                    }}
+                  >
                     <RowAmount
                       amount={signed}
                       tone={tone === 'neutral' ? 'secondary' : tone}
@@ -450,6 +498,7 @@ export function GroupBalancesView({
   onRefreshBalances: () => void;
 }) {
   const { balances } = state;
+  const title = useBalanceTitle();
   const notice =
     pending?.groupId === group.id ? (
       <PendingPaymentNotice
@@ -497,7 +546,7 @@ export function GroupBalancesView({
               <View
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
               >
-                <View style={{ flex: 1 }}>
+                <View style={title}>
                   <SkeletonOf bar>
                     <CompactText variant="overline">
                       All-time balance · {group.defaultCurrency}

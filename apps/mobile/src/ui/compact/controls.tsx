@@ -63,8 +63,13 @@ export function CompactButton({
     <>
       {icon ? <Icon name={icon} size={18} color={color} /> : null}
       {/* Room to spare (#331): a button as wide as its words, opened again, otherwise wrapped its
-          last word out of sight ("Skip for now" read "Skip for"). */}
-      <CompactText weight="semibold" spare style={{ color, fontSize: size }}>
+          last word out of sight ("Skip for now" read "Skip for"). Wider than the button, as at
+          200% text, the words wrap inside it rather than run past its edges (#639). */}
+      <CompactText
+        weight="semibold"
+        spare
+        style={{ color, fontSize: size, flexShrink: 1, textAlign: 'center' }}
+      >
         {label}
       </CompactText>
       {amount ? <Money style={{ color }}>{amount}</Money> : null}
@@ -85,7 +90,11 @@ export function CompactButton({
         borderRadius: radius.tile,
         paddingHorizontal: variant === 'text' ? 12 : dense ? 14 : 18,
         flexDirection: 'row',
+        // An amount that doesn't fit beside the words goes under them: "Record payment
+        // ₹1,000.00" ran past both edges at 200% text (#639). One line stays centred.
+        flexWrap: 'wrap',
         alignItems: 'center',
+        alignContent: 'center',
         justifyContent: 'center',
         gap: 8,
         backgroundColor:
