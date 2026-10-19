@@ -7,7 +7,6 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { createMobileController } from '../src/data';
-import type { MobileSnapshot } from '../src/data/types';
 import type { SavedQueryRecords } from '../src/data/saved-copy-budget';
 import { expensePagePath, activityPagePath } from '@splitbook/shared/api-paths';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
@@ -21,7 +20,6 @@ interface OfflineVerificationOptions {
   waitForCopies?: typeof waitForSavedQueries;
   writeSavedQuery?: (path: string, write: () => Promise<void>) => Promise<void>;
   checkpointRead?: (path: string) => void;
-  afterOfflineRestart?: (snapshot: MobileSnapshot) => 'stop' | void;
   afterOfflineViews?: () => 'stop' | void;
   beforeCleanup?: () => void;
 }
@@ -152,6 +150,7 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
     );
   let controller = create(),
     groupId: string | undefined;
+  let openingActivity: Promise<void> | undefined;
   try {
     await alex.signIn('alex');
     await sam.signIn('sam');
@@ -197,7 +196,7 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
     });
     // Activity may display before its command finishes draining the account's disk lease.
     // Checkpoint that displayed page without requiring the held disk write to finish first.
-    const openingActivity = controller.openActivity(groupId);
+    openingActivity = controller.openActivity(groupId);
     try {
       await Promise.race([activityReady, openingActivity]);
     } finally {
@@ -211,7 +210,6 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
     controller = create();
     await controller.restore();
     assert.equal(controller.getSnapshot().auth.status, 'authenticated');
-    if (options.afterOfflineRestart?.(controller.getSnapshot()) === 'stop') return;
     assert.equal(controller.getSnapshot().home.status, 'ready', 'Home after offline restart');
     present(
       controller.getSnapshot().offline.refreshedAt,
@@ -355,6 +353,7 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
   } finally {
     options.beforeCleanup?.();
     await Promise.allSettled([...pendingWrites]);
+    if (openingActivity) await Promise.allSettled([openingActivity]);
     offline = false;
     await controller.signOut();
     controller.dispose();
