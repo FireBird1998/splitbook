@@ -242,11 +242,9 @@ function AuthenticationScreen() {
         : null;
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-      {(!showsSignIn || state.screen !== 'groups') && (
-        <View
-          style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}
-        >
-          {/* Shrinks so the wordmark and its short status never push Settings off screen. */}
+      <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
+        {/* Shrinks so the wordmark and its short status never push Settings off screen. */}
+        {!showsSignIn || state.screen !== 'groups' ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
             {state.screen !== 'groups' ? (
               // Disabled while joining: the join finishes and opens its Group.
@@ -291,49 +289,51 @@ function AuthenticationScreen() {
             {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
             <RefreshStatus visible={feedback.quiet} />
           </View>
-          {authenticated && state.screen !== 'settings' ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Settings"
-              accessibilityState={{
-                disabled:
-                  state.creation.status === 'saving' ||
-                  state.invitation.status === 'joining' ||
-                  (state.screen === 'expense' &&
-                    (state.expense.status === 'saving' || state.expense.persistence !== 'saved')),
-              }}
-              disabled={
+        ) : (
+          <View />
+        )}
+        {authenticated && state.screen !== 'settings' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            accessibilityState={{
+              disabled:
                 state.creation.status === 'saving' ||
                 state.invitation.status === 'joining' ||
                 (state.screen === 'expense' &&
-                  (state.expense.status === 'saving' || state.expense.persistence !== 'saved'))
-              }
-              onPress={controller.openSettings}
-              style={{
-                minHeight: 48,
-                minWidth: 48,
-                justifyContent: 'center',
-                alignItems: 'flex-end',
-              }}
-            >
-              <Icon name="settings-outline" size={23} />
-            </Pressable>
-          ) : (
-            <View
-              style={{
-                paddingHorizontal: 9,
-                paddingVertical: 5,
-                borderRadius: 7,
-                backgroundColor: theme.brand.bg,
-              }}
-            >
-              <Label>
-                {googleSignInEnabled ? (environment.isProduction ? 'LIVE' : 'STAGING') : 'DEV'}
-              </Label>
-            </View>
-          )}
-        </View>
-      )}
+                  (state.expense.status === 'saving' || state.expense.persistence !== 'saved')),
+            }}
+            disabled={
+              state.creation.status === 'saving' ||
+              state.invitation.status === 'joining' ||
+              (state.screen === 'expense' &&
+                (state.expense.status === 'saving' || state.expense.persistence !== 'saved'))
+            }
+            onPress={controller.openSettings}
+            style={{
+              minHeight: 48,
+              minWidth: 48,
+              justifyContent: 'center',
+              alignItems: 'flex-end',
+            }}
+          >
+            <Icon name="settings-outline" size={23} />
+          </Pressable>
+        ) : (
+          <View
+            style={{
+              paddingHorizontal: 9,
+              paddingVertical: 5,
+              borderRadius: 7,
+              backgroundColor: theme.brand.bg,
+            }}
+          >
+            <Label>
+              {googleSignInEnabled ? (environment.isProduction ? 'LIVE' : 'STAGING') : 'DEV'}
+            </Label>
+          </View>
+        )}
+      </View>
       {/* #331's one progress cue while the session is checked or a sign-in runs. Its room
           stays when nothing runs, so the screen never moves (#335). */}
       {waiting ? <LinearProgress label={waiting} /> : <View style={{ height: progressHeight }} />}

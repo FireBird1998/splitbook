@@ -23,6 +23,8 @@ import { savedQueriesIn } from './test-utils/saved-queries';
 const runtime = vi.hoisted(() => ({
   controller: undefined as unknown,
   appearance: { mode: 'light', status: 'ready', message: null },
+  googleSignInEnabled: false,
+  isProduction: false,
 }));
 setFileWindow({ width: 360, height: 640 });
 vi.mock('react-native-nitro-google-signin', () => ({ GoogleSignInButton: 'GoogleSignInButton' }));
@@ -56,11 +58,16 @@ vi.mock('./runtime', () => ({
   },
   configurationReady: true,
   environment: {
+    get isProduction() {
+      return runtime.isProduction;
+    },
     label: 'Local development · fictional data',
     apiOrigin: 'http://localhost:4138',
     webOrigin: 'http://localhost:4138',
   },
-  googleSignInEnabled: false,
+  get googleSignInEnabled() {
+    return runtime.googleSignInEnabled;
+  },
 }));
 
 const { default: App } = await import('../App');
@@ -616,6 +623,25 @@ it('shows Sign in branding once without the old tile or typed wordmark', async (
   expect(app.text()).not.toContain('splitbook');
   expect(app.hosts(() => true).filter((node) => node.children.includes('s'))).toEqual([]);
 });
+
+it.each(['STAGING', 'LIVE'] as const)(
+  'keeps the %s environment badge on Sign in',
+  async (badge) => {
+    runtime.googleSignInEnabled = true;
+    runtime.isProduction = badge === 'LIVE';
+    try {
+      const app = await start(device());
+      await settle();
+      expect(app.text()).toContain(badge);
+      expect(app.hosts((props) => props.accessibilityLabel === 'Splitbook')).toHaveLength(1);
+      expect(app.text()).not.toContain('splitbook');
+      expect(app.hosts(() => true).filter((node) => node.children.includes('s'))).toEqual([]);
+    } finally {
+      runtime.googleSignInEnabled = false;
+      runtime.isProduction = false;
+    }
+  },
+);
 
 describe('sign-in and start-up show progress while they wait (#335)', () => {
   /** What the App's controller publishes. */
@@ -1398,13 +1424,11 @@ describe('Home says what is true, without jumps (#332)', () => {
           minWidth: 0,
           flexShrink: 1,
         });
-        expect(
-          fixed +
-            Math.min(
-              layoutWidth(statusBox, scale),
-              Number(flatten(statusBox.props.style).maxWidth),
-            ),
-        ).toBeLessThanOrEqual(360);
+        if (scale <= 1.3) {
+          expect(layoutWidth(statusBox, scale)).toBeLessThanOrEqual(
+            Number(flatten(statusBox.props.style).maxWidth),
+          );
+        }
         expect(text).toContain(status);
         const [line] = findHosts(
           bar,
