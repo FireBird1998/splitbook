@@ -7,6 +7,7 @@ import {
   expectedTheme,
   expectNoSeriousA11yViolations,
   expectThemeApplied,
+  hexToRgb,
   isPhone,
   reviewScreenshot,
 } from './fixtures';
@@ -132,9 +133,11 @@ test('a Trip’s Insights shows the whole trip, not Months', async ({ page }, te
   const tokens = expectedTheme(testInfo) === 'dark' ? darkTokens : lightTokens;
   const biggest = read.days.reduce((top, day) => (day.spentMinor > top.spentMinor ? day : top));
   expect(
-    await bars.evaluateAll((elements) => elements.map((element) => element.getAttribute('fill'))),
+    await bars.evaluateAll((elements) => elements.map((element) => getComputedStyle(element).fill)),
   ).toEqual(
-    read.days.map((day) => (day === biggest ? tokens.chart.series : tokens.chart.seriesSoft)),
+    read.days.map((day) =>
+      hexToRgb(day === biggest ? tokens.chart.series : tokens.chart.seriesSoft),
+    ),
   );
   await expect(chart.getByTestId('trip-daily-average-line')).toHaveCount(1);
   await expect(days).toContainText(
