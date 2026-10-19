@@ -593,9 +593,13 @@ describe.each(['light', 'dark'] as const)('Group options connectivity in %s at 1
       (props) =>
         flatten(props.style).borderRadius === 14 && flatten(props.style).overflow === 'hidden',
     );
-    expect(unreadText(options!, size.fontScale, size.width - 40, { cutOnce: !offline })).toEqual(
-      [],
-    );
+    expect(unreadText(options!, size.fontScale, size.width - 40, { cutOnce: true })).toEqual([]);
+    if (offline) {
+      for (const label of [tagsLabel, refreshLabel]) {
+        const [row] = findHosts(options!, (props) => props.accessibilityLabel === label);
+        expect(unreadText(row!, size.fontScale, size.width - 40)).toEqual([]);
+      }
+    }
     press(tags);
     expect(onManageTags).toHaveBeenCalledOnce();
     press(one(byRole(root, 'button', 'Group options')));
