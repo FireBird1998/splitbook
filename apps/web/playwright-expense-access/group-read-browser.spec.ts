@@ -714,7 +714,7 @@ test('saving Group settings preserves fields and updates the list, dashboard The
   await sidebar.getByRole('link', { name: 'Groups', exact: true }).click();
   await expect(page).toHaveURL(/\/groups$/);
   await expect(page.getByRole('main').getByRole('link', { name, exact: true })).toBeVisible();
-  await expect(page.getByText('Apr 10, 2032 – Apr 14, 2032', { exact: true })).toBeVisible();
+  await expect(page.getByText('10 Apr 2032 – 14 Apr 2032', { exact: true })).toBeVisible();
   await sidebar
     .getByRole('navigation', { name: 'Main', exact: true })
     .getByRole('link', { name: 'Home', exact: true })
@@ -726,7 +726,7 @@ test('saving Group settings preserves fields and updates the list, dashboard The
     .getByRole('region', { name: 'Groups' })
     .getByRole('link', { name: /^Shared contract spring trip / });
   await expect(trip).toBeVisible();
-  await expect(trip).toHaveAccessibleName(/Trip · Apr 10–14, 2032$/);
+  await expect(trip).toHaveAccessibleName(/Trip · 10–14 Apr 2032$/);
   await sidebar.getByRole('link', { name: 'Groups', exact: true }).click();
   await page.locator(`a[href="${settingsPath}"]`).click();
   await expect(page.getByLabel('Group Name', { exact: true })).toHaveValue(name);

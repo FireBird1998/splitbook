@@ -583,8 +583,8 @@ describe('the Expense list', () => {
       reads.set(LIST, { data: page(EXPENSES) });
       const year = new Date().getFullYear();
       // Dated 29 to 26 September, never the evening before there.
-      expect(text(list())).toContain(`Sep 26, ${year}`);
-      expect(text(list())).not.toContain(`Sep 25, ${year}`);
+      expect(text(list())).toContain(`26 Sep ${year}`);
+      expect(text(list())).not.toContain(`25 Sep ${year}`);
     }));
 
   it('shows a summary outside a Household, with "You owe" and "You get back"', () => {

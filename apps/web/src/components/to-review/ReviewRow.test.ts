@@ -110,7 +110,7 @@ describe('a row in the web To review page (#512)', () => {
       'splitBetween',
       'tagId',
     ]);
-    expect(shown).toMatch(/^Expense to review Sep 2, 2026 · You set this aside ₹12\.50 /);
+    expect(shown).toMatch(/^Expense to review 2 Sep 2026 · You set this aside ₹12\.50 /);
     expect(shown).not.toMatch(/missing/i);
   });
 
@@ -121,7 +121,7 @@ describe('a row in the web To review page (#512)', () => {
       'splitBetween',
       'tagId',
     ]);
-    expect(shown).toMatch(/^Fare Sep 2, 2026 · You set this aside ₹12\.50 /);
+    expect(shown).toMatch(/^Fare 2 Sep 2026 · You set this aside ₹12\.50 /);
     expect(shown).not.toContain('currency');
   });
 });
@@ -144,7 +144,7 @@ describe('a row whose item is in another currency than its Group’s (#567)', ()
       ['CURRENCY_MISMATCH'],
     );
     expect(shown).toBe(
-      'Station dinner Sep 2, 2026 · You set this aside $30.00 Needs the Group currency Fix the rest',
+      'Station dinner 2 Sep 2026 · You set this aside $30.00 Needs the Group currency Fix the rest',
     );
   });
 });
@@ -168,7 +168,7 @@ describe('a row whose item is in another currency, in a Trip (#596)', () => {
       'trip',
     );
     expect(shown).toBe(
-      'Station dinner Sep 2, 2026 · You set this aside $30.00 Needs the Trip currency Fix the rest',
+      'Station dinner 2 Sep 2026 · You set this aside $30.00 Needs the Trip currency Fix the rest',
     );
   });
 });

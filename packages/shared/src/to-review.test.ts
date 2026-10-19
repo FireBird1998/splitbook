@@ -353,7 +353,7 @@ describe('changes while an item is open', () => {
     expect(describeDraftChange(before, after)).toBe(
       `Claude changed the date a moment ago: ${reviewDate('2026-10-14')} → ${reviewDate('2026-10-15')}. You're seeing the latest version.`,
     );
-    expect(reviewDate('2000-01-01')).toBe('Jan 1, 2000');
+    expect(reviewDate('2000-01-01')).toBe('1 Jan 2000');
   });
   it('names changed payers and amounts without exposing identities', () => {
     const { before, after } = changed();
