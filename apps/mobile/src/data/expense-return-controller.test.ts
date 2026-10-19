@@ -669,6 +669,52 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
     ]);
   });
 
+  // Owner decision (#655): the note offers the Month the edited Expense is in, which opens the
+  // Group's Expenses there with the row highlighted, as after a resumed edit (#219, #104).
+  it('offers View in the edited Expense’s Month beside the note', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Electricity bill' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      message: 'Expense updated.',
+      viewMonth: '2026-08',
+    });
+  });
+
+  it('View in its Month opens Expenses at that Month with the edited row highlighted', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    await controller.openExpense(householdId, expenseId, { scrollY: 75 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ date: '2026-09-02' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      viewMonth: '2026-09',
+    });
+
+    await controller.viewRecordMonth();
+    const shown = controller.getSnapshot();
+    expect(shown).toMatchObject({
+      screen: 'group',
+      destination: 'expenses',
+      financial: { groupId: householdId, month: '2026-09' },
+      snackbar: {
+        groupId: householdId,
+        message: 'Expense updated · Electricity',
+        viewMonth: null,
+        expenseId,
+      },
+    });
+    expect(shown.financial.expenses.data.map((row) => row.id)).toContain(expenseId);
+  });
+
   it('starts the next edit from the saved values, without the note', async () => {
     const { controller } = await signedIn();
     await controller.openGroup(householdId);
@@ -683,6 +729,7 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
       message: null,
       draft: { description: 'Electricity bill', original: { revision: 1 } },
     });
+    expect(controller.getSnapshot().expense.viewMonth ?? null).toBeNull();
   });
 
   it('lands on the Group after an edit resumed from the Group, as a new Expense does', async () => {
@@ -734,6 +781,8 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
         snackbar: { message: 'Expense updated · Electricity bill' },
         financial: { month: fromHome ? '2026-09' : '2026-08' },
       });
+      // No record to offer a Month from: the Group's own Snackbar says what changed.
+      expect(controller.getSnapshot().expense.viewMonth ?? null).toBeNull();
     },
   );
 });

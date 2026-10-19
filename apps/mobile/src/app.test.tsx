@@ -1320,6 +1320,50 @@ describe('App return from an Expense', () => {
     expect(app.text()).toContain('September groceries and milk');
   });
 
+  // Owner decision (#655): the record's note offers "View in {Month}", which opens Expenses at
+  // the edited Expense's Month with its row highlighted.
+  it('offers View in the edited Expense’s Month on its record, a full-size button at 130% text that opens Expenses there with the row highlighted', async () => {
+    setWindow({ fontScale: 1.3 });
+    const app = await renderApp();
+    const moved = { ...september, date: '2026-08-15T00:00:00.000Z', revision: 1, isDeleted: false };
+    let edited = false;
+    app.use((path, init) => {
+      if (path === `/api/groups/${groupId}/expenses/${september._id}`) {
+        if (init.method === 'PATCH') edited = true;
+        return json({
+          status: 200,
+          data: edited ? moved : { ...september, revision: 0, isDeleted: false },
+        });
+      }
+      if (path.includes('/expenses?') && edited) {
+        const from = new URL(path, 'http://local').searchParams.get('dateFrom');
+        return json(page(from === expenseMonthRange('2026-08').dateFrom ? [august, moved] : []));
+      }
+    });
+    await app.press('Open Maple House');
+    await app.press('September groceries');
+    await app.press('Edit expense');
+    await settle(app.controller.updateExpenseDraft({ date: '2026-08-15' }));
+    await app.press('Save changes');
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { status: 'detail', viewMonth: '2026-08' },
+    });
+    expect(app.text()).toContain('Expense updated.');
+    const action = app.pressable('View in August');
+    expect(action.props.accessibilityRole).toBe('button');
+    expect(action.props.style({ pressed: false }).minHeight).toBe(48);
+
+    await app.press('View in August');
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'expenses',
+      financial: { month: '2026-08' },
+    });
+    expect(app.text()).toContain('August 2026');
+    expect(screen!.root.findByType(GroupExpensesView).props.savedExpenseId).toBe(september._id);
+  });
+
   it('the top-bar back arrow names the Group it returns to', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');
