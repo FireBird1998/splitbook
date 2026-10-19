@@ -626,6 +626,7 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
     await controller.openExpense(householdId, expenseId, { scrollY: 75 });
     await controller.editExpense();
     await controller.updateExpenseDraft({ description: 'Electricity bill' });
+    const sent = server.requests.length;
     await controller.saveExpense();
 
     expect(server.records.get(expenseId)).toMatchObject({
@@ -633,6 +634,13 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
       revision: 1,
     });
     expect(server.drafts.size).toBe(0);
+    // The record and its changes are read again after the edit, so its history can show it.
+    const reads = server.requests
+      .slice(sent)
+      .filter(({ method }) => method === 'GET')
+      .map(({ path }) => path.split('&')[0]);
+    expect(reads).toContain(`/api/groups/${householdId}/expenses/${expenseId}`);
+    expect(reads).toContain(`/api/groups/${householdId}/activity?expenseId=${expenseId}`);
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'expense',
       snackbar: null,
@@ -695,6 +703,39 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
       snackbar: { message: 'Expense updated · Electricity bill' },
     });
   });
+
+  // Home's draft row and the Expense's row both open the Expense the kept edit is of: the open
+  // asks for that Expense, but Edit was never pressed on its record.
+  it.each([
+    ['Home’s draft row', true],
+    ['its row on the Group', false],
+  ] as const)(
+    'lands on the Group after a kept edit is resumed from %s, as before',
+    async (_from, fromHome) => {
+      const { controller } = await signedIn();
+      await controller.openGroup(householdId);
+      await controller.selectMonth('2026-08');
+      await controller.openExpense(householdId, expenseId);
+      await controller.editExpense();
+      await controller.updateExpenseDraft({ description: 'Electricity bill' });
+      // Back keeps the edit on this device.
+      await controller.back();
+      if (fromHome) await controller.back();
+      await controller.openExpense(householdId, expenseId);
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'resume',
+        requestedExpenseId: expenseId,
+      });
+      controller.resumeExpenseDraft();
+      await controller.saveExpense();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        expense: { status: 'saved', message: 'Expense updated.' },
+        snackbar: { message: 'Expense updated · Electricity bill' },
+        financial: { month: fromHome ? '2026-09' : '2026-08' },
+      });
+    },
+  );
 });
 
 describe('Returning to an Expense beyond the first page', () => {
