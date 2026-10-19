@@ -34,6 +34,15 @@ const recordSchema = z
   })
   .refine((record) => record.command.intent.action !== 'delete');
 export type TagRecovery = z.infer<typeof recordSchema>;
+/**
+ * Whether a Tag change kept on this device is neither confirmed nor refused (#638). One it
+ * can't read counts as unresolved, so its Group's Tags are held back rather than trusted.
+ */
+export function unresolvedTagRecord(value: unknown) {
+  if (value === null) return false;
+  const record = recordSchema.safeParse(value);
+  return !record.success || (!record.data.confirmed && !record.data.rejected);
+}
 const data = (value: unknown) => z.object({ data: z.unknown() }).parse(value).data;
 /** A read of the Tags as its query holds it: the answer, where it came from, and when. */
 export function tagRead(value: unknown): TagRead {

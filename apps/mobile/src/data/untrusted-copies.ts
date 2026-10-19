@@ -5,6 +5,7 @@ import { removeRecordRows } from './expense-queries';
 import { removeActivityRows } from './activity-queries';
 import { parseStoredExpenseDraft } from './expense-draft';
 import { parseSettlementAttempt } from './settlement';
+import { unresolvedTagRecord } from './tag-management';
 import type { MobileDependencies } from './types';
 
 const recorded = z.object({ accountId: z.string(), scopes: z.record(z.string(), z.number()) });
@@ -114,7 +115,8 @@ export function untrustedCopies({
     drop,
     /**
      * A stored attempt may have reached the server before the app was killed (#282). Returns the
-     * Groups with a Tag change kept here, whose Tags are then never saved until it is resolved.
+     * Groups whose kept Tag change is neither confirmed nor refused (or can't be read): their
+     * Tags are never saved, nor offered on a form offline, until it is resolved (#638).
      */
     async recover(accountId: string, time: number): Promise<string[]> {
       const scopes = new Set<string>();
@@ -164,7 +166,12 @@ export function untrustedCopies({
             }
           : undefined,
       );
-      return tagGroups;
+      const unresolved: string[] = [];
+      for (const groupId of tagGroups) {
+        const record = await tagRequests!.load(accountId, groupId).catch(() => undefined);
+        if (record === undefined || unresolvedTagRecord(record)) unresolved.push(groupId);
+      }
+      return unresolved;
     },
   });
 }

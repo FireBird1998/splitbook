@@ -1,6 +1,6 @@
 import { tagActionsPath, tagActionCheckPath } from '@splitbook/shared/api-paths';
 import { emptyTagManager, tagManager } from './tag-manager';
-import { tagManagement, tagRead, type TagRead } from './tag-management';
+import { tagManagement, tagRead, unresolvedTagRecord, type TagRead } from './tag-management';
 import { createReviewRun } from './review-run';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
 import {
@@ -1569,8 +1569,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     await recordCookieAccount(owner, session.user.id);
     await queueAccount(() => financialCleanup.recover());
-    for (const id of await queueAccount(() => untrusted.recover(session.user.id, now())))
-      unconfirmedTags.add(id);
+    const kept = await queueAccount(() => untrusted.recover(session.user.id, now()));
+    // Never for a session that ended while they were read: its marks went with it.
+    assertCurrent(owner);
+    for (const id of kept) unconfirmedTags.add(id);
     // A Group submission stored on this device reopens before anything else can be created.
     openHome(session.user, await storedCreation(owner, session.user.id));
     await saveVerifiedIdentity(session, owner);
@@ -1621,9 +1623,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await queueAccount(() => untrusted.drop());
       const device = readDeviceAccount();
       const accountId = (await device)?.accountId;
-      if (accountId)
-        for (const id of await queueAccount(() => untrusted.recover(accountId, now())))
-          unconfirmedTags.add(id);
+      if (accountId) {
+        const kept = await queueAccount(() => untrusted.recover(accountId, now()));
+        // Never for a session that ended while they were read: its marks went with it.
+        assertCurrent(owner);
+        for (const id of kept) unconfirmedTags.add(id);
+      }
       const deviceHome = readSavedHome(device);
       await loadPending();
       assertCurrent(owner);
@@ -6286,8 +6291,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const tagFlights = new Map<string, { active: boolean }>();
   /** Notes whether a Tag change kept for a Group is still unresolved, as it is read or stored. */
   const noteTagRecord = (groupId: string, record: unknown) => {
-    const kept = record as { confirmed?: unknown; rejected?: unknown } | null;
-    if (kept && !kept.confirmed && !kept.rejected) unconfirmedTags.add(groupId);
+    if (unresolvedTagRecord(record)) unconfirmedTags.add(groupId);
     else unconfirmedTags.delete(groupId);
   };
   const groupTags = (groupId: string) => {
