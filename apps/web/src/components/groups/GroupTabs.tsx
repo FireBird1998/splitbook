@@ -28,7 +28,7 @@ export default function GroupTabs({ groupId, label }: GroupTabsProps) {
         gap: 0.5,
         // The rule under the tabs is drawn inside the bar, so the open tab's 2 px line can
         // cover it: a scrolling box clips anything its children draw over its own border.
-        boxShadow: (theme) => `inset 0 -1px 0 ${theme.palette.divider}`,
+        boxShadow: (theme) => `inset 0 -1px 0 ${(theme.vars ?? theme).palette.divider}`,
         overflowX: 'auto',
       }}
     >

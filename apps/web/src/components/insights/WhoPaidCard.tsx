@@ -248,7 +248,7 @@ function PaidTable({ model }: { model: WhoPaidModel }) {
                       ml: '-1px',
                       borderRadius: '1px',
                       bgcolor: 'text.secondary',
-                      boxShadow: `0 0 0 2px ${theme.palette.background.paper}`,
+                      boxShadow: `0 0 0 2px ${(theme.vars ?? theme).palette.background.paper}`,
                     })}
                   />
                 </Box>

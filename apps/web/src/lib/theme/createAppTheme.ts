@@ -8,6 +8,7 @@ declare module '@mui/material/styles' {
     status: {
       positive: string;
       negative: string;
+      negativeHover: string;
       warning: string;
       info: string;
       infoHover: string;
@@ -38,6 +39,7 @@ declare module '@mui/material/styles' {
     status?: {
       positive?: string;
       negative?: string;
+      negativeHover?: string;
       warning?: string;
       info?: string;
       infoHover?: string;
@@ -157,6 +159,10 @@ export function createAppTheme(mode: ThemeMode): Theme {
       focus: { main: tokens.focus, ring: tokens.focusRing },
       status: {
         ...tokens.status,
+        negativeHover:
+          mode === 'light'
+            ? darken(tokens.status.negative, 0.15)
+            : lighten(tokens.status.negative, 0.1),
         infoHover:
           mode === 'light' ? darken(tokens.status.info, 0.15) : lighten(tokens.status.info, 0.1),
       },

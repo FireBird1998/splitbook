@@ -361,7 +361,7 @@ export function QuickAddView({
         bgcolor: 'background.paper',
         '&:focus-within': {
           borderColor: 'focus.main',
-          boxShadow: (theme) => `0 0 0 3px ${theme.palette.focus.ring}`,
+          boxShadow: (theme) => `0 0 0 3px ${(theme.vars ?? theme).palette.focus.ring}`,
         },
       }}
     >

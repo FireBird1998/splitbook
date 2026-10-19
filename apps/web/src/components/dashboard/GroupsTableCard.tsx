@@ -447,7 +447,7 @@ const avatarSx = {
   fontSize: '0.65625rem',
   fontWeight: 600,
   // A ring in the card's colour separates the overlapping avatars.
-  boxShadow: (theme: Theme) => `0 0 0 2px ${theme.palette.background.paper}`,
+  boxShadow: (theme: Theme) => `0 0 0 2px ${(theme.vars ?? theme).palette.background.paper}`,
   '&:not(:first-of-type)': { ml: '-6px' },
 } as const;
 

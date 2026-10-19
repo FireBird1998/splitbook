@@ -161,7 +161,10 @@ export default function NewGroupPage() {
             <Box
               role="alert"
               sx={{
-                bgcolor: (theme) => `${theme.palette.error.main}12`,
+                bgcolor: (theme) =>
+                  theme.vars
+                    ? `rgba(${theme.vars.palette.error.mainChannel} / ${18 / 255})`
+                    : `${theme.palette.error.main}12`,
                 color: 'error.main',
                 px: 2,
                 py: 1.5,

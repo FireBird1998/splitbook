@@ -13,7 +13,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { darken, lighten } from '@mui/material/styles';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { groupTabHref } from './group-tabs';
 
@@ -148,13 +147,10 @@ export default function LeaveGroupSection({
             color="error"
             disabled={leaving}
             sx={(theme) => ({
-              backgroundColor: theme.palette.status.negative,
-              color: theme.palette.primary.contrastText,
+              backgroundColor: (theme.vars ?? theme).palette.status.negative,
+              color: (theme.vars ?? theme).palette.primary.contrastText,
               '&:hover': {
-                backgroundColor:
-                  theme.palette.mode === 'light'
-                    ? darken(theme.palette.status.negative, 0.15)
-                    : lighten(theme.palette.status.negative, 0.1),
+                backgroundColor: (theme.vars ?? theme).palette.status.negativeHover,
               },
             })}
           >

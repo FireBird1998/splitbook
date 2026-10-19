@@ -144,7 +144,7 @@ export default function TripStrip({
         position: 'relative',
         display: 'grid',
         gridTemplateColumns: '1fr auto',
-        background: (theme) => theme.palette.strip.bg,
+        background: (theme) => (theme.vars ?? theme).palette.strip.bg,
         color: 'strip.text',
         borderRadius: '12px',
         ...(joinedBottom ? { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 } : {}),

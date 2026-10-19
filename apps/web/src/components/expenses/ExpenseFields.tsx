@@ -285,7 +285,7 @@ export default function ExpenseFields({
               bgcolor: 'text.disabled',
             },
             scrollbarWidth: 'thin',
-            scrollbarColor: (theme) => `${theme.palette.border.strong} transparent`,
+            scrollbarColor: (theme) => `${(theme.vars ?? theme).palette.border.strong} transparent`,
           }}
         >
           {PREDEFINED_ITEMS.slice(0, 8).map((item) => (

@@ -67,7 +67,7 @@ function PersonAvatar({ name }: { name: string }) {
         bgcolor: 'tint.brand',
         color: 'primary.main',
         // Overlapping avatars keep a ring of the card's surface between them (web.css .avatars).
-        boxShadow: (theme) => `0 0 0 2px ${theme.palette.background.paper}`,
+        boxShadow: (theme) => `0 0 0 2px ${(theme.vars ?? theme).palette.background.paper}`,
         '& + &': { ml: '-4px' },
       }}
     >
