@@ -684,11 +684,33 @@ const HomeScreen = memo(function HomeScreen() {
         progress: feedback.progress,
         // Silence matters while figures are read; an unchanged fresh Home has no cue to hide.
         silent: snapshot.home.status === 'loading' && feedback.silent,
+        // Each Group's count in To review, for its row: as text, so Home redraws only when one
+        // changes.
+        reviewCounts:
+          process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
+            ? controller
+                .toReviewModel()
+                .groups.map((group) => `${group.groupId}:${group.counts.total}`)
+                .join(',')
+            : '',
       };
     },
     sameSelection,
   );
   const state = selected;
+  const toReview = useMemo(
+    () =>
+      Object.fromEntries(
+        selected.reviewCounts
+          .split(',')
+          .filter(Boolean)
+          .map((entry) => {
+            const [groupId, count] = entry.split(':');
+            return [groupId!, Number(count)];
+          }),
+      ),
+    [selected.reviewCounts],
+  );
   const theme = useTheme();
   const feedback = selected;
   const { checking } = feedback;
@@ -784,6 +806,7 @@ const HomeScreen = memo(function HomeScreen() {
         <HomeGroups
           groups={state.groups}
           byGroup={state.home.byGroup}
+          toReview={toReview}
           balancesPending={state.home.status === 'idle' || state.home.status === 'loading'}
           newGroupLabel={state.creation.draft.name ? 'Continue Group form' : 'New Group'}
           offline={state.offline.active}

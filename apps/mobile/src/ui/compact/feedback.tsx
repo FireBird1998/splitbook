@@ -26,11 +26,14 @@ export function Banner({
   title,
   message,
   standing = false,
+  heading = false,
   trailing,
   children,
 }: {
   tone: BannerTone;
   title?: string;
+  /** The title heads what follows, such as a duplicate's details: read as a heading. */
+  heading?: boolean;
   message: string;
   /** A notice that stays on the screen, e.g. an unconfirmed payment: announced politely. */
   standing?: boolean;
@@ -64,7 +67,12 @@ export function Banner({
       <View style={{ flex: 1, gap: 2 }}>
         {title ? (
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-            <CompactText variant="small" weight="semibold" style={{ flex: 1, color: colors[1] }}>
+            <CompactText
+              variant="small"
+              weight="semibold"
+              accessibilityRole={heading ? 'header' : undefined}
+              style={{ flex: 1, color: colors[1] }}
+            >
               {title}
             </CompactText>
             {trailing}
@@ -98,7 +106,7 @@ export type BadgeTone = 'positive' | 'negative' | 'warning' | 'neutral';
  * hair space adds its width to the measure but never moves a word to the next line, as a line
  * may end past its room in white space.
  */
-const hairSpace = String.fromCodePoint(0x200a);
+export const hairSpace = String.fromCodePoint(0x200a);
 
 /** A short status pill such as "Adds up", "Not confirmed" or "Saved 10:42". */
 export function Badge({

@@ -1,5 +1,14 @@
 import { useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import type { ReactNode } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   buildToReview,
@@ -18,9 +27,28 @@ import type { MobileController } from '../data/mobile-controller';
 import { reviewForm, reviewFormChange } from '../data/review-form';
 import type { ExpenseDraft } from '../data/expense-draft';
 import { useMobileSnapshot, sameSelection } from './use-mobile-snapshot';
-import { BottomSheet, Card, CompactText, Money } from './compact';
-import { Button, Copy } from './primitives';
-import { ExpenseTiles, expenseDateLabel, splitSummary, OptionalDetails } from './expense-form';
+import {
+  Banner,
+  BottomSheet,
+  Card,
+  CompactButton,
+  CompactText,
+  Divider,
+  IconButton,
+  IconTile,
+  Money,
+  TopBar,
+  denseHitSlop,
+  touch,
+} from './compact';
+import { Icon } from './primitives';
+import {
+  ActionBar,
+  ExpenseTiles,
+  expenseDateLabel,
+  splitSummary,
+  OptionalDetails,
+} from './expense-form';
 import { DateSheet } from './date-sheet';
 import { CurrencyBadge, RequiredFieldLabel } from './expense-inputs';
 import { clockTime } from './activity-format';
@@ -29,7 +57,7 @@ import { PayerSheet, paidBySummary } from './payer-sheet';
 import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
 import { useStartWhileUnfocused } from './start-while-unfocused';
-import { useTheme } from './theme';
+import { fonts, useTheme } from './theme';
 import { reviewedItemsLine } from './review-run-copy';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
@@ -69,10 +97,8 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
   return (
     <Modal visible animationType="slide" onRequestClose={close}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}
-        >
+        {/* The keyboard leaves room for what's typed: the run shrinks above it. */}
+        <KeyboardAvoidingView behavior="height" style={{ flex: 1 }}>
           <ReviewRunContent
             key={`${snapshot.run.index}:${snapshot.run.changed?.after.revision ?? 0}`}
             controller={controller}
@@ -81,11 +107,171 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
             userId={snapshot.user.id}
             close={close}
           />
-        </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
   );
 }
+
+/** The run's screen: its top bar, then what scrolls, then the bar pinned at the foot. */
+function RunScreen({
+  bar,
+  progress,
+  children,
+  ...top
+}: {
+  title: string;
+  subtitle: string;
+  close(): void;
+  /** Check latest details, while there is an item to check. */
+  refresh?: { onPress(): void; disabled: boolean };
+  progress?: ReactNode;
+  bar: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <TopBar
+        title={top.title}
+        subtitle={top.subtitle}
+        subtitleLines={2}
+        prominent={false}
+        leading={{ kind: 'close', label: 'Close review', onPress: top.close }}
+        actions={
+          top.refresh ? (
+            <IconButton
+              icon="refresh-outline"
+              label="Check latest details"
+              disabled={top.refresh.disabled}
+              onPress={top.refresh.onPress}
+            />
+          ) : null
+        }
+      />
+      {progress}
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
+      >
+        {children}
+      </ScrollView>
+      <ActionBar>{bar}</ActionBar>
+    </>
+  );
+}
+
+/** One segment per item: done in green, this one in the brand colour, the rest muted. */
+function RunProgress({ index, total }: { index: number; total: number }) {
+  const theme = useTheme();
+  const segments = Math.max(1, total);
+  return (
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel="Review progress"
+      accessibilityValue={{
+        min: 0,
+        max: total,
+        now: index,
+        text: `${index} done, item ${index + 1} of ${total}, ${total - index - 1} remaining`,
+      }}
+      style={{
+        flexDirection: 'row',
+        gap: segments > 24 ? 0 : 4,
+        paddingHorizontal: 16,
+        paddingBottom: 10,
+      }}
+    >
+      {Array.from({ length: segments }, (_, at) => (
+        <View
+          key={at}
+          style={{
+            flex: 1,
+            height: 4,
+            borderRadius: 2,
+            backgroundColor:
+              at < index
+                ? theme.positive.main
+                : at === index
+                  ? theme.brand.main
+                  : theme.surfaceMuted,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+/** Where the item came from: the assistant's initials, or a bookmark for one you set aside. */
+function RunSource({
+  assistant,
+  title,
+  detail,
+}: {
+  assistant?: string;
+  title: string;
+  detail: string;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 2 }}>
+      {assistant ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            backgroundColor: theme.text,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <CompactText weight="semibold" maxFontSizeMultiplier={1.3} style={{ color: theme.bg }}>
+            {assistant.slice(0, 2)}
+          </CompactText>
+        </View>
+      ) : (
+        <IconTile icon="bookmark-outline" />
+      )}
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <CompactText weight="semibold">{title}</CompactText>
+        <CompactText variant="caption" tone="secondary">
+          {detail}
+        </CompactText>
+      </View>
+    </View>
+  );
+}
+
+/** A count at the end of the run, label then figure. */
+function Tally({
+  label,
+  count,
+  tone,
+}: {
+  label: string;
+  count: number;
+  tone?: 'positive' | 'warning';
+}) {
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${label} ${count}`}
+      style={{
+        minHeight: 48,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 14,
+      }}
+    >
+      <CompactText>{label}</CompactText>
+      <Money tone={count ? tone : undefined}>{String(count)}</Money>
+    </View>
+  );
+}
+
 function ReviewRunContent({
   controller,
   state,
@@ -109,20 +295,45 @@ function ReviewRunContent({
   if (!selected) {
     const summary = summarizeReviewRun(state.outcomes);
     return (
-      <>
-        <CompactText variant="title" accessibilityRole="header">
-          Done for now
+      <RunScreen
+        title="To review"
+        subtitle="Finished"
+        close={close}
+        bar={<CompactButton label="Done" block onPress={close} />}
+      >
+        <View style={{ alignItems: 'center', gap: 10, paddingTop: 40, paddingHorizontal: 8 }}>
+          <View
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 20,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: theme.positive.bg,
+            }}
+          >
+            <Icon name="checkmark" size={30} color={theme.status.positive} />
+          </View>
+          <CompactText variant="title" accessibilityRole="header">
+            Done for now
+          </CompactText>
+          <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
+            {reviewedItemsLine(state.items.length, [
+              ...new Set(state.items.map((row) => row.groupName)),
+            ])}
+          </CompactText>
+        </View>
+        <Card>
+          <Tally label="Saved" count={summary.saved} tone="positive" />
+          <Divider />
+          <Tally label="Deleted" count={summary.deleted} />
+          <Divider />
+          <Tally label="Left for later" count={summary.left} tone="warning" />
+        </Card>
+        <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+          What you skipped stays in To review.
         </CompactText>
-        <Copy>
-          {reviewedItemsLine(state.items.length, [
-            ...new Set(state.items.map((row) => row.groupName)),
-          ])}
-        </Copy>
-        <Copy>Saved {summary.saved}</Copy>
-        <Copy>Deleted {summary.deleted}</Copy>
-        <Copy>Left for later {summary.left}</Copy>
-        <Button label="Done" onPress={close} />
-      </>
+      </RunScreen>
     );
   }
   const { item, groupId, groupName } = selected;
@@ -186,56 +397,95 @@ function ReviewRunContent({
       : toDateParam(created) === toDateParam(yesterday)
         ? 'yesterday'
         : spellDay(created, { year: true });
-  const source =
-    item.draft.preparedBy.kind === 'assistant'
-      ? `Prepared by ${item.draft.preparedBy.name} · from your chat`
-      : 'You set this aside · Finish later';
+  const assistant =
+    item.draft.preparedBy.kind === 'assistant' ? item.draft.preparedBy.name : undefined;
+  const sourceTitle = assistant ? `Prepared by ${assistant}` : 'You set this aside';
+  const sourceDetail = `${assistant ? 'From your chat' : 'Finish later'} · ${day} ${clockTime(item.draft.createdAt)}`;
+  const canSave = !(locked || state.busy || !!reason || !!invalid || !!state.unkept);
+  const shares = state.allocation?.splitBetween
+    .map(
+      (row) =>
+        `${person(row.user)} ${row.user === userId ? 'share' : 'shares'} ${money(row.amount, state.allocation!.currency)}`,
+    )
+    .join(' · ');
+  const field = { color: theme.text, paddingVertical: 4, paddingHorizontal: 0 };
   return (
     <>
-      <CompactText variant="title" accessibilityRole="header">
-        {groupName}
-      </CompactText>
-      <Copy>
-        Review · {state.index + 1} of {state.items.length}
-        {groups > 1 ? ` · across ${groups} Groups` : ''}
-      </Copy>
-      <View
-        accessibilityRole="progressbar"
-        accessibilityLabel="Review progress"
-        accessibilityValue={{
-          min: 0,
-          max: state.items.length,
-          now: state.index,
-          text: `${state.index} done, item ${state.index + 1} of ${state.items.length}, ${state.items.length - state.index - 1} remaining`,
-        }}
-        style={{ height: 8, backgroundColor: theme.border, borderRadius: 4, flexDirection: 'row' }}
+      <RunScreen
+        title={groupName}
+        subtitle={`Review · ${state.index + 1} of ${state.items.length}${groups > 1 ? ` · across ${groups} Groups` : ''}`}
+        close={close}
+        refresh={
+          offline
+            ? undefined
+            : { onPress: () => void machine.refresh(), disabled: state.busy || state.pending }
+        }
+        progress={<RunProgress index={state.index} total={state.items.length} />}
+        bar={
+          <>
+            {state.pending ? (
+              <CompactButton
+                label="Check again"
+                block
+                disabled={offline || state.busy}
+                onPress={() => void machine.retry()}
+              />
+            ) : (
+              <CompactButton
+                label="Save expense"
+                block
+                hint={reason ?? undefined}
+                disabled={!canSave}
+                onPress={() => void machine.save()}
+              />
+            )}
+            {/* Why Save waits, under it, for anything not already said in a banner above. */}
+            {reason && !missing.length && !state.pending ? (
+              <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+                {reason}
+              </CompactText>
+            ) : null}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <CompactButton
+                label="Delete"
+                variant="text"
+                destructive
+                dense
+                disabled={locked || state.busy || !!state.unkept}
+                onPress={() => machine.deletePrompt(true)}
+              />
+              <CompactButton
+                label="Skip for now"
+                variant="text"
+                dense
+                disabled={offline || state.busy || state.pending || !!state.unkept}
+                onPress={() => void machine.skip()}
+              />
+            </View>
+          </>
+        }
       >
-        <View style={{ flex: state.index, backgroundColor: theme.positive.main }} />
-        <View style={{ flex: 1, backgroundColor: theme.brand.main }} />
-        <View style={{ flex: state.items.length - state.index - 1 }} />
-      </View>
-      <Button label="Close review" secondary onPress={close} />
-      {offline && <Copy accessibilityRole="alert">Connect to change or save this</Copy>}
-      <Card padded>
-        <View style={{ gap: 12 }}>
-          {state.changed && (
-            <Copy accessibilityRole="alert" accessibilityLiveRegion="polite">
-              {describeDraftChange(
-                state.changed.before,
-                state.changed.after,
-                Object.fromEntries([
-                  ...(members ?? []).map((member) => [member.id, person(member.id)]),
-                  ...(state.context?.tags ?? []).map((tag) => [tag.id, tag.name]),
-                ]),
-                groupCurrency,
-              )}
-            </Copy>
-          )}
-          <Copy>
-            {source} · {day} {clockTime(item.draft.createdAt)}
-          </Copy>
-          <Money numberOfLines={0}>{money(values.amount, values.currency || groupCurrency)}</Money>
-          {/* Labelled as Add expense labels them, so a filled box still says what it is (#524). */}
+        <RunSource assistant={assistant} title={sourceTitle} detail={sourceDetail} />
+        {/* The item is locked until its save is checked: this says why, as Check again waits. */}
+        {state.pending && !offline && <Banner tone="warning" standing message={reason ?? ''} />}
+        {offline && <Banner tone="offline" message="Connect to change or save this" />}
+        {state.changed && (
+          <Banner
+            tone="info"
+            standing
+            message={describeDraftChange(
+              state.changed.before,
+              state.changed.after,
+              Object.fromEntries([
+                ...(members ?? []).map((member) => [member.id, person(member.id)]),
+                ...(state.context?.tags ?? []).map((tag) => [tag.id, tag.name]),
+              ]),
+              groupCurrency,
+            )}
+          />
+        )}
+        {/* Amount and Description, as Add expense lays them out, labelled as it labels them (#524). */}
+        <Card padded>
           <View style={{ gap: 6 }}>
             <RequiredFieldLabel text="Amount" invalid={needsAmount(missing)} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -248,108 +498,139 @@ function ReviewRunContent({
                 value={typedAmount ?? form.amount}
                 editable={!locked}
                 keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={theme.textMuted}
+                selectionColor={theme.brand.main}
                 onChangeText={(amount) => {
                   setTypedAmount(amount);
                   change({ amount });
                 }}
-                style={{
-                  flex: 1,
-                  color: theme.text,
-                  padding: 12,
-                  borderColor: theme.border,
-                  borderWidth: 1,
-                }}
+                style={[
+                  field,
+                  { flex: 1, minHeight: 48, fontFamily: fonts.mono, fontSize: 32, lineHeight: 38 },
+                ]}
               />
             </View>
           </View>
+          <View
+            style={{ height: 1, backgroundColor: theme.border, marginTop: 4, marginBottom: 8 }}
+          />
           <View style={{ gap: 6 }}>
             <RequiredFieldLabel text="Description" invalid={missing.includes('what it was for')} />
-            <TextInput
-              key={`description:${state.changed?.after.revision ?? 0}`}
-              accessibilityLabel="Description"
-              value={form.description}
-              editable={!locked}
-              onChangeText={(description) => change({ description })}
-              selection={descriptionStart.selection}
-              onFocus={descriptionStart.onFocus}
-              onBlur={descriptionStart.onBlur}
-              style={{ color: theme.text, padding: 12, borderColor: theme.border, borderWidth: 1 }}
-            />
+            <View>
+              <TextInput
+                key={`description:${state.changed?.after.revision ?? 0}`}
+                accessibilityLabel="Description"
+                value={form.description}
+                editable={!locked}
+                placeholder="What was it for? e.g. Groceries"
+                placeholderTextColor={theme.textMuted}
+                selectionColor={theme.brand.main}
+                onChangeText={(description) => change({ description })}
+                selection={descriptionStart.selection}
+                onFocus={descriptionStart.onFocus}
+                onBlur={descriptionStart.onBlur}
+                style={[field, { minHeight: 48, fontFamily: fonts.regular, fontSize: 17 }]}
+              />
+            </View>
           </View>
-          {/* Another currency can only change to the Group's. */}
-          {groupCurrency && values.currency && values.currency !== groupCurrency && (
-            <Button
-              label={`Use ${groupCurrency}, the ${groupNounTitle(selected.category)}’s currency`}
-              disabled={locked}
-              onPress={() => change({ currency: groupCurrency })}
-            />
-          )}
-          <OptionalDetails draft={form} locked={locked} onChange={change} />
-          <ExpenseTiles
-            locked={locked}
-            errors={{
-              date: missing.includes('the date') ? 'Choose a date' : undefined,
-              payers: missing.includes('who paid')
-                ? 'Who paid? · Choose'
-                : missing.includes(PAID_TOTAL_NEED)
-                  ? 'Must add up to the total'
-                  : undefined,
-              // A split that is there but doesn't add up says so, not "Choose" (#506).
-              split:
-                missing.includes('who shared it') || missing.includes('how to split it')
-                  ? 'Choose who shared it and how'
-                  : missing.includes(SPLIT_TOTAL_NEED)
-                    ? 'Must add up to the total'
-                    : missing.includes(PERCENTAGE_TOTAL_NEED)
-                      ? 'Must add up to 100%'
-                      : undefined,
-              tag: missing.includes('the tag') ? 'Choose a Tag' : undefined,
-            }}
-            values={{
-              date: expenseDateLabel(form.date, controller.reviewNow()),
-              payers: values.paidBy?.length ? paidBySummary(form, person) : 'Choose',
-              split: values.splitMethod ? splitSummary(form) : 'Choose',
-              tag:
-                state.context?.tags.find((tag) => tag.id === form.tagId)?.name ??
-                values.tag ??
-                'Choose',
-            }}
-            correction={() => null}
-            section={() => () => {}}
-            onOpen={setSheet}
+        </Card>
+        {/* Another currency can only change to the Group's. */}
+        {groupCurrency && values.currency && values.currency !== groupCurrency && (
+          <CompactButton
+            label={`Use ${groupCurrency}, the ${groupNounTitle(selected.category)}’s currency`}
+            variant="tonal"
+            block
+            disabled={locked}
+            onPress={() => change({ currency: groupCurrency })}
           />
-          {state.allocation?.splitBetween.map((row) => (
-            <Copy key={row.user}>
-              {person(row.user)} {row.user === userId ? 'share' : 'shares'}{' '}
-              {money(row.amount, state.allocation!.currency)}
-            </Copy>
-          ))}
-          {!!missing.length && <Copy accessibilityRole="alert">{reason}</Copy>}
-          {missing.includes('who paid') && item.draft.preparedBy.kind === 'assistant' && (
-            <Copy>{item.draft.preparedBy.name} didn't know who paid, so it left that to you</Copy>
-          )}
-          {invalid && <Copy accessibilityRole="alert">{invalid}</Copy>}
-          {!!state.message && <Copy accessibilityRole="alert">{state.message}</Copy>}
-          {!!item.duplicates.length && (
-            <>
-              <Copy accessibilityRole="header">Possible duplicate</Copy>
+        )}
+        <ExpenseTiles
+          locked={locked}
+          errors={{
+            date: missing.includes('the date') ? 'Choose a date' : undefined,
+            payers: missing.includes('who paid')
+              ? 'Who paid? · Choose'
+              : missing.includes(PAID_TOTAL_NEED)
+                ? 'Must add up to the total'
+                : undefined,
+            // A split that is there but doesn't add up says so, not "Choose" (#506).
+            split:
+              missing.includes('who shared it') || missing.includes('how to split it')
+                ? 'Choose who shared it and how'
+                : missing.includes(SPLIT_TOTAL_NEED)
+                  ? 'Must add up to the total'
+                  : missing.includes(PERCENTAGE_TOTAL_NEED)
+                    ? 'Must add up to 100%'
+                    : undefined,
+            tag: missing.includes('the tag') ? 'Choose a Tag' : undefined,
+          }}
+          values={{
+            date: expenseDateLabel(form.date, controller.reviewNow()),
+            payers: values.paidBy?.length ? paidBySummary(form, person) : 'Choose',
+            split: values.splitMethod ? splitSummary(form) : 'Choose',
+            tag:
+              state.context?.tags.find((tag) => tag.id === form.tagId)?.name ??
+              values.tag ??
+              'Choose',
+          }}
+          correction={() => null}
+          section={() => () => {}}
+          onOpen={setSheet}
+        />
+        {shares ? (
+          <CompactText variant="caption" tone="secondary" style={{ paddingHorizontal: 2 }}>
+            {shares}
+          </CompactText>
+        ) : null}
+        <OptionalDetails draft={form} locked={locked} onChange={change} />
+        {!!missing.length && (
+          <Banner tone="warning" message={reason ?? ''}>
+            {missing.includes('who paid') && assistant ? (
+              <CompactText variant="small" tone="secondary" style={{ paddingLeft: 4 }}>
+                {assistant} didn't know who paid, so it left that to you
+              </CompactText>
+            ) : null}
+          </Banner>
+        )}
+        {invalid && <Banner tone="error" message={invalid} />}
+        {!!state.message && <Banner tone="error" message={state.message} />}
+        {!!item.duplicates.length && (
+          <Banner
+            tone="warning"
+            standing
+            heading
+            title="Possible duplicate"
+            message="Save it only if it's a different expense."
+          >
+            <View style={{ flex: 1, gap: 6, marginLeft: 4 }}>
               {item.duplicates.map((duplicate) => (
-                <View key={duplicate.id} style={{ gap: 4 }}>
-                  <Copy>{duplicate.description}</Copy>
+                <View
+                  key={duplicate.id}
+                  style={{
+                    gap: 2,
+                    padding: 10,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: theme.surface,
+                  }}
+                >
+                  <CompactText weight="semibold">{duplicate.description}</CompactText>
                   {state.matches
                     .filter((expense) => expense._id === duplicate.id)
                     .map((expense) => (
-                      <View key={expense._id}>
-                        <Copy>
+                      <View key={expense._id} style={{ gap: 1 }}>
+                        <CompactText variant="caption" tone="secondary">
                           {recentDay(expenseLocalDate(expense.date))} ·{' '}
                           {money(expense.amount, expense.currency)}
-                        </Copy>
-                        <Copy>
+                        </CompactText>
+                        <CompactText variant="caption" tone="secondary">
                           Added by{' '}
                           {expense.createdBy && typeof expense.createdBy === 'object'
                             ? (expense.createdBy.name ?? 'Group member')
                             : name(expense.createdBy ?? '')}
-                        </Copy>
+                        </CompactText>
                       </View>
                     ))}
                 </View>
@@ -360,63 +641,49 @@ function ReviewRunContent({
                 accessibilityState={{ checked: state.acknowledged, disabled: locked }}
                 disabled={locked}
                 onPress={machine.acknowledge}
+                hitSlop={denseHitSlop}
                 style={{
-                  minHeight: 48,
-                  padding: 12,
-                  borderColor: state.acknowledged ? theme.brand.main : theme.border,
-                  borderWidth: 2,
+                  minHeight: touch.dense,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
                 }}
               >
-                <Copy>
-                  {state.acknowledged ? '✓ ' : ''}It's a different expense, save it anyway
-                </Copy>
+                <View
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    borderWidth: 2,
+                    borderColor: state.acknowledged ? theme.brand.main : theme.borderStrong,
+                    backgroundColor: state.acknowledged ? theme.brand.main : 'transparent',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {state.acknowledged ? (
+                    <Icon name="checkmark" size={16} color={theme.brand.contrastText} />
+                  ) : null}
+                </View>
+                <CompactText variant="small" weight="medium" style={{ flex: 1 }}>
+                  It's a different expense, save it anyway
+                </CompactText>
               </Pressable>
-            </>
-          )}
-          {state.unkept && (
-            <Button
+            </View>
+          </Banner>
+        )}
+        {state.unkept && (
+          <Banner tone="warning" standing message="Your latest changes have not been kept.">
+            <CompactButton
               label="Keep my changes"
+              variant="text"
+              dense
               disabled={offline || state.busy || state.pending}
               onPress={() => void machine.retryChange()}
             />
-          )}
-          {state.pending ? (
-            <Button
-              label="Check again"
-              disabled={offline || state.busy}
-              onPress={() => void machine.retry()}
-            />
-          ) : (
-            <Button
-              label="Save expense"
-              hint={reason ?? undefined}
-              disabled={locked || state.busy || !!reason || !!invalid || !!state.unkept}
-              onPress={() => void machine.save()}
-            />
-          )}
-          {reason && !missing.length && <Copy>{reason}</Copy>}
-          <Button
-            label="Delete"
-            secondary
-            disabled={locked || state.busy || !!state.unkept}
-            onPress={() => machine.deletePrompt(true)}
-          />
-          <Button
-            label="Skip for now"
-            secondary
-            disabled={offline || state.busy || state.pending || !!state.unkept}
-            onPress={() => void machine.skip()}
-          />
-          {!offline && (
-            <Button
-              label="Check latest details"
-              secondary
-              disabled={state.busy || state.pending}
-              onPress={() => void machine.refresh()}
-            />
-          )}
-        </View>
-      </Card>
+          </Banner>
+        )}
+      </RunScreen>
       {sheet === 'date' && (
         <DateSheet
           visible
@@ -473,9 +740,27 @@ function ReviewRunContent({
           onDone={() => machine.deletePrompt(false)}
           doneLabel="Keep item"
           dismissible={!state.busy}
+          footer={
+            <CompactButton
+              label="Delete item"
+              destructive
+              block
+              disabled={locked}
+              onPress={() => void machine.delete()}
+            />
+          }
         >
-          <Copy>It was never saved, so nothing in {groupName} changes. You can't undo this.</Copy>
-          <Button label="Delete item" disabled={locked} onPress={() => void machine.delete()} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <CompactText weight="semibold" style={{ flex: 1 }} numberOfLines={2}>
+              {values.description || 'Expense to review'}
+            </CompactText>
+            <Money numberOfLines={0}>
+              {money(values.amount, values.currency || groupCurrency)}
+            </Money>
+          </View>
+          <CompactText>
+            It was never saved, so nothing in {groupName} changes. You can't undo this.
+          </CompactText>
         </BottomSheet>
       )}
     </>
