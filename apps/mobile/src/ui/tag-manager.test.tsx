@@ -10,20 +10,23 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import type { MobileFetch } from '../data/types';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import type { TagCommand } from '@splitbook/shared/tag-management';
 import { AccessibilityInfo } from 'react-native';
-import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import {
   findHosts,
   flatten,
   hairSpace,
   labelRuns,
   largeTextWindows,
+  layoutHeight,
+  layoutWidth,
   unreadText,
 } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
-import { ThemeContext } from './theme';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 import { TagManager, doneShownFor } from './tag-manager';
+import { ThemeContext } from './theme';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -845,3 +848,183 @@ describe.each(['light', 'dark'] as const)('a long Tag at large text in %s (#639)
     },
   );
 });
+
+/**
+ * This phone, whose stores outlive the app as SQLite and SecureStore do (#638): Alex signs in
+ * online and may open Tags, then the app starts again without a connection.
+ */
+function coldPhone() {
+  let cookie: string | null = null,
+    owner: string | null = null,
+    identity: unknown = null,
+    offline = false;
+  const cache = new Map<string, unknown>();
+  const savedQueries = savedQueriesIn(cache);
+  const tagRequests = memoryRecords();
+  const boot = () =>
+    createMobileController(
+      {
+        apiBaseUrl: 'http://tags.example.test',
+        authOrigin: 'http://tags.example.test',
+        developmentPersonaEnabled: true,
+      },
+      {
+        fetch: async (url, init) => {
+          if (offline) throw new TypeError('Network request failed');
+          return fetch(url, init);
+        },
+        tagRequests,
+        savedQueries,
+        newSubmissionKey: () => crypto.randomUUID(),
+        offlineIdentity: {
+          load: async () => structuredClone(identity),
+          save: async (next) => {
+            identity = structuredClone(next);
+          },
+          clear: async () => {
+            identity = null;
+          },
+        },
+        accountLocal: {
+          owner: {
+            load: async () => owner,
+            save: async (next) => {
+              owner = next;
+            },
+            clear: async () => {
+              owner = null;
+            },
+          },
+          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
+          stores: [tagRequests, savedQueries],
+        },
+        credentials: {
+          load: async () => cookie,
+          save: async (next) => {
+            cookie = next;
+          },
+          clear: async () => {
+            cookie = null;
+          },
+        },
+      },
+    );
+  return {
+    boot,
+    /** Whether this phone keeps Harbour Flat's Tags. */
+    keepsTags: () => cache.has(`${alex.id}/api/groups/${groupId}/tag-actions`),
+    /** The app is closed and started again, without a connection. */
+    async restartOffline() {
+      act(() => renderer?.unmount());
+      renderer = undefined;
+      controller?.dispose();
+      offline = true;
+      controller = boot();
+      await controller.restore();
+      expect(controller.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated' },
+        offline: { active: true },
+      });
+    },
+  };
+}
+
+/** Tags at 130% text on a 360dp phone, in light or dark, as the app shows it now. */
+async function showTagsIn(mode: 'light' | 'dark') {
+  views = [];
+  measured = [];
+  setWindow({ width: 360, height: 780, fontScale: 1.3 });
+  const offline = controller!.getSnapshot().offline.active;
+  act(() => {
+    renderer = create(
+      <ThemeContext.Provider value={getSemanticTokens(mode)}>
+        {tagsScreen(offline)}
+      </ThemeContext.Provider>,
+      nativeViews(),
+    );
+  });
+  await settle();
+}
+
+/** The content's width on a 360dp phone: its 16dp padding each side. */
+const room = 360 - 32;
+/** The laid-out text node that says exactly this, a pill's hair space aside. */
+const textHost = (text: string) =>
+  findHosts(renderer!.toJSON() as ReactTestRendererJSON, (_props, type) => type === 'Text').find(
+    (node) => (node.children ?? []).join('').replace(hairSpace, '') === text,
+  );
+
+describe.each(['light', 'dark'] as const)(
+  'Tags after a cold offline start, at 130 percent text in %s (#638)',
+  (mode) => {
+    it('lists the saved Tags read only, with when they were saved, and never a load error', async () => {
+      const phone = coldPhone();
+      controller = phone.boot();
+      await controller.signIn('alex');
+      await showTagsIn(mode);
+      expect(screenText()).toContain(longName);
+      await vi.waitFor(() => expect(phone.keepsTags()).toBe(true));
+      await phone.restartOffline();
+      await showTagsIn(mode);
+      // The banner's promise is kept: the saved Tags are listed, Active then Archived.
+      expect(screenText()).toContain(
+        'You’re offline. You can see the Tags; changing them needs a connection.',
+      );
+      expect(screenText()).toContain(longName);
+      expect(screenText()).toContain('Old rent');
+      expect(screenText()).toContain('Harbour Flat · 1 active');
+      // This phone's copy says so, with its time, as every saved Group screen does.
+      const status = screenText()
+        .split('\n')
+        .map((line) => line.replace(hairSpace, ''))
+        .find((line) => line.startsWith('Saved '));
+      expect(status, 'a "Saved …" status').toBeDefined();
+      expect(screenText()).not.toMatch(/^Updated /m);
+      // Never the load error, nor a refresh to retry, beside the promise.
+      expect(screenText()).not.toContain('The Tags couldn’t be loaded.');
+      expect(screenText()).not.toContain('Couldn’t refresh the Tags');
+      expect(screenText()).not.toContain('Not available offline');
+      expect(offered('Try again')).toBe(false);
+      // Nothing can be changed offline.
+      expect(offered('New Tag')).toBe(false);
+      expect(rowOffered(`${longName}, active. Opens`)).toBe(false);
+      // The status stays on one line inside the content at 130%: nothing is cut off.
+      const badge = textHost(status!)!;
+      expect(layoutWidth(badge, 1.3)).toBeLessThanOrEqual(room);
+      expect(layoutHeight(badge, 1.3, room)).toBe(layoutHeight(badge, 1.3));
+    });
+
+    it('says the Tags aren’t saved on this phone, without the banner’s promise or a load error', async () => {
+      const phone = coldPhone();
+      controller = phone.boot();
+      await controller.signIn('alex');
+      await phone.restartOffline();
+      await showTagsIn(mode);
+      expect(screenText()).toContain('Not available offline');
+      expect(screenText()).toContain(
+        'This Group’s Tags aren’t saved on this phone. Connect to load them.',
+      );
+      // Neither the promise that they can be seen, nor a load failure, nor an empty list.
+      expect(screenText()).not.toContain('You can see the Tags');
+      expect(screenText()).not.toContain('The Tags couldn’t be loaded.');
+      const headings = renderer!.root
+        .findAll(
+          (node: ReactTestInstance) =>
+            String(node.type) === 'Text' && node.props.accessibilityRole === 'header',
+        )
+        .map((node) => [node.props.children].flat().join(''));
+      expect(headings).toContain('Not available offline');
+      expect(headings.filter((heading) => /^(Active|Archived)\b/.test(heading))).toEqual([]);
+      expect(screenText()).not.toContain('No active Tags');
+      expect(offered('New Tag')).toBe(false);
+      // Its message wraps inside the card at 130%, beside the card's icon, never past its edge.
+      const message = textHost(
+        'This Group’s Tags aren’t saved on this phone. Connect to load them.',
+      )!;
+      expect(layoutWidth(message, 1.3)).toBeGreaterThan(room - 52);
+      expect(layoutHeight(message, 1.3, room - 52)).toBeGreaterThan(layoutHeight(message, 1.3));
+      // Try again reads the Tags again, and nothing else.
+      expect(labelled('Try again').props.disabled).toBeFalsy();
+    });
+  },
+);
