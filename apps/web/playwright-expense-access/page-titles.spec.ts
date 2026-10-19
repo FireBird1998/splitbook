@@ -1,7 +1,7 @@
 import { test, expect, dataOf } from './fixtures';
 
 test('page titles identify Home, Settings and every Group tab', async ({ page, ledger }) => {
-  // Nine full document loads share this journey, including cold Group tabs.
+  // Ten full document loads share this journey, including cold Group tabs.
   test.slow();
   await page.context().addCookies((await ledger.alex.storageState()).cookies);
   const base = process.env.EXPENSE_ACCESS_BASE_URL!;
@@ -10,6 +10,7 @@ test('page titles identify Home, Settings and every Group tab', async ({ page, l
     ['/dashboard', 'Home'],
     ['/settings', 'Settings'],
     [`/groups/${ledger.groupA}`, group.name],
+    [`/groups/${ledger.groupA}/review`, `${group.name} · To review`],
     ...['expenses', 'balances', 'insights', 'activity', 'members', 'settings'].map((tab) => [
       `/groups/${ledger.groupA}/${tab}`,
       tab === 'expenses' ? group.name : `${group.name} · ${tab[0].toUpperCase()}${tab.slice(1)}`,

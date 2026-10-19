@@ -1,4 +1,4 @@
-import { groupPageMetadata } from '@/lib/group-page-metadata';
+import { groupTabMetadata } from '@/lib/group-page-metadata';
 import { GroupBalancesTab } from '@/components/groups/GroupTabPanels';
 
 export default function GroupBalancesPage() {
@@ -6,5 +6,5 @@ export default function GroupBalancesPage() {
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  return groupPageMetadata(params, 'Balances');
+  return groupTabMetadata(params, 'balances');
 }

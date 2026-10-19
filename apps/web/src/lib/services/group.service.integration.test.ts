@@ -295,3 +295,27 @@ describe('GroupService integration', () => {
     });
   });
 });
+
+it('title reads return only the name to a current Group member', async () => {
+  const group = await createTrip();
+  const id = String(group._id);
+  expect(await groupService.getMemberName(id, alice)).toEqual({ name: 'QA Trip' });
+  expect(await groupService.getMemberName(id, bob)).toBeNull();
+  await groupService.addMember(id, bob);
+  expect(await groupService.getMemberName(id, bob)).toEqual({ name: 'QA Trip' });
+  await groupService.removeMember(id, bob, alice);
+  expect(await groupService.getMemberName(id, bob)).toBeNull();
+});
+
+it('invitation title reads return only the name for active unexpired invitations', async () => {
+  const group = await createTrip();
+  const id = String(group._id);
+  const invite = await groupService.generateInviteCode(id, alice);
+  expect(await groupService.getInviteName(invite!.inviteCode)).toEqual({ name: 'QA Trip' });
+  expect(await groupService.getInviteName('not-a-code')).toBeNull();
+  await groupService.archive(id, alice);
+  expect(await groupService.getInviteName(invite!.inviteCode)).toBeNull();
+  const other = await createTrip();
+  const expired = await groupService.generateInviteCode(String(other._id), alice, -1);
+  expect(await groupService.getInviteName(expired!.inviteCode)).toBeNull();
+});

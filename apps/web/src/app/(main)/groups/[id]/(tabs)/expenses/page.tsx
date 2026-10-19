@@ -1,4 +1,4 @@
-import { groupPageMetadata } from '@/lib/group-page-metadata';
+import { groupTabMetadata } from '@/lib/group-page-metadata';
 import GroupExpensesTab from '@/components/groups/GroupExpensesTab';
 import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
 
@@ -8,5 +8,5 @@ export default function GroupExpensesPage() {
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  return groupPageMetadata(params);
+  return groupTabMetadata(params, 'expenses');
 }
