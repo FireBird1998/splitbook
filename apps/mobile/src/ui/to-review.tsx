@@ -1,6 +1,6 @@
 import { ReviewRunOverlay } from './review-run';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
+import { Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import {
@@ -17,9 +17,25 @@ import {
 } from '@splitbook/shared/to-review-quick-fixes';
 import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
-import { BottomSheet, Card, CompactText, Money, Snackbar } from './compact';
+import {
+  Banner,
+  BottomSheet,
+  Card,
+  CompactButton,
+  CompactText,
+  Divider,
+  IconButton,
+  IconTile,
+  ListRow,
+  Money,
+  SectionHeader,
+  Snackbar,
+  SummaryStats,
+  TopBar,
+} from './compact';
 import { useDismissAfter } from './group-snackbar';
-import { Copy } from './primitives';
+import { groupIcon } from './group-icon';
+import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
@@ -28,49 +44,8 @@ import { recentDay } from './day-format';
 const offlineMessage =
   "You're offline. What Claude prepared and what you set aside show up when you're back online";
 const unconfirmedMessage = "We didn't hear back, so it may already be saved";
-
-/** Review actions wrap at large text sizes; their touch target has no fixed height. */
-function Button({
-  label,
-  accessibilityLabel = label,
-  secondary = false,
-  disabled = false,
-  onPress,
-}: {
-  label: string;
-  accessibilityLabel?: string;
-  secondary?: boolean;
-  disabled?: boolean;
-  onPress(): void;
-}) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        minHeight: 48,
-        padding: 12,
-        borderRadius: 12,
-        backgroundColor: secondary ? theme.brand.bg : theme.brand.main,
-        opacity: disabled ? 0.5 : pressed ? 0.75 : 1,
-      })}
-    >
-      <CompactText
-        style={{
-          textAlign: 'center',
-          fontFamily: fonts.semibold,
-          color: secondary ? theme.brand.main : theme.brand.contrastText,
-        }}
-      >
-        {label}
-      </CompactText>
-    </Pressable>
-  );
-}
+/** A list row's leading tile and its gap, so dividers and follow-on lines start under the text. */
+const rowInset = 66;
 
 /** Backend errors are translated at the presentation boundary, never used as decisions. */
 function memberMessage(message: string) {
@@ -94,17 +69,62 @@ function sourceLabel(item: ReviewItemModel) {
   const source = item.accountItem?.draft.preparedBy;
   return source?.kind === 'assistant' ? `Prepared by ${source.name}` : 'Set aside by you';
 }
+
+/**
+ * Where an item came from, at the start of its row: the assistant's initials, a bookmark for
+ * one the member set aside, a phone for one only on this phone.
+ */
+function SourceTile({ item }: { item: ReviewItemModel }) {
+  const theme = useTheme();
+  const source = item.accountItem?.draft.preparedBy;
+  if (source?.kind === 'assistant')
+    return (
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 12,
+          backgroundColor: theme.text,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <CompactText weight="semibold" maxFontSizeMultiplier={1.3} style={{ color: theme.bg }}>
+          {source.name.slice(0, 2)}
+        </CompactText>
+      </View>
+    );
+  if (item.id.startsWith('save:')) return <IconTile icon="alert-circle-outline" tone="warning" />;
+  if (item.deviceItem) return <IconTile icon="phone-portrait-outline" tone="neutral" />;
+  return <IconTile icon="bookmark-outline" />;
+}
+
 /** `label` replaces the Needs line when chips already ask for some facts (#439); null hides it. */
-function ItemDetails({
+function ItemRow({
   item,
   label = item.label,
   currency,
+  groupName,
+  trailing,
+  onPress,
+  accessibilityLabel,
+  disabled = false,
 }: {
   item: ReviewItemModel;
   label?: string | null;
   /** The Group's currency. */
   currency?: string;
+  /** Said under an item only on this phone, where the list spans Groups. */
+  groupName?: string;
+  /** In place of the amount, such as "Continue". */
+  trailing?: string;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+  disabled?: boolean;
 }) {
+  const theme = useTheme();
   const values = item.accountItem?.draft.values ?? item.deviceItem?.values;
   // An item in your account says what it needs once, in its Needs line, so a missing fact leaves
   // its place empty here rather than saying it again (#435).
@@ -116,22 +136,58 @@ function ItemDetails({
         ? null
         : 'Date needed';
   const amount = amountLabel(values, currency);
-  return (
-    <View style={{ gap: 4 }}>
-      <CompactText weight="semibold">
-        {values?.description || (needs ? 'Expense to review' : 'Description needed')}
-      </CompactText>
-      {!(needs && amount === 'Amount needed') && <Money numberOfLines={0}>{amount}</Money>}
-      <CompactText variant="caption" tone="secondary">
-        {sourceLabel(item)}
-        {date ? ` · ${date}` : ''}
-      </CompactText>
-      {item.state !== 'on-this-phone' && label && (
-        <CompactText variant="caption" tone={item.state === 'ready' ? 'positive' : 'warning'}>
-          {label}
+  const content = (
+    <>
+      <SourceTile item={item} />
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <CompactText weight="semibold" numberOfLines={2}>
+          {values?.description || (needs ? 'Expense to review' : 'Description needed')}
         </CompactText>
-      )}
-    </View>
+        <CompactText variant="caption" tone="secondary">
+          {sourceLabel(item)}
+          {date ? ` · ${date}` : ''}
+          {groupName ? ` · ${groupName}` : ''}
+        </CompactText>
+        {item.state !== 'on-this-phone' && label && (
+          <CompactText variant="caption" tone={item.state === 'ready' ? 'positive' : 'warning'}>
+            {label}
+          </CompactText>
+        )}
+      </View>
+      <View style={{ alignItems: 'flex-end', gap: 1, maxWidth: '40%' }}>
+        {!(needs && amount === 'Amount needed') && <Money numberOfLines={0}>{amount}</Money>}
+        {trailing ? (
+          <CompactText variant="small" weight="semibold" tone="brand">
+            {trailing}
+          </CompactText>
+        ) : null}
+      </View>
+    </>
+  );
+  const row = {
+    minHeight: 60,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+  };
+  if (!onPress) return <View style={row}>{content}</View>;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        row,
+        pressed && { backgroundColor: theme.surfaceMuted },
+        disabled && { opacity: 0.5 },
+      ]}
+    >
+      {content}
+    </Pressable>
   );
 }
 function useReviewSnapshot(controller: MobileController) {
@@ -147,40 +203,33 @@ function useReviewSnapshot(controller: MobileController) {
     sameSelection,
   );
 }
+/** An unfinished Expense only on this phone, or a save still waiting for its reply. */
 function PhoneItem({
   item,
   controller,
   disabled = false,
+  showGroup = false,
 }: {
   item: ReviewItemModel;
   controller: MobileController;
   disabled?: boolean;
+  /** Home lists items from every Group, so each says which. */
+  showGroup?: boolean;
 }) {
   const draft = controller.getSnapshot().drafts.find((entry) => entry.groupId === item.groupId);
   const retainedSave = item.id.startsWith('save:');
+  const unconfirmed = retainedSave || !!draft?.unconfirmed;
   return (
-    <View style={{ gap: 8 }}>
-      {retainedSave ? (
-        <CompactText weight="semibold">
-          {item.deviceItem?.values.description || 'Save awaiting confirmation'}
-        </CompactText>
-      ) : (
-        <ItemDetails item={item} />
-      )}
-      <CompactText variant="caption" tone="secondary">
-        {item.deviceItem?.groupName}
-      </CompactText>
-      {(retainedSave || draft?.unconfirmed) && (
-        <CompactText tone="warning">{unconfirmedMessage}</CompactText>
-      )}
-      <Button
-        label={retainedSave ? 'Check again' : 'Continue'}
+    <View>
+      <ItemRow
+        item={item}
+        groupName={showGroup ? item.deviceItem?.groupName : undefined}
+        trailing={retainedSave ? 'Check again' : 'Continue'}
         accessibilityLabel={
           retainedSave
             ? 'Check again'
             : `Continue ${item.deviceItem?.values.description || 'unfinished expense'}`
         }
-        secondary
         disabled={disabled || (!retainedSave && !draft)}
         onPress={() => {
           if (retainedSave) {
@@ -192,10 +241,23 @@ function PhoneItem({
           void controller.openExpense(draft.groupId, draft.expenseId ?? undefined);
         }}
       />
+      {unconfirmed && (
+        <CompactText
+          variant="caption"
+          tone="warning"
+          style={{ paddingLeft: rowInset, paddingRight: 14, paddingBottom: 8 }}
+        >
+          {unconfirmedMessage}
+        </CompactText>
+      )}
     </View>
   );
 }
 
+/**
+ * Home's To review card: one row per Group with a count, then anything only on this phone, then
+ * the run across every Group. Outlined in the brand colour: it's the one thing waiting for you.
+ */
 export function ToReviewHomeCard({
   controller,
   disabled = false,
@@ -213,108 +275,147 @@ export function ToReviewHomeCard({
     !state.toReview.recoveryMessage
   )
     return null;
+  const phoneItems = model.items
+    .filter((item) => item.deviceItem)
+    .sort(
+      (a, b) =>
+        Number(
+          b.id.startsWith('save:') ||
+            !!state.drafts.find((draft) => draft.groupId === b.groupId)?.unconfirmed,
+        ) -
+        Number(
+          a.id.startsWith('save:') ||
+            !!state.drafts.find((draft) => draft.groupId === a.groupId)?.unconfirmed,
+        ),
+    );
+  const accountCount = model.items.filter((item) => item.accountItem).length;
+  const groups = state.offline ? [] : model.groups;
   return (
-    <Card padded>
-      <View style={{ gap: 12 }}>
-        <CompactText accessibilityRole="header" variant="title">
+    <View
+      style={{
+        backgroundColor: theme.surface,
+        borderRadius: 14,
+        borderWidth: 2,
+        borderColor: theme.brand.main,
+        overflow: 'hidden',
+      }}
+    >
+      <View
+        style={{
+          minHeight: 32,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          paddingTop: 10,
+          paddingHorizontal: 14,
+        }}
+      >
+        <CompactText variant="overline" tone="brand" accessibilityRole="header">
           To review · {model.counts.total}
         </CompactText>
         <CompactText variant="caption" tone="secondary">
           Only you see these
         </CompactText>
-        {state.toReview.recoveryMessage && (
-          <>
-            <Copy accessibilityRole="alert">{memberMessage(state.toReview.recoveryMessage)}</Copy>
-            <Button
-              label="Check this phone again"
-              secondary
-              disabled={disabled}
-              onPress={() => void controller.refreshToReview()}
-            />
-          </>
-        )}
-        {state.offline ? (
-          <Copy>{offlineMessage}</Copy>
-        ) : state.toReview.status === 'idle' || state.toReview.status === 'loading' ? (
-          <Copy accessibilityLiveRegion="polite">Checking what’s waiting…</Copy>
-        ) : state.toReview.status === 'error' ? (
-          <>
-            <Copy>{memberMessage(state.toReview.message ?? 'Couldn’t check what’s waiting.')}</Copy>
-            <Button
-              label="Try again"
-              secondary
-              disabled={disabled}
-              onPress={() => void controller.refreshToReview()}
-            />
-          </>
-        ) : null}
-        {!state.offline &&
-          model.groups.map((group) => (
-            <Pressable
-              key={group.groupId}
-              accessibilityRole="button"
-              accessibilityLabel={`${group.groupName}, ${group.counts.total} to review`}
-              accessibilityState={{ disabled }}
-              disabled={disabled}
-              onPress={() => void controller.openToReview(group.groupId)}
-              style={{
-                minHeight: 48,
-                paddingVertical: 10,
-                gap: 6,
-                borderBottomWidth: 1,
-                borderColor: theme.border,
-              }}
+      </View>
+      {(state.toReview.recoveryMessage ||
+        state.offline ||
+        state.toReview.status === 'error' ||
+        state.toReview.status === 'idle' ||
+        state.toReview.status === 'loading') && (
+        <View style={{ gap: 8, paddingHorizontal: 14, paddingTop: 8 }}>
+          {state.toReview.recoveryMessage && (
+            <Banner tone="warning" message={memberMessage(state.toReview.recoveryMessage)}>
+              <CompactButton
+                label="Check this phone again"
+                variant="text"
+                dense
+                disabled={disabled}
+                onPress={() => void controller.refreshToReview()}
+              />
+            </Banner>
+          )}
+          {state.offline ? (
+            <Banner tone="offline" message={`${offlineMessage}.`} />
+          ) : state.toReview.status === 'idle' || state.toReview.status === 'loading' ? (
+            <CompactText variant="small" tone="secondary" accessibilityLiveRegion="polite">
+              Checking what’s waiting…
+            </CompactText>
+          ) : state.toReview.status === 'error' ? (
+            <Banner
+              tone="error"
+              message={memberMessage(state.toReview.message ?? 'Couldn’t check what’s waiting.')}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-                <CompactText weight="semibold" style={{ flex: 1 }}>
-                  {group.groupName}
-                </CompactText>
+              <CompactButton
+                label="Try again"
+                variant="text"
+                dense
+                disabled={disabled}
+                onPress={() => void controller.refreshToReview()}
+              />
+            </Banner>
+          ) : null}
+        </View>
+      )}
+      <View style={{ paddingTop: 4 }}>
+        {groups.map((group, index) => (
+          <View key={group.groupId}>
+            {index > 0 && <Divider inset={rowInset} />}
+            <ListRow
+              leading={<IconTile icon={groupIcon(group.category)} />}
+              title={group.groupName}
+              meta={group.sourceSummary || undefined}
+              trailing={
                 <View
                   style={{
-                    borderRadius: 10,
-                    paddingHorizontal: 10,
-                    paddingVertical: 2,
-                    backgroundColor: theme.brand.bg,
+                    minWidth: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    paddingHorizontal: 8,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: theme.brand.main,
                   }}
                 >
-                  <CompactText tone="brand">{group.counts.total}</CompactText>
+                  <CompactText
+                    variant="small"
+                    weight="semibold"
+                    maxFontSizeMultiplier={1.3}
+                    style={{ color: theme.brand.contrastText }}
+                  >
+                    {group.counts.total}
+                  </CompactText>
                 </View>
-              </View>
-              {!!group.sourceSummary && (
-                <CompactText variant="caption" tone="secondary">
-                  {group.sourceSummary}
-                </CompactText>
-              )}
-            </Pressable>
-          ))}
-        {model.items
-          .filter((item) => item.deviceItem)
-          .sort(
-            (a, b) =>
-              Number(
-                b.id.startsWith('save:') ||
-                  !!state.drafts.find((draft) => draft.groupId === b.groupId)?.unconfirmed,
-              ) -
-              Number(
-                a.id.startsWith('save:') ||
-                  !!state.drafts.find((draft) => draft.groupId === a.groupId)?.unconfirmed,
-              ),
-          )
-          .map((item) => (
-            <PhoneItem key={item.id} item={item} controller={controller} disabled={disabled} />
-          ))}
-        {model.items.some((item) => item.accountItem) && !state.offline && (
-          <Button
-            label={`Review ${model.items.filter((item) => item.accountItem).length}, one at a time`}
+              }
+              accessibilityLabel={`${group.groupName}, ${group.counts.total} to review`}
+              onPress={disabled ? undefined : () => void controller.openToReview(group.groupId)}
+            />
+          </View>
+        ))}
+        {phoneItems.map((item, index) => (
+          <View key={item.id}>
+            {(groups.length > 0 || index > 0) && <Divider inset={rowInset} />}
+            <PhoneItem item={item} controller={controller} disabled={disabled} showGroup />
+          </View>
+        ))}
+      </View>
+      {accountCount > 0 && !state.offline ? (
+        <View style={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 14 }}>
+          <CompactButton
+            label={`Review ${accountCount}, one at a time`}
+            block
             disabled={disabled}
             onPress={() => void controller.startReviewRun()}
           />
-        )}
-      </View>
-    </Card>
+        </View>
+      ) : (
+        <View style={{ height: 8 }} />
+      )}
+    </View>
   );
 }
 
+/** A Group's To review bar, above its Expenses: what's waiting, in one row that opens the list. */
 export function ToReviewGroupBanner({
   controller,
   groupId,
@@ -323,20 +424,60 @@ export function ToReviewGroupBanner({
   groupId: string;
 }) {
   const state = useReviewSnapshot(controller);
+  const theme = useTheme();
   const model = controller.toReviewModel(groupId);
   const group = model.groups[0];
   if (!group) return null;
+  const summary = [group.bannerSummary, state.offline ? 'On this phone' : null]
+    .filter(Boolean)
+    .join(' · ');
   return (
-    <Card padded>
-      <View style={{ gap: 8 }}>
-        <CompactText accessibilityRole="header" weight="semibold">
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${group.counts.total} to review in ${group.groupName}${summary ? `: ${summary}` : ''}. Review`}
+      onPress={() => void controller.openToReview(groupId)}
+      style={({ pressed }) => ({
+        minHeight: 64,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 10,
+        paddingLeft: 12,
+        paddingRight: 8,
+        borderRadius: 14,
+        backgroundColor: theme.brand.bg,
+        opacity: pressed ? 0.8 : 1,
+      })}
+    >
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 12,
+          backgroundColor: theme.brand.main,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Icon name="file-tray-outline" size={20} color={theme.brand.contrastText} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <CompactText weight="semibold" accessibilityRole="header">
           {group.counts.total} to review
         </CompactText>
-        {!!group.bannerSummary && <CompactText tone="secondary">{group.bannerSummary}</CompactText>}
-        {state.offline && <CompactText tone="secondary">On this phone</CompactText>}
-        <Button label="Review" secondary onPress={() => void controller.openToReview(groupId)} />
+        {summary ? (
+          <CompactText variant="caption" tone="secondary" numberOfLines={2}>
+            {summary}
+          </CompactText>
+        ) : null}
       </View>
-    </Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingRight: 4 }}>
+        <CompactText variant="small" weight="semibold" tone="brand">
+          Review
+        </CompactText>
+        <Icon name="chevron-forward" size={18} color={theme.brand.main} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -378,10 +519,10 @@ function QuickChip({
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => ({
-        minHeight: 48,
+        minHeight: 44,
         paddingHorizontal: 14,
         justifyContent: 'center',
-        borderRadius: 8,
+        borderRadius: 12,
         borderWidth: 1,
         borderStyle: more ? 'dashed' : 'solid',
         borderColor: suggested ? theme.brand.main : theme.borderStrong,
@@ -390,6 +531,7 @@ function QuickChip({
       })}
     >
       <CompactText
+        variant="small"
         style={{
           fontFamily: suggested ? fonts.semibold : fonts.medium,
           color: suggested ? theme.brand.main : more ? theme.textSecondary : theme.text,
@@ -401,7 +543,7 @@ function QuickChip({
   );
 }
 
-/** An item in your account: its open control, quick fixes, Save or Fix the rest, and ⋮. */
+/** An item in your account: its row opens it; quick fixes, Save or Fix the rest, and ⋮ follow. */
 function AccountRow({
   item,
   currency,
@@ -412,7 +554,7 @@ function AccountRow({
   onFill,
   onMore,
   onSave,
-  onDelete,
+  onMenu,
 }: {
   item: ReviewItemModel;
   /** The Group's currency. */
@@ -424,9 +566,8 @@ function AccountRow({
   onFill(fact: QuickFixFact, option: string): void;
   onMore(fact: QuickFixFact): void;
   onSave(): void;
-  onDelete(): void;
+  onMenu(): void;
 }) {
-  const theme = useTheme();
   const title = item.accountItem?.draft.values?.description || 'Expense to review';
   const fixes = quick?.fixes ?? [];
   const still = quick?.stillNeeds ?? [];
@@ -436,117 +577,102 @@ function AccountRow({
       ? `Still needs ${still.join(', ')}`
       : null
     : item.label;
-  const confirmDelete = () =>
-    Alert.alert('Delete this item?', 'This can’t be undone. Nothing in the Group changes.', [
-      { text: 'Keep item', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: onDelete },
-    ]);
+  const problems = memberProblems(item, names);
+  const duplicates = item.accountItem?.duplicates ?? [];
   return (
-    <>
-      <Pressable
-        accessibilityRole="button"
+    <View>
+      <ItemRow
+        item={item}
+        label={label}
+        currency={currency}
         accessibilityLabel={`Review ${item.accountItem?.draft.values?.description || 'expense details'}`}
-        accessibilityState={{ disabled }}
         disabled={disabled}
-        style={{ minHeight: 48, paddingVertical: 4 }}
         onPress={onOpen}
-      >
-        <ItemDetails item={item} label={label} currency={currency} />
-        {quick?.summary ? <CompactText variant="caption">{quick.summary}</CompactText> : null}
-      </Pressable>
-      {fixes.map((fix) => (
-        <View
-          key={fix.fact}
-          accessibilityLabel={`${fix.fact === 'paidBy' ? 'Who paid for' : 'Tag for'} ${title}`}
-          style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}
-        >
-          <CompactText weight="semibold" style={{ width: '100%' }}>
-            {fix.question}
+      />
+      <View style={{ paddingLeft: rowInset, paddingRight: 8, paddingBottom: 8, gap: 8 }}>
+        {quick?.summary ? (
+          <CompactText variant="caption" tone="secondary">
+            {quick.summary}
           </CompactText>
-          {fix.visible.map((option) => (
-            <QuickChip
-              key={option.id}
-              label={option.label}
-              accessibilityLabel={option.suggested ? `${option.label}, suggested` : option.label}
-              suggested={option.suggested}
+        ) : null}
+        {fixes.map((fix) => (
+          <View
+            key={fix.fact}
+            accessibilityLabel={`${fix.fact === 'paidBy' ? 'Who paid for' : 'Tag for'} ${title}`}
+            style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}
+          >
+            <CompactText variant="small" weight="semibold" style={{ width: '100%' }}>
+              {fix.question}
+            </CompactText>
+            {fix.visible.map((option) => (
+              <QuickChip
+                key={option.id}
+                label={option.label}
+                accessibilityLabel={option.suggested ? `${option.label}, suggested` : option.label}
+                suggested={option.suggested}
+                disabled={disabled}
+                onPress={() => onFill(fix.fact, option.id)}
+              />
+            ))}
+            {fix.hasMore && (
+              <QuickChip
+                label="More…"
+                accessibilityLabel={`More ${fix.fact === 'paidBy' ? 'people' : 'Tags'} for ${title}`}
+                more
+                disabled={disabled}
+                onPress={() => onMore(fix.fact)}
+              />
+            )}
+          </View>
+        ))}
+        {problems.map((problem) => (
+          <CompactText key={problem} variant="caption" tone="warning">
+            {problem}
+          </CompactText>
+        ))}
+        {duplicates.map((duplicate, index) => (
+          <CompactText key={index} variant="caption" tone="warning">
+            May match {duplicate.description}
+          </CompactText>
+        ))}
+        <View
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          {item.state === 'ready' && (
+            <CompactButton
+              label="Save"
+              accessibilityLabel={`Save ${title}`}
+              variant="tonal"
+              dense
               disabled={disabled}
-              onPress={() => onFill(fix.fact, option.id)}
-            />
-          ))}
-          {fix.hasMore && (
-            <QuickChip
-              label="More…"
-              accessibilityLabel={`More ${fix.fact === 'paidBy' ? 'people' : 'Tags'} for ${title}`}
-              more
-              disabled={disabled}
-              onPress={() => onMore(fix.fact)}
+              onPress={onSave}
             />
           )}
+          {item.state === 'needs-details' && fixes.length > 0 && still.length > 0 && (
+            <CompactButton
+              label="Fix the rest"
+              accessibilityLabel={`Fix the rest of ${title}`}
+              variant="tonal"
+              dense
+              disabled={disabled}
+              onPress={onOpen}
+            />
+          )}
+          <IconButton
+            icon="ellipsis-vertical"
+            label={`More for ${title}`}
+            disabled={disabled}
+            onPress={onMenu}
+          />
         </View>
-      ))}
-      {memberProblems(item, names).map((problem) => (
-        <CompactText key={problem} tone="warning">
-          {problem}
-        </CompactText>
-      ))}
-      {item.accountItem?.duplicates.map((duplicate, index) => (
-        <CompactText key={index} tone="warning">
-          May match {duplicate.description}
-        </CompactText>
-      ))}
-      <View
-        style={{
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
-        {item.state === 'ready' && (
-          <Button
-            label="Save"
-            accessibilityLabel={`Save ${title}`}
-            secondary
-            disabled={disabled}
-            onPress={onSave}
-          />
-        )}
-        {item.state === 'needs-details' && fixes.length > 0 && still.length > 0 && (
-          <Button
-            label="Fix the rest"
-            accessibilityLabel={`Fix the rest of ${title}`}
-            secondary
-            disabled={disabled}
-            onPress={onOpen}
-          />
-        )}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`More for ${title}`}
-          accessibilityState={{ disabled }}
-          disabled={disabled}
-          onPress={() =>
-            Alert.alert(title, undefined, [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Open', onPress: onOpen },
-              { text: 'Delete', style: 'destructive', onPress: confirmDelete },
-            ])
-          }
-          style={({ pressed }) => ({
-            width: 48,
-            height: 48,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: disabled ? 0.5 : pressed ? 0.75 : 1,
-          })}
-        >
-          <CompactText style={{ fontFamily: fonts.bold, fontSize: 20, color: theme.textSecondary }}>
-            ⋮
-          </CompactText>
-        </Pressable>
       </View>
-    </>
+    </View>
   );
 }
 
@@ -570,6 +696,25 @@ function PayerNotice({
       bottom={16}
       action={notice.undo ? { label: 'Undo', onPress: onUndo } : undefined}
     />
+  );
+}
+
+/** A line in a confirm or results sheet: what it is, and its amount at the end. */
+function SheetLine({ title, detail, amount }: { title: string; detail?: string; amount?: string }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 }}>
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <CompactText weight="semibold" numberOfLines={2}>
+          {title}
+        </CompactText>
+        {detail ? (
+          <CompactText variant="caption" tone="secondary">
+            {detail}
+          </CompactText>
+        ) : null}
+      </View>
+      {amount ? <Money numberOfLines={0}>{amount}</Money> : null}
+    </View>
   );
 }
 
@@ -636,124 +781,210 @@ export function ToReviewList({
   };
   const [more, setMore] = useState<{ item: ReviewItemModel; fact: QuickFixFact } | null>(null);
   const moreFix = more ? quickFor(more.item)?.fixes.find((fix) => fix.fact === more.fact) : null;
+  // An item's ⋮ options, then its delete confirmation: sheets, as the rest of the app has.
+  const [menu, setMenu] = useState<{ item: ReviewItemModel; confirm: boolean } | null>(null);
+  const menuTitle = menu?.item.accountItem?.draft.values?.description || 'Expense to review';
   const payers = quickContext ? bulkPayerItems(model.items) : [];
   const close = () => {
     if (!collection.busy) controller.closeToReview();
   };
+  const loaded = model.counts.total === 0 && state.toReview.status === 'ready' && !state.offline;
+  const name = (id: string) =>
+    id === state.auth.user?.id
+      ? 'You'
+      : (collection.context?.group.members.find((member) => member.user.id === id)?.user.name ??
+        'Group member');
   return (
     <Modal visible animationType="slide" onRequestClose={close}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+        <TopBar
+          title="To review"
+          subtitle={`${groupName} · ${
+            model.counts.total === 0
+              ? 'nothing waiting'
+              : `${model.counts.total} ${model.counts.total === 1 ? 'item' : 'items'}`
+          }`}
+          prominent={false}
+          leading={{
+            kind: 'back',
+            label: 'Close To review',
+            onPress: close,
+            disabled: collection.busy,
+          }}
+          actions={
+            <IconButton
+              icon="refresh-outline"
+              label="Refresh items"
+              disabled={collection.busy || state.offline}
+              onPress={() => void controller.refreshToReview()}
+            />
+          }
+        />
         <ScrollView
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => {
+                if (!collection.busy && !state.offline) void controller.refreshToReview();
+              }}
+              tintColor={theme.brand.main}
+              colors={[theme.brand.main]}
+            />
+          }
           contentContainerStyle={{
-            padding: 16,
-            gap: 16,
+            paddingHorizontal: 16,
+            paddingTop: 4,
+            gap: 12,
             // Room for the payer notice, so it never covers the last item.
             paddingBottom: collection.notice ? 112 : 32,
           }}
         >
-          <CompactText accessibilityRole="header" variant="title">
-            To review
-          </CompactText>
-          <CompactText weight="semibold">{groupName}</CompactText>
-          <Button label="Close To review" secondary disabled={collection.busy} onPress={close} />
-          <Copy>Only you see these. Balances stay the same until you save.</Copy>
           {unavailable ? (
-            <Copy accessibilityRole="alert">
-              This Group isn’t available. You may no longer be a member of this Group.
-            </Copy>
+            <Banner
+              tone="error"
+              message="This Group isn’t available. You may no longer be a member of this Group."
+            />
+          ) : loaded ? (
+            <View style={{ alignItems: 'center', gap: 10, paddingTop: 72, paddingHorizontal: 12 }}>
+              <View
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 20,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: theme.positive.bg,
+                }}
+              >
+                <Icon name="checkmark" size={30} color={theme.status.positive} />
+              </View>
+              <CompactText variant="title" accessibilityRole="header">
+                All caught up
+              </CompactText>
+              <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
+                Nothing is waiting in {groupName}. When Claude prepares expenses, or you choose
+                Finish later, they appear here.
+              </CompactText>
+              <CompactButton label="Back to Expenses" variant="tonal" onPress={close} />
+            </View>
           ) : (
             <>
-              {state.offline && <Copy>{offlineMessage}</Copy>}
+              <CompactText variant="small" tone="secondary" style={{ paddingHorizontal: 2 }}>
+                Only you see these. Balances stay the same until you save.
+              </CompactText>
+              {state.offline && <Banner tone="offline" message={`${offlineMessage}.`} />}
               {state.toReview.recoveryMessage && (
-                <>
-                  <Copy accessibilityRole="alert">
-                    {memberMessage(state.toReview.recoveryMessage)}
-                  </Copy>
-                  <Button
+                <Banner tone="warning" message={memberMessage(state.toReview.recoveryMessage)}>
+                  <CompactButton
                     label="Check this phone again"
-                    secondary
+                    variant="text"
+                    dense
                     disabled={collection.busy}
                     onPress={() => void controller.refreshToReview()}
                   />
-                </>
+                </Banner>
               )}
               {!!collection.message && (
-                <Copy accessibilityRole="alert">{memberMessage(collection.message)}</Copy>
+                <Banner tone="error" message={memberMessage(collection.message)} />
               )}
               {collection.pending && (
-                <View style={{ gap: 8 }}>
-                  <Copy>{unconfirmedMessage}</Copy>
-                  <Button
+                <Banner tone="warning" standing message={unconfirmedMessage}>
+                  <CompactButton
                     label="Check again"
+                    variant="text"
+                    dense
                     disabled={collection.busy || state.offline}
                     onPress={() => void client.retry()}
                   />
-                </View>
+                </Banner>
               )}
               {state.toReview.status === 'loading' && !state.offline && (
-                <Copy accessibilityLiveRegion="polite">Checking what’s waiting…</Copy>
+                <CompactText
+                  variant="small"
+                  tone="secondary"
+                  accessibilityLiveRegion="polite"
+                  style={{ paddingHorizontal: 2 }}
+                >
+                  Checking what’s waiting…
+                </CompactText>
               )}
               {state.toReview.status === 'error' && !state.offline && (
-                <Copy accessibilityRole="alert">
-                  {memberMessage(state.toReview.message ?? 'Couldn’t load your items. Try again.')}
-                </Copy>
+                <Banner
+                  tone="error"
+                  message={memberMessage(
+                    state.toReview.message ?? 'Couldn’t load your items. Try again.',
+                  )}
+                />
               )}
-              <CompactText tone="secondary">
-                {model.counts.ready} ready · {model.counts.needsDetails} needs details ·{' '}
-                {model.counts.onThisPhone} on this phone
-              </CompactText>
-              <Button
-                label={model.ready.label}
-                disabled={disabled || model.ready.count === 0}
-                onPress={() => void client.reviewReady(model.ready.items, own?.currency)}
-              />
-              <Button
-                label="Review one at a time"
-                secondary
-                disabled={disabled || !model.items.some((item) => item.accountItem)}
-                onPress={() => void controller.startReviewRun(groupId)}
-              />
-              <Button
-                label="Refresh items"
-                secondary
-                disabled={collection.busy || state.offline}
-                onPress={() => void controller.refreshToReview()}
-              />
-              {model.counts.total === 0 && state.toReview.status === 'ready' && !state.offline && (
-                <Copy accessibilityRole="header">All caught up</Copy>
-              )}
+              <Card>
+                <SummaryStats
+                  stats={[
+                    {
+                      value: String(model.counts.ready),
+                      label: 'ready to save',
+                      tone: 'positive',
+                    },
+                    {
+                      value: String(model.counts.needsDetails),
+                      label: 'needs details',
+                      tone: 'warning',
+                    },
+                    {
+                      value: String(model.counts.onThisPhone),
+                      label: 'on this phone',
+                      tone: 'secondary',
+                    },
+                  ]}
+                />
+                <View style={{ gap: 8, paddingHorizontal: 14, paddingBottom: 14 }}>
+                  <CompactButton
+                    label={model.ready.label}
+                    block
+                    disabled={disabled || model.ready.count === 0}
+                    onPress={() => void client.reviewReady(model.ready.items, own?.currency)}
+                  />
+                  <CompactButton
+                    label="Review one at a time"
+                    variant="tonal"
+                    block
+                    disabled={disabled || !model.items.some((item) => item.accountItem)}
+                    onPress={() => void controller.startReviewRun(groupId)}
+                  />
+                </View>
+              </Card>
               {sections.map(([kind, label]) => {
                 const items = model.items.filter((item) => item.state === kind);
                 if (!items.length) return null;
                 return (
-                  <View key={kind} style={{ gap: 10 }}>
-                    <CompactText accessibilityRole="header" weight="semibold">
-                      {label}
-                    </CompactText>
+                  <View key={kind} style={{ gap: 6 }}>
+                    <SectionHeader title={`${label} · ${items.length}`} />
                     {kind === 'needs-details' && payers.length >= 2 && (
-                      <Card padded>
-                        <View style={{ gap: 10 }}>
-                          <Copy>Who paid? {payers.length} items still need a payer.</Copy>
-                          <Button
-                            label={`You for all ${payers.length}`}
-                            secondary
-                            disabled={disabled}
-                            onPress={() =>
-                              void client.payAll(
-                                payers.flatMap((item) =>
-                                  item.accountItem ? [item.accountItem.draft] : [],
-                                ),
-                                viewerId,
-                              )
-                            }
-                          />
-                        </View>
-                      </Card>
+                      <Banner
+                        tone="info"
+                        title="Who paid?"
+                        message={`${payers.length} items still need a payer.`}
+                      >
+                        <CompactButton
+                          label={`You for all ${payers.length}`}
+                          variant="text"
+                          dense
+                          disabled={disabled}
+                          onPress={() =>
+                            void client.payAll(
+                              payers.flatMap((item) =>
+                                item.accountItem ? [item.accountItem.draft] : [],
+                              ),
+                              viewerId,
+                            )
+                          }
+                        />
+                      </Banner>
                     )}
-                    {items.map((item) => (
-                      <Card key={item.id} padded>
-                        <View style={{ gap: 10 }}>
+                    <Card>
+                      {items.map((item, index) => (
+                        <View key={item.id}>
+                          {index > 0 && <Divider inset={rowInset} />}
                           {item.deviceItem ? (
                             <PhoneItem
                               item={item}
@@ -773,14 +1004,12 @@ export function ToReviewList({
                               onSave={() => {
                                 if (item.accountItem) void client.saveOne(item.accountItem);
                               }}
-                              onDelete={() => {
-                                if (item.accountItem) void client.discard(item.accountItem.draft);
-                              }}
+                              onMenu={() => setMenu({ item, confirm: false })}
                             />
                           )}
                         </View>
-                      </Card>
-                    ))}
+                      ))}
+                    </Card>
                   </View>
                 );
               })}
@@ -831,75 +1060,168 @@ export function ToReviewList({
                   )}
                 </Pressable>
               ))}
-              <Copy>Choosing keeps it on this item. Nothing is saved as an expense.</Copy>
+              <CompactText variant="small" tone="secondary">
+                Choosing keeps it on this item. Nothing is saved as an expense.
+              </CompactText>
             </View>
+          </BottomSheet>
+        )}
+        {menu && (
+          <BottomSheet
+            visible
+            title={menu.confirm ? 'Delete this item?' : menuTitle}
+            subtitle={menu.confirm ? undefined : sourceLabel(menu.item)}
+            onDone={() => setMenu(null)}
+            doneLabel={menu.confirm ? 'Keep item' : 'Close'}
+            dismissLabel={menu.confirm ? 'Keep item' : `Close ${menuTitle}`}
+            dismissible={!collection.busy}
+            footer={
+              menu.confirm ? (
+                <CompactButton
+                  label="Delete"
+                  accessibilityLabel={`Delete ${menuTitle}`}
+                  destructive
+                  block
+                  disabled={disabled}
+                  onPress={() => {
+                    const draft = menu.item.accountItem?.draft;
+                    setMenu(null);
+                    if (draft) void client.discard(draft);
+                  }}
+                />
+              ) : undefined
+            }
+          >
+            {menu.confirm ? (
+              <>
+                <SheetLine
+                  title={menuTitle}
+                  amount={amountLabel(menu.item.accountItem?.draft.values, own?.currency)}
+                />
+                <CompactText>
+                  It was never saved, so nothing in {groupName} changes. You can’t undo this.
+                </CompactText>
+              </>
+            ) : (
+              <Card>
+                <ListRow
+                  leading={<IconTile icon="open-outline" />}
+                  title="Open"
+                  meta="Review it with every detail"
+                  onPress={() => {
+                    const item = menu.item;
+                    setMenu(null);
+                    openItem(item);
+                  }}
+                />
+                <Divider inset={rowInset} />
+                <ListRow
+                  leading={<IconTile icon="trash-outline" tone="warning" />}
+                  title="Delete"
+                  meta="Remove it from To review"
+                  onPress={() => setMenu({ item: menu.item, confirm: true })}
+                />
+              </Card>
+            )}
           </BottomSheet>
         )}
         <BottomSheet
           visible={!!collection.confirmation}
-          title="Save ready expenses?"
+          title={
+            collection.confirmation
+              ? `Save ${collection.confirmation.items.length} ${collection.confirmation.items.length === 1 ? 'expense' : 'expenses'}?`
+              : 'Save ready expenses?'
+          }
           subtitle={groupName}
           onDone={() => client.cancelReview()}
           doneLabel="Cancel"
           dismissible={!collection.busy}
+          footer={
+            collection.confirmation ? (
+              <CompactButton
+                label={`Confirm ${collection.confirmation.label.toLowerCase()}`}
+                block
+                disabled={disabled}
+                onPress={() => void client.save()}
+              />
+            ) : undefined
+          }
         >
-          <View style={{ gap: 12 }}>
-            {collection.confirmation?.items.map((item) => (
-              <View key={item.draft.id} style={{ gap: 4 }}>
-                <Copy>{item.draft.values?.description || 'Expense'}</Copy>
-                <Money numberOfLines={0}>{amountLabel(item.draft.values, own?.currency)}</Money>
-                <CompactText tone="secondary">
-                  {item.draft.preparedBy.kind === 'assistant'
+          {collection.confirmation ? (
+            <View>
+              {collection.confirmation.items.map((item, index) => {
+                const allocation = collection.reviews.find(
+                  (review) => review.draft.id === item.draft.id,
+                )?.allocation;
+                const detail = [
+                  item.draft.values?.date
+                    ? recentDay(expenseLocalDate(item.draft.values.date))
+                    : null,
+                  item.draft.preparedBy.kind === 'assistant'
                     ? `Prepared by ${item.draft.preparedBy.name}`
-                    : 'Set aside by you'}
-                </CompactText>
-                {item.draft.values?.date && (
-                  <Copy>{recentDay(expenseLocalDate(item.draft.values.date))}</Copy>
-                )}
-                {collection.reviews.find((review) => review.draft.id === item.draft.id)
-                  ?.allocation &&
-                  (() => {
-                    const allocation = collection.reviews.find(
-                      (review) => review.draft.id === item.draft.id,
-                    )!.allocation!;
-                    // The signed-in member is "You", as on Add expense (#434).
-                    const isYou = (id: string) => id === state.auth.user?.id;
-                    const name = (id: string) =>
-                      isYou(id)
-                        ? 'You'
-                        : (collection.context?.group.members.find((member) => member.user.id === id)
-                            ?.user.name ?? 'Group member');
-                    return (
-                      <View style={{ gap: 4 }}>
+                    : 'Set aside by you',
+                ]
+                  .filter(Boolean)
+                  .join(' · ');
+                return (
+                  <View key={item.draft.id}>
+                    {index > 0 && <Divider inset={0} />}
+                    <SheetLine
+                      title={item.draft.values?.description || 'Expense'}
+                      detail={detail}
+                      amount={amountLabel(item.draft.values, own?.currency)}
+                    />
+                    {allocation && (
+                      // The signed-in member is "You", as on Add expense (#434).
+                      <View style={{ gap: 2, paddingBottom: 8 }}>
                         {allocation.paidBy.map((row) => (
-                          <Copy key={`paid:${row.user}`}>
+                          <CompactText key={`paid:${row.user}`} variant="caption" tone="secondary">
                             {name(row.user)} paid {formatCurrency(row.amount, allocation.currency)}
-                          </Copy>
+                          </CompactText>
                         ))}
                         {allocation.splitBetween.map((row) => (
-                          <Copy key={`shared:${row.user}`}>
-                            {name(row.user)} {isYou(row.user) ? 'share' : 'shares'}{' '}
+                          <CompactText
+                            key={`shared:${row.user}`}
+                            variant="caption"
+                            tone="secondary"
+                          >
+                            {name(row.user)} {row.user === state.auth.user?.id ? 'share' : 'shares'}{' '}
                             {formatCurrency(row.amount, allocation.currency)}
-                          </Copy>
+                          </CompactText>
                         ))}
                       </View>
-                    );
-                  })()}
+                    )}
+                  </View>
+                );
+              })}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: theme.borderStrong,
+                  marginTop: 4,
+                  paddingTop: 10,
+                }}
+              >
+                <CompactText weight="semibold" accessibilityRole="header">
+                  Total
+                </CompactText>
+                <View style={{ alignItems: 'flex-end' }}>
+                  {collection.confirmation.totals.map((total) => (
+                    <Money key={total.currency} numberOfLines={0}>
+                      {total.formatted}
+                    </Money>
+                  ))}
+                </View>
               </View>
-            ))}
-            <Copy accessibilityRole="header">Total</Copy>
-            {collection.confirmation?.totals.map((total) => (
-              <Money key={total.currency} numberOfLines={0}>
-                {total.formatted}
-              </Money>
-            ))}
-            <Copy>Balances there will change for everyone</Copy>
-            <Button
-              label={`Confirm ${collection.confirmation?.label.toLowerCase() ?? 'save'}`}
-              disabled={disabled}
-              onPress={() => void client.save()}
-            />
-          </View>
+              <CompactText variant="small" tone="secondary" style={{ paddingTop: 12 }}>
+                Balances there will change for everyone
+              </CompactText>
+            </View>
+          ) : null}
         </BottomSheet>
         <BottomSheet
           visible={collection.resultsVisible}
@@ -907,52 +1229,80 @@ export function ToReviewList({
           subtitle={results.label || 'Check each item below'}
           onDone={() => client.closeResults()}
           dismissible={!collection.busy}
-        >
-          <View style={{ gap: 12 }}>
-            {collection.outcomes.map((outcome) => {
-              const name = collection.outcomeNames[outcome.id] || 'Expense';
-              return (
-                <View
-                  key={outcome.id}
-                  style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}
-                >
-                  <View style={{ flex: 1, minWidth: 160, gap: 4 }}>
-                    <Copy>{name}</Copy>
-                    <CompactText tone={outcome.status === 'saved' ? 'positive' : 'warning'}>
-                      {outcome.status === 'saved'
-                        ? 'Saved'
-                        : outcome.status === 'unresolved'
-                          ? unconfirmedMessage
-                          : /changed|revision|version|stale|conflict/i.test(outcome.message)
-                            ? 'Changed since you checked'
-                            : `Couldn’t save: ${memberMessage(outcome.message)}`}
-                    </CompactText>
-                  </View>
-                  {/* A saved item opens as the Expense it became, as on the web (#439). */}
-                  {outcome.status === 'saved' && (
-                    <Button
-                      label="View"
-                      accessibilityLabel={`View ${name}`}
-                      secondary
-                      disabled={collection.busy}
-                      onPress={() => {
-                        client.closeResults();
-                        controller.closeToReview();
-                        void controller.openExpense(groupId, outcome.expenseId);
-                      }}
-                    />
-                  )}
-                </View>
-              );
-            })}
-            {(collection.pending ||
-              collection.outcomes.some((outcome) => outcome.status === 'unresolved')) && (
-              <Button
+          footer={
+            collection.pending ||
+            collection.outcomes.some((outcome) => outcome.status === 'unresolved') ? (
+              <CompactButton
                 label="Check again"
+                block
                 disabled={collection.busy || state.offline}
                 onPress={() => void client.retry()}
               />
-            )}
+            ) : undefined
+          }
+        >
+          <View>
+            {collection.outcomes.map((outcome, index) => {
+              const outcomeName = collection.outcomeNames[outcome.id] || 'Expense';
+              const saved = outcome.status === 'saved';
+              return (
+                <View key={outcome.id}>
+                  {index > 0 && <Divider inset={40} />}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      paddingVertical: 10,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: saved ? theme.positive.bg : theme.warning.bg,
+                      }}
+                    >
+                      <Icon
+                        name={saved ? 'checkmark' : 'alert-outline'}
+                        size={16}
+                        color={saved ? theme.status.positive : theme.status.warning}
+                      />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                      <CompactText weight="semibold">{outcomeName}</CompactText>
+                      <CompactText variant="small" tone={saved ? 'positive' : 'warning'}>
+                        {saved
+                          ? 'Saved'
+                          : outcome.status === 'unresolved'
+                            ? unconfirmedMessage
+                            : /changed|revision|version|stale|conflict/i.test(outcome.message)
+                              ? 'Changed since you checked'
+                              : `Couldn’t save: ${memberMessage(outcome.message)}`}
+                      </CompactText>
+                    </View>
+                    {/* A saved item opens as the Expense it became, as on the web (#439). */}
+                    {saved && (
+                      <CompactButton
+                        label="View"
+                        accessibilityLabel={`View ${outcomeName}`}
+                        variant="tonal"
+                        dense
+                        disabled={collection.busy}
+                        onPress={() => {
+                          client.closeResults();
+                          controller.closeToReview();
+                          void controller.openExpense(groupId, outcome.expenseId);
+                        }}
+                      />
+                    )}
+                  </View>
+                </View>
+              );
+            })}
           </View>
         </BottomSheet>
       </SafeAreaView>

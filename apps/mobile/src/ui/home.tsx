@@ -4,7 +4,6 @@ import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { getMoneyTone } from '@splitbook/shared/money';
-import type { GroupCategory } from '@splitbook/shared/types';
 import type {
   ExpenseDraftSummary,
   HomeCurrencyBalance,
@@ -36,17 +35,10 @@ import {
 } from './compact';
 import { readTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
-import type { IconName } from './primitives';
 import { fonts, useTheme } from './theme';
 import { brandLogo, brandLogoSize } from './brand-logo';
+import { groupThemeIcons } from './group-icon';
 
-const themeIcons: Record<GroupCategory, IconName> = {
-  home: 'home-outline',
-  trip: 'airplane-outline',
-  work: 'briefcase-outline',
-  couple: 'heart-outline',
-  other: 'people-outline',
-};
 /** Leading icon tile (40) plus the row's padding and gap, so dividers start under the text. */
 const rowInset = 66;
 
@@ -446,12 +438,15 @@ export function balanceWidth(fontScale: number) {
 const GroupRow = memo(function GroupRow({
   group,
   balances,
+  toReview = 0,
   pending,
   width,
   onOpen,
   disabled,
 }: {
   group: MobileGroup;
+  /** What waits in To review for this Group, said after its members. */
+  toReview?: number;
   /** Undefined while the member's balance in this Group is unknown. */
   balances: HomeGroupBalance[] | undefined;
   /** Home's figures are being read: an unknown balance keeps its place until they land. */
@@ -467,13 +462,14 @@ const GroupRow = memo(function GroupRow({
     descriptor.label,
     descriptor.dates === 'bounded' ? tripDates(group) : null,
     `${count} ${count === 1 ? 'member' : 'members'}`,
+    toReview ? `${toReview} to review` : null,
   ]
     .filter(Boolean)
     .join(' · ');
   const position = balances && groupPosition(balances);
   return (
     <ListRow
-      leading={<IconTile icon={themeIcons[descriptor.id]} />}
+      leading={<IconTile icon={groupThemeIcons[descriptor.id]} />}
       title={group.name}
       meta={meta}
       trailingLoading={pending && !balances}
@@ -529,6 +525,7 @@ function NoGroups({ onRefresh }: { onRefresh: () => void }) {
 export const HomeGroups = memo(function HomeGroups({
   groups,
   byGroup,
+  toReview,
   balancesPending = false,
   newGroupLabel,
   offline = false,
@@ -539,6 +536,8 @@ export const HomeGroups = memo(function HomeGroups({
 }: {
   groups: MobileSnapshot['groups'];
   byGroup: HomeFinancialState['byGroup'];
+  /** Each Group's count in To review, by its id. */
+  toReview?: Record<string, number>;
   balancesPending?: boolean;
   newGroupLabel: string;
   offline?: boolean;
@@ -595,6 +594,7 @@ export const HomeGroups = memo(function HomeGroups({
               <GroupRow
                 group={group}
                 balances={byGroup[group.id]}
+                toReview={toReview?.[group.id]}
                 pending={balancesPending}
                 width={width}
                 onOpen={onOpen}

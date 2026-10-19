@@ -460,6 +460,58 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     await tap(home, 'Review 4, one at a time');
     expect(f.controller.getSnapshot().toReview.run?.items[0].groupId).toBe(groupId);
   });
+  it('lays the list out as its board: a top bar, a summary card and counted sections (#646)', async () => {
+    const f = fixture();
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    // A top bar, its title "To review" over the Group and its count, with back as an arrow.
+    const close = button(list, 'Close To review');
+    expect(
+      close.findAll(
+        (node) => String(node.type) === 'Text' && node.children.includes('Close To review'),
+      ),
+      'an icon, not a text button',
+    ).toHaveLength(0);
+    expect(text(list)).toContain('Maple House · 4 items');
+    // The three counts in a card, then Save and Review one at a time, full width.
+    for (const label of ['ready to save', 'needs details', 'on this phone'])
+      expect(text(list)).toContain(label);
+    expect(button(list, 'Save 2 ready').props.style({ pressed: false }).alignSelf).toBe('stretch');
+    // Each section says how many it holds.
+    expect(text(list)).toMatch(/Ready · \d/);
+  });
+  it('shows Home’s card and the Group’s bar as their boards (#646)', async () => {
+    const f = fixture();
+    await signIn(f);
+    await act(async () => {
+      await f.controller.refreshToReview();
+    });
+    const home = await render(<ToReviewHomeCard controller={f.controller} />, mode);
+    // The heading is the brand-coloured overline label, not a large title.
+    const heading = home.root.find(
+      (node) => String(node.type) === 'Text' && node.props.accessibilityRole === 'header',
+    );
+    expect(heading.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ textTransform: 'uppercase' })]),
+    );
+    expect(button(home, 'Review 4, one at a time').props.style({ pressed: false }).alignSelf).toBe(
+      'stretch',
+    );
+    // The Group's bar is one row that opens the list, ending "Review ›": no button inside it.
+    const banner = await render(
+      <ToReviewGroupBanner controller={f.controller} groupId={groupId} />,
+      mode,
+    );
+    expect(button(banner, 'Review')).toBeUndefined();
+    const bar = banner.root.findAll(
+      (node) =>
+        String(node.type) === 'Pressable' &&
+        String(node.props.accessibilityLabel).startsWith('4 to review in Maple House'),
+    );
+    expect(bar).toHaveLength(1);
+    await tap(banner, bar[0]!.props.accessibilityLabel);
+    expect(f.controller.getSnapshot().toReview.groupId).toBe(groupId);
+  });
   it('shows an item’s day as it is, in a zone behind UTC (#437)', () =>
     inTimeZone('Pacific/Pago_Pago', async () => {
       const f = fixture();
@@ -469,7 +521,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       expect(text(list)).toContain('Prepared by Claude · Today');
       expect(text(list)).not.toContain('Yesterday');
       await tap(list, 'Save 2 ready');
-      expect(text(list)).toContain('Save ready expenses?');
+      expect(text(list)).toContain('Save 2 expenses?');
       expect(text(list)).not.toContain('Yesterday');
     }));
   it('dates an older item day first, on a US phone too (#640)', async () => {
@@ -487,7 +539,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     await signIn(f);
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     await tap(list, 'Save 2 ready');
-    expect(text(list)).toContain('Save ready expenses?');
+    expect(text(list)).toContain('Save 2 expenses?');
     expect(text(list)).toContain('₹12.34');
     expect(text(list)).not.toContain('Some items changed');
   });
@@ -529,8 +581,10 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     const home = await render(<ToReviewHomeCard controller={f.controller} />, mode);
     expect(home.toJSON()).toBeNull();
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    // The board's empty state: a check, what appears here, and the way back; nothing to save.
     expect(text(list)).toContain('All caught up');
-    expect(button(list, 'Save 0 ready').props.disabled).toBe(true);
+    expect(button(list, 'Save 0 ready')).toBeUndefined();
+    expect(button(list, 'Back to Expenses')).toBeDefined();
   });
   it('opens a tapped item in the guided review, never a raw editor (#435)', async () => {
     const f = fixture();
@@ -999,23 +1053,19 @@ describe('To review quick fixes on Android (#439)', () => {
       'paidBy',
     );
   });
-  it('⋮ offers Open and Delete, and Delete asks first', async () => {
+  it('⋮ offers Open and Delete in a sheet, and Delete asks first', async () => {
     const f = fixture();
     await signIn(f);
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     await tap(list, 'More for Fare');
-    const [title, , choices] = vi.mocked(Alert.alert).mock.lastCall!;
-    expect(title).toBe('Fare');
-    expect(choices!.map((choice) => choice.text)).toEqual(['Cancel', 'Open', 'Delete']);
-    await act(async () => {
-      choices![2].onPress!();
-    });
-    const [confirm, , buttons] = vi.mocked(Alert.alert).mock.lastCall!;
-    expect(confirm).toBe('Delete this item?');
+    // A sheet titled with the item, as the app's other options are; never a stock dialog.
+    expect(vi.mocked(Alert.alert)).not.toHaveBeenCalled();
+    expect(text(list)).toContain('Fare');
+    expect(button(list, 'Open, Review it with every detail')).toBeDefined();
+    await tap(list, 'Delete, Remove it from To review');
+    expect(text(list)).toContain('Delete this item?');
     expect(f.deletes).toEqual([]);
-    await act(async () => {
-      buttons!.find((choice) => choice.text === 'Delete')!.onPress!();
-    });
+    await tap(list, 'Delete Fare');
     await settle();
     expect(f.deletes).toEqual([fare]);
   });

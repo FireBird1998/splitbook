@@ -389,6 +389,15 @@ const text = (tree: ReactTestRenderer) =>
         .join(''),
     )
     .join('\n');
+/** The end of a run's counts, each a row read as one, such as "Saved 1". */
+const tally = (tree: ReactTestRenderer) =>
+  tree.root
+    .findAll(
+      (node) =>
+        typeof node.type === 'string' && node.props.accessible && !!node.props.accessibilityLabel,
+    )
+    .map((node) => String(node.props.accessibilityLabel))
+    .join('\n');
 const button = (tree: ReactTestRenderer, label: string) =>
   tree.root.findAll(
     (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label,
@@ -444,9 +453,9 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(f.committed.size).toBe(1);
     expect(f.saves[1]).toBe(f.saves[0]);
     expect(text(tree)).toContain('Done for now');
-    expect(text(tree)).toContain('Saved 1');
-    expect(text(tree)).toContain('Deleted 0');
-    expect(text(tree)).toContain('Left for later 0');
+    expect(tally(tree)).toContain('Saved 1');
+    expect(tally(tree)).toContain('Deleted 0');
+    expect(tally(tree)).toContain('Left for later 0');
     await tap(tree, 'Done');
     expect(tree.toJSON()).toBeNull();
   });
@@ -466,7 +475,8 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       await f.controller.startReviewRun();
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
-    expect(text(tree)).toContain('You set this aside · Finish later · today');
+    expect(text(tree)).toContain('You set this aside');
+    expect(text(tree)).toContain('Finish later · today');
     expect(button(tree, 'Save expense').props.disabled).toBe(false);
     await tap(tree, 'Save expense');
     expect(
@@ -490,9 +500,9 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       "It was never saved, so nothing in Maple House changes. You can't undo this.",
     );
     await tap(tree, 'Delete item');
-    expect(text(tree)).toContain('Saved 2');
-    expect(text(tree)).toContain('Deleted 1');
-    expect(text(tree)).toContain('Left for later 1');
+    expect(tally(tree)).toContain('Saved 2');
+    expect(tally(tree)).toContain('Deleted 1');
+    expect(tally(tree)).toContain('Left for later 1');
   });
   it('is read-only offline and Close returns to the Group list that started it', async () => {
     const f = fixture();
@@ -534,7 +544,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(button(tree, 'Save expense').props.disabled).toBe(false);
     await tap(tree, 'Save expense');
     expect(f.saves).toHaveLength(1);
-    expect(text(tree)).toContain('Saved 1');
+    expect(tally(tree)).toContain('Saved 1');
   });
   it('labels Amount and Description above their boxes as Add expense does (#524)', async () => {
     const f = fixture({ one: true });
@@ -637,7 +647,34 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(text(tree)).toContain('You ₹12.34');
     expect(text(tree)).not.toMatch(/Alex (shares|₹)/);
   });
-  it('shows an amount with too many decimals as entered in its header (#537)', async () => {
+  it('pins Save, a red Delete and Skip in a bar under the item, and confirms Delete in red (#646)', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    const outsideScroll = (label: string) => {
+      let node = button(tree, label).parent;
+      while (node && String(node.type) !== 'ScrollView') node = node.parent;
+      return node === null;
+    };
+    for (const label of ['Save expense', 'Delete', 'Skip for now'])
+      expect(outsideScroll(label), label).toBe(true);
+    const theme = getSemanticTokens(mode);
+    const words = (label: string) =>
+      button(tree, label).find((node) => String(node.type) === 'Text').props.style;
+    expect(words('Delete')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ color: theme.status.negative })]),
+    );
+    // The amount shows once: in its box.
+    expect(text(tree)).not.toContain('₹12.34');
+    await tap(tree, 'Delete');
+    expect(button(tree, 'Delete item').props.style({ pressed: false }).backgroundColor).toBe(
+      theme.status.negative,
+    );
+  });
+  it('shows an amount with too many decimals as entered, once, in its box (#537)', async () => {
     const f = fixture({ one: true });
     f.items()[0].draft.values!.amount = 10.555;
     await signIn(f);
@@ -645,7 +682,10 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       await f.controller.startReviewRun();
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
-    expect(text(tree)).toContain('₹10.555');
+    const amount = tree.root.find(
+      (node) => String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Amount',
+    );
+    expect(amount.props.value).toBe('10.555');
     for (const shown of ['₹10.56', 'Amount needed']) expect(text(tree)).not.toContain(shown);
   });
   it('keeps a correction with the existing payer sheet and labels every control', async () => {
@@ -720,14 +760,18 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
           node.props.accessibilityLabel === 'Currency INR, the Group’s currency',
       ),
     ).toHaveLength(1);
-    expect(text(tree)).toContain('₹12.34');
+    expect(
+      tree.root.find(
+        (node) => String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Amount',
+      ).props.value,
+    ).toBe('12.34');
     expect(text(tree)).not.toContain('Use INR as currency');
     expect(text(tree)).not.toContain('the currency');
     expect(button(tree, 'Save expense').props.disabled).toBe(false);
     // The Group's currency is a fact the save already has, so the item saves as it is.
     await tap(tree, 'Save expense');
     expect(f.saves).toHaveLength(1);
-    expect(text(tree)).toContain('Saved 1');
+    expect(tally(tree)).toContain('Saved 1');
   });
   it('says an item in another currency needs the Group currency, not the expense details (#567)', async () => {
     const f = fixture({ one: true });

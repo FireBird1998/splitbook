@@ -293,6 +293,13 @@ describe('Home Groups', () => {
     return { root, ...handlers };
   };
 
+  it('says how many wait in To review on a Group’s row (#646)', () => {
+    const { root } = view({}, { toReview: { [groupsList[0]!.id]: 3 } });
+    expect(
+      button(root, 'Open Maple House, Household · 3 members · 3 to review, You owe ₹1,480.00'),
+    ).toBeDefined();
+    expect(text(root)).toContain('Household · 3 members · 3 to review');
+  });
   it('shows the member’s balance in each Group, its first currency and +N, or Settled up', () => {
     const { root, onOpen } = view();
     expect(headers(root)).toEqual(['Groups · 4']);

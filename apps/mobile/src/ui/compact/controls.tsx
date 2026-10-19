@@ -4,6 +4,7 @@ import { Icon, type IconName } from '../primitives';
 import { useReducedMotion } from './motion';
 import { denseHitSlop, radius, touch } from './scale';
 import { CompactText, FieldMarker, Money } from './text';
+import { hairSpace } from './feedback';
 
 /** Spinning while busy; with reduce motion on, a still hourglass instead. */
 export function BusyMark({ color }: { color: string }) {
@@ -64,6 +65,9 @@ export function CompactButton({
       {icon ? <Icon name={icon} size={18} color={color} /> : null}
       <CompactText weight="semibold" style={{ color, fontSize: size }}>
         {label}
+        {/* Room to spare, as a Badge keeps (#331): a button as wide as its words, opened again,
+            otherwise wrapped its last word out of sight ("Skip for now" read "Skip for"). */}
+        {hairSpace}
       </CompactText>
       {amount ? <Money style={{ color }}>{amount}</Money> : null}
     </>

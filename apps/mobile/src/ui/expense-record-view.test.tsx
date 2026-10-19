@@ -747,7 +747,8 @@ describe('compact Expense record', () => {
     const ui = await render(open(ids.bill));
     const edit = ui.pressable('Edit expense');
     expect(edit.props.disabled).toBe(false);
-    expect(text(edit)).toBe('Edit');
+    // A button's words end in a hair space (#331), which a reader doesn't hear.
+    expect(text(edit).trim()).toBe('Edit');
     expect(ui.pressable('Back to Group')).toBeTruthy();
     await ui.press('Edit expense');
     expect(ui.headings()[0]).toBe('Edit expense');

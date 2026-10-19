@@ -98,7 +98,7 @@ export type BadgeTone = 'positive' | 'negative' | 'warning' | 'neutral';
  * hair space adds its width to the measure but never moves a word to the next line, as a line
  * may end past its room in white space.
  */
-const hairSpace = String.fromCodePoint(0x200a);
+export const hairSpace = String.fromCodePoint(0x200a);
 
 /** A short status pill such as "Adds up", "Not confirmed" or "Saved 10:42". */
 export function Badge({
