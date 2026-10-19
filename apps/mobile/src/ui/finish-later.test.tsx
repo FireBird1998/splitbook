@@ -665,9 +665,13 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
       onlineManager.setOnline(false);
     });
     const editor = await form(f, mode);
-    expect(text(editor)).toContain("You're offline, so it stays on this phone.");
+    // In the app's typographic quotes, as To review writes them (#640).
+    const note =
+      'You’re offline, so it stays on this phone. It shows in To review as “On this phone”.';
+    expect(text(editor)).toContain(note);
     await tap(editor, 'Finish later');
     expect(f.drafts.values.size).toBe(1);
+    expect(f.controller.getSnapshot().snackbar?.message).toBe(note);
     const before = f.calls.length;
     await act(async () => {
       onlineManager.setOnline(true);

@@ -26,6 +26,9 @@ export interface ToReviewState {
   offline: boolean;
   recoveryMessage: string | null;
 }
+/** Where an Expense set aside offline goes, said as Finish later keeps it and once it has. */
+export const finishLaterOffline =
+  'You’re offline, so it stays on this phone. It shows in To review as “On this phone”.';
 export const emptyToReview = (): ToReviewState => ({
   run: null,
   status: 'idle',

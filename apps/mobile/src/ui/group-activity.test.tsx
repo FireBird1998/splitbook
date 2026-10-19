@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyActivity, type ActivityEvent, type ActivityState } from '../data/activity';
 import { flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { GroupActivity } from './group-activity';
 import { refreshedLabel } from './refresh-feedback';
 
@@ -484,5 +485,18 @@ describe('offline with nothing shown (#222, the loading-state audit)', () => {
     expect(text(root)).toContain('The server could not complete this request. Please try again.');
     expect(text(root)).not.toContain('isn’t saved on this phone');
     expect(button(root, 'Try again')).toHaveLength(1);
+  });
+});
+
+describe('an event’s detail', () => {
+  it('says when it happened day first, on a US phone too (#640)', () => {
+    mockDeviceLocale('en-US');
+    render({ state: activity({ selected: event(1) }) });
+    const clock = new Date(2026, 8, 30, 11, 0).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    // The time is the last run of the details line, a string inside its text.
+    expect(JSON.stringify(screen!.toJSON())).toContain(`"Wed 30 Sep 2026, ${clock}"`);
   });
 });

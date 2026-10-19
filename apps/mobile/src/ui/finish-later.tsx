@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { onlineManager } from '@tanstack/query-core';
 import type { MobileController } from '../data/mobile-controller';
+import { finishLaterOffline } from '../data/to-review';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 import {
   ACTIVE_DRAFTS_PER_MEMBER,
@@ -64,9 +65,7 @@ export function FinishLater({ controller }: { controller: MobileController }) {
         onPress={finish}
       />
       <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-        {offline
-          ? "You're offline, so it stays on this phone. It shows in To review as 'On this phone'."
-          : 'Keeps it in To review. Only you can see it.'}
+        {offline ? finishLaterOffline : 'Keeps it in To review. Only you can see it.'}
       </CompactText>
       {editor.closePrompt && (
         <BottomSheet

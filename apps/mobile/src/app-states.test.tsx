@@ -16,6 +16,7 @@ import { findHosts, flatten, layoutHeight, layoutWidth } from './test-utils/layo
 import { loop, setFileWindow, setReduceMotion, setWindow, timing } from './test-utils/native';
 import { progressHeight, sweepTrack } from './ui/compact';
 import { savedQueriesIn } from './test-utils/saved-queries';
+import { mockDeviceLocale } from './test-utils/device-locale';
 
 // #127: the App's loading, refreshing, offline and cold-start states, rendered through the real
 // App tree and controller. Only native modules are replaced.
@@ -2752,6 +2753,16 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     await settle();
     expect(posts(phone)).toEqual([`POST /api/groups/${maple}/settlements`]);
     expect(app.text()).toContain('Payment recorded');
+  });
+
+  // #640: the Date tile read "Today, Oct 19" while every other day on the phone put the day first.
+  it('dates the payment today, day first, on a US phone too', async () => {
+    await onBalances();
+    mockDeviceLocale('en-US');
+    await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+    const today = new Date();
+    const month = today.toLocaleDateString('en-US', { month: 'short' });
+    expect(inSheet(`Date: Today, ${today.getDate()} ${month}`)).toHaveLength(1);
   });
 
   // Device check: Check payment read "FM You → FM Former member" until its check landed.

@@ -1,5 +1,6 @@
 import { shownGroup, shownView } from '../data/mobile-controller';
 import type { LoadStatus, MobileSnapshot } from '../data/types';
+import { spellMoment, spellTime } from './day-format';
 
 export interface RefreshFeedback {
   /** The native pull indicator: only while a pull that started on this view runs. */
@@ -100,16 +101,9 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
   };
 }
 
-/** "12:05 PM" today, otherwise "Sep 30, 12:05 PM": when the shown figures were read. */
+/** "12:05 PM" today, otherwise "30 Sep, 12:05 PM": when the shown figures were read. */
 export function refreshedLabel(time: number | null, now = Date.now()) {
   if (time === null) return 'an unknown time';
   const date = new Date(time);
-  return date.toDateString() === new Date(now).toDateString()
-    ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    : date.toLocaleString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      });
+  return date.toDateString() === new Date(now).toDateString() ? spellTime(date) : spellMoment(date);
 }

@@ -123,23 +123,24 @@ describe('Date sheet calendar', () => {
     expect(sheet.month()).toBe('September 2026');
     expect(sheet.days()).toHaveLength(30);
     for (const day of sheet.days()) expect(day.props.accessibilityRole).toBe('button');
-    expect(sheet.pressable('Tuesday, 15 September 2026').props.accessibilityState).toEqual({
+    expect(sheet.pressable('Tuesday 15 September 2026').props.accessibilityState).toEqual({
       selected: true,
       disabled: false,
     });
-    expect(sheet.pressable('Wednesday, 30 September 2026, today').props.accessibilityState).toEqual(
-      { selected: false, disabled: false },
-    );
-    expect(sheet.selected()).toEqual(['Tuesday, 15 September 2026']);
-    expect(sheet.footer()).toBe('Tuesday, 15 September 2026');
+    expect(sheet.pressable('Wednesday 30 September 2026, today').props.accessibilityState).toEqual({
+      selected: false,
+      disabled: false,
+    });
+    expect(sheet.selected()).toEqual(['Tuesday 15 September 2026']);
+    expect(sheet.footer()).toBe('Tuesday 15 September 2026');
     expect(sheet.pressable('Today').props.accessibilityState).toEqual({ selected: false });
 
-    sheet.press('Wednesday, 30 September 2026, today');
+    sheet.press('Wednesday 30 September 2026, today');
     expect(changes).toEqual(['2026-09-30']);
-    expect(sheet.selected()).toEqual(['Wednesday, 30 September 2026, today']);
+    expect(sheet.selected()).toEqual(['Wednesday 30 September 2026, today']);
     expect(sheet.pressable('Today').props.accessibilityState).toEqual({ selected: true });
     expect(sheet.pressable('Yesterday').props.accessibilityState).toEqual({ selected: false });
-    expect(sheet.footer()).toBe('Wednesday, 30 September 2026');
+    expect(sheet.footer()).toBe('Wednesday 30 September 2026');
   });
 
   it('keeps each week its own row, with the days in reading order from Month to Month', () => {
@@ -154,7 +155,7 @@ describe('Date sheet calendar', () => {
         expect(row.children).toHaveLength(7);
         return row.children.flatMap((cell) =>
           typeof cell !== 'string' && isHost(cell, 'Pressable')
-            ? [Number(/, (\d+) /.exec(cell.props.accessibilityLabel)![1])]
+            ? [Number(/ (\d+) /.exec(cell.props.accessibilityLabel)![1])]
             : [],
         );
       });
@@ -169,7 +170,7 @@ describe('Date sheet calendar', () => {
     sheet.press('Previous month');
     expect(reading()).toEqual(days(30));
     expect(sheet.days().map((day) => day.props.accessibilityLabel)[0]).toBe(
-      'Tuesday, 1 September 2026',
+      'Tuesday 1 September 2026',
     );
   });
 
@@ -183,6 +184,26 @@ describe('Date sheet calendar', () => {
     const weekdays = render('2026-09-15').weekdays();
     expect(text(weekdays)).toBe(letters);
     expect(weekdays.props.accessibilityElementsHidden).toBe(true);
+  });
+
+  it('spells each day day-first on a US phone, as the rest of the app does (#640)', () => {
+    deviceLocale('en-US');
+    const sheet = render('2026-09-15');
+    expect(sheet.month()).toBe('September 2026');
+    expect(sheet.selected()).toEqual(['Tuesday 15 September 2026']);
+    expect(sheet.footer()).toBe('Tuesday 15 September 2026');
+    sheet.press('Wednesday 30 September 2026, today');
+    expect(sheet.footer()).toBe('Wednesday 30 September 2026');
+  });
+
+  it('reads the phone’s locale and zone once for a whole Month (#640)', async () => {
+    const readings = deviceLocale('en-IN');
+    const sheet = render('2026-09-15');
+    await Promise.resolve();
+    readings.mockClear();
+    sheet.press('Next month');
+    expect(sheet.days()).toHaveLength(31);
+    expect(readings).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a Persian-calendar locale on the Gregorian dates it lays out', () => {
@@ -222,9 +243,9 @@ describe('Date sheet calendar', () => {
     sheet.press('Next month');
     sheet.press('Next month');
     expect(sheet.month()).toBe('December 2026');
-    sheet.press('Thursday, 31 December 2026');
+    sheet.press('Thursday 31 December 2026');
     expect(changes).toEqual(['2026-12-31']);
-    expect(sheet.footer()).toBe('Thursday, 31 December 2026');
+    expect(sheet.footer()).toBe('Thursday 31 December 2026');
 
     for (let month = 0; month < 4; month++) sheet.press('Previous month');
     expect(sheet.month()).toBe('August 2026');
@@ -249,10 +270,10 @@ describe('Date sheet calendar', () => {
     const sheet = render('2026-09-20');
     sheet.press('Today');
     expect(sheet.month()).toBe('October 2026');
-    expect(sheet.selected()).toEqual(['Thursday, 1 October 2026, today']);
+    expect(sheet.selected()).toEqual(['Thursday 1 October 2026, today']);
     sheet.press('Yesterday');
     expect(sheet.month()).toBe('September 2026');
-    expect(sheet.selected()).toEqual(['Wednesday, 30 September 2026']);
+    expect(sheet.selected()).toEqual(['Wednesday 30 September 2026']);
     expect(changes).toEqual(['2026-10-01', '2026-09-30']);
   });
 
@@ -285,12 +306,12 @@ describe('Date sheet calendar', () => {
   it('changes nothing while the Expense is locked', () => {
     const sheet = render('2026-09-15', { locked: true });
     sheet.press('Today');
-    sheet.press('Monday, 14 September 2026');
+    sheet.press('Monday 14 September 2026');
     expect(changes).toEqual([]);
-    expect(sheet.pressable('Monday, 14 September 2026').props.accessibilityState).toEqual({
+    expect(sheet.pressable('Monday 14 September 2026').props.accessibilityState).toEqual({
       selected: false,
       disabled: true,
     });
-    expect(sheet.footer()).toBe('Tuesday, 15 September 2026');
+    expect(sheet.footer()).toBe('Tuesday 15 September 2026');
   });
 });

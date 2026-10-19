@@ -6,6 +6,7 @@ import {
   memberNamer,
   type ExpenseHistoryChange,
 } from '../data/expense-history';
+import { nearDay, spellDay, spellTime } from './day-format';
 
 /** One Activity row in plain language: "{actor} {verb} {subject} {complement}" and its details. */
 export interface ActivityLine {
@@ -43,18 +44,15 @@ export interface ActivityDay {
 const localDayKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-/** "Today", "Yesterday", or a short weekday and date such as "Sun 27 Sep". */
+/** "Today", "Yesterday", or a short weekday and date such as "Sun 27 Sep", day first (#640). */
 export function dayLabel(date: Date, now: number) {
-  const today = new Date(now);
-  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-  if (localDayKey(date) === localDayKey(today)) return 'Today';
-  if (localDayKey(date) === localDayKey(yesterday)) return 'Yesterday';
-  return date.toLocaleDateString([], {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    ...(date.getFullYear() === today.getFullYear() ? {} : { year: 'numeric' }),
-  });
+  return (
+    nearDay(date, now) ??
+    spellDay(date, {
+      weekday: 'short',
+      year: date.getFullYear() !== new Date(now).getFullYear(),
+    })
+  );
 }
 
 /** Events keep the server's newest-first order, grouped under their local day. */
@@ -70,8 +68,7 @@ export function activityDays(events: ActivityEvent[], now: number): ActivityDay[
   return days;
 }
 
-export const clockTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+export const clockTime = (iso: string) => spellTime(new Date(iso));
 
 const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
 
@@ -138,17 +135,10 @@ const currencies = (value: unknown) =>
   (Array.isArray(value) ? value : [value])
     .filter((code): code is string => typeof code === 'string' && !!getCurrency(code))
     .join(', ') || 'None';
-/** A Group's dates are calendar days stored at UTC midnight. */
+/** A Group's dates are calendar days stored at UTC midnight: "1 Oct 2026". */
 function calendarDay(value: unknown) {
   const date = new Date(typeof value === 'string' ? value : Number.NaN);
-  return Number.isNaN(date.getTime())
-    ? 'None'
-    : date.toLocaleDateString('en', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        timeZone: 'UTC',
-      });
+  return Number.isNaN(date.getTime()) ? 'None' : spellDay(date, { year: true, timeZone: 'UTC' });
 }
 const groupFields = new Map<
   string,

@@ -5,6 +5,7 @@ import { createMobileController, type MobileController } from '../data/mobile-co
 import type { FetchResponse } from '../data/types';
 import { DetailsNotice, ReadTime, RefreshStatus } from './financial-views';
 import { flatten } from '../test-utils/layout';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { GroupBalancesView } from './group-balances';
 import { GroupExpensesView } from './group-expenses';
 import { HomeBalances } from './home';
@@ -406,6 +407,15 @@ describe('ReadTime', () => {
     const [outgoing] = slot.root.findAll((node) => (node.type as unknown) === 'AnimatedText');
     expect(outgoing!.children).toEqual(['Updating…']);
     act(() => slot.unmount());
+  });
+
+  it('puts the day first for a time read on an earlier day, on a US phone too (#640)', () => {
+    mockDeviceLocale('en-US');
+    const time = new Date(2026, 8, 30, 12, 5);
+    const later = new Date(2026, 9, 7, 9, 26).getTime();
+    const clock = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    expect(refreshedLabel(time.getTime(), later)).toBe(`30 Sep, ${clock}`);
+    expect(refreshedLabel(time.getTime(), time.getTime())).toBe(clock);
   });
 });
 

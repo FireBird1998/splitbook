@@ -212,7 +212,7 @@ export function SettingsScreen({
         <Card padded>
           <View style={{ gap: 10 }}>
             <CompactText variant="small" tone="secondary">
-              Manage Group members and Tags in the connected web app.
+              Change roles or remove Group members in the connected web app.
             </CompactText>
             <CompactButton
               label={`Open ${PRODUCT_NAME} web`}

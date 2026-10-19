@@ -9,6 +9,7 @@ import type {
 } from '../data/types';
 import { GroupExpensesView, expenseDays } from './group-expenses';
 import { inTimeZone } from '../test-utils/time-zone';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { refreshedLabel } from './refresh-feedback';
 
 // #116: the Expenses destination's summary, rows, pagination and draft states, rendered.
@@ -277,15 +278,11 @@ describe('Expenses summary', () => {
 
 describe('Expense rows', () => {
   it('sit under day headings and say what the member lent or owes', () => {
+    // A US phone too: day first, and Yesterday named like Today (#640).
+    mockDeviceLocale('en-US');
     const { root, onOpenExpense } = view();
-    const day = (date: number) =>
-      new Date(2026, 8, date, 12).toLocaleDateString([], {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-      });
     expect(headings(root)).toEqual(
-      expect.arrayContaining([`Today · ${day(30)}`, day(29), day(27)]),
+      expect.arrayContaining(['Today · Wed 30 Sep', 'Yesterday · Tue 29 Sep', 'Sun 27 Sep']),
     );
     expect(buttons(root)).toEqual(
       expect.arrayContaining([
@@ -306,16 +303,12 @@ describe('Expense rows', () => {
 
   it('sit under the day they are dated, in a zone behind UTC (#437)', () =>
     inTimeZone('Pacific/Pago_Pago', () => {
+      mockDeviceLocale('en-US');
       const stored = { ...groceries, date: new Date('2026-09-28T00:00:00.000Z') };
-      const [day] = expenseDays([stored], now);
+      // Midday on the 30th there, so the 28th is neither today nor yesterday.
+      const [day] = expenseDays([stored], new Date(2026, 8, 30, 12).getTime());
       expect(day.key).toBe('2026-09-28');
-      expect(day.label).toBe(
-        new Date(2026, 8, 28).toLocaleDateString([], {
-          weekday: 'short',
-          day: 'numeric',
-          month: 'short',
-        }),
-      );
+      expect(day.label).toBe('Mon 28 Sep');
     }));
 
   it('replaces an empty list with loading after a save, then highlights its first Expense', () => {
