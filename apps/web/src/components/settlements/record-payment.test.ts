@@ -117,6 +117,25 @@ describe('checkNewPayment', () => {
     expect(check({ amount: '100', ack: true })).toMatchObject({ ready: true, overpayment: null });
   });
 
+  it.each([
+    { from: YOU, to: SAM, tick: 'I meant to pay more than suggested' },
+    { from: SAM, to: YOU, tick: 'Sam Chen paid more than suggested' },
+  ])(
+    'uses the payer’s perspective for the overpayment tick and hint: $tick',
+    ({ from, to, tick }) => {
+      expect(check({ from, to, amount: '1200' })).toMatchObject({
+        overpayTick: tick,
+        waitingFor: `Tick “${tick}” first.`,
+        ready: false,
+      });
+      expect(check({ from, to, amount: '1200', ack: true })).toMatchObject({
+        overpayTick: tick,
+        waitingFor: null,
+        ready: true,
+      });
+    },
+  );
+
   it('says what is missing, one thing at a time', () => {
     expect(check({ to: '' }).waitingFor).toBe('Choose who paid whom.');
     expect(check({}).waitingFor).toBe('Enter the amount paid.');
