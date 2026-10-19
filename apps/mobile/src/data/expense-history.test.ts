@@ -248,6 +248,11 @@ describe('describeExpenseHistory', () => {
     expect(flat([entry])).toEqual(['Amount €30.00 → €40.00']);
   });
 
+  it('keeps when each edit was made as its ISO timestamp, for the screen to spell (#640)', () => {
+    const [entry] = describeExpenseHistory(record([edit({ notes: { old: '', new: 'Aisle' } })]));
+    expect(entry.editedAt).toBe(iso);
+  });
+
   it('names editors from the Group, and anyone it no longer names as a former member', () => {
     const entries = describeExpenseHistory(
       record([

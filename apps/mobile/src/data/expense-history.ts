@@ -1,4 +1,3 @@
-import { formatDateTime } from '@splitbook/shared/date';
 import { expenseEditLines, type ExpenseEditLine } from '@splitbook/shared/expense-detail';
 import type { ActivityEvent } from './activity';
 import type { ExpenseRecord } from './expense-record';
@@ -11,6 +10,7 @@ export interface ExpenseHistoryEntry {
   editor: string;
   /** For example "Priya Shah edited this Expense". */
   summary: string;
+  /** When, as an ISO timestamp: the screen spells it. */
   editedAt: string;
   changes: ExpenseHistoryChange[];
 }
@@ -129,7 +129,7 @@ export function describeExpenseHistory(
       key: `${entry.editedAt}:${index}`,
       editor,
       summary: `${editor} edited this Expense`,
-      editedAt: formatDateTime(entry.editedAt),
+      editedAt: entry.editedAt,
       changes: described,
     };
   });

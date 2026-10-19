@@ -8,6 +8,7 @@ import {
 } from 'react-test-renderer';
 import { flatten, layoutHeight } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
@@ -1151,6 +1152,35 @@ describe('rendered edit history', () => {
     expect(labels.join(' ')).not.toMatch(/[a-f\d]{24}/);
   });
 
+  it('dates the saved record and its history day first, on a US phone too (#640)', async () => {
+    mockDeviceLocale('en-US');
+    await act(async () => {
+      screen = create(
+        <ExpenseRecordView
+          record={expenseRecordSchema.parse(withHistory)}
+          title="Current saved record"
+          people={[{ id: memberId, name: 'Alex' }]}
+          tags={[{ id: tagId, name: 'Groceries' }]}
+        />,
+      );
+    });
+    const shown = text(screen!.root);
+    /** A moment on this device, day first: "28 Sep 2026, 10:00 AM" in UTC. */
+    const moment = (value: string) => {
+      const date = new Date(value);
+      const month = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[date.getMonth()];
+      const clock = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      return `${date.getDate()} ${month} ${date.getFullYear()}, ${clock}`;
+    };
+    // The Expense's own date is a calendar day (#437); the rest are moments on this device.
+    expect(shown).toContain('Mon 28 Sep 2026 · food');
+    expect(shown).toContain(`Created ${moment(iso)}`);
+    expect(shown).toContain(`Last updated ${moment(iso)}`);
+    expect(shown).toContain(moment('2026-09-27T15:40:00.000Z'));
+    // Never month first ("Sep 28, 2026") or numeric ("9/28/2026").
+    expect(shown).not.toMatch(/Sep \d{1,2}\b|\d\/\d/);
+  });
+
   it('names the signed-in member "You" in the saved record’s history (#434)', async () => {
     await act(async () => {
       screen = create(
@@ -1176,6 +1206,8 @@ describe('compact Expense form', () => {
   it.each([1, 1.3])(
     'keeps editable input positions when the saved-copy offline notice clears at %sx text',
     async (scale) => {
+      // The notice's saved time is measured as an English phone writes it ("10:42 AM").
+      mockDeviceLocale('en-US');
       setWindow({ fontScale: scale });
       let disconnected = false;
       let held = false;
@@ -1428,10 +1460,10 @@ describe('compact Expense form', () => {
     await ui.press(ui.tile('Date').props.accessibilityLabel);
     expect(openSheet(ui.root(), 'September 2026')).toBe(true);
     expect(() => ui.input('Date, required')).toThrow();
-    expect(ui.pressable('Monday, 28 September 2026').props.accessibilityState.selected).toBe(true);
+    expect(ui.pressable('Monday 28 September 2026').props.accessibilityState.selected).toBe(true);
 
-    await ui.press('Tuesday, 15 September 2026');
-    expect(openSheet(ui.root(), 'Tuesday, 15 September 2026')).toBe(true);
+    await ui.press('Tuesday 15 September 2026');
+    expect(openSheet(ui.root(), 'Tuesday 15 September 2026')).toBe(true);
     // Back, like swiping down or tapping outside, behaves like Done.
     const sheet = ui.root().find((node) => isHost(node, 'Modal') && node.props.visible === true);
     await act(async () => sheet.props.onRequestClose());

@@ -138,7 +138,7 @@ export function RecordPaymentSheet({
   visible: boolean;
   state: SettlementState;
   currentUserId: string;
-  /** Shown on the Date tile, e.g. "Today, Oct 1": a payment is dated when it's recorded. */
+  /** Shown on the Date tile, e.g. "Today, 1 Oct": a payment is dated when it's recorded. */
   today: string;
   onChange: (patch: Partial<Pick<SettlementDraft, 'amount' | 'note'>>) => void;
   onLeaveField: (field: SettlementField) => void;
@@ -196,6 +196,11 @@ export function RecordPaymentSheet({
   const name = (id: string) => (id === currentUserId ? 'You' : fullName(id));
   const editable = Boolean(draft) && ['editing', 'review'].includes(status) && !state.attempt;
   const extra = draft ? overpayment(state, currentUserId, name(draft.paidBy)) : null;
+  // The payer says what they meant; the member being paid confirms what the payer paid (#640).
+  const tick =
+    !draft || draft.paidBy === currentUserId
+      ? 'I meant to pay more than suggested'
+      : `${fullName(draft.paidBy)} paid more than suggested`;
   const waitingForTick = Boolean(extra) && !state.acknowledged;
   const paid = figures ? minor(figures.amount, figures.currency) : null;
   const amountLabel =
@@ -234,7 +239,7 @@ export function RecordPaymentSheet({
                   ? retryWaitsForCheck
                   : recordWaitsForCheck
                 : waitingForTick
-                  ? 'Tick “I meant to pay more than suggested” first.'
+                  ? `Tick “${tick}” first.`
                   : undefined
             }
             onPress={onRecord}
@@ -418,7 +423,7 @@ export function RecordPaymentSheet({
               </View>
               <View style={{ paddingLeft: 30 }}>
                 <Checkbox
-                  label="I meant to pay more than suggested"
+                  label={tick}
                   checked={state.acknowledged}
                   onPress={() => onAcknowledge(!state.acknowledged)}
                 />

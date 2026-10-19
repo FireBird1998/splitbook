@@ -735,6 +735,14 @@ describe('App Settings sign-out', () => {
     expect(advice).toContain('If a save was interrupted');
   });
 
+  it('sends to the web only what Android can’t do, and Tags are managed here (#640)', async () => {
+    const app = await renderApp();
+    await app.press('Account and settings');
+    const panel = app.text();
+    expect(panel).toContain('Change roles or remove Group members in the connected web app.');
+    expect(panel).not.toContain('Tags in the connected web app');
+  });
+
   it('offers Try again and Continue, and no account, when the server doesn’t confirm (#202)', async () => {
     const app = await renderApp();
     const revokes: (string | null)[] = [];
@@ -1099,7 +1107,7 @@ describe('App Members and Group details', () => {
 });
 
 describe('App return from an Expense', () => {
-  /** `date` is the Date sheet's steps from this Month, such as ['Sunday, 20 September 2026']. */
+  /** `date` is the Date sheet's steps from this Month, such as ['Sunday 20 September 2026']. */
   const addExpense = async (app: Awaited<ReturnType<typeof renderApp>>, date: string[]) => {
     const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
     vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
@@ -1129,7 +1137,7 @@ describe('App return from an Expense', () => {
         ? Promise.reject(new Error('The response was lost after sending'))
         : undefined,
     );
-    await addExpense(app, ['Sunday, 20 September 2026']);
+    await addExpense(app, ['Sunday 20 September 2026']);
     await app.press('Save expense');
     app.use(() => undefined);
     await app.press('Back to Group');
@@ -1335,7 +1343,7 @@ describe('App return from an Expense', () => {
     const app = await renderApp();
     await app.press('Open Maple House');
     app.use(created);
-    await addExpense(app, ['Sunday, 20 September 2026']);
+    await addExpense(app, ['Sunday 20 September 2026']);
     await app.press('Save expense');
 
     expect(app.text()).toContain('Expense saved · Weekly groceries');
@@ -1347,7 +1355,7 @@ describe('App return from an Expense', () => {
     const app = await renderApp();
     await app.press('Open Maple House');
     app.use(created);
-    await addExpense(app, ['Previous month', 'Saturday, 15 August 2026']);
+    await addExpense(app, ['Previous month', 'Saturday 15 August 2026']);
     await app.press('Save expense');
 
     expect(app.text()).toContain('Expense saved · Weekly groceries');

@@ -75,6 +75,7 @@ import {
 import { SplitSheet } from './split-sheet';
 import { ErrorBoundary } from './error-boundary';
 import { savingNeedsConnection } from './offline-notice';
+import { spellMoment } from './day-format';
 import { useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
 
@@ -876,7 +877,8 @@ function ExpenseTask({
               <Banner tone={checkNotice.tone} title={checkNotice.title} message={checkingMessage}>
                 {checking.saved && checking.refreshedAt && (
                   <CompactText variant="small" tone="secondary">
-                    Saved Group checked {new Date(checking.refreshedAt).toLocaleString()}
+                    Saved Group checked{' '}
+                    {spellMoment(new Date(checking.refreshedAt), { year: true })}
                   </CompactText>
                 )}
                 {checking.status !== 'checking' && (
