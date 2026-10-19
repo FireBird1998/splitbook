@@ -1,6 +1,8 @@
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import {
   currentMonthKey,
+  formatDate,
+  formatDateTime,
   getLocalMonthIsoRange,
   gregorianLocale,
   localeFirstWeekday,
@@ -8,6 +10,39 @@ import {
   shiftMonthKey,
   toInclusiveDateToBound,
 } from './date';
+
+import { expenseLocalDate } from './expense-day';
+
+describe('day-first display dates', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 21, 12));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('spells dates and date-times day first for Dates and timestamp strings', () => {
+    const date = new Date(2026, 9, 19, 15, 5);
+    for (const input of [date, date.toISOString()]) {
+      expect(formatDate(input)).toBe('19 Oct 2026');
+      expect(formatDateTime(input)).toBe('19 Oct 2026 at 3:05 PM');
+    }
+  });
+
+  it('keeps Today and Yesterday with their local time', () => {
+    expect(formatDate(new Date(2026, 9, 21, 0, 5))).toBe('Today');
+    expect(formatDate(new Date(2026, 9, 20, 23, 59))).toBe('Yesterday');
+    expect(formatDateTime(new Date(2026, 9, 21, 15, 5))).toBe('Today at 3:05 PM');
+    expect(formatDateTime(new Date(2026, 9, 20, 15, 5))).toBe('Yesterday at 3:05 PM');
+  });
+
+  it('keeps the Expense calendar day through expenseLocalDate in every viewer zone', () => {
+    for (const stored of ['2026-10-19', '2026-10-19T00:00:00.000Z', '2026-10-19T23:59:59.999Z']) {
+      expect(formatDate(expenseLocalDate(stored))).toBe('19 Oct 2026');
+    }
+    expect(formatDate(expenseLocalDate('2026-10-21'))).toBe('Today');
+    expect(formatDate(expenseLocalDate('2026-10-20'))).toBe('Yesterday');
+  });
+});
 
 describe('toInclusiveDateToBound', () => {
   it('widens a date-only string to end-of-day UTC so the final day is included', () => {

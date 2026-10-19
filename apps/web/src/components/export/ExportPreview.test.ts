@@ -99,62 +99,69 @@ it('shows only backup contents and states the accepted backup omission', () => {
   expect(text(html)).toContain('Not included: recurring Expense templates and Activity history.');
 });
 
-it('renders statement period figures, named people and bounded expense rows as a document', () => {
-  const html = render({
-    status: 'ready',
-    data: {
-      ...csv,
-      format: 'statement',
-      statement: {
-        id: 'maple',
-        name: 'Maple House',
-        theme: 'home',
-        defaultCurrency: 'INR',
-        from: csv.from,
-        to: csv.to,
-        timeZone: 'UTC',
-        currencies: [
-          {
-            currency: 'INR',
-            spentMinor: 7007,
-            expenseCount: 7,
-            paymentTotalMinor: 1000,
-            paymentCount: 1,
-            people: [
-              {
-                id: 'alice',
-                name: 'Alice Tester',
-                paidMinor: 7007,
-                shareMinor: 3504,
-                netMinor: 3503,
-              },
-            ],
-            expenses: [
-              {
-                id: 'expense',
-                date: '2026-09-01',
-                description: 'Groceries',
-                tag: 'Food',
-                amountMinor: 1001,
-              },
-            ],
-          },
-        ],
+it.each([
+  ['UTC', '19 Oct 2026 at 6:00 AM'],
+  ['Pacific/Pago_Pago', '18 Oct 2026 at 7:00 PM'],
+])(
+  'renders the statement’s generated time day first in %s with its document rows',
+  (timeZone, generated) => {
+    const html = render({
+      status: 'ready',
+      data: {
+        ...csv,
+        format: 'statement',
+        timeZone,
+        statement: {
+          id: 'maple',
+          name: 'Maple House',
+          theme: 'home',
+          defaultCurrency: 'INR',
+          from: csv.from,
+          to: csv.to,
+          timeZone: 'UTC',
+          currencies: [
+            {
+              currency: 'INR',
+              spentMinor: 7007,
+              expenseCount: 7,
+              paymentTotalMinor: 1000,
+              paymentCount: 1,
+              people: [
+                {
+                  id: 'alice',
+                  name: 'Alice Tester',
+                  paidMinor: 7007,
+                  shareMinor: 3504,
+                  netMinor: 3503,
+                },
+              ],
+              expenses: [
+                {
+                  id: 'expense',
+                  date: '2026-09-01',
+                  description: 'Groceries',
+                  tag: 'Food',
+                  amountMinor: 1001,
+                },
+              ],
+            },
+          ],
+        },
       },
-    },
-  });
-  expect(text(html)).toContain('Maple House · Statement · September 2026');
-  expect(text(html)).toContain('Household · INR · Generated');
-  expect(text(html)).toContain('Generated');
-  expect(text(html)).toContain('Spent');
-  expect(text(html)).toContain('70.07');
-  expect(text(html)).toContain('Member Paid Share Net');
-  expect(text(html)).toContain('Alice Tester');
-  expect(text(html)).not.toContain('You');
-  expect(text(html)).toContain('Groceries');
-  expect(text(html)).toContain('…and 6 more Expenses');
-  expect(text(html)).toContain('Amounts in INR, never converted');
-});
+    });
+    expect(text(html)).toContain('Maple House · Statement · September 2026');
+    expect(text(html)).toContain('Household · INR · Generated');
+    expect(text(html)).toContain(`Generated ${generated} (${timeZone})`);
+    expect(text(html)).toContain('Spent');
+    expect(text(html)).toContain('70.07');
+    expect(text(html)).toContain('Member Paid Share Net');
+    expect(text(html)).toContain('Alice Tester');
+    expect(text(html)).not.toContain('You');
+    expect(text(html)).toContain('Groceries');
+    expect(text(html)).toContain('…and 6 more Expenses');
+    expect(text(html)).toContain('Amounts in INR, never converted');
+  },
+);
 
 it('says nothing to export yet for an empty All time export', () => {
   expect(

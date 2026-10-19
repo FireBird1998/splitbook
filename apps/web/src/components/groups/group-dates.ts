@@ -5,8 +5,8 @@ import type { GroupTheme } from '@splitbook/shared/group-themes';
 type Day = string | Date | null | undefined;
 
 /**
- * "Sep 1, 2026 – Sep 5, 2026", "Starts Sep 1, 2026", or, with `tracking`, a Household's
- * "Tracking since Sep 1, 2026". A Group's dates are calendar days, the same in every zone (#437).
+ * "1 Sep 2026 – 5 Sep 2026", "Starts 1 Sep 2026", or, with `tracking`, a Household's
+ * "Tracking since 1 Sep 2026". A Group's dates are calendar days, the same in every zone (#437).
  */
 export function groupDatesLabel(
   theme: Pick<GroupTheme, 'dates' | 'signature'>,

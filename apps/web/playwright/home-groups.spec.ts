@@ -139,10 +139,13 @@ test('Home lists every Group: Theme, members, spent this month, the balance and 
         );
       await expect(row.locator('time')).toHaveAttribute('datetime', lastChange(group._id)!);
     }
-    // The seeded Trip says when it is.
+    // The seeded Trip says when it is, day first. Its dates move with the run date, so accept each
+    // shape tripDatesLabel gives: "10–13 Oct", "29 Oct – 1 Nov", "26–29 Dec 2026" and
+    // "29 Dec 2025 – 1 Jan".
+    const day = '\\d{1,2} [A-Z][a-z]{2}(?: \\d{4})?';
     await expect(
       table.locator(`tbody tr:has(a[href="/groups/${DEMO_GROUP_ID}"])`).getByRole('rowheader'),
-    ).toContainText(new RegExp(`^${DEMO_TRIP_NAME}Trip · \\w{3} \\d`));
+    ).toContainText(new RegExp(`^${DEMO_TRIP_NAME}Trip · (?:\\d{1,2}–${day}|${day} – ${day})$`));
     // The page never scrolls sideways; a narrow card scrolls its table instead.
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

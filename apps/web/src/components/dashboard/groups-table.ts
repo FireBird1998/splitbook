@@ -57,7 +57,7 @@ export interface GroupsTableRow {
   href: string;
   name: string;
   category: GroupCategory;
-  /** "Household", or "Trip · Sep 17–20". */
+  /** "Household", or "Trip · 17–20 Sep". */
   themeLine: string;
   members: {
     /** "Members: you, Sam Chen and Priya Shah". */
@@ -75,16 +75,12 @@ export interface GroupsTableRow {
 /** Avatars shown in a row; past that, the first ones and "+N". */
 const MAX_AVATARS = 3;
 
-const utcDay = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  timeZone: 'UTC',
-});
 const utcMonth = new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' });
+const utcDay = (date: Date) => `${date.getUTCDate()} ${utcMonth.format(date)}`;
 const utcDate = (value: string) => new Date(value);
 
 /**
- * A Trip's dates as the table shows them: "Sep 17–20", "Sep 29 – Oct 2", with the year when it
+ * A Trip's dates as the table shows them: "17–20 Sep", "29 Sep – 2 Oct", with the year when it
  * isn't this year's. Trip dates are calendar days, stored at midnight UTC, so they are read in
  * UTC whatever the viewer's zone.
  */
@@ -98,23 +94,23 @@ export function tripDatesLabel(
   const year = (date: Date) => date.getUTCFullYear();
   const thisYear = now.getFullYear();
   const withYear = (label: string, date: Date) =>
-    year(date) === thisYear ? label : `${label}, ${year(date)}`;
+    year(date) === thisYear ? label : `${label} ${year(date)}`;
   if (start && end) {
     if (year(start) !== year(end))
-      return `${withYear(utcDay.format(start), start)} – ${withYear(utcDay.format(end), end)}`;
-    if (start.getTime() === end.getTime()) return withYear(utcDay.format(start), start);
+      return `${withYear(utcDay(start), start)} – ${withYear(utcDay(end), end)}`;
+    if (start.getTime() === end.getTime()) return withYear(utcDay(start), start);
     const sameMonth = start.getUTCMonth() === end.getUTCMonth();
     const range = sameMonth
-      ? `${utcMonth.format(start)} ${start.getUTCDate()}–${end.getUTCDate()}`
-      : `${utcDay.format(start)} – ${utcDay.format(end)}`;
+      ? `${start.getUTCDate()}–${end.getUTCDate()} ${utcMonth.format(start)}`
+      : `${utcDay(start)} – ${utcDay(end)}`;
     return withYear(range, start);
   }
-  if (start) return `From ${withYear(utcDay.format(start), start)}`;
-  if (end) return `Until ${withYear(utcDay.format(end), end)}`;
+  if (start) return `From ${withYear(utcDay(start), start)}`;
+  if (end) return `Until ${withYear(utcDay(end), end)}`;
   return null;
 }
 
-/** "Household", or for a Trip "Trip · Sep 17–20" when it has dates. */
+/** "Household", or for a Trip "Trip · 17–20 Sep" when it has dates. */
 export function themeLine(group: Pick<GroupRead, 'category' | 'startDate' | 'endDate'>, now: Date) {
   const theme = getGroupTheme(group.category);
   const dates =
@@ -124,7 +120,7 @@ export function themeLine(group: Pick<GroupRead, 'category' | 'startDate' | 'end
 
 /**
  * When a Group last changed, in the viewer's own zone: "Today, 9:14 AM", "Yesterday, 8:02 PM",
- * "Sep 27", or "Sep 27, 2025" in another year.
+ * "27 Sep", or "27 Sep 2025" in another year.
  */
 export function lastChangeLabel(at: string | Date, now: Date): string {
   const date = new Date(at);
@@ -132,7 +128,7 @@ export function lastChangeLabel(at: string | Date, now: Date): string {
   const time = format(date, 'h:mm\u00a0a');
   if (isSameDay(date, now)) return `Today, ${time}`;
   if (isSameDay(date, subDays(now, 1))) return `Yesterday, ${time}`;
-  return format(date, date.getFullYear() === now.getFullYear() ? 'MMM d' : 'MMM d, yyyy');
+  return format(date, date.getFullYear() === now.getFullYear() ? 'd MMM' : 'd MMM yyyy');
 }
 
 /** "Spent in October", or "Spent this month" until the read says which Month that is. */

@@ -70,6 +70,22 @@ function PreviewTable({
     </Box>
   );
 }
+/** The Statement’s generation instant in the export’s chosen zone, day first. */
+function generatedTime(at: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone,
+  }).formatToParts(new Date(at));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((each) => each.type === type)!.value;
+  return `${part('day')} ${part('month')} ${part('year')} at ${part('hour')}:${part('minute')} ${part('dayPeriod')}`;
+}
+
 const formats = { csv: 'CSV', json: 'Full backup', statement: 'Statement' } as const;
 export default function ExportPreviewPanel({
   state,
@@ -139,13 +155,7 @@ export default function ExportPreviewPanel({
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {getGroupTheme(data.statement.theme).label} · {data.statement.defaultCurrency} ·
-            Generated{' '}
-            {new Intl.DateTimeFormat('en-US', {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-              timeZone: data.timeZone,
-            }).format(new Date(data.generatedAt))}{' '}
-            ({data.timeZone})
+            Generated {generatedTime(data.generatedAt, data.timeZone)} ({data.timeZone})
           </Typography>
           {data.statement.currencies.map((bucket) => (
             <Box key={bucket.currency} sx={{ mt: 2 }}>

@@ -96,9 +96,9 @@ describe('the recurring list’s start and end (#522)', () => {
       inTimeZone(zone, () => {
         expect(
           list({ startsOn: '2026-02-01T00:00:00.000Z', endsOn: '2026-10-01T00:00:00.000Z' }),
-        ).toContain('since Feb 1, 2026 · until Oct 1, 2026');
+        ).toContain('since 1 Feb 2026 · until 1 Oct 2026');
         expect(list({ startsOn: '2026-10-01T00:00:00.000Z', endsOn: null })).toContain(
-          'since Oct 1, 2026',
+          'since 1 Oct 2026',
         );
       }),
   );

@@ -313,7 +313,7 @@ describe('the Groups table', () => {
         'Today, 9:14 AM',
       ],
       [
-        'Goa Friends Trip Trip · Sep 17–20',
+        'Goa Friends Trip Trip · 17–20 Sep',
         'AR SC PS',
         // A legacy Group in two currencies: each on its own line, its own currency first.
         '₹9,840.00 €25.00',
@@ -321,7 +321,7 @@ describe('the Groups table', () => {
         'Yesterday, 8:02 PM',
       ],
       // Nothing spent this month: zero in the Group's own currency.
-      ['Lisbon Offsite Work', 'AR SC +2', '€0.00', '+€30.00 you are owed €30.00', 'Aug 28'],
+      ['Lisbon Offsite Work', 'AR SC +2', '€0.00', '+€30.00 you are owed €30.00', '28 Aug'],
       ['Sunday Football General', 'AR SC +6', '₹3,200.00', 'Settled up', '– No changes yet'],
     ]);
     // The avatars say who is in the Group, viewer first; past three, two and "+N".
@@ -355,8 +355,8 @@ describe('the Groups table', () => {
     expect(html).not.toContain('<table');
     expect(phoneRows(html)).toEqual([
       'Maple House Household −₹1,480.00 you owe ₹1,480.00 Today, 9:14 AM',
-      'Goa Friends Trip Trip · Sep 17–20 +₹620.00 you are owed ₹620.00 +€12.50 you are owed €12.50 Yesterday, 8:02 PM',
-      'Lisbon Offsite Work +€30.00 you are owed €30.00 Aug 28',
+      'Goa Friends Trip Trip · 17–20 Sep +₹620.00 you are owed ₹620.00 +€12.50 you are owed €12.50 Yesterday, 8:02 PM',
+      'Lisbon Offsite Work +€30.00 you are owed €30.00 28 Aug',
       'Sunday Football General Settled up – No changes yet',
     ]);
   });
@@ -433,19 +433,19 @@ describe('the Groups table', () => {
 describe('the Groups table’s wording', () => {
   it('writes a Trip’s dates as calendar days, whatever the zone', () => {
     const at = (day: string) => `${day}T00:00:00.000Z`;
-    expect(tripDatesLabel(at('2026-09-17'), at('2026-09-20'), NOW)).toBe('Sep 17–20');
-    expect(tripDatesLabel(at('2026-09-29'), at('2026-10-02'), NOW)).toBe('Sep 29 – Oct 2');
-    expect(tripDatesLabel(at('2026-09-17'), at('2026-09-17'), NOW)).toBe('Sep 17');
-    expect(tripDatesLabel(at('2032-04-10'), at('2032-04-14'), NOW)).toBe('Apr 10–14, 2032');
-    expect(tripDatesLabel(at('2026-12-29'), at('2027-01-02'), NOW)).toBe('Dec 29 – Jan 2, 2027');
-    expect(tripDatesLabel(at('2026-09-17'), null, NOW)).toBe('From Sep 17');
-    expect(tripDatesLabel(null, at('2026-09-20'), NOW)).toBe('Until Sep 20');
+    expect(tripDatesLabel(at('2026-09-17'), at('2026-09-20'), NOW)).toBe('17–20 Sep');
+    expect(tripDatesLabel(at('2026-09-29'), at('2026-10-02'), NOW)).toBe('29 Sep – 2 Oct');
+    expect(tripDatesLabel(at('2026-09-17'), at('2026-09-17'), NOW)).toBe('17 Sep');
+    expect(tripDatesLabel(at('2032-04-10'), at('2032-04-14'), NOW)).toBe('10–14 Apr 2032');
+    expect(tripDatesLabel(at('2026-12-29'), at('2027-01-02'), NOW)).toBe('29 Dec – 2 Jan 2027');
+    expect(tripDatesLabel(at('2026-09-17'), null, NOW)).toBe('From 17 Sep');
+    expect(tripDatesLabel(null, at('2026-09-20'), NOW)).toBe('Until 20 Sep');
     expect(tripDatesLabel(null, null, NOW)).toBeNull();
   });
 
   it('gives a Trip its dates and every other Theme its name', () => {
     const dates = { startDate: '2026-09-17T00:00:00.000Z', endDate: '2026-09-20T00:00:00.000Z' };
-    expect(themeLine({ category: 'trip', ...dates }, NOW)).toBe('Trip · Sep 17–20');
+    expect(themeLine({ category: 'trip', ...dates }, NOW)).toBe('Trip · 17–20 Sep');
     expect(themeLine({ category: 'trip', startDate: null, endDate: null }, NOW)).toBe('Trip');
     expect(themeLine({ category: 'home', ...dates }, NOW)).toBe('Household');
   });
@@ -453,7 +453,7 @@ describe('the Groups table’s wording', () => {
   it('says when a Group last changed in the viewer’s own day', () => {
     expect(lastChangeLabel(new Date(2026, 9, 7, 0, 5), NOW)).toBe('Today, 12:05\u00a0AM');
     expect(lastChangeLabel(new Date(2026, 9, 6, 23, 59), NOW)).toBe('Yesterday, 11:59\u00a0PM');
-    expect(lastChangeLabel(new Date(2026, 9, 5, 23, 59), NOW)).toBe('Oct 5');
-    expect(lastChangeLabel(new Date(2025, 11, 31, 10, 0), NOW)).toBe('Dec 31, 2025');
+    expect(lastChangeLabel(new Date(2026, 9, 5, 23, 59), NOW)).toBe('5 Oct');
+    expect(lastChangeLabel(new Date(2025, 11, 31, 10, 0), NOW)).toBe('31 Dec 2025');
   });
 });
