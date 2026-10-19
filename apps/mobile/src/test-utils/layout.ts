@@ -15,8 +15,10 @@ type Style = Record<string, unknown>;
  * in, text wraps onto as many lines as its estimated width needs (up to `numberOfLines`), and a
  * row that wraps (`flexWrap: 'wrap'`) breaks into lines where its children no longer fit, by
  * their estimated widths (`layoutWidth`): enough to see that a note takes two lines, or that an
- * amount and a badge go onto two lines on a narrow phone or at large text. The widths are
- * estimates from character counts, so check anything close to a line's end on a device too.
+ * amount and a badge go onto two lines on a narrow phone or at large text. In a row, a flexible
+ * child (`flex`) keeps its `minWidth`, and children that shrink (`flexShrink`) give up what
+ * overflows the row, so their text wraps. The widths are estimates from character counts, so
+ * check anything close to a line's end on a device too.
  *
  * Enough to show that content takes its skeleton's place at the same height (#331).
  */
@@ -65,28 +67,45 @@ export function layoutHeight(node: Node | string | null, fontScale = 1, width?: 
   };
   const row = style.flexDirection === 'row';
   const across = number(style.columnGap ?? style.gap);
-  /** A child that takes what its line leaves (flex: 1), starting from nothing. */
+  /** A child that takes what its line leaves (flex: 1), starting from its minimum width. */
   const flexible = (child: Node) => number(flatten(child.props.style).flex) > 0;
-  /** A child's own width in a row: fixed, a percentage, or as wide as its content. */
+  /**
+   * A child's own width in a row: fixed, a percentage, as wide as its content, or a flexible
+   * child's minimum.
+   */
   const span = (child: Node) =>
-    flexible(child) ? 0 : Math.min(inner!, childWidth(child, true, inner, fontScale)!);
-  /** Children on one line of a row: each flexible one gets an equal part of what's left. */
+    Math.min(
+      inner!,
+      flexible(child)
+        ? number(flatten(child.props.style).minWidth)
+        : childWidth(child, true, inner, fontScale)!,
+    );
+  /** How much a child gives up when its line overflows (flexShrink). */
+  const shrink = (child: Node) =>
+    flexible(child) ? 0 : number(flatten(child.props.style).flexShrink);
+  /**
+   * Children on one line of a row: each flexible one gets an equal part of what's left. When
+   * the line overflows, the children that shrink give up the excess in proportion to their
+   * widths, as Yoga shrinks them: a sentence beside an icon wraps rather than run past the row.
+   */
   const line = (members: Node[]) => {
     const fixed = members.filter((child) => !flexible(child));
-    const left =
-      inner! -
-      fixed.reduce((sum, child) => sum + span(child), 0) -
-      across * Math.max(0, members.length - 1);
+    const gaps = across * Math.max(0, members.length - 1);
+    const left = inner! - fixed.reduce((sum, child) => sum + span(child), 0) - gaps;
     const share = Math.max(0, left) / Math.max(1, members.length - fixed.length);
-    return Math.max(
-      0,
-      ...members.map((child) => outer(child, flexible(child) ? share : span(child))),
-    );
+    const over = members.reduce((sum, child) => sum + span(child), gaps) - inner!;
+    const giving = members.reduce((sum, child) => sum + shrink(child) * span(child), 0);
+    const width = (child: Node) => {
+      if (flexible(child)) return Math.max(share, span(child));
+      if (over <= 0 || giving <= 0) return span(child);
+      return Math.max(0, span(child) - (over * shrink(child) * span(child)) / giving);
+    };
+    return Math.max(0, ...members.map((child) => outer(child, width(child))));
   };
   if (row && inner !== undefined) {
     if (style.flexWrap !== 'wrap') return box(line(children));
     // Lines of children, each as wide as it would be on its own; a flexible child starts at
-    // nothing, so it never starts a line.
+    // its minimum width, so one without a minimum never starts a line.
     const lines: Node[][] = [];
     let used = -1;
     for (const child of children) {
@@ -206,25 +225,36 @@ function outfitAdvance(character: string) {
 /**
  * One line of a text node's characters, estimated: IBM Plex Mono's advance is exactly 0.6 of
  * the font size; Outfit's comes from `outfitAdvance`. Letter spacing adds to each character.
- * `hanging` leaves out the white space it ends with, which a line may end past its room in.
+ * A nested run, such as an amount in the money face inside a sentence, is measured in its own
+ * size and face. `hanging` leaves out the white space it ends with, which a line may end past
+ * its room in.
  */
 function textWidth(node: Node, fontScale: number, hanging = false) {
-  const style = flatten(node.props.style);
-  const size = scaledSp(number(style.fontSize), fontScale);
-  const mono = String(style.fontFamily ?? '').includes('Mono');
-  // Outfit's bold is wider than the weights the advances were fitted to.
-  const weight = String(style.fontFamily ?? '').includes('Bold') ? 1.09 : 1;
-  const characters = hanging ? text(node).trimEnd() : text(node);
-  return [...characters].reduce(
-    (width, character) =>
-      width + size * (mono ? 0.6 : outfitAdvance(character) * weight) + number(style.letterSpacing),
-    0,
-  );
+  const parts = runs(node, {});
+  // Only the white space the whole text ends with hangs.
+  for (let index = parts.length - 1; hanging && index >= 0; index--) {
+    parts[index]!.characters = parts[index]!.characters.trimEnd();
+    if (parts[index]!.characters) break;
+  }
+  return parts.reduce((width, { characters, style }) => {
+    const size = scaledSp(number(style.fontSize), fontScale);
+    const mono = String(style.fontFamily ?? '').includes('Mono');
+    // Outfit's bold is wider than the weights the advances were fitted to.
+    const weight = String(style.fontFamily ?? '').includes('Bold') ? 1.09 : 1;
+    return [...characters].reduce(
+      (sum, character) =>
+        sum + size * (mono ? 0.6 : outfitAdvance(character) * weight) + number(style.letterSpacing),
+      width,
+    );
+  }, 0);
 }
 
-/** All the text in a node, its nested runs included. */
-const text = (node: Node | string): string =>
-  typeof node === 'string' ? node : (node.children ?? []).map(text).join('');
+/** A text's characters in runs, each in the style its nesting gives it. */
+function runs(node: Node | string, outer: Style): { characters: string; style: Style }[] {
+  if (typeof node === 'string') return [{ characters: node, style: outer }];
+  const style = { ...outer, ...flatten(node.props.style) };
+  return (node.children ?? []).flatMap((child) => runs(child, style));
+}
 
 /**
  * The width a child gets: its own fixed or percentage width; in a column, the column's width;

@@ -22,6 +22,7 @@ import {
   SegmentedControl,
   radius,
   touch,
+  useLargeText,
 } from './compact';
 import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
@@ -63,6 +64,7 @@ export function PayerSheet({
   onDone: () => void;
 }) {
   const theme = useTheme();
+  const large = useLargeText();
   const { currency } = draft;
   const money = (minor: number) => formatCurrency(toMajorAmount(minor, currency), currency);
   const memberIds = members?.map((member) => member.id) ?? [];
@@ -75,6 +77,11 @@ export function PayerSheet({
   const { totalMinor, assignedMinor } = remainder;
   const left = remainder.remainingMinor ?? 0;
   const invalid = Object.keys(remainder.problems).length > 0;
+  const keepsEntries = 'Entries stay in your draft. Done or Back keeps them.';
+  // At large text the footer is as compact as the Split sheet's, so the amount being typed keeps
+  // its row above the keyboard (#637): the remainder takes the small size, and the note that
+  // entries stay moves under the rows. A failed draft save still shows in the footer.
+  const noteInList = large && persistence !== 'error';
 
   const person = (id: string) => (
     <>
@@ -218,6 +225,11 @@ export function PayerSheet({
           </View>
         );
       })}
+      {noteInList ? (
+        <CompactText variant="small" tone="secondary">
+          {keepsEntries}
+        </CompactText>
+      ) : null}
     </>
   );
 
@@ -240,11 +252,22 @@ export function PayerSheet({
       <CompactText variant="small" tone="negative" accessibilityRole="alert" style={{ flex: 1 }}>
         Couldn’t save these entries on this device. Close this sheet and retry saving the draft.
       </CompactText>
-    ) : (
+    ) : noteInList ? null : (
       <CompactText variant="small" tone="secondary" style={{ flex: 1, minWidth: 150 }}>
-        Entries stay in your draft. Done or Back keeps them.
+        {keepsEntries}
       </CompactText>
     );
+  const giveTheRest =
+    recipient && rest ? (
+      <CompactButton
+        label={`Give ${money(left)} to ${you(recipient) ? 'you' : name(recipient).split(' ')[0]}`}
+        accessibilityLabel={`Give ${money(left)} to ${you(recipient) ? 'you' : name(recipient)}`}
+        variant="tonal"
+        dense
+        disabled={locked}
+        onPress={() => edit(rest)}
+      />
+    ) : null;
   const footer = draft.multiPayer ? (
     <>
       <View
@@ -268,12 +291,19 @@ export function PayerSheet({
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
             <Icon name="alert-circle-outline" size={18} color={theme.status.negative} />
-            <CompactText weight="semibold" tone="negative" style={{ flexShrink: 1 }}>
+            <CompactText
+              variant={large ? 'small' : 'body'}
+              weight="semibold"
+              tone="negative"
+              style={{ flexShrink: 1 }}
+            >
               {invalid ? (
                 status
               ) : (
                 <>
-                  <Money tone="negative">{money(Math.abs(left))}</Money>
+                  <Money size={large ? 'table' : 'list'} tone="negative">
+                    {money(Math.abs(left))}
+                  </Money>
                   {remainderText}
                 </>
               )}
@@ -313,19 +343,12 @@ export function PayerSheet({
           />
         </View>
       ) : null}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
-        {draftNote}
-        {recipient && rest ? (
-          <CompactButton
-            label={`Give ${money(left)} to ${you(recipient) ? 'you' : name(recipient).split(' ')[0]}`}
-            accessibilityLabel={`Give ${money(left)} to ${you(recipient) ? 'you' : name(recipient)}`}
-            variant="tonal"
-            dense
-            disabled={locked}
-            onPress={() => edit(rest)}
-          />
-        ) : null}
-      </View>
+      {draftNote || giveTheRest ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+          {draftNote}
+          {giveTheRest}
+        </View>
+      ) : null}
     </>
   ) : persistence === 'error' ? (
     draftNote
