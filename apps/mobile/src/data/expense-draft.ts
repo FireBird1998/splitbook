@@ -151,6 +151,11 @@ export interface ExpenseEditor {
    */
   groupDraft: ExpenseDraft | null;
   /**
+   * This task is the record × returned to, with the edit begun on it kept beside it (#664).
+   * Opening the same task again, as Try again, Retry and Discard do, keeps it that record.
+   */
+  keptEdit?: boolean;
+  /**
    * The entries a new Expense's draft started from, stored with the draft so it is compared
    * with the same start after a restart or a change of day. Null when unknown, as for drafts
    * stored by earlier versions. An edit starts from its saved Expense.
@@ -173,8 +178,10 @@ export interface ExpenseEditor {
 }
 /**
  * × and Back keep the edit and return to the Expense's record, not the Group (owner decision for
- * #664): an ordinary edit begun on this open's record, editing or comparing versions. A save or
- * change that may already be recorded, and a form its Group or Expense refused, return as before.
+ * #664): an ordinary edit begun on this open's record, open for editing, also once "Keep my
+ * version for review" has rebased it. A save or change that may already be recorded (its
+ * conflict too, which keeps the change to check) and a form its Group or Expense refused return to
+ * the Group as before.
  */
 export function closesToRecord(editor: ExpenseEditor) {
   const original = editor.draft?.original;
@@ -182,7 +189,7 @@ export function closesToRecord(editor: ExpenseEditor) {
     !!editor.beganOnRecord &&
     !!original &&
     original._id === editor.requestedExpenseId &&
-    (editor.status === 'editing' || editor.status === 'conflict') &&
+    editor.status === 'editing' &&
     !editor.attempt &&
     !editor.mutation &&
     !editor.accessLost

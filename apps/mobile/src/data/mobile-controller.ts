@@ -2469,6 +2469,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let draftWrite: Promise<void> = Promise.resolve();
   /** A Save accepted while Back waits for a draft write wins: Back then stays on the form. */
   let closeRequest = 0;
+  /** The record × returned to (#664): a second × while it opens is the same tap again. */
+  let closedToRecord: Route | null = null;
   /**
    * Save and close wait for the latest draft write, so nothing is sent or left from entries
    * this device doesn't hold. False when those entries couldn't be stored.
@@ -2703,6 +2705,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
     const returnTo = expenseReturn(groupId, origin.scrollY, origin.anchor);
+    // Try again, Retry and Discard reopen the same task, as for its origin: the record × returned
+    // to opens as that record again, with the kept edit beside it (QA review of #671).
+    const keeps =
+      keptEdit ||
+      (route.screen === 'expense' &&
+        route.groupId === groupId &&
+        !!expenseId &&
+        snapshot.expense.requestedExpenseId === expenseId &&
+        !!snapshot.expense.keptEdit);
+    const kept = keeps ? { keptEdit: true } : {};
     if (financialCleanup.blocked(accountId, groupId)) {
       navigate(
         { screen: 'expense', groupId, returnTo },
@@ -2712,6 +2724,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             groupId,
             status: 'blocked',
             message: financialCleanupMessage,
+            ...kept,
           },
         },
       );
@@ -2745,6 +2758,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           requestedExpenseId: expenseId ?? null,
           status: 'loading',
           returnTo,
+          ...kept,
         },
       },
     );
@@ -2836,7 +2850,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       let held =
         record &&
         expenseId &&
-        (record.draft.original?._id !== expenseId || keptEdit) &&
+        (record.draft.original?._id !== expenseId || keeps) &&
         !record.attempt &&
         !record.mutation
           ? record.draft
@@ -2948,6 +2962,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           groupDraft: held,
           blank: record ? record.blank : blank,
           history: emptyExpenseHistory(),
+          ...kept,
         },
       });
       // The record is shown first; its changes follow when they've been read.
@@ -3462,6 +3477,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const closeExpense = async (confirmed = false) => {
     if (route.screen !== 'expense' || expenseNavigationBlocked()) return;
+    // Only while that record opens, before anything of it shows (its skeleton).
+    if (
+      route === closedToRecord &&
+      snapshot.expense.status === 'loading' &&
+      !snapshot.expense.draft
+    )
+      return;
     if (snapshot.expense.status === 'delete-review') return cancelExpenseDeletion();
     const editor = snapshot.expense;
     if (
@@ -3503,8 +3525,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (invitation) return invitation;
     // The record opens again as from its row, keeping where it opened from, and reads the saved
     // Expense; the edit stays on this device, offered beside it.
-    if (closesToRecord(snapshot.expense))
-      return openExpense(route.groupId, snapshot.expense.requestedExpenseId!, {}, true);
+    if (closesToRecord(snapshot.expense)) {
+      const opening = openExpense(route.groupId, snapshot.expense.requestedExpenseId!, {}, true);
+      // The record's route shows before openExpense first waits; until the record does, a double
+      // tap's second × is ignored (QA review of #671).
+      closedToRecord = route;
+      return opening;
+    }
     const to = parent(route);
     if (to.screen !== 'group') return showHome();
     returnToGroup(to);
@@ -6245,6 +6272,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       return;
     }
+    // The same task again: a record × returned to opens with its kept edit beside it (#664).
     if (!reuse && groupId && !draft && status === 'blocked')
       return openExpense(groupId, requestedExpenseId ?? undefined);
     await (reuse ? expenseQueries.settle() : expenseQueries.retry());
