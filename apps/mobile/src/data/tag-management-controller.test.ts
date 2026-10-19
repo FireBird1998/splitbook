@@ -25,7 +25,9 @@ function phone() {
   let cookie: string | null = null;
   let account: string | null = null;
   const records = new Map<string, unknown>();
-  const networkListeners = new Set<(state: { isConnected: boolean }) => void>();
+  const networkListeners = new Set<
+    (state: { isConnected: boolean; isInternetReachable?: boolean }) => void
+  >();
   const server = {
     snapshot: {
       canManage: true,
@@ -178,13 +180,30 @@ function phone() {
     boot,
     server,
     tagRequests,
-    connect: (isConnected: boolean) => {
-      for (const listener of networkListeners) listener({ isConnected });
+    connect: (isConnected: boolean, isInternetReachable?: boolean) => {
+      for (const listener of networkListeners) listener({ isConnected, isInternetReachable });
     },
   };
 }
 
 describe('Group Tag actions through the public controller', () => {
+  it('allows an explicit Tag write on connected Wi-Fi even when internet reachability is false', async () => {
+    const device = phone();
+    const controller = device.boot();
+    await controller.signIn('alex');
+    device.connect(true, false);
+    try {
+      const manager = controller.groupTags(groupId);
+      await manager.read();
+      await expect(manager.submit({ action: 'create', name: 'Villa' })).resolves.toMatchObject({
+        state: 'applied',
+      });
+      expect(device.server.submitted).toHaveLength(1);
+    } finally {
+      device.connect(true, true);
+    }
+  });
+
   it('allows explicit correction after an authoritative ambiguous-name rejection', async () => {
     const device = phone();
     const controller = device.boot();
