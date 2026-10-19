@@ -168,7 +168,8 @@ describe('Selector tile', () => {
       />,
     );
     const tile = one(byRole(root, 'button', 'Date: Yesterday, Thursday, 1 October 2026'));
-    expect(text(tile)).toBe('Date Thu 1 Oct');
+    // The label keeps a hair space to spare (#639).
+    expect(text(tile)).toBe('Date \u200a Thu 1 Oct');
   });
 });
 

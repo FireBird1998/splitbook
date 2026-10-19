@@ -563,7 +563,8 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       const shown = () =>
         field.findAll((node) => String(node.type) === 'Text').map((node) => node.children.join(''));
       while (!shown().includes(name)) field = field.parent!;
-      expect(shown().slice(0, 2), name).toEqual([name, 'Required']);
+      // The marker's pill keeps a hair space to spare (#639).
+      expect(shown().slice(0, 2), name).toEqual([name, 'Required\u200a']);
       const [label, box] = field.children as ReactTestInstance[];
       expect(label.findAll((node) => String(node.type) === 'Text').length, name).toBe(2);
       expect(

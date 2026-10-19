@@ -243,7 +243,12 @@ describe('Home', () => {
 
   it('the balances fade in where their places were held', async () => {
     const faded = await arrival(listed(false, true), listed(true, false));
-    expect(faded).toEqual(['₹1,480.00 you owe', '₹620.00 owed to you', 'Settled up']);
+    // Each caption keeps a hair space to spare (#639).
+    expect(faded).toEqual([
+      '₹1,480.00 you owe \u200a',
+      '₹620.00 owed to you \u200a',
+      'Settled up \u200a',
+    ]);
   });
 
   const balances = (patch: Partial<HomeFinancialState>) => (

@@ -119,7 +119,8 @@ const sheet = (root: ReactTestInstance) => one(root.findAll((node) => isHost(nod
 describe('Members and Group details', () => {
   it('titles the page with the Group and returns from the back arrow', () => {
     const { root, props } = page();
-    expect(byRole(root, 'header').map(text)).toEqual(['Members and details', 'Members · 3']);
+    // A section's title keeps a hair space to spare (#639).
+    expect(byRole(root, 'header').map(text)).toEqual(['Members and details', 'Members · 3\u200a']);
     expect(text(root)).toContain('Maple House');
     act(() => {
       one(byRole(root, 'button', 'Back to Group')).props.onPress();

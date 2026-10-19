@@ -4,7 +4,6 @@ import { Icon, type IconName } from '../primitives';
 import { useReducedMotion } from './motion';
 import { denseHitSlop, radius, touch } from './scale';
 import { CompactText, FieldMarker, Money } from './text';
-import { hairSpace } from './feedback';
 
 /** Spinning while busy; with reduce motion on, a still hourglass instead. */
 export function BusyMark({ color }: { color: string }) {
@@ -63,11 +62,10 @@ export function CompactButton({
   const content = (
     <>
       {icon ? <Icon name={icon} size={18} color={color} /> : null}
-      <CompactText weight="semibold" style={{ color, fontSize: size }}>
+      {/* Room to spare (#331): a button as wide as its words, opened again, otherwise wrapped its
+          last word out of sight ("Skip for now" read "Skip for"). */}
+      <CompactText weight="semibold" spare style={{ color, fontSize: size }}>
         {label}
-        {/* Room to spare, as a Badge keeps (#331): a button as wide as its words, opened again,
-            otherwise wrapped its last word out of sight ("Skip for now" read "Skip for"). */}
-        {hairSpace}
       </CompactText>
       {amount ? <Money style={{ color }}>{amount}</Money> : null}
     </>
@@ -228,7 +226,7 @@ export function SelectorTile({
       <Icon name={icon} size={20} color={error ? theme.status.negative : theme.brand.main} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <CompactText variant="caption" tone={error ? 'negative' : 'secondary'}>
+          <CompactText variant="caption" tone={error ? 'negative' : 'secondary'} spare>
             {label}
           </CompactText>
           {required ? <FieldMarker kind="required" /> : null}
@@ -299,6 +297,7 @@ export function SegmentedControl<T extends string>({
               <CompactText
                 weight="semibold"
                 tone={selected ? 'primary' : 'secondary'}
+                spare
                 style={{ fontSize: 14 }}
               >
                 {option.label}
@@ -359,6 +358,7 @@ export function Chip({
       <CompactText
         weight={selected ? 'semibold' : 'medium'}
         tone={selected ? 'brand' : 'primary'}
+        spare
         style={{ fontSize: 14 }}
       >
         {label}
@@ -462,7 +462,7 @@ export function FloatingAction({
       })}
     >
       <Icon name={icon} size={24} color={theme.brand.contrastText} />
-      <CompactText weight="semibold" style={{ color: theme.brand.contrastText }}>
+      <CompactText weight="semibold" spare style={{ color: theme.brand.contrastText }}>
         {label}
       </CompactText>
     </Pressable>

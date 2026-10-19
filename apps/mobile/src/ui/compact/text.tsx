@@ -40,11 +40,26 @@ export function toneColor(theme: SemanticTokens, tone: TextTone) {
   }
 }
 
+/**
+ * Room a label sized to its words keeps to spare: a hair space (U+200A) after it. React Native
+ * sizes such a label to the width it measured, and Android's TextView lays the text out again to
+ * draw it (React Native 0.86 doesn't draw from the measured layout: `enablePreparedTextLayout`
+ * is off). The second layout can need a fraction of a pixel more, most often at a low density,
+ * where a pixel is a whole dp; then a label that fitted to within that fraction wraps its last
+ * word onto a line its one-line box has no room for. Tea stall's badge drew "You owe Sam"
+ * without "₹416.67" (#331); "Groups · 7" drew "Groups ·" and "One person" "One" (#639). The hair
+ * space adds its width to the measure but never moves a word to the next line, as a line may end
+ * past its room in white space.
+ */
+export const hairSpace = String.fromCodePoint(0x200a);
+
 export function CompactText({
   variant = 'body',
   tone = 'primary',
   weight,
+  spare = false,
   style,
+  children,
   ...props
 }: TextProps & {
   /** The text itself, as for a heading the screen reader is moved to. */
@@ -52,23 +67,32 @@ export function CompactText({
   variant?: TextVariant;
   tone?: TextTone;
   weight?: 'regular' | 'medium' | 'semibold';
+  /**
+   * The text's box is as wide as its words, as a label beside something in a row, in a pill, a
+   * button or a segment is: it ends in a hair space, room to spare (`hairSpace`). Text that fills
+   * its line, or wraps across the screen, doesn't need it.
+   */
+  spare?: boolean;
 }) {
   const theme = useTheme();
-  return (
-    <Text
-      {...props}
-      style={[
-        textVariants[variant],
-        {
-          color:
-            variant === 'overline' && tone === 'primary'
-              ? theme.textSecondary
-              : toneColor(theme, tone),
-        },
-        weight && { fontFamily: fonts[weight] },
-        style,
-      ]}
-    />
+  const look = [
+    textVariants[variant],
+    {
+      color:
+        variant === 'overline' && tone === 'primary' ? theme.textSecondary : toneColor(theme, tone),
+    },
+    weight && { fontFamily: fonts[weight] },
+    style,
+  ];
+  return spare ? (
+    <Text {...props} style={look}>
+      {children}
+      {hairSpace}
+    </Text>
+  ) : (
+    <Text {...props} style={look}>
+      {children}
+    </Text>
   );
 }
 
@@ -228,6 +252,7 @@ export function FieldMarker({ kind }: { kind: 'required' | 'optional' }) {
         }}
       >
         {required ? 'Required' : 'Optional'}
+        {hairSpace}
       </Text>
     </View>
   );

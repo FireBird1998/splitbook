@@ -478,7 +478,7 @@ const GroupRow = memo(function GroupRow({
         position ? (
           <RowAmount amount={position.amount} tone={position.tone} caption={position.caption} />
         ) : balances ? (
-          <CompactText variant="small" tone="secondary">
+          <CompactText variant="small" tone="secondary" spare>
             Settled up
           </CompactText>
         ) : undefined

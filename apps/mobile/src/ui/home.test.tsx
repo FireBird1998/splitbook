@@ -258,7 +258,8 @@ describe('Continue where you left off', () => {
         onOpen={onOpen}
       />,
     );
-    expect(headers(root)).toEqual(['Continue where you left off']);
+    // A section's title keeps a hair space to spare (#639).
+    expect(headers(root)).toEqual(['Continue where you left off\u200a']);
     expect(buttons(root).map((row) => row.props.accessibilityLabel)).toEqual([
       'Save not confirmed, Airport taxi, ₹1,150.00, Goa Friends Trip',
       'Draft, Weekly groceries, ₹1,249.50, Maple House',
@@ -302,7 +303,7 @@ describe('Home Groups', () => {
   });
   it('shows the member’s balance in each Group, its first currency and +N, or Settled up', () => {
     const { root, onOpen } = view();
-    expect(headers(root)).toEqual(['Groups · 4']);
+    expect(headers(root)).toEqual(['Groups · 4\u200a']);
     expect(buttons(root).map((row) => row.props.accessibilityLabel)).toEqual([
       'New Group',
       'Open Maple House, Household · 3 members, You owe ₹1,480.00',
@@ -329,7 +330,7 @@ describe('Home Groups', () => {
 
   it('invites a first Group when there are none, and explains a failed read with a retry', () => {
     const empty = view({ data: [] });
-    expect(headers(empty.root)).toEqual(['Groups · 0']);
+    expect(headers(empty.root)).toEqual(['Groups · 0\u200a']);
     expect(text(empty.root)).toContain('A shared space starts here.');
     act(() => button(empty.root, 'Refresh Groups').props.onPress());
     expect(empty.onRetry).toHaveBeenCalledTimes(1);
@@ -347,11 +348,11 @@ describe('Home Groups', () => {
       root.findAll((node) => node.props.accessibilityLabel === 'Loading your Groups');
     const first = view({ status: 'loading', data: [], loaded: false });
     expect(placeholders(first.root)).not.toHaveLength(0);
-    expect(headers(first.root)).toEqual(['Groups']);
+    expect(headers(first.root)).toEqual(['Groups\u200a']);
 
     const again = view({ status: 'loading', data: [], loaded: true });
     expect(placeholders(again.root)).toHaveLength(0);
-    expect(headers(again.root)).toEqual(['Groups · 0']);
+    expect(headers(again.root)).toEqual(['Groups · 0\u200a']);
     expect(text(again.root)).toContain('A shared space starts here.');
   });
 });
