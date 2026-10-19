@@ -15,6 +15,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import { groupService } from '@/lib/services/group.service';
+import { expenseService } from '@/lib/services/expense.service';
+import { settlementService } from '@/lib/services/settlement.service';
+import { seedDemoData } from '@/lib/demo/seed';
+import { DEMO_HOUSEHOLD_ID, DEMO_PERSONA_IDS } from '@/lib/demo-personas';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
@@ -151,6 +155,70 @@ async function openGroupPage(groupId: string) {
 }
 
 describe('GET /api/groups/[id]/balances with a recurring Expense due', () => {
+  it('gives the demo Household fewer Suggested payments than Debts for the browser explanation', async () => {
+    await seedDemoData();
+    session.userId = DEMO_PERSONA_IDS.alex;
+    const { status, body } = await read(readBalances, DEMO_HOUSEHOLD_ID, '/balances');
+    expect(status).toBe(200);
+    expect(body.data.debts).toHaveLength(2);
+    expect(body.data.debtsBeforeSimplifying).toHaveLength(3);
+  });
+  it('returns the worked-example Debts beside unchanged Suggested payments and reduces only the paid pair', async () => {
+    const group = await groupService.create(
+      { name: 'Maple example', category: 'home', defaultCurrency: 'INR', alternateCurrencies: [] },
+      alice,
+    );
+    const groupId = String(group._id);
+    await groupService.addMember(groupId, bob);
+    await groupService.addMember(groupId, carol);
+    for (const [payer, amount, splits] of [
+      [
+        bob,
+        1060,
+        [
+          { user: alice, amount: 880 },
+          { user: carol, amount: 180 },
+        ],
+      ],
+      [carol, 600, [{ user: alice, amount: 600 }]],
+    ] as const) {
+      await expenseService.create(
+        groupId,
+        {
+          description: 'Worked example',
+          amount,
+          currency: 'INR',
+          category: 'other',
+          tag: 'General',
+          date: new Date('2026-09-19T12:00:00Z'),
+          paidBy: [{ user: payer, amount }],
+          splitMethod: 'exact',
+          splitBetween: [...splits],
+        },
+        payer,
+      );
+    }
+    session.userId = alice;
+    const { status, body } = await read(readBalances, groupId, '/balances');
+    expect(status).toBe(200);
+    const expected = [
+      { from: { _id: alice }, to: { _id: bob }, amount: 880 },
+      { from: { _id: alice }, to: { _id: carol }, amount: 600 },
+      { from: { _id: carol }, to: { _id: bob }, amount: 180 },
+    ];
+    expect(body.data.debtsBeforeSimplifying).toMatchObject(expected);
+    expect(body.data.byCurrency[0].debtsBeforeSimplifying).toEqual(
+      body.data.debtsBeforeSimplifying,
+    );
+    expect(body.data.debts).toMatchObject([
+      { from: { _id: alice }, to: { _id: bob }, amount: 1060 },
+      { from: { _id: alice }, to: { _id: carol }, amount: 420 },
+    ]);
+    await settlementService.create(groupId, { paidTo: bob, amount: 180, currency: 'INR' }, carol);
+    const after = await read(readBalances, groupId, '/balances');
+    expect(after.body.data.debtsBeforeSimplifying).toMatchObject(expected.slice(0, 2));
+    expect(after.body.data.debtsBeforeSimplifying).toHaveLength(2);
+  });
   it('includes this month’s Rent when the Group page starts its reads together', async () => {
     for (let round = 0; round < 20; round += 1) {
       const { groupId, templateId } = await householdWithRentDue(`Lakeview Flat ${round}`);

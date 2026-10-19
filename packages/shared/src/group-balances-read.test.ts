@@ -39,6 +39,27 @@ function changed(path: readonly (string | number)[], value: unknown) {
 const bucket = ['data', 'byCurrency', 0];
 
 describe('Group Balances read contract', () => {
+  it('accepts Debts before simplifying without changing legacy Suggested payments', () => {
+    const body = changed(
+      [...bucket, 'debtsBeforeSimplifying'],
+      [{ from: sam, to: { _id: priya, name: 'Priya Shah' }, amount: 30 }],
+    );
+    expect(parseGroupBalancesResponse(body)).toStrictEqual(body.data);
+    expect(parseGroupBalancesResponse(response).byCurrency[0]).not.toHaveProperty(
+      'debtsBeforeSimplifying',
+    );
+  });
+
+  it.each([
+    [null],
+    [{}],
+    [[{ from: sam, to: { _id: priya }, amount: 0 }]],
+    [[{ from: sam, to: { _id: priya }, amount: '30' }]],
+  ])('rejects malformed optional Debts before simplifying: %j', (value) => {
+    expect(() =>
+      parseGroupBalancesResponse(changed([...bucket, 'debtsBeforeSimplifying'], value)),
+    ).toThrow(GroupBalancesReadError);
+  });
   it('returns the wire shape, with the fields it does not declare', () => {
     expect(parseGroupBalancesResponse(changed(['extra'], 1))).toStrictEqual(response.data);
   });

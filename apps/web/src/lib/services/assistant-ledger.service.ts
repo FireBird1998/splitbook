@@ -130,7 +130,9 @@ export const assistantLedgerService = {
   },
   async balances(actorId: string, groupId: string) {
     await requireLedgerMembership(actorId, groupId);
-    const read = await balanceService.getGroupBalances(groupId);
+    const read = await balanceService.getGroupBalances(groupId, {
+      includeDebtsBeforeSimplifying: false,
+    });
     if (!read) throw new Error('FORBIDDEN');
     const member = assistantMembers(actorId);
     const bucket = (balances: Pick<typeof read, 'currency' | 'balances' | 'debts'>) => ({

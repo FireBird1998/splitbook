@@ -8,6 +8,9 @@ const currencyBalances = z.looseObject({
   debts: z.array(
     z.looseObject({ from: financialPerson, to: financialPerson, amount: amount.positive() }),
   ),
+  debtsBeforeSimplifying: z
+    .array(z.looseObject({ from: financialPerson, to: financialPerson, amount: amount.positive() }))
+    .optional(),
 });
 const groupBalances = z.looseObject({ byCurrency: z.array(currencyBalances) });
 

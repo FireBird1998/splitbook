@@ -43,10 +43,11 @@ import type { GroupRead } from '@splitbook/shared/group-read';
 import { fetchWebBalances, fetchWebRead } from '@/lib/web-read';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import type { SettlementAttempt } from '@/lib/settlement-attempts';
-import { TabCard, PersonAvatar } from './TabCard';
+import { PersonAvatar } from './TabCard';
 import PaymentsTable, { type PaymentRead, type PaymentsState } from './PaymentsTable';
 import EveryoneCard, { type EveryoneState } from './EveryoneCard';
 import type { EveryonePerson } from './everyone-chart';
+import SettleUpViews, { type Debt } from './SettleUpViews';
 
 const MIXED_CURRENCY_WARNING =
   'This ledger contains multiple currencies. Each balance is shown separately, without conversion.';
@@ -65,10 +66,17 @@ interface BalancePerson {
 /** Someone the read names; null for an account it can no longer identify. */
 type ReadPerson = BalancePerson | null | undefined;
 
+interface SuggestedPayment {
+  from: { _id: string; name: string };
+  to: { _id: string; name: string };
+  amount: number;
+}
+
 interface CurrencyFigures {
   currency: string;
   balances: Array<{ user: BalancePerson; balance: number }>;
-  debts: Array<{ from: BalancePerson; to: BalancePerson; amount: number }>;
+  debts: SuggestedPayment[];
+  debtsBeforeSimplifying?: Debt[];
 }
 
 interface BalancesRead {
@@ -410,10 +418,12 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   })();
 
   const settleUpCard = (
-    <TabCard
-      headingId="settle-up-heading"
-      title="Settle up"
-      subtitle={debts.length > 0 ? `${currency} · Record one once it’s paid` : currency}
+    <SettleUpViews
+      key={`${groupId}:${currency}`}
+      currency={currency}
+      viewerId={userId}
+      debts={(shownBucket ?? read)?.debtsBeforeSimplifying}
+      suggestedCount={debts.length}
     >
       {debts.length === 0 ? (
         <Typography sx={{ m: 0, px: 2.5, pb: 2.5, fontSize: '0.875rem', color: 'text.secondary' }}>
@@ -581,7 +591,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           </Typography>
         </>
       )}
-    </TabCard>
+    </SettleUpViews>
   );
 
   // Everyone's position in the currency shown (#313): loading and failing with the balances,
