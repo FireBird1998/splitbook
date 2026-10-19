@@ -58,8 +58,12 @@ export default function DemoPersonaPicker({
         placeItems: 'center',
         px: 2,
         py: 6,
-        background: (theme) =>
-          `radial-gradient(ellipse 80% 50% at 50% -10%, ${theme.palette.primary.main}24, transparent), ${theme.palette.background.default}`,
+        background: (theme) => {
+          const glow = theme.vars
+            ? `rgba(${theme.vars.palette.primary.mainChannel} / ${36 / 255})`
+            : `${theme.palette.primary.main}24`;
+          return `radial-gradient(ellipse 80% 50% at 50% -10%, ${glow}, transparent), ${(theme.vars ?? theme).palette.background.default}`;
+        },
       }}
     >
       <Box

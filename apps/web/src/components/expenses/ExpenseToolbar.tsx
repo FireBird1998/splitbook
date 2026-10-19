@@ -483,7 +483,7 @@ function SearchField({
         color: 'text.secondary',
         '&:focus-within': {
           borderColor: 'focus.main',
-          boxShadow: (theme) => `0 0 0 3px ${theme.palette.focus.ring}`,
+          boxShadow: (theme) => `0 0 0 3px ${(theme.vars ?? theme).palette.focus.ring}`,
         },
         // In the box, / types a slash.
         '&:focus-within [data-shortcut-hint]': { display: 'none' },

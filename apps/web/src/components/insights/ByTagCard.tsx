@@ -183,7 +183,7 @@ function TagBars({ model }: { model: ByTagModel }) {
                     borderRadius: '1px',
                     bgcolor: 'text.secondary',
                     // A ring in the card's colour keeps the tick clear of the bar under it.
-                    boxShadow: `0 0 0 2px ${theme.palette.background.paper}`,
+                    boxShadow: `0 0 0 2px ${(theme.vars ?? theme).palette.background.paper}`,
                   })}
                 />
               )}

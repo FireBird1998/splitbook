@@ -7,6 +7,7 @@ import {
   expectedTheme,
   expectNoSeriousA11yViolations,
   expectThemeApplied,
+  hexToRgb,
   isPhone,
   reviewScreenshot,
 } from './fixtures';
@@ -173,8 +174,8 @@ test('Insights opens from the tab bar on the current Month, with seven months of
   await expect(bars).toHaveCount(7);
   const tokens = expectedTheme(testInfo) === 'dark' ? darkTokens : lightTokens;
   expect(
-    await bars.evaluateAll((elements) => elements.map((element) => element.getAttribute('fill'))),
-  ).toEqual([...Array(6).fill(tokens.chart.seriesSoft), tokens.chart.series]);
+    await bars.evaluateAll((elements) => elements.map((element) => getComputedStyle(element).fill)),
+  ).toEqual([...Array(6).fill(tokens.chart.seriesSoft), tokens.chart.series].map(hexToRgb));
   await expect(chart.getByTestId('monthly-average-line')).toHaveCount(1);
   await expect(
     card.getByText(/ (above|below) the 6-month average\.| matches the 6-month average\./),

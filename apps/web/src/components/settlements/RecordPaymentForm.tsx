@@ -131,7 +131,7 @@ const fieldSx = (theme: Theme) => ({
   fontSize: '0.9375rem',
   '&.Mui-focused': {
     borderColor: 'focus.main',
-    boxShadow: `0 0 0 3px ${theme.palette.focus.ring}`,
+    boxShadow: `0 0 0 3px ${(theme.vars ?? theme).palette.focus.ring}`,
   },
   // The field's border shows focus, so the control inside it doesn't add the global ring.
   '& input:focus-visible, & select:focus-visible': { outline: 'none', boxShadow: 'none' },
@@ -637,7 +637,7 @@ export default function RecordPaymentForm({
                 border: 1,
                 borderColor: amountError ? 'status.negative' : 'border.strong',
                 boxShadow: amountError
-                  ? `inset 0 0 0 1px ${theme.palette.status.negative}`
+                  ? `inset 0 0 0 1px ${(theme.vars ?? theme).palette.status.negative}`
                   : 'none',
                 borderRadius: '12px',
                 bgcolor: readOnly ? 'surface.muted' : 'background.paper',
@@ -646,7 +646,7 @@ export default function RecordPaymentForm({
                 pr: 1.75,
                 '&.Mui-focused': {
                   borderColor: 'focus.main',
-                  boxShadow: `0 0 0 3px ${theme.palette.focus.ring}`,
+                  boxShadow: `0 0 0 3px ${(theme.vars ?? theme).palette.focus.ring}`,
                 },
                 '& input:focus-visible': { outline: 'none', boxShadow: 'none' },
                 '& input': {

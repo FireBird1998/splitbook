@@ -543,7 +543,10 @@ function GroupSettingsContent({
                           height: 20,
                           ...(m.role === 'admin'
                             ? {
-                                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
+                                backgroundColor: (theme) =>
+                                  theme.vars
+                                    ? `rgba(${theme.vars.palette.primary.mainChannel} / 0.1)`
+                                    : alpha(theme.palette.primary.main, 0.1),
                                 color: 'primary.main',
                               }
                             : {}),

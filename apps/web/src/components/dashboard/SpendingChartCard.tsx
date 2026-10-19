@@ -225,7 +225,9 @@ function gapRatio(band: number | null): number {
 const LABEL_CHARACTER_WIDTH = 7;
 
 function SpendingColumns({ model }: { model: SpendingChartModel }) {
-  const { palette, typography } = useTheme();
+  const theme = useTheme();
+  const { typography } = theme;
+  const { palette } = theme.vars ?? theme;
   const [measure, width] = useWidth();
   const band = bandWidth(width, model.rows.length);
   const axis = valueAxis(Math.max(...model.rows.map((row) => row.amount)));

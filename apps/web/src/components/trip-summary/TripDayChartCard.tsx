@@ -202,7 +202,9 @@ function AverageLine({
   text: string;
   labelled: boolean;
 }) {
-  const { palette, typography } = useTheme();
+  const theme = useTheme();
+  const { typography } = theme;
+  const { palette } = theme.vars ?? theme;
   const { left, width } = useDrawingArea();
   const scale = useYScale() as (input: number) => number | undefined;
   const y = scale(value);
@@ -242,7 +244,9 @@ function AverageLine({
 }
 
 function DayColumns({ model }: { model: TripDayChart }) {
-  const { palette, typography } = useTheme();
+  const theme = useTheme();
+  const { typography } = theme;
+  const { palette } = theme.vars ?? theme;
   const [measure, width] = useWidth();
   const average = model.average;
   const labelled = Boolean(average) && width !== null && width >= LABEL_MIN_WIDTH;

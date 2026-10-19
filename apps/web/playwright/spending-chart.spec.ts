@@ -5,6 +5,7 @@ import {
   expectedTheme,
   expectNoSeriousA11yViolations,
   expectThemeApplied,
+  hexToRgb,
   isPhone,
   reviewScreenshot,
 } from './fixtures';
@@ -89,9 +90,11 @@ test('Home shows six Months of the member’s share as columns, the current Mont
   await expect(bars).toHaveCount(6);
   const tokens = expectedTheme(testInfo) === 'dark' ? darkTokens : lightTokens;
   const fills = await bars.evaluateAll((elements) =>
-    elements.map((element) => element.getAttribute('fill')),
+    elements.map((element) => getComputedStyle(element).fill),
   );
-  expect(fills).toEqual([...Array(5).fill(tokens.chart.seriesSoft), tokens.chart.series]);
+  expect(fills).toEqual(
+    [...Array(5).fill(tokens.chart.seriesSoft), tokens.chart.series].map(hexToRgb),
+  );
   await expect(card.getByRole('table')).toHaveCount(1);
   expect(await shareColumn(card)).toEqual(
     series.months.map((month) => money(month.shareMinor, series.currency)),

@@ -109,7 +109,7 @@ export function expectedTheme(testInfo: TestInfo): 'light' | 'dark' {
 }
 
 /** CSS `rgb()` form of a `#rrggbb` token, as getComputedStyle reports it. */
-function hexToRgb(hex: string): string {
+export function hexToRgb(hex: string): string {
   const n = parseInt(hex.slice(1), 16);
   return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
 }
