@@ -276,6 +276,8 @@ export interface HomeSession {
   publish(next: Partial<MobileSnapshot>): void;
   /** Home shows in a signed-in session. */
   shows(): boolean;
+  /** No live session check has succeeded since the last offline answer. */
+  offline(): boolean;
   lease(): AccountStorageLease | null;
   /** The account lease's own checks, at write time: still this account, with no clean-up. */
   owns(accountId: string): boolean;
@@ -667,7 +669,8 @@ export function createHomeQueries(session: HomeSession) {
       queryFn: queryFn(acceptList, () => session.snapshot().groups.data.length > 0),
       // A saved list is never current. Returning from a live Group read must replace it too,
       // or its old offline answer keeps Home's connection notice beside live balances (#669).
-      refetchOnMount: (query) => query.state.data?.source === 'saved',
+      // Without a confirmed connection, keep the saved answer until focus, reconnect or Retry.
+      refetchOnMount: (query) => query.state.data?.source === 'saved' && !session.offline(),
     },
     {
       queryKey: keys()[1],
