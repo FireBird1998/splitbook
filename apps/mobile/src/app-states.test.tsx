@@ -1099,7 +1099,7 @@ describe('offline', () => {
     const saved = `Saved ${refreshedLabel(savedAt)}`;
     expect(app.text()).toContain('You’re offline');
     expect(app.text()).toContain(
-      `What’s shown was saved on this device at ${refreshedLabel(savedAt)}`,
+      `Some of what\'s shown was saved on this device at ${refreshedLabel(savedAt)}`,
     );
     expect(app.text()).toContain(saved);
 
@@ -1569,7 +1569,7 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.text()).not.toContain('This view was not saved');
     // Home says it's offline, but nothing shown is this phone's copy, so not that it was saved.
     expect(app.text()).toContain('You’re offlineConnect to load the latest.');
-    expect(app.text()).not.toContain('What’s shown was saved');
+    expect(app.text()).not.toContain("Some of what's shown was saved");
   });
 
   it('says the same beside the badge of a saved copy a change has since removed', async () => {
@@ -1634,7 +1634,7 @@ describe('Home says what is true, without jumps (#332)', () => {
       );
       expect(app.text()).not.toContain('This view was not saved');
       // The list on screen is still this phone's earlier copy, and the banner says so.
-      expect(app.text()).toContain('What’s shown was saved on this device');
+      expect(app.text()).toContain("Some of what's shown was saved on this device");
     },
   );
 
@@ -1648,7 +1648,7 @@ describe('Home says what is true, without jumps (#332)', () => {
     await settle(controller().refreshHome());
     expect(app.content().inside).toContain(badge(`Saved ${refreshedLabel(savedAt)}`));
     expect(app.text()).toContain('You’re offline');
-    expect(app.text()).toContain('What’s shown was saved on this device');
+    expect(app.text()).toContain("Some of what's shown was saved on this device");
   });
 
   it('keeps the offline banner over an empty Groups list and its saved figures', async () => {
@@ -1662,7 +1662,7 @@ describe('Home says what is true, without jumps (#332)', () => {
     await settle();
     expect(app.text()).toContain('A shared space starts here.');
     expect(app.text()).toContain('Nothing outstanding in your Groups');
-    expect(app.text()).toContain('You’re offlineWhat’s shown was saved on this device');
+    expect(app.text()).toContain("You’re offlineSome of what's shown was saved on this device");
   });
 
   it('says the balances and Groups aren’t saved, offline after a sign-out cleared them', async () => {
@@ -1688,7 +1688,7 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.text()).not.toContain('yet');
     // Home says it's offline; nothing shown was saved on this phone, so nothing says it was.
     expect(app.text()).toContain('You’re offlineConnect to load the latest.');
-    expect(app.text()).not.toContain('What’s shown was saved');
+    expect(app.text()).not.toContain("Some of what's shown was saved");
   });
 
   /**
@@ -1719,7 +1719,7 @@ describe('Home says what is true, without jumps (#332)', () => {
 
     const app = await start(phone);
     await settle();
-    expect(app.text()).toContain('You’re offlineWhat’s shown was saved on this device');
+    expect(app.text()).toContain("You’re offlineSome of what's shown was saved on this device");
     expect(app.text()).toContain('Maple House');
     expect(app.text()).toContain(notSaved.balances);
     expect(app.text()).not.toContain('yet');
@@ -1912,7 +1912,9 @@ describe('A Group says what is true, without jumps (#219)', () => {
       await app.press(open[groupId]);
       expect(app.content().inside).toContain(expenses);
       // The Group itself is this phone's copy: the banner says what was saved (#219).
-      expect(app.text()).toContain('You’re offlineWhat’s shown was saved on this device at');
+      expect(app.text()).toContain(
+        "You’re offlineSome of what's shown was saved on this device at",
+      );
       await app.press('Balances');
       expect(app.content().inside).toContain(
         'These balances aren’t saved on this phone. Connect to load them.',
@@ -1968,7 +1970,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     // Maple House shows this phone's copy: the banner says when it was saved, as its badge does.
     await app.press(open[maple]);
     expect(app.text()).toContain(
-      `You’re offlineWhat’s shown was saved on this device at ${refreshedLabel(savedAt)}`,
+      `You’re offlineSome of what\'s shown was saved on this device at ${refreshedLabel(savedAt)}`,
     );
     expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}\u200a`);
     await app.press('Back to Home');
@@ -1981,7 +1983,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await check.reached;
     await settle();
     expect(app.text()).toContain('You’re offlineConnect to load the latest.');
-    expect(app.text()).not.toContain('What’s shown was saved');
+    expect(app.text()).not.toContain("Some of what's shown was saved");
 
     // Splitbook answered the check: the app is online while the Group and its Expenses are
     // still read.
@@ -2024,7 +2026,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expenses.release();
     await settle();
     expect(app.text()).toContain(
-      `You’re offlineWhat’s shown was saved on this device at ${refreshedLabel(savedAt)}`,
+      `You’re offlineSome of what\'s shown was saved on this device at ${refreshedLabel(savedAt)}`,
     );
   });
 
@@ -2946,6 +2948,6 @@ describe('Activity says what is true (#222)', () => {
     expect(app.text()).not.toContain('Saved');
     // Nothing shown is this phone's copy: the banner says only that the app is offline.
     expect(app.text()).toContain('You’re offlineConnect to load the latest.');
-    expect(app.text()).not.toContain('What’s shown was saved');
+    expect(app.text()).not.toContain("Some of what's shown was saved");
   });
 });

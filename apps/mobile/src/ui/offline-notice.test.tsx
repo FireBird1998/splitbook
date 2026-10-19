@@ -35,7 +35,7 @@ const text = (node: ReactTestInstance): string =>
 const savedAt = new Date(2026, 8, 30, 10, 42).getTime();
 
 describe('offline banner', () => {
-  it('is one polite banner saying when what’s shown was saved, with Try again where asked', () => {
+  it('names the oldest saved copy as some of what is shown, with Try again where asked', () => {
     const onRetry = vi.fn();
     const root = render(
       <OfflineNotice
@@ -47,7 +47,7 @@ describe('offline banner', () => {
     expect(banner.props.accessibilityLiveRegion).toBe('polite');
     // Try again ends in a hair space (#331), which a reader doesn't hear.
     expect(text(banner).trim()).toBe(
-      `You’re offlineWhat’s shown was saved on this device at ${refreshedLabel(savedAt)} and may have changed since.Try again`,
+      `You’re offlineSome of what's shown was saved on this device at ${refreshedLabel(savedAt)} and may have changed since.Try again`,
     );
     act(() => byRole(root, 'button', 'Try again')[0].props.onPress());
     expect(onRetry).toHaveBeenCalledOnce();
