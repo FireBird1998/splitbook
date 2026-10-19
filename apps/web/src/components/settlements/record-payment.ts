@@ -20,7 +20,6 @@ import { groupTabHref } from '@/components/groups/group-tabs';
 export const NOTE_MAX_LENGTH = 500;
 
 export const RECORD_PAYMENT_FOOTNOTE = 'Records a payment made outside Splitbook. No money moves.';
-export const OVERPAY_TICK = 'I meant to pay more than suggested';
 
 /** Money as the app shows it: "₹1,060.00". */
 export const money = (amountMinor: number, currency: string) =>
@@ -109,7 +108,7 @@ export interface NewPaymentDraft {
   to: string;
   amount: string;
   note: string;
-  /** "I meant to pay more than suggested". */
+  /** The overpayment acknowledgement. */
   ack: boolean;
 }
 
@@ -124,6 +123,8 @@ export interface NewPaymentCheck {
   preview: SettlementPreview | null;
   /** The overpayment warning; Record waits for the tick. */
   overpayment: string | null;
+  /** The acknowledgement in the payer’s or recorder’s words. */
+  overpayTick: string;
   /** Why Record is disabled, under the button; null when nothing more is needed or a field says why. */
   waitingFor: string | null;
   ready: boolean;
@@ -157,6 +158,10 @@ export function checkNewPayment(
           amountMinor: amount.amountMinor,
         })
       : null;
+  const overpayTick =
+    draft.from === viewerId
+      ? 'I meant to pay more than suggested'
+      : `${nameOf(draft.from)} paid more than suggested`;
   const overpayment =
     preview?.overpays === true
       ? overpaymentMessage(
@@ -175,7 +180,7 @@ export function checkNewPayment(
   else if (ledger.status === 'loading') waitingFor = 'Loading the latest balances…';
   else if (ledger.status === 'error')
     waitingFor = 'Balances could not be loaded, so this payment can’t be checked yet.';
-  else if (overpayment && !draft.ack) waitingFor = `Tick “${OVERPAY_TICK}” first.`;
+  else if (overpayment && !draft.ack) waitingFor = `Tick “${overpayTick}” first.`;
 
   const ready =
     pairReady &&
@@ -183,7 +188,17 @@ export function checkNewPayment(
     noteError === null &&
     preview !== null &&
     (!preview.overpays || draft.ack);
-  return { partyError, amount, noteError, suggestedMinor, preview, overpayment, waitingFor, ready };
+  return {
+    partyError,
+    amount,
+    noteError,
+    suggestedMinor,
+    preview,
+    overpayment,
+    overpayTick,
+    waitingFor,
+    ready,
+  };
 }
 
 /** What the amount field's locked currency reads as. */
