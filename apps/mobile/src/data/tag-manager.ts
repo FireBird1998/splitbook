@@ -5,12 +5,20 @@ import {
   type TagActionResult,
   type TagSnapshot,
 } from '@splitbook/shared/tag-management';
-import type { tagManagement, MobileTagIntent, TagRecovery } from './tag-management';
+import type { tagManagement, MobileTagIntent, TagRead, TagRecovery } from './tag-management';
 import { RequestError, Superseded } from './transport';
 
 export interface TagManagerState {
   groupId: string | null;
   snapshot: TagSnapshot | null;
+  /**
+   * When the Tags shown were read: by the server, or this phone's saved copy (`saved`), which is
+   * never presented as current (#638). Null until a read answers.
+   */
+  refreshedAt: number | null;
+  saved: boolean;
+  /** Splitbook couldn't be reached, and this phone keeps no copy of the Tags (#638). */
+  unsaved: boolean;
   recovery: TagRecovery | null;
   result: TagActionResult | null;
   edit: MobileTagIntent | null;
@@ -39,6 +47,15 @@ export const notAppliedTagMessage =
   'It hasn’t happened yet. Checking changed nothing; Try again to make the change.';
 /** Said when reading the Tags failed: a read changes nothing, so nothing is left to check. */
 export const refreshFailedTagMessage = 'Couldn’t refresh the Tags. Pull down to try again.';
+/**
+ * Said when the Tags shown couldn't be read again, Splitbook out of reach, and this phone no
+ * longer keeps a copy of them: true of what stays on screen, as other screens say it (#638).
+ */
+export const notKeptTagMessage =
+  'Couldn’t refresh the Tags, and this phone no longer keeps a copy of them.';
+/** Splitbook couldn't be reached, and this phone had no saved copy of the Tags to answer with. */
+const unreachable = (error: unknown) =>
+  error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
 
 /** A read of the Tags that failed, told apart from a change whose reply was lost. */
 class TagReadFailed extends Error {
@@ -49,6 +66,9 @@ class TagReadFailed extends Error {
 export const emptyTagManager = (): TagManagerState => ({
   groupId: null,
   snapshot: null,
+  refreshedAt: null,
+  saved: false,
+  unsaved: false,
   recovery: null,
   result: null,
   edit: null,
@@ -69,7 +89,7 @@ export function tagManager({
   current,
 }: {
   client(): ReturnType<typeof tagManagement> & {
-    watch(snapshot: (snapshot: TagSnapshot) => void, error: (error: unknown) => void): () => void;
+    watch(shown: (read: TagRead) => void, error: (error: unknown) => void): () => void;
   };
   groupId: string;
   read(): TagManagerState;
@@ -86,22 +106,40 @@ export function tagManager({
     update({ recovery });
     return recovery;
   };
+  /** The Tags a read answered, from the server or this phone's saved copy, with their time. */
+  const shown = ({ snapshot, refreshedAt, saved }: TagRead) =>
+    update({ snapshot, refreshedAt, saved, unsaved: false });
+  /** Tags the server sent with a change's outcome: read now, never this phone's copy. */
+  const served = (snapshot: TagSnapshot) => ({
+    snapshot,
+    refreshedAt: Date.now(),
+    saved: false,
+    unsaved: false,
+  });
   const refresh = async () => {
-    let snapshot: TagSnapshot;
+    let answer: TagRead;
     try {
-      snapshot = await client().read();
+      answer = await client().read();
     } catch (error) {
       throw error instanceof Superseded ? error : new TagReadFailed(error);
     }
-    update({ snapshot });
+    shown(answer);
   };
   const failure = (error: unknown) => {
     if (error instanceof Superseded) return;
     if (error instanceof TagReadFailed) {
       const reason = error.reason;
+      // Out of reach, with no copy here: nothing failed to load, the phone keeps none (#638).
+      if (unreachable(reason) && !read().snapshot) {
+        update({ unsaved: true, message: '' });
+        return;
+      }
+      // Any other failure is the server's or the answer's, not about what this phone keeps.
       update({
-        message:
-          reason instanceof RequestError && reason.serverMessage
+        unsaved: false,
+        message: unreachable(reason)
+          ? notKeptTagMessage
+          : reason instanceof RequestError && reason.serverMessage
             ? reason.serverMessage
             : refreshFailedTagMessage,
       });
@@ -122,7 +160,7 @@ export function tagManager({
           ) ?? null)
         : null;
     update({
-      ...(parsed?.success ? { snapshot: parsed.data, duplicate } : {}),
+      ...(parsed?.success ? { ...served(parsed.data), duplicate } : {}),
       ...(error instanceof RequestError &&
       ['TAG_ADMIN_REQUIRED', 'TAG_PERMISSION_UNCONFIRMED'].includes(error.code ?? '')
         ? { snapshot: read().snapshot ? { ...read().snapshot!, canManage: false } : null }
@@ -159,7 +197,7 @@ export function tagManager({
   const showResult = (result: TagActionResult) => {
     update({
       result,
-      snapshot: result.snapshot,
+      ...served(result.snapshot),
       ...(result.state === 'applied' ? { edit: null, reviewRequired: false, duplicate: null } : {}),
       message: result.state === 'not-applied' ? notAppliedTagMessage : '',
     });
@@ -218,9 +256,8 @@ export function tagManager({
       publish({ ...emptyTagManager(), groupId });
       let stop: (() => void) | undefined;
       void run(async () => {
-        stop = client().watch(
-          (snapshot) => update({ snapshot }),
-          (error) => failure(error instanceof Superseded ? error : new TagReadFailed(error)),
+        stop = client().watch(shown, (error) =>
+          failure(error instanceof Superseded ? error : new TagReadFailed(error)),
         );
         const recovery = await recover();
         if (recovery?.confirmed) update({ result: recovery.confirmed });

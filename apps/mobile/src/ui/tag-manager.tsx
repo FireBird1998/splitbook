@@ -21,7 +21,9 @@ import {
   unconfirmedTagMessage,
   type TagManagerState,
 } from '../data/tag-manager';
+import { ReadTime } from './financial-views';
 import { useDismissAfter } from './group-snackbar';
+import { NotAvailableOffline } from './offline-notice';
 import { Icon, type IconName } from './primitives';
 import {
   Banner,
@@ -236,6 +238,10 @@ export function TagManager({
   );
   useEffect(() => manager.open(), [manager]);
   const { snapshot, recovery, edit, duplicate, busy, reviewRequired, message, done } = state;
+  const { refreshedAt, saved, unsaved } = state;
+  // Splitbook out of reach, and no copy of the Tags on this phone: it says so, and nothing else
+  // promises or lists them (#638).
+  const notSaved = !snapshot && unsaved;
   /** The Tag whose options sheet is open. */
   const [selected, setSelected] = useState<string | null>(null);
   const [pulled, setPulled] = useState(false);
@@ -250,7 +256,8 @@ export function TagManager({
   const typing = useRef(false);
 
   const unresolved = !!recovery && !recovery.confirmed && !recovery.rejected;
-  const canChange = !offline && !recoveryOnly && !!snapshot?.canManage && !recovery;
+  // A saved copy offers no change: its revisions and permission wait for a live read (#638).
+  const canChange = !offline && !saved && !recoveryOnly && !!snapshot?.canManage && !recovery;
   const tags = snapshot?.tags.filter((tag) => !tag.isDeleted) ?? [];
   const active = tags.filter((tag) => !tag.isArchived);
   const archived = tags.filter((tag) => tag.isArchived);
@@ -464,6 +471,7 @@ export function TagManager({
         />
         <View style={{ height: progressHeight }}>
           {busy && snapshot ? <LinearProgress label="Updating Tags" /> : null}
+          {busy && notSaved ? <LinearProgress label="Loading Tags" /> : null}
         </View>
         <ScrollView
           ref={scroll}
@@ -487,12 +495,19 @@ export function TagManager({
             <CompactText variant="small" tone="secondary" style={{ paddingHorizontal: 2 }}>
               Everyone in {groupName} picks from these when adding an Expense.
             </CompactText>
-            {offline && (
+            {offline && snapshot && (
               <Banner
                 tone="offline"
                 message="You’re offline. You can see the Tags; changing them needs a connection."
               />
             )}
+            {/* When the Tags shown were read, offline or as this phone's copy, as every saved
+                Group screen says it: "Saved" for this phone's copy, never current (#638). */}
+            {snapshot && refreshedAt !== null && (offline || saved) ? (
+              <View style={{ paddingHorizontal: 2 }}>
+                <ReadTime refreshedAt={refreshedAt} restored={saved} offline={offline} />
+              </View>
+            ) : null}
             {snapshot && !snapshot.canManage && !screenMessage && (
               <Banner
                 tone="info"
@@ -558,7 +573,14 @@ export function TagManager({
               </Banner>
             )}
             {!!screenMessage && <Banner tone="error" message={screenMessage} />}
-            {!snapshot && !busy && (
+            {notSaved ? (
+              <NotAvailableOffline
+                compact
+                message="This Group’s Tags aren’t saved on this phone. Connect to load them."
+                onRetry={() => void manager.refresh()}
+              />
+            ) : null}
+            {!snapshot && !busy && !notSaved && (
               <Banner tone="error" message="The Tags couldn’t be loaded.">
                 <CompactButton
                   label="Try again"
@@ -570,41 +592,43 @@ export function TagManager({
               </Banner>
             )}
 
-            <View style={{ gap: 6 }}>
-              <SectionHeader
-                title={snapshot ? `Active · ${active.length}` : 'Active'}
-                trailing={
-                  canChange ? (
-                    <CompactButton
-                      label="New Tag"
-                      icon="add"
-                      variant="text"
-                      dense
-                      disabled={busy}
-                      onPress={() => {
-                        openedFrom.current = null;
-                        typing.current = true;
-                        manager.newTag();
-                      }}
-                    />
-                  ) : undefined
-                }
-              />
-              <Card
-                loading={!snapshot && busy ? 'Loading Tags' : undefined}
-                skeleton={{ rows: 4, dividers: true }}
-              >
-                {active.length ? (
-                  active.map(row)
-                ) : snapshot ? (
-                  <View style={{ padding: 14 }}>
-                    <CompactText tone="secondary">
-                      No active Tags. Create or restore one to use on new Expenses.
-                    </CompactText>
-                  </View>
-                ) : null}
-              </Card>
-            </View>
+            {!notSaved && (
+              <View style={{ gap: 6 }}>
+                <SectionHeader
+                  title={snapshot ? `Active · ${active.length}` : 'Active'}
+                  trailing={
+                    canChange ? (
+                      <CompactButton
+                        label="New Tag"
+                        icon="add"
+                        variant="text"
+                        dense
+                        disabled={busy}
+                        onPress={() => {
+                          openedFrom.current = null;
+                          typing.current = true;
+                          manager.newTag();
+                        }}
+                      />
+                    ) : undefined
+                  }
+                />
+                <Card
+                  loading={!snapshot && busy ? 'Loading Tags' : undefined}
+                  skeleton={{ rows: 4, dividers: true }}
+                >
+                  {active.length ? (
+                    active.map(row)
+                  ) : snapshot ? (
+                    <View style={{ padding: 14 }}>
+                      <CompactText tone="secondary">
+                        No active Tags. Create or restore one to use on new Expenses.
+                      </CompactText>
+                    </View>
+                  ) : null}
+                </Card>
+              </View>
+            )}
             {archived.length > 0 && (
               <View style={{ gap: 6 }}>
                 <SectionHeader title={`Archived · ${archived.length}`} />

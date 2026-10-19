@@ -565,6 +565,47 @@ describe('rendered Expense corrections', () => {
     expect(ui.writes).toEqual([]);
   });
 
+  it('offline, opens the Tag tile on a new Expense and takes a required Tag from the saved Tags (#638)', async () => {
+    let time = localNoon;
+    let disconnected = false;
+    const ui = await render(
+      async (controller) => {
+        // Opening the Group keeps it, with its Tags, in its Saved copy.
+        await controller.openGroup(groupId);
+        await controller.back();
+        disconnected = true;
+        time += 31_000;
+        await controller.openExpense(groupId);
+      },
+      {
+        now: () => time,
+        readGroup: async () => {
+          if (disconnected) throw new Error('Offline');
+          return json({ status: 200, data: group });
+        },
+      },
+    );
+    expect(ui.controller.getSnapshot().offline.active).toBe(true);
+    expect(ui.controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      contextCheck: { status: 'saved', initialize: true },
+    });
+    // The Tag tile opens, though the payer and the split still wait for the live check.
+    expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Choose a Tag');
+    expect(ui.tile('Tag').props.disabled).toBe(false);
+    expect(ui.tile('Paid by').props.disabled).toBe(true);
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
+    // The saved Tags are listed, ready to choose.
+    expect(ui.pressable('Tag: Groceries').props.disabled).toBe(false);
+    expect(text(ui.root())).not.toContain('Connect to see this Group’s Tags.');
+    await ui.press('Tag: Groceries');
+    expect(ui.controller.getSnapshot().expense.draft?.tagId).toBe(tagId);
+    expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Groceries');
+    expect(corrections(ui.root())).not.toContain('Choose a Tag for this Expense.');
+    // Saving still needs a connection.
+    expect(ui.writes).toEqual([]);
+  });
+
   it('moves screen-reader focus to a missing Tag instead of opening the keyboard', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     await ui.type('Amount, required', '12');

@@ -4,16 +4,50 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { setTimeout } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { createMobileController } from '../src/data';
 import type { SavedQueryRecords } from '../src/data/saved-copy-budget';
-import { expensePagePath, activityPagePath } from '@splitbook/shared/api-paths';
+import { expensePagePath, activityPagePath, tagActionsPath } from '@splitbook/shared/api-paths';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { waitForSavedQueries } from './offline-checkpoint';
 import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
 import { observe, present, reportVerifierFailure } from './verify-report';
+
+type Controller = ReturnType<typeof createMobileController>;
+
+/**
+ * The Tags screen over a Group, as Group options opens it: read until nothing is busy, then
+ * `change` made there, if any, then closed. Returns what it showed last (#638).
+ */
+async function readTags(
+  controller: Controller,
+  groupId: string,
+  change?: (manager: ReturnType<Controller['manageTags']>) => Promise<void>,
+) {
+  const settled = async () => {
+    for (let wait = 0; controller.getSnapshot().tagManager.busy; wait++) {
+      assert.ok(wait < 2_000, 'The Tags screen never finished reading.');
+      await setTimeout(10);
+    }
+  };
+  controller.openTags(groupId);
+  const manager = controller.manageTags(groupId);
+  const close = manager.open();
+  try {
+    await settled();
+    if (change) {
+      await change(manager);
+      await settled();
+    }
+    return controller.getSnapshot().tagManager;
+  } finally {
+    close();
+    controller.closeTags();
+  }
+}
 
 /** Test controls exercise offline restoration; normal CLI verification runs every stage. */
 interface OfflineVerificationOptions {
@@ -42,7 +76,9 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
   const identity = record('identity'),
     // Per-query rows for every display read (#223), in a file of their own.
     rows = record('rows'),
-    draft = record('draft');
+    draft = record('draft'),
+    // Kept Tag actions, by account and Group, as this phone keeps a change before sending it.
+    tags = record('tags');
   const credentials = record('credentials'),
     accountOwner = record('owner');
   const owner = {
@@ -103,6 +139,22 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
       return savedQueries.load(account, path);
     },
   };
+  const tagRequests = {
+    load: async (account: string, id: string) => (await entries(tags))[account + id] ?? null,
+    save: async (account: string, id: string, value: unknown) => {
+      await tags.save({ ...(await entries(tags)), [account + id]: value });
+    },
+    remove: async (account: string, id: string) => {
+      const kept = await entries(tags);
+      delete kept[account + id];
+      await tags.save(kept);
+    },
+    clear: tags.clear,
+    keys: async (account: string) =>
+      Object.keys(await entries(tags))
+        .filter((key) => key.startsWith(account))
+        .map((key) => key.slice(account.length)),
+  };
   const waitForCopies = options.waitForCopies ?? waitForSavedQueries;
   let offline = false,
     writes = 0,
@@ -121,6 +173,9 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
         },
         offlineIdentity: identity,
         savedQueries,
+        tagRequests,
+        // A Tag change's request id, kept with it before it is sent.
+        newSubmissionKey: randomUUID,
         expenseDrafts: {
           load: draft.load,
           save: async (_account, _group, value) => draft.save(value),
@@ -138,7 +193,7 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
               cleanup = false;
             },
           },
-          stores: [identity, rows, draft],
+          stores: [identity, rows, draft, tags],
         },
         fetch: async (url, init) => {
           assert.equal(new URL(url).origin, origin);
@@ -241,7 +296,21 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
     assert.equal(controller.getSnapshot().activity.events.length, activity);
     if (options.afterOfflineViews?.() === 'stop') return;
     await controller.openExpense(groupId);
-    await controller.updateExpenseDraft({ description: 'Prepared offline', amount: '12.00' });
+    // A new Expense takes one of the saved Tags offline; saving it still needs a connection.
+    const savedTag = controller
+      .getSnapshot()
+      .expense.context?.tags.find((tag) => !tag.isArchived && !tag.isDeleted);
+    present(savedTag, 'The saved Group offered no Tag for a new Expense offline.');
+    await controller.updateExpenseDraft({
+      description: 'Prepared offline',
+      amount: '12.00',
+      tagId: savedTag.id,
+    });
+    assert.equal(
+      controller.getSnapshot().expense.draft?.tagId,
+      savedTag.id,
+      'A saved Tag chosen for a new Expense offline',
+    );
     await controller.saveExpense();
     assert.equal(writes, 0);
     controller.dispose();
@@ -352,8 +421,55 @@ export async function verifyOffline(options: OfflineVerificationOptions = {}) {
     await controller.restore();
     assert.equal(controller.getSnapshot().auth.status, 'authenticated');
     await readOffline();
+
+    // #638: a Group's Tags join its Saved copy. Alex reads them online and renames one here;
+    // after a cold offline start they show from this phone's copy, renamed, with their time.
+    offline = false;
+    await controller.refresh();
+    const before = await readTags(controller, groupId);
+    const tag = before.snapshot?.tags.find((item) => !item.isArchived && !item.isDeleted);
+    present(tag, 'The Tags screen read no active Tag to rename.');
+    const name = `QA638 ${randomUUID().slice(0, 8)}`;
+    const sent = writes;
+    const renamed = await readTags(controller, groupId, async (manager) => {
+      manager.edit(tag, 'rename');
+      manager.enter(name);
+      await manager.submit();
+    });
+    observe(renamed.done?.state === 'applied', 'The Tag rename was not confirmed.', {
+      message: renamed.message,
+      recovery: renamed.recovery,
+    });
+    // The saved Tags follow the confirmed rename: they are read again after it, never kept from
+    // before it.
+    const tagsPath = tagActionsPath(groupId);
+    for (let wait = 0; ; wait++) {
+      const row = z
+        .object({ value: z.object({ data: z.object({ tags: z.array(z.unknown()) }) }) })
+        .nullable()
+        .catch(null)
+        .parse(await savedQueries.load(alexId, tagsPath));
+      if (JSON.stringify(row?.value.data.tags ?? []).includes(name)) break;
+      assert.ok(wait < 2_000, 'The saved Tags never followed the confirmed rename.');
+      await setTimeout(10);
+    }
+    controller.dispose();
+    offline = true;
+    controller = create();
+    await controller.restore();
+    assert.equal(controller.getSnapshot().auth.status, 'authenticated');
+    const savedTags = await readTags(controller, groupId);
+    assert.equal(savedTags.saved, true, 'Saved Tags after offline restart');
+    assert.equal(savedTags.unsaved, false);
+    present(savedTags.refreshedAt, 'The saved Tags said nothing about when they were read.');
+    observe(
+      savedTags.snapshot?.tags.some((item) => item.id === tag.id && item.name === name),
+      'The saved Tags did not show the confirmed rename.',
+      { tags: savedTags.snapshot?.tags },
+    );
+    assert.equal(writes - sent, 1, 'Only the rename was sent.');
     console.log(
-      'PASS: real HTTP cached Home, Group, Month, balances and Activity; disk restart; missing Month; retained draft; reconnect without writes; revocation; sign-out purge; no saved copy older than a confirmed edit.',
+      'PASS: real HTTP cached Home, Group, Month, balances and Activity; disk restart; missing Month; a saved Tag on a new Expense offline; retained draft; reconnect without writes; revocation; sign-out purge; no saved copy older than a confirmed edit; saved Tags after a confirmed rename.',
     );
   } finally {
     options.beforeCleanup?.();

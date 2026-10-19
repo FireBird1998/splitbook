@@ -1,7 +1,6 @@
 import { tagActionsPath, tagActionCheckPath } from '@splitbook/shared/api-paths';
-import { tagSnapshotSchema, type TagSnapshot } from '@splitbook/shared/tag-management';
 import { emptyTagManager, tagManager } from './tag-manager';
-import { tagManagement } from './tag-management';
+import { tagManagement, tagRead, unresolvedTagRecord, type TagRead } from './tag-management';
 import { createReviewRun } from './review-run';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
 import {
@@ -27,6 +26,7 @@ import {
   groupKey,
   groupsKey,
   homeBalancesKey,
+  queryKeyPath,
   tagActionsKey,
   type QueryKey,
 } from '@splitbook/shared/query-keys';
@@ -66,6 +66,7 @@ import {
   expenseCorrectionSummary,
   expenseContextPending,
   expenseDraftChanged,
+  expenseTagPending,
   expenseFields,
   parseCreatedExpenseId,
   parseExpenseContext,
@@ -410,6 +411,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
   const tagRebinders = new Set<() => void>();
+  /**
+   * Groups with a Tag change kept on this device that is neither confirmed nor refused: their
+   * Tags are shown but never saved (#638). Seeded at each start from the kept changes, then kept
+   * up to date as the Tag client reads, stores and removes them.
+   */
+  const unconfirmedTags = new Set<string>();
   let snapshot: MobileSnapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
   let cookie: string | null = null;
   /**
@@ -657,6 +664,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     toReviewQueries.reset();
     tagOwners.clear();
     tagFlights.clear();
+    unconfirmedTags.clear();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
     groupQueries.reset();
@@ -1339,10 +1347,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /**
    * Saved copies are kept only for Groups the latest Groups list holds, or that Home has gained
    * since (a Group just created). One the list leaves out, such as an archived Group the member
-   * can still open, is shown but never saved.
+   * can still open, is shown but never saved. A Group's Tags aren't kept while this phone holds a
+   * Tag change for it that isn't confirmed or refused: a read then may or may not include it, so
+   * it shows but is never saved (#638), as a restart quarantines them (#282).
    */
   const savable = (key: QueryKey) => {
     const id = key.length === 5 ? key[3] : null;
+    if (id && unconfirmedTags.has(id) && queryKeyPath(key) === tagActionsPath(id)) return false;
     return (
       !id ||
       !listedGroups ||
@@ -1558,7 +1569,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     await recordCookieAccount(owner, session.user.id);
     await queueAccount(() => financialCleanup.recover());
-    await queueAccount(() => untrusted.recover(session.user.id, now()));
+    const kept = await queueAccount(() => untrusted.recover(session.user.id, now()));
+    // Never for a session that ended while they were read: its marks went with it.
+    assertCurrent(owner);
+    for (const id of kept) unconfirmedTags.add(id);
     // A Group submission stored on this device reopens before anything else can be created.
     openHome(session.user, await storedCreation(owner, session.user.id));
     await saveVerifiedIdentity(session, owner);
@@ -1609,7 +1623,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await queueAccount(() => untrusted.drop());
       const device = readDeviceAccount();
       const accountId = (await device)?.accountId;
-      if (accountId) await queueAccount(() => untrusted.recover(accountId, now()));
+      if (accountId) {
+        const kept = await queueAccount(() => untrusted.recover(accountId, now()));
+        // Never for a session that ended while they were read: its marks went with it.
+        assertCurrent(owner);
+        for (const id of kept) unconfirmedTags.add(id);
+      }
       const deviceHome = readSavedHome(device);
       await loadPending();
       assertCurrent(owner);
@@ -2051,6 +2070,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const forgetGroup = (groupId: string, status: number, owner: number, financialRefusal = true) => {
     if (!current(owner)) return Promise.resolve();
     tagOwners.delete(groupId);
+    // Its kept Tag change goes with its other records; the next open reads what is left.
+    unconfirmedTags.delete(groupId);
     if (financialRefusal) {
       lostGroups.add(groupId);
       if (snapshot.screen === 'expense' && snapshot.expense.groupId === groupId)
@@ -2527,6 +2548,39 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     tagId: '',
     notes: '',
   });
+  /** The check's outcome, which offers no Tags while a Tag change made here is unconfirmed. */
+  const checkedContext = (
+    check: NonNullable<ExpenseEditor['contextCheck']>,
+    groupId: string,
+    next: Partial<NonNullable<ExpenseEditor['contextCheck']>>,
+  ): NonNullable<ExpenseEditor['contextCheck']> => {
+    const checked = { ...check, ...next };
+    if (unconfirmedTags.has(groupId)) checked.tagChange = true;
+    else delete checked.tagChange;
+    return checked;
+  };
+  /**
+   * Offline, a form's Tags come from the newer of the Group's two saved reads: the Group's own,
+   * or its Tags (#638); from neither while a Tag change made here is unconfirmed, when the Tag
+   * waits for the live check. Online, they're the Group's, as read.
+   */
+  const withSavedTags = async (context: ExpenseContext): Promise<ExpenseContext> => {
+    const groupId = snapshot.expense.groupId;
+    if (!groupId || unconfirmedTags.has(groupId)) return context;
+    const envelope = queryClient.getQueryData<Envelope>(groupKey(account(), groupId));
+    if (envelope?.source !== 'saved') return context;
+    const saved = await groupQueries.savedTags(groupId).catch(() => null);
+    if (!saved || saved.refreshedAt <= envelope.refreshedAt) return context;
+    return {
+      ...context,
+      tags: saved.tags.map(({ id, name, isArchived, isDeleted }) => ({
+        id,
+        name,
+        isArchived,
+        isDeleted,
+      })),
+    };
+  };
   const failExpenseOpening = (error: unknown) => {
     const editor = snapshot.expense;
     if (
@@ -2542,7 +2596,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...editor,
         preview: null,
         status: editor.draft ? editor.status : 'blocked',
-        contextCheck: { ...editor.contextCheck, status: 'failed' },
+        contextCheck: checkedContext(editor.contextCheck, editor.groupId!, { status: 'failed' }),
         message: expenseFailureMessage(
           error,
           'Could not check this Group. Your entries are kept. Please retry.',
@@ -2550,7 +2604,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     });
   };
-  const acceptExpenseOpening = async (context: ExpenseContext) => {
+  const acceptExpenseOpening = async (checked: ExpenseContext) => {
+    const context = await withSavedTags(checked);
     const editor = snapshot.expense;
     if (snapshot.screen !== 'expense' || editor.status === 'saving' || editor.accessLost) return;
     const check = editor.contextCheck;
@@ -2587,12 +2642,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         context,
         blank,
         contextCheck: saved
-          ? {
-              ...check,
+          ? checkedContext(check, editor.groupId!, {
               status: 'saved',
               saved: true,
               refreshedAt: envelope?.refreshedAt ?? check.refreshedAt,
-            }
+            })
           : undefined,
         message: check.status === 'failed' ? null : editor.message,
         preview: saved ? null : draft ? previewExpense(draft) : null,
@@ -3001,14 +3055,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !snapshot.expense.draft
     )
       return;
+    // Offline, the Tag comes from the Group's saved Tags, a new Expense's too, unless a Tag
+    // change made here is unconfirmed (#638).
+    const tagged = !expenseTagPending(snapshot.expense, snapshot.offline.active);
     if (expenseContextPending(snapshot.expense, snapshot.offline.active)) {
-      const { amount, description, date, notes } = patch;
+      const { amount, description, date, notes, tagId } = patch;
       patch = {
         ...(amount !== undefined ? { amount } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(date !== undefined ? { date } : {}),
         ...(notes !== undefined ? { notes } : {}),
+        ...(tagId !== undefined && tagged ? { tagId } : {}),
       };
+    } else if (!tagged && patch.tagId !== undefined) {
+      patch = { ...patch };
+      delete patch.tagId;
     }
     const lease = accountStorage();
     const storage = dependencies.expenseDrafts;
@@ -6228,6 +6289,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const tagOwners = new Map<string, object>();
   const tagFlights = new Map<string, { active: boolean }>();
+  /** Notes whether a Tag change kept for a Group is still unresolved, as it is read or stored. */
+  const noteTagRecord = (groupId: string, record: unknown) => {
+    if (unresolvedTagRecord(record)) unconfirmedTags.add(groupId);
+    else unconfirmedTags.delete(groupId);
+  };
   const groupTags = (groupId: string) => {
     objectId.parse(groupId);
     const owner = generation;
@@ -6250,9 +6316,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         throw new Error('Tag changes need a connection. Connect, then check or retry explicitly.');
     };
     const path = tagActionsPath(groupId);
-    const tagRequest = async (target: string, options?: RequestOptions) => {
+    /** `send` sends it: as it is, or as a display read, which checks the session first offline. */
+    const tagRequest = async (target: string, options?: RequestOptions, send = request) => {
       try {
-        return await request(target, owner, options);
+        return await send(target, owner, options);
       } catch (error) {
         if (!(error instanceof RequestError) || error.status !== 403 || error.code !== null)
           throw error;
@@ -6287,10 +6354,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const queryKey = tagActionsKey(at, groupId);
     const options = {
       queryKey,
-      queryFn: ({ signal }: { signal: AbortSignal }) => {
+      // One of the Group's saved reads (#638): saved as its row, retired with its other rows, and
+      // offline answered from that row with its own time. Read as every view reads, with the
+      // session checked first while offline.
+      queryFn: groupQueries.tagsQuery((signal) => {
         ensure();
-        return tagRequest(path, { signal });
-      },
+        return tagRequest(path, { signal }, (target, by, sent) =>
+          session.read(target, by, sent?.signal),
+        );
+      }),
+      // A saved copy is never fresh, and neither is a read of them: each open reads them again.
       staleTime: 0,
       retry: false,
       networkMode: 'always' as const,
@@ -6306,19 +6379,24 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return dependencies.newSubmissionKey();
       },
       load: () =>
-        lease.write(() => {
+        lease.write(async () => {
           ensure();
-          return storage.load(lease.accountId, groupId);
+          const record = await storage.load(lease.accountId, groupId);
+          noteTagRecord(groupId, record);
+          return record;
         }),
+      // Noted before the write: a Tags read answering meanwhile is never kept (#638).
       save: (record) =>
         lease.write(() => {
           ensure();
+          noteTagRecord(groupId, record);
           return storage.save(lease.accountId, groupId, record);
         }),
       remove: () =>
-        lease.write(() => {
+        lease.write(async () => {
           ensure();
-          return storage.remove(lease.accountId, groupId);
+          await storage.remove(lease.accountId, groupId);
+          noteTagRecord(groupId, null);
         }),
       read: async () => {
         const owns = queryOwner(queryClient, queryKey);
@@ -6335,7 +6413,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     return {
       ...client,
-      watch(onSnapshot: (snapshot: TagSnapshot) => void, onError: (error: unknown) => void) {
+      watch(onSnapshot: (shown: TagRead) => void, onError: (error: unknown) => void) {
         const observer = new QueryObserver(queryClient, options);
         const rebind = () => {
           try {
@@ -6349,7 +6427,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           try {
             ensure();
             if (result.error) onError(result.error);
-            else if (result.data) onSnapshot(tagSnapshotSchema.parse(Object(result.data).data));
+            else if (result.data) onSnapshot(tagRead(result.data));
           } catch (error) {
             onError(error);
           }
