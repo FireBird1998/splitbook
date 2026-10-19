@@ -18,7 +18,6 @@ import {
   SkeletonOf,
   SkeletonText,
   StatusText,
-  largeTextColumn,
   scaledSp,
   textVariants,
   useLargestText,
@@ -145,13 +144,13 @@ function PendingPaymentNotice({
 }
 
 /**
- * The balance card's title beside its time: it takes the line's room, and keeps
+ * The balance card's title beside its time: it takes the line's room, and at large text keeps
  * `largeTextColumn` of it, so where the time leaves it less, the time goes under it. At 200% on
  * a 360dp phone the time squeezed it into a column that broke its words ("ALL-T / IME BAL /
  * ANCE", #639). Its skeleton keeps the same shape.
  */
 function useBalanceTitle() {
-  return { flex: 1, minWidth: largeTextColumn(useWindowDimensions().fontScale) };
+  return { flex: 1, minWidth: useTextColumn() ?? 0 };
 }
 
 function MemberBalanceCard({
@@ -254,13 +253,15 @@ function SuggestedPayments({
           // The caption takes the room the title leaves, wrapping there rather than running past
           // the screen's edge at large text. While a change keeps Record waiting, its reason
           // takes the caption's place at once, in a box the caption holds, so nothing moves
-          // (#219); the full reason is Record's hint. It keeps room for its longest word,
-          // "Record", four of its em: with less beside the title, as at 200%, it goes on a line
-          // of its own under it, where it was a column a letter wide (#639).
+          // (#219); the full reason is Record's hint. At large text it keeps room for its
+          // longest word, "Record", four of its em: with less beside the title, as at 200%, it
+          // goes on a line of its own under it, where it was a column a letter wide (#639).
           <View
             style={{
               flex: 1,
-              minWidth: 4 * scaledSp(textVariants.caption.fontSize as number, fontScale),
+              minWidth: column
+                ? 4 * scaledSp(textVariants.caption.fontSize as number, fontScale)
+                : 0,
             }}
           >
             {inPlace({

@@ -12,9 +12,9 @@ import { CompactText } from './text';
  * an optional status (e.g. "Draft saved") and trailing actions.
  *
  * At large text (from 130%) the title and subtitle take as many lines as they need, and the
- * status goes under them where it would leave them less than `largeTextColumn` beside it: at
- * 200% on a 360dp phone, "Kept on this phone" squeezed "Add expense" and its Group to dots, and
- * a Group's subtitle lost its currency (#639).
+ * status goes under them, at the bar's end, where it would leave them less than
+ * `largeTextColumn` beside it: at 200% on a 360dp phone, "Kept on this phone" squeezed "Add
+ * expense" and its Group to dots, and a Group's subtitle lost its currency (#639).
  */
 export function TopBar({
   title,
@@ -85,6 +85,8 @@ export function TopBar({
             flexWrap: 'wrap',
             alignItems: 'center',
             alignContent: 'center',
+            // The title fills its line; a status on a line of its own keeps to the end.
+            justifyContent: 'flex-end',
             rowGap: 2,
           }}
         >

@@ -160,8 +160,8 @@ export function Divider({ inset = 14 }: { inset?: number }) {
  * An overline title with an optional trailing action or note. With `below`, the note goes under
  * the title, at every width and text size: never cut at the screen's edge beside a long title,
  * and in a line as tall as a badge, so nothing below moves as the note changes (#222). Without
- * it, the trailing part goes onto a line of its own where it doesn't fit beside the title, and a
- * title wider than the screen wraps (#639).
+ * it, the trailing part goes onto a line of its own, at the end, where it doesn't fit beside the
+ * title, and a title wider than the screen wraps (#639).
  */
 export function SectionHeader({
   title,
@@ -173,7 +173,14 @@ export function SectionHeader({
   below?: boolean;
 }) {
   const heading = (
-    <CompactText variant="overline" accessibilityRole="header" spare style={{ flexShrink: 1 }}>
+    <CompactText
+      variant="overline"
+      accessibilityRole="header"
+      spare
+      // Its margin takes what its line leaves, so the trailing part keeps to the end beside it
+      // and on a line of its own (justifyContent puts a lone part at the end).
+      style={{ flexShrink: 1, marginRight: 'auto' }}
+    >
       {title}
     </CompactText>
   );
@@ -193,7 +200,7 @@ export function SectionHeader({
         alignItems: 'center',
         // One line is centred in the header's height, as without wrapping.
         alignContent: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end',
         gap: space.gap,
         paddingHorizontal: 2,
       }}

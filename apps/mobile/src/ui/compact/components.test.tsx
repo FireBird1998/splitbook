@@ -659,8 +659,9 @@ describe('a part on a line of its own keeps to the row’s end (#639)', () => {
         (props) => flatten(props.style).flexWrap === 'wrap',
       );
       const { row: style, first } = parts(line!);
+      // The title fills its line, and a status on a line of its own keeps to the end.
+      expect(first.flex).toBe(1);
       expect(style.justifyContent).toBe('flex-end');
-      expect(first.marginRight).toBe('auto');
     },
   );
 });
