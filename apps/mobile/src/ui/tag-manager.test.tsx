@@ -992,6 +992,19 @@ describe.each(['light', 'dark'] as const)(
       const badge = textHost(status!)!;
       expect(layoutWidth(badge, 1.3)).toBeLessThanOrEqual(room);
       expect(layoutHeight(badge, 1.3, room)).toBe(layoutHeight(badge, 1.3));
+      // The saved list keeps #639's layout: each section's count whole, and the long Tag's
+      // name read in full in its row, inside its Card's border. Read only, a row is a View.
+      for (const label of ['Active · 1', 'Archived · 1'])
+        expect(labelRuns(renderer!.root, label), label).toEqual([[label, hairSpace]]);
+      const rows = findHosts(
+        renderer!.toJSON(),
+        (props, type) =>
+          ['View', 'Pressable'].includes(type) &&
+          flatten(props.style).minHeight === 60 &&
+          flatten(props.style).paddingHorizontal === 14,
+      );
+      expect(rows.length).toBeGreaterThan(0);
+      for (const tagRow of rows) expect(unreadText(tagRow, 1.3, 360 - 34)).toEqual([]);
     });
 
     it('says the Tags aren’t saved on this phone, without the banner’s promise or a load error', async () => {
