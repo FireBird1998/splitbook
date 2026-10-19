@@ -934,21 +934,30 @@ describe('native Expense creation and editing', () => {
       expect(writes).toBe(1);
       // Revision 3 + 1, holding the description sent, or deleted: the member's own change.
       await restarted.reconcileExpense();
-      expect(restarted.getSnapshot()).toMatchObject({
-        screen: 'group',
-        expense: {
-          status: 'saved',
-          mutation: null,
-          draft: null,
-          message: kind === 'delete' ? 'Expense deleted.' : 'Expense updated.',
-        },
-        snackbar: {
-          message:
-            kind === 'delete'
-              ? 'Expense deleted · Original dinner'
-              : 'Expense updated · Saved correction',
-        },
-      });
+      // An edit opened on its record returns there (#635); a deletion returns to the Group.
+      expect(restarted.getSnapshot()).toMatchObject(
+        kind === 'delete'
+          ? {
+              screen: 'group',
+              expense: {
+                status: 'saved',
+                mutation: null,
+                draft: null,
+                message: 'Expense deleted.',
+              },
+              snackbar: { message: 'Expense deleted · Original dinner' },
+            }
+          : {
+              screen: 'expense',
+              expense: {
+                status: 'detail',
+                mutation: null,
+                draft: { description: 'Saved correction', original: { revision: 4 } },
+                message: 'Expense updated.',
+              },
+              snackbar: null,
+            },
+      );
       expect(records.size).toBe(0);
       await restarted.saveExpense();
       await restarted.deleteExpense();
@@ -1091,7 +1100,7 @@ describe('native Expense creation and editing', () => {
     await controller.updateExpenseDraft({ description: 'Corrected dinner' });
     await controller.saveExpense();
     expect(controller.getSnapshot().expense).toMatchObject({
-      status: 'saved',
+      status: 'detail',
       mutation: null,
       message: 'Expense updated.',
     });
@@ -1198,7 +1207,11 @@ describe('native Expense creation and editing', () => {
     expect(restarted.getSnapshot().expense.draft?.original?.revision).toBe(4);
     await restarted.saveExpense();
     expect(writes).toEqual(['3', '4']);
-    expect(restarted.getSnapshot().expense.status).toBe('saved');
+    // Saved, back on the record it was opened from (#635).
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      message: 'Expense updated.',
+    });
   });
 
   it('edits metadata with the displayed revision and preserves historical rounding and timestamp', async () => {
@@ -1227,7 +1240,11 @@ describe('native Expense creation and editing', () => {
     expect(writes).toEqual([
       { method: 'PATCH', revision: '3', body: { description: 'Corrected dinner' } },
     ]);
-    expect(controller.getSnapshot().expense.status).toBe('saved');
+    // Saved, back on the record it was opened from (#635).
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      message: 'Expense updated.',
+    });
   });
 
   describe('an Expense is dated by calendar day, in any zone (#437)', () => {
@@ -1279,7 +1296,11 @@ describe('native Expense creation and editing', () => {
           await controller.updateExpenseDraft({ date: '2026-09-29' });
           await controller.saveExpense();
           expect(writes).toEqual([{ date: '2026-09-29T00:00:00.000Z' }]);
-          expect(controller.getSnapshot().expense.status).toBe('saved');
+          // Saved, back on the record it was opened from (#635).
+          expect(controller.getSnapshot().expense).toMatchObject({
+            status: 'detail',
+            message: 'Expense updated.',
+          });
         }),
     );
   });
@@ -1309,7 +1330,11 @@ describe('native Expense creation and editing', () => {
     await controller.updateExpenseDraft({ description: 'Corrected dinner' });
     await controller.saveExpense();
     expect(bodies).toEqual([{ description: 'Corrected dinner' }]);
-    expect(controller.getSnapshot().expense.status).toBe('saved');
+    // Saved, back on the record it was opened from (#635).
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      message: 'Expense updated.',
+    });
   });
 
   it('drops a saved payer of 0 who left the Group from a money edit, instead of blocking it', async () => {
@@ -1355,7 +1380,11 @@ describe('native Expense creation and editing', () => {
         { user: memberIds[1], amount: 5 },
       ],
     });
-    expect(controller.getSnapshot().expense.status).toBe('saved');
+    // Saved, back on the record it was opened from (#635).
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      message: 'Expense updated.',
+    });
   });
 
   it('opens authorized Expense detail with historical allocations and edit history', async () => {
@@ -2648,7 +2677,8 @@ describe('Save straight after the last keystroke', () => {
       expect(events).toEqual(
         kind === 'new' ? ['draft', 'attempt', 'POST'] : ['draft', 'mutation', 'PATCH'],
       );
-      expect(controller.getSnapshot().expense.status).toBe('saved');
+      // A new Expense is saved; an edit is back on the record it was opened from (#635).
+      expect(controller.getSnapshot().expense.status).toBe(kind === 'new' ? 'saved' : 'detail');
     },
   );
 
@@ -2717,7 +2747,8 @@ describe('Save straight after the last keystroke', () => {
       expect(events).toEqual(
         kind === 'new' ? ['draft', 'attempt', 'POST'] : ['draft', 'mutation', 'PATCH'],
       );
-      expect(controller.getSnapshot().expense.status).toBe('saved');
+      // A new Expense is saved; an edit is back on the record it was opened from (#635).
+      expect(controller.getSnapshot().expense.status).toBe(kind === 'new' ? 'saved' : 'detail');
     },
   );
 
@@ -3295,7 +3326,11 @@ describe('an edit that meets a newer saved Expense', () => {
     });
     expect(Object.keys(patches[1].body)).not.toContain('description');
     expect(Object.keys(patches[1].body)).not.toContain('category');
-    expect(restarted.getSnapshot().expense.status).toBe('saved');
+    // Saved, back on the record it was opened from (#635).
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      message: 'Expense updated.',
+    });
   });
 
   it('sends the member’s own amount only once they choose to keep it', async () => {

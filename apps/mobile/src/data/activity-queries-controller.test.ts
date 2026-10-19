@@ -524,7 +524,10 @@ async function onActivity(f: ReturnType<typeof fixture>, pages: number) {
   await settle();
   return controller;
 }
-/** Alex edits Dinner's description and the server confirms it; back on Expenses. */
+/**
+ * Alex edits Dinner's description from Expenses and the server confirms it: its record shows the
+ * change (#635), and Back returns to Expenses.
+ */
 async function editDinner(
   controller: ReturnType<ReturnType<typeof fixture>['create']>,
   description = 'Lake dinner',
@@ -534,10 +537,11 @@ async function editDinner(
   await controller.updateExpenseDraft({ description });
   await controller.saveExpense();
   expect(controller.getSnapshot()).toMatchObject({
-    screen: 'group',
-    destination: 'expenses',
-    expense: { status: 'saved' },
+    screen: 'expense',
+    expense: { status: 'detail', message: 'Expense updated.' },
   });
+  await controller.back();
+  expect(controller.getSnapshot()).toMatchObject({ screen: 'group', destination: 'expenses' });
 }
 
 describe('Activity reuses reads verified inside the window (#181, M1-6)', () => {
@@ -964,13 +968,8 @@ describe('a save made while the window has slid (#215)', () => {
     const f = fixture();
     const controller = await onActivity(f, 6);
     expect(controller.getSnapshot().activity.firstPage).toBe(2);
-    await controller.openActivityEvent(dinnerEventId, { scrollY: 900 });
-    expect(controller.getSnapshot()).toMatchObject({
-      screen: 'expense',
-      expense: { status: 'detail' },
-    });
-    await controller.editExpense();
-    await controller.updateExpenseDraft({ description: 'Lake dinner' });
+    await controller.openExpense(mapleId);
+    await controller.updateExpenseDraft({ description: 'Fresh groceries', amount: '12', tagId });
     await controller.saveExpense();
     expect(controller.getSnapshot()).toMatchObject({ screen: 'group', destination: 'expenses' });
     const sent = f.calls.length;
@@ -982,6 +981,45 @@ describe('a save made while the window has slid (#215)', () => {
       firstPage: 1,
       pagination: { page: 1 },
     });
+    expect(listed(controller.getSnapshot())[0]).toBe('Fresh groceries');
+  });
+
+  // An edit begun on a record returns to that record (#635); Back from it is a return like any
+  // other, to the window it left, with the change above it under Load newer.
+  it('returns to the window on Back from an Expense edited from its event, the change under Load newer', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 6);
+    await controller.openActivityEvent(dinnerEventId, { scrollY: 900 });
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { status: 'detail' },
+    });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Lake dinner' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { status: 'detail', message: 'Expense updated.' },
+    });
+    let sent = f.calls.length;
+    await controller.back();
+    await settle();
+    expect(f.gets(sent)).toEqual([
+      'activity p2',
+      'activity p3',
+      'activity p4',
+      'activity p5',
+      'activity p6',
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'activity',
+      activity: { status: 'ready', firstPage: 2, pagination: { page: 6 } },
+    });
+    sent = f.calls.length;
+    await controller.loadNewerActivity();
+    await settle();
+    expect(f.gets(sent)).toEqual(['activity p1']);
     expect(listed(controller.getSnapshot())[0]).toBe('Lake dinner');
   });
 });
@@ -993,6 +1031,7 @@ describe('after a write (M2-2)', () => {
     await controller.openExpense(mapleId, dinnerId);
     expect(controller.getSnapshot().expense.history.events).toHaveLength(1);
     await controller.back();
+    await controller.selectDestination('expenses');
     await editDinner(controller);
     const shown = published(controller);
     let sent = f.calls.length;
@@ -1057,6 +1096,7 @@ describe('after a write (M2-2)', () => {
     const f = fixture();
     const controller = await onActivity(f, 1);
     f.device.failRemoval = true;
+    await controller.selectDestination('expenses');
     await editDinner(controller);
     await settle();
     expect(f.savedRows(`${maplePath}/activity?page=`)).toHaveLength(1);

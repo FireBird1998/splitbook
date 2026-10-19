@@ -1283,6 +1283,43 @@ describe('App return from an Expense', () => {
     expect(app.text()).toContain('You paid your share');
   });
 
+  // The navigation map: Edit → Save → back to the record (#635).
+  it('returns to the Expense’s record after its edit is saved, with the note, and Back goes to the Group', async () => {
+    const app = await renderApp();
+    let saved = { ...september, revision: 0, isDeleted: false };
+    const patches: unknown[] = [];
+    app.use((path, init) => {
+      if (path === `/api/groups/${groupId}/expenses/${september._id}`) {
+        if (init.method === 'PATCH') {
+          patches.push(JSON.parse(String(init.body)));
+          saved = { ...saved, description: 'September groceries and milk', revision: 1 };
+        }
+        return json({ status: 200, data: saved });
+      }
+      if (path.includes('/expenses?')) return json(page([saved]));
+    });
+    await app.press('Open Maple House');
+    await app.press('September groceries');
+    await app.press('Edit expense');
+    await app.type('Description, required', 'September groceries and milk');
+    await app.press('Save changes');
+
+    expect(patches).toEqual([{ description: 'September groceries and milk' }]);
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { status: 'detail', requestedExpenseId: september._id },
+    });
+    expect(app.text()).toContain('Expense updated.');
+    expect(app.text()).toContain('September groceries and milk');
+    expect(app.text()).toContain('You paid your share');
+    expect(app.pressable('Edit expense')).toBeDefined();
+
+    expect(await app.androidBack()).toBe(true);
+    expect(app.controller.getSnapshot().screen).toBe('group');
+    expect(app.text()).toContain('September 2026');
+    expect(app.text()).toContain('September groceries and milk');
+  });
+
   it('the top-bar back arrow names the Group it returns to', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');
@@ -1645,7 +1682,8 @@ describe('App Expense window (#219)', () => {
   });
 
   // The device recheck of a31f3e8 (#219): an edit at the list's end came back one row short, as the
-  // list dropped Load more while its window was read again.
+  // list dropped Load more while its window was read again. The edit returns to its record first
+  // (#635), and Back from there to the list.
   it('returns an edit made at the list’s end to its place: the list keeps Load more while read again', async () => {
     const app = await renderApp();
     app.use(sixPages);
@@ -1655,29 +1693,46 @@ describe('App Expense window (#219)', () => {
     await app.scrollEnd(5000, 'fling');
     const id = `e${String(5 * 100 + 18).padStart(23, '0')}`;
     const record = { ...expense(id, 'Fictional row 5-19'), revision: 0, isDeleted: false };
-    // Once the edit is sent, the window's pages answer only when released.
+    let edited = false;
+    /** The window's pages, with the edited row once the edit is saved. */
+    const pages = (path: string) => {
+      if (!path.includes('/expenses?')) return undefined;
+      const number = Number(new URL(path, 'http://local').searchParams.get('page'));
+      const answer = septemberPage(number);
+      answer.data.pagination = { page: number, limit: 20, total: 120, totalPages: 6 };
+      answer.data.summary = { ...answer.data.summary, count: 120 };
+      answer.data.expenses = (answer.data.expenses as ReturnType<typeof expense>[]).map((row) =>
+        edited && row._id === id ? { ...row, description: 'Fictional row 5-19 r' } : row,
+      );
+      return json(answer);
+    };
+    // Once the member goes Back, the window's pages answer only when released.
     let holding = false;
     const held: (() => void)[] = [];
     app.use((path, init) => {
-      if (path === `/api/groups/${groupId}/expenses/${id}`)
-        return init.method === 'PATCH'
-          ? json({ status: 200, data: { ...record, description: 'Fictional row 5-19 r' } })
-          : json({ status: 200, data: record });
+      if (path === `/api/groups/${groupId}/expenses/${id}`) {
+        if (init.method === 'PATCH') edited = true;
+        return json({
+          status: 200,
+          data: edited ? { ...record, description: 'Fictional row 5-19 r', revision: 1 } : record,
+        });
+      }
       if (holding && path.includes('/expenses?'))
-        return new Promise<FetchResponse>((resolve) => held.push(() => resolve(sixPages(path)!)));
-      return sixPages(path);
+        return new Promise<FetchResponse>((resolve) => held.push(() => resolve(pages(path)!)));
+      return pages(path);
     });
     await app.press('Fictional row 5-19');
     await settle(app.controller.editExpense());
     await settle(app.controller.updateExpenseDraft({ description: 'Fictional row 5-19 r' }));
+    await settle(app.controller.saveExpense());
+    expect(app.text()).toContain('Expense updated.');
     holding = true;
     native.scrollTo.mockClear();
-    const saving = app.controller.saveExpense();
+    const returning = app.controller.back();
     await settle();
     // Back on Expenses while the window is read again: Load more holds its place, disabled, so
     // the list is as long as when the member left it, and the return lands where it began.
     expect(held.length).toBeGreaterThan(0);
-    expect(app.text()).toContain('Expense updated · Fictional row 5-19 r');
     expect(app.pressable('Load more expenses').props.accessibilityState).toEqual({
       disabled: true,
       busy: false,
@@ -1689,7 +1744,7 @@ describe('App Expense window (#219)', () => {
       held.shift()!();
       await settle();
     }
-    await settle(saving);
+    await settle(Promise.resolve(returning));
     expect(app.text()).toContain('Fictional row 5-19 r');
     expect(app.pressable('Load more expenses').props.accessibilityState).toEqual({
       disabled: false,
