@@ -48,7 +48,7 @@ export default function LandingFigure({ figure }: { figure: Figure }) {
         dangerouslySetInnerHTML={{
           __html: (figureCss + figure.css).replaceAll(
             '.iso[data-theme="light"]',
-            ':root[data-theme="light"] .iso',
+            ':root:not([data-theme="dark"]) .iso',
           ),
         }}
       />

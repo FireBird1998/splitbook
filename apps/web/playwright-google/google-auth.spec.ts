@@ -92,8 +92,8 @@ test.describe('google auth mode', () => {
     await expect(home.getByRole('img')).toHaveAttribute('src', '/brand/logo-light.svg');
     const footer = page.getByRole('contentinfo');
     await expect(footer).toContainText('Splitbook · shared expenses, settled fairly.');
-    await expect(footer.locator('img')).toHaveAttribute('alt', '');
-    await expect(footer.locator('img')).toHaveAttribute('src', '/brand/mark-indigo.svg');
+    await expect(footer.locator('img:visible')).toHaveAttribute('alt', '');
+    await expect(footer.locator('img:visible')).toHaveAttribute('src', '/brand/mark-indigo.svg');
 
     // Fig 1 sits under the hero at full width, named by its full description.
     await expect(fig1Drawing(page)).toBeVisible();
@@ -119,7 +119,7 @@ test.describe('google auth mode', () => {
     await fig1(page).scrollIntoViewIfNeeded();
     await expect(fig1Drawing(page)).toBeVisible();
     // The drawing follows the page into dark: its paper is the kit's dark card.
-    await expect(fig1(page)).toHaveAttribute('data-theme', 'dark');
+    await expect(fig1(page)).toHaveCSS('--anatomy-paper', '#131313');
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

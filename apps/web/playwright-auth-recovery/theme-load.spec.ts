@@ -162,3 +162,37 @@ test('a light-theme toggle before preference adoption switches to dark', async (
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(await page.evaluate((key) => localStorage.getItem(key), THEME_STORAGE_KEY)).toBe('dark');
 });
+
+for (const attribute of ['missing', 'invalid'] as const) {
+  test(`Landing figures stay light before hydration when the theme attribute is ${attribute}`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.addInitScript(
+      ({ attribute, key }) => {
+        if (attribute === 'missing') {
+          // The pre-paint script catches blocked storage and leaves the attribute unset.
+          Storage.prototype.getItem = () => {
+            throw new DOMException('Storage is blocked', 'SecurityError');
+          };
+        } else {
+          localStorage.setItem(key, 'invalid-theme');
+        }
+      },
+      { attribute, key: THEME_STORAGE_KEY },
+    );
+    // Inspect server-rendered colours without letting hydration repair the preference.
+    await page.route('**/_next/static/**/*.js', (route) => route.abort());
+    await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL!}/`);
+    expect(await page.locator('html').getAttribute('data-theme')).toBe(
+      attribute === 'missing' ? null : 'invalid-theme',
+    );
+    await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(244, 245, 249)');
+    const figures = page.locator('figure.iso');
+    await expect(figures.first()).toBeVisible();
+    for (const paper of await figures.evaluateAll((nodes) =>
+      nodes.map((node) => getComputedStyle(node).getPropertyValue('--anatomy-paper').trim()),
+    ))
+      expect(paper).toBe('#fbfbfa');
+  });
+}

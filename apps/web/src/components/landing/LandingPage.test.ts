@@ -325,7 +325,7 @@ describe('Fig 1 in the hero', () => {
       });
       // Figures inherit the pre-paint root choice, even while the JS theme is still light.
       expect(html).not.toMatch(/<figure\b[^>]*data-theme=/);
-      expect(html).toContain(':root[data-theme="light"] .iso');
+      expect(html).toContain(':root:not([data-theme="dark"]) .iso');
     }
   });
 });
