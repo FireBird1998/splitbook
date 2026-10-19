@@ -63,6 +63,7 @@ import {
   draftFromExpense,
   buildExpenseBody,
   buildExpensePatch,
+  closesToRecord,
   expenseCorrectionSummary,
   expenseContextPending,
   expenseDraftChanged,
@@ -72,6 +73,7 @@ import {
   parseExpenseContext,
   parseStoredExpenseDraft,
   previewExpense,
+  recordKeepsEdit,
   refusedRetryNotice,
   rebaseExpenseDraft,
   sameExpenseDraft,
@@ -2685,10 +2687,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       else failExpenseOpening(error);
     }
   };
+  /**
+   * Opens a new Expense, a Group's draft, or a saved Expense's record. `keptEdit`: × on an edit
+   * begun on that record returns to it, which then shows the saved Expense with the edit beside it
+   * (#664); opened any other way, an edit kept for it opens on its form, to resume or discard.
+   */
   const openExpense = async (
     groupId: string,
     expenseId?: string,
     origin: { scrollY?: number; anchor?: ScrollAnchor } = {},
+    keptEdit = false,
   ) => {
     if (snapshot.auth.status !== 'authenticated' || !snapshot.auth.user) return;
     const owner = generation;
@@ -2823,11 +2831,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return await checkExpenseOpening(owner, wanted);
       }
       // Another saved Expense opens read-only beside an ordinary draft. An unconfirmed save,
-      // and a draft editing this same Expense, still come first.
+      // and a draft editing this same Expense, still come first, except for the edit × kept on
+      // its record, which the record offers beside it (#664).
       let held =
         record &&
         expenseId &&
-        record.draft.original?._id !== expenseId &&
+        (record.draft.original?._id !== expenseId || keptEdit) &&
         !record.attempt &&
         !record.mutation
           ? record.draft
@@ -3010,7 +3019,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const resumeExpenseDraft = () => {
     const editor = snapshot.expense;
     if (snapshot.screen !== 'expense') return;
-    // From a record read beside the Group's draft, Resume opens that draft.
+    // From a record read beside the Group's draft, Resume opens that draft. The record's own edit,
+    // which × kept there, goes on as the edit begun on it: × and Save return here again (#664).
     if (editor.status === 'detail' && editor.groupDraft) {
       const draft = editor.groupDraft;
       publish({
@@ -3022,7 +3032,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: 'editing',
           message: null,
           groupDraft: null,
-          beganOnRecord: false,
+          beganOnRecord: recordKeepsEdit(editor),
         },
       });
       return;
@@ -3137,6 +3147,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await write;
   };
 
+  /**
+   * Discard, after the app confirms it: removes the form's draft from this device and opens the
+   * task again without it. On a record, the edit × kept beside it (#664); the record stays.
+   */
   const discardExpenseDraft = async () => {
     const editor = snapshot.expense;
     const lease = accountStorage();
@@ -3144,7 +3158,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (
       snapshot.screen !== 'expense' ||
       (!['editing', 'resume'].includes(editor.status) &&
-        !(editor.status === 'blocked' && editor.accessLost)) ||
+        !(editor.status === 'blocked' && editor.accessLost) &&
+        !recordKeepsEdit(editor)) ||
       editor.attempt ||
       editor.mutation ||
       !editor.groupId ||
@@ -3440,7 +3455,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     return backHome();
   };
 
-  /** Android Back and close keep the draft on this device and return where the task began. */
+  /**
+   * Android Back and close keep the draft on this device and return where the task began. An edit
+   * begun on the Expense's record returns to that record, which offers the kept edit beside the
+   * saved Expense (`closesToRecord`, owner decision for #664); every other one, to the Group.
+   */
   const closeExpense = async (confirmed = false) => {
     if (route.screen !== 'expense' || expenseNavigationBlocked()) return;
     if (snapshot.expense.status === 'delete-review') return cancelExpenseDeletion();
@@ -3482,6 +3501,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     const invitation = openWaitingInvitation();
     if (invitation) return invitation;
+    // The record opens again as from its row, keeping where it opened from, and reads the saved
+    // Expense; the edit stays on this device, offered beside it.
+    if (closesToRecord(snapshot.expense))
+      return openExpense(route.groupId, snapshot.expense.requestedExpenseId!, {}, true);
     const to = parent(route);
     if (to.screen !== 'group') return showHome();
     returnToGroup(to);
@@ -6913,7 +6936,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     resumeKeptDraft,
     discardKeptDraft,
     saveExpense,
-    openExpense,
+    openExpense: (
+      groupId: string,
+      expenseId?: string,
+      origin?: { scrollY?: number; anchor?: ScrollAnchor },
+    ) => openExpense(groupId, expenseId, origin),
     closeExpense,
     viewSnackbarMonth,
     viewRecordMonth,

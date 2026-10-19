@@ -739,8 +739,11 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
     await controller.openExpense(householdId, expenseId);
     await controller.editExpense();
     await controller.updateExpenseDraft({ description: 'Electricity bill' });
-    // Back keeps the edit as the Group's draft, which the Group offers to resume.
+    // × keeps the edit and returns to the record (#664); Back from there goes to the Group, which
+    // offers the edit as its draft to resume.
     await controller.back();
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('group');
     await controller.openExpense(householdId);
     controller.resumeExpenseDraft();
     await controller.saveExpense();
@@ -765,8 +768,10 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
       await controller.openExpense(householdId, expenseId);
       await controller.editExpense();
       await controller.updateExpenseDraft({ description: 'Electricity bill' });
-      // Back keeps the edit on this device.
+      // × keeps the edit on this device and returns to the record (#664); Back goes on from there.
       await controller.back();
+      await controller.back();
+      expect(controller.getSnapshot().screen).toBe('group');
       if (fromHome) await controller.back();
       await controller.openExpense(householdId, expenseId);
       expect(controller.getSnapshot().expense).toMatchObject({
