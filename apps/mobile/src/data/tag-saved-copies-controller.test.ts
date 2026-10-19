@@ -3,6 +3,7 @@ import type { TagCommand } from '@splitbook/shared/tag-management';
 import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 import type { AccountGroupRecordStore } from './account-record-storage';
+import { expenseTagPending } from './expense-draft';
 
 // #638: a Group's Tags are kept in its Saved copy, beside its other saved reads (ADR 0006). After
 // a cold offline start the Tags screen shows them with when they were read, or says plainly that
@@ -38,6 +39,10 @@ function fixture() {
     receipts: new Map<string, unknown>(),
     /** Reads of the Tags wait for this before they're answered. */
     holdRead: null as Promise<void> | null,
+    /** How long this phone takes to read a kept Tag change, in ms. */
+    tagLoadDelay: 0,
+    /** This phone can't remove saved copies. */
+    failRemoval: false,
     tags: [
       { id: foodId, name: 'Food', revision: 0, isArchived: false, isDeleted: false },
       { id: rentId, name: 'Rent', revision: 0, isArchived: false, isDeleted: false },
@@ -75,11 +80,23 @@ function fixture() {
           .map((key) => key.slice(account.length)),
     };
   };
-  const tagRequests = memory(),
+  const kept = memory(),
     drafts = memory(),
     attempts = memory();
+  const tagRequests = {
+    ...kept,
+    load: async (account: string, id: string) => {
+      await new Promise((resolve) => setTimeout(resolve, server.tagLoadDelay));
+      return kept.load(account, id);
+    },
+  };
+  const rows = savedQueriesIn(cache);
   const savedQueries = {
-    ...savedQueriesIn(cache),
+    ...rows,
+    remove: async (account: string, path: string) => {
+      if (server.failRemoval) throw new Error('The device storage is full');
+      await rows.remove(account, path);
+    },
     usage: async (account: string) =>
       [...cache.keys()]
         .filter((key) => key.startsWith(account))
@@ -297,7 +314,9 @@ async function openTags(controller: Controller) {
   controller.openTags(mapleId);
   const manager = controller.manageTags(mapleId);
   const stop = manager.open();
-  await vi.waitFor(() => expect(controller.getSnapshot().tagManager.busy).toBe(false));
+  await vi.waitFor(() => expect(controller.getSnapshot().tagManager.busy).toBe(false), {
+    timeout: 3000,
+  });
   return {
     manager,
     state: () => controller.getSnapshot().tagManager,
@@ -441,6 +460,37 @@ describe('a Group’s Tags in its Saved copy (#638)', () => {
 });
 
 describe('Tags are never kept while a change made here is unconfirmed (#638)', () => {
+  it('keeps none after a restart, though the Tags are read before the kept change is', async () => {
+    const f = fixture();
+    const { controller, tags } = await readTagsOnline(f);
+    const food = tags.state().snapshot!.tags.find((item) => item.name === 'Food')!;
+    f.server.loseTagReply = true;
+    tags.manager.edit(food, 'rename');
+    tags.manager.enter('Meals');
+    await tags.manager.submit();
+    expect(tags.state().recovery?.confirmed).toBeUndefined();
+    tags.close();
+    controller.dispose();
+    // The app starts again, online, and this phone reads its kept change more slowly than
+    // Splitbook answers a read of the Tags.
+    f.server.tagLoadDelay = 300;
+    const restarted = f.create();
+    await restarted.restore();
+    try {
+      const again = await openTags(restarted);
+      expect(again.state()).toMatchObject({
+        snapshot: { tags: [{ name: 'Meals' }, { name: 'Rent' }] },
+        recovery: { command: { intent: { action: 'rename', name: 'Meals' } } },
+      });
+      expect(again.state().recovery?.confirmed).toBeUndefined();
+      await settled();
+      expect(f.savedTags()).toBeNull();
+      again.close();
+    } finally {
+      restarted.dispose();
+    }
+  });
+
   it('shows them, but keeps none, until Check again confirms the change', async () => {
     const f = fixture();
     const { controller, tags } = await readTagsOnline(f);
@@ -548,6 +598,53 @@ describe('saved Tags are retired with the Group’s other saved copies (#638)', 
     controller.dispose();
   });
 
+  it('at the next start, when a Tag change is kept for their Group', async () => {
+    const f = fixture();
+    const { controller, tags } = await readTagsOnline(f);
+    tags.close();
+    // A change kept before the app was killed: it may have reached the server.
+    await f.tagRequests.save(alex.id, mapleId, {
+      command: {
+        requestId: '00000000-0000-4000-8000-000000000099',
+        intent: { action: 'rename', tagId: foodId, expectedRevision: 0, name: 'Meals' },
+      },
+    });
+    expect(f.savedTags()).not.toBeNull();
+    controller.dispose();
+    f.server.offline = true;
+    const restarted = f.create();
+    await restarted.restore();
+    try {
+      expect(f.savedTags()).toBeNull();
+    } finally {
+      restarted.dispose();
+    }
+  });
+
+  it('never shown once this phone couldn’t remove them, even still on disk after a restart', async () => {
+    const f = fixture();
+    const { controller, tags } = await readTagsOnline(f);
+    tags.close();
+    await controller.back();
+    // A Groups list leaves Maple House out, and this phone can't remove its copies.
+    f.server.unlisted = true;
+    f.server.failRemoval = true;
+    await controller.refresh('pull');
+    expect(f.savedTags()).not.toBeNull();
+    controller.dispose();
+    f.server.offline = true;
+    const restarted = f.create();
+    await restarted.restore();
+    try {
+      const offline = await openTags(restarted);
+      expect(offline.state()).toMatchObject({ snapshot: null, unsaved: true, saved: false });
+      expect(f.savedTags()).not.toBeNull();
+      offline.close();
+    } finally {
+      restarted.dispose();
+    }
+  });
+
   it('within the 20 MB budget: kept while their Group is open, removed least recently used once it isn’t', async () => {
     const f = fixture();
     f.sizes.set(tagsPath, 21 * mb);
@@ -566,6 +663,112 @@ describe('saved Tags are retired with the Group’s other saved copies (#638)', 
 });
 
 describe('a new Expense offline takes one of the Group’s saved Tags (#638)', () => {
+  it('offers the Tags of the newer of the Group’s two saved reads', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId);
+    await vi.waitFor(() => expect(f.cache.has(alex.id + maplePath)).toBe(true));
+    // Another admin renames Food; this phone reads the Tags after it, and not the Group.
+    f.server.tags[0].name = 'Meals';
+    controller.openTags(mapleId);
+    const stop = controller.manageTags(mapleId).open();
+    await vi.waitFor(() =>
+      expect(f.savedTags()?.tags.map((tag) => tag.name)).toEqual(['Meals', 'Rent']),
+    );
+    stop();
+    controller.closeTags();
+    const group = f.cache.get(alex.id + maplePath) as {
+      refreshedAt: number;
+      value: { data: { tags: { name: string }[] } };
+    };
+    expect(group.value.data.tags.map((tag) => tag.name)).toEqual(['Food', 'Rent']);
+    expect(f.savedTags()!.refreshedAt).toBeGreaterThan(group.refreshedAt);
+    const restarted = await restartOffline(f, controller);
+    try {
+      await restarted.openGroup(mapleId);
+      await restarted.openExpense(mapleId);
+      expect(restarted.getSnapshot().expense.contextCheck).toMatchObject({ status: 'saved' });
+      expect(restarted.getSnapshot().expense.context?.tags.map((tag) => tag.name)).toEqual([
+        'Meals',
+        'Rent',
+      ]);
+      await restarted.updateExpenseDraft({ tagId: foodId });
+      expect(restarted.getSnapshot().expense.draft?.tagId).toBe(foodId);
+    } finally {
+      restarted.dispose();
+    }
+  });
+
+  it('offers no saved Tags while a Tag change made here is unconfirmed: the Tag waits', async () => {
+    const f = fixture();
+    const { controller, tags } = await readTagsOnline(f);
+    const food = tags.state().snapshot!.tags.find((item) => item.name === 'Food')!;
+    f.server.loseTagReply = true;
+    tags.manager.edit(food, 'rename');
+    tags.manager.enter('Meals');
+    await tags.manager.submit();
+    expect(tags.state().recovery?.confirmed).toBeUndefined();
+    tags.close();
+    // The Group is read again and saved after the lost reply: it may or may not include the
+    // change. Then the phone goes offline.
+    await controller.refresh();
+    await vi.waitFor(() => expect(f.cache.has(alex.id + maplePath)).toBe(true));
+    f.server.offline = true;
+    await controller.refresh();
+    expect(controller.getSnapshot().offline.active).toBe(true);
+    try {
+      await controller.openExpense(mapleId);
+      const { expense } = controller.getSnapshot();
+      expect(expense).toMatchObject({
+        status: 'editing',
+        contextCheck: { status: 'saved', tagChange: true },
+      });
+      expect(expenseTagPending(expense, true)).toBe(true);
+      await controller.updateExpenseDraft({ tagId: foodId, description: 'Market run' });
+      expect(controller.getSnapshot().expense.draft).toMatchObject({
+        tagId: '',
+        description: 'Market run',
+      });
+    } finally {
+      controller.dispose();
+    }
+  });
+
+  it('refuses a saved Tag archived meanwhile once back online, sending nothing and swapping nothing in', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId);
+    await vi.waitFor(() => expect(f.cache.has(alex.id + maplePath)).toBe(true));
+    const restarted = await restartOffline(f, controller);
+    try {
+      await restarted.openGroup(mapleId);
+      await restarted.openExpense(mapleId);
+      await restarted.updateExpenseDraft({
+        amount: '12',
+        description: 'Market run',
+        tagId: foodId,
+      });
+      expect(restarted.getSnapshot().expense.draft?.tagId).toBe(foodId);
+      // Meanwhile another admin archives Food, and the phone reconnects.
+      f.server.tags[0].isArchived = true;
+      f.server.offline = false;
+      await restarted.refresh();
+      expect(restarted.getSnapshot().expense.contextCheck).toBeUndefined();
+      await restarted.saveExpense();
+      const { expense } = restarted.getSnapshot();
+      expect(expense.status).toBe('editing');
+      expect(expense.draft?.tagId).toBe(foodId);
+      expect(expense.validation.errors.tag).toBe(
+        '“Food” is no longer active in this Group. Choose another Tag; nothing is swapped in for you.',
+      );
+      expect(f.requests.filter((request) => request.startsWith('POST /api/groups'))).toEqual([]);
+    } finally {
+      restarted.dispose();
+    }
+  });
+
   it('lists the saved Tags and keeps the Tag chosen, while other financial choices still wait', async () => {
     const f = fixture();
     const controller = f.create();
