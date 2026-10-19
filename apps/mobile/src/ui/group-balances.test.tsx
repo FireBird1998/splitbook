@@ -16,7 +16,7 @@ import {
   recordWaitsForDetails,
 } from './group-balances';
 import type { PendingPayment } from '../data/settlement';
-import { findHosts, largeTextWindows, unreadText } from '../test-utils/layout';
+import { findHosts, flatten, largeTextWindows, unreadText } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import {
@@ -633,6 +633,50 @@ describe.each(['light', 'dark'] as const)('Balances at large text in %s (#639)',
       // The sheet's header, edge to edge, and its footer with Record payment.
       expect(unreadText(top!, size.fontScale, size.width)).toEqual([]);
       expect(unreadText(footer!, size.fontScale, size.width)).toEqual([]);
+    },
+  );
+});
+
+// #639 review: the room the balance card's title and the payments' caption keep beside what
+// follows them is a large-text rule, as every other one is: at 100% they lay out as they did,
+// with no minimum width, and their skeleton too.
+describe('Balances at 100% text keep their shape (#639)', () => {
+  /** The minimum width of the innermost flexible view or text that holds `words`. */
+  const least = (tree: ReactTestRendererJSON, words: string) => {
+    const holders = findHosts(tree, (props) => flatten(props.style).flex === 1).filter((node) =>
+      [node, ...findHosts(node, (_props, type) => type === 'Text')].some(
+        (text) => text.type === 'Text' && (text.children ?? []).join('').startsWith(words),
+      ),
+    );
+    return flatten(holders.at(-1)!.props.style).minWidth ?? 0;
+  };
+  it.each([
+    [360, 1, 0],
+    [412, 1, 0],
+    [360, 1.3, 'some'],
+  ] as const)(
+    '%sdp at %s× text: the title and caption keep %s minimum',
+    (width, fontScale, kept) => {
+      setWindow({ width, height: 640, fontScale });
+      const view = (state: GroupFinancialState) => (
+        <GroupBalancesView
+          group={group()}
+          currentUserId={you}
+          state={state}
+          pending={null}
+          offline={false}
+          onRecord={vi.fn()}
+          onCheckPayment={vi.fn()}
+          onRefreshBalances={() => undefined}
+        />
+      );
+      render(view(financial()));
+      const shown = screen!.toJSON() as ReactTestRendererJSON;
+      const minimums = [least(shown, 'All-time balance'), least(shown, 'Record one once')];
+      act(() => screen!.update(view(financial({ status: 'loading', data: null }))));
+      minimums.push(least(screen!.toJSON() as ReactTestRendererJSON, 'All-time balance'));
+      if (kept === 0) expect(minimums).toEqual([0, 0, 0]);
+      else for (const minimum of minimums) expect(minimum).toBeGreaterThan(0);
     },
   );
 });

@@ -8,7 +8,15 @@ import {
 } from 'react-test-renderer';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hairSpace, labelRuns, largeTextWindows, unreadText } from '../../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  hairSpace,
+  labelRuns,
+  largeTextWindows,
+  layoutHeight,
+  unreadText,
+} from '../../test-utils/layout';
 import { setWindow } from '../../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -595,4 +603,64 @@ describe.each(['light', 'dark'] as const)('compact parts at large text in %s (#6
       renderer = undefined;
     }
   });
+});
+
+// #639 review: at large text a part that can't share its line goes onto a line of its own at the
+// row's end, as a row's balance does: a section's action (New Group, New Tag, Invite) and a top
+// bar's status, where they were at 100%, not under the title at the start.
+describe('a part on a line of its own keeps to the row’s end (#639)', () => {
+  const noop = () => undefined;
+  /** A line that wraps: its style, the title's part and the part after it. */
+  const parts = (row: ReactTestRendererJSON) => {
+    const [first, second] = (row.children ?? []) as ReactTestRendererJSON[];
+    return {
+      row: flatten(row.props.style),
+      first: flatten(first!.props.style),
+      title: first!,
+      second,
+    };
+  };
+  it('a section’s action, under a title it doesn’t fit beside at 200% on a 360dp phone', () => {
+    setWindow({ width: 360, height: 640, fontScale: 2 });
+    render(
+      <SectionHeader
+        title="Groups · 12"
+        trailing={<CompactButton label="New Group" icon="add" variant="text" onPress={noop} />}
+      />,
+    );
+    const row = renderer!.toJSON() as ReactTestRendererJSON;
+    const { title, second } = parts(row);
+    // On a line of its own: the title's line, the gap, then the button's.
+    const room = 360 - 32 - 4;
+    expect(layoutHeight(row, 2, 360 - 32)).toBe(
+      layoutHeight(title, 2, room) + 8 + layoutHeight(second!, 2, room),
+    );
+    // A lone part keeps to the end; the title's margin takes what its own line leaves.
+    const { row: style, first } = parts(row);
+    expect(style.justifyContent).toBe('flex-end');
+    expect(first.marginRight).toBe('auto');
+  });
+  it.each(largeTextWindows)(
+    'a top bar’s status, beside its title or under it at the end, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      render(
+        <TopBar
+          title="Add expense"
+          subtitle="Maple House · INR"
+          prominent={false}
+          leading={{ kind: 'close', label: 'Back to Group', onPress: noop }}
+          status={<Badge label="Kept on this phone" />}
+          actions={<IconButton icon="ellipsis-vertical-outline" label="Options" onPress={noop} />}
+        />,
+      );
+      const [line] = findHosts(
+        renderer!.toJSON() as ReactTestRendererJSON,
+        (props) => flatten(props.style).flexWrap === 'wrap',
+      );
+      const { row: style, first } = parts(line!);
+      expect(style.justifyContent).toBe('flex-end');
+      expect(first.marginRight).toBe('auto');
+    },
+  );
 });
