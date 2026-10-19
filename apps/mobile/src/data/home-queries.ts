@@ -956,7 +956,9 @@ export function createHomeQueries(session: HomeSession) {
       if (netInfo) {
         wired.set(online, own);
         online.setEventListener((setOnline) =>
-          netInfo.addEventListener(({ isConnected }) => setOnline(isConnected !== false)),
+          netInfo.addEventListener(({ isConnected, isInternetReachable }) =>
+            setOnline(isConnected !== false && isInternetReachable !== false),
+          ),
         );
       }
       return () => {

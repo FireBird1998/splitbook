@@ -593,7 +593,12 @@ export type GoogleIdentityResult =
 
 /** What NetInfo tells the app: only whether the device has a connection (ADR 0006, M1-4). */
 export interface NetworkState {
-  addEventListener(listener: (state: { isConnected: boolean | null }) => void): () => void;
+  addEventListener(
+    listener: (state: {
+      isConnected: boolean | null;
+      isInternetReachable?: boolean | null;
+    }) => void,
+  ): () => void;
 }
 
 export interface MobileDependencies {
