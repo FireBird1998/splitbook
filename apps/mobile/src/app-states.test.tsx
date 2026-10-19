@@ -1099,7 +1099,7 @@ describe('offline', () => {
     const saved = `Saved ${refreshedLabel(savedAt)}`;
     expect(app.text()).toContain('You’re offline');
     expect(app.text()).toContain(
-      `Some of what\'s shown was saved on this device at ${refreshedLabel(savedAt)}`,
+      `Some of what's shown was saved on this device at ${refreshedLabel(savedAt)}`,
     );
     expect(app.text()).toContain(saved);
 
@@ -1970,7 +1970,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     // Maple House shows this phone's copy: the banner says when it was saved, as its badge does.
     await app.press(open[maple]);
     expect(app.text()).toContain(
-      `You’re offlineSome of what\'s shown was saved on this device at ${refreshedLabel(savedAt)}`,
+      `You’re offlineSome of what's shown was saved on this device at ${refreshedLabel(savedAt)}`,
     );
     expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}\u200a`);
     await app.press('Back to Home');
@@ -2026,7 +2026,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expenses.release();
     await settle();
     expect(app.text()).toContain(
-      `You’re offlineSome of what\'s shown was saved on this device at ${refreshedLabel(savedAt)}`,
+      `You’re offlineSome of what's shown was saved on this device at ${refreshedLabel(savedAt)}`,
     );
   });
 
