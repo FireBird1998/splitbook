@@ -1,3 +1,4 @@
+import { groupPageMetadata } from '@/lib/group-page-metadata';
 import { getAuthUser } from '@/lib/utils/api-response';
 import { redirect } from 'next/navigation';
 import GroupSettingsView from '@/components/groups/GroupSettingsView';
@@ -16,4 +17,8 @@ export default async function GroupSettingsPage({ params }: { params: Promise<{ 
       recurringExpensesEnabled={recurringExpensesEnabled()}
     />
   );
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  return groupPageMetadata(params, 'Settings');
 }

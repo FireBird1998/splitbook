@@ -2,6 +2,8 @@ import { getAuthUser } from '@/lib/utils/api-response';
 import { redirect } from 'next/navigation';
 import DashboardView from '@/components/dashboard/DashboardView';
 
+export const metadata = { title: 'Home' };
+
 export default async function DashboardPage() {
   const user = await getAuthUser();
   if (!user) redirect('/login');
