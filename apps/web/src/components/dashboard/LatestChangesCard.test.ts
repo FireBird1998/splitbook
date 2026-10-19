@@ -109,19 +109,19 @@ describe('Home’s latest changes', () => {
   it('reads newest first: who did what, to which Expense, in which Group, when, and the amount', () => {
     expect(rows(view({ status: 'ready', activities: READ.activities }))).toEqual([
       {
-        href: `/groups/${maple._id}`,
+        href: `/groups/${maple._id}/activity`,
         text: `AR You added Weekly groceries Maple House · ${formatDateTime(times.groceries)} ₹1,249.50`,
       },
       {
-        href: `/groups/${maple._id}`,
+        href: `/groups/${maple._id}/activity`,
         text: `PS Priya Shah edited Wi-Fi Maple House · ${formatDateTime(times.wifi)} from ₹899.00 → to ₹999.00`,
       },
       {
-        href: `/groups/${goa._id}`,
+        href: `/groups/${goa._id}/activity`,
         text: `SC Sam Chen recorded a payment Goa Friends Trip · ${formatDateTime(times.payment)} €12.50`,
       },
       {
-        href: `/groups/${goa._id}`,
+        href: `/groups/${goa._id}/activity`,
         text: `Someone joined the Group Goa Friends Trip · ${formatDateTime(times.joined)}`,
       },
     ]);
