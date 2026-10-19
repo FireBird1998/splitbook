@@ -21,6 +21,7 @@ import {
   groupBalancesKey,
   groupKey,
   queryKeyPath,
+  tagActionsKey,
   type QueryAccount,
   type QueryKey,
 } from '@splitbook/shared/query-keys';
@@ -1464,6 +1465,19 @@ export function createGroupQueries(session: GroupSession) {
      * `tag-actions` row, retired with its other rows, and answer for it offline.
      */
     tagsQuery: (send: (signal?: AbortSignal) => Promise<unknown>) => readTags(send),
+    /**
+     * This phone's saved Tags of a Group, checked as an offline answer is: never a copy a change,
+     * a denial or a failed removal made obsolete, nor one it can't read (#638). Null without one.
+     */
+    async savedTags(groupId: string) {
+      const lease = session.lease();
+      if (!lease || !rows) return null;
+      const key = tagActionsKey(session.account(), groupId);
+      const row = await savedRow(lease, queryKeyPath(key)).catch(() => null);
+      if (!row || row.refreshedAt <= session.distrusted(key, false) || !readable(key, row.value))
+        return null;
+      return { refreshedAt: row.refreshedAt, tags: tagsOf(row.value).tags };
+    },
     /**
      * Load more: the next older page. Past 5 pages the window slides and the newest page drops; a
      * page that couldn't be read before is read again, in its place.

@@ -411,6 +411,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
   const tagRebinders = new Set<() => void>();
+  /**
+   * Groups with a Tag change kept on this device that is neither confirmed nor refused: their
+   * Tags are shown but never saved (#638). Seeded at each start from the kept changes, then kept
+   * up to date as the Tag client reads, stores and removes them.
+   */
+  const unconfirmedTags = new Set<string>();
   let snapshot: MobileSnapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
   let cookie: string | null = null;
   /**
@@ -1563,7 +1569,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     await recordCookieAccount(owner, session.user.id);
     await queueAccount(() => financialCleanup.recover());
-    await queueAccount(() => untrusted.recover(session.user.id, now()));
+    for (const id of await queueAccount(() => untrusted.recover(session.user.id, now())))
+      unconfirmedTags.add(id);
     // A Group submission stored on this device reopens before anything else can be created.
     openHome(session.user, await storedCreation(owner, session.user.id));
     await saveVerifiedIdentity(session, owner);
@@ -1614,7 +1621,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await queueAccount(() => untrusted.drop());
       const device = readDeviceAccount();
       const accountId = (await device)?.accountId;
-      if (accountId) await queueAccount(() => untrusted.recover(accountId, now()));
+      if (accountId)
+        for (const id of await queueAccount(() => untrusted.recover(accountId, now())))
+          unconfirmedTags.add(id);
       const deviceHome = readSavedHome(device);
       await loadPending();
       assertCurrent(owner);
@@ -2534,6 +2543,39 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     tagId: '',
     notes: '',
   });
+  /** The check's outcome, which offers no Tags while a Tag change made here is unconfirmed. */
+  const checkedContext = (
+    check: NonNullable<ExpenseEditor['contextCheck']>,
+    groupId: string,
+    next: Partial<NonNullable<ExpenseEditor['contextCheck']>>,
+  ): NonNullable<ExpenseEditor['contextCheck']> => {
+    const checked = { ...check, ...next };
+    if (unconfirmedTags.has(groupId)) checked.tagChange = true;
+    else delete checked.tagChange;
+    return checked;
+  };
+  /**
+   * Offline, a form's Tags come from the newer of the Group's two saved reads: the Group's own,
+   * or its Tags (#638); from neither while a Tag change made here is unconfirmed, when the Tag
+   * waits for the live check. Online, they're the Group's, as read.
+   */
+  const withSavedTags = async (context: ExpenseContext): Promise<ExpenseContext> => {
+    const groupId = snapshot.expense.groupId;
+    if (!groupId || unconfirmedTags.has(groupId)) return context;
+    const envelope = queryClient.getQueryData<Envelope>(groupKey(account(), groupId));
+    if (envelope?.source !== 'saved') return context;
+    const saved = await groupQueries.savedTags(groupId).catch(() => null);
+    if (!saved || saved.refreshedAt <= envelope.refreshedAt) return context;
+    return {
+      ...context,
+      tags: saved.tags.map(({ id, name, isArchived, isDeleted }) => ({
+        id,
+        name,
+        isArchived,
+        isDeleted,
+      })),
+    };
+  };
   const failExpenseOpening = (error: unknown) => {
     const editor = snapshot.expense;
     if (
@@ -2549,7 +2591,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...editor,
         preview: null,
         status: editor.draft ? editor.status : 'blocked',
-        contextCheck: { ...editor.contextCheck, status: 'failed' },
+        contextCheck: checkedContext(editor.contextCheck, editor.groupId!, { status: 'failed' }),
         message: expenseFailureMessage(
           error,
           'Could not check this Group. Your entries are kept. Please retry.',
@@ -2557,7 +2599,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     });
   };
-  const acceptExpenseOpening = async (context: ExpenseContext) => {
+  const acceptExpenseOpening = async (checked: ExpenseContext) => {
+    const context = await withSavedTags(checked);
     const editor = snapshot.expense;
     if (snapshot.screen !== 'expense' || editor.status === 'saving' || editor.accessLost) return;
     const check = editor.contextCheck;
@@ -2594,12 +2637,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         context,
         blank,
         contextCheck: saved
-          ? {
-              ...check,
+          ? checkedContext(check, editor.groupId!, {
               status: 'saved',
               saved: true,
               refreshedAt: envelope?.refreshedAt ?? check.refreshedAt,
-            }
+            })
           : undefined,
         message: check.status === 'failed' ? null : editor.message,
         preview: saved ? null : draft ? previewExpense(draft) : null,
@@ -3008,10 +3050,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !snapshot.expense.draft
     )
       return;
+    // Offline, the Tag comes from the Group's saved Tags, a new Expense's too, unless a Tag
+    // change made here is unconfirmed (#638).
+    const tagged = !expenseTagPending(snapshot.expense, snapshot.offline.active);
     if (expenseContextPending(snapshot.expense, snapshot.offline.active)) {
       const { amount, description, date, notes, tagId } = patch;
-      // Offline, the Tag comes from the Group's saved Tags, a new Expense's too (#638).
-      const tagged = !expenseTagPending(snapshot.expense, snapshot.offline.active);
       patch = {
         ...(amount !== undefined ? { amount } : {}),
         ...(description !== undefined ? { description } : {}),
@@ -3019,6 +3062,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...(notes !== undefined ? { notes } : {}),
         ...(tagId !== undefined && tagged ? { tagId } : {}),
       };
+    } else if (!tagged && patch.tagId !== undefined) {
+      patch = { ...patch };
+      delete patch.tagId;
     }
     const lease = accountStorage();
     const storage = dependencies.expenseDrafts;
@@ -6238,8 +6284,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const tagOwners = new Map<string, object>();
   const tagFlights = new Map<string, { active: boolean }>();
-  /** Groups whose kept Tag change, read or stored this session, is neither confirmed nor refused. */
-  const unconfirmedTags = new Set<string>();
   /** Notes whether a Tag change kept for a Group is still unresolved, as it is read or stored. */
   const noteTagRecord = (groupId: string, record: unknown) => {
     const kept = record as { confirmed?: unknown; rejected?: unknown } | null;

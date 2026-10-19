@@ -112,8 +112,11 @@ export function untrustedCopies({
   return Object.assign(untrusted, {
     mark,
     drop,
-    /** A stored attempt may have reached the server before the app was killed (#282). */
-    async recover(accountId: string, time: number) {
+    /**
+     * A stored attempt may have reached the server before the app was killed (#282). Returns the
+     * Groups with a Tag change kept here, whose Tags are then never saved until it is resolved.
+     */
+    async recover(accountId: string, time: number): Promise<string[]> {
       const scopes = new Set<string>();
       const [expenses, payments] = await Promise.all([
         expenseDrafts?.list?.(accountId) ?? [],
@@ -161,6 +164,7 @@ export function untrustedCopies({
             }
           : undefined,
       );
+      return tagGroups;
     },
   });
 }

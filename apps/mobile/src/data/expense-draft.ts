@@ -94,6 +94,11 @@ export interface ExpenseEditor {
     saved: boolean;
     /** Only a new, untouched form's financial defaults follow the accepted Group. */
     initialize: boolean;
+    /**
+     * A Tag change made on this phone for this Group is neither confirmed nor refused: no Tags
+     * this phone knows are offered until the live check (#638).
+     */
+    tagChange?: boolean;
   };
   status:
     | 'conflict'
@@ -173,14 +178,15 @@ export function expenseContextPending(editor: ExpenseEditor, offline: boolean) {
 }
 /**
  * Whether choosing the Tag waits for the Group's live check. Offline, once that check has
- * answered from what this phone knows (the Group's saved copy, or a read earlier in this
- * session) or failed, the member picks from those Tags, on a new Expense too (#638): a Tag is
- * the member's own choice, never a default the check would replace, and Save still checks it
- * live. Reconnecting waits for the live check, as every financial choice does.
+ * answered from what this phone knows (the newer of the Group's saved reads, or a read earlier
+ * in this session) or failed, the member picks from those Tags, on a new Expense too (#638): a
+ * Tag is the member's own choice, never a default the check would replace, and Save still
+ * checks it live. Never while a Tag change made here is unconfirmed, and reconnecting waits for
+ * the live check, as every financial choice does.
  */
 export function expenseTagPending(editor: ExpenseEditor, offline: boolean) {
   const check = editor.contextCheck;
-  return !!check && !(offline && check.status !== 'checking');
+  return !!check && (!!check.tagChange || !(offline && check.status !== 'checking'));
 }
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;
 export type ExpenseField = (typeof expenseFields)[number];
