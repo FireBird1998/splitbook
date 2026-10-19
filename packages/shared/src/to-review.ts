@@ -4,6 +4,7 @@ import { groupNounTitle } from './group-themes';
 import { GROUP_ARCHIVED_MESSAGE } from './group-archive';
 import type { PersistedExpenseDraft } from './validators/expense-draft';
 import { formatDate } from './date';
+import { expenseLocalDate } from './expense-day';
 import { toDateParam } from './date';
 import { formatCurrency } from './currency';
 import { parseAmountMinor, sumMinorAmounts, toMajorAmount } from './exact-money';
@@ -294,7 +295,7 @@ export function summarizeReviewRun(outcomes: readonly ReviewRunOutcome[]) {
 
 /** A date-only Expense fact is a calendar day, not a UTC instant. */
 export function reviewDate(date?: string): string {
-  return date ? formatDate(`${date}T12:00:00`) : 'Date missing';
+  return date ? formatDate(expenseLocalDate(date)) : 'Date missing';
 }
 
 /**

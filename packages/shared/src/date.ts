@@ -13,13 +13,14 @@ import {
 } from 'date-fns';
 
 /**
- * Format a date for display.
+ * Format an instant’s local day for display. Pass Expense calendar days through
+ * expenseLocalDate first so the viewer’s zone cannot shift the day.
  */
 export function formatDate(date: Date | string): string {
   const d = new Date(date);
   if (isToday(d)) return 'Today';
   if (isYesterday(d)) return 'Yesterday';
-  return format(d, 'MMM d, yyyy');
+  return format(d, 'd MMM yyyy');
 }
 
 /**
@@ -27,9 +28,7 @@ export function formatDate(date: Date | string): string {
  */
 export function formatDateTime(date: Date | string): string {
   const d = new Date(date);
-  if (isToday(d)) return `Today at ${format(d, 'h:mm a')}`;
-  if (isYesterday(d)) return `Yesterday at ${format(d, 'h:mm a')}`;
-  return format(d, "MMM d, yyyy 'at' h:mm a");
+  return `${formatDate(d)} at ${format(d, 'h:mm a')}`;
 }
 
 /**

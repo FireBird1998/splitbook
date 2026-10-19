@@ -97,7 +97,7 @@ const SPLIT_METHOD_OPTIONS: Array<{ value: SplitMethod; label: string }> = [
 ];
 
 /**
- * "Feb 1, 2026": a recurring Expense's start or end, a calendar day stored at midnight UTC, so the
+ * "1 Feb 2026": a recurring Expense's start or end, a calendar day stored at midnight UTC, so the
  * same in every zone (#522).
  */
 const dayLabel = (date: Date | string) => formatDate(expenseLocalDate(date));
