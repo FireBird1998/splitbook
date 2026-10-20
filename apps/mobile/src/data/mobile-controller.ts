@@ -1263,6 +1263,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     groupQueries.listen(focusManager, onlineManager),
     expenseQueries.listen(focusManager, onlineManager),
     activityQueries.listen(focusManager, onlineManager),
+    // A full reconnect reaches a Group's view, its Activity and an Expense record through their own
+    // listeners; Members and the Record payment sheet, which this controller reads itself, recover
+    // here as when only the internet returns (#690).
+    onlineManager.subscribe((online) => {
+      if (online) void recoverShown();
+    }),
   ];
   const disconnect = () => {
     listening.forEach((stop) => stop());
