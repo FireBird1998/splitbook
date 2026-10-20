@@ -471,6 +471,12 @@ afterEach(() => {
 const later = (ms: number) => vi.setSystemTime(Date.now() + ms);
 /** Lets every answer and storage step already under way go as far as it can. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+/** Writes sent since `from`, as method and path. */
+const writes = (f: ReturnType<typeof fixture>, from: number) =>
+  f.calls
+    .slice(from)
+    .filter(({ method }) => method !== 'GET')
+    .map(({ method, path }) => `${method} ${path}`);
 const septemberPath = (page: number) =>
   `/api/groups/${mapleId}/expenses?page=${page}&limit=20&includeMemberBreakdown=1`;
 /** The Expense rows listed, as `<month> expense <n>`. */
@@ -1692,12 +1698,6 @@ describe('a Group shown offline reads again once the internet returns (#678)', (
     f
       .gets(from)
       .filter((read) => read === 'group' || read === 'balances' || read.startsWith('expenses'));
-  /** Writes sent since `from`. */
-  const writes = (f: ReturnType<typeof fixture>, from: number) =>
-    f.calls
-      .slice(from)
-      .filter(({ method }) => method !== 'GET')
-      .map(({ method, path }) => `${method} ${path}`);
   /**
    * Alex read Maple House on `destination` a minute ago (without keeping its Group, `group:
    * false`). The app restarts on Wi-Fi that doesn't reach the internet yet.
@@ -2032,6 +2032,262 @@ describe('Members shown offline reads its Group again once the internet returns 
       await settle();
       expect(f.gets(sent)).toEqual([]);
       expect(controller.getSnapshot().detail).toEqual(shown.detail);
+    },
+  );
+});
+
+// #685, after #678 and #681 (owner decision, 2026-10-20). Record payment opens only over a view
+// read live, but its own reads can still end offline while Wi-Fi stays connected without the
+// internet: its check of the payment, which then shows "Could not reach Splitbook" and offers no
+// Record, or a pull whose Group falls back to this phone's copy, under the offline banner. When
+// only the internet returns, the sheet reads again once, as Try again or a pull does. A failure
+// Splitbook answered stays until Try again.
+describe('the Record payment sheet shown offline reads again once the internet returns (#685)', () => {
+  /** Alex has Maple House open on Balances, read live. */
+  async function onBalances(f: ReturnType<typeof fixture>) {
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId, true, 'balances');
+    await settle();
+    return controller;
+  }
+  it('checks the payment again once the internet returns, after its check failed offline, and Record records', async () => {
+    const f = fixture();
+    const controller = await onBalances(f);
+    // Wi-Fi stops reaching the internet before the app has seen it: the sheet's check fails.
+    f.connect(true, false);
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: {
+        status: 'error',
+        draft: null,
+        message: 'Could not reach Splitbook. Check your connection and try again.',
+      },
+    });
+    const sent = f.calls.length;
+    // The internet returns on the Wi-Fi the phone kept, and NetInfo says so twice.
+    f.connect(true, true);
+    f.connect(true, true);
+    await settle();
+    await settle();
+    // The check again, once, as Try again: the Group was verified within the freshness window, so
+    // only its Balances are read.
+    expect(f.gets(sent)).toEqual(['balances']);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      offline: { active: false },
+      settlement: { status: 'editing', message: null },
+    });
+    const writing = f.calls.length;
+    await controller.recordSettlement();
+    await settle();
+    expect(controller.getSnapshot().snackbar?.message).toBe('Payment recorded');
+    expect(writes(f, writing)).toEqual([`POST ${maplePath}/settlements`]);
+  });
+
+  it('reads the sheet’s Group again once the internet returns, after a pull fell back to its copy, and the banner lifts', async () => {
+    const f = fixture();
+    const controller = await onBalances(f);
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    await settle();
+    f.connect(true, false);
+    later(60_000);
+    await controller.refresh('pull');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      offline: { active: true },
+      detail: { restored: true },
+      settlement: { status: 'editing' },
+    });
+    const sent = f.calls.length;
+    f.connect(true, true);
+    await settle();
+    await settle();
+    // Once, as a pull on the sheet reads it: the session, then the Group, whose read checks the
+    // session again while the banner still shows.
+    expect(f.gets(sent)).toEqual(['/api/auth/get-session', '/api/auth/get-session', 'group']);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      offline: { active: false },
+      detail: { restored: false },
+      settlement: { status: 'editing' },
+    });
+    const writing = f.calls.length;
+    await controller.recordSettlement();
+    await settle();
+    expect(controller.getSnapshot().snackbar?.message).toBe('Payment recorded');
+    expect(writes(f, writing)).toEqual([`POST ${maplePath}/settlements`]);
+  });
+
+  it('checks the payment and reads the sheet’s Group again once the internet returns, when both ended offline', async () => {
+    const f = fixture();
+    const controller = await onBalances(f);
+    f.connect(true, false);
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    await settle();
+    later(60_000);
+    // A pull on the sheet falls back to the Group's copy too: the banner shows over the failure.
+    await controller.refresh('pull');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      offline: { active: true },
+      detail: { restored: true },
+      settlement: { status: 'error' },
+    });
+    const sent = f.calls.length;
+    f.connect(true, true);
+    await settle();
+    await settle();
+    // The check again, which reads the Group without its saved copy, then the Group as a pull on
+    // the sheet reads it, since that copy still keeps the banner.
+    expect(f.gets(sent)).toEqual([
+      'group',
+      'balances',
+      '/api/auth/get-session',
+      '/api/auth/get-session',
+      'group',
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      offline: { active: false },
+      detail: { restored: false },
+      settlement: { status: 'editing', message: null },
+    });
+  });
+
+  it('reads nothing more once the sheet closes while its check runs again', async () => {
+    const f = fixture();
+    const controller = await onBalances(f);
+    f.connect(true, false);
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    await settle();
+    later(60_000);
+    await controller.refresh('pull');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true },
+      settlement: { status: 'error' },
+    });
+    const balances = f.hold(balancesPath, { exact: true });
+    const sent = f.calls.length;
+    f.connect(true, true);
+    await balances.reached;
+    // The member closes the sheet while it checks again.
+    await controller.back();
+    balances.release();
+    await settle();
+    await settle();
+    expect(controller.getSnapshot().screen).toBe('group');
+    // The check, then what closing the sheet reads, as it always does: the Group's Balances, when
+    // they aren't fresh. Nothing is read for the sheet once it has closed.
+    expect(f.gets(sent)).toEqual(['group', 'balances', '/api/auth/get-session', 'balances']);
+  });
+
+  it('checks the payment again after a Try again under way when the internet returns, once it ends offline', async () => {
+    const f = fixture();
+    const controller = await onBalances(f);
+    f.connect(true, false);
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    await settle();
+    expect(controller.getSnapshot().settlement.status).toBe('error');
+    // Try again starts just before the internet returns, and its Balances answer is lost.
+    f.server.offline = false;
+    const balances = f.hold(balancesPath, { exact: true, lost: true });
+    const retrying = controller.retrySettlementCheck();
+    await balances.reached;
+    const sent = f.calls.length;
+    f.connect(true, true);
+    await settle();
+    // Nothing is sent beside the read under way.
+    expect(f.gets(sent)).toEqual([]);
+    balances.release();
+    await retrying;
+    await settle();
+    await settle();
+    // It ended offline, so the payment is checked once more, live.
+    expect(f.gets(sent)).toEqual(['balances']);
+    expect(controller.getSnapshot().settlement).toMatchObject({ status: 'editing', message: null });
+  });
+
+  it.each([
+    ['without the banner', false],
+    ['under the banner', true],
+  ] as const)(
+    'sends nothing of a payment stored on this phone when the internet returns, %s',
+    async (_, banner) => {
+      const f = fixture();
+      const controller = await onBalances(f);
+      await controller.openRecordPayment(alex.id, sam.id, 'INR');
+      await settle();
+      // Record is sent, but its answer is lost: the payment is stored here, unconfirmed.
+      const posting = f.hold(`${maplePath}/settlements`, { exact: true, lost: true });
+      const recording = controller.recordSettlement();
+      await posting.reached;
+      posting.release();
+      await recording;
+      await settle();
+      const key = controller.getSnapshot().settlement.attempt?.key;
+      expect(key).toBeTruthy();
+      await controller.back();
+      await settle();
+      // Its check, from Balances, can't reach Splitbook: it shows 'uncertain', with Retry payment.
+      f.connect(true, false);
+      await controller.openPendingPayment();
+      await settle();
+      if (banner) {
+        later(60_000);
+        await controller.refresh('pull');
+        await settle();
+      }
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'settlement',
+        offline: { active: banner },
+        settlement: { status: 'uncertain', attempt: { key } },
+      });
+      const sent = f.calls.length;
+      f.connect(true, true);
+      await settle();
+      await settle();
+      // Only what lifts the banner is read; the payment is never sent again by itself.
+      expect(f.calls.slice(sent).map(({ method, path }) => `${method} ${path}`)).toEqual(
+        banner
+          ? ['GET /api/auth/get-session', 'GET /api/auth/get-session', `GET ${maplePath}`]
+          : [],
+      );
+      expect(controller.getSnapshot().settlement).toMatchObject({
+        status: 'uncertain',
+        attempt: { key },
+      });
+    },
+  );
+
+  it.each(['a server failure', 'a refusal'] as const)(
+    'keeps %s Splitbook answered for the sheet’s check, and reads nothing, when the internet returns',
+    async (failure) => {
+      const f = fixture();
+      const controller = await onBalances(f);
+      // NetInfo hasn't confirmed the internet yet, but Splitbook answers.
+      f.connect(true, false);
+      f.server.offline = false;
+      if (failure === 'a server failure') f.server.failBalances = true;
+      else f.server.revoked.add(mapleId);
+      await controller.openRecordPayment(alex.id, sam.id, 'INR');
+      await settle();
+      const shown = controller.getSnapshot();
+      expect(shown).toMatchObject({
+        screen: 'settlement',
+        offline: { active: false },
+        settlement: { status: failure === 'a server failure' ? 'error' : 'blocked' },
+      });
+      const sent = f.calls.length;
+      f.connect(true, true);
+      await settle();
+      expect(f.gets(sent)).toEqual([]);
+      expect(controller.getSnapshot().settlement).toEqual(shown.settlement);
     },
   );
 });
