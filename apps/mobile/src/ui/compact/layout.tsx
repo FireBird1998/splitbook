@@ -377,7 +377,7 @@ export const ListRow = memo(function ListRow({
   const reveal = useReveal(trailingLoading);
   const column = useTextColumn();
   const whole = useLargestText();
-  const tap = useTap(onPress);
+  const tap = useTap();
   const after = trailingLoading ? <TrailingSkeleton /> : trailing;
   const content = (
     <>
@@ -430,8 +430,7 @@ export const ListRow = memo(function ListRow({
       accessibilityLabel={accessibilityLabel ?? [title, meta].filter(Boolean).join(', ')}
       accessibilityState={disabled ? { disabled } : undefined}
       disabled={disabled}
-      {...tap.touch}
-      onPress={tap.onPress}
+      {...tap.on(onPress)}
       style={({ pressed }) => [
         style,
         pressed && !tap.dragged && { backgroundColor: theme.surfaceMuted },

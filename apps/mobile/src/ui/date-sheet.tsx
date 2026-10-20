@@ -7,7 +7,7 @@ import {
   toDateParam,
   type CalendarDay,
 } from '@splitbook/shared/date';
-import { BottomSheet, Chip, CompactText, IconButton, touch } from './compact';
+import { BottomSheet, Chip, CompactText, IconButton, touch, useTap } from './compact';
 import { gregorianDateFormat, readPhoneCalendar, spellDay } from './day-format';
 import { useTheme } from './theme';
 
@@ -46,6 +46,8 @@ export function DateSheet({
   onDone: () => void;
 }) {
   const theme = useTheme();
+  // A drag that starts on a day never picks it (#665).
+  const dayTap = useTap();
   const locale = useMemo(() => {
     const narrow = gregorianDateFormat({ weekday: 'narrow' });
     return {
@@ -166,13 +168,13 @@ export function DateSheet({
                   accessibilityLabel={cell.label}
                   accessibilityState={{ selected: cell.selected, disabled: locked }}
                   disabled={locked}
-                  onPress={() => choose(cell.date)}
+                  {...dayTap.on(() => choose(cell.date))}
                   style={({ pressed }) => ({
                     flex: 1,
                     height: 46,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    opacity: pressed ? 0.6 : 1,
+                    opacity: pressed && !dayTap.dragged ? 0.6 : 1,
                   })}
                 >
                   <View

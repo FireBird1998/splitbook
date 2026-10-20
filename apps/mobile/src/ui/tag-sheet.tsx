@@ -3,7 +3,7 @@ import { Pressable, TextInput, View } from 'react-native';
 import { expenseTagError, type ExpenseEditor } from '../data/expense-draft';
 import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
-import { BottomSheet, CompactText, FieldMarker, radius, touch } from './compact';
+import { BottomSheet, CompactText, FieldMarker, radius, touch, useTap } from './compact';
 import { fonts, useTheme } from './theme';
 
 /**
@@ -54,6 +54,8 @@ export function TagSheet({
   onDone: () => void;
 }) {
   const theme = useTheme();
+  // A drag that starts on a Tag never picks it (#665).
+  const tagTap = useTap();
   const [query, setQuery] = useState('');
   useEffect(() => {
     if (!visible) setQuery('');
@@ -135,14 +137,14 @@ export function TagSheet({
                   accessibilityLabel={`Tag: ${item.name}`}
                   accessibilityState={{ checked: selected, disabled: locked }}
                   disabled={locked}
-                  onPress={() => !locked && onChoose(item.id)}
+                  {...tagTap.on(() => !locked && onChoose(item.id))}
                   style={({ pressed }) => ({
                     minHeight: touch.min,
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 14,
                     paddingHorizontal: 20,
-                    backgroundColor: pressed ? theme.surfaceMuted : undefined,
+                    backgroundColor: pressed && !tagTap.dragged ? theme.surfaceMuted : undefined,
                   })}
                 >
                   <View

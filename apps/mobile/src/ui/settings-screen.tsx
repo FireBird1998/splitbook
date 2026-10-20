@@ -11,6 +11,7 @@ import {
   Divider,
   IconTile,
   SectionHeader,
+  useTap,
 } from './compact';
 import { Icon, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
@@ -80,6 +81,8 @@ export function SettingsScreen({
   onSignOut,
 }: SettingsScreenProps) {
   const theme = useTheme();
+  // Settings is short enough not to scroll: a drag that starts on a choice never picks it (#665).
+  const appearanceTap = useTap();
   const preferenceBusy = preferenceStatus === 'loading' || preferenceStatus === 'saving';
   const apiOrigin = parseWebOrigin(environment.apiOrigin)?.origin ?? 'Unavailable';
   const webOrigin = parseWebOrigin(environment.webOrigin)?.origin ?? 'Unavailable';
@@ -115,11 +118,12 @@ export function SettingsScreen({
                     accessibilityHint={option.description}
                     accessibilityState={{ checked: selected, disabled: preferenceBusy }}
                     disabled={preferenceBusy}
-                    onPress={() => onAppearanceChange(option.value)}
+                    {...appearanceTap.on(() => onAppearanceChange(option.value))}
                     style={({ pressed }) => [
                       row,
                       {
-                        backgroundColor: pressed ? theme.surfaceMuted : undefined,
+                        backgroundColor:
+                          pressed && !appearanceTap.dragged ? theme.surfaceMuted : undefined,
                         opacity: preferenceBusy ? 0.6 : 1,
                       },
                     ]}

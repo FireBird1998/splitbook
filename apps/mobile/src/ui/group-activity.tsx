@@ -169,7 +169,7 @@ const ActivityRow = memo(
     );
     const time = clockTime(event.createdAt);
     // A drag that starts on the row never opens it (#665).
-    const tap = useTap(() => onSelect(event._id));
+    const tap = useTap();
     return (
       <Pressable
         accessibilityRole="button"
@@ -179,8 +179,7 @@ const ActivityRow = memo(
         }
         accessibilityState={{ disabled }}
         disabled={disabled}
-        {...tap.touch}
-        onPress={tap.onPress}
+        {...tap.on(() => onSelect(event._id))}
         style={({ pressed }) => ({
           minHeight: 60,
           flexDirection: 'row',

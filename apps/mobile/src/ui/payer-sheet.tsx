@@ -23,6 +23,7 @@ import {
   radius,
   touch,
   useLargeText,
+  useTap,
 } from './compact';
 import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
@@ -65,6 +66,8 @@ export function PayerSheet({
 }) {
   const theme = useTheme();
   const large = useLargeText();
+  // A drag that starts on a member never makes them the payer (#665).
+  const memberTap = useTap();
   const { currency } = draft;
   const money = (minor: number) => formatCurrency(toMajorAmount(minor, currency), currency);
   const memberIds = members?.map((member) => member.id) ?? [];
@@ -111,7 +114,7 @@ export function PayerSheet({
               accessibilityLabel={you(id) ? `You, ${name(id)}` : name(id)}
               accessibilityState={{ checked: selected, disabled: locked }}
               disabled={locked}
-              onPress={() => !selected && edit({ payerId: id })}
+              {...memberTap.on(() => !selected && edit({ payerId: id }))}
               style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 }}
             >
               {person(id)}
