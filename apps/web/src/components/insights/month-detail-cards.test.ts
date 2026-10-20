@@ -197,9 +197,12 @@ describe('By Tag', () => {
     );
   });
 
-  it('draws bars hidden from assistive technology, with the same table for it', () => {
+  it('offers focusable Tag tooltips with spending and the earlier average while preserving the table', () => {
     const markup = render();
-    expect(tagWith(markup, 'data-testid="tag-bars"')).toContain('aria-hidden="true"');
+    expect(tagWith(markup, 'data-testid="tag-bars"')).not.toContain('aria-hidden="true"');
+    const row = tagWith(markup, 'data-testid="tag-bar-row"');
+    expect(row).toContain('tabindex="0"');
+    expect(row).toContain('aria-label="Household: ₹5,890.00 spent; 6-month average: ₹5,410.00"');
     expect(markup.match(/data-testid="tag-bar-row"/g)).toHaveLength(4);
     expect(markup.match(/data-testid="tag-average-tick"/g)).toHaveLength(4);
     expect(markup).toMatch(/aria-pressed="true"[^>]*>Chart</);
@@ -213,6 +216,11 @@ describe('By Tag', () => {
     expect(text(markup)).toContain(
       'Spending by Tag in September 2026, in INR, against the 6-month average, March to August 2026',
     );
+  });
+
+  it('a first-Month Tag tooltip says there is no earlier average', () => {
+    const row = tagWith(render({ read: FIRST }), 'data-testid="tag-bar-row"');
+    expect(row).toContain('aria-label="Household: ₹5,890.00 spent; Nothing earlier to compare"');
   });
 
   it('shows the table in a region the keyboard can scroll', () => {
