@@ -552,6 +552,7 @@ No body needed. Adds the current user to the group. Returns `201` on join, or
 | POST   | `/api/groups/[id]/expenses`                 | Add expense                |
 | GET    | `/api/groups/[id]/expenses`                 | List (with filters)        |
 | GET    | `/api/groups/[id]/expenses/check-duplicate` | Pre-submit duplicate check |
+| POST   | `/api/groups/[id]/expenses/tag-change`      | Move Expenses to one Tag   |
 | GET    | `/api/groups/[id]/expenses/[expenseId]`     | Get single expense         |
 | PATCH  | `/api/groups/[id]/expenses/[expenseId]`     | Update expense             |
 | DELETE | `/api/groups/[id]/expenses/[expenseId]`     | Soft delete                |
@@ -758,6 +759,58 @@ Accepts any subset of the create body, plus `isDeleted: false` to restore a
 soft-deleted expense. Each edit appends a diff to the expense's `editHistory`.
 An archived Group refuses an edit, a restore and a `DELETE` of its Expenses
 with **409** `GROUP_ARCHIVED`.
+
+### POST /api/groups/[id]/expenses/tag-change
+
+Moves several of the Group's Expenses to one Tag (#610). Any member may, as
+for a single edit.
+
+```json
+{
+  "tagId": "<an active Tag of the Group>",
+  "expenses": [{ "id": "<Expense id>", "revision": 3 }]
+}
+```
+
+`expenses` lists 1 to 100 Expenses (`EXPENSE_TAG_CHANGE_MAX`), each once, with
+the revision the member last saw. A non-member gets **403**. A Tag that isn't
+an active Tag of the Group gets **422** `INVALID_TAG`, and an archived Group
+**409** `GROUP_ARCHIVED`; a list that is empty, too long or names an Expense
+twice gets **422** `VALIDATION_ERROR`. Each of these changes nothing.
+
+Otherwise each Expense changes on its own, under a single edit's rules: it
+gets its own `editHistory` entry and `expense_updated` Activity event, and one
+that can't change doesn't stop the rest. Nothing is retried. The reply lists
+an outcome for each, in the order asked:
+
+```json
+{
+  "status": 200,
+  "data": {
+    "tagId": "<the Tag>",
+    "results": [
+      { "expenseId": "<id>", "outcome": "changed", "revision": 4 },
+      { "expenseId": "<id>", "outcome": "unchanged", "revision": 2 },
+      { "expenseId": "<id>", "outcome": "changed-elsewhere" },
+      { "expenseId": "<id>", "outcome": "unavailable" },
+      {
+        "expenseId": "<id>",
+        "outcome": "refused",
+        "code": "GROUP_ARCHIVED",
+        "reason": "<member words>"
+      }
+    ]
+  }
+}
+```
+
+- `changed`: it is on the Tag now, at `revision`.
+- `unchanged`: it was already on the Tag, so it wasn't edited. Sending the
+  same request again reports each Expense it changed this way.
+- `changed-elsewhere`: its revision isn't the one sent, so it was left as it is.
+- `unavailable`: it was deleted, or isn't the Group's.
+- `refused`: it couldn't change, for `reason`, such as the Group archived or
+  the Tag archived while the request ran. `code` names a known cause.
 
 ---
 
