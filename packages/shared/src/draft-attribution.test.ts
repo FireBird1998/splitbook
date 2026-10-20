@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assistantAttributionSchema,
   cleanAssistantName,
+  cleanPublishedAssistantName,
   draftAttributionSchema,
 } from './draft-attribution';
 
@@ -35,4 +36,14 @@ describe('Draft attribution', () => {
     expect(cleanAssistantName(input)).toBe(expected);
     expect(cleanAssistantName(cleanAssistantName(input))).toBe(expected);
   });
+  it.each([
+    ['  Synthetic\n\t Assistant  ', 'Synthetic Assistant'],
+    [' \t\u0000\u200b ', null],
+    ['', null],
+  ])(
+    'says when a published name has nothing left to show, so callers choose the fallback: %j',
+    (input, expected) => {
+      expect(cleanPublishedAssistantName(input)).toBe(expected);
+    },
+  );
 });

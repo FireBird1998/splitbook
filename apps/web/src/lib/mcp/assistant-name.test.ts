@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { assistantDisplay } from './assistant-name';
 
 /* How the approval page names an assistant (#614): by the name its metadata document publishes,
- * else by its address's host, with that address in small text beside it. */
+ * else by its address's host, with that address in small text beside it. A registered client has
+ * no metadata document, so it has no address to show. */
 describe('an assistant as the approval page names it', () => {
   it('uses the published name, with the address host beside it', () => {
     expect(assistantDisplay('https://chatgpt.com/oauth/client.json', 'ChatGPT')).toEqual({
@@ -29,10 +30,11 @@ describe('an assistant as the approval page names it', () => {
     ).toBe('Fictional Helper');
   });
 
-  it('names a registered client without a published name Assistant, by its client id', () => {
-    expect(assistantDisplay('a1b2c3d4e5', '')).toEqual({
-      name: 'Assistant',
-      address: 'a1b2c3d4e5',
+  it('names a registered client by its name, never by its client id', () => {
+    expect(assistantDisplay('a1b2c3d4e5', 'Synthetic MCP Client')).toEqual({
+      name: 'Synthetic MCP Client',
+      address: null,
     });
+    expect(assistantDisplay('a1b2c3d4e5', '')).toEqual({ name: 'Assistant', address: null });
   });
 });

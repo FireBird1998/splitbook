@@ -7,22 +7,23 @@ import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
 import OAuthFlow, { ConsentPermissions } from './OAuthFlow';
 
-/* The consent screen's permissions, rendered to static markup with the details the server sends. */
+/* The approval page's permissions, rendered to static markup with the details the server sends. */
 
 const render = (element: ReactElement) =>
   text(
     renderToStaticMarkup(createElement(ThemeProvider, { theme: createAppTheme('light') }, element)),
   );
 
-const permissions = (scopes: string[]) =>
+const permissions = (
+  scopes: string[],
+  assistant: { name: string; address: string | null } = {
+    name: 'Fictional Assistant',
+    address: 'assistant.example.test',
+  },
+) =>
   render(
     createElement(ConsentPermissions, {
-      details: {
-        clientId: 'https://assistant.example.test/client.json',
-        scopes,
-        name: 'Fictional Assistant',
-        address: 'assistant.example.test',
-      },
+      details: { scopes, ...assistant },
       drafts: false,
       busy: false,
       onDraftsChange: () => {},
@@ -68,6 +69,12 @@ describe('the consent screen', () => {
     expect(shown).toContain('assistant.example.test · identified by its published details');
     expect(shown).not.toContain('Client identity');
     expect(shown).not.toContain('https://assistant.example.test/client.json');
+  });
+
+  it('shows no address for a registered client, which publishes no details (#614)', () => {
+    const shown = permissions(['ledger:read'], { name: 'Synthetic MCP Client', address: null });
+    expect(shown).toContain('Synthetic MCP Client wants to use your Splitbook');
+    expect(shown).not.toContain('identified by its published details');
   });
 
   it.each([[['ledger:read']], [['ledger:read', MCP_DRAFT_SCOPE, 'offline_access']]])(

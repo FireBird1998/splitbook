@@ -45,7 +45,8 @@ for (const allowPreparation of [false, true]) {
     });
     await page.goto(`/api/auth/oauth2/authorize?${query}`);
     await expect(page).toHaveURL(/\/mcp\/consent\?/);
-    // Named by the name it registered, its address in small text, with what it can't do (#614).
+    // Named by the name it registered, with what it can't do (#614). A registered client
+    // publishes no details, so no address is shown for it.
     await expect(
       page.getByText('Fictional consent test assistant wants to use your Splitbook', {
         exact: true,
@@ -61,6 +62,7 @@ for (const allowPreparation of [false, true]) {
       'See anyone’s email',
     ])
       await expect(page.getByText(limit, { exact: true })).toBeVisible();
+    await expect(page.getByText('identified by its published details')).toHaveCount(0);
     const permission = page.getByRole('checkbox', {
       name: 'Also let it prepare Expenses for your To review',
       exact: true,
