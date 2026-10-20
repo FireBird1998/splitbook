@@ -1376,8 +1376,10 @@ JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
 - CSV carries `fileName` and `files`: each file has `name`, `kind`, `header`,
   at most five `rows`, `totalRows`, and `text` with the complete CSV file, including
   its UTF-8 BOM and CRLF line endings, for a file of up to 256 KB in UTF-8
-  (`EXPORT_PREVIEW_TEXT_BYTES`). A larger file has no `text`; its Text view says to
-  download it. Table / Text selects the sample or raw file. Cells match parsed download cells,
+  (`EXPORT_PREVIEW_TEXT_BYTES`), while the reply's files stay within 1 MB of `text`
+  together (`EXPORT_PREVIEW_TEXT_TOTAL_BYTES`), in file order. A larger file has no
+  `text` and takes none of that total; from the first file that would pass it, no later
+  file has `text` either. A file without `text` says in its Text view to download it. Table / Text selects the sample or raw file. Cells match parsed download cells,
   including the leading apostrophe protecting spreadsheet formulas. Queries,
   column order, exact money formatting and row order use the download builders.
 - JSON carries `fileName`, approximate `sizeBytes`, `earliestMonth`,

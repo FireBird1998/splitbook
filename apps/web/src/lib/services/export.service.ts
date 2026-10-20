@@ -28,7 +28,7 @@ import {
   type ExportRequest,
 } from '@splitbook/shared/export-request';
 import {
-  buildCsvPreview,
+  buildCsvPreviews,
   buildStatementPreview,
   type ExportPreview,
 } from '@splitbook/shared/export-preview';
@@ -261,10 +261,11 @@ export class ExportService {
       timeZone: request.timeZone,
       fileName: plan.download,
       empty: tables.every((table) => table.rows.length === 0),
-      files: tables.map((table, index) => ({
+      // The reply's Text budget runs across its files, in this order.
+      files: buildCsvPreviews(tables).map((preview, index) => ({
         name: plan.files[index].name,
         kind: plan.files[index].kind,
-        ...buildCsvPreview(table),
+        ...preview,
       })),
     };
   }

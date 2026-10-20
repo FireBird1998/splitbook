@@ -12,6 +12,8 @@ export const EXPORT_PREVIEW_ROWS = 5;
  * larger file's Text is left out: its download has every row.
  */
 export const EXPORT_PREVIEW_TEXT_BYTES = 256 * 1024;
+/** The most CSV Text one preview reply carries across all its files, in UTF-8 bytes (1 MB). */
+export const EXPORT_PREVIEW_TEXT_TOTAL_BYTES = 1024 * 1024;
 const common = {
   groupNames: z.array(z.string()),
   generatedAt: z.iso.datetime(),
@@ -31,7 +33,7 @@ export const csvPreviewSchema = z.object({
       header: z.array(z.string()),
       rows: z.array(z.array(z.string())).max(EXPORT_PREVIEW_ROWS),
       totalRows: z.number().int().nonnegative(),
-      /** The download's exact bytes, absent for a file over `EXPORT_PREVIEW_TEXT_BYTES`. */
+      /** The download's exact bytes; absent past either Text budget (`buildCsvPreviews`). */
       text: z.string().optional(),
     }),
   ),
@@ -136,15 +138,24 @@ function utf8Bytes(text: string) {
 }
 
 /**
- * Both views use the download's table. Text is the download's exact bytes, every row with the BOM
- * and CRLF, for a file of up to `EXPORT_PREVIEW_TEXT_BYTES`; a larger file has none.
+ * A reply's files, in preview order. Both views use the download's table. Text is the download's
+ * exact bytes, every row with the BOM and CRLF. A file over `EXPORT_PREVIEW_TEXT_BYTES` has none
+ * and takes none of the reply's `EXPORT_PREVIEW_TEXT_TOTAL_BYTES`; from the first file that would
+ * pass that total, no later file has Text either.
  */
-export function buildCsvPreview(table: CsvTable) {
-  const text = serializeCsv(table.header, table.rows);
-  return {
-    header: table.header.map(spreadsheetCellText),
-    rows: table.rows.slice(0, EXPORT_PREVIEW_ROWS).map((row) => row.map(spreadsheetCellText)),
-    totalRows: table.rows.length,
-    ...(utf8Bytes(text) <= EXPORT_PREVIEW_TEXT_BYTES ? { text } : {}),
-  };
+export function buildCsvPreviews(tables: readonly CsvTable[]) {
+  let left = EXPORT_PREVIEW_TEXT_TOTAL_BYTES;
+  return tables.map((table) => {
+    const text = serializeCsv(table.header, table.rows);
+    const bytes = utf8Bytes(text);
+    const fits = bytes <= EXPORT_PREVIEW_TEXT_BYTES;
+    const kept = fits && bytes <= left;
+    if (fits) left = kept ? left - bytes : 0;
+    return {
+      header: table.header.map(spreadsheetCellText),
+      rows: table.rows.slice(0, EXPORT_PREVIEW_ROWS).map((row) => row.map(spreadsheetCellText)),
+      totalRows: table.rows.length,
+      ...(kept ? { text } : {}),
+    };
+  });
 }

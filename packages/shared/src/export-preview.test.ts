@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildStatement } from './statement';
-import { buildCsvPreview, buildCsvPreviews, buildStatementPreview } from './export-preview';
-import { serializeCsv } from './export-csv';
+import { buildCsvPreviews, buildStatementPreview } from './export-preview';
+import { serializeCsv, type CsvTable } from './export-csv';
+
+/** A reply with this one file. */
+const buildCsvPreview = (table: CsvTable) => buildCsvPreviews([table])[0];
 import type { BackupGroupInput } from './export-backup';
 
 const group: BackupGroupInput = {
