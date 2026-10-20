@@ -268,6 +268,73 @@ export function connectionTests(mongo = false) {
   });
 
   describe('MCP connection authorization', () => {
+    const connectionList = async () => {
+      const response = await fetch(`${origin}/api/auth/mcp/connections`, { headers: { cookie } });
+      expect(response.status).toBe(200);
+      return (await response.json()).connections as Array<{
+        id: string;
+        name: string;
+        access: string;
+        lastUsedAt: string | null;
+      }>;
+    };
+
+    it('lists the assistant metadata name, access and Not used yet before an authorized call', async () => {
+      expect(await connectionList()).toMatchObject([
+        {
+          name: 'Synthetic MCP Client',
+          access: 'Ledger',
+          lastUsedAt: null,
+        },
+      ]);
+    });
+
+    it('records authorized SDK calls at most once a minute and does not count refused calls or Settings reads', async () => {
+      const now = new Date();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(now);
+      const client = new Client({ name: 'last-use-test', version: '1' });
+      try {
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(resource), {
+            requestInit: { headers: { Authorization: `Bearer ${token}` } },
+          }),
+        );
+        expect((await connectionList())[0].lastUsedAt).toBe(now.toISOString());
+        vi.setSystemTime(new Date(now.getTime() + 59_999));
+        await client.callTool({ name: 'connection_status', arguments: {} });
+        expect((await connectionList())[0].lastUsedAt).toBe(now.toISOString());
+        const later = new Date(now.getTime() + 60_000);
+        vi.setSystemTime(later);
+        await Promise.all([
+          client.listTools(),
+          client.callTool({ name: 'connection_status', arguments: {} }),
+        ]);
+        expect((await connectionList())[0].lastUsedAt).toBe(later.toISOString());
+        vi.setSystemTime(new Date(now.getTime() + 120_000));
+        expect(
+          (
+            await fetch(resource, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}broken` },
+            })
+          ).status,
+        ).toBe(401);
+        expect(
+          (
+            await fetch(resource, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, Origin: 'https://untrusted.example' },
+            })
+          ).status,
+        ).toBe(403);
+        expect((await connectionList())[0].lastUsedAt).toBe(later.toISOString());
+      } finally {
+        await client.close();
+        vi.useRealTimers();
+      }
+    });
+
     it('challenges anonymous callers with resource discovery and rejects browser cookies as MCP credentials', async () => {
       const response = await fetch(resource, { method: 'POST', headers: { cookie } });
       expect(response.status).toBe(401);
