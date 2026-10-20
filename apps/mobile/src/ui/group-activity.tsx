@@ -20,6 +20,7 @@ import {
   Divider,
   LinearProgress,
   SectionHeader,
+  useTap,
 } from './compact';
 import { readTime } from './financial-views';
 import { spellMoment } from './day-format';
@@ -167,6 +168,8 @@ const ActivityRow = memo(
       [event, currentUserId, currency, named],
     );
     const time = clockTime(event.createdAt);
+    // A drag that starts on the row never opens it (#665).
+    const tap = useTap(() => onSelect(event._id));
     return (
       <Pressable
         accessibilityRole="button"
@@ -176,7 +179,8 @@ const ActivityRow = memo(
         }
         accessibilityState={{ disabled }}
         disabled={disabled}
-        onPress={() => onSelect(event._id)}
+        {...tap.touch}
+        onPress={tap.onPress}
         style={({ pressed }) => ({
           minHeight: 60,
           flexDirection: 'row',
@@ -184,7 +188,7 @@ const ActivityRow = memo(
           gap: 12,
           paddingVertical: 8,
           paddingHorizontal: 14,
-          backgroundColor: pressed ? theme.surfaceMuted : undefined,
+          backgroundColor: pressed && !tap.dragged ? theme.surfaceMuted : undefined,
         })}
       >
         <EventContent line={line} name={event.actor?.name || 'Former member'} time={time} />

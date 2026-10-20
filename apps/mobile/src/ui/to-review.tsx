@@ -35,6 +35,7 @@ import {
   denseHitSlop,
   touch,
   useLargeText,
+  useTap,
 } from './compact';
 import { useDismissAfter } from './group-snackbar';
 import { groupIcon } from './group-icon';
@@ -131,6 +132,8 @@ function ItemRow({
   // At large text the amount goes under the title, on a line of its own: beside it, a narrow
   // column would break the number in two (₹1,4 / 80.00).
   const large = useLargeText();
+  // A drag that starts on the row never opens it (#665).
+  const tap = useTap(onPress);
   const values = item.accountItem?.draft.values ?? item.deviceItem?.values;
   // An item in your account says what it needs once, in its Needs line, so a missing fact leaves
   // its place empty here rather than saying it again (#435). A save still waiting for its reply
@@ -194,10 +197,11 @@ function ItemRow({
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
       disabled={disabled}
-      onPress={onPress}
+      {...tap.touch}
+      onPress={tap.onPress}
       style={({ pressed }) => [
         row,
-        pressed && { backgroundColor: theme.surfaceMuted },
+        pressed && !tap.dragged && { backgroundColor: theme.surfaceMuted },
         disabled && { opacity: 0.5 },
       ]}
     >
