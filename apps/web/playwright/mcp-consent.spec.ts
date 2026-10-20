@@ -45,6 +45,22 @@ for (const allowPreparation of [false, true]) {
     });
     await page.goto(`/api/auth/oauth2/authorize?${query}`);
     await expect(page).toHaveURL(/\/mcp\/consent\?/);
+    // Named by the name it registered, its address in small text, with what it can't do (#614).
+    await expect(
+      page.getByText('Fictional consent test assistant wants to use your Splitbook', {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText('What Fictional consent test assistant can’t do', { exact: true }),
+    ).toBeVisible();
+    for (const limit of [
+      'Save Expenses or payments',
+      'Change anything in a Group',
+      'See Groups left out',
+      'See anyone’s email',
+    ])
+      await expect(page.getByText(limit, { exact: true })).toBeVisible();
     const permission = page.getByRole('checkbox', {
       name: 'Also let it prepare Expenses for your To review',
       exact: true,

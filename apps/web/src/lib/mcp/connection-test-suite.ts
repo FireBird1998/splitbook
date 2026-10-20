@@ -119,6 +119,8 @@ export function connectionTests(mongo = false) {
       { headers: { cookie } },
     );
     expect(details.status).toBe(200);
+    // The approval page names the assistant by its published name, its address beside it (#614).
+    expect(await details.json()).toMatchObject({ name: 'Synthetic MCP Client', address: clientId });
     const consent = await post(
       '/oauth2/consent',
       {

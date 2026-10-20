@@ -17,7 +17,12 @@ const render = (element: ReactElement) =>
 const permissions = (scopes: string[]) =>
   render(
     createElement(ConsentPermissions, {
-      details: { clientId: 'https://chatgpt.com/oauth/client.json', scopes },
+      details: {
+        clientId: 'https://assistant.example.test/client.json',
+        scopes,
+        name: 'Fictional Assistant',
+        address: 'assistant.example.test',
+      },
       drafts: false,
       busy: false,
       onDraftsChange: () => {},
@@ -56,6 +61,29 @@ describe('the consent screen', () => {
     );
     expect(shown).toContain('Prepared items don’t change Balances until you save them.');
   });
+
+  it('names the assistant, with its address in small text, never as a raw client identity (#614)', () => {
+    const shown = permissions(['ledger:read']);
+    expect(shown).toContain('Fictional Assistant wants to use your Splitbook');
+    expect(shown).toContain('assistant.example.test · identified by its published details');
+    expect(shown).not.toContain('Client identity');
+    expect(shown).not.toContain('https://assistant.example.test/client.json');
+  });
+
+  it.each([[['ledger:read']], [['ledger:read', MCP_DRAFT_SCOPE, 'offline_access']]])(
+    'says what the assistant can’t do on every approval (#614): %j',
+    (scopes) => {
+      const shown = permissions(scopes);
+      expect(shown).toContain('What Fictional Assistant can’t do');
+      for (const limit of [
+        'Save Expenses or payments',
+        'Change anything in a Group',
+        'See Groups left out',
+        'See anyone’s email',
+      ])
+        expect(shown).toContain(limit);
+    },
+  );
 
   it('says nothing about To review when the assistant asks only to read the ledger', () => {
     const shown = permissions(['ledger:read']);
