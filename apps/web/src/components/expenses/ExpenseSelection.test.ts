@@ -1,4 +1,4 @@
-import { createElement, type ReactElement } from 'react';
+import { createElement, type ComponentType, type ReactElement, type ReactNode } from 'react';
 import { ThemeProvider as EmotionThemeProvider } from '@emotion/react';
 import { THEME_ID } from '@mui/material/styles';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
@@ -126,8 +126,9 @@ afterEach(() => {
  * The app's theme, through Emotion's provider: MUI's own reads the document's head on mount,
  * which this renderer has none of.
  */
+const AppTheme = EmotionThemeProvider as ComponentType<{ theme: object; children?: ReactNode }>;
 const themed = (element: ReactElement) =>
-  createElement(EmotionThemeProvider, { theme: { [THEME_ID]: createAppTheme('light') } }, element);
+  createElement(AppTheme, { theme: { [THEME_ID]: createAppTheme('light') } }, element);
 function show(element: ReactElement) {
   act(() => {
     renderer = create(themed(element));
@@ -261,10 +262,11 @@ describe('the selection panel (#610)', () => {
     expect(shown()).toContain('2 selected · ₹1,560.50');
     expect(shown()).toContain('Weekly groceries');
     expect(shown()).toContain('Water cans');
-    expect(shown()).toContain('Your position on these lent ₹1,040.32');
+    // In each row's own words, "you lent" and the amount.
+    expect(shown()).toContain('Your position on theseyou lent₹1,040.32');
     panel(EXPENSES);
     expect(shown()).toContain('3 selected · ₹4,420.50');
-    expect(shown()).toContain('Your position on these lent ₹86.99');
+    expect(shown()).toContain('Your position on theseyou lent₹86.99');
   });
 
   it('offers only the Group’s active Tags to move them to', async () => {

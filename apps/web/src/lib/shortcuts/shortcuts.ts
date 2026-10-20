@@ -3,7 +3,7 @@
  * does and the hints that show it, so the two can't drift apart. Pure, so the rules are
  * unit-tested without a browser.
  *
- * - **Single-key shortcuts** (N, /, J, K, E) are one character with no modifier. A Settings
+ * - **Single-key shortcuts** (N, /, J, K, E, X) are one character with no modifier. A Settings
  *   switch turns them off (WCAG 2.1.4). They never fire while the member types in a field,
  *   while a dialog or menu is open, or with Ctrl, Alt or ⌘ held.
  * - **⌘K** (Ctrl+K off Apple devices) opens search (#321), whatever the switch says.
@@ -37,7 +37,8 @@ export type ShortcutId =
   | 'next-expense'
   | 'previous-expense'
   | 'open-expense'
-  | 'edit-expense';
+  | 'edit-expense'
+  | 'select-expense';
 
 /** Where a shortcut works: anywhere on a page, or only while the Expense table has focus. */
 export type ShortcutScope = 'page' | 'table';
@@ -84,11 +85,7 @@ export function isSearchShortcut(event: ShortcutKeyEvent): boolean {
   return event.metaKey !== event.ctrlKey;
 }
 
-/**
- * Every shortcut, in the order the Expenses tab's footer lists them. X ("select") from the
- * design canvas is left out: the table has no row selection, since bulk actions are deferred
- * (#300), so there is nothing for it to act on.
- */
+/** Every shortcut, in the order the Expenses tab's footer lists them. */
 export const SHORTCUTS: readonly Shortcut[] = [
   {
     id: 'next-expense',
@@ -124,6 +121,15 @@ export const SHORTCUTS: readonly Shortcut[] = [
     ...same('E'),
     singleKey: true,
     matches: letter('e'),
+  },
+  {
+    // Ticks or unticks the focused row's Expense, as its checkbox does (#610).
+    id: 'select-expense',
+    scope: 'table',
+    hint: 'Select',
+    ...same('X'),
+    singleKey: true,
+    matches: letter('x'),
   },
   {
     id: 'add-expense',
