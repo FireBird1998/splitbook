@@ -96,7 +96,7 @@ test('fix a missing payer; edits are kept; Save records exactly the version show
   );
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const review = panel(page);
-  await expect(review).toContainText("Claude didn't know who paid, so it left that to you");
+  await expect(review).toContainText('Claude didn’t know who paid, so it left that to you');
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
   await review.getByLabel('Paid by', { exact: true }).click();
   await page.getByRole('option', { name: 'You', exact: true }).click();
@@ -199,7 +199,7 @@ test('possible duplicate shows the matching Expense and requires the explicit ti
     'Added by You',
   );
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
-  await review.getByLabel("It's a different expense, save it anyway").check();
+  await review.getByLabel('It’s a different expense, save it anyway').check();
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
   await review.getByRole('button', { name: 'Save expense', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
@@ -217,7 +217,7 @@ test('Save N ready confirms only ready versions and gives mixed per-item outcome
   await expect(confirm).toContainText('Total · ₹24.68');
   await expect(confirm).toContainText('Paid by You · Split equally between You');
   await expect(confirm).toContainText(
-    "They'll be added to Goa Friends Trip, and Balances there will change for everyone",
+    'They’ll be added to Goa Friends Trip, and Balances there will change for everyone',
   );
   const draft = (await rows(page)).find(
     (row: { values: { description: string } }) => row.values.description === 'Review meal 2',
@@ -232,7 +232,7 @@ test('Save N ready confirms only ready versions and gives mixed per-item outcome
   ).toBe(200);
   await confirm.getByRole('button', { name: 'Confirm save' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
-  await expect(page.getByRole('alert').filter({ hasText: "Couldn't save:" })).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Couldn’t save:' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Fix this item' })).toBeVisible();
   expect(await rows(page)).toHaveLength(2);
 });
@@ -246,7 +246,7 @@ test('delete asks first, removes only the unsaved item and leaves the ledger unc
   await panel(page).getByRole('button', { name: 'Delete', exact: true }).click();
   const confirm = page.getByRole('dialog', { name: 'Delete this item?' });
   await expect(confirm).toContainText(
-    "It was never saved, so nothing in Goa Friends Trip changes. You can't undo this.",
+    'It was never saved, so nothing in Goa Friends Trip changes. You can’t undo this.',
   );
   expect(await rows(page)).toHaveLength(1);
   await confirm.getByRole('button', { name: 'Delete item', exact: true }).click();
@@ -397,7 +397,7 @@ test('empty, old-address redirect and Leave Group count', async ({ page }) => {
   await page.goto(`${root}/settings`);
   await page.getByRole('button', { name: 'Leave Group', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText(
-    "You have 3 items in To review for Goa Friends Trip. They're kept but hidden while you're not a member.",
+    'You have 3 items in To review for Goa Friends Trip. They’re kept but hidden while you’re not a member.',
   );
 });
 
@@ -567,7 +567,7 @@ test('a new possible match invalidates the earlier duplicate tick before saving'
   await page.reload();
   await page.getByRole('button', { name: 'Review Review matching meal', exact: true }).click();
   const review = panel(page);
-  await review.getByLabel("It's a different expense, save it anyway").check();
+  await review.getByLabel('It’s a different expense, save it anyway').check();
   expect(
     (await page.request.post(`/api/groups/${DEMO_GROUP_ID}/expenses`, { data: body })).status(),
   ).toBe(201);
@@ -575,10 +575,10 @@ test('a new possible match invalidates the earlier duplicate tick before saving'
   await expect(
     page.getByRole('alert').filter({ hasText: 'The possible matches changed' }),
   ).toBeVisible();
-  await expect(review.getByLabel("It's a different expense, save it anyway")).not.toBeChecked();
+  await expect(review.getByLabel('It’s a different expense, save it anyway')).not.toBeChecked();
   expect(await rows(page)).toHaveLength(1);
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
-  await review.getByLabel("It's a different expense, save it anyway").check();
+  await review.getByLabel('It’s a different expense, save it anyway').check();
   await review.getByRole('button', { name: 'Save expense', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
 });
@@ -936,7 +936,7 @@ test('typing that could not be kept after Back is pointed out when the item open
   await reviewFromExpenses(page);
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   await expect(panel(page)).toContainText(
-    "Your last change to this item wasn't kept. Check it and make the change again.",
+    'Your last change to this item wasn’t kept. Check it and make the change again.',
   );
 });
 

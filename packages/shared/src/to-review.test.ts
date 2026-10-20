@@ -335,7 +335,7 @@ describe('changes while an item is open', () => {
     const { before, after } = changed();
     after.values!.amount = 2400;
     expect(describeDraftChange(before, after, names)).toBe(
-      "Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00. You're seeing the latest version.",
+      'Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00. You’re seeing the latest version.',
     );
   });
   it('describes an amount without a currency in the Group’s (#512)', () => {
@@ -344,14 +344,14 @@ describe('changes while an item is open', () => {
     delete after.values!.currency;
     after.values!.amount = 2400;
     expect(describeDraftChange(before, after, names, 'INR')).toBe(
-      "Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00. You're seeing the latest version.",
+      'Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00. You’re seeing the latest version.',
     );
   });
   it('formats date facts as calendar days in every host time zone', () => {
     const { before, after } = changed();
     after.values!.date = '2026-10-15';
     expect(describeDraftChange(before, after)).toBe(
-      `Claude changed the date a moment ago: ${reviewDate('2026-10-14')} → ${reviewDate('2026-10-15')}. You're seeing the latest version.`,
+      `Claude changed the date a moment ago: ${reviewDate('2026-10-14')} → ${reviewDate('2026-10-15')}. You’re seeing the latest version.`,
     );
     expect(reviewDate('2000-01-01')).toBe('1 Jan 2000');
   });
@@ -380,13 +380,13 @@ describe('changes while an item is open', () => {
     const note = describeDraftChange(before, after, names);
     expect(note).toContain('You on another device changed the amount a moment ago: ');
     expect(note).toContain('; the date:');
-    expect(note).toMatch(/You're seeing the latest version\.$/);
+    expect(note).toMatch(/You’re seeing the latest version\.$/);
     expect(note).not.toMatch(/draft|revision|request|collection/i);
   });
   it('still says who changed it when no listed fact differs', () => {
     const { before, after } = changed();
     expect(describeDraftChange(before, after)).toBe(
-      "Claude changed this item a moment ago. You're seeing the latest version.",
+      'Claude changed this item a moment ago. You’re seeing the latest version.',
     );
   });
 });

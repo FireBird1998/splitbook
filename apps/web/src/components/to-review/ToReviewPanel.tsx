@@ -167,7 +167,7 @@ export default function ToReviewPanel({
               {item.accountItem!.draft.preparedBy.kind === 'assistant'
                 ? item.accountItem!.draft.preparedBy.name
                 : ''}{' '}
-              didn&apos;t know {fact}, so it left that to you.
+              didn’t know {fact}, so it left that to you.
             </Typography>
           ))}
         <Box
@@ -216,7 +216,7 @@ export default function ToReviewPanel({
                   }
                 />
               }
-              label="It's a different expense, save it anyway"
+              label="It’s a different expense, save it anyway"
             />
           </>
         )}
@@ -261,7 +261,7 @@ export default function ToReviewPanel({
       <Dialog open={deleting} onClose={() => !busy && setDeleting(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Delete this item?</DialogTitle>
         <DialogContent>
-          It was never saved, so nothing in {groupName} changes. You can&apos;t undo this.
+          It was never saved, so nothing in {groupName} changes. You can’t undo this.
         </DialogContent>
         <DialogActions>
           <Button disabled={blocked} onClick={() => setDeleting(false)}>

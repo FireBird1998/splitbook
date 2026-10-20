@@ -58,7 +58,7 @@ for (const allowPreparation of [false, true]) {
       ),
     ).toBeVisible();
     await expect(
-      page.getByText("Prepared items don't change Balances until you save them.", {
+      page.getByText('Prepared items don’t change Balances until you save them.', {
         exact: true,
       }),
     ).toBeVisible();

@@ -382,7 +382,7 @@ export function describeDraftChange(
   const changed = fields.filter(([, , , a, b]) => JSON.stringify(a) !== JSON.stringify(b));
   const author =
     after.changedBy.kind === 'assistant' ? after.changedBy.name : 'You on another device';
-  const latest = "You're seeing the latest version.";
+  const latest = 'You’re seeing the latest version.';
   if (!changed.length) return `${author} changed this item a moment ago. ${latest}`;
   // The design's wording: "Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00."
   const changes = changed.map(([field, a, b], index) => {

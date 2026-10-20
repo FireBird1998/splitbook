@@ -295,7 +295,7 @@ export default function NewGroupPage() {
               Participants
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-              You&apos;re already a member. Add emails to invite people after creation.
+              You’re already a member. Add emails to invite people after creation.
             </Typography>
             <Stack direction="row" spacing={1} sx={{ mb: participants.length ? 1.5 : 0 }}>
               <TextField

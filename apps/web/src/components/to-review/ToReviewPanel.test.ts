@@ -22,6 +22,7 @@ function markup(
   values: Record<string, unknown>,
   missingFields: string[],
   category?: GroupCategory,
+  preparedBy: ToReviewItem['draft']['preparedBy'] = { kind: 'member' },
 ) {
   const read: ToReviewItem = {
     draft: {
@@ -29,7 +30,7 @@ function markup(
       groupId,
       revision: 0,
       state: 'active',
-      preparedBy: { kind: 'member' },
+      preparedBy,
       changedBy: { kind: 'member' },
       createdAt: '2026-10-16T00:00:00.000Z',
       updatedAt: '2026-10-16T00:00:00.000Z',
@@ -174,6 +175,19 @@ describe('an item in the web To review panel (#441)', () => {
       [],
     );
     expect(shown.split('The amount paid by Sam?')).toHaveLength(2);
+  });
+});
+
+describe('what an assistant left to the member, in the web To review panel (#683)', () => {
+  it('says what Claude didn’t know, with a typographic apostrophe', () => {
+    const shown = panel(
+      [],
+      { description: 'Station dinner', amount: 30, currency: 'INR', date: '2026-10-16' },
+      ['paidBy'],
+      undefined,
+      { kind: 'assistant', name: 'Claude' },
+    );
+    expect(shown).toContain('Claude didn’t know who paid, so it left that to you.');
   });
 });
 

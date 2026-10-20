@@ -120,7 +120,7 @@ export default function GroupHeader({
     : !balance || tone === 'neutral'
       ? 'Settled up'
       : tone === 'positive'
-        ? `You're owed ${formatCurrency(balance.amount, balance.currency)}`
+        ? `You’re owed ${formatCurrency(balance.amount, balance.currency)}`
         : `You owe ${formatCurrency(Math.abs(balance.amount), balance.currency)}`;
 
   const memberNames = members.map((member) =>

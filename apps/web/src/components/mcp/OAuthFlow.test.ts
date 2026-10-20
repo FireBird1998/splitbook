@@ -46,6 +46,17 @@ describe('the consent screen', () => {
     );
   });
 
+  it('says prepared items don’t change Balances until the member saves them (#683)', () => {
+    const shown = render(
+      createElement(OAuthFlow, {
+        query: '',
+        consent: true,
+        accountId: 'a00000000000000000000001',
+      }),
+    );
+    expect(shown).toContain('Prepared items don’t change Balances until you save them.');
+  });
+
   it('says nothing about To review when the assistant asks only to read the ledger', () => {
     const shown = permissions(['ledger:read']);
     expect(shown).toContain('Ledger permission: read Group details, Balances and spending.');

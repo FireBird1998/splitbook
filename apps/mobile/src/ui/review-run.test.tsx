@@ -827,7 +827,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       await f.controller.refreshToReview();
     });
     expect(text(tree)).toContain('Claude changed the amount a moment ago: ₹12.34 → ₹24.00');
-    expect(text(tree)).toContain("You're seeing the latest version.");
+    expect(text(tree)).toContain('You’re seeing the latest version.');
     expect(
       tree.root.findAll(
         (node) => String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Amount',

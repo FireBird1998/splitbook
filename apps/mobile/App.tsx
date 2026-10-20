@@ -1542,16 +1542,19 @@ const ExpenseScreen = memo(function ExpenseScreen() {
               state.expense.requestedExpenseId ?? undefined,
             )
       }
+      // In the To review rollout's words when it is on, as the form around it is (#683).
       onDiscardUnconfirmed={() =>
         Alert.alert(
-          'Discard this unconfirmed save?',
-          state.expense.accessLost
-            ? 'This Expense save or change may already be recorded. Discarding removes it from this device and sends nothing. If access returns, check the Group’s Expenses before saving again.'
-            : 'Check this Group’s Expenses first. If this Expense is already there, discard this save and don’t save the draft again. If it isn’t, discard this save, then correct the draft and save it. Discarding sends nothing.',
+          expenseRecoveryWords('Discard this unconfirmed save?'),
+          expenseRecoveryWords(
+            state.expense.accessLost
+              ? 'This Expense save or change may already be recorded. Discarding removes it from this device and sends nothing. If access returns, check the Group’s Expenses before saving again.'
+              : 'Check this Group’s Expenses first. If this Expense is already there, discard this save and don’t save the draft again. If it isn’t, discard this save, then correct the draft and save it. Discarding sends nothing.',
+          ),
           [
-            { text: 'Cancel', style: 'cancel' },
+            { text: expenseRecoveryWords('Cancel'), style: 'cancel' },
             {
-              text: 'Discard',
+              text: expenseRecoveryWords('Discard'),
               style: 'destructive',
               onPress: () => void controller.discardUnconfirmedExpense(),
             },

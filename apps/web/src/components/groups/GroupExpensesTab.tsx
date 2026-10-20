@@ -122,8 +122,8 @@ export default function GroupExpensesTab({
               Settle {activeMonth.monthName}?
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {activeMonth.monthName}&apos;s numbers are in — settle the running balance on the
-              Balances tab.
+              {activeMonth.monthName}’s numbers are in — settle the running balance on the Balances
+              tab.
             </Typography>
           </Box>
           <Button
