@@ -1,3 +1,6 @@
+// THROWAWAY HOTKEYS PROTOTYPE (#715): compatibility and maintenance proof.
+import { matchesKeyboardEvent, type HotkeyChord } from '@tanstack/react-hotkeys';
+
 /**
  * Keyboard shortcuts (#322): one table of every shortcut, which drives both what a key press
  * does and the hints that show it, so the two can't drift apart. Pure, so the rules are
@@ -61,16 +64,15 @@ export interface Shortcut {
   native?: boolean;
   /** Keeps working while the key is held (moving through the table). */
   repeats?: boolean;
-  matches: (event: ShortcutKeyEvent) => boolean;
+  bindings: readonly HotkeyChord[];
+  /** Literal event.key identity; prevents the library’s physical-position fallback. */
+  key: string;
 }
 
 const same = (key: string) => ({
   keys: { apple: [key], other: [key] },
   aria: { apple: key, other: key },
 });
-
-/** A letter, either case (Shift is allowed; the guard turns away Ctrl, Alt and ⌘). */
-const letter = (key: string) => (event: ShortcutKeyEvent) => event.key.toLowerCase() === key;
 
 /**
  * The search shortcut: K with ⌘ or Ctrl, not both. Either is taken on any device, since a
@@ -79,9 +81,14 @@ const letter = (key: string) => (event: ShortcutKeyEvent) => event.key.toLowerCa
  * Ctrl+K, "delete to the end of the line", still works there.
  */
 export function isSearchShortcut(event: ShortcutKeyEvent): boolean {
-  if (event.isComposing || event.altKey || event.shiftKey) return false;
-  if (event.key.toLowerCase() !== 'k') return false;
-  return event.metaKey !== event.ctrlKey;
+  return !event.isComposing && matchesShortcut(shortcut('search'), event);
+}
+
+/** Match logical chords without converting an unrelated physical position into a shortcut. */
+export function matchesShortcut(entry: Shortcut, event: ShortcutKeyEvent): boolean {
+  if (event.key.toLowerCase() !== entry.key) return false;
+  // The published matcher only reads these keyboard fields; no DOM event methods are needed.
+  return entry.bindings.some((binding) => matchesKeyboardEvent(event as KeyboardEvent, binding));
 }
 
 /**
@@ -97,7 +104,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
     ...same('J'),
     singleKey: true,
     repeats: true,
-    matches: letter('j'),
+    bindings: ['J', 'Shift+J'],
+    key: 'j',
   },
   {
     id: 'previous-expense',
@@ -106,7 +114,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
     ...same('K'),
     singleKey: true,
     repeats: true,
-    matches: letter('k'),
+    bindings: ['K', 'Shift+K'],
+    key: 'k',
   },
   {
     id: 'open-expense',
@@ -115,7 +124,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
     ...same('Enter'),
     singleKey: false,
     native: true,
-    matches: (event) => event.key === 'Enter',
+    bindings: ['Enter'],
+    key: 'enter',
   },
   {
     id: 'edit-expense',
@@ -123,7 +133,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
     hint: 'Edit',
     ...same('E'),
     singleKey: true,
-    matches: letter('e'),
+    bindings: ['E', 'Shift+E'],
+    key: 'e',
   },
   {
     id: 'add-expense',
@@ -131,7 +142,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
     hint: 'New expense',
     ...same('N'),
     singleKey: true,
-    matches: letter('n'),
+    bindings: ['N', 'Shift+N'],
+    key: 'n',
   },
   {
     id: 'search-group',
@@ -139,7 +151,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
     hint: 'Search',
     ...same('/'),
     singleKey: true,
-    matches: (event) => event.key === '/',
+    bindings: ['/', 'Shift+/'],
+    key: '/',
   },
   {
     id: 'search',
@@ -148,7 +161,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
     keys: { apple: ['⌘K'], other: ['Ctrl K'] },
     aria: { apple: 'Meta+K', other: 'Control+K' },
     singleKey: false,
-    matches: isSearchShortcut,
+    bindings: ['Control+K', 'Meta+K'],
+    key: 'k',
   },
 ];
 
@@ -201,10 +215,17 @@ export interface ShortcutContext {
 }
 
 /** Whether `shortcut`, whose key this is, may act on the key press. */
-function allowed(shortcut: Shortcut, event: ShortcutKeyEvent, context: ShortcutContext): boolean {
+export function shortcutAllowed(
+  shortcut: Shortcut,
+  event: ShortcutKeyEvent,
+  context: ShortcutContext,
+): boolean {
   if (event.isComposing) return false;
   // ⌘K as #321 built it: in the search field it closes the search; in any other field it types.
-  if (!shortcut.singleKey) return Boolean(context.inSearchField) || !isTypingTarget(context.target);
+  if (!shortcut.singleKey) {
+    if (event.altKey || event.shiftKey || event.metaKey === event.ctrlKey) return false;
+    return Boolean(context.inSearchField) || !isTypingTarget(context.target);
+  }
   if (context.singleKeys !== true) return false;
   if (event.ctrlKey || event.altKey || event.metaKey) return false;
   if (event.repeat && !shortcut.repeats) return false;
@@ -223,9 +244,10 @@ export function shortcutFor(
   context: ShortcutContext,
 ): Shortcut | null {
   const match = SHORTCUTS.find(
-    (candidate) => candidate.scope === scope && !candidate.native && candidate.matches(event),
+    (candidate) =>
+      candidate.scope === scope && !candidate.native && matchesShortcut(candidate, event),
   );
-  return match && allowed(match, event, context) ? match : null;
+  return match && shortcutAllowed(match, event, context) ? match : null;
 }
 
 /** Whether a hint for `shortcut` shows: always for ⌘K, and for a single key only while they are on. */
