@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { betterAuth } from 'better-auth';
 import { memoryAdapter, type MemoryDB } from 'better-auth/adapters/memory';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { buildAuthOptions } from '@/lib/auth/create-auth';
+import { buildAuthOptions, type AuthEnv } from '@/lib/auth/create-auth';
 import { createMcpConnectionHandler, MCP_LEDGER_SCOPE } from './connection';
 import { MongoClient } from 'mongodb';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
@@ -48,7 +48,7 @@ export function connectionTests(mongo = false) {
   let cookie: string;
   let exposeTools = false;
 
-  const env = {
+  const env: AuthEnv = {
     AUTH_SECRET: 'synthetic-mcp-connection-test-secret-32-characters',
     AUTH_ALLOWED_EMAILS: 'connection@example.test,other@example.test',
     NODE_ENV: 'test',
@@ -1550,6 +1550,40 @@ export function connectionTests(mongo = false) {
           expect((await post('/mcp/revoke', { id: connection.id }, true)).status).toBe(200);
         return authorizeClient();
       };
+
+      it('enforces a shortened staging idle timeout on the next MCP request', async () => {
+        const start = Math.floor(Date.now() / 1000) * 1000;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(start);
+        env.MCP_DEPLOYMENT = 'staging';
+        env.MCP_IDLE_TIMEOUT_SECONDS = '120';
+        auth = makeAuth(origin);
+        try {
+          const issued = await freshConnection();
+          await use(issued.access_token);
+          vi.setSystemTime(start + 119_000);
+          expect(await connectionList()).toHaveLength(1);
+          vi.setSystemTime(start + 120_000);
+          expect(
+            (
+              await fetch(resource, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${issued.access_token}`,
+                },
+              })
+            ).status,
+          ).toBe(403);
+          expect((await refresh(issued.refresh_token)).ok).toBe(false);
+          expect(await connectionList()).toEqual([]);
+        } finally {
+          vi.useRealTimers();
+          delete env.MCP_DEPLOYMENT;
+          delete env.MCP_IDLE_TIMEOUT_SECONDS;
+          auth = makeAuth(origin);
+          await signIn();
+        }
+      });
 
       it('expires a never-used connection at 90 days and lets the member reconnect', async () => {
         const start = Math.floor(Date.now() / 1000) * 1000;

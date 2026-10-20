@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mcpResource } from './config';
+import { mcpIdleSeconds, mcpResource } from './config';
 
 describe('MCP deployment boundary', () => {
   it('stays unavailable until explicitly enabled', () => {
@@ -37,4 +37,30 @@ describe('MCP deployment boundary', () => {
       }),
     ).toThrow();
   });
+});
+
+describe('MCP inactivity deployment boundary', () => {
+  it('keeps production at 90 days even when a short test timeout is present', () => {
+    expect(mcpIdleSeconds({})).toBe(7_776_000);
+    expect(mcpIdleSeconds({ NODE_ENV: 'production', MCP_IDLE_TIMEOUT_SECONDS: '120' })).toBe(
+      7_776_000,
+    );
+  });
+  it('allows an explicitly marked staging deployment to shorten inactivity', () => {
+    expect(
+      mcpIdleSeconds({
+        NODE_ENV: 'production',
+        MCP_DEPLOYMENT: 'staging',
+        MCP_IDLE_TIMEOUT_SECONDS: '120',
+      }),
+    ).toBe(120);
+  });
+  it.each(['0', '-1', 'abc', '1.5', '7776001'])(
+    'rejects invalid staging inactivity timeout %s',
+    (timeout) => {
+      expect(() =>
+        mcpIdleSeconds({ MCP_DEPLOYMENT: 'staging', MCP_IDLE_TIMEOUT_SECONDS: timeout }),
+      ).toThrow('MCP_IDLE_TIMEOUT_SECONDS');
+    },
+  );
 });
