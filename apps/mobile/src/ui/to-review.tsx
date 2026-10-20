@@ -45,8 +45,8 @@ import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import { recentDay } from './day-format';
 
 const offlineMessage =
-  "You're offline. What Claude prepared and what you set aside show up when you're back online";
-const unconfirmedMessage = "We didn't hear back, so it may already be saved";
+  'You’re offline. What Claude prepared and what you set aside show up when you’re back online';
+const unconfirmedMessage = 'We didn’t hear back, so it may already be saved';
 /** A list row's leading tile and its gap, so dividers and follow-on lines start under the text. */
 const rowInset = 66;
 

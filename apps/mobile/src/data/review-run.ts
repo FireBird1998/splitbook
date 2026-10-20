@@ -366,7 +366,7 @@ export function createReviewRun(options: {
             await advance('saved');
             await options.refresh();
           } else if (outcomes[0].status === 'unresolved')
-            update({ pending: true, message: "We didn't hear back, so it may already be saved" });
+            update({ pending: true, message: 'We didn’t hear back, so it may already be saved' });
           else {
             await refresh();
             update({
@@ -379,7 +379,7 @@ export function createReviewRun(options: {
           update({
             pending,
             message: pending
-              ? "We didn't hear back, so it may already be saved"
+              ? 'We didn’t hear back, so it may already be saved'
               : 'Could not save this item. Check its details or leave it for later.',
           });
         }

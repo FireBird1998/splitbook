@@ -364,7 +364,7 @@ function ReviewRunContent({
   const reason = offline
     ? 'Connect to change or save this'
     : state.pending
-      ? "We didn't hear back, so it may already be saved"
+      ? 'We didn’t hear back, so it may already be saved'
       : missing.length
         ? `${missing.length === 1 ? 'One thing' : `${missing.length} things`} left before you can save: ${missing.join(', ')}`
         : item.duplicates.some(
@@ -589,7 +589,7 @@ function ReviewRunContent({
           <Banner tone="warning" message={reason ?? ''}>
             {missing.includes('who paid') && assistant ? (
               <CompactText variant="small" tone="secondary" style={{ paddingLeft: 4 }}>
-                {assistant} didn't know who paid, so it left that to you
+                {assistant} didn’t know who paid, so it left that to you
               </CompactText>
             ) : null}
           </Banner>
@@ -602,7 +602,7 @@ function ReviewRunContent({
             standing
             heading
             title="Possible duplicate"
-            message="Save it only if it's a different expense."
+            message="Save it only if it’s a different expense."
           >
             <View style={{ flex: 1, gap: 6, marginLeft: 4 }}>
               {item.duplicates.map((duplicate) => (
@@ -638,7 +638,7 @@ function ReviewRunContent({
               ))}
               <Pressable
                 accessibilityRole="checkbox"
-                accessibilityLabel="It's a different expense, save it anyway"
+                accessibilityLabel="It’s a different expense, save it anyway"
                 accessibilityState={{ checked: state.acknowledged, disabled: locked }}
                 disabled={locked}
                 onPress={machine.acknowledge}
@@ -667,7 +667,7 @@ function ReviewRunContent({
                   ) : null}
                 </View>
                 <CompactText variant="small" weight="medium" style={{ flex: 1 }}>
-                  It's a different expense, save it anyway
+                  It’s a different expense, save it anyway
                 </CompactText>
               </Pressable>
             </View>
@@ -760,7 +760,7 @@ function ReviewRunContent({
             </Money>
           </View>
           <CompactText>
-            It was never saved, so nothing in {groupName} changes. You can't undo this.
+            It was never saved, so nothing in {groupName} changes. You can’t undo this.
           </CompactText>
         </BottomSheet>
       )}
