@@ -126,7 +126,10 @@ function fixture() {
     lost: boolean;
     exact: boolean;
   }[] = [];
-  const connection = new Set<(state: { isConnected: boolean | null }) => void>();
+  type ConnectionState = { isConnected: boolean | null; isInternetReachable?: boolean | null };
+  /** What NetInfo last reported, once a test has reported something. */
+  let connectionState: ConnectionState | null = null;
+  const connection = new Set<(state: ConnectionState) => void>();
   const records = (map: Map<string, unknown>) => ({
     load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
     save: async (account: string, key: string, value: unknown) => {
@@ -336,9 +339,10 @@ function fixture() {
         },
         savedQueries,
         netInfo: {
+          // As NetInfo does, a new listener hears the connection as it is now.
           addEventListener: (listener) => {
             connection.add(listener);
-            listener({ isConnected: !server.offline });
+            listener(connectionState ?? { isConnected: !server.offline });
             return () => connection.delete(listener);
           },
         },
@@ -471,9 +475,12 @@ function fixture() {
       writes.push({ path, arrive, released });
       return { reached, release };
     },
-    connect(isConnected: boolean) {
-      server.offline = !isConnected;
-      connection.forEach((listener) => listener({ isConnected }));
+    /** NetInfo reports the device's connection, and whether it reaches the internet. */
+    connect(isConnected: boolean, isInternetReachable?: boolean | null) {
+      const state = { isConnected, isInternetReachable };
+      server.offline = !isConnected || isInternetReachable === false;
+      connectionState = state;
+      connection.forEach((listener) => listener(state));
     },
     /** This account's persister rows whose path starts with `prefix`, in path order. */
     savedRows: (prefix: string, account = alex.id) =>
@@ -1869,4 +1876,112 @@ describe('device check (#222)', () => {
       moreStatus: 'idle',
     });
   });
+});
+
+// #681, after #678 (owner decision, 2026-10-20). Wi-Fi can connect before it reaches the
+// internet, and NetInfo reports the two separately. The online manager follows the connection
+// only, so it doesn't change when just the internet returns. Activity that shows this phone's
+// copy, or a read that failed offline, then reads again once, as on reconnecting, and the offline
+// banner clears when that read lands. A failure Splitbook answered stays until Retry or a pull.
+describe('Activity shown offline reads again once the internet returns (#681)', () => {
+  it('reads every loaded page again once the internet returns, after a pull ended offline, and the banner lifts', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 2);
+    // The Wi-Fi stays connected but stops reaching the internet: a pull shows this phone's copy.
+    f.connect(true, false);
+    await settle();
+    await controller.refresh('pull');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true, refreshedAt: start },
+      activity: { status: 'ready', restored: true, refreshedAt: start },
+    });
+    later(60_000);
+    const sent = f.calls.length;
+    // The internet returns on the Wi-Fi the phone kept, and NetInfo says so twice.
+    f.connect(true, true);
+    f.connect(true, true);
+    await settle();
+    await settle();
+    // As on reconnecting after a read failed offline: the session before each page (#356).
+    expect(f.gets(sent)).toEqual([
+      '/api/auth/get-session',
+      'activity p1',
+      '/api/auth/get-session',
+      'activity p2',
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false, refreshedAt: null },
+      activity: { status: 'ready', restored: false, refreshedAt: start + 60_000 },
+    });
+    expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 40));
+    // Read live, Activity shows no copy: the internet dropping and returning reads nothing more.
+    const again = f.calls.length;
+    f.connect(true, false);
+    f.connect(true, true);
+    await settle();
+    expect(f.gets(again)).toEqual([]);
+  });
+
+  it('reads Activity again after a pull under way when the internet returns, once that pull ends offline', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 1);
+    f.connect(true, false);
+    await settle();
+    await controller.refresh('pull');
+    await settle();
+    expect(controller.getSnapshot().offline.active).toBe(true);
+    later(60_000);
+    // A pull starts just before the internet returns, and its page's answer is lost.
+    f.server.offline = false;
+    const page = f.hold(activityPath(1), { lost: true });
+    const pulling = controller.refresh('pull');
+    await page.reached;
+    const sent = f.calls.length;
+    f.connect(true, true);
+    await settle();
+    // Nothing is sent beside the read under way.
+    expect(f.gets(sent)).toEqual([]);
+    page.release();
+    await pulling;
+    await settle();
+    await settle();
+    // It ended on this phone's copy, so Activity is read once more, live.
+    expect(f.gets(sent)).toEqual(['/api/auth/get-session', 'activity p1']);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false },
+      activity: { status: 'ready', restored: false, refreshedAt: start + 60_000 },
+    });
+  });
+
+  it.each(['a server failure', 'a refusal'] as const)(
+    'keeps %s Splitbook answered for Activity, and reads nothing, when the internet returns',
+    async (failure) => {
+      const f = fixture();
+      const controller = await onActivity(f, 1);
+      later(60_000);
+      // NetInfo hasn't confirmed the internet yet, but Splitbook answers a pull.
+      f.connect(true, false);
+      f.server.offline = false;
+      if (failure === 'a server failure') f.server.failing.add(activityPath(1));
+      else f.server.revoked.add(mapleId);
+      await controller.refresh('pull');
+      await settle();
+      const shown = controller.getSnapshot();
+      expect(shown).toMatchObject({
+        screen: 'group',
+        destination: 'activity',
+        offline: { active: false },
+        activity:
+          failure === 'a server failure'
+            ? { status: 'error', restored: false, refreshedAt: start }
+            : { status: 'denied', events: [] },
+      });
+      const sent = f.calls.length;
+      f.connect(true, true);
+      await settle();
+      expect(f.gets(sent)).toEqual([]);
+      expect(controller.getSnapshot().activity).toEqual(shown.activity);
+    },
+  );
 });
