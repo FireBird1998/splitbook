@@ -934,11 +934,17 @@ export function createHomeQueries(session: HomeSession) {
     /**
      * Returning to the foreground and reconnecting are TanStack's focus and online events (M1-4,
      * M1-6): they reach only the queries a screen observes, and those past their stale time read
-     * again. Connectivity drives the online manager; reachability recovery only requests reads.
+     * again. Connectivity drives the online manager; reachability recovery only requests reads:
+     * the active queries', and `onRecovery`'s, such as a Group's view shown offline (#678).
      * A failed read still decides "offline" (ADR 0006).
      * Returns what stops listening.
      */
-    listen(focus: typeof focusManager, online: typeof onlineManager, netInfo?: NetworkState) {
+    listen(
+      focus: typeof focusManager,
+      online: typeof onlineManager,
+      netInfo?: NetworkState,
+      onRecovery: () => void = () => undefined,
+    ) {
       const stops = [
         // Their reads publish their answer wherever the member is (#190).
         client.getQueryCache().subscribe((event) => {
@@ -968,7 +974,10 @@ export function createHomeQueries(session: HomeSession) {
             setOnline(isConnected !== false);
             // Unvalidated Wi-Fi can still reach the API. Reachability only prompts reads;
             // it must not refuse an explicit write or duplicate the connectivity event.
-            if (recovered && wasOnline && online.isOnline()) client.getQueryCache().onOnline();
+            if (recovered && wasOnline && online.isOnline()) {
+              client.getQueryCache().onOnline();
+              onRecovery();
+            }
           });
         });
       }

@@ -126,7 +126,10 @@ function fixture() {
     /** Holds only a request for exactly `path`. */
     exact: boolean;
   }[] = [];
-  const connection = new Set<(state: { isConnected: boolean | null }) => void>();
+  type ConnectionState = { isConnected: boolean | null; isInternetReachable?: boolean | null };
+  /** What NetInfo last reported, once a test has reported something. */
+  let connectionState: ConnectionState | null = null;
+  const connection = new Set<(state: ConnectionState) => void>();
   const records = (map: Map<string, unknown>) => ({
     load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
     save: async (account: string, key: string, value: unknown) => {
@@ -323,9 +326,10 @@ function fixture() {
         },
         savedQueries,
         netInfo: {
+          // As NetInfo does, a new listener hears the connection as it is now.
           addEventListener: (listener) => {
             connection.add(listener);
-            listener({ isConnected: !server.offline });
+            listener(connectionState ?? { isConnected: !server.offline });
             return () => connection.delete(listener);
           },
         },
@@ -437,9 +441,12 @@ function fixture() {
       writes.push({ path, arrive, released });
       return { reached, release };
     },
-    connect(isConnected: boolean) {
-      server.offline = !isConnected;
-      connection.forEach((listener) => listener({ isConnected }));
+    /** NetInfo reports the device's connection, and whether it reaches the internet. */
+    connect(isConnected: boolean, isInternetReachable?: boolean | null) {
+      const state = { isConnected, isInternetReachable };
+      server.offline = !isConnected || isInternetReachable === false;
+      connectionState = state;
+      connection.forEach((listener) => listener(state));
     },
     /** This account's persister rows whose path starts with `prefix`. */
     savedRows: (prefix: string, account = alex.id) =>
@@ -1671,4 +1678,207 @@ describe('opening and refreshing a Group read independent things together', () =
     expect(states.filter((state) => state.financial.expenses.data.length > 0)).toEqual([]);
     expect(f.savedRows(maplePath)).toEqual([]);
   });
+});
+
+// Owner decision on #678 (2026-10-20). Wi-Fi can connect before it reaches the internet, and
+// NetInfo reports the two separately. The online manager follows the connection only, so it
+// doesn't change when just the internet returns. A Group's view that shows this phone's copy, or
+// a read that failed offline, then reads again once, through the recovery Home uses (#669). The
+// offline banner keeps its write rules (#219) and clears when that read lands. A failure that
+// Splitbook answered stays until Retry, a pull or the next open.
+describe('a Group shown offline reads again once the internet returns (#678)', () => {
+  /** The view's own reads since `from`: its Group, its Expense pages and its Balances. */
+  const viewReads = (f: ReturnType<typeof fixture>, from: number) =>
+    f
+      .gets(from)
+      .filter((read) => read === 'group' || read === 'balances' || read.startsWith('expenses'));
+  /** Writes sent since `from`. */
+  const writes = (f: ReturnType<typeof fixture>, from: number) =>
+    f.calls
+      .slice(from)
+      .filter(({ method }) => method !== 'GET')
+      .map(({ method, path }) => `${method} ${path}`);
+  /**
+   * Alex read Maple House on `destination` a minute ago (without keeping its Group, `group:
+   * false`). The app restarts on Wi-Fi that doesn't reach the internet yet.
+   */
+  async function restartOffline(
+    f: ReturnType<typeof fixture>,
+    destination: 'expenses' | 'balances',
+    { group = true } = {},
+  ) {
+    const first = f.create();
+    await first.signIn('alex');
+    await first.openGroup(mapleId, true, destination);
+    await settle();
+    first.dispose();
+    if (!group) f.rows.delete(alex.id + maplePath);
+    later(60_000);
+    f.connect(true, false);
+    const controller = f.create();
+    await controller.restore();
+    return controller;
+  }
+  /** As `restartOffline`, with Maple House then opened: it shows what this phone kept. */
+  async function openedOffline(
+    f: ReturnType<typeof fixture>,
+    destination: 'expenses' | 'balances',
+    options: { group?: boolean } = {},
+  ) {
+    const controller = await restartOffline(f, destination, options);
+    await controller.openGroup(mapleId, true, destination);
+    await settle();
+    return controller;
+  }
+
+  it('reads the view again once the internet returns, then lifts the banner and Record payment records', async () => {
+    const f = fixture();
+    const savedAt = Date.now();
+    const controller = await openedOffline(f, 'balances');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      offline: { active: true, refreshedAt: savedAt },
+      detail: { status: 'ready', restored: true, refreshedAt: savedAt },
+      financial: { balances: { status: 'ready', restored: true, refreshedAt: savedAt } },
+    });
+    // The banner governs writes (#219): Record payment does nothing.
+    let sent = f.calls.length;
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    expect(controller.getSnapshot().screen).toBe('group');
+    expect(f.calls.length).toBe(sent);
+    // The internet returns on the Wi-Fi the phone kept: the connection itself never changed.
+    f.connect(true, true);
+    await settle();
+    // Read once, in order: the session, the Group beside the Month's Expenses, then Balances.
+    expect(f.gets(sent)).toEqual([
+      '/api/auth/get-session',
+      'group',
+      'expenses 2026-09 p1',
+      'balances',
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false, refreshedAt: null },
+      detail: { status: 'ready', restored: false, refreshedAt: Date.now() },
+      financial: {
+        expenses: { status: 'ready', restored: false, refreshedAt: Date.now() },
+        balances: { status: 'ready', restored: false, refreshedAt: Date.now() },
+      },
+    });
+    // The live read lifted the banner and its write rule with it.
+    sent = f.calls.length;
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    expect(controller.getSnapshot().screen).toBe('settlement');
+    await controller.recordSettlement();
+    await settle();
+    expect(controller.getSnapshot().snackbar?.message).toBe('Payment recorded');
+    expect(writes(f, sent)).toEqual([`POST ${maplePath}/settlements`]);
+  });
+
+  it('reads a Group this phone keeps no copy of again once the internet returns, then saves an Expense', async () => {
+    const f = fixture();
+    const controller = await openedOffline(f, 'expenses', { group: false });
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true },
+      detail: { status: 'error', data: null },
+    });
+    const sent = f.calls.length;
+    f.connect(true, true);
+    await settle();
+    expect(viewReads(f, sent)).toEqual(['group', 'expenses 2026-09 p1', 'balances']);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false, refreshedAt: null },
+      detail: { status: 'ready', restored: false, data: { name: 'Maple House' } },
+      financial: { expenses: { status: 'ready', restored: false } },
+    });
+    await controller.openExpense(mapleId);
+    await controller.updateExpenseDraft({
+      description: 'Fresh groceries',
+      amount: '12',
+      tagId,
+      date: '2026-09-14',
+    });
+    const saving = f.calls.length;
+    await controller.saveExpense();
+    await settle();
+    expect(controller.getSnapshot().snackbar?.message).toBe('Expense saved · Fresh groceries');
+    expect(writes(f, saving)).toEqual([`POST ${maplePath}/expenses`]);
+  });
+
+  it('reads each of the view’s queries once for one return of the internet, and not again once read live', async () => {
+    const f = fixture();
+    const controller = await openedOffline(f, 'balances');
+    const sent = f.calls.length;
+    f.connect(true, true);
+    // NetInfo reports the same connection again.
+    f.connect(true, true);
+    await settle();
+    expect(viewReads(f, sent)).toEqual(['group', 'expenses 2026-09 p1', 'balances']);
+    // Read live, the view shows no copy: the internet dropping and returning reads nothing more.
+    const again = f.calls.length;
+    f.connect(true, false);
+    f.connect(true, true);
+    await settle();
+    expect(f.gets(again)).toEqual([]);
+    expect(controller.getSnapshot().offline.active).toBe(false);
+  });
+
+  it('reads the view again after a read under way when the internet returns, once that read ends offline', async () => {
+    const f = fixture();
+    const controller = await restartOffline(f, 'balances');
+    // Maple House opens just before the internet returns. Its session check is under way, and
+    // its answer is lost.
+    f.server.offline = false;
+    const check = f.hold('/api/auth/get-session', { lost: true });
+    const opening = controller.openGroup(mapleId, true, 'balances');
+    await check.reached;
+    const sent = f.calls.length;
+    f.connect(true, true);
+    await settle();
+    // Nothing is sent beside the read under way.
+    expect(f.gets(sent)).toEqual([]);
+    check.release();
+    await opening;
+    await settle();
+    // It ended on this phone's copy, so the view is read once more, live.
+    expect(viewReads(f, sent).filter((read) => read !== 'balances')).toEqual([
+      'group',
+      'expenses 2026-09 p1',
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false, refreshedAt: null },
+      detail: { status: 'ready', restored: false },
+      financial: {
+        expenses: { status: 'ready', restored: false },
+        balances: { status: 'ready', restored: false },
+      },
+    });
+  });
+
+  it.each(['a server failure', 'a refusal'] as const)(
+    'keeps %s Splitbook answered for the Group, and reads nothing, when the internet returns',
+    async (failure) => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      // NetInfo hasn't confirmed the internet yet, but Splitbook answers.
+      f.connect(true, false);
+      f.server.offline = false;
+      if (failure === 'a server failure') f.server.failGroup = true;
+      else f.server.revoked.add(mapleId);
+      await controller.openGroup(mapleId);
+      await settle();
+      const shown = controller.getSnapshot();
+      expect(shown).toMatchObject({
+        screen: 'group',
+        offline: { active: false },
+        detail: { status: failure === 'a server failure' ? 'error' : 'denied' },
+      });
+      const sent = f.calls.length;
+      f.connect(true, true);
+      await settle();
+      expect(f.gets(sent)).toEqual([]);
+      expect(controller.getSnapshot().detail).toEqual(shown.detail);
+    },
+  );
 });
