@@ -504,6 +504,48 @@ describe('a very long Trip', () => {
 });
 
 describe('By Tag', () => {
+  it.each([
+    { amounts: [1, 1, 1], percentages: [34, 33, 33] },
+    { amounts: [1, 1, 4], percentages: [17, 17, 66] },
+  ])(
+    'allocates Tag shares to exactly 100 percent for $amounts, independent of Expense order',
+    ({ amounts, percentages }) => {
+      const tags = [TRANSPORT, STAY, DINING];
+      const expenses = tags.map((tag, index) =>
+        expense(
+          '2026-09-17',
+          tag.name,
+          { [alex]: amounts[index] },
+          { [alex]: amounts[index] },
+          tag,
+        ),
+      );
+      for (const ordered of [expenses, [...expenses].reverse()]) {
+        const summary = goa({ expenses: ordered });
+        expect(
+          tags.map((tag) => summary.byTag.find((row) => row.tagId === tag.id)?.percent),
+        ).toEqual(percentages);
+        expect(summary.byTag.reduce((total, tag) => total + tag.percent, 0)).toBe(100);
+      }
+    },
+  );
+
+  it('gives a single counted Tag 100 percent and leaves other currencies out', () => {
+    const summary = goa({
+      expenses: [
+        expense('2026-09-17', 'Bus', { [alex]: 1 }, { [alex]: 1 }, TRANSPORT),
+        expense('2026-09-17', 'Dinner', { [alex]: 99999 }, { [alex]: 99999 }, DINING, {
+          currency: 'USD',
+        }),
+      ],
+    });
+    expect(summary.byTag).toMatchObject([{ tagId: TRANSPORT.id, spentMinor: 1, percent: 100 }]);
+    expect(summary.otherCurrencies).toEqual([
+      { currency: 'USD', spentMinor: 99999, expenseCount: 1 },
+    ]);
+    expect(goa({ expenses: [] }).byTag).toEqual([]);
+  });
+
   it('gives each Tag its Spent, share of spend, count and the member’s share', () => {
     expect(goa().byTag).toEqual([
       {

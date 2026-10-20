@@ -32,7 +32,12 @@ import {
   simplifyDebtsMinor,
   type BalanceSettlement,
 } from './debt-simplifier';
-import { moneyParticipantId, readStoredAmountMinor, sumMinorAmounts } from './exact-money';
+import {
+  calculateSplitAmountsMinor,
+  moneyParticipantId,
+  readStoredAmountMinor,
+  sumMinorAmounts,
+} from './exact-money';
 import { getGroupTheme } from './group-themes';
 import {
   expenseTotalMinor,
@@ -164,7 +169,7 @@ export interface TripTag {
   spentMinor: number;
   expenseCount: number;
   yourShareMinor: number;
-  /** Its share of the Trip's Spent, in whole percent, rounded half up. */
+  /** Its share of the Trip's Spent: whole percentages totaling 100 by largest remainder. */
   percent: number;
 }
 
@@ -217,12 +222,6 @@ export interface TripSummary {
 /** A non-negative total over a positive count, rounded half up to a minor unit. */
 function roundedAverage(totalMinor: number, count: number): number {
   return Number((BigInt(2) * BigInt(totalMinor) + BigInt(count)) / (BigInt(2) * BigInt(count)));
-}
-
-/** `part` as a whole percentage of `total`, rounded half up; 0 when the total is 0. */
-function wholePercent(part: number, total: number): number {
-  if (total <= 0) return 0;
-  return Number((BigInt(200) * BigInt(part) + BigInt(total)) / (BigInt(2) * BigInt(total)));
 }
 
 function instantTime(instant: Instant): number {
@@ -426,12 +425,23 @@ export function tripSummary({
       amountMinor: totalMinor,
     }));
 
+  // Allocate 100 percentage points by spending with the existing exact largest-remainder
+  // allocator. Stable Tag identities break ties; other currencies were excluded above.
+  const percentages = new Map(
+    spentMinor > 0
+      ? calculateSplitAmountsMinor(
+          'shares',
+          100,
+          [...tags].map(([user, tag]) => ({ user, shares: tag.spentMinor })),
+        ).map(({ user, amountMinor }) => [user, amountMinor])
+      : [],
+  );
   const byTag = [...tags.entries()]
     .sort(
       ([aKey, a], [bKey, b]) =>
         b.spentMinor - a.spentMinor || compareText(a.name, b.name) || compareText(aKey, bKey),
     )
-    .map(([, tag]) => ({ ...tag, percent: wholePercent(tag.spentMinor, spentMinor) }));
+    .map(([key, tag]) => ({ ...tag, percent: percentages.get(key) ?? 0 }));
 
   // The same exact balances the Group's Balances simplify, so both suggest the same payments.
   const net = calculateNetBalancesMinor(

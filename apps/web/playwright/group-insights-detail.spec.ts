@@ -116,6 +116,25 @@ async function openLastMonth(page: Page) {
   return read;
 }
 
+test('By Tag tooltips show the Tag, spending and six-month average on hover and focus', async ({
+  page,
+}, testInfo) => {
+  test.skip(isPhone(testInfo), 'Hover is a pointer gesture; phones read the table.');
+  const read = await openLastMonth(page);
+  const tag = read.byTag.tags[0];
+  expect(read.byTag.earlierMonths).toHaveLength(6);
+  const row = card(page, 'By Tag').getByTestId('tag-bar-row').first();
+  const label = `${tag.name ?? 'Untagged'}: ${money(tag.spentMinor, read.currency)} spent; 6-month average: ${money(tag.averageMinor!, read.currency)}`;
+  await row.getByTestId('tag-bar').hover();
+  await expect(page.getByRole('tooltip')).toHaveText(label);
+  await page.mouse.move(0, 0);
+  await expect(page.getByRole('tooltip')).toBeHidden();
+  await row.focus();
+  await expect(page.getByRole('tooltip')).toHaveText(label);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('tooltip')).toBeHidden();
+});
+
 test('By Tag and Who paid show the Month against the read, and recurring Expenses only when on', async ({
   page,
 }, testInfo) => {
@@ -128,12 +147,11 @@ test('By Tag and Who paid show the Month against the read, and recurring Expense
   expect(read.average?.monthCount).toBe(6);
   expect(read.byTag.earlierMonths).not.toContain(read.month);
 
-  // By Tag: a bar per Tag in the series colour, each with its average tick, hidden from
-  // assistive technology, which reads the same Tags in the table.
+  // By Tag: focusable bars with average ticks; the same accessible table remains available.
   const byTag = card(page, 'By Tag');
   await expect(byTag.getByText(/ vs the 6-month average, /)).toBeVisible();
   const bars = byTag.getByTestId('tag-bars');
-  await expect(bars).toHaveAttribute('aria-hidden', 'true');
+  await expect(bars).not.toHaveAttribute('aria-hidden', 'true');
   const rows = bars.getByTestId('tag-bar-row');
   await expect(rows).toHaveCount(tags.length);
   for (const [index, tag] of tags.entries())
