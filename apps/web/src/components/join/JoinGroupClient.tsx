@@ -3,7 +3,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
-import { visuallyHidden } from '@/components/common/visually-hidden';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
@@ -11,6 +10,7 @@ import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import GoogleIcon from '@mui/icons-material/Google';
+import { visuallyHidden } from '@/components/common/visually-hidden';
 import BrandLogo from '@/components/layout/BrandLogo';
 import { PRODUCT_NAME } from '@/lib/product';
 import type { AuthMode } from '@/lib/auth-mode';
