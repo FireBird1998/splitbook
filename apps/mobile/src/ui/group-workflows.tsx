@@ -16,6 +16,7 @@ import {
   TileGrid,
   TopBar,
   radius,
+  useTap,
 } from './compact';
 import { savingNeedsConnection } from './offline-notice';
 import { useStartWhileUnfocused } from './start-while-unfocused';
@@ -173,6 +174,10 @@ export function GroupCreateForm({
   const currency = getCurrency(draft.defaultCurrency);
   const nameStart = useStartWhileUnfocused(() => onLeaveField('name'));
   const [choosingCurrency, setChoosingCurrency] = useState(false);
+  // A drag that starts on the field or on a currency never presses it (#684): one for the form,
+  // one for the list over it.
+  const fieldTap = useTap();
+  const currencyTap = useTap();
   const [currencySearch, setCurrencySearch] = useState('');
   const locked = busy || uncertain;
   const creating = `Sending this Group. Keep this screen open until ${PRODUCT_NAME} confirms it.`;
@@ -278,17 +283,18 @@ export function GroupCreateForm({
           accessibilityHint="Choose the currency for this Group"
           accessibilityState={{ disabled: locked }}
           disabled={locked}
-          onPress={() => {
+          {...fieldTap.on(() => {
             setCurrencySearch('');
             setChoosingCurrency(true);
-          }}
+          })}
           style={({ pressed }) => ({
             minHeight: 52,
             paddingHorizontal: 14,
             borderWidth: 1,
             borderColor: theme.border,
             borderRadius: radius.tile,
-            backgroundColor: locked || pressed ? theme.surfaceMuted : theme.surface,
+            backgroundColor:
+              locked || (pressed && !fieldTap.dragged) ? theme.surfaceMuted : theme.surface,
             flexDirection: 'row',
             alignItems: 'center',
             gap: 12,
@@ -445,10 +451,10 @@ export function GroupCreateForm({
                       accessibilityRole="radio"
                       accessibilityLabel={`${item.code}, ${item.name}`}
                       accessibilityState={{ checked: item.code === draft.defaultCurrency }}
-                      onPress={() => {
+                      {...currencyTap.on(() => {
                         onChange({ defaultCurrency: item.code });
                         setChoosingCurrency(false);
-                      }}
+                      })}
                       style={({ pressed }) => ({
                         minHeight: 56,
                         paddingVertical: 8,
@@ -456,7 +462,8 @@ export function GroupCreateForm({
                         flexDirection: 'row',
                         alignItems: 'center',
                         gap: 12,
-                        backgroundColor: pressed ? theme.surfaceMuted : undefined,
+                        backgroundColor:
+                          pressed && !currencyTap.dragged ? theme.surfaceMuted : undefined,
                       })}
                     >
                       <CompactText style={{ fontFamily: fonts.mono }}>{item.code}</CompactText>

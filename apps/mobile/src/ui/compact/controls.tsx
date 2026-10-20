@@ -3,6 +3,7 @@ import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
 import { useReducedMotion } from './motion';
 import { denseHitSlop, radius, touch } from './scale';
+import type { Tap } from './tap';
 import { CompactText, FieldMarker, Money } from './text';
 
 /** Spinning while busy; with reduce motion on, a still hourglass instead. */
@@ -42,6 +43,7 @@ export function CompactButton({
   accessibilityLabel,
   busy,
   amountBelow = false,
+  tap,
 }: {
   label: string;
   onPress: () => void;
@@ -56,6 +58,11 @@ export function CompactButton({
   accessibilityLabel?: string;
   busy?: string;
   amountBelow?: boolean;
+  /**
+   * The screen's one `useTap` (#665, #684), for a button in a row of a list: a drag that starts
+   * on it never presses it.
+   */
+  tap?: Tap;
 }) {
   const theme = useTheme();
   const tones = destructive
@@ -99,7 +106,7 @@ export function CompactButton({
       accessibilityHint={hint}
       accessibilityState={{ disabled: disabled || busy !== undefined, busy: busy !== undefined }}
       disabled={disabled || busy !== undefined}
-      onPress={onPress}
+      {...(tap ? tap.on(onPress) : { onPress })}
       hitSlop={dense ? denseHitSlop : undefined}
       style={({ pressed }) => ({
         minHeight: dense ? touch.dense : touch.min,
@@ -114,7 +121,7 @@ export function CompactButton({
         gap: 8,
         backgroundColor:
           variant === 'primary' ? tones.main : variant === 'tonal' ? tones.bg : 'transparent',
-        opacity: busy ? 1 : disabled ? 0.45 : pressed ? 0.8 : 1,
+        opacity: busy ? 1 : disabled ? 0.45 : pressed && !tap?.dragged ? 0.8 : 1,
       })}
     >
       {busy === undefined ? (

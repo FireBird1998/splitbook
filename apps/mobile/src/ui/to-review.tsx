@@ -444,6 +444,8 @@ export function ToReviewGroupBanner({
 }) {
   const state = useReviewSnapshot(controller);
   const theme = useTheme();
+  // A drag that starts on the bar never opens the list (#684).
+  const tap = useTap();
   const model = controller.toReviewModel(groupId);
   const group = model.groups[0];
   if (!group) return null;
@@ -454,7 +456,7 @@ export function ToReviewGroupBanner({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${group.counts.total} to review in ${group.groupName}${summary ? `: ${summary}` : ''}. Review`}
-      onPress={() => void controller.openToReview(groupId)}
+      {...tap.on(() => void controller.openToReview(groupId))}
       style={({ pressed }) => ({
         minHeight: 64,
         flexDirection: 'row',
@@ -465,7 +467,7 @@ export function ToReviewGroupBanner({
         paddingRight: 8,
         borderRadius: 14,
         backgroundColor: theme.brand.bg,
-        opacity: pressed ? 0.8 : 1,
+        opacity: pressed && !tap.dragged ? 0.8 : 1,
       })}
     >
       <View

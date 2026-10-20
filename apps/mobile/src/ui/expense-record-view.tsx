@@ -63,6 +63,7 @@ import {
   StatusText,
   TopBar,
   useLargeText,
+  useTap,
   type BadgeTone,
   type Reveal,
 } from './compact';
@@ -262,6 +263,8 @@ export function ExpenseRecordScreen({
   const large = useLargeText();
   const { width } = useWindowDimensions();
   const [options, setOptions] = useState(false);
+  // A drag that starts on an option never presses it (#684).
+  const optionTap = useTap();
   const scroll = useRef<ScrollView>(null);
   // Where the record was scrolled to, from where scrolling stopped as well as while it scrolls: a
   // throttled scroll event can miss the end of a drag or a fling (#219).
@@ -566,13 +569,13 @@ export function ExpenseRecordScreen({
                   accessibilityHint={held ?? 'Removes it from balances; its history is kept'}
                   accessibilityState={{ disabled: !!held }}
                   disabled={!!held}
-                  onPress={() => {
+                  {...optionTap.on(() => {
                     setOptions(false);
                     onReviewDelete();
-                  }}
+                  })}
                   style={({ pressed }) => ({
                     opacity: held ? 0.45 : 1,
-                    backgroundColor: pressed ? theme.surfaceMuted : undefined,
+                    backgroundColor: pressed && !optionTap.dragged ? theme.surfaceMuted : undefined,
                   })}
                 >
                   <ListRow
