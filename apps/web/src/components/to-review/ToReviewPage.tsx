@@ -526,8 +526,7 @@ export default function ToReviewPage({
             </Button>
           }
         >
-          We didn&apos;t hear back, so it may already be saved. Check again before saving another
-          item.
+          We didn’t hear back, so it may already be saved. Check again before saving another item.
         </Alert>
       )}
       {summary && (
@@ -543,8 +542,8 @@ export default function ToReviewPage({
           {outcome.status === 'saved'
             ? 'Expense saved'
             : outcome.status === 'unresolved'
-              ? "We didn't hear back, so it may already be saved"
-              : `Couldn't save: ${reviewProblem(outcome.message)}`}
+              ? 'We didn’t hear back, so it may already be saved'
+              : `Couldn’t save: ${reviewProblem(outcome.message)}`}
           {outcome.status === 'saved' && (
             <Button
               component={Link}
@@ -788,8 +787,8 @@ export default function ToReviewPage({
               </Typography>
             ))}
             <Typography>
-              They&apos;ll be added to {group?.name || 'this Group'}, and Balances there will change
-              for everyone.
+              They’ll be added to {group?.name || 'this Group'}, and Balances there will change for
+              everyone.
             </Typography>
           </Stack>
         </DialogContent>
@@ -810,8 +809,8 @@ export default function ToReviewPage({
       <Dialog open={!!deleting} onClose={() => !busy && setDeleting(null)} maxWidth="xs" fullWidth>
         <DialogTitle>Delete this item?</DialogTitle>
         <DialogContent>
-          It was never saved, so nothing in {group?.name || 'this Group'} changes. You can&apos;t
-          undo this.
+          It was never saved, so nothing in {group?.name || 'this Group'} changes. You can’t undo
+          this.
         </DialogContent>
         <DialogActions>
           <Button disabled={busy} onClick={() => setDeleting(null)}>

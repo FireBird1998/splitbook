@@ -17,7 +17,7 @@ const removedElsewhere = (cause: unknown) =>
 
 /** Drafts whose typing couldn't be kept after their editor closed; said when one opens again. */
 const UNKEPT_NOTE =
-  "Your last change to this item wasn't kept. Check it and make the change again.";
+  'Your last change to this item wasn’t kept. Check it and make the change again.';
 const unkeptDraftIds = new Set<string>();
 /** Drafts with an editor open now, which shows their latest state itself. */
 const openDraftIds = new Set<string>();

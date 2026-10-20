@@ -716,7 +716,7 @@ export default function ExpenseFields({
                         slotProps={{
                           htmlInput: {
                             'aria-label': review
-                              ? `${id === viewerId ? 'Your' : `${memberName(id)}'s`} share`
+                              ? `${id === viewerId ? 'Your' : `${memberName(id)}’s`} share`
                               : undefined,
                             min: 0,
                             step:

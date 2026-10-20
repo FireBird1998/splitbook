@@ -157,7 +157,7 @@ export default function OAuthFlow({
                 />
               )}
               <Alert severity="info">
-                Prepared items don&apos;t change Balances until you save them.
+                Prepared items don’t change Balances until you save them.
               </Alert>
               <Typography variant="body2">
                 Disconnect at any time in Settings. Your To review items stay yours; disconnecting

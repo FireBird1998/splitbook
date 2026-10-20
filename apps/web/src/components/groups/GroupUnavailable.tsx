@@ -29,7 +29,7 @@ export default function GroupUnavailable({
         Group not found
       </Typography>
       <Typography color="text.secondary">
-        This group may have been deleted or you don&apos;t have access.
+        This group may have been deleted or you don’t have access.
       </Typography>
       {action ? <Box sx={{ mt: 3 }}>{action}</Box> : null}
     </Box>

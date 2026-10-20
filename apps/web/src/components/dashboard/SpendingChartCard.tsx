@@ -350,7 +350,7 @@ function SpendingTable({ model, hidden = false }: { model: SpendingChartModel; h
         }}
       >
         <Box component="caption" id={captionId} sx={visuallyHidden}>
-          Your share of spending in {model.currency}, by month, with each Group&apos;s part
+          Your share of spending in {model.currency}, by month, with each Group’s part
         </Box>
         <thead>
           <tr>

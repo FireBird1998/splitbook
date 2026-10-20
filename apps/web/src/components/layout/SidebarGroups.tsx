@@ -221,7 +221,7 @@ export default function SidebarGroups({
         ) : groups.error ? (
           <Box sx={{ px: 1.5, py: 1 }}>
             <Typography variant="body2" color="text.secondary">
-              Your Groups didn&apos;t load.
+              Your Groups didn’t load.
             </Typography>
             <Button
               size="small"

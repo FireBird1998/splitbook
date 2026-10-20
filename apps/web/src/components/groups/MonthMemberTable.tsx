@@ -144,7 +144,7 @@ export default function MonthMemberTable({
       </Box>
 
       <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1 }}>
-        Net in {monthName} = share − paid, for this month&apos;s expenses only.
+        Net in {monthName} = share − paid, for this month’s expenses only.
       </Typography>
     </Paper>
   );

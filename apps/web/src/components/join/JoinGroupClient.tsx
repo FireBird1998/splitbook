@@ -85,7 +85,7 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
       <DemoPersonaPicker
         callbackUrl={`/join/${code}`}
         title="Sign in to join"
-        subtitle="Pick a demo persona, then you'll return to this invite."
+        subtitle="Pick a demo persona, then you’ll return to this invite."
       />
     );
   }
@@ -132,7 +132,7 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
         <Stack spacing={3} alignItems="center">
           <Box>
             <Typography color="text.secondary" sx={{ mb: 1 }}>
-              You&apos;ve been invited to join:
+              You’ve been invited to join:
             </Typography>
             <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
               <Typography variant="h6" fontWeight={700} color="text.primary">
