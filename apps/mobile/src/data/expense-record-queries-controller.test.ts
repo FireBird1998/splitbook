@@ -2060,3 +2060,288 @@ describe('an Expense record shown offline reads again once the internet returns 
     },
   );
 });
+
+// #694, after #681 and #690. An Expense this phone never saved can't open offline: it shows
+// "Couldn't open this Expense", that it isn't saved on this phone, and the offline banner. When the
+// internet returns, or the device fully reconnects, it opens by itself, once, as Try again opens
+// it, and the banner clears. A 404, a refusal or a server failure Splitbook answered stays until
+// Try again.
+describe('an Expense that couldn’t open offline opens by itself once the connection returns (#694)', () => {
+  /** The internet returns on the Wi-Fi the phone kept: NetInfo reports it reachable. */
+  const internetReturns = async (f: Fixture) => {
+    f.connect(true, true);
+    await settle();
+    await settle();
+  };
+  /** Wi-Fi goes off, then on again, reaching the internet: a full reconnect. */
+  const fullReconnect = async (f: Fixture) => {
+    f.connect(false);
+    await settle();
+    f.connect(true, true);
+    await settle();
+    await settle();
+  };
+  const returns = [
+    ['when the internet returns', internetReturns],
+    ['on a full reconnect', fullReconnect],
+  ] as const;
+  /** Alex opens the dinner, which this phone never saved, on Wi-Fi without the internet. */
+  async function openedOffline(f: Fixture) {
+    const controller = await signedIn(f);
+    f.connect(true, false);
+    await controller.openExpense(mapleId, dinnerId);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true },
+      expense: {
+        status: 'blocked',
+        draft: null,
+        message: 'This Expense isn’t saved on this phone. Connect to load it.',
+      },
+    });
+    return controller;
+  }
+
+  it.each(returns)('opens it once %s, and the banner clears', async (_, trigger) => {
+    const f = fixture();
+    const controller = await openedOffline(f);
+    const from = f.calls.length;
+    await trigger(f);
+    // NetInfo reports the same return again.
+    f.connect(true, true);
+    await settle();
+    // Opened once, as Try again opens it: the session, the Group beside the record, its changes.
+    expect(f.gets(from)).toEqual([
+      '/api/auth/get-session',
+      'group',
+      'record dinner',
+      'history dinner p1',
+    ]);
+    expect(f.writes(from)).toEqual([]);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      offline: { active: false },
+      expense: { status: 'detail', draft: { original: { _id: dinnerId } } },
+    });
+  });
+
+  it.each(returns)(
+    'opens it after a Try again under way %s, once that ends offline',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await openedOffline(f);
+      // Try again starts just before the connection returns, and the record's answer is lost.
+      f.server.offline = false;
+      const record = f.hold(recordPath(dinnerId), { exact: true, lost: true });
+      const retrying = controller.refresh('retry');
+      await record.reached;
+      const from = f.calls.length;
+      await trigger(f);
+      // Nothing is sent beside the read under way.
+      expect(f.gets(from)).toEqual([]);
+      record.release();
+      await retrying;
+      await settle();
+      await settle();
+      // Try again ended offline, so it opens once more, live.
+      expect(f.gets(from)).toEqual([
+        '/api/auth/get-session',
+        'group',
+        'record dinner',
+        'history dinner p1',
+      ]);
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'detail',
+        draft: { original: { _id: dinnerId } },
+      });
+    },
+  );
+
+  it.each(returns)(
+    'opens it after its own open under way %s, once that ends offline',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await signedIn(f);
+      // The member opens the dinner just before the connection returns, and its answer is lost.
+      f.connect(true, false);
+      f.server.offline = false;
+      const record = f.hold(recordPath(dinnerId), { exact: true, lost: true });
+      const opening = controller.openExpense(mapleId, dinnerId);
+      await record.reached;
+      const from = f.calls.length;
+      await trigger(f);
+      // Nothing is sent beside the read under way.
+      expect(f.gets(from)).toEqual([]);
+      record.release();
+      await opening;
+      await settle();
+      await settle();
+      // That open ended offline, so it opens once more, live.
+      expect(f.gets(from)).toEqual([
+        '/api/auth/get-session',
+        'group',
+        'record dinner',
+        'history dinner p1',
+      ]);
+      expect(controller.getSnapshot()).toMatchObject({
+        offline: { active: false },
+        expense: { status: 'detail', draft: { original: { _id: dinnerId } } },
+      });
+    },
+  );
+
+  it.each(returns)(
+    'opens it again when the connection returns once more during its reopen, %s, once that ends offline',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await openedOffline(f);
+      // The reopen's answer is lost as the connection drops and returns again.
+      const record = f.hold(recordPath(dinnerId), { exact: true, lost: true });
+      const from = f.calls.length;
+      await trigger(f);
+      await record.reached;
+      f.connect(true, false);
+      await settle();
+      await trigger(f);
+      record.release();
+      await settle();
+      await settle();
+      await settle();
+      // The reopen whose answer was lost, then one more for the second return, live.
+      expect(f.gets(from)).toEqual([
+        '/api/auth/get-session',
+        'group',
+        'record dinner',
+        '/api/auth/get-session',
+        'group',
+        'record dinner',
+        'history dinner p1',
+      ]);
+      expect(controller.getSnapshot()).toMatchObject({
+        offline: { active: false },
+        expense: { status: 'detail', draft: { original: { _id: dinnerId } } },
+      });
+    },
+  );
+
+  it.each(returns)(
+    'reopens it beside a draft stored for its Group, which stays as it was, %s',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await signedIn(f);
+      await controller.openExpense(mapleId);
+      await controller.updateExpenseDraft({ description: 'Kept for later' });
+      await controller.back();
+      await settle();
+      const stored = structuredClone(f.drafts.get(`${alex.id}${mapleId}`));
+      f.connect(true, false);
+      await controller.openExpense(mapleId, dinnerId);
+      expect(controller.getSnapshot()).toMatchObject({
+        keptDraft: { groupId: mapleId },
+        expense: { status: 'blocked', draft: null },
+      });
+      const from = f.calls.length;
+      await trigger(f);
+      expect(controller.getSnapshot()).toMatchObject({
+        offline: { active: false },
+        keptDraft: { groupId: mapleId },
+        expense: { status: 'detail', draft: { original: { _id: dinnerId } } },
+      });
+      expect(f.writes(from)).toEqual([]);
+      expect(f.drafts.get(`${alex.id}${mapleId}`)).toEqual(stored);
+    },
+  );
+
+  it.each(returns)(
+    'reads nothing for a later visit Splitbook answered as gone, after an earlier one couldn’t open offline, %s',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await openedOffline(f);
+      await controller.back();
+      await settle();
+      // The same Expense opens again; Splitbook answers now, and it's gone.
+      f.server.offline = false;
+      f.server.gone.add(dinnerId);
+      await controller.openExpense(mapleId, dinnerId);
+      await settle();
+      const shown = controller.getSnapshot();
+      expect(shown.expense).toMatchObject({ status: 'blocked', draft: null });
+      const from = f.calls.length;
+      await trigger(f);
+      expect(f.gets(from)).toEqual([]);
+      expect(controller.getSnapshot().expense).toEqual(shown.expense);
+    },
+  );
+
+  it.each(returns)(
+    'reads the Group of a new Expense form that couldn’t be checked offline again, %s',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await signedIn(f);
+      // A new form, with no saved copy of its Group and no draft kept: its check fails offline.
+      f.connect(true, false);
+      await controller.openExpense(mapleId);
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        offline: { active: true },
+        expense: {
+          status: 'blocked',
+          draft: null,
+          contextCheck: { status: 'failed' },
+          message: 'This view was not saved on this device. Connect to load it.',
+        },
+      });
+      const from = f.calls.length;
+      await trigger(f);
+      // Its Group is read again, as it was before #694: the banner and the message clear, and the
+      // form waits for Try again.
+      expect(f.gets(from)).toEqual(['/api/auth/get-session', 'group']);
+      expect(controller.getSnapshot()).toMatchObject({
+        offline: { active: false },
+        expense: { status: 'blocked', draft: null, message: null, contextCheck: undefined },
+      });
+    },
+  );
+
+  it.each(returns)('reads nothing for it once the member has left it, %s', async (_, trigger) => {
+    const f = fixture();
+    const controller = await openedOffline(f);
+    await controller.back();
+    await settle();
+    const from = f.calls.length;
+    await trigger(f);
+    expect(f.gets(from).filter((read) => read.includes('dinner'))).toEqual([]);
+  });
+
+  it.each([
+    ['gone (404)', ...returns[0]],
+    ['refused (403)', ...returns[0]],
+    ['a server failure', ...returns[0]],
+    ['gone (404)', ...returns[1]],
+    ['refused (403)', ...returns[1]],
+    ['a server failure', ...returns[1]],
+  ] as const)(
+    'keeps an Expense Splitbook answered as %s, and doesn’t open it again, %s',
+    async (failure, _, trigger) => {
+      const f = fixture();
+      const controller = await signedIn(f);
+      // NetInfo hasn't confirmed the internet yet, but Splitbook answers.
+      f.connect(true, false);
+      f.server.offline = false;
+      if (failure === 'gone (404)') f.server.gone.add(billId);
+      else if (failure === 'refused (403)') f.server.group = 403;
+      else f.server.failRecord = true;
+      await controller.openExpense(mapleId, billId);
+      await settle();
+      const shown = controller.getSnapshot();
+      expect(shown).toMatchObject({
+        screen: 'expense',
+        offline: { active: false },
+        expense: { status: 'blocked', draft: null },
+      });
+      const from = f.calls.length;
+      await trigger(f);
+      expect(f.gets(from)).toEqual([]);
+      expect(controller.getSnapshot().expense).toEqual(shown.expense);
+    },
+  );
+});

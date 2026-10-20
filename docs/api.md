@@ -1151,7 +1151,7 @@ Amounts are exact minor units of the Group's currency. The response holds:
 - `beforeTrip` / `afterTrip`: Expenses dated outside the window, summed;
 - `byTag`: each Tag (by identity; `tagId` is null for a legacy name no Tag
   matches) with `spentMinor`, `expenseCount`, `yourShareMinor` and `percent`
-  of the Trip's Spent (whole percent, half up);
+  of the Trip's Spent (whole percents that total 100, by largest remainder);
 - `suggestedPayments`: `{ from, to, amountMinor }`, people as `{ id, name }`,
   exactly the payments Balances suggests in the Group's currency;
 - `otherCurrencies` (legacy Groups only: listed, never converted) and
