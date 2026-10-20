@@ -964,7 +964,8 @@ describe('saved copies on the persister (M3-1, AMEND-2)', () => {
     await controller.refresh('foreground');
     await settle();
     // The session is checked first, as after any read that failed offline (#356). The Group shown
-    // is this phone's copy too, so it is read again first, and Activity follows it (#682).
+    // is this phone's copy too, so it is read again first, and Activity follows it (#682); the
+    // session again, since Activity still shows this phone's copy while it is read.
     expect(f.gets(sent)).toEqual([
       '/api/auth/get-session',
       'group',
@@ -2053,6 +2054,7 @@ describe('Activity reads its Group again while that Group is this phone’s copy
     });
     return controller;
   }
+  /** Both the Group and Activity were read live a minute after they were saved: no banner. */
   const lifted = (controller: ReturnType<ReturnType<typeof fixture>['create']>) =>
     expect(controller.getSnapshot()).toMatchObject({
       offline: { active: false, refreshedAt: null },
@@ -2106,7 +2108,12 @@ describe('Activity reads its Group again while that Group is this phone’s copy
     lifted(controller);
   });
 
-  it('reads only Activity on a pull while its Group was read live', async () => {
+  it.each([
+    ['a pull', 'pull'],
+    ['the foreground', 'foreground'],
+    ['a reconnect', 'reconnect'],
+    ['the internet’s return', 'recovery'],
+  ] as const)('reads only Activity on %s while its Group was read live', async (_, trigger) => {
     const f = fixture();
     const controller = await onActivity(f, 1);
     f.connect(true, false);
@@ -2119,20 +2126,26 @@ describe('Activity reads its Group again while that Group is this phone’s copy
       activity: { restored: true },
     });
     later(60_000);
-    f.server.offline = false;
     const sent = f.calls.length;
-    await controller.refresh('pull');
+    if (trigger === 'pull' || trigger === 'foreground') {
+      f.server.offline = false;
+      await controller.refresh(trigger);
+    } else {
+      if (trigger === 'reconnect') {
+        f.connect(false);
+        await settle();
+      }
+      f.connect(true, true);
+    }
+    await settle();
     await settle();
     expect(f.gets(sent)).toEqual(['/api/auth/get-session', 'activity p1']);
     expect(controller.getSnapshot().offline.active).toBe(false);
   });
 
-  it.each([
-    ['a server failure', 'error', ['/api/auth/get-session', 'activity p1']],
-    ['a refusal', 'denied', []],
-  ] as const)(
-    'keeps %s Splitbook answered for the Group, and doesn’t read it again, when the internet returns',
-    async (failure, status, reads) => {
+  it.each(['a server failure', 'a refusal'] as const)(
+    'keeps %s Splitbook answered for the Group, and reads nothing more, when the internet returns',
+    async (failure) => {
       const f = fixture();
       const controller = await restartedOffline(f);
       // NetInfo hasn't confirmed the internet yet, but Splitbook answers a pull.
@@ -2142,17 +2155,92 @@ describe('Activity reads its Group again while that Group is this phone’s copy
       await controller.refresh('pull');
       await settle();
       const shown = controller.getSnapshot();
-      expect(shown.detail.status).toBe(status);
+      // Activity follows the Group's read whatever it answers: after a 500 it is read live, and the
+      // Group's copy shows its failure; a refusal drops the Group.
+      expect(shown).toMatchObject(
+        failure === 'a server failure'
+          ? {
+              offline: { active: true, refreshedAt: start },
+              detail: { status: 'error', restored: true, refreshedAt: start },
+              activity: { status: 'ready', restored: false, refreshedAt: start + 60_000 },
+            }
+          : { offline: { active: false }, detail: { status: 'denied' } },
+      );
       const sent = f.calls.length;
       f.connect(true, true);
       await settle();
       await settle();
-      // After a server failure Activity, still this phone's copy, is read; the Group's failure
-      // stays until Retry or a pull.
-      expect(f.gets(sent)).toEqual(reads);
+      expect(f.gets(sent)).toEqual([]);
       expect(controller.getSnapshot().detail).toEqual(shown.detail);
     },
   );
+
+  it('keeps a server failure Splitbook answered for the Group when switching to Expenses', async () => {
+    const f = fixture();
+    const controller = await restartedOffline(f);
+    f.server.offline = false;
+    f.server.failing.add(maplePath);
+    await controller.refresh('pull');
+    await settle();
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'error', restored: true });
+    const sent = f.calls.length;
+    await controller.selectDestination('expenses');
+    await settle();
+    // The Expenses and Balances only: the Group's failure stays until Retry or a pull.
+    expect(f.gets(sent)).toEqual([
+      '/api/auth/get-session',
+      'expenses',
+      '/api/auth/get-session',
+      'balances',
+    ]);
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'error', restored: true });
+  });
+
+  it('reads the Group, then Activity, on switching to Activity from Expenses, and the banner lifts', async () => {
+    const f = fixture();
+    const first = await onActivity(f, 1);
+    first.dispose();
+    later(60_000);
+    f.connect(true, false);
+    const controller = f.create();
+    await controller.restore();
+    await controller.openGroup(mapleId, true, 'expenses');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      destination: 'expenses',
+      offline: { active: true },
+      detail: { status: 'ready', restored: true },
+    });
+    f.server.offline = false;
+    const sent = f.calls.length;
+    await controller.selectDestination('activity');
+    await settle();
+    expect(f.gets(sent)).toEqual(['/api/auth/get-session', 'group', 'activity p1']);
+    lifted(controller);
+  });
+
+  it('reads Activity once its Group lands, on switching back to it while the Group is read for Expenses', async () => {
+    const f = fixture();
+    const controller = await restartedOffline(f);
+    f.server.offline = false;
+    const group = f.hold(maplePath, { exact: true });
+    const sent = f.calls.length;
+    const toExpenses = controller.selectDestination('expenses');
+    await group.reached;
+    await controller.selectDestination('activity');
+    group.release();
+    await toExpenses;
+    await settle();
+    // The Group with the Expenses read beside it, then Activity, once, after the Group.
+    expect(f.gets(sent)).toEqual([
+      '/api/auth/get-session',
+      'group',
+      'expenses',
+      '/api/auth/get-session',
+      'activity p1',
+    ]);
+    lifted(controller);
+  });
 
   it('reads the Group with the Expenses when switching to them, and again Activity on switching back', async () => {
     const f = fixture();
