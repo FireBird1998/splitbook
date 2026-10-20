@@ -59,11 +59,11 @@ The twelve integration cases prove:
 - Member preference disables single keys while search stays available, then enabling it activates N.
 - Strict Mode mount/unmount/remount leaves no duplicate or leaked registrations.
 
-Existing tests additionally cover semantic metadata/hints, unknown preference on the server, allowed non-text inputs, settings failure behavior and row stepping. The added priority test does not exercise fallback restoration after the last real handler disappears; browser/remaining tests must not be credited for a case they do not execute. Browser journeys remain necessary for real Group navigation, portal/menu/dialog behavior and Expense focus/scroll.
+Existing tests additionally cover semantic metadata/hints, unknown preference on the server, allowed non-text inputs, settings failure behavior and row stepping. The added priority test does not exercise fallback restoration after the last real handler disappears; browser/remaining tests must not be credited for a case they do not execute. The browser runs below cover real Group navigation, portal/menu/dialog behavior and Expense focus/scroll.
 
 ### Build and browser evidence
 
-The independent parent session built both the baseline and the final candidate successfully with the same demo-auth configuration, Next.js webpack production build, persistent-Draft flags and isolated replica-set backend. It measured the unique client-manifest JavaScript chunks for each named route plus the build's `rootMainFiles`, gzipping each file at level 9 and summing their compressed lengths:
+Both the baseline and the final candidate built successfully with the same demo-auth configuration, Next.js webpack production build, persistent-Draft flags and isolated replica-set backend. The measurement collects the unique client-manifest JavaScript chunks for each named route plus the build's `rootMainFiles`, gzipping each file at level 9 and summing their compressed lengths:
 
 | Measured JavaScript set              | Baseline gzip bytes | Candidate gzip bytes | Delta   |
 | ------------------------------------ | ------------------- | -------------------- | ------- |
@@ -79,6 +79,6 @@ The existing `shortcuts.spec.ts` and `search.spec.ts` browser journeys passed on
 
 ## Verdict and rollback
 
-**Do not migrate this adapter to main.** Even if remaining browser parity succeeds, it adds 39 owned nonblank/noncomment production lines, four resolved library packages, and a second API boundary for matching while retaining the difficult registration and navigation policies. No current feature demand justifies the library's broader scope. A package adoption that preserves behavior but adds maintenance does not satisfy the owner's condition.
+**Do not migrate this adapter to main.** The adapter adds 39 owned nonblank/noncomment production lines, four resolved library packages, and a second API boundary for matching while retaining the difficult registration and navigation policies. No current feature demand justifies the library's broader scope. A package adoption that preserves behavior but adds maintenance does not satisfy the owner's condition.
 
 Keep this throwaway branch as primary evidence. Rollback is simply to leave main on the existing implementation; if evaluating the branch locally, restore the two production modules and remove the candidate dependency and prototype-only commands/fixture/tooling. All existing public hook calls, storage and navigation contracts are unchanged. Revisit only if an actual product requirement removes substantial application responsibilities or a later library API directly supports the missing policy boundaries; do not expand product scope to make the adoption look useful.
