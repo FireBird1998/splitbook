@@ -77,9 +77,12 @@ export function readProvenance(client: QueryClient) {
         const error = client.getQueryState(key)?.error;
         return error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
       });
-      const active = offline || unavailable || times.length > 0;
+      // Every saved answer leaves the session offline until a live check confirms it. Once one
+      // has, Home no longer says it's offline: its saved figures keep their own "Saved" time
+      // until they're read again (#675). Elsewhere a saved copy shown keeps the banner (#219).
+      const active = offline || unavailable || (next.screen !== 'groups' && times.length > 0);
       // Deliberately name the oldest saved copy still shown, rather than a newer card.
-      const refreshedAt = times.length ? Math.min(...times) : null;
+      const refreshedAt = active && times.length ? Math.min(...times) : null;
       return next.offline.active === active && next.offline.refreshedAt === refreshedAt
         ? next
         : { ...next, offline: { ...next.offline, active, refreshedAt } };
