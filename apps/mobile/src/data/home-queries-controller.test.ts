@@ -573,6 +573,71 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
     controller.dispose();
   });
 
+  it('never shows Home offline again after a live Group read, while its saved figures still say Saved (#675)', async () => {
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await settle();
+    first.dispose();
+    const savedAt = Date.now();
+    later(60_000);
+    // Wi-Fi without internet: Home shows this phone's copy under the offline banner and note.
+    f.connect(true, false);
+    const controller = f.create();
+    await controller.restore();
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true, refreshedAt: savedAt },
+      toReview: { offline: true },
+    });
+    // The internet is back before NetInfo says so: opening Maple House reads it live.
+    f.server.offline = false;
+    await controller.openGroup(mapleId);
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: { status: 'ready', restored: false },
+      offline: { active: false },
+      toReview: { offline: false },
+    });
+    const published = record(controller);
+    const list = f.hold(listPath);
+    const home = f.hold(homePath);
+    const returning = controller.back();
+    await Promise.all([list.reached, home.reached]);
+    await settle();
+    // Home reads again. Until its reads land, its figures are this phone's copy and say so.
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      groups: { restored: true },
+      home: { restored: true, refreshedAt: savedAt },
+      offline: { active: false, refreshedAt: null },
+      toReview: { offline: false },
+    });
+    let card!: ReactTestRenderer;
+    act(() => {
+      card = create(createElement(ToReviewHomeCard, { controller }));
+    });
+    // The note's apostrophe may be straight or typographic (#674).
+    expect(JSON.stringify(card.toJSON())).not.toMatch(/You.re offline/);
+    act(() => card.unmount());
+    list.release();
+    home.release();
+    await returning;
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', restored: false },
+      home: { status: 'ready', restored: false },
+      offline: { active: false, refreshedAt: null },
+      toReview: { offline: false },
+    });
+    // At no point on the way back did Home's banner or To review's note say the app was offline.
+    expect(
+      new Set(published.map((state) => `${state.offline.active}/${state.toReview.offline}`)),
+    ).toEqual(new Set(['false/false']));
+    controller.dispose();
+  });
+
   it.each(['internet returns', 'foreground'] as const)(
     'clears a cold offline Home without manual Refresh when %s',
     async (recovery) => {
