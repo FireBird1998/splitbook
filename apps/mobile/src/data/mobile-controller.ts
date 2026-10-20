@@ -433,6 +433,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * again (#685). It lasts for that visit of the sheet, since each visit is a new route.
    */
   let settlementUnreachable: Route | null = null;
+  /**
+   * The Expense that couldn't open because Splitbook was out of reach and nothing of it is saved on
+   * this phone: the connection's return opens it again (#694). It lasts for that visit, as above.
+   */
+  let expenseUnreachable: Route | null = null;
   let pendingRequest = 0;
   let keptDraftRequest = 0;
   /**
@@ -1264,10 +1269,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     expenseQueries.listen(focusManager, onlineManager),
     activityQueries.listen(focusManager, onlineManager),
     // A full reconnect reaches a Group's view, its Activity and an Expense record through their own
-    // listeners; Members and the Record payment sheet, which this controller reads itself, recover
-    // here as when only the internet returns (#690). It comes after homeQueries.listen: NetInfo
-    // reports its state synchronously while that wires it, which can flip the online manager, and
-    // recoverShown is declared further down, so subscribing first would call it before it exists.
+    // listeners; Members, the Record payment sheet and an Expense that couldn't open offline, which
+    // this controller reads itself, recover here as when only the internet returns (#690, #694).
+    // It comes after homeQueries.listen: NetInfo reports its state synchronously while that wires
+    // it, which can flip the online manager, and recoverShown is declared further down, so
+    // subscribing first would call it before it exists.
     onlineManager.subscribe((online) => {
       if (online) void recoverShown();
     }),
@@ -2721,8 +2727,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * Opens a new Expense, a Group's draft, or a saved Expense's record. `keptEdit`: × on an edit
    * begun on that record returns to it, which then shows the saved Expense with the edit beside it
    * (#664); opened any other way, an edit kept for it opens on its form, to resume or discard.
+   * Each open is one of the reads under way that the connection's return waits for (#694).
    */
-  const openExpense = async (
+  const openExpense = (...open: Parameters<typeof openExpenseNow>) =>
+    trackRead(openExpenseNow(...open));
+  const openExpenseNow = async (
     groupId: string,
     expenseId?: string,
     origin: { scrollY?: number; anchor?: ScrollAnchor } = {},
@@ -3033,20 +3042,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       if (known && shown.status === 'detail')
         return publish({ ...snapshot, expense: withdrawExpense(message) });
+      const notOnPhone =
+        error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE' && !shown.draft;
+      if (notOnPhone && expenseId) expenseUnreachable = view;
       publish({
         ...snapshot,
         expense: {
           ...snapshot.expense,
           status: denied ? 'blocked' : snapshot.expense.draft ? 'resume' : 'blocked',
-          message:
-            error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE' && !shown.draft
-              ? expenseNotOnPhone
-              : error instanceof RequestError
-                ? error.message
-                : // Only a draft kept on this phone has one to keep (#334).
-                  expenseId || snapshot.keptDraft?.groupId === groupId
-                  ? 'Could not open this Expense draft. Your saved draft has not been changed.'
-                  : 'Could not open a new Expense. Please try again.',
+          message: notOnPhone
+            ? expenseNotOnPhone
+            : error instanceof RequestError
+              ? error.message
+              : // Only a draft kept on this phone has one to keep (#334).
+                expenseId || snapshot.keptDraft?.groupId === groupId
+                ? 'Could not open this Expense draft. Your saved draft has not been changed.'
+                : 'Could not open a new Expense. Please try again.',
         },
       });
     }
@@ -6146,6 +6157,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await Promise.allSettled(reading);
     }
   };
+  /**
+   * The Expense shown couldn't open because Splitbook was out of reach, with nothing of it on this
+   * phone (#694): the connection's return opens it again, as Try again does. The mark is what
+   * decides; 'blocked', no draft and access not lost are defence in depth, since nothing that
+   * reaches this screen with the mark set changes them without a new visit.
+   */
+  const reopensExpense = (view: Route) =>
+    expenseUnreachable === view &&
+    snapshot.expense.status === 'blocked' &&
+    !snapshot.expense.draft &&
+    !snapshot.expense.accessLost;
   /** The offline banner shows: the session, or a saved copy shown, hasn't been read live. */
   const bannerShown = () => offlineSession || snapshot.offline.active;
   /**
@@ -6156,6 +6178,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * copy, which keeps the banner until then.
    */
   const recoveryRead = (view: Route) => {
+    if (view.screen === 'expense') {
+      // An Expense that couldn't open offline, with nothing of it on this phone, opens again as Try
+      // again opens it (#694). One that shows reads itself again (expense-queries, #681).
+      return reopensExpense(view) ? () => reread(false) : null;
+    }
     const owner = generation,
       check =
         view.screen === 'settlement' &&
@@ -6180,15 +6207,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * The internet returned while the device stayed connected, which the online manager doesn't
    * follow (#681, as #678 for a Group's view), or the device fully reconnected, which it does
    * (#690). Members and Group details, or the Record payment sheet, that shows this phone's copy
-   * or a read that failed offline reads again once (`recoveryRead`): the offline banner clears,
-   * and Record is offered, when that read lands. A failure Splitbook answered stays until Retry or
-   * a pull. A read under way may still end offline, so this first waits for it to end, and a
-   * return heard meanwhile is handled once this one's read ends.
+   * or a read that failed offline reads again once (`recoveryRead`), and an Expense that couldn't
+   * open offline opens again (#694): the offline banner clears, and Record is offered, when that
+   * read lands. A failure Splitbook answered stays until Retry or a pull. A read under way may
+   * still end offline, so this first waits for it to end, and a return heard meanwhile is handled
+   * once this one's read ends.
    */
   const recoverShown = async () => {
     const view = route,
       owner = generation;
-    if (view.screen !== 'members' && view.screen !== 'settlement') return;
+    if (!['members', 'settlement', 'expense'].includes(view.screen) || !('groupId' in view)) return;
     const key = groupKey(account(), view.groupId);
     // One recovery per visit: a return heard while it runs is counted, and handled after its read.
     // A second would only repeat it: it waits for the same reads, then its re-read joins this
