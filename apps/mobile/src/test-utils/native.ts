@@ -81,10 +81,12 @@ const deliver = (node: PressableNode, handler: string, nativeEvent: Record<strin
 
 /**
  * A finger on a Pressable stand-in, landing at the first point of `path`, moving through the
- * rest and lifting at the last, delivered to the handlers in the order React Native calls them:
- * `onTouchStart` and `onPressIn` where it lands, `onTouchMove` and `onPressMove` at each later
- * point, then `onPressOut`, `onPress` and `onTouchEnd` where it lifts. With `lift: false` it stays
- * down at the last point.
+ * rest and lifting at the last, delivered to the handlers in the order React Native calls them on
+ * Android, where the responder's events come before the touch events: `onPressIn` then
+ * `onTouchStart` where it lands, `onPressMove` then `onTouchMove` at each later point, then
+ * `onPressOut`, `onPress` and `onTouchEnd` where it lifts. With `lift: false` it stays down at the
+ * last point. With `moves: false` no move reaches the row: it lifts at the last point straight
+ * after landing, as a fast swipe can arrive once its moves are coalesced.
  *
  * This is what Android delivers for a drag on a list too short to scroll: nothing takes the
  * touch, and Pressability still presses on release unless the touch left the row's measured
@@ -94,19 +96,20 @@ const deliver = (node: PressableNode, handler: string, nativeEvent: Record<strin
 export function touchAlong(
   node: PressableNode,
   path: [TouchPoint, ...TouchPoint[]],
-  { lift = true }: { lift?: boolean } = {},
+  { lift = true, moves = true }: { lift?: boolean; moves?: boolean } = {},
 ) {
-  const [landed, ...moves] = path;
+  const [landed, ...later] = path;
   const touch = (point: TouchPoint) => ({ ...point, touches: [point], changedTouches: [point] });
-  deliver(node, 'onTouchStart', touch(landed));
   deliver(node, 'onPressIn', touch(landed));
-  for (const point of moves) {
-    deliver(node, 'onTouchMove', touch(point));
+  deliver(node, 'onTouchStart', touch(landed));
+  for (const point of moves ? later : []) {
     deliver(node, 'onPressMove', touch(point));
+    deliver(node, 'onTouchMove', touch(point));
   }
   if (!lift) return;
   // The finger that lifts is no longer among the touches.
-  const lifted = { ...(path.at(-1) ?? landed), touches: [], changedTouches: [path.at(-1)] };
+  const at = path.at(-1) ?? landed;
+  const lifted = { ...at, touches: [], changedTouches: [at] };
   deliver(node, 'onPressOut', lifted);
   deliver(node, 'onPress', lifted);
   deliver(node, 'onTouchEnd', lifted);

@@ -343,6 +343,18 @@ describe('a drag that starts on a list row never opens it (#665)', () => {
     expect(open).not.toHaveBeenCalled();
   });
 
+  it('a finger that lifts past the slop with no move in between does not open it', () => {
+    // A fast swipe whose moves were coalesced away: only where it lifts says it moved.
+    const open = vi.fn();
+    const pressable = row(open);
+    act(() => touchAlong(pressable, [landed, { pageX: 182, pageY: 150 }], { moves: false }));
+    act(() => touchAlong(pressable, [landed, { pageX: 180, pageY: 391 }], { moves: false }));
+    expect(open).not.toHaveBeenCalled();
+    // Lifted within the slop, it is a tap.
+    act(() => touchAlong(pressable, [landed, { pageX: 184, pageY: 395 }], { moves: false }));
+    expect(open).toHaveBeenCalledOnce();
+  });
+
   it('a drag that comes back to where it landed does not open it', () => {
     const open = vi.fn();
     const pressable = row(open);
