@@ -1,5 +1,7 @@
 'use client';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Box from '@mui/material/Box';
 import LinearProgress from '@mui/material/LinearProgress';
 import MoneyText from '@/components/common/MoneyText';
@@ -94,6 +96,7 @@ export default function ExportPreviewPanel({
   state: PreviewState;
   onRetry: () => void;
 }) {
+  const [csvView, setCsvView] = useState<'table' | 'text'>('table');
   const data = state.status === 'ready' ? state.data : null;
   return (
     <Box
@@ -203,11 +206,62 @@ export default function ExportPreviewPanel({
                   </TableRow>
                 ))}
               </PreviewTable>
+              <Box sx={{ mt: 2 }}>
+                <Typography component="h4" variant="subtitle1">
+                  Current balances
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Current all-time positions, including every recorded payment. These match
+                  Balances; the period changes spending only.
+                </Typography>
+                <PreviewTable
+                  label={`${bucket.currency} current balances`}
+                  headers={['Member', 'Balance']}
+                >
+                  {bucket.people.map((person) => (
+                    <TableRow key={person.id}>
+                      <TableCell component="th" scope="row">
+                        {person.name}
+                      </TableCell>
+                      <TableCell>
+                        <MoneyText
+                          amount={toMajorAmount(person.balanceMinor, bucket.currency)}
+                          currency={bucket.currency}
+                          tone="neutral"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </PreviewTable>
+                <Typography component="h4" variant="subtitle1" sx={{ mt: 2 }}>
+                  Suggested payments
+                </Typography>
+                {bucket.suggestedPayments.length ? (
+                  <Box component="ul">
+                    {bucket.suggestedPayments.map((payment) => (
+                      <li key={`${payment.from}-${payment.to}`}>
+                        {bucket.people.find((person) => person.id === payment.from)?.name ??
+                          'Former member'}{' '}
+                        pays{' '}
+                        {bucket.people.find((person) => person.id === payment.to)?.name ??
+                          'Former member'}{' '}
+                        <MoneyText
+                          amount={toMajorAmount(payment.amountMinor, bucket.currency)}
+                          currency={bucket.currency}
+                          tone="neutral"
+                        />
+                      </li>
+                    ))}
+                  </Box>
+                ) : (
+                  <Typography>Settled up.</Typography>
+                )}
+              </Box>
               {bucket.expenses.length > 0 && (
                 <Box sx={{ mt: 2 }}>
                   <PreviewTable
                     label={`${bucket.currency} first Expenses`}
-                    headers={['Date', 'Description', 'Tag', 'Amount']}
+                    headers={['Date', 'Description', 'Tag', 'Amount', 'Paid by', 'Share']}
                   >
                     {bucket.expenses.map((expense) => (
                       <TableRow key={expense.id}>
@@ -221,6 +275,21 @@ export default function ExportPreviewPanel({
                             tone="neutral"
                           />
                         </TableCell>
+                        {[expense.paidBy, expense.splitBetween].map((allocations, index) => (
+                          <TableCell key={index}>
+                            {allocations.map((person) => (
+                              <Box key={person.userId}>
+                                {bucket.people.find((member) => member.id === person.userId)
+                                  ?.name ?? 'Former member'}{' '}
+                                <MoneyText
+                                  amount={toMajorAmount(person.amountMinor, bucket.currency)}
+                                  currency={bucket.currency}
+                                  tone="neutral"
+                                />
+                              </Box>
+                            ))}
+                          </TableCell>
+                        ))}
                       </TableRow>
                     ))}
                   </PreviewTable>
@@ -278,6 +347,20 @@ export default function ExportPreviewPanel({
           </Typography>
         </Box>
       )}
+      {data?.format === 'csv' && !data.empty && (
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={csvView}
+          aria-label="CSV preview format"
+          onChange={(_, value: 'table' | 'text' | null) => {
+            if (value) setCsvView(value);
+          }}
+        >
+          <ToggleButton value="table">Table</ToggleButton>
+          <ToggleButton value="text">Text</ToggleButton>
+        </ToggleButtonGroup>
+      )}
       {data?.format === 'csv' && data.files.length > 1 && (
         <Typography variant="body2" color="text.secondary">
           In one zip, {data.fileName}
@@ -299,26 +382,48 @@ export default function ExportPreviewPanel({
             >
               {file.name}
             </Typography>
-            <PreviewTable label={`${file.name} preview`} headers={file.header}>
-              {file.rows.map((row, i) => (
-                <TableRow key={i}>
-                  {row.map((cell, column) => (
-                    <TableCell
-                      key={column}
-                      sx={{
-                        whiteSpace: 'nowrap',
-                        ...(/^(Amount)$| share$/.test(file.header[column])
-                          ? { fontFamily: FONT_MONO, fontVariantNumeric: 'tabular-nums' }
-                          : {}),
-                      }}
-                    >
-                      {cell}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </PreviewTable>
-            {file.totalRows > file.rows.length && (
+            {csvView === 'text' ? (
+              <Box
+                component="pre"
+                role="region"
+                aria-label={`${file.name} text preview`}
+                tabIndex={0}
+                sx={{
+                  m: 0,
+                  overflow: 'auto',
+                  maxHeight: 384,
+                  fontFamily: FONT_MONO,
+                  '&:focus-visible': {
+                    outline: '2px solid',
+                    outlineColor: 'focus.main',
+                    outlineOffset: 2,
+                  },
+                }}
+              >
+                {file.text}
+              </Box>
+            ) : (
+              <PreviewTable label={`${file.name} preview`} headers={file.header}>
+                {file.rows.map((row, i) => (
+                  <TableRow key={i}>
+                    {row.map((cell, column) => (
+                      <TableCell
+                        key={column}
+                        sx={{
+                          whiteSpace: 'nowrap',
+                          ...(/^(Amount)$| share$/.test(file.header[column])
+                            ? { fontFamily: FONT_MONO, fontVariantNumeric: 'tabular-nums' }
+                            : {}),
+                        }}
+                      >
+                        {cell}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </PreviewTable>
+            )}
+            {csvView === 'table' && file.totalRows > file.rows.length && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 …and {file.totalRows - file.rows.length} more rows
               </Typography>

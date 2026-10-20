@@ -1,5 +1,7 @@
-/** Bounded JSON previews of the same export records and file formatting. */
+/** Export previews: bounded table samples and complete CSV text from the download builders. */
 import { z } from 'zod';
+import type { Statement } from './statement';
+import { serializeCsv, spreadsheetCellText, type CsvTable } from './export-csv';
 import { isCalendarDay, isTimeZone } from './export-request';
 const day = z.string().refine(isCalendarDay).nullable();
 
@@ -23,6 +25,7 @@ export const csvPreviewSchema = z.object({
       header: z.array(z.string()),
       rows: z.array(z.array(z.string())).max(EXPORT_PREVIEW_ROWS),
       totalRows: z.number().int().nonnegative(),
+      text: z.string(),
     }),
   ),
 });
@@ -73,7 +76,11 @@ export const statementPreviewSchema = z.object({
             paidMinor: minor,
             shareMinor: minor,
             netMinor: minor,
+            balanceMinor: minor,
           }),
+        ),
+        suggestedPayments: z.array(
+          z.object({ from: z.string(), to: z.string(), amountMinor: minor }),
         ),
         expenses: z
           .array(
@@ -83,6 +90,8 @@ export const statementPreviewSchema = z.object({
               description: z.string(),
               tag: z.string(),
               amountMinor: minor,
+              paidBy: z.array(z.object({ userId: z.string(), amountMinor: minor })),
+              splitBetween: z.array(z.object({ userId: z.string(), amountMinor: minor })),
             }),
           )
           .max(EXPORT_PREVIEW_ROWS),
@@ -96,3 +105,25 @@ export const exportPreviewSchema = z.discriminatedUnion('format', [
   statementPreviewSchema,
 ]);
 export type ExportPreview = z.infer<typeof exportPreviewSchema>;
+
+/** Project the printed statement without recomputing any money. */
+export function buildStatementPreview(statement: Statement) {
+  return statementPreviewSchema.shape.statement.parse({
+    ...statement,
+    currencies: statement.currencies.map((bucket) => ({
+      ...bucket,
+      paymentCount: bucket.payments.length,
+      expenses: bucket.expenses.slice(0, EXPORT_PREVIEW_ROWS),
+    })),
+  });
+}
+
+/** Both views use the download's table; raw text includes every row, BOM and CRLF. */
+export function buildCsvPreview(table: CsvTable) {
+  return {
+    header: table.header.map(spreadsheetCellText),
+    rows: table.rows.slice(0, EXPORT_PREVIEW_ROWS).map((row) => row.map(spreadsheetCellText)),
+    totalRows: table.rows.length,
+    text: serializeCsv(table.header, table.rows),
+  };
+}

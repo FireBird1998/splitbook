@@ -1356,7 +1356,7 @@ there are several, or with `format=json` one JSON backup of every chosen Group
 | `to`      | no       | Last day of the window, `YYYY-MM-DD`, inclusive. Give both `from` and `to`, or neither for all time   |
 | `include` | no       | Any of `payments`, `shares`, `deleted`, `history`, joined by commas                                   |
 | `format`  | no       | `csv` (default), `json` (all-time backup), or `statement` (one Group, preview only)                   |
-| `preview` | no       | `1` returns a bounded JSON preview instead of an attachment                                           |
+| `preview` | no       | `1` returns a JSON preview instead of an attachment                                                   |
 | `tz`      | no       | The viewer's IANA time zone, `UTC` by default: the calendar payments, edits and deletions are read in |
 
 A query it can't read (no Groups, an id that isn't one, half a window, a window
@@ -1374,7 +1374,9 @@ JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
 - All formats carry `format`, `groupNames`, `generatedAt`, `from`, `to`,
   `timeZone` and `empty`.
 - CSV carries `fileName` and `files`: each file has `name`, `kind`, `header`,
-  at most five `rows`, and `totalRows`. Cells match parsed download cells,
+  at most five `rows`, `totalRows`, and `text` with the complete CSV file, including
+  its UTF-8 BOM and CRLF line endings. Table / Text selects the sample or raw file.
+  Cells match parsed download cells,
   including the leading apostrophe protecting spreadsheet formulas. Queries,
   column order, exact money formatting and row order use the download builders.
 - JSON carries `fileName`, approximate `sizeBytes`, `earliestMonth`,
@@ -1391,8 +1393,10 @@ JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
   projects the canonical printable statement builder into `statement`, with
   its header and currency buckets: `spentMinor`, `expenseCount`,
   `paymentTotalMinor`, `paymentCount`, named `people` (Paid, Share, Net in
-  minor units for the period), and up to five first `expenses`. Currency buckets
-  remain separate; current all-time balances are not period contributions.
+  minor units for the period, plus current all-time `balanceMinor`),
+  `suggestedPayments`, and up to five first `expenses` including `paidBy` and
+  `splitBetween` allocations. Currency buckets remain separate; current all-time
+  balances and Suggested payments are not period contributions.
   The existing printable page still supplies print/save as PDF.
 
 Preview uses the same membership check and real row limit as its download or
