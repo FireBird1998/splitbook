@@ -599,7 +599,7 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
         act(() => card.unmount());
         return shown;
       };
-      expect(reviewNote()).toContain("You're offline.");
+      expect(reviewNote()).toContain('You’re offline.');
       const sent = f.calls.length;
       if (recovery === 'internet returns') f.connect(true, true);
       else {
@@ -614,7 +614,7 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
         home: { status: 'ready', restored: false },
         toReview: { status: 'ready', offline: false },
       });
-      expect(reviewNote()).not.toContain("You're offline.");
+      expect(reviewNote()).not.toContain('You’re offline.');
       expect(f.calls.slice(sent).some(({ path }) => path === '/api/user/to-review')).toBe(true);
       expect(f.calls.slice(sent).every(({ method }) => method === 'GET')).toBe(true);
       controller.dispose();

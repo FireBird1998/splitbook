@@ -936,7 +936,7 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     });
     const members = await render(<Members controller={f.controller} />, mode);
     expect(text(members)).toContain(
-      "You have 4 items in To review for Maple House. They're kept but hidden while you're not a member.",
+      'You have 4 items in To review for Maple House. They’re kept but hidden while you’re not a member.',
     );
     await act(async () => {
       onlineManager.setOnline(false);
