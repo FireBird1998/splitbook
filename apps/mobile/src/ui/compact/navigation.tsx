@@ -5,6 +5,7 @@ import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
 import { IconButton } from './controls';
 import { useTextColumn } from './layout';
+import { useTap } from './tap';
 import { CompactText } from './text';
 
 /**
@@ -124,6 +125,9 @@ export function GroupNavBar({
   onChange: (value: GroupDestination) => void;
 }) {
   const theme = useTheme();
+  // A drag that starts on a tab never chooses it, even a short one: no scrolling parent takes the
+  // touch here (#693).
+  const tap = useTap();
   return (
     <View
       accessibilityRole="tablist"
@@ -147,7 +151,7 @@ export function GroupNavBar({
             accessibilityRole="tab"
             accessibilityLabel={destination.label}
             accessibilityState={{ selected }}
-            onPress={() => onChange(destination.value)}
+            {...tap.on(() => onChange(destination.value))}
             style={{
               flex: 1,
               minHeight: 56,
