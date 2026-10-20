@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Tooltip from '@mui/material/Tooltip';
 import {
   readGroupInsightsByTag,
   type GroupInsightsRead,
@@ -23,8 +24,8 @@ import { byTagModel, type ByTagModel, type InsightsCardState } from './insights-
  * "By Tag" on a Group's Insights tab (#315, design canvas "Web portal", Group insights): the
  * Month's spending per Tag as bars in the one series colour, each with a tick at that Tag's own
  * average of the earlier Months (never the Month itself), the % change beside it, and a
- * Chart/Table switch. The table is what assistive technology reads in either view; the bars
- * are hidden from it.
+ * Chart/Table switch. The table remains available to assistive technology in either view;
+ * each bar also has a tooltip on hover or keyboard focus.
  */
 
 const CARD_ID = 'by-tag';
@@ -108,87 +109,108 @@ export default function ByTagCard({ read, state, onRetry, initialView = 'chart' 
 /** One series colour for the Month; the average is a tick in a text colour, never a hue. */
 function TagBars({ model }: { model: ByTagModel }) {
   return (
-    <Box aria-hidden="true" data-testid="tag-bars">
+    <Box data-testid="tag-bars">
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
         {model.rows.map((row) => (
-          <Box
+          <Tooltip
             key={row.key}
-            data-testid="tag-bar-row"
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) auto 56px',
-              gridTemplateRows: 'auto 12px',
-              alignItems: 'center',
-              columnGap: 1.5,
-              rowGap: 0.75,
-              minHeight: 48,
-              py: 0.5,
+            title={`${row.name}: ${row.spentText} spent; ${model.averageName ? `${model.averageName}: ${row.averageText}` : 'Nothing earlier to compare'}`}
+            slotProps={{
+              tooltip: {
+                sx: {
+                  bgcolor: 'inverse.bg',
+                  color: 'inverse.text',
+                  px: 1.25,
+                  py: 1,
+                  borderRadius: '10px',
+                  boxShadow: 2,
+                  fontSize: '0.78125rem',
+                  lineHeight: 1.45,
+                },
+              },
             }}
           >
-            <Typography
-              noWrap
-              title={row.name}
+            <Box
+              role="img"
+              tabIndex={0}
+              data-testid="tag-bar-row"
               sx={{
-                fontSize: '0.875rem',
-                color: row.untagged ? 'text.secondary' : 'text.primary',
-                fontStyle: row.untagged ? 'italic' : 'normal',
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto 56px',
+                gridTemplateRows: 'auto 12px',
+                alignItems: 'center',
+                columnGap: 1.5,
+                rowGap: 0.75,
+                minHeight: 48,
+                py: 0.5,
+                '&:focus-visible': { outline: 2, outlineColor: 'focus.main', outlineOffset: 2 },
               }}
             >
-              {row.name}
-            </Typography>
-            <Box
-              component="span"
-              sx={(theme) => ({
-                ...theme.typography.money,
-                fontSize: '0.8125rem',
-                color: 'text.primary',
-                whiteSpace: 'nowrap',
-              })}
-            >
-              {row.spentText}
-            </Box>
-            <Box
-              component="span"
-              sx={(theme) => ({
-                ...theme.typography.money,
-                fontSize: '0.8125rem',
-                color: 'text.secondary',
-                textAlign: 'right',
-                whiteSpace: 'nowrap',
-              })}
-            >
-              {row.changeText}
-            </Box>
-            <Box sx={{ gridColumn: '1 / -1', position: 'relative', height: 12 }}>
-              <Box
-                data-testid="tag-bar"
+              <Typography
+                noWrap
+                title={row.name}
                 sx={{
-                  position: 'absolute',
-                  inset: '0 auto 0 0',
-                  width: `${row.bar}%`,
-                  bgcolor: 'chart.series',
-                  borderRadius: '0 4px 4px 0',
+                  fontSize: '0.875rem',
+                  color: row.untagged ? 'text.secondary' : 'text.primary',
+                  fontStyle: row.untagged ? 'italic' : 'normal',
                 }}
-              />
-              {row.tick === null ? null : (
+              >
+                {row.name}
+              </Typography>
+              <Box
+                component="span"
+                sx={(theme) => ({
+                  ...theme.typography.money,
+                  fontSize: '0.8125rem',
+                  color: 'text.primary',
+                  whiteSpace: 'nowrap',
+                })}
+              >
+                {row.spentText}
+              </Box>
+              <Box
+                component="span"
+                sx={(theme) => ({
+                  ...theme.typography.money,
+                  fontSize: '0.8125rem',
+                  color: 'text.secondary',
+                  textAlign: 'right',
+                  whiteSpace: 'nowrap',
+                })}
+              >
+                {row.changeText}
+              </Box>
+              <Box sx={{ gridColumn: '1 / -1', position: 'relative', height: 12 }}>
                 <Box
-                  data-testid="tag-average-tick"
-                  sx={(theme) => ({
+                  data-testid="tag-bar"
+                  sx={{
                     position: 'absolute',
-                    top: -4,
-                    bottom: -4,
-                    left: `${row.tick}%`,
-                    width: 2,
-                    ml: '-1px',
-                    borderRadius: '1px',
-                    bgcolor: 'text.secondary',
-                    // A ring in the card's colour keeps the tick clear of the bar under it.
-                    boxShadow: `0 0 0 2px ${(theme.vars ?? theme).palette.background.paper}`,
-                  })}
+                    inset: '0 auto 0 0',
+                    width: `${row.bar}%`,
+                    bgcolor: 'chart.series',
+                    borderRadius: '0 4px 4px 0',
+                  }}
                 />
-              )}
+                {row.tick === null ? null : (
+                  <Box
+                    data-testid="tag-average-tick"
+                    sx={(theme) => ({
+                      position: 'absolute',
+                      top: -4,
+                      bottom: -4,
+                      left: `${row.tick}%`,
+                      width: 2,
+                      ml: '-1px',
+                      borderRadius: '1px',
+                      bgcolor: 'text.secondary',
+                      // A ring in the card's colour keeps the tick clear of the bar under it.
+                      boxShadow: `0 0 0 2px ${(theme.vars ?? theme).palette.background.paper}`,
+                    })}
+                  />
+                )}
+              </Box>
             </Box>
-          </Box>
+          </Tooltip>
         ))}
       </Box>
       <Box
