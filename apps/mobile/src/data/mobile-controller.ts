@@ -1271,9 +1271,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // A full reconnect reaches a Group's view, its Activity and an Expense record through their own
     // listeners; Members, the Record payment sheet and an Expense that couldn't open offline, which
     // this controller reads itself, recover here as when only the internet returns (#690, #694).
-    // It comes after homeQueries.listen: NetInfo
-    // reports its state synchronously while that wires it, which can flip the online manager, and
-    // recoverShown is declared further down, so subscribing first would call it before it exists.
+    // It comes after homeQueries.listen: NetInfo reports its state synchronously while that wires
+    // it, which can flip the online manager, and recoverShown is declared further down, so
+    // subscribing first would call it before it exists.
     onlineManager.subscribe((online) => {
       if (online) void recoverShown();
     }),
@@ -6159,7 +6159,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   /**
    * The Expense shown couldn't open because Splitbook was out of reach, with nothing of it on this
-   * phone (#694): the connection's return opens it again, as Try again does.
+   * phone (#694): the connection's return opens it again, as Try again does. The mark is what
+   * decides; 'blocked', no draft and access not lost are defence in depth, since nothing that
+   * reaches this screen with the mark set changes them without a new visit.
    */
   const reopensExpense = (view: Route) =>
     expenseUnreachable === view &&
@@ -6207,9 +6209,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * (#690). Members and Group details, or the Record payment sheet, that shows this phone's copy
    * or a read that failed offline reads again once (`recoveryRead`), and an Expense that couldn't
    * open offline opens again (#694): the offline banner clears, and Record is offered, when that
-   * read lands. A failure Splitbook answered stays until Retry or
-   * a pull. A read under way may still end offline, so this first waits for it to end, and a
-   * return heard meanwhile is handled once this one's read ends.
+   * read lands. A failure Splitbook answered stays until Retry or a pull. A read under way may
+   * still end offline, so this first waits for it to end, and a return heard meanwhile is handled
+   * once this one's read ends.
    */
   const recoverShown = async () => {
     const view = route,

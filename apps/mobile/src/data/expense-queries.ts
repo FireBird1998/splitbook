@@ -761,8 +761,8 @@ export function createExpenseQueries(session: ExpenseSession) {
   /**
    * The screen reads again: on the foreground by itself, the Group past its stale time, after the
    * session check every screen over a Group makes (M1-6); on reconnecting by itself, the Group,
-   * then the record and its changes, whatever is stale (M1-4); on Try again, all of them, after
-   * the session check (#192). One shown read-only takes the version read; an edit or a deletion
+   * then the record and its changes, whatever is stale (M1-4), except for a record that shows
+   * nothing (#694); on Try again, all of them, after the session check (#192). One shown read-only takes the version read; an edit or a deletion
    * under review keeps its own (M6-1). A refusal, or the Expense gone, withdraws what shows.
    */
   const readAgain = async (kind: 'foreground' | 'reconnect' | 'retry') => {
@@ -773,9 +773,10 @@ export function createExpenseQueries(session: ExpenseSession) {
     const here = (lost = kind === 'retry') =>
       session.current(owner) && view === opened && onScreen(lost) !== null;
     if (!opened || !here() || onScreen(true)!.expense.status === 'saving') return;
-    // Nothing shows to read again: an Expense that couldn't open offline opens again instead (the
-    // controller, #694), and one Splitbook refused, found gone or failed stays until Try again.
-    if (kind === 'reconnect' && !onScreen(true)!.expense.draft) return;
+    // A record that shows nothing has nothing to read again: one that couldn't open offline opens
+    // again instead (the controller, #694), and one Splitbook refused, found gone or failed stays
+    // until Try again. A new form whose Group couldn't be checked still reads its Group.
+    if (kind === 'reconnect' && opened.expenseId && !onScreen(true)!.expense.draft) return;
     // Try again on the record shown says so from the start, and its page controls wait, until
     // its changes are read again, which say so themselves (the device check of #220).
     let marked = kind === 'retry' && recordShown();
