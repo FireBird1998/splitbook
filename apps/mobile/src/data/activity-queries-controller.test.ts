@@ -1954,6 +1954,40 @@ describe('Activity shown offline reads again once the internet returns (#681)', 
     });
   });
 
+  it('reads Activity again after a Load older under way when the internet returns, once it ends offline', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 1);
+    f.connect(true, false);
+    await settle();
+    await controller.refresh('pull');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true },
+      activity: { restored: true },
+    });
+    later(60_000);
+    // Load older starts just before the internet returns, and its page's answer is lost.
+    f.server.offline = false;
+    const page = f.hold(activityPath(2), { lost: true });
+    const loading = controller.loadMoreActivity();
+    await page.reached;
+    const sent = f.calls.length;
+    f.connect(true, true);
+    await settle();
+    // Nothing is sent beside the read under way.
+    expect(f.gets(sent)).toEqual([]);
+    page.release();
+    await loading;
+    await settle();
+    await settle();
+    // It ended offline, so Activity is read once more, live.
+    expect(f.gets(sent)).toEqual(['/api/auth/get-session', 'activity p1']);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false },
+      activity: { status: 'ready', restored: false, refreshedAt: start + 60_000 },
+    });
+  });
+
   it.each(['a server failure', 'a refusal'] as const)(
     'keeps %s Splitbook answered for Activity, and reads nothing, when the internet returns',
     async (failure) => {
