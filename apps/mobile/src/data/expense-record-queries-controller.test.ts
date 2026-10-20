@@ -2116,6 +2116,7 @@ describe('an Expense that couldn’t open offline opens by itself once the conne
       'record dinner',
       'history dinner p1',
     ]);
+    expect(f.writes(from)).toEqual([]);
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'expense',
       offline: { active: false },
@@ -2218,6 +2219,85 @@ describe('an Expense that couldn’t open offline opens by itself once the conne
       expect(controller.getSnapshot()).toMatchObject({
         offline: { active: false },
         expense: { status: 'detail', draft: { original: { _id: dinnerId } } },
+      });
+    },
+  );
+
+  it.each(returns)(
+    'reopens it beside a draft stored for its Group, which stays as it was, %s',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await signedIn(f);
+      await controller.openExpense(mapleId);
+      await controller.updateExpenseDraft({ description: 'Kept for later' });
+      await controller.back();
+      await settle();
+      const stored = structuredClone(f.drafts.get(`${alex.id}${mapleId}`));
+      f.connect(true, false);
+      await controller.openExpense(mapleId, dinnerId);
+      expect(controller.getSnapshot()).toMatchObject({
+        keptDraft: { groupId: mapleId },
+        expense: { status: 'blocked', draft: null },
+      });
+      const from = f.calls.length;
+      await trigger(f);
+      expect(controller.getSnapshot()).toMatchObject({
+        offline: { active: false },
+        keptDraft: { groupId: mapleId },
+        expense: { status: 'detail', draft: { original: { _id: dinnerId } } },
+      });
+      expect(f.writes(from)).toEqual([]);
+      expect(f.drafts.get(`${alex.id}${mapleId}`)).toEqual(stored);
+    },
+  );
+
+  it.each(returns)(
+    'reads nothing for a later visit Splitbook answered as gone, after an earlier one couldn’t open offline, %s',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await openedOffline(f);
+      await controller.back();
+      await settle();
+      // The same Expense opens again; Splitbook answers now, and it's gone.
+      f.server.offline = false;
+      f.server.gone.add(dinnerId);
+      await controller.openExpense(mapleId, dinnerId);
+      await settle();
+      const shown = controller.getSnapshot();
+      expect(shown.expense).toMatchObject({ status: 'blocked', draft: null });
+      const from = f.calls.length;
+      await trigger(f);
+      expect(f.gets(from)).toEqual([]);
+      expect(controller.getSnapshot().expense).toEqual(shown.expense);
+    },
+  );
+
+  it.each(returns)(
+    'reads the Group of a new Expense form that couldn’t be checked offline again, %s',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await signedIn(f);
+      // A new form, with no saved copy of its Group and no draft kept: its check fails offline.
+      f.connect(true, false);
+      await controller.openExpense(mapleId);
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        offline: { active: true },
+        expense: {
+          status: 'blocked',
+          draft: null,
+          contextCheck: { status: 'failed' },
+          message: 'This view was not saved on this device. Connect to load it.',
+        },
+      });
+      const from = f.calls.length;
+      await trigger(f);
+      // Its Group is read again, as it was before #694: the banner and the message clear, and the
+      // form waits for Try again.
+      expect(f.gets(from)).toEqual(['/api/auth/get-session', 'group']);
+      expect(controller.getSnapshot()).toMatchObject({
+        offline: { active: false },
+        expense: { status: 'blocked', draft: null, message: null, contextCheck: undefined },
       });
     },
   );
