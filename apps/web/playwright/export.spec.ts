@@ -185,7 +185,7 @@ test('preview follows Groups, period, include and format choices with recovery',
     preview.getByRole('table', { name: 'INR current balances', exact: true }),
   ).toBeVisible();
   await expect(
-    preview.getByRole('heading', { name: 'Suggested payments', exact: true }),
+    preview.getByRole('heading', { name: 'Suggested payments (INR)', exact: true }),
   ).toBeVisible();
   await expect(
     preview

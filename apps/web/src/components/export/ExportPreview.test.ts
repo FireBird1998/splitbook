@@ -1,10 +1,11 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { act, create, type ReactTestInstance } from 'react-test-renderer';
 import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
-import type { ExportPreview } from '@splitbook/shared/export-preview';
+import { exportPreviewSchema, type ExportPreview } from '@splitbook/shared/export-preview';
 import ExportPreviewPanel, { type PreviewState } from './ExportPreview';
 
 const csv: ExportPreview = {
@@ -223,4 +224,93 @@ it('names the zip and explains blank Amount cells for edit rows', () => {
   const html = text(render({ status: 'ready', data }));
   expect(html).toContain('In one zip, export.zip');
   expect(html).toContain('Edit rows leave Amount blank.');
+});
+
+it('says a CSV file too large to show as text can be downloaded in full (#698)', () => {
+  // The reply as the server sends it: the large file comes without its text.
+  const data = exportPreviewSchema.parse({
+    ...csv,
+    fileName: 'export.zip',
+    files: [
+      {
+        name: 'expenses.csv',
+        kind: 'expenses',
+        header: ['Description', 'Amount', 'Currency'],
+        rows: [['Groceries', '10.01', 'INR']],
+        totalRows: 50000,
+      },
+      { ...csv.files[0], name: 'payments.csv', kind: 'payments' },
+    ],
+  });
+  let renderer!: ReturnType<typeof create>;
+  act(() => {
+    // MUI's default theme: its ThemeProvider reads the document, which this renderer has none of.
+    renderer = create(
+      createElement(ExportPreviewPanel, { state: { status: 'ready', data }, onRetry: vi.fn() }),
+    );
+  });
+  const strings = (node: ReactTestInstance | string): string =>
+    typeof node === 'string' ? node : node.children.map(strings).join(' ');
+  const textButton = renderer.root.find(
+    (node) => node.type === 'button' && strings(node).trim() === 'Text',
+  );
+  act(() => textButton.props.onClick({ defaultPrevented: false, preventDefault: () => {} }));
+  const shown = strings(renderer.root);
+  expect(shown).toContain('This file is too large to show as text. Download it to see every row.');
+  expect(shown).toContain('Groceries,10.01,INR');
+  const regions = renderer.root
+    .findAll((node) => node.type === 'pre')
+    .map((node) => node.props['aria-label']);
+  expect(regions).toEqual(['payments.csv text preview']);
+  act(() => renderer.unmount());
+});
+
+it('names each currency’s balances and Suggested payments for screen readers (#698)', () => {
+  const bucket = (currency: string) => ({
+    currency,
+    spentMinor: 1001,
+    expenseCount: 1,
+    paymentTotalMinor: 0,
+    paymentCount: 0,
+    people: [
+      {
+        id: 'alice',
+        name: 'Alice Tester',
+        paidMinor: 1001,
+        shareMinor: 501,
+        netMinor: 500,
+        balanceMinor: 500,
+      },
+      { id: 'bob', name: 'Bob', paidMinor: 0, shareMinor: 500, netMinor: -500, balanceMinor: -500 },
+    ],
+    suggestedPayments: [{ from: 'bob', to: 'alice', amountMinor: 500 }],
+    expenses: [],
+  });
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: {
+        id: 'maple',
+        name: 'Maple House',
+        theme: 'home',
+        defaultCurrency: 'INR',
+        from: csv.from,
+        to: csv.to,
+        timeZone: 'UTC',
+        currencies: [bucket('INR'), bucket('USD')],
+      },
+    },
+  });
+  const headings = [...html.matchAll(/<h4[^>]*>([^<]*)<\/h4>/g)].map(([, heading]) => heading);
+  expect(headings).toEqual([
+    'Current balances (INR)',
+    'Suggested payments (INR)',
+    'Current balances (USD)',
+    'Suggested payments (USD)',
+  ]);
+  expect(html).toMatch(/<ul[^>]*aria-label="INR suggested payments"/);
+  expect(html).toMatch(/<ul[^>]*aria-label="USD suggested payments"/);
+  expect(text(html)).toContain('Bob pays Alice Tester');
 });

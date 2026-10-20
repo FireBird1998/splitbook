@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildStatement } from './statement';
 import { buildCsvPreview, buildStatementPreview } from './export-preview';
+import { serializeCsv } from './export-csv';
 import type { BackupGroupInput } from './export-backup';
 
 const group: BackupGroupInput = {
@@ -80,5 +81,35 @@ describe('export preview content', () => {
     expect(preview.text).toBe(
       '\uFEFFDescription,Amount\r\n\'=SUM(1),1.01\r\n"a,b",2.00\r\n"say ""hi""",3.00\r\n"line\nbreak",4.00\r\nfive,5.00\r\nsix,6.00\r\n',
     );
+  });
+});
+
+describe('CSV Text in a preview reply is bounded (#698)', () => {
+  /**
+   * 5,461 rows of `cell`. With 46 ASCII characters each, the header and the BOM (one character,
+   * three bytes in UTF-8), the file is 262,142 characters: 262,144 bytes.
+   */
+  const rows = (cell: string) => Array.from({ length: 5461 }, () => [cell]);
+
+  it('is the exact download bytes for a file of up to 256 KB', () => {
+    const table = { header: ['Description'], rows: rows('x'.repeat(46)) };
+    const preview = buildCsvPreview(table);
+    expect(preview.text).toHaveLength(262_142);
+    expect(preview.text).toBe(serializeCsv(table.header, table.rows));
+  });
+
+  it('is left out for a file over 256 KB, counted in UTF-8 bytes, while the table sample stays', () => {
+    const table = { header: ['Description'], rows: rows('x'.repeat(46)) };
+    table.rows[0] = ['x'.repeat(47)];
+    // One byte over: 262,145 bytes.
+    expect(serializeCsv(table.header, table.rows)).toHaveLength(262_143);
+    const over = buildCsvPreview(table);
+    expect(over.text).toBeUndefined();
+    expect(over.rows).toHaveLength(5);
+    expect(over.totalRows).toBe(5461);
+    // "₹" is one character but three bytes: 262,142 characters, 764,556 bytes.
+    const rupees = { header: ['Description'], rows: rows('₹'.repeat(46)) };
+    expect(serializeCsv(rupees.header, rupees.rows)).toHaveLength(262_142);
+    expect(buildCsvPreview(rupees).text).toBeUndefined();
   });
 });
