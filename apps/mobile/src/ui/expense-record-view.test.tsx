@@ -18,7 +18,7 @@ import {
 } from '@splitbook/shared/expense-detail';
 import { motion } from './compact';
 import { findHosts, flatten, layoutHeight } from '../test-utils/layout';
-import { setWindow, timing } from '../test-utils/native';
+import { activateWithScreenReader, setWindow, timing, touchAlong } from '../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -785,6 +785,33 @@ describe('compact Expense record', () => {
       screen: 'group',
       snackbar: { message: 'Expense deleted · Electricity bill' },
     });
+  });
+
+  it('opens the delete review on a tap or a screen reader’s activate, never on a drag (#684)', async () => {
+    const ui = await render(open(ids.bill));
+    await ui.press('Expense options');
+    const landed = { pageX: 180, pageY: 560 };
+    await act(async () =>
+      touchAlong(ui.pressable('Delete expense'), [
+        landed,
+        { pageX: 180, pageY: 470 },
+        { pageX: 181, pageY: 320 },
+      ]),
+    );
+    await settle();
+    expect(ui.controller.getSnapshot().expense.status).toBe('detail');
+    expect(text(ui.shown())).toContain('Expense options');
+    await act(async () =>
+      touchAlong(ui.pressable('Delete expense'), [landed, { pageX: 178, pageY: 563 }]),
+    );
+    await settle();
+    expect(ui.controller.getSnapshot().expense.status).toBe('delete-review');
+    await ui.press('Cancel');
+    await ui.press('Expense options');
+    await act(async () => activateWithScreenReader(ui.pressable('Delete expense')));
+    await settle();
+    expect(ui.controller.getSnapshot().expense.status).toBe('delete-review');
+    expect(ui.writes).toEqual([]);
   });
 
   it('says a deleted Expense was deleted and offers neither Edit nor Delete', async () => {
