@@ -3,6 +3,12 @@
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogActions from '@mui/material/DialogActions';
+import { format, isToday, isYesterday } from 'date-fns';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -16,11 +22,21 @@ interface Connection {
   id: string;
   clientId: string;
   scopes: string[];
+  name: string;
+  lastUsedAt: string | null;
 }
 interface Connections {
   resource: string;
   connections: Connection[];
   nextOffset: number | null;
+}
+
+function lastUsedLabel(value: string | null): string {
+  if (!value) return 'Not used yet';
+  const date = new Date(value);
+  if (isToday(date)) return `Last used ${format(date, 'HH:mm')}`;
+  if (isYesterday(date)) return 'Last used yesterday';
+  return `Last used ${format(date, 'd MMM yyyy')}`;
 }
 
 /**
@@ -56,12 +72,12 @@ export function ConnectionsList({
       )}
       {data.connections.map((connection) => (
         <Stack key={connection.id} spacing={1}>
-          <Typography sx={{ overflowWrap: 'anywhere' }}>{connection.clientId}</Typography>
+          <Typography sx={{ overflowWrap: 'anywhere' }}>{connection.name}</Typography>
           <Typography variant="body2">
-            All current and future Groups · Ledger access
-            {connection.scopes.includes(MCP_DRAFT_SCOPE)
-              ? ' · To review access, including permanent deletion'
-              : ''}
+            {connection.scopes.includes(MCP_DRAFT_SCOPE) ? 'Ledger + To review' : 'Ledger'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {lastUsedLabel(connection.lastUsedAt)}
           </Typography>
           <Button
             variant="outlined"
@@ -90,6 +106,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [pending, setPending] = useState<Connection | null>(null);
   useEffect(() => {
     if (!accountId) return;
     const controller = new AbortController();
@@ -121,6 +138,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
         body: JSON.stringify({ id }),
       });
       if (!response.ok) throw new Error();
+      setPending(null);
       setData(
         (current) =>
           current && {
@@ -185,10 +203,42 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
           <ConnectionsList
             data={data}
             busy={busy}
-            onRevoke={(id) => void revoke(id)}
+            onRevoke={(id) => setPending(data.connections.find((item) => item.id === id) ?? null)}
             onLoadMore={() => void loadMore()}
           />
         )}
+        <Dialog
+          open={pending !== null}
+          onClose={() => {
+            if (!busy) setPending(null);
+          }}
+          aria-labelledby="disconnect-assistant-title"
+          aria-describedby="disconnect-assistant-description"
+        >
+          <DialogTitle id="disconnect-assistant-title">Disconnect {pending?.name}?</DialogTitle>
+          <DialogContent>
+            <DialogContentText id="disconnect-assistant-description">
+              The assistant stops at once. Items already prepared stay in your To review. Previously
+              shared information may remain in your assistant.
+            </DialogContentText>
+            {error && <Alert severity="error">{error}</Alert>}
+          </DialogContent>
+          <DialogActions>
+            <Button disabled={busy !== null} onClick={() => setPending(null)}>
+              Cancel
+            </Button>
+            <Button
+              color="error"
+              sx={{ color: 'status.negative' }}
+              disabled={busy !== null || !pending}
+              onClick={() => {
+                if (pending) void revoke(pending.id);
+              }}
+            >
+              Disconnect
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Stack>
     </Paper>
   );

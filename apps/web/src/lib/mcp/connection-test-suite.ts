@@ -207,7 +207,15 @@ export function connectionTests(mongo = false) {
       auth,
       resource,
       async (subject, client, generation, scopes) =>
-        currentMcpGrant((await auth.$context).adapter, env, subject, client, generation, scopes),
+        currentMcpGrant(
+          (await auth.$context).adapter,
+          env,
+          subject,
+          client,
+          generation,
+          scopes,
+          true,
+        ),
       async (server, id, scopes, authorize, clientId) => {
         if (exposeTools)
           registerSplitbookTools(
@@ -361,6 +369,7 @@ export function connectionTests(mongo = false) {
               client,
               generation,
               scopes,
+              true,
             ),
           (server, id, scopes, authorize) =>
             registerSplitbookTools(server, { id, authorize }, scopes, origin),
