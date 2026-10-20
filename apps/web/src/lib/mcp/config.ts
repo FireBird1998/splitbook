@@ -1,5 +1,10 @@
 import type { AuthEnv } from '@/lib/auth/create-auth';
 
+// Refresh rotation rolls this lifetime forward. The extra day covers use of an
+// access token after issuance; the live grant check still enforces 90 idle days.
+export const MCP_REFRESH_TOKEN_SECONDS = 91 * 24 * 60 * 60;
+export const MCP_IDLE_SECONDS = 90 * 24 * 60 * 60;
+
 export const MCP_LEDGER_SCOPE = 'ledger:read';
 export const MCP_DRAFT_SCOPE = 'drafts:write';
 export const MCP_SCOPES = [MCP_LEDGER_SCOPE, MCP_DRAFT_SCOPE, 'offline_access'];
