@@ -1,4 +1,4 @@
-import { approvingAssistant, connectedAssistantName } from './assistant-name';
+import { assistantForApproval, connectedAssistantName } from './assistant-name';
 import { randomUUID } from 'node:crypto';
 import type { AuthContext, BetterAuthPlugin } from 'better-auth';
 import {
@@ -171,11 +171,11 @@ export function mcpAuthPlugins(env: AuthEnv) {
           )
             throw new APIError('BAD_REQUEST', { message: 'Unsupported connection permissions.' });
           ctx.setHeader('Cache-Control', 'no-store');
-          // The assistant by the name it publishes, never its raw address alone (#614).
+          // The assistant by the name it publishes, never by its raw client identity (#614).
           return ctx.json({
             clientId,
             scopes,
-            ...(await approvingAssistant(ctx.context.adapter, clientId)),
+            ...(await assistantForApproval(ctx.context.adapter, clientId)),
           });
         },
       ),

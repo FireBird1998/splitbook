@@ -12,16 +12,18 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import { ASSISTANT_CANNOT } from '@/lib/mcp/assistant-limits';
+import type { AssistantDisplay } from '@/lib/mcp/assistant-name';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { PRODUCT_NAME } from '@/lib/product';
 
-/** A connection request as the consent screen shows it: the assistant, and what it asks for. */
-type ConsentDetails = { clientId: string; scopes: string[]; name: string; address: string };
+/** A connection request as the approval page shows it: the assistant, and what it asks for. */
+type ConsentDetails = AssistantDisplay & { scopes: string[] };
 
 /**
- * The permissions a connection request asks for, as the consent screen lists them: the assistant
- * by name, with its address in small text (#614), ledger access, and, when it asks for them,
- * preparing items for To review and staying connected; then what it can't do, on every approval.
+ * The permissions a connection request asks for, as the approval page lists them: the assistant
+ * by name, with its address in small text when it has one (#614), ledger access, and, when it
+ * asks for them, preparing items for To review and staying connected; then what it can't do, on
+ * every approval.
  */
 export function ConsentPermissions({
   details,
@@ -40,14 +42,18 @@ export function ConsentPermissions({
         <Typography variant="h6" component="h2">
           {details.name} wants to use your {PRODUCT_NAME}
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-          {details.address} · identified by its published details
-        </Typography>
+        {details.address && (
+          <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+            {details.address} · identified by its published details
+          </Typography>
+        )}
       </Box>
-      <Typography variant="subtitle2" component="h3">
-        What {details.name} can do
-      </Typography>
-      <Typography>Ledger permission: read Group details, Balances and spending.</Typography>
+      <Box>
+        <Typography variant="subtitle2" component="h3">
+          What {details.name} can do
+        </Typography>
+        <Typography>Ledger permission: read Group details, Balances and spending.</Typography>
+      </Box>
       {details.scopes.includes(MCP_DRAFT_SCOPE) && (
         <FormControlLabel
           control={
