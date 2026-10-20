@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
+import { visuallyHidden } from '@/components/common/visually-hidden';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
@@ -93,6 +94,9 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
   if (loading) {
     return (
       <JoinPage>
+        <Typography component="h1" sx={visuallyHidden}>
+          Join Group
+        </Typography>
         <CircularProgress />
       </JoinPage>
     );
@@ -105,7 +109,7 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
           <Typography component="span" sx={{ fontSize: '3rem' }}>
             😕
           </Typography>
-          <Typography variant="h6" fontWeight={700} color="text.primary">
+          <Typography component="h1" variant="h6" fontWeight={700} color="text.primary">
             Oops!
           </Typography>
           <Typography color="text.secondary">{error}</Typography>
@@ -135,7 +139,7 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
               You’ve been invited to join:
             </Typography>
             <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
-              <Typography variant="h6" fontWeight={700} color="text.primary">
+              <Typography component="h1" variant="h6" fontWeight={700} color="text.primary">
                 {getGroupTheme(((group?.category as string) || 'other') as GroupCategory).icon}{' '}
                 {group?.name as string}
               </Typography>

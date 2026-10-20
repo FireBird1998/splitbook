@@ -40,7 +40,7 @@ export default function LoginForm() {
         </Box>
 
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" color="text.primary" sx={{ mb: 1 }}>
+          <Typography component="h1" variant="h6" color="text.primary" sx={{ mb: 1 }}>
             Welcome back!
           </Typography>
           <Typography color="text.secondary">Sign in to continue.</Typography>

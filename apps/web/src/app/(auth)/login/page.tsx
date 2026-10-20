@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import Box from '@mui/material/Box';
+import { visuallyHidden } from '@/components/common/visually-hidden';
 import Typography from '@mui/material/Typography';
 import BrandMark from '@/components/layout/BrandMark';
 import { isDemoMode } from '@/lib/auth-mode';
@@ -31,8 +32,11 @@ export default async function LoginPage() {
             role="status"
             sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}
           >
+            <Typography component="h1" sx={visuallyHidden}>
+              Welcome back!
+            </Typography>
             <BrandMark size={48} decorative={false} />
-            <Typography color="text.secondary">Loading...</Typography>
+            <Typography color="text.secondary">Loading…</Typography>
           </Box>
         </Box>
       }
