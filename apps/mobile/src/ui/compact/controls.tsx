@@ -3,7 +3,7 @@ import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
 import { useReducedMotion } from './motion';
 import { denseHitSlop, radius, touch } from './scale';
-import type { Tap } from './tap';
+import { useTap, type Tap } from './tap';
 import { CompactText, FieldMarker, Money } from './text';
 
 /** Spinning while busy; with reduce motion on, a still hourglass instead. */
@@ -59,12 +59,14 @@ export function CompactButton({
   busy?: string;
   amountBelow?: boolean;
   /**
-   * The screen's one `useTap` (#665, #684), for a button in a row of a list: a drag that starts
-   * on it never presses it.
+   * The `useTap` it shares with the other presses of its screen or sheet (#684). Without one it
+   * keeps its own: a drag that starts on any button never presses it (#693).
    */
   tap?: Tap;
 }) {
   const theme = useTheme();
+  const own = useTap();
+  const press = tap ?? own;
   const tones = destructive
     ? { main: theme.status.negative, bg: theme.negative.bg }
     : { main: theme.brand.main, bg: theme.brand.bg };
@@ -106,7 +108,7 @@ export function CompactButton({
       accessibilityHint={hint}
       accessibilityState={{ disabled: disabled || busy !== undefined, busy: busy !== undefined }}
       disabled={disabled || busy !== undefined}
-      {...(tap ? tap.on(onPress) : { onPress })}
+      {...press.on(onPress)}
       hitSlop={dense ? denseHitSlop : undefined}
       style={({ pressed }) => ({
         minHeight: dense ? touch.dense : touch.min,
@@ -121,7 +123,7 @@ export function CompactButton({
         gap: 8,
         backgroundColor:
           variant === 'primary' ? tones.main : variant === 'tonal' ? tones.bg : 'transparent',
-        opacity: busy ? 1 : disabled ? 0.45 : pressed && !tap?.dragged ? 0.8 : 1,
+        opacity: busy ? 1 : disabled ? 0.45 : pressed && !press.dragged ? 0.8 : 1,
       })}
     >
       {busy === undefined ? (
@@ -226,6 +228,8 @@ export function SelectorTile({
   locked?: boolean;
 }) {
   const theme = useTheme();
+  // A drag that starts on a tile never opens its editor (#693).
+  const tap = useTap();
   const spoken = [
     `${label}${required ? ', required' : ''}: ${spokenValue ?? value}`,
     error,
@@ -239,7 +243,7 @@ export function SelectorTile({
       accessibilityLabel={spoken}
       accessibilityState={{ disabled: locked || !onPress }}
       disabled={locked || !onPress}
-      onPress={onPress}
+      {...tap.on(onPress)}
       style={({ pressed }) => ({
         minHeight: 60,
         flexDirection: 'row',
@@ -251,7 +255,7 @@ export function SelectorTile({
         borderRadius: radius.tile,
         borderWidth: error ? 2 : 1,
         borderColor: error ? theme.negative.main : theme.border,
-        backgroundColor: locked ? theme.surfaceMuted : pressed ? theme.surfaceMuted : theme.surface,
+        backgroundColor: locked || (pressed && !tap.dragged) ? theme.surfaceMuted : theme.surface,
       })}
     >
       <Icon name={icon} size={20} color={error ? theme.status.negative : theme.brand.main} />
@@ -471,11 +475,13 @@ export function FloatingAction({
   bottom?: number;
 }) {
   const theme = useTheme();
+  // A drag that starts on it never presses it (#693).
+  const tap = useTap();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      onPress={onPress}
+      {...tap.on(onPress)}
       style={({ pressed }) => ({
         position: 'absolute',
         right: 16,
@@ -488,7 +494,7 @@ export function FloatingAction({
         alignItems: 'center',
         gap: 10,
         backgroundColor: theme.brand.main,
-        opacity: pressed ? 0.85 : 1,
+        opacity: pressed && !tap.dragged ? 0.85 : 1,
         elevation: 4,
       })}
     >

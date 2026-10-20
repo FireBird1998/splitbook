@@ -1187,6 +1187,40 @@ describe('To review quick fixes on Android (#439)', () => {
     await settle();
     expect(f.deletes).toEqual([fare]);
   });
+  it('deletes on a tap or a screen reader’s activate of Delete, never on a drag (#693)', async () => {
+    const f = fixture();
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await tap(list, 'More for Fare');
+    await tap(list, 'Delete, Remove it from To review');
+    expect(text(list)).toContain('Delete this item?');
+    const landed = { pageX: 180, pageY: 700 };
+    await act(async () => {
+      touchAlong(button(list, 'Delete Fare'), [
+        landed,
+        { pageX: 260, pageY: 702 },
+        { pageX: 330, pageY: 703 },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await settle();
+    expect(f.deletes).toEqual([]);
+    expect(text(list)).toContain('Delete this item?');
+    await act(async () => {
+      touchAlong(button(list, 'Delete Fare'), [landed, { pageX: 183, pageY: 702 }]);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await settle();
+    expect(f.deletes).toEqual([fare]);
+    await tap(list, 'More for Lunch');
+    await tap(list, 'Delete, Remove it from To review');
+    await act(async () => {
+      activateWithScreenReader(button(list, 'Delete Lunch'));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await settle();
+    expect(f.deletes).toEqual([fare, lunch]);
+  });
   it('More shows every Tag with the Category match suggested, and keeps the Tag identity', async () => {
     const extra = ['Food', 'Transport', 'Stay', 'Activities'].map((name, index) => ({
       _id: `c${String(index + 2).padStart(23, '0')}`,

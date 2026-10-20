@@ -14,7 +14,7 @@ import {
   layoutWidth,
   unreadText,
 } from '../test-utils/layout';
-import { setWindow } from '../test-utils/native';
+import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -422,6 +422,58 @@ const text = (scope: ReactTestInstance) =>
     .findAll((node) => isHost(node, 'Text'))
     .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
     .join('');
+
+describe('the Expense form presses only on a tap (#693)', () => {
+  const landed = { pageX: 180, pageY: 500 };
+  /** A sideways drag that starts and ends on the control, as on the device. */
+  const sideways = [landed, { pageX: 260, pageY: 502 }, { pageX: 330, pageY: 503 }] as const;
+  const tap = [landed, { pageX: 183, pageY: 502 }] as const;
+  const finger = async (node: ReactTestInstance, path: readonly (typeof landed)[]) => {
+    await act(async () => touchAlong(node, [path[0]!, ...path.slice(1)]));
+    await settle();
+  };
+  const sheetOpen = (root: ReactTestInstance, title: string) =>
+    root
+      .findAll((node) => isHost(node, 'Modal') && node.props.visible === true)
+      .some((modal) => text(modal).includes(title));
+
+  it('saves on a tap, never on a sideways drag across Save expense', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await ui.type('Description, required', 'Groceries');
+    await ui.type('Amount, required', '250.50');
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
+    await ui.press('Tag: Groceries');
+    await finger(ui.pressable('Save expense'), sideways);
+    expect(ui.writes).toEqual([]);
+    await finger(ui.pressable('Save expense'), tap);
+    expect(ui.writes).toEqual([`POST /api/groups/${groupId}/expenses`]);
+  });
+
+  it('opens a tile’s sheet on a tap or a screen reader’s activate, never on a drag', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await finger(ui.tile('Paid by'), sideways);
+    expect(sheetOpen(ui.root(), 'Who paid?')).toBe(false);
+    await finger(ui.tile('Paid by'), tap);
+    expect(sheetOpen(ui.root(), 'Who paid?')).toBe(true);
+    await ui.press('Done');
+    expect(sheetOpen(ui.root(), 'Who paid?')).toBe(false);
+    await act(async () => activateWithScreenReader(ui.tile('Paid by')));
+    await settle();
+    expect(sheetOpen(ui.root(), 'Who paid?')).toBe(true);
+  });
+
+  it('opens Category and notes on a tap or a screen reader’s activate, never on a drag', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    const details = () => ui.pressable('Category and notes, optional');
+    await finger(details(), sideways);
+    expect(details().props.accessibilityState.expanded).toBe(false);
+    await finger(details(), tap);
+    expect(details().props.accessibilityState.expanded).toBe(true);
+    await act(async () => activateWithScreenReader(details()));
+    await settle();
+    expect(details().props.accessibilityState.expanded).toBe(false);
+  });
+});
 
 describe('rendered Expense corrections', () => {
   it('moves a blank Description submission to its field and saves once after correction', async () => {

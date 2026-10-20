@@ -13,7 +13,7 @@ import type {
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { MobileFetch } from '../data/types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
-import { setWindow } from '../test-utils/native';
+import { setWindow, touchAlong } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import { ToReviewHomeCard, ToReviewList } from './to-review';
 import { ControllerExpenseEditor } from './controller-expense-editor';
@@ -550,6 +550,24 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     const editor = await form(f, mode);
     expect(text(editor)).toContain('Keeps it in To review. Only you can see it.');
     await tap(editor, 'Finish later');
+    expect(f.controller.getSnapshot().screen).toBe('group');
+    expect(f.controller.getSnapshot().snackbar?.message).toBe('Kept in To review');
+  });
+  it('sets the item aside on a tap, never on a sideways drag across Finish later (#693)', async () => {
+    const f = fixture({ empty: true });
+    await signIn(f);
+    await enter(f);
+    const editor = await form(f, mode);
+    const landed = { pageX: 180, pageY: 600 };
+    const finger = (path: Parameters<typeof touchAlong>[1]) =>
+      act(async () => {
+        touchAlong(button(editor, 'Finish later'), path);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+    await finger([landed, { pageX: 260, pageY: 602 }, { pageX: 330, pageY: 603 }]);
+    expect(f.controller.getSnapshot().screen).toBe('expense');
+    expect(f.controller.getSnapshot().snackbar).toBeNull();
+    await finger([landed, { pageX: 183, pageY: 602 }]);
     expect(f.controller.getSnapshot().screen).toBe('group');
     expect(f.controller.getSnapshot().snackbar?.message).toBe('Kept in To review');
   });

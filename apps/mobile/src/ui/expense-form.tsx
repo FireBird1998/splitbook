@@ -37,6 +37,7 @@ import {
   SelectorTile,
   TileGrid,
   useLargeText,
+  useTap,
 } from './compact';
 import { useTheme } from './theme';
 
@@ -675,20 +676,22 @@ export const OptionalDetails = memo(function OptionalDetails({
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
+  // A drag that starts on it never opens or closes it (#693).
+  const tap = useTap();
   return (
     <Card>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Category and notes, optional"
         accessibilityState={{ expanded: open }}
-        onPress={() => setOpen(!open)}
+        {...tap.on(() => setOpen(!open))}
         style={({ pressed }) => ({
           minHeight: 56,
           flexDirection: 'row',
           alignItems: 'center',
           gap: 12,
           paddingHorizontal: 14,
-          backgroundColor: pressed ? theme.surfaceMuted : undefined,
+          backgroundColor: pressed && !tap.dragged ? theme.surfaceMuted : undefined,
         })}
       >
         <Icon name="document-text-outline" size={20} color={theme.brand.main} />
