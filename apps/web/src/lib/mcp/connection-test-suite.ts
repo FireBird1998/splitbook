@@ -1505,5 +1505,126 @@ export function connectionTests(mongo = false) {
       ).toBe(403);
       expect((await refresh(refreshed.refresh_token)).ok).toBe(false);
     });
+    describe('inactivity expiry', () => {
+      const day = 86_400_000;
+      const signIn = async () => {
+        const response = await post('/sign-in/email', {
+          email: 'connection@example.test',
+          password: 'synthetic-password-for-test-only',
+        });
+        expect(response.status).toBe(200);
+        cookie = response.headers
+          .getSetCookie()
+          .map((value) => value.split(';')[0])
+          .join('; ');
+      };
+      const refresh = (value: string) =>
+        fetch(`${origin}/api/auth/oauth2/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: clientId,
+            refresh_token: value,
+            resource,
+          }),
+        });
+      const use = async (accessToken: string) => {
+        const client = new Client({ name: 'expiry-test', version: '1' });
+        try {
+          await client.connect(
+            new StreamableHTTPClientTransport(new URL(resource), {
+              requestInit: { headers: { Authorization: `Bearer ${accessToken}` } },
+            }),
+          );
+          expect((await client.listTools()).tools.map((tool) => tool.name)).toContain(
+            'connection_status',
+          );
+        } finally {
+          await client.close();
+        }
+      };
+      const freshConnection = async () => {
+        await signIn();
+        for (const connection of await connectionList())
+          expect((await post('/mcp/revoke', { id: connection.id }, true)).status).toBe(200);
+        return authorizeClient();
+      };
+
+      it('expires a never-used connection at 90 days and lets the member reconnect', async () => {
+        const start = Math.floor(Date.now() / 1000) * 1000;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(start);
+        try {
+          const issued = await freshConnection();
+          expect((await connectionList())[0].lastUsedAt).toBeNull();
+          vi.setSystemTime(start + 90 * day);
+          await signIn();
+          expect(await connectionList()).toEqual([]);
+          expect((await refresh(issued.refresh_token)).ok).toBe(false);
+          const reconnected = await authorizeClient();
+          await use(reconnected.access_token);
+          expect(await connectionList()).toHaveLength(1);
+          expect((await refresh(issued.refresh_token)).ok).toBe(false);
+        } finally {
+          vi.useRealTimers();
+          await signIn();
+        }
+      });
+
+      it('keeps rolling refresh alive within 90 days of use and refuses a fresh token at idle expiry', async () => {
+        const start = Math.floor(Date.now() / 1000) * 1000;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(start);
+        try {
+          const issued = await freshConnection();
+          await use(issued.access_token);
+          vi.setSystemTime(start + 89 * day);
+          const response = await refresh(issued.refresh_token);
+          expect(response.status, await response.clone().text()).toBe(200);
+          const active = await response.json();
+          await use(active.access_token);
+          // Rotating tokens alone is not assistant use. Mint a token just before
+          // the idle deadline so its five-minute JWT lifetime cannot hide the bug.
+          vi.setSystemTime(start + 179 * day - 60_000);
+          const late = await refresh(active.refresh_token);
+          expect(late.status, await late.clone().text()).toBe(200);
+          const stillValid = await late.json();
+          await signIn();
+          expect((await connectionList())[0].lastUsedAt).toBe(
+            new Date(start + 89 * day).toISOString(),
+          );
+          vi.setSystemTime(start + 179 * day);
+          expect(
+            (
+              await fetch(resource, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${stillValid.access_token}`,
+                },
+              })
+            ).status,
+          ).toBe(403);
+          expect((await refresh(stillValid.refresh_token)).ok).toBe(false);
+          expect(await connectionList()).toEqual([]);
+          const reconnected = await authorizeClient();
+          await use(reconnected.access_token);
+          expect(
+            (
+              await fetch(resource, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${stillValid.access_token}`,
+                },
+              })
+            ).status,
+          ).toBe(403);
+          expect((await refresh(stillValid.refresh_token)).ok).toBe(false);
+        } finally {
+          vi.useRealTimers();
+          await signIn();
+        }
+      });
+    });
   });
 }
