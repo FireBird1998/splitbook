@@ -1356,7 +1356,7 @@ there are several, or with `format=json` one JSON backup of every chosen Group
 | `to`      | no       | Last day of the window, `YYYY-MM-DD`, inclusive. Give both `from` and `to`, or neither for all time   |
 | `include` | no       | Any of `payments`, `shares`, `deleted`, `history`, joined by commas                                   |
 | `format`  | no       | `csv` (default), `json` (all-time backup), or `statement` (one Group, preview only)                   |
-| `preview` | no       | `1` returns a JSON preview instead of an attachment                                                   |
+| `preview` | no       | `1` returns a bounded JSON preview instead of an attachment                                           |
 | `tz`      | no       | The viewer's IANA time zone, `UTC` by default: the calendar payments, edits and deletions are read in |
 
 A query it can't read (no Groups, an id that isn't one, half a window, a window
@@ -1375,8 +1375,9 @@ JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
   `timeZone` and `empty`.
 - CSV carries `fileName` and `files`: each file has `name`, `kind`, `header`,
   at most five `rows`, `totalRows`, and `text` with the complete CSV file, including
-  its UTF-8 BOM and CRLF line endings. Table / Text selects the sample or raw file.
-  Cells match parsed download cells,
+  its UTF-8 BOM and CRLF line endings, for a file of up to 256 KB in UTF-8
+  (`EXPORT_PREVIEW_TEXT_BYTES`). A larger file has no `text`; its Text view says to
+  download it. Table / Text selects the sample or raw file. Cells match parsed download cells,
   including the leading apostrophe protecting spreadsheet formulas. Queries,
   column order, exact money formatting and row order use the download builders.
 - JSON carries `fileName`, approximate `sizeBytes`, `earliestMonth`,

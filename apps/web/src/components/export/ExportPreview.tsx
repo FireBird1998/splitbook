@@ -208,7 +208,7 @@ export default function ExportPreviewPanel({
               </PreviewTable>
               <Box sx={{ mt: 2 }}>
                 <Typography component="h4" variant="subtitle1">
-                  Current balances
+                  Current balances ({bucket.currency})
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Current all-time positions, including every recorded payment. These match
@@ -234,10 +234,10 @@ export default function ExportPreviewPanel({
                   ))}
                 </PreviewTable>
                 <Typography component="h4" variant="subtitle1" sx={{ mt: 2 }}>
-                  Suggested payments
+                  Suggested payments ({bucket.currency})
                 </Typography>
                 {bucket.suggestedPayments.length ? (
-                  <Box component="ul">
+                  <Box component="ul" aria-label={`${bucket.currency} suggested payments`}>
                     {bucket.suggestedPayments.map((payment) => (
                       <li key={`${payment.from}-${payment.to}`}>
                         {bucket.people.find((person) => person.id === payment.from)?.name ??
@@ -382,7 +382,11 @@ export default function ExportPreviewPanel({
             >
               {file.name}
             </Typography>
-            {csvView === 'text' ? (
+            {csvView === 'text' && file.text === undefined ? (
+              <Typography color="text.secondary">
+                This file is too large to show as text. Download it to see every row.
+              </Typography>
+            ) : csvView === 'text' ? (
               <Box
                 component="pre"
                 role="region"

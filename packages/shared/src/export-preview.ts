@@ -1,4 +1,4 @@
-/** Export previews: bounded table samples and complete CSV text from the download builders. */
+/** Export previews: bounded table samples and CSV text from the download builders. */
 import { z } from 'zod';
 import type { Statement } from './statement';
 import { serializeCsv, spreadsheetCellText, type CsvTable } from './export-csv';
@@ -6,6 +6,12 @@ import { isCalendarDay, isTimeZone } from './export-request';
 const day = z.string().refine(isCalendarDay).nullable();
 
 export const EXPORT_PREVIEW_ROWS = 5;
+/**
+ * The most CSV one preview file carries as Text, in UTF-8 bytes (256 KB). A preview is read again
+ * on every settled change of the selection, and a serverless reply is capped at about 4.5 MB, so a
+ * larger file's Text is left out: its download has every row.
+ */
+export const EXPORT_PREVIEW_TEXT_BYTES = 256 * 1024;
 const common = {
   groupNames: z.array(z.string()),
   generatedAt: z.iso.datetime(),
@@ -25,7 +31,8 @@ export const csvPreviewSchema = z.object({
       header: z.array(z.string()),
       rows: z.array(z.array(z.string())).max(EXPORT_PREVIEW_ROWS),
       totalRows: z.number().int().nonnegative(),
-      text: z.string(),
+      /** The download's exact bytes, absent for a file over `EXPORT_PREVIEW_TEXT_BYTES`. */
+      text: z.string().optional(),
     }),
   ),
 });
@@ -118,12 +125,26 @@ export function buildStatementPreview(statement: Statement) {
   });
 }
 
-/** Both views use the download's table; raw text includes every row, BOM and CRLF. */
+/** How many bytes `text` takes in UTF-8, as the download is encoded; a lone surrogate takes 3. */
+function utf8Bytes(text: string) {
+  let bytes = 0;
+  for (const character of text) {
+    const code = character.codePointAt(0)!;
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  return bytes;
+}
+
+/**
+ * Both views use the download's table. Text is the download's exact bytes, every row with the BOM
+ * and CRLF, for a file of up to `EXPORT_PREVIEW_TEXT_BYTES`; a larger file has none.
+ */
 export function buildCsvPreview(table: CsvTable) {
+  const text = serializeCsv(table.header, table.rows);
   return {
     header: table.header.map(spreadsheetCellText),
     rows: table.rows.slice(0, EXPORT_PREVIEW_ROWS).map((row) => row.map(spreadsheetCellText)),
     totalRows: table.rows.length,
-    text: serializeCsv(table.header, table.rows),
+    ...(utf8Bytes(text) <= EXPORT_PREVIEW_TEXT_BYTES ? { text } : {}),
   };
 }
