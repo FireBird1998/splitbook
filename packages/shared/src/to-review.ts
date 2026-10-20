@@ -30,6 +30,9 @@ export interface ReviewItemModel {
   groupId: string;
   createdAt: string;
   state: ToReviewState;
+  groupCategory?: GroupCategory;
+  /** Meaning retained before member wording is rendered. Member rows keep their source path. */
+  needs: ReviewNeed[];
   /**
    * What the item still needs before it can be saved, in words that follow "Needs": a fact it
    * has no value for ("the date"), or one that is there but wrong ("the split to add up to the
@@ -41,6 +44,21 @@ export interface ReviewItemModel {
   label: string;
   accountItem?: ToReviewItem;
   deviceItem?: DeviceToReviewItem;
+}
+export interface ReviewNeed {
+  field: string;
+  reason:
+    | 'missing'
+    | 'invalid'
+    | 'decimals'
+    | 'split-total'
+    | 'payer-total'
+    | 'percentage-total'
+    | 'group-currency'
+    | 'unknown';
+  index?: number;
+  part?: string;
+  precision?: number;
 }
 const facts: Record<string, string> = {
   description: 'what it was for',
@@ -65,13 +83,43 @@ export const SPLIT_TOTAL_NEED = 'the split to add up to the total';
 export const PAID_TOTAL_NEED = 'the amounts paid to add up to the total';
 export const PERCENTAGE_TOTAL_NEED = 'the percentages to add up to 100%';
 /** Whether an item's missing facts ask for its amount: missing, or with too many decimals. */
-export const needsAmount = (missingFacts: readonly string[]) =>
-  missingFacts.some(
-    (fact) =>
-      fact === facts.amount ||
-      fact === 'a whole-number amount' ||
-      fact.startsWith('an amount with'),
-  );
+export const needsAmount = (needs: readonly ReviewNeed[]) =>
+  needs.some((need) => need.field === 'amount');
+
+/** Display projection retained for the Needs line and #713's existing explanation callers. */
+export function reviewNeedWords(need: ReviewNeed, category?: GroupCategory): string {
+  if (need.reason === 'split-total') return SPLIT_TOTAL_NEED;
+  if (need.reason === 'payer-total') return PAID_TOTAL_NEED;
+  if (need.reason === 'percentage-total') return PERCENTAGE_TOTAL_NEED;
+  if (need.reason === 'group-currency') return groupCurrencyNeed(category);
+  if (need.reason === 'decimals') {
+    const places = need.precision === 0 ? undefined : `at most ${need.precision} decimal places`;
+    if (need.field === 'splitBetween')
+      return places ? `shares with ${places}` : 'whole-number shares';
+    if (need.field === 'paidBy')
+      return places ? `amounts paid with ${places}` : 'whole-number amounts paid';
+    return places ? `an amount with ${places}` : 'a whole-number amount';
+  }
+  return facts[need.field] ?? 'the expense details';
+}
+
+/** Known legacy validation reasons are interpreted here, before any display wording exists. */
+function validationNeed(reason: string, path: readonly PropertyKey[]): ReviewNeed {
+  const field = String(path[0] ?? 'expense');
+  if (reason === 'Split amounts must add up to the expense amount')
+    return { field: 'splitBetween', reason: 'split-total' };
+  if (reason === 'Payer amounts must add up to the expense amount')
+    return { field: 'paidBy', reason: 'payer-total' };
+  if (reason === 'Percentages must add up to 100')
+    return { field: 'splitBetween', reason: 'percentage-total' };
+  const precision = reason.match(DECIMALS)?.[1];
+  return {
+    field,
+    reason: precision === undefined ? 'invalid' : 'decimals',
+    ...(precision === undefined ? {} : { precision: Number(precision) }),
+    ...(typeof path[1] === 'number' ? { index: path[1], part: String(path[2]) } : {}),
+  };
+}
 /** What an item in another currency than its Group's needs (#567). */
 function groupCurrencyNeed(category?: GroupCategory) {
   // Named as Add expense names it: the Trip currency, the Household currency (#596).
@@ -98,30 +146,33 @@ function unmetNeed(
   reason: string,
   field = 'amount',
 ): { need: string; sentence: string } | undefined {
-  if (reason === 'Split amounts must add up to the expense amount')
-    return { need: SPLIT_TOTAL_NEED, sentence: 'The split must add up to the total.' };
-  if (reason === 'Payer amounts must add up to the expense amount')
-    return { need: PAID_TOTAL_NEED, sentence: 'The amounts paid must add up to the total.' };
-  if (reason === 'Percentages must add up to 100')
-    return { need: PERCENTAGE_TOTAL_NEED, sentence: 'The percentages must add up to 100%.' };
-  const decimals = reason.match(DECIMALS);
-  if (!decimals) return undefined;
-  const places = decimals[1] === '0' ? undefined : `at most ${decimals[1]} decimal places`;
+  const interpreted = validationNeed(reason, [field]);
+  const need = reviewNeedWords(interpreted);
+  if (interpreted.reason === 'split-total')
+    return { need, sentence: 'The split must add up to the total.' };
+  if (interpreted.reason === 'payer-total')
+    return { need, sentence: 'The amounts paid must add up to the total.' };
+  if (interpreted.reason === 'percentage-total')
+    return { need, sentence: 'The percentages must add up to 100%.' };
+  if (interpreted.reason !== 'decimals') return undefined;
+  const places =
+    interpreted.precision === 0 ? undefined : `at most ${interpreted.precision} decimal places`;
   if (field === 'splitBetween')
     return {
-      need: places ? `shares with ${places}` : 'whole-number shares',
+      need,
       sentence: places ? `Each share can have ${places}.` : 'Each share must be a whole number.',
     };
   if (field === 'paidBy')
     return {
-      need: places ? `amounts paid with ${places}` : 'whole-number amounts paid',
+      need,
       sentence: places
         ? `Each amount paid can have ${places}.`
         : 'Each amount paid must be a whole number.',
     };
-  return places
-    ? { need: `an amount with ${places}`, sentence: `The amount can have ${places}.` }
-    : { need: 'a whole-number amount', sentence: 'The amount must be a whole number.' };
+  return {
+    need,
+    sentence: places ? `The amount can have ${places}.` : 'The amount must be a whole number.',
+  };
 }
 
 function accountModel(
@@ -133,34 +184,38 @@ function accountModel(
   const parsed = completeExpenseDraftSchema.safeParse(values);
   const issues = parsed.success ? [] : parsed.error.issues;
   const missing = missingDraftFields(values, issues, item.draft.missingFields ?? []);
-  const unknownFacts = [...new Set(missing.map((field) => facts[field] ?? 'the expense details'))];
+  const needs: ReviewNeed[] = missing.map((field) => ({ field, reason: 'missing' }));
   // A fact that is there but wrong reads as what it needs, or as the fact for a reason without
   // member words.
-  const needs = issues
-    .filter((issue) => !missing.includes(String(issue.path[0] ?? 'expense')))
-    .map(
-      (issue) =>
-        unmetNeed(issue.message, String(issue.path[0]))?.need ??
-        facts[String(issue.path[0])] ??
-        'the expense details',
-    );
-  const coded = item.problems.flatMap((problem) => codeNeeds.get(problem)?.(category) ?? []);
-  const missingFacts = [...new Set([...unknownFacts, ...needs, ...coded])];
+  needs.push(
+    ...issues
+      .filter((issue) => !missing.includes(String(issue.path[0] ?? 'expense')))
+      .map((issue) => validationNeed(issue.message, issue.path)),
+  );
+  if (item.problems.includes('CURRENCY_MISMATCH'))
+    needs.push({ field: 'currency', reason: 'group-currency' });
   // Only a problem nothing can name falls back to the expense details.
-  if (item.problems.length && !missingFacts.length) missingFacts.push('the expense details');
-  const state = missingFacts.length
-    ? 'needs-details'
-    : item.duplicates.length
-      ? 'duplicate'
-      : 'ready';
+  if (item.problems.length && !needs.length) needs.push({ field: 'expense', reason: 'unknown' });
+  const words = (rows: readonly ReviewNeed[]) => [
+    ...new Set(rows.map((need) => reviewNeedWords(need, category))),
+  ];
+  const state = needs.length ? 'needs-details' : item.duplicates.length ? 'duplicate' : 'ready';
   return {
     id: item.draft.id,
     groupId: item.draft.groupId,
     createdAt: item.draft.createdAt,
     state,
-    missingFacts,
-    unknownFacts,
-    label: missingFacts.length ? `Needs ${missingFacts.join(', ')}` : labels[state],
+    groupCategory: category,
+    needs,
+    get missingFacts() {
+      return words(needs);
+    },
+    get unknownFacts() {
+      return words(needs.filter((need) => need.reason === 'missing'));
+    },
+    get label() {
+      return needs.length ? `Needs ${words(needs).join(', ')}` : labels[state];
+    },
     accountItem: item,
   };
 }
@@ -213,6 +268,7 @@ export function buildToReview(
       groupId: item.groupId,
       createdAt: item.createdAt,
       state: 'on-this-phone' as const,
+      needs: [],
       missingFacts: [],
       unknownFacts: [],
       label: labels['on-this-phone'],

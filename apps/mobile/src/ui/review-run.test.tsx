@@ -752,6 +752,21 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     ))
       expect(node.props.accessibilityLabel).toBeTruthy();
   });
+  it('preserves existing invalid payer guidance while blocking save (#712)', async () => {
+    const f = fixture({ one: true });
+    f.items()[0].draft.values!.paidBy = [
+      { user: user.id, amount: 6.17 },
+      { user: user.id, amount: 6.17 },
+    ];
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    expect(text(tree)).toContain('who paid');
+    expect(text(tree)).toContain('Claude didn’t know who paid');
+    expect(button(tree, 'Save expense').props.disabled).toBe(true);
+  });
   it('names a split that does not add up, not a missing amount (#506)', async () => {
     const f = fixture({ one: true });
     // ₹12.34 split exactly as ₹10, as the server sent it before #506: the reason at the amount.

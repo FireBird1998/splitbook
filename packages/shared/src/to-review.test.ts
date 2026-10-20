@@ -5,8 +5,6 @@ import {
   reviewDate,
   memberProblems,
   needsAmount,
-  PAID_TOTAL_NEED,
-  SPLIT_TOTAL_NEED,
   reviewProblem,
   reviewSplitMethod,
   summarizeReviewRun,
@@ -795,22 +793,31 @@ describe('the Group currency (#512)', () => {
   });
 });
 
-describe('whether To review asks for an item’s amount (#524)', () => {
-  it('asks when the amount is missing or has more decimal places than its currency', () => {
-    expect(needsAmount(['the amount'])).toBe(true);
-    expect(needsAmount(['an amount with at most 2 decimal places'])).toBe(true);
-    expect(needsAmount(['a whole-number amount'])).toBe(true);
-  });
+describe('whether To review asks for an item’s amount (#524, #712)', () => {
+  it.each([undefined, 10.555])(
+    'targets the total for missing or invalid amount %s regardless of display wording',
+    (amount) => {
+      const draft = item(1);
+      draft.draft.values = { ...draft.draft.values, amount, paidBy: [{ user: member }] };
+      const model = buildToReview(read([draft]), [], now).items[0];
+      const reworded = { ...model, missingFacts: ['correct this value'] };
+      expect(needsAmount(reworded.needs)).toBe(true);
+      expect(reworded.state).toBe('needs-details');
+    },
+  );
 
-  it('does not ask for a split, payers or other facts that mention amounts', () => {
-    expect(
-      needsAmount([
-        SPLIT_TOTAL_NEED,
-        PAID_TOTAL_NEED,
-        'amounts paid with at most 2 decimal places',
-      ]),
-    ).toBe(false);
-    expect(needsAmount(['what it was for', 'the date'])).toBe(false);
+  it('does not target the total for payer or split decimals', () => {
+    for (const field of ['paidBy', 'splitBetween'] as const) {
+      const draft = item(1);
+      draft.draft.values = {
+        ...draft.draft.values,
+        splitMethod: 'exact',
+        [field]: [{ user: member, amount: 0.111 }],
+      };
+      const model = buildToReview(read([draft]), [], now).items[0];
+      expect(needsAmount(model.needs)).toBe(false);
+      expect(model.state).toBe('needs-details');
+    }
   });
 });
 

@@ -1,5 +1,5 @@
 import { getCategory } from './categories';
-import { reviewSplitMethod, type ReviewItemModel } from './to-review';
+import { reviewNeedWords, reviewSplitMethod, type ReviewItemModel } from './to-review';
 import type { ExpenseDraftValues } from './validators/expense-draft';
 
 /** Who is looking, and the Group's current members and active Tags. */
@@ -32,8 +32,6 @@ export interface ItemQuickFixes {
 }
 
 const VISIBLE = 4;
-// The To review model's member words for the facts a chip can fill in.
-const COVERS: Record<QuickFixFact, string> = { paidBy: 'who paid', tag: 'the tag' };
 
 function categoryLabel(values: ExpenseDraftValues) {
   return getCategory(values.category ?? 'other')?.label ?? 'Other';
@@ -86,10 +84,16 @@ export function toReviewQuickFixes(
       );
     }
   }
-  const covered = new Set(fixes.map((row) => COVERS[row.fact]));
+  const covered = new Set<string>(fixes.map((row) => row.fact));
   return {
     fixes,
-    stillNeeds: item.missingFacts.filter((fact) => !covered.has(fact)),
+    stillNeeds: [
+      ...new Set(
+        item.needs
+          .filter((need) => !covered.has(need.field === 'tagId' ? 'tag' : need.field))
+          .map((need) => reviewNeedWords(need, item.groupCategory)),
+      ),
+    ],
     summary: item.state === 'ready' ? summarize(values, context) : null,
   };
 }

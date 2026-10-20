@@ -15,9 +15,7 @@ import {
   summarizeReviewRun,
   describeDraftChange,
   needsAmount,
-  PAID_TOTAL_NEED,
-  PERCENTAGE_TOTAL_NEED,
-  SPLIT_TOTAL_NEED,
+  type ReviewNeed,
 } from '@splitbook/shared/to-review';
 import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
@@ -364,6 +362,12 @@ function ReviewRunContent({
   const groups = new Set(state.items.map((row) => row.groupId)).size;
   const locked = offline || (state.busy && !state.editing) || state.pending || !state.context;
   const missing = model.missingFacts;
+  const hasNeed = (field: string, reason?: ReviewNeed['reason']) =>
+    model.needs.some(
+      (need) =>
+        need.field === field &&
+        (reason ? need.reason === reason : need.reason === 'missing' || need.reason === 'invalid'),
+    );
   const reason = offline
     ? 'Connect to change or save this'
     : state.pending
@@ -491,7 +495,7 @@ function ReviewRunContent({
         {/* Amount and Description, as Add expense lays them out, labelled as it labels them (#524). */}
         <Card padded>
           <View style={{ gap: 6 }}>
-            <RequiredFieldLabel text="Amount" invalid={needsAmount(missing)} />
+            <RequiredFieldLabel text="Amount" invalid={needsAmount(model.needs)} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               {groupCurrency && (values.currency || groupCurrency) === groupCurrency && (
                 <CurrencyBadge currency={groupCurrency} recorded={false} />
@@ -520,7 +524,7 @@ function ReviewRunContent({
             style={{ height: 1, backgroundColor: theme.border, marginTop: 4, marginBottom: 8 }}
           />
           <View style={{ gap: 6 }}>
-            <RequiredFieldLabel text="Description" invalid={missing.includes('what it was for')} />
+            <RequiredFieldLabel text="Description" invalid={hasNeed('description')} />
             <View>
               <TextInput
                 key={`description:${state.changed?.after.revision ?? 0}`}
@@ -552,22 +556,22 @@ function ReviewRunContent({
         <ExpenseTiles
           locked={locked}
           errors={{
-            date: missing.includes('the date') ? 'Choose a date' : undefined,
-            payers: missing.includes('who paid')
+            date: hasNeed('date') ? 'Choose a date' : undefined,
+            payers: hasNeed('paidBy')
               ? 'Who paid? · Choose'
-              : missing.includes(PAID_TOTAL_NEED)
+              : hasNeed('paidBy', 'payer-total')
                 ? 'Must add up to the total'
                 : undefined,
             // A split that is there but doesn't add up says so, not "Choose" (#506).
             split:
-              missing.includes('who shared it') || missing.includes('how to split it')
+              hasNeed('splitBetween') || hasNeed('splitMethod')
                 ? 'Choose who shared it and how'
-                : missing.includes(SPLIT_TOTAL_NEED)
+                : hasNeed('splitBetween', 'split-total')
                   ? 'Must add up to the total'
-                  : missing.includes(PERCENTAGE_TOTAL_NEED)
+                  : hasNeed('splitBetween', 'percentage-total')
                     ? 'Must add up to 100%'
                     : undefined,
-            tag: missing.includes('the tag') ? 'Choose a Tag' : undefined,
+            tag: hasNeed('tagId') || hasNeed('tag') ? 'Choose a Tag' : undefined,
           }}
           values={{
             date: expenseDateLabel(form.date, controller.reviewNow()),
@@ -590,7 +594,7 @@ function ReviewRunContent({
         <OptionalDetails draft={form} locked={locked} onChange={change} />
         {!!missing.length && (
           <Banner tone="warning" message={reason ?? ''}>
-            {missing.includes('who paid') && assistant ? (
+            {hasNeed('paidBy') && assistant ? (
               <CompactText variant="small" tone="secondary" style={{ paddingLeft: 4 }}>
                 {assistant} didn’t know who paid, so it left that to you
               </CompactText>

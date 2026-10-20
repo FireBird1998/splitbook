@@ -1,7 +1,8 @@
 import { test, expect, dataOf } from './fixtures';
 import type { Page } from '@playwright/test';
 import type { Ledger } from './fixtures';
-async function setup(page: Page, ledger: Ledger) {
+import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
+async function setup(page: Page, ledger: Ledger, changes: ExpenseDraftValues = {}) {
   const origin = process.env.EXPENSE_ACCESS_BASE_URL!;
   await page.context().addCookies((await ledger.priya.storageState()).cookies);
   const group = await dataOf(await ledger.priya.get(`/api/groups/${ledger.groupB}`));
@@ -21,6 +22,7 @@ async function setup(page: Page, ledger: Ledger) {
               paidBy: [{ user: 'a00000000000000000000003', amount: 12.34 }],
               splitMethod: 'equal',
               splitBetween: [{ user: 'a00000000000000000000003' }],
+              ...changes,
             },
           ],
         },
@@ -31,6 +33,43 @@ async function setup(page: Page, ledger: Ledger) {
   await page.goto(`${origin}/groups/${ledger.groupB}/review`);
   return draft;
 }
+
+test('payer and Tag quick fixes cover their needs, announce Ready, and wait for explicit save (#712)', async ({
+  page,
+  ledger,
+}) => {
+  await setup(page, ledger, { paidBy: undefined, tagId: undefined });
+  const needs = page.getByRole('region', { name: 'Needs details', exact: true });
+  await expect(page.getByRole('region', { name: 'Ready', exact: true })).toHaveCount(0);
+  await needs
+    .getByRole('group', { name: 'Who paid for Review recovery meal' })
+    .getByRole('button', { name: 'You, suggested' })
+    .click();
+  await expect(needs).toContainText('Review recovery meal');
+  await expect(needs.getByRole('group', { name: 'Who paid for Review recovery meal' })).toHaveCount(
+    0,
+  );
+  const tags = needs.getByRole('group', { name: 'Tag for Review recovery meal' });
+  await tags.getByRole('button').first().click();
+  await expect(page.getByRole('region', { name: 'Ready', exact: true })).toContainText(
+    'Review recovery meal',
+  );
+  await expect(
+    page.locator('[aria-live="polite"]').filter({ hasText: 'Review recovery meal moved to Ready' }),
+  ).toBeAttached();
+  const drafts = await dataOf(await ledger.priya.get(`/api/groups/${ledger.groupB}/drafts`));
+  expect(drafts).toHaveLength(1);
+  expect(drafts[0].values.paidBy).toEqual([{ user: 'a00000000000000000000003' }]);
+  expect(drafts[0].values.tagId).toBeTruthy();
+  const expenses = await dataOf(
+    await ledger.priya.get(`/api/groups/${ledger.groupB}/expenses?limit=100`),
+  );
+  expect(
+    expenses.expenses.some(
+      (row: { description: string }) => row.description === 'Review recovery meal',
+    ),
+  ).toBe(false);
+});
 for (const mode of ['single', 'ready'] as const) {
   test(`Check again after a lost ${mode} save reply and reload creates exactly one Expense`, async ({
     page,
