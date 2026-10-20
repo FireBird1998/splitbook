@@ -122,7 +122,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
                 { field: 'referenceId', value: row.generation },
               ],
             });
-            if (consent && !isMcpConnectionExpired(row, consent))
+            if (consent && !isMcpConnectionExpired(row, consent, env))
               connections.push({
                 id: row.id,
                 clientId: row.clientId,
@@ -250,7 +250,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
               { field: 'referenceId', value: row.generation },
             ],
           });
-          if (consent && isMcpConnectionExpired(row, consent)) {
+          if (consent && isMcpConnectionExpired(row, consent, env)) {
             // Reconnection starts a fresh authorization. Never let old tokens adopt
             // it, or rotate over activity that landed after the expiry read.
             const renewed = await context.adapter.update<McpConnection>({

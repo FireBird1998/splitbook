@@ -1529,7 +1529,7 @@ export function connectionTests(mongo = false) {
             resource,
           }),
         });
-      const use = async (accessToken: string) => {
+      const callAssistant = async (accessToken: string) => {
         const client = new Client({ name: 'expiry-test', version: '1' });
         try {
           await client.connect(
@@ -1560,7 +1560,7 @@ export function connectionTests(mongo = false) {
         auth = makeAuth(origin);
         try {
           const issued = await freshConnection();
-          await use(issued.access_token);
+          await callAssistant(issued.access_token);
           vi.setSystemTime(start + 119_000);
           expect(await connectionList()).toHaveLength(1);
           vi.setSystemTime(start + 120_000);
@@ -1597,7 +1597,7 @@ export function connectionTests(mongo = false) {
           expect(await connectionList()).toEqual([]);
           expect((await refresh(issued.refresh_token)).ok).toBe(false);
           const reconnected = await authorizeClient();
-          await use(reconnected.access_token);
+          await callAssistant(reconnected.access_token);
           expect(await connectionList()).toHaveLength(1);
           expect((await refresh(issued.refresh_token)).ok).toBe(false);
         } finally {
@@ -1612,12 +1612,12 @@ export function connectionTests(mongo = false) {
         vi.setSystemTime(start);
         try {
           const issued = await freshConnection();
-          await use(issued.access_token);
+          await callAssistant(issued.access_token);
           vi.setSystemTime(start + 89 * day);
           const response = await refresh(issued.refresh_token);
           expect(response.status, await response.clone().text()).toBe(200);
           const active = await response.json();
-          await use(active.access_token);
+          await callAssistant(active.access_token);
           // Rotating tokens alone is not assistant use. Mint a token just before
           // the idle deadline so its five-minute JWT lifetime cannot hide the bug.
           vi.setSystemTime(start + 179 * day - 60_000);
@@ -1642,7 +1642,7 @@ export function connectionTests(mongo = false) {
           expect((await refresh(stillValid.refresh_token)).ok).toBe(false);
           expect(await connectionList()).toEqual([]);
           const reconnected = await authorizeClient();
-          await use(reconnected.access_token);
+          await callAssistant(reconnected.access_token);
           expect(
             (
               await fetch(resource, {

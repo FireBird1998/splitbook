@@ -5,6 +5,16 @@ import type { AuthEnv } from '@/lib/auth/create-auth';
 export const MCP_REFRESH_TOKEN_SECONDS = 91 * 24 * 60 * 60;
 export const MCP_IDLE_SECONDS = 90 * 24 * 60 * 60;
 
+/** Production ignores test timeouts unless the deployment is explicitly staging. */
+export function mcpIdleSeconds(env: AuthEnv): number {
+  if (env.MCP_DEPLOYMENT !== 'staging' || env.MCP_IDLE_TIMEOUT_SECONDS === undefined)
+    return MCP_IDLE_SECONDS;
+  const seconds = Number(env.MCP_IDLE_TIMEOUT_SECONDS);
+  if (!Number.isInteger(seconds) || seconds <= 0 || seconds > MCP_IDLE_SECONDS)
+    throw new Error('MCP_IDLE_TIMEOUT_SECONDS must be an integer from 1 to 7776000');
+  return seconds;
+}
+
 export const MCP_LEDGER_SCOPE = 'ledger:read';
 export const MCP_DRAFT_SCOPE = 'drafts:write';
 export const MCP_SCOPES = [MCP_LEDGER_SCOPE, MCP_DRAFT_SCOPE, 'offline_access'];

@@ -1,4 +1,4 @@
-import { MCP_IDLE_SECONDS } from './config';
+import { mcpIdleSeconds } from './config';
 import type { AuthContext } from 'better-auth';
 import { APIError } from 'better-auth/api';
 import { isEmailAllowed } from '@/lib/auth/allowlist';
@@ -26,11 +26,15 @@ export interface McpConsent {
 }
 
 /** A never-used authorization ages from consent, not the durable connection row. */
-export function isMcpConnectionExpired(connection: McpConnection, consent: McpConsent): boolean {
+export function isMcpConnectionExpired(
+  connection: McpConnection,
+  consent: McpConsent,
+  env: AuthEnv,
+): boolean {
   const since = new Date(
     connection.lastUsedAt ?? consent.createdAt ?? connection.createdAt,
   ).getTime();
-  return !Number.isFinite(since) || Date.now() - since >= MCP_IDLE_SECONDS * 1000;
+  return !Number.isFinite(since) || Date.now() - since >= mcpIdleSeconds(env) * 1000;
 }
 
 export async function requireMcpMember(adapter: Adapter, userId: string, env: AuthEnv) {
@@ -83,7 +87,7 @@ export async function currentMcpGrant(
   if (
     !consent ||
     !scopes.every((scope) => consent.scopes.includes(scope)) ||
-    isMcpConnectionExpired(connection, consent)
+    isMcpConnectionExpired(connection, consent, env)
   )
     return false;
   const now = new Date();
