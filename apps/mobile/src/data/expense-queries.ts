@@ -762,8 +762,9 @@ export function createExpenseQueries(session: ExpenseSession) {
    * The screen reads again: on the foreground by itself, the Group past its stale time, after the
    * session check every screen over a Group makes (M1-6); on reconnecting by itself, the Group,
    * then the record and its changes, whatever is stale (M1-4), except for a record that shows
-   * nothing (#694); on Try again, all of them, after the session check (#192). One shown read-only takes the version read; an edit or a deletion
-   * under review keeps its own (M6-1). A refusal, or the Expense gone, withdraws what shows.
+   * nothing (#694); on Try again, all of them, after the session check (#192). One shown
+   * read-only takes the version read; an edit or a deletion under review keeps its own (M6-1). A
+   * refusal, or the Expense gone, withdraws what shows.
    */
   const readAgain = async (kind: 'foreground' | 'reconnect' | 'retry') => {
     const opened = view,
