@@ -619,7 +619,9 @@ export function createActivityQueries(session: ActivitySession) {
    * Reads Activity for this open: every page loaded, from the window's first, up to 5 (M1-3), or
    * the newest page when none is. `fresh` reads them again now; otherwise a read verified within
    * the freshness window is reused. `after`: the Group read it follows (a Household's, or a
-   * Group not known yet); when that fails, Activity isn't read. A refusal drops the Group.
+   * Group not known yet); when that fails, Activity isn't read. A refusal drops the Group. Without
+   * one, a Group shown from this phone's copy is read again first, and Activity follows it: that
+   * copy keeps the offline banner until its own read lands (#682).
    */
   const read = (
     owner: number,
@@ -634,6 +636,12 @@ export function createActivityQueries(session: ActivitySession) {
     const key = activityKey(opened.groupId);
     // Only while Activity shows: one a change cancelled is read again only if the member is on it.
     const still = () => view === opened && !opened.lost && session.current(owner) && onScreen();
+    const { detail } = session.snapshot();
+    const group =
+      after ??
+      (detail.id === opened.groupId && detail.status === 'ready' && detail.restored
+        ? session.readGroup(opened.groupId, owner, { fresh: false, wanted: () => !!still() })
+        : undefined);
     opened.reading += 1;
     const reading = (async (): Promise<boolean> => {
       // What this device saved shows while the Group is first read, with its own time.
@@ -645,9 +653,9 @@ export function createActivityQueries(session: ActivitySession) {
       let checked = false;
       try {
         reproject();
-        if (after) {
+        if (group) {
           try {
-            await after;
+            await group;
           } catch {
             return false;
           }

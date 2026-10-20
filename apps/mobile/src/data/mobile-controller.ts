@@ -2257,10 +2257,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       publish({ ...snapshot, keptDraft: kept });
   };
   /**
-   * The view's Expenses and Balances read from `from` on (`groupQueries`), with the Group's
+   * The view's Group, Expenses and Balances read from `from` on (`groupQueries`), with the Group's
    * unconfirmed payment, which Balances offers, read from this device alongside.
    */
-  const readFinancial = async (from: 'expenses' | 'balances', fresh = false) => {
+  const readFinancial = async (from: 'group' | 'expenses' | 'balances', fresh = false) => {
     const groupId = overGroup() ? snapshot.detail.data?.id : undefined;
     const pending = groupId ? loadPendingPayment(groupId) : null;
     const owner = generation,
@@ -2350,8 +2350,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.financial.groupId === groupId &&
       (at.destination === 'activity' || snapshot.financial.expenses.status === 'idle')
     )
-      // Read unless verified within the freshness window.
-      await readFinancial('expenses');
+      // Read unless verified within the freshness window; a Group shown from this phone's copy is
+      // read again beside them, since that copy keeps the offline banner (#682).
+      await readFinancial(snapshot.detail.restored ? 'group' : 'expenses');
   };
 
   /** Open a Group on its Activity destination. */
