@@ -79,6 +79,16 @@ test('from the sidebar: pick one Group and all time, and download its Expenses a
   expect(file.suggestedFilename()).toBe('goa-friends-trip-all-time-expenses.csv');
   const text = await readFile((await file.path())!, 'utf8');
   expect(text.startsWith(BOM)).toBe(true);
+  const preview = page.getByRole('region', { name: 'Preview', exact: true });
+  await preview.getByRole('button', { name: 'Text', exact: true }).click();
+  const raw = preview.getByRole('region', {
+    name: `${file.suggestedFilename()} text preview`,
+    exact: true,
+  });
+  await expect(raw).toBeVisible();
+  expect(await raw.textContent()).toBe(text);
+  await preview.getByRole('button', { name: 'Table', exact: true }).click();
+  await expect(preview.getByRole('table')).toBeVisible();
   expect(headerOf(text)).toEqual([
     ...EXPENSE_COLUMNS,
     'Alex Rivera share',
@@ -171,7 +181,27 @@ test('preview follows Groups, period, include and format choices with recovery',
   await page.getByLabel('Format', { exact: true }).selectOption('statement');
   await expect(preview).toContainText('Member');
   await expect(preview).toContainText('Amounts in INR, never converted');
-  await expect(preview.getByRole('rowheader', { name: 'Alex Rivera', exact: true })).toBeVisible();
+  await expect(
+    preview.getByRole('table', { name: 'INR current balances', exact: true }),
+  ).toBeVisible();
+  await expect(
+    preview.getByRole('heading', { name: 'Suggested payments', exact: true }),
+  ).toBeVisible();
+  await expect(
+    preview
+      .getByRole('table', { name: 'INR first Expenses', exact: true })
+      .getByRole('columnheader', { name: 'Paid by', exact: true }),
+  ).toBeVisible();
+  await expect(
+    preview
+      .getByRole('table', { name: 'INR first Expenses', exact: true })
+      .getByRole('columnheader', { name: 'Share', exact: true }),
+  ).toBeVisible();
+  await expect(
+    preview
+      .getByRole('table', { name: 'INR period contributions', exact: true })
+      .getByRole('rowheader', { name: 'Alex Rivera', exact: true }),
+  ).toBeVisible();
   await page.getByLabel('Period', { exact: true }).selectOption('custom');
   await page.getByLabel('From', { exact: true }).fill('2000-01-01');
   await page.getByLabel('To', { exact: true }).fill('2000-01-31');

@@ -18,7 +18,14 @@ const payload = (name: string) => ({
   empty: false,
   fileName: `${name}.csv`,
   files: [
-    { name: `${name}.csv`, kind: 'expenses', header: ['Amount'], rows: [['10.01']], totalRows: 1 },
+    {
+      name: `${name}.csv`,
+      kind: 'expenses',
+      header: ['Amount'],
+      rows: [['10.01']],
+      totalRows: 1,
+      text: '\uFEFFAmount\r\n10.01\r\n',
+    },
   ],
 });
 function Harness({ url }: { url: string | null }) {

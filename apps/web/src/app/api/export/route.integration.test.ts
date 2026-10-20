@@ -891,6 +891,7 @@ describe('Export preview (#611)', () => {
       header: rows[0],
       rows: rows.slice(1, 6),
       totalRows: 7,
+      text: file.text,
     });
   });
 
@@ -1007,23 +1008,29 @@ describe('Export preview (#611)', () => {
       paymentTotalMinor: 123,
     });
     expect(bucket.people).toEqual(
-      printed.currencies[0].people.map(({ id, name, paidMinor, shareMinor, netMinor }) => ({
-        id,
-        name,
-        paidMinor,
-        shareMinor,
-        netMinor,
-      })),
+      printed.currencies[0].people.map(
+        ({ id, name, paidMinor, shareMinor, netMinor, balanceMinor }) => ({
+          id,
+          name,
+          paidMinor,
+          shareMinor,
+          netMinor,
+          balanceMinor,
+        }),
+      ),
     );
+    expect(bucket.suggestedPayments).toEqual(printed.currencies[0].suggestedPayments);
     expect(bucket.expenses).toEqual(
       printed.currencies[0].expenses
         .slice(0, 5)
-        .map(({ id, date, description, tag, amountMinor }) => ({
+        .map(({ id, date, description, tag, amountMinor, paidBy, splitBetween }) => ({
           id,
           date,
           description,
           tag,
           amountMinor,
+          paidBy,
+          splitBetween,
         })),
     );
     expect(bucket.people.map((p: { name: string }) => p.name)).toEqual([

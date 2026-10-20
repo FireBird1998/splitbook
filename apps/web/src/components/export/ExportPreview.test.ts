@@ -23,6 +23,7 @@ const csv: ExportPreview = {
       header: ['Description', 'Amount', 'Currency'],
       rows: [['Groceries', '10.01', 'INR']],
       totalRows: 8,
+      text: '\uFEFFDescription,Amount,Currency\r\nGroceries,10.01,INR\r\n',
     },
   ],
 };
@@ -36,6 +37,13 @@ function render(state: PreviewState) {
   );
 }
 describe('Export preview panel (#611)', () => {
+  it('offers Table and Text views of the CSV preview', () => {
+    const html = render({ status: 'ready', data: csv });
+    expect(html).toContain('aria-label="CSV preview format"');
+    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*>Table</);
+    expect(html).toMatch(/<button[^>]*aria-pressed="false"[^>]*>Text</);
+  });
+
   it('shows the CSV headers, exact first cells and remaining row count', () => {
     const html = render({ status: 'ready', data: csv });
     expect(text(html)).toContain('Preview');
@@ -103,7 +111,7 @@ it.each([
   ['UTC', '19 Oct 2026 at 6:00 AM'],
   ['Pacific/Pago_Pago', '18 Oct 2026 at 7:00 PM'],
 ])(
-  'renders the statement’s generated time day first in %s with its document rows',
+  'renders statement balances, Suggested payments and Expense allocations in %s',
   (timeZone, generated) => {
     const html = render({
       status: 'ready',
@@ -133,8 +141,10 @@ it.each([
                   paidMinor: 7007,
                   shareMinor: 3504,
                   netMinor: 3503,
+                  balanceMinor: 2503,
                 },
               ],
+              suggestedPayments: [{ from: 'bob', to: 'alice', amountMinor: 2503 }],
               expenses: [
                 {
                   id: 'expense',
@@ -142,6 +152,11 @@ it.each([
                   description: 'Groceries',
                   tag: 'Food',
                   amountMinor: 1001,
+                  paidBy: [{ userId: 'alice', amountMinor: 1001 }],
+                  splitBetween: [
+                    { userId: 'alice', amountMinor: 501 },
+                    { userId: 'bob', amountMinor: 500 },
+                  ],
                 },
               ],
             },
@@ -155,6 +170,13 @@ it.each([
     expect(text(html)).toContain('Spent');
     expect(text(html)).toContain('70.07');
     expect(text(html)).toContain('Member Paid Share Net');
+    expect(text(html)).toContain('Current balances');
+    expect(text(html)).toContain('Suggested payments');
+    expect(text(html)).toContain('25.03');
+    expect(text(html)).toContain('Former member pays Alice Tester');
+    expect(text(html)).toContain('Paid by');
+    expect(text(html)).toContain('5.01');
+    expect(text(html)).toContain('5.00');
     expect(text(html)).toContain('Alice Tester');
     expect(text(html)).not.toContain('You');
     expect(text(html)).toContain('Groceries');

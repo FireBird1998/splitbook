@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'vitest';
+import { buildStatement } from './statement';
+import { buildCsvPreview, buildStatementPreview } from './export-preview';
+import type { BackupGroupInput } from './export-backup';
+
+const group: BackupGroupInput = {
+  id: 'g',
+  name: 'Preview Trip',
+  theme: 'trip',
+  currency: 'INR',
+  tags: [],
+  members: [
+    { id: 'a', name: 'Alice' },
+    { id: 'b', name: 'Bob' },
+  ],
+  names: { a: 'Alice', b: 'Bob' },
+  expenses: ['INR', 'USD'].map((currency) => ({
+    id: currency,
+    date: '2026-09-01',
+    description: 'Lunch',
+    category: 'food',
+    tag: 'Meals',
+    currency,
+    amountMinor: 101,
+    splitMethod: 'equal',
+    paidBy: [{ userId: 'a', amountMinor: 101 }],
+    splitBetween: [
+      { userId: 'a', amountMinor: 51 },
+      { userId: 'b', amountMinor: 50 },
+    ],
+  })),
+  settlements: [
+    {
+      id: 'p',
+      at: '2026-09-02T12:00:00Z',
+      fromId: 'b',
+      toId: 'a',
+      currency: 'INR',
+      amountMinor: 20,
+      recordedById: 'b',
+    },
+  ],
+};
+
+describe('export preview content', () => {
+  it('preserves statement balances, Suggested payments and Expense allocations per currency', () => {
+    const preview = buildStatementPreview(buildStatement(group));
+    const [inr, usd] = preview.currencies;
+    expect(inr.people.map((p) => p.balanceMinor)).toEqual([30, -30]);
+    expect(usd.people.map((p) => p.balanceMinor)).toEqual([50, -50]);
+    expect(inr.suggestedPayments).toEqual([{ from: 'b', to: 'a', amountMinor: 30 }]);
+    expect(usd.suggestedPayments).toEqual([{ from: 'b', to: 'a', amountMinor: 50 }]);
+    expect(inr.expenses[0].paidBy).toEqual([{ userId: 'a', amountMinor: 101 }]);
+    expect(inr.expenses[0].splitBetween).toEqual([
+      { userId: 'a', amountMinor: 51 },
+      { userId: 'b', amountMinor: 50 },
+    ]);
+    const period = buildStatementPreview(
+      buildStatement(group, { from: '2026-10-01', to: '2026-10-31' }),
+    );
+    expect(period.currencies[0].spentMinor).toBe(0);
+    expect(period.currencies[0].people.map((p) => p.balanceMinor)).toEqual([30, -30]);
+    expect(period.currencies[0].suggestedPayments).toEqual(inr.suggestedPayments);
+  });
+
+  it('CSV Text preserves the full download bytes beyond the five table rows', () => {
+    const preview = buildCsvPreview({
+      header: ['Description', 'Amount'],
+      rows: [
+        ['=SUM(1)', '1.01'],
+        ['a,b', '2.00'],
+        ['say "hi"', '3.00'],
+        ['line\nbreak', '4.00'],
+        ['five', '5.00'],
+        ['six', '6.00'],
+      ],
+    });
+    expect(preview.rows).toHaveLength(5);
+    expect(preview.totalRows).toBe(6);
+    expect(preview.text).toBe(
+      '\uFEFFDescription,Amount\r\n\'=SUM(1),1.01\r\n"a,b",2.00\r\n"say ""hi""",3.00\r\n"line\nbreak",4.00\r\nfive,5.00\r\nsix,6.00\r\n',
+    );
+  });
+});
