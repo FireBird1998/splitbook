@@ -433,6 +433,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * again (#685). It lasts for that visit of the sheet, since each visit is a new route.
    */
   let settlementUnreachable: Route | null = null;
+  /**
+   * The Expense that couldn't open because Splitbook was out of reach and nothing of it is saved on
+   * this phone: the connection's return opens it again (#694). It lasts for that visit, as above.
+   */
+  let expenseUnreachable: Route | null = null;
   let pendingRequest = 0;
   let keptDraftRequest = 0;
   /**
@@ -3033,20 +3038,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       if (known && shown.status === 'detail')
         return publish({ ...snapshot, expense: withdrawExpense(message) });
+      const unsaved =
+        error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE' && !shown.draft;
+      if (unsaved && expenseId) expenseUnreachable = view;
       publish({
         ...snapshot,
         expense: {
           ...snapshot.expense,
           status: denied ? 'blocked' : snapshot.expense.draft ? 'resume' : 'blocked',
-          message:
-            error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE' && !shown.draft
-              ? expenseNotOnPhone
-              : error instanceof RequestError
-                ? error.message
-                : // Only a draft kept on this phone has one to keep (#334).
-                  expenseId || snapshot.keptDraft?.groupId === groupId
-                  ? 'Could not open this Expense draft. Your saved draft has not been changed.'
-                  : 'Could not open a new Expense. Please try again.',
+          message: unsaved
+            ? expenseNotOnPhone
+            : error instanceof RequestError
+              ? error.message
+              : // Only a draft kept on this phone has one to keep (#334).
+                expenseId || snapshot.keptDraft?.groupId === groupId
+                ? 'Could not open this Expense draft. Your saved draft has not been changed.'
+                : 'Could not open a new Expense. Please try again.',
         },
       });
     }
@@ -6146,6 +6153,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await Promise.allSettled(reading);
     }
   };
+  /**
+   * The Expense shown couldn't open because Splitbook was out of reach, with nothing of it on this
+   * phone (#694): the connection's return opens it again, as Try again does.
+   */
+  const reopensExpense = (view: Route) =>
+    view.screen === 'expense' &&
+    expenseUnreachable === view &&
+    snapshot.expense.status === 'blocked' &&
+    !snapshot.expense.draft;
   /** The offline banner shows: the session, or a saved copy shown, hasn't been read live. */
   const bannerShown = () => offlineSession || snapshot.offline.active;
   /**
@@ -6156,6 +6172,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * copy, which keeps the banner until then.
    */
   const recoveryRead = (view: Route) => {
+    if (view.screen === 'expense') {
+      // An Expense that couldn't open offline, with nothing of it on this phone, opens again as Try
+      // again opens it (#694). One that shows reads itself again (expense-queries, #681).
+      const { requestedExpenseId } = snapshot.expense;
+      return reopensExpense(view) && requestedExpenseId
+        ? () => openExpense(view.groupId, requestedExpenseId)
+        : null;
+    }
     const owner = generation,
       check =
         view.screen === 'settlement' &&
@@ -6188,7 +6212,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const recoverShown = async () => {
     const view = route,
       owner = generation;
-    if (view.screen !== 'members' && view.screen !== 'settlement') return;
+    if (!['members', 'settlement', 'expense'].includes(view.screen) || !('groupId' in view)) return;
     const key = groupKey(account(), view.groupId);
     // One recovery per visit: a return heard while it runs is counted, and handled after its read.
     // A second would only repeat it: it waits for the same reads, then its re-read joins this

@@ -773,6 +773,9 @@ export function createExpenseQueries(session: ExpenseSession) {
     const here = (lost = kind === 'retry') =>
       session.current(owner) && view === opened && onScreen(lost) !== null;
     if (!opened || !here() || onScreen(true)!.expense.status === 'saving') return;
+    // Nothing shows to read again: an Expense that couldn't open offline opens again instead (the
+    // controller, #694), and one Splitbook refused, found gone or failed stays until Try again.
+    if (kind === 'reconnect' && !onScreen(true)!.expense.draft) return;
     // Try again on the record shown says so from the start, and its page controls wait, until
     // its changes are read again, which say so themselves (the device check of #220).
     let marked = kind === 'retry' && recordShown();
