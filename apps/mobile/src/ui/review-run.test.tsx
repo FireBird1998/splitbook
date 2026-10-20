@@ -440,7 +440,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     await tap(tree, 'Save expense');
-    expect(text(tree)).toContain("We didn't hear back, so it may already be saved");
+    expect(text(tree)).toContain('We didn’t hear back, so it may already be saved');
     expect(f.committed.size).toBe(1);
     await act(async () => {
       onlineManager.setOnline(false);
@@ -489,15 +489,16 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(text(tree)).toContain('Possible duplicate');
     expect(text(tree)).toContain('Earlier dinner');
     expect(text(tree)).toContain('Added by Alex');
+    expect(text(tree)).toContain('Save it only if it’s a different expense.');
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
-    await tap(tree, "It's a different expense, save it anyway");
+    await tap(tree, 'It’s a different expense, save it anyway');
     expect(button(tree, 'Save expense').props.disabled).toBe(false);
     await tap(tree, 'Save expense');
     expect(text(tree)).toContain('things left before you can save');
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
     await tap(tree, 'Delete');
     expect(text(tree)).toContain(
-      "It was never saved, so nothing in Maple House changes. You can't undo this.",
+      'It was never saved, so nothing in Maple House changes. You can’t undo this.',
     );
     await tap(tree, 'Delete item');
     expect(tally(tree)).toContain('Saved 2');
@@ -540,7 +541,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     expect(text(tree)).not.toContain('before you can save');
-    expect(text(tree)).not.toContain("didn't know who paid");
+    expect(text(tree)).not.toContain('didn’t know who paid');
     expect(button(tree, 'Save expense').props.disabled).toBe(false);
     await tap(tree, 'Save expense');
     expect(f.saves).toHaveLength(1);
@@ -699,7 +700,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     expect(text(tree)).toContain('One thing left before you can save: who paid');
-    expect(text(tree)).toContain("Claude didn't know who paid, so it left that to you");
+    expect(text(tree)).toContain('Claude didn’t know who paid, so it left that to you');
     const tile = tree.root.findAll(
       (node) =>
         String(node.type) === 'Pressable' &&
@@ -998,7 +999,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(text(tree)).toContain('₹30.00');
     expect(text(tree)).toContain('Added by Alex');
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
-    await tap(tree, "It's a different expense, save it anyway");
+    await tap(tree, 'It’s a different expense, save it anyway');
     await tap(tree, 'Save expense');
     expect(f.saves).toHaveLength(1);
   });

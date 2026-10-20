@@ -156,7 +156,7 @@ export function sharedDraftCollection({
           id: draft.id,
           status: pending ? 'unresolved' : 'failed',
           message: pending
-            ? "We didn't hear back, so it may already be saved"
+            ? 'We didn’t hear back, so it may already be saved'
             : error instanceof Error
               ? error.message
               : 'Could not save this item.',
@@ -204,7 +204,7 @@ export function sharedDraftCollection({
                 outcomes: items.map(({ id }) => ({
                   id,
                   status: 'unresolved',
-                  message: "We didn't hear back, so it may already be saved",
+                  message: 'We didn’t hear back, so it may already be saved',
                 })),
               });
             }

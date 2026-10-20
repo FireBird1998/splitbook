@@ -1216,11 +1216,52 @@ describe('App return from an Expense', () => {
     await app.press('Discard draft');
     const [title, , choices] = vi.mocked(Alert.alert).mock.lastCall!;
     expect(title).toBe('Discard this expense draft?');
+    expect(choices!.map((choice) => choice.text)).toEqual(['Keep draft', 'Discard']);
     expect(app.text()).toContain('Draft: Kept for later');
     await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
     expect(app.text()).not.toContain('Draft: Kept for later');
     expect(app.pressable('Add expense').props.accessibilityRole).toBe('button');
   });
+
+  // #674: the Expense's Discard alert said "draft" while everything around it said "item".
+  it.each([
+    ['off', 'draft'],
+    ['on', 'item'],
+  ] as const)(
+    'asks before discarding an Expense in the To review rollout’s words (review flag %s)',
+    async (flag, word) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', flag === 'on' ? 'true' : 'false');
+      try {
+        const app = await renderApp();
+        await app.press('Open Maple House');
+        await app.press('Add expense');
+        await app.type('Description, required', 'Weekly groceries');
+        await app.press('Expense options');
+        await app.press(`Discard ${word}, Removes these entries from this device`);
+
+        const [title, message, choices] = vi.mocked(Alert.alert).mock.lastCall!;
+        expect(title).toBe(`Discard this expense ${word}?`);
+        expect(message).toBe('Your saved entries will be removed from this device.');
+        expect(choices!.map((choice) => choice.text)).toEqual([`Keep ${word}`, 'Discard']);
+        const description = () =>
+          app
+            .root()
+            .find(
+              (node) =>
+                (node.type as unknown) === 'TextInput' &&
+                node.props.accessibilityLabel === 'Description, required',
+            ).props.value;
+        expect(description()).toBe('Weekly groceries');
+        await settle(
+          Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()),
+        );
+        // Discarding opens the form again, empty.
+        expect(description()).toBe('');
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 
   // #331: on the emulator Home moved up 3dp when its progress bar went.
   it('keeps the progress bar’s room on Home when nothing loads', async () => {

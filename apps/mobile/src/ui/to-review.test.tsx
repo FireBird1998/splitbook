@@ -702,7 +702,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     await tap(list, 'Save 2 ready');
     await tap(list, 'Confirm save 2 ready');
-    expect(text(list)).toContain("We didn't hear back, so it may already be saved");
+    expect(text(list)).toContain('We didn’t hear back, so it may already be saved');
     expect(f.requests.values.size).toBe(1);
     await act(async () => {
       focusManager.setFocused(false);
@@ -786,7 +786,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     });
     const run = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     expect(button(run, 'Check again')).toBeDefined();
-    expect(text(run)).toContain("We didn't hear back, so it may already be saved");
+    expect(text(run)).toContain('We didn’t hear back, so it may already be saved');
   });
   it('keeps Home’s rows as buttons, disabled while Home checks (#646)', async () => {
     const f = fixture();
@@ -855,7 +855,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(restarted.getSnapshot().toReview.read.total).toBe(0);
     expect(restarted.toReviewModel().counts.onThisPhone).toBeGreaterThan(0);
     const home = await render(<ToReviewHomeCard controller={restarted} />, mode);
-    expect(text(home)).toContain("We didn't hear back, so it may already be saved");
+    expect(text(home)).toContain('We didn’t hear back, so it may already be saved');
     expect(f.saves).toHaveLength(1);
     await tap(home, 'Check again');
     const overlay = await render(<ToReviewOverlay controller={restarted} />, mode);
@@ -877,7 +877,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     onlineManager.setOnline(false);
     const calls = f.calls.length;
     const home = await render(<ToReviewHomeCard controller={f.controller} />, mode);
-    expect(text(home)).toContain("You're offline. What Claude prepared");
+    expect(text(home)).toContain('You’re offline. What Claude prepared');
     expect(text(home)).toContain('Phone groceries');
     expect(text(home)).not.toContain('4 from Claude');
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
@@ -902,7 +902,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     });
     expect(f.controller.getSnapshot().drafts[0]?.unconfirmed).toBe(true);
     const home = await render(<ToReviewHomeCard controller={f.controller} />, mode);
-    expect(text(home)).toContain("We didn't hear back, so it may already be saved");
+    expect(text(home)).toContain('We didn’t hear back, so it may already be saved');
     const submitted = f.calls.filter(
       (path) => path === `POST /api/groups/${groupId}/expenses`,
     ).length;
@@ -921,7 +921,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       onlineManager.setOnline(false);
       await Promise.resolve();
     });
-    expect(text(home)).toContain("You're offline. What Claude prepared");
+    expect(text(home)).toContain('You’re offline. What Claude prepared');
     expect(text(home)).not.toContain('4 from Claude');
     const reads = f.calls.length;
     await act(async () => {

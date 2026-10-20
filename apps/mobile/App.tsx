@@ -63,6 +63,7 @@ import { useMobileSnapshot, sameSelection } from './src/ui/use-mobile-snapshot';
 import { scrollToShow } from './src/ui/scroll';
 import { returnScrollTarget, visibleRowAnchor, type RowPlaces } from './src/ui/return-scroll';
 import { recordOutline } from './src/ui/expense-record-view';
+import { expenseRecoveryWords } from './src/ui/expense-recovery-copy';
 import { DetailsNotice, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
 import { currentDayKey } from './src/ui/list-day-header';
 import { GroupExpensesView } from './src/ui/group-expenses';
@@ -851,6 +852,21 @@ const HomeScreen = memo(function HomeScreen() {
   );
 });
 
+/**
+ * Asks before an Expense's entries are removed from this device, in the To review rollout's words
+ * when it is on, as the controls that open it are (#674).
+ */
+function confirmDraftDiscard(discard: () => void) {
+  Alert.alert(
+    expenseRecoveryWords('Discard this expense draft?'),
+    'Your saved entries will be removed from this device.',
+    [
+      { text: expenseRecoveryWords('Keep draft'), style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: discard },
+    ],
+  );
+}
+
 /** Shares the open Group's invitation link through Android's share sheet. */
 function shareInvite() {
   void (async () => {
@@ -1085,20 +1101,11 @@ function GroupScreen() {
       : null;
   const discardDraft = useCallback(
     () =>
-      Alert.alert(
-        'Discard this expense draft?',
-        'Your saved entries will be removed from this device.',
-        [
-          { text: 'Keep draft', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () =>
-              void controller.discardKeptDraft().then((discarded) => {
-                if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
-              }),
-          },
-        ],
+      confirmDraftDiscard(
+        () =>
+          void controller.discardKeptDraft().then((discarded) => {
+            if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
+          }),
       ),
     [],
   );
@@ -1551,20 +1558,7 @@ const ExpenseScreen = memo(function ExpenseScreen() {
           ],
         )
       }
-      onDiscard={() =>
-        Alert.alert(
-          'Discard this expense draft?',
-          'Your saved entries will be removed from this device.',
-          [
-            { text: 'Keep draft', style: 'cancel' },
-            {
-              text: 'Discard',
-              style: 'destructive',
-              onPress: () => void controller.discardExpenseDraft(),
-            },
-          ],
-        )
-      }
+      onDiscard={() => confirmDraftDiscard(() => void controller.discardExpenseDraft())}
     />
   );
 });
