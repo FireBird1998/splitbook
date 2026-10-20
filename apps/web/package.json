@@ -27,7 +27,10 @@
     "migrate:ledger": "tsx --tsconfig scripts/tsconfig.json scripts/migrate-ledger.ts",
     "migrate:expense-dates": "tsx --tsconfig scripts/tsconfig.json scripts/migrate-expense-dates.ts",
     "groups:orphans": "tsx --tsconfig scripts/tsconfig.json scripts/orphan-groups.ts",
-    "test:group-cleanup-http": "tsx --tsconfig scripts/tsconfig.json scripts/verify-group-cleanup.ts"
+    "test:group-cleanup-http": "tsx --tsconfig scripts/tsconfig.json scripts/verify-group-cleanup.ts",
+    "test:hotkeys-prototype": "vitest run src/lib/shortcuts/hotkeys-prototype.test.ts src/lib/shortcuts/shortcuts.test.ts src/components/shortcuts/shortcut-hints.test.ts src/components/search/search.test.ts",
+    "measure:hotkeys-prototype": "node scripts/hotkeys-prototype-measure.mjs",
+    "measure:hotkeys-bundle": "node scripts/hotkeys-prototype-bundle.mjs"
   },
   "dependencies": {
     "@better-auth/cimd": "1.7.7",
@@ -43,6 +46,7 @@
     "@mui/material-nextjs": "^7.3.7",
     "@mui/x-charts": "^8.29.3",
     "@splitbook/shared": "workspace:*",
+    "@tanstack/react-hotkeys": "0.16.0",
     "better-auth": "1.7.7",
     "date-fns": "^4.1.0",
     "fflate": "^0.8.3",

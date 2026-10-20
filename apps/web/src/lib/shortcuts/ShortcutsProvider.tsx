@@ -1,5 +1,8 @@
 'use client';
 
+// THROWAWAY HOTKEYS PROTOTYPE (#715): one library-owned page event listener.
+import { useHotkeys } from '@tanstack/react-hotkeys';
+
 import {
   createContext,
   useCallback,
@@ -15,7 +18,8 @@ import { setSingleKeysOn, singleKeysOn, subscribeSingleKeys } from './shortcut-s
 import {
   hintShows,
   shortcut,
-  shortcutFor,
+  SHORTCUTS,
+  shortcutAllowed,
   type Shortcut,
   type ShortcutId,
   type ShortcutTarget,
@@ -90,46 +94,66 @@ export function ShortcutsProvider({ memberId, children }: PropsWithChildren<{ me
   const registry = useRef(new Map<ShortcutId, Registration[]>());
   const handedOn = useRef<{ id: ShortcutId; at: number } | null>(null);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented) return;
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      const match = shortcutFor(event, 'page', {
-        singleKeys,
-        target: describeTarget(target),
-        inSearchField: target?.matches('[data-search-input]') ?? false,
-        overlayOpen: overlayOpen(),
-      });
-      if (!match) return;
-      const handlers = registry.current.get(match.id) ?? [];
-      const handler =
-        handlers.findLast((entry) => !entry.fallback) ??
-        handlers.findLast((entry) => entry.fallback);
-      if (!handler) return;
-      event.preventDefault();
-      handedOn.current = null;
-      handler.run();
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [singleKeys]);
+  useHotkeys(
+    SHORTCUTS.filter((entry) => entry.scope === 'page').flatMap((entry) =>
+      entry.bindings.map((hotkey) => ({
+        hotkey,
+        options: { enabled: !entry.singleKey || singleKeys === true },
+        callback: (event: KeyboardEvent) => {
+          if (event.defaultPrevented || event.key.toLowerCase() !== entry.key) return;
+          const target = event.target instanceof HTMLElement ? event.target : null;
+          if (
+            !shortcutAllowed(entry, event, {
+              singleKeys,
+              target: describeTarget(target),
+              inSearchField: target?.matches('[data-search-input]') ?? false,
+              overlayOpen: overlayOpen(),
+            })
+          )
+            return;
+          const handlers = registry.current.get(entry.id) ?? [];
+          const handler =
+            handlers.findLast((item) => !item.fallback) ??
+            handlers.findLast((item) => item.fallback);
+          if (!handler) return;
+          event.preventDefault();
+          handedOn.current = null;
+          handler.run();
+        },
+      })),
+    ),
+    {
+      // Resolve the actual window after mount; SSR never evaluates a browser global.
+      target: typeof window === 'undefined' ? null : window,
+      capture: false,
+      eventType: 'keydown',
+      ignoreInputs: false,
+      preventDefault: false,
+      stopPropagation: false,
+      requireReset: false,
+      conflictBehavior: 'error',
+    },
+  );
 
-  const register = useCallback((id: ShortcutId, run: Handler, fallback: boolean) => {
-    const entry: Registration = { run, fallback };
-    const handlers = registry.current.get(id) ?? [];
-    registry.current.set(id, [...handlers, entry]);
-    const waiting = handedOn.current;
-    if (!fallback && waiting?.id === id) {
-      handedOn.current = null;
-      if (Date.now() - waiting.at < HAND_ON_MS) run();
-    }
-    return () => {
-      registry.current.set(
-        id,
-        (registry.current.get(id) ?? []).filter((other) => other !== entry),
-      );
-    };
-  }, []);
+  const register = useCallback(
+    (id: ShortcutId, run: Handler, fallback: boolean) => {
+      const entry: Registration = { run, fallback };
+      const handlers = registry.current.get(id) ?? [];
+      registry.current.set(id, [...handlers, entry]);
+      const waiting = handedOn.current;
+      if (!fallback && waiting?.id === id) {
+        handedOn.current = null;
+        if (Date.now() - waiting.at < HAND_ON_MS) run();
+      }
+      return () => {
+        registry.current.set(
+          id,
+          (registry.current.get(id) ?? []).filter((other) => other !== entry),
+        );
+      };
+    },
+    [registry, handedOn],
+  );
 
   const handOn = useCallback((id: ShortcutId) => {
     handedOn.current = { id, at: Date.now() };
