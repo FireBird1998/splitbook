@@ -11,12 +11,17 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
+import { ASSISTANT_CANNOT } from '@/lib/mcp/assistant-limits';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { PRODUCT_NAME } from '@/lib/product';
 
+/** A connection request as the consent screen shows it: the assistant, and what it asks for. */
+type ConsentDetails = { clientId: string; scopes: string[]; name: string; address: string };
+
 /**
- * The permissions a connection request asks for, as the consent screen lists them: the client,
- * ledger access, and, when it asks for them, preparing items for To review and staying connected.
+ * The permissions a connection request asks for, as the consent screen lists them: the assistant
+ * by name, with its address in small text (#614), ledger access, and, when it asks for them,
+ * preparing items for To review and staying connected; then what it can't do, on every approval.
  */
 export function ConsentPermissions({
   details,
@@ -24,15 +29,23 @@ export function ConsentPermissions({
   busy,
   onDraftsChange,
 }: {
-  details: { clientId: string; scopes: string[] };
+  details: ConsentDetails;
   drafts: boolean;
   busy: boolean;
   onDraftsChange: (drafts: boolean) => void;
 }) {
   return (
     <>
-      <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
-        Client identity: {details.clientId}
+      <Box>
+        <Typography variant="h6" component="h2">
+          {details.name} wants to use your {PRODUCT_NAME}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+          {details.address} · identified by its published details
+        </Typography>
+      </Box>
+      <Typography variant="subtitle2" component="h3">
+        What {details.name} can do
       </Typography>
       <Typography>Ledger permission: read Group details, Balances and spending.</Typography>
       {details.scopes.includes(MCP_DRAFT_SCOPE) && (
@@ -58,6 +71,18 @@ export function ConsentPermissions({
           The assistant may stay connected while you are away, until you disconnect it.
         </Typography>
       )}
+      <Box>
+        <Typography variant="subtitle2" component="h3">
+          What {details.name} can’t do
+        </Typography>
+        <Box component="ul" sx={{ m: 0, pl: 3 }}>
+          {ASSISTANT_CANNOT.map((limit) => (
+            <Typography key={limit} component="li" variant="body2">
+              {limit}
+            </Typography>
+          ))}
+        </Box>
+      </Box>
     </>
   );
 }
@@ -71,7 +96,7 @@ export default function OAuthFlow({
   consent: boolean;
   accountId: string;
 }) {
-  const [details, setDetails] = useState<{ clientId: string; scopes: string[] } | null>(null);
+  const [details, setDetails] = useState<ConsentDetails | null>(null);
   const [drafts, setDrafts] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
