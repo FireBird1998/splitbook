@@ -171,6 +171,11 @@ interface View {
   since: number;
   /** Reads of this open running, or waiting for the Group read they follow. */
   reading: number;
+  /**
+   * The internet returned while this open's reads ran (#681): once they end, it reads again if
+   * they ended offline.
+   */
+  recovering: boolean;
   detail: Detail | null;
   /**
    * Read beside its Group, before the Group's check passed (owner decision, 2026-10-06). Should
@@ -677,6 +682,11 @@ export function createActivityQueries(session: ActivitySession) {
         // Landed after the Group's check: what it read shows, or its failure with what was read.
         if (checked) opened.beside = false;
         if (session.current(owner)) reproject();
+        // The internet returned while they ran: whether to read again waits until all have ended.
+        if (!opened.reading && opened.recovering) {
+          opened.recovering = false;
+          if (view === opened) recover();
+        }
       }
       return answered;
     })();
@@ -707,6 +717,32 @@ export function createActivityQueries(session: ActivitySession) {
       }
       return;
     }
+  };
+
+  /** Activity on screen reads again what is past its stale time, as a reconnect does (M1-4). */
+  const again = () => {
+    if (view && onScreen() && session.checked(view.groupId))
+      void read(session.generation()).catch(() => undefined);
+  };
+  /**
+   * The internet returned while the device stayed connected, so the online manager didn't change
+   * (#681, as #678 for a Group's view). Activity that shows this phone's copy, or a read that
+   * failed offline, reads again once, as on a reconnect: the offline banner clears when that read
+   * lands. A failure Splitbook answered stays until Retry, a pull or the next open. A read under
+   * way, its own or a Load older or newer, may still end offline, so Activity first waits for its
+   * reads to end.
+   */
+  const recover = () => {
+    const opened = view,
+      owner = session.generation();
+    if (!opened) return;
+    if (opened.reading) opened.recovering = true;
+    // A Load older or newer reads through the observer, not `read`: a read now would join it.
+    else if (held(activityKey(opened.groupId))?.state.fetchStatus === 'fetching')
+      void settle(owner).then(() => {
+        if (view === opened && session.current(owner)) recover();
+      });
+    else if (session.offline()) again();
   };
 
   /** The Expense an open event names, as its record query holds it now. */
@@ -926,6 +962,7 @@ export function createActivityQueries(session: ActivitySession) {
           lost: false,
           since: Date.now(),
           reading: 0,
+          recovering: false,
           detail: null,
           beside: false,
           preview: null,
@@ -1115,10 +1152,6 @@ export function createActivityQueries(session: ActivitySession) {
      * publish wherever they land, and are saved as rows. Returns what stops listening.
      */
     listen(focus: typeof focusManager, online: typeof onlineManager) {
-      const again = () => {
-        if (view && onScreen() && session.checked(view.groupId))
-          void read(session.generation()).catch(() => undefined);
-      };
       const stops = [
         client.getQueryCache().subscribe((event) => {
           // A removed query's requests are obsolete: they are cancelled, never offline (#214).
@@ -1145,6 +1178,8 @@ export function createActivityQueries(session: ActivitySession) {
       ];
       return () => stops.forEach((stop) => stop());
     },
+    /** The internet returned on the connection the device kept (#681): Home's NetInfo says so. */
+    recover,
     /** Settles once no saved copy is being written. */
     idle: () => queue.idle(),
     /** The session ended (M10-2): nothing waiting is written, nothing is observed. */

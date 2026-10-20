@@ -133,8 +133,18 @@ function fixture() {
     await step.released;
   };
   const calls: { method: string; path: string }[] = [];
-  const held: { path: string; arrive: () => void; answer: Promise<void>; exact: boolean }[] = [];
-  const connection = new Set<(state: { isConnected: boolean | null }) => void>();
+  const held: {
+    path: string;
+    arrive: () => void;
+    answer: Promise<void>;
+    exact: boolean;
+    /** Its answer is lost on the way back, as when the connection drops. */
+    lost: boolean;
+  }[] = [];
+  type ConnectionState = { isConnected: boolean | null; isInternetReachable?: boolean | null };
+  /** What NetInfo last reported, once a test has reported something. */
+  let connectionState: ConnectionState | null = null;
+  const connection = new Set<(state: ConnectionState) => void>();
   const records = (map: Map<string, unknown>) => ({
     load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
     save: async (account: string, key: string, value: unknown) => {
@@ -332,9 +342,10 @@ function fixture() {
         },
         savedQueries,
         netInfo: {
+          // As NetInfo does, a new listener hears the connection as it is now.
           addEventListener: (listener) => {
             connection.add(listener);
-            listener({ isConnected: !server.offline });
+            listener(connectionState ?? { isConnected: !server.offline });
             return () => connection.delete(listener);
           },
         },
@@ -388,7 +399,10 @@ function fixture() {
           // The server answers as it is when the request arrives; the reply comes on release.
           const [request] = held.splice(index, 1);
           request.arrive();
-          return request.answer.then(() => reply);
+          return request.answer.then(() => {
+            if (request.lost) throw new TypeError('Network request failed');
+            return reply;
+          });
         },
       },
     );
@@ -419,7 +433,7 @@ function fixture() {
     /** The writes sent since `from`. */
     writes: (from = 0) => calls.slice(from).filter((call) => call.method !== 'GET'),
     /** The next request whose path starts with `path` is answered at once; its reply on release. */
-    hold(path: string, { exact = false } = {}) {
+    hold(path: string, { exact = false, lost = false } = {}) {
       let arrive!: () => void;
       let release!: () => void;
       const reached = new Promise<void>((resolve) => {
@@ -428,7 +442,7 @@ function fixture() {
       const answer = new Promise<void>((resolve) => {
         release = resolve;
       });
-      held.push({ path, arrive, answer, exact });
+      held.push({ path, arrive, answer, exact, lost });
       return { reached, release };
     },
     /** The next write of this path's row waits until released. */
@@ -444,9 +458,12 @@ function fixture() {
       writes.push({ path, arrive, released });
       return { reached, release };
     },
-    connect(isConnected: boolean) {
-      server.offline = !isConnected;
-      connection.forEach((listener) => listener({ isConnected }));
+    /** NetInfo reports the device's connection, and whether it reaches the internet. */
+    connect(isConnected: boolean, isInternetReachable?: boolean | null) {
+      const state = { isConnected, isInternetReachable };
+      server.offline = !isConnected || isInternetReachable === false;
+      connectionState = state;
+      connection.forEach((listener) => listener(state));
     },
     /** This account's persister rows whose path starts with `prefix`. */
     savedRows: (prefix: string, account = alex.id) =>
@@ -1934,4 +1951,112 @@ describe('the Group’s details after a refused save (the device check)', () => 
     await controller.reconcileExpense();
     expect(f.gets(from)[0]).toBe('record bill');
   });
+});
+
+// #681, after #678 (owner decision, 2026-10-20). Wi-Fi can connect before it reaches the
+// internet, and NetInfo reports the two separately. The online manager follows the connection
+// only, so it doesn't change when just the internet returns. An Expense record that shows this
+// phone's copy, or a read that failed offline, then reads again once, as on reconnecting, and the
+// offline banner clears when that read lands. A failure Splitbook answered stays until Try again.
+describe('an Expense record shown offline reads again once the internet returns (#681)', () => {
+  it('reads the record and its changes again once the internet returns, and the banner lifts', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await controller.back();
+    await settle();
+    const savedAt = Date.now();
+    later(60_000);
+    // Wi-Fi without the internet: the bill opens on what this phone kept.
+    f.connect(true, false);
+    await controller.openExpense(mapleId, billId);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true, refreshedAt: savedAt },
+      expense: { status: 'detail', draft: { original: { revision: 1 } } },
+    });
+    f.server.records.set(billId, record(billId, 'Electricity bill (August)', 2));
+    const from = f.calls.length;
+    // The internet returns on the Wi-Fi the phone kept, and NetInfo says so twice.
+    f.connect(true, true);
+    f.connect(true, true);
+    await settle();
+    expect(f.gets(from)).toEqual(afterOffline);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false, refreshedAt: null },
+      expense: { status: 'detail', draft: { original: { revision: 2 } } },
+    });
+    // Read live, the record shows no copy: the internet dropping and returning reads nothing more.
+    const again = f.calls.length;
+    f.connect(true, false);
+    f.connect(true, true);
+    await settle();
+    expect(f.gets(again)).toEqual([]);
+  });
+
+  it('reads the record again after a Try again under way when the internet returns, once it ends offline', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await controller.back();
+    await settle();
+    later(60_000);
+    f.connect(true, false);
+    await controller.openExpense(mapleId, billId);
+    expect(controller.getSnapshot().offline.active).toBe(true);
+    // Try again starts just before the internet returns, and the record's answer is lost.
+    f.server.offline = false;
+    const read = f.hold(recordPath(billId), { exact: true, lost: true });
+    const retrying = controller.refresh();
+    await read.reached;
+    const sent = f.calls.length;
+    f.connect(true, true);
+    await settle();
+    // Nothing is sent beside the read under way.
+    expect(f.gets(sent)).toEqual([]);
+    read.release();
+    await retrying;
+    await settle();
+    await settle();
+    // Try again ends first: its record fell back to this phone's copy, then it read the changes.
+    // That copy keeps the banner, so the record is read once more, live, as on reconnecting.
+    expect(f.gets(sent)).toEqual([
+      '/api/auth/get-session',
+      'history bill p1',
+      '/api/auth/get-session',
+      'group',
+      '/api/auth/get-session',
+      'record bill',
+      'history bill p1',
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false },
+      expense: { status: 'detail', draft: { original: { revision: 1 } } },
+    });
+  });
+
+  it.each(['a server failure', 'a refusal'] as const)(
+    'keeps %s Splitbook answered for the record, and reads nothing, when the internet returns',
+    async (failure) => {
+      const f = fixture();
+      const controller = await signedIn(f);
+      // NetInfo hasn't confirmed the internet yet, but Splitbook answers.
+      f.connect(true, false);
+      f.server.offline = false;
+      if (failure === 'a server failure') f.server.failRecord = true;
+      else f.server.group = 403;
+      await controller.openExpense(mapleId, billId);
+      await settle();
+      const shown = controller.getSnapshot();
+      expect(shown).toMatchObject({
+        screen: 'expense',
+        offline: { active: false },
+        expense: { status: 'blocked', draft: null },
+      });
+      const from = f.calls.length;
+      f.connect(true, true);
+      await settle();
+      expect(f.gets(from)).toEqual([]);
+      expect(controller.getSnapshot().expense).toEqual(shown.expense);
+    },
+  );
 });

@@ -1246,9 +1246,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     lost: (groupId) => lostGroups.has(groupId),
   });
   const listening = [
-    // The internet's return, which the online manager doesn't follow, reaches the Group's view
-    // too (#678).
-    homeQueries.listen(focusManager, onlineManager, dependencies.netInfo, groupQueries.recover),
+    // The internet's return, which the online manager doesn't follow, reaches the screen shown
+    // too: a Group's view (#678), its Activity, an Expense record and Members (#681).
+    homeQueries.listen(focusManager, onlineManager, dependencies.netInfo, () => {
+      groupQueries.recover();
+      activityQueries.recover();
+      void expenseQueries.recover();
+      void recoverMembers();
+    }),
     groupQueries.listen(focusManager, onlineManager),
     expenseQueries.listen(focusManager, onlineManager),
     activityQueries.listen(focusManager, onlineManager),
@@ -6071,7 +6076,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * verified within the display freshness window and joins identical reads already in flight.
    */
   const refresh = async (origin: 'pull' | 'retry' | 'foreground' = 'retry') => {
-    if (origin === 'retry') return refreshView(false);
+    if (origin === 'retry') return reread(false);
     const kind = origin === 'pull' ? 'pull' : 'automatic';
     const views = running[kind];
     const mark = (view: string | null) => {
@@ -6085,7 +6090,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // screen observes, and those past their stale time read again.
     if (origin === 'foreground') focusManager.onFocus();
     try {
-      await refreshView(origin === 'foreground');
+      await reread(origin === 'foreground');
     } finally {
       views.splice(views.lastIndexOf(view), 1);
       // A sign-out or restore since then has already cleared it.
@@ -6093,6 +6098,62 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  /** Re-reads of the screen shown still under way, which the internet's return waits for (#681). */
+  const rereads = new Set<Promise<void>>();
+  /** Re-reads the screen shown, as one of the re-reads under way. */
+  const reread = (reuse: boolean) => {
+    const reading = refreshView(reuse);
+    rereads.add(reading);
+    const done = () => rereads.delete(reading);
+    reading.then(done, done);
+    return reading;
+  };
+  /**
+   * Waits until Members reads nothing: neither a re-read of the screen nor a read of its Group,
+   * such as the open's, which a read now would join. Bounded, as Activity's `settle` is.
+   */
+  const untilMembersReadsEnd = async (key: QueryKey) => {
+    for (let round = 0; round < 1000; round += 1) {
+      const group = queryClient.getQueryCache().find({ queryKey: key, exact: true });
+      const reading: Promise<unknown>[] = [...rereads];
+      if (group?.state.fetchStatus === 'fetching' && group.promise) reading.push(group.promise);
+      if (!reading.length) return;
+      await Promise.allSettled(reading);
+    }
+  };
+  /** The internet's return being handled on Members: its view, and how many returns it heard. */
+  let membersRecovery: { view: Route; heard: number } | null = null;
+  /**
+   * The internet returned while the device stayed connected, so the online manager didn't change
+   * (#681, as #678 for a Group's view). Members and Group details that shows this phone's copy of
+   * its Group, or a read that failed offline, reads its Group again once, as Retry does: the
+   * offline banner clears when that read lands. A failure Splitbook answered stays until Retry or
+   * a pull. A read under way may still end offline, so this first waits for it to end, and a
+   * return heard meanwhile is handled once this one's read ends.
+   */
+  const recoverMembers = async () => {
+    const view = route,
+      owner = generation;
+    if (view.screen !== 'members') return;
+    const key = groupKey(account(), view.groupId);
+    if (membersRecovery?.view === view) {
+      membersRecovery.heard += 1;
+      return;
+    }
+    const recovery = { view, heard: 1 };
+    membersRecovery = recovery;
+    try {
+      for (let handled = 0; handled !== recovery.heard; ) {
+        handled = recovery.heard;
+        await untilMembersReadsEnd(key);
+        if (!current(owner) || route !== view || !(offlineSession || snapshot.offline.active))
+          return;
+        await reread(false).catch(() => undefined);
+      }
+    } finally {
+      if (membersRecovery === recovery) membersRecovery = null;
+    }
+  };
   /** `reuse`: a foreground refresh may show reads verified within the display freshness window. */
   const refreshView = async (reuse: boolean) => {
     if (['restoring', 'signing-in'].includes(snapshot.auth.status)) return;

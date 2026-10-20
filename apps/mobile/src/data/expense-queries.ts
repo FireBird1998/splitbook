@@ -165,6 +165,12 @@ interface View {
   history: boolean;
   /** How many Try agains are reading this open's record again: while any is, it says so. */
   retrying: number;
+  /** This open's re-reads under way, which the internet's return waits for (#681). */
+  rereads: Set<Promise<void>>;
+  /** How many returns of the internet this open has heard (#681). */
+  recoveries: number;
+  /** One is being handled: another heard meanwhile is handled once its reads end. */
+  recovering: boolean;
 }
 type Read = {
   fresh?: boolean;
@@ -759,7 +765,7 @@ export function createExpenseQueries(session: ExpenseSession) {
    * the session check (#192). One shown read-only takes the version read; an edit or a deletion
    * under review keeps its own (M6-1). A refusal, or the Expense gone, withdraws what shows.
    */
-  const again = async (kind: 'foreground' | 'reconnect' | 'retry') => {
+  const readAgain = async (kind: 'foreground' | 'reconnect' | 'retry') => {
     const opened = view,
       owner = session.generation(),
       fresh = kind === 'retry';
@@ -810,6 +816,58 @@ export function createExpenseQueries(session: ExpenseSession) {
       unmark(false);
     }
   };
+  /** The screen reads again (`readAgain`), as one of this open's re-reads under way. */
+  const again = (kind: 'foreground' | 'reconnect' | 'retry') => {
+    const opened = view,
+      reading = readAgain(kind);
+    if (opened) {
+      opened.rereads.add(reading);
+      const done = () => opened.rereads.delete(reading);
+      reading.then(done, done);
+    }
+    return reading;
+  };
+  /**
+   * Waits until this open reads nothing: neither a re-read nor any query it shows. Bounded, as
+   * Activity's `settle` is.
+   */
+  const untilReadsEnd = async (opened: View) => {
+    for (let round = 0; round < 1000 && view === opened; round += 1) {
+      const fetching = api
+        .shownKeys(session.snapshot())
+        .map((key) => held(key))
+        .filter((query) => query?.state.fetchStatus === 'fetching')
+        .map((query) => query!.promise);
+      const reading = [...opened.rereads, ...fetching];
+      if (!reading.length) return;
+      await Promise.allSettled(reading);
+    }
+  };
+  /**
+   * The internet returned while the device stayed connected, so the online manager didn't change
+   * (#681, as #678 for a Group's view). A record that shows this phone's copy, or a read that
+   * failed offline, reads again once, as on reconnecting: the offline banner clears when that read
+   * lands. A failure Splitbook answered stays until Try again. A read under way may still end
+   * offline, so the record first waits for its reads to end.
+   */
+  const recover = async () => {
+    const opened = view,
+      owner = session.generation();
+    if (!opened || !onScreen()) return;
+    opened.recoveries += 1;
+    if (opened.recovering) return;
+    opened.recovering = true;
+    try {
+      for (let handled = 0; handled !== opened.recoveries; ) {
+        handled = opened.recoveries;
+        await untilReadsEnd(opened);
+        if (!session.current(owner) || view !== opened || !onScreen() || !session.offline()) return;
+        await again('reconnect');
+      }
+    } finally {
+      opened.recovering = false;
+    }
+  };
   /** A Try again of this open starts or ends: its record says so while it shows. */
   const mark = (opened: View, by: 1 | -1, quietly = false) => {
     opened.retrying = Math.max(0, opened.retrying + by);
@@ -855,6 +913,9 @@ export function createExpenseQueries(session: ExpenseSession) {
         lost: false,
         history: false,
         retrying: 0,
+        rereads: new Set(),
+        recoveries: 0,
+        recovering: false,
       };
     },
     /**
@@ -1027,6 +1088,8 @@ export function createExpenseQueries(session: ExpenseSession) {
     settle: () => foreground,
     /** Try again: the session, the Group, then the record and its changes, read again now. */
     retry: () => again('retry'),
+    /** The internet returned on the connection the device kept (#681): Home's NetInfo says so. */
+    recover,
     /**
      * Try again on the record's changes, also while it is edited: every page loaded is read
      * again, from the window's first, and the changes shown stay until they land (M1-3).
