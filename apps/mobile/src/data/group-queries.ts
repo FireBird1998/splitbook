@@ -260,6 +260,11 @@ interface View {
   lost: boolean;
   /** Reads of this open (or a refresh of it) are running. */
   reading: number;
+  /**
+   * The internet returned while this open's reads ran (#678): once they end, it reads again if
+   * they ended offline.
+   */
+  recovering: boolean;
   /** Whether the Group is a Household, once known: only a Household has a Month to show. */
   household: boolean | null;
   /** The Month shown before, kept when this Group opens again; undefined for a first open. */
@@ -675,11 +680,12 @@ export function createGroupQueries(session: GroupSession) {
       ? session.freshness
       : STALE;
   };
-  // Only what the view lacks is read on its own; the view's own reads, the foreground and a
-  // reconnect read in order, Group then Expenses then Balances.
+  // Only what the view lacks is read on its own; the view's own reads, the foreground, a
+  // reconnect and the internet's return read in order, Group then Expenses then Balances.
   const shared = {
     staleTime,
-    // A read that failed shows its failure until Retry, a pull or the next open reads it again.
+    // A read that failed shows its failure until Retry, a pull or the next open reads it again;
+    // one that failed offline, also until a reconnect or the internet's return (`recover`, #678).
     retryOnMount: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -961,6 +967,11 @@ export function createGroupQueries(session: GroupSession) {
     } finally {
       opened.reading -= 1;
       if (session.current(owner)) reproject();
+      // The internet returned while they ran: whether to read again waits until all have ended.
+      if (!opened.reading && opened.recovering) {
+        opened.recovering = false;
+        if (view === opened) recover();
+      }
     }
     // What its reads set off meanwhile, such as Balances read again after another Month's read.
     if (ended && session.current(owner) && view === opened && !onScreen()?.sheet)
@@ -1081,6 +1092,27 @@ export function createGroupQueries(session: GroupSession) {
       if (!sameMonth(list)()) return still();
     }
     return followBalances();
+  };
+  /**
+   * The view on Expenses or Balances reads again what is past its stale time, in order, as the
+   * foreground and a reconnect read it (M1-4, M1-6). Activity reads itself (#222).
+   */
+  const again = () => {
+    const shown = onScreen();
+    if (!shown || shown.sheet || shown.destination === 'activity' || !view || view.lost) return;
+    void read(session.generation()).catch(() => undefined);
+  };
+  /**
+   * The internet returned while the device stayed connected, so the online manager didn't change
+   * (#678). A view that shows this phone's copy, or a read that failed offline, reads again once,
+   * as on a reconnect: the offline banner, and the write rules it carries (#219), clear when that
+   * read lands. A failure Splitbook answered stays until Retry, a pull or the next open. A read
+   * under way may still end offline, so the view first waits for its reads to end.
+   */
+  const recover = () => {
+    if (!view) return;
+    if (view.reading) view.recovering = true;
+    else if (session.offline()) again();
   };
 
   /** The Expenses shown for the Month, from their query, in the snapshot's shape. */
@@ -1423,6 +1455,7 @@ export function createGroupQueries(session: GroupSession) {
         checked: false,
         lost: false,
         reading: 0,
+        recovering: false,
         household: null,
         previousMonth,
         since: Date.now(),
@@ -1651,13 +1684,6 @@ export function createGroupQueries(session: GroupSession) {
      * saved as rows. Returns what stops listening.
      */
     listen(focus: typeof focusManager, online: typeof onlineManager) {
-      // Activity reads itself on the foreground (#222); the Group's view on Expenses or Balances
-      // reads here.
-      const again = () => {
-        const shown = onScreen();
-        if (!shown || shown.sheet || shown.destination === 'activity' || !view || view.lost) return;
-        void read(session.generation()).catch(() => undefined);
-      };
       const stops = [
         client.getQueryCache().subscribe((event) => {
           // A removed query's requests are obsolete: they are cancelled, never offline (#214).
@@ -1710,6 +1736,8 @@ export function createGroupQueries(session: GroupSession) {
       ];
       return () => stops.forEach((stop) => stop());
     },
+    /** The internet returned on the connection the device kept (#678): Home's NetInfo says so. */
+    recover,
     /** Settles once no saved copy is being written. */
     idle: () => queue.idle(),
     /** The session ended (M10-2): nothing waiting is written, nothing is observed. */

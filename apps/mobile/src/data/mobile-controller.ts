@@ -1246,7 +1246,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     lost: (groupId) => lostGroups.has(groupId),
   });
   const listening = [
-    homeQueries.listen(focusManager, onlineManager, dependencies.netInfo),
+    // The internet's return, which the online manager doesn't follow, reaches the Group's view
+    // too (#678).
+    homeQueries.listen(focusManager, onlineManager, dependencies.netInfo, groupQueries.recover),
     groupQueries.listen(focusManager, onlineManager),
     expenseQueries.listen(focusManager, onlineManager),
     activityQueries.listen(focusManager, onlineManager),
