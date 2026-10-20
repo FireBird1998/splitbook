@@ -286,7 +286,15 @@ interface Start {
   change: number;
   open: number;
 }
-type Step = 'group' | 'expenses' | 'balances';
+/** Where a read of a Group's view starts: its Group, its Month's Expenses, or its Balances. */
+export type Step = 'group' | 'expenses' | 'balances';
+/**
+ * The Group's details show this phone's copy, as an offline read leaves them: that copy keeps the
+ * offline banner until the Group is read again (#682). A failure Splitbook answered shows as an
+ * error instead, and is read again only by Retry or a pull.
+ */
+export const savedGroupShown = (detail: MobileSnapshot['detail']) =>
+  detail.status === 'ready' && !!detail.restored;
 
 /**
  * A Group's own view on declarative queries (ADR 0006, M1-1; #219): the Group, its Expenses for

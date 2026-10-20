@@ -28,7 +28,14 @@ import {
   type ActivityState,
 } from './activity';
 import { parseGroup } from './dto';
-import { MAX_PAGES, rowPaths, sharePages, STALE, type PageEnvelope } from './group-queries';
+import {
+  MAX_PAGES,
+  rowPaths,
+  savedGroupShown,
+  sharePages,
+  STALE,
+  type PageEnvelope,
+} from './group-queries';
 import { createSavedCopyQueue, notSaved, type Envelope } from './home-queries';
 import { cachedRead } from './offline-cache';
 import { keepInvalidated, queryOwner } from './query-owner';
@@ -620,8 +627,8 @@ export function createActivityQueries(session: ActivitySession) {
    * the newest page when none is. `fresh` reads them again now; otherwise a read verified within
    * the freshness window is reused. `after`: the Group read it follows (a Household's, or a
    * Group not known yet); when that fails, Activity isn't read. A refusal drops the Group. Without
-   * one, a Group shown from this phone's copy is read again first, and Activity follows it: that
-   * copy keeps the offline banner until its own read lands (#682).
+   * one, a Group shown from this phone's copy is read again first, and Activity follows it, whatever
+   * it answers: that copy keeps the offline banner until its own read lands (#682).
    */
   const read = (
     owner: number,
@@ -637,11 +644,10 @@ export function createActivityQueries(session: ActivitySession) {
     // Only while Activity shows: one a change cancelled is read again only if the member is on it.
     const still = () => view === opened && !opened.lost && session.current(owner) && onScreen();
     const { detail } = session.snapshot();
-    const group =
-      after ??
-      (detail.id === opened.groupId && detail.status === 'ready' && detail.restored
+    const groupRead =
+      !after && detail.id === opened.groupId && savedGroupShown(detail)
         ? session.readGroup(opened.groupId, owner, { fresh: false, wanted: () => !!still() })
-        : undefined);
+        : null;
     opened.reading += 1;
     const reading = (async (): Promise<boolean> => {
       // What this device saved shows while the Group is first read, with its own time.
@@ -653,13 +659,13 @@ export function createActivityQueries(session: ActivitySession) {
       let checked = false;
       try {
         reproject();
-        if (group) {
+        if (after) {
           try {
-            await group;
+            await after;
           } catch {
             return false;
           }
-        }
+        } else if (groupRead) await groupRead.catch(() => undefined);
         if (!still()) return false;
         // A read again would join a Load older or newer still on its way: that page lands first,
         // then every page loaded is read again.
@@ -750,7 +756,22 @@ export function createActivityQueries(session: ActivitySession) {
       void settle(owner).then(() => {
         if (view === opened && session.current(owner)) recover();
       });
-    else if (session.offline()) again();
+    else if (shownOffline(opened)) again();
+  };
+  /**
+   * What this open shows is this phone's copy, or a read that failed offline: Activity's pages, or
+   * its Group's details (#682). A failure Splitbook answered doesn't count, and nor does a live
+   * Activity beside it: the internet's return reads only what is offline.
+   */
+  const shownOffline = (opened: View) => {
+    const { activity, detail } = session.snapshot();
+    const state = held(activityKey(opened.groupId))?.state,
+      error = state && failure(state);
+    return (
+      (activity.groupId === opened.groupId && !!activity.restored) ||
+      (!!error && unreachable(error)) ||
+      (detail.id === opened.groupId && savedGroupShown(detail))
+    );
   };
 
   /** The Expense an open event names, as its record query holds it now. */
