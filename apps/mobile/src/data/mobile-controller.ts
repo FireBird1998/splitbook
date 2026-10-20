@@ -116,7 +116,7 @@ import {
 import { parseInvitationLink, parseToReviewLink } from './invitation-links';
 import { parseGroupBalances } from './financial-dto';
 import { createHomeQueries, draftSummaries, emptyHome, type Envelope } from './home-queries';
-import { createGroupQueries, emptyExpenses } from './group-queries';
+import { createGroupQueries, emptyExpenses, savedGroupShown, type Step } from './group-queries';
 import { createExpenseQueries } from './expense-queries';
 import { createActivityQueries } from './activity-queries';
 import { untrustedCopies } from './untrusted-copies';
@@ -2257,10 +2257,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       publish({ ...snapshot, keptDraft: kept });
   };
   /**
-   * The view's Expenses and Balances read from `from` on (`groupQueries`), with the Group's
+   * The view's Group, Expenses and Balances read from `from` on (`groupQueries`), with the Group's
    * unconfirmed payment, which Balances offers, read from this device alongside.
    */
-  const readFinancial = async (from: 'expenses' | 'balances', fresh = false) => {
+  const readFinancial = async (from: Step, fresh = false) => {
     const groupId = overGroup() ? snapshot.detail.data?.id : undefined;
     const pending = groupId ? loadPendingPayment(groupId) : null;
     const owner = generation,
@@ -2349,9 +2349,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     else if (
       snapshot.financial.groupId === groupId &&
       (at.destination === 'activity' || snapshot.financial.expenses.status === 'idle')
-    )
-      // Read unless verified within the freshness window.
-      await readFinancial('expenses');
+    ) {
+      // Read unless verified within the freshness window; a Group shown from this phone's copy is
+      // read again beside them, since that copy keeps the offline banner (#682).
+      const rereadGroup = savedGroupShown(snapshot.detail);
+      await readFinancial(rereadGroup ? 'group' : 'expenses');
+      // Back on Activity while its Group was read, which skipped reading it: Activity follows.
+      if (rereadGroup && showingActivity() && snapshot.detail.id === groupId)
+        await activityQueries.read(generation, { saved: true });
+    }
   };
 
   /** Open a Group on its Activity destination. */
