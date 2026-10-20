@@ -17,7 +17,6 @@ import {
   buildExpenseCsv,
   buildPaymentCsv,
   serializeCsv,
-  spreadsheetCellText,
   zonedDay,
   expenseDay,
   type ExportExpense,
@@ -28,7 +27,11 @@ import {
   planExportFiles,
   type ExportRequest,
 } from '@splitbook/shared/export-request';
-import { EXPORT_PREVIEW_ROWS, type ExportPreview } from '@splitbook/shared/export-preview';
+import {
+  buildCsvPreviews,
+  buildStatementPreview,
+  type ExportPreview,
+} from '@splitbook/shared/export-preview';
 import { displayTagReference } from '@splitbook/shared/tag-identity';
 
 /** An export over `EXPORT_MAX_ROWS`: refused before any file is built. */
@@ -202,38 +205,7 @@ export class ExportService {
         empty: statement.currencies.every(
           (bucket) => bucket.expenseCount === 0 && bucket.payments.length === 0,
         ),
-        statement: {
-          id: statement.id,
-          name: statement.name,
-          theme: statement.theme,
-          defaultCurrency: statement.defaultCurrency,
-          from: statement.from,
-          to: statement.to,
-          timeZone: statement.timeZone,
-          currencies: statement.currencies.map((bucket) => ({
-            currency: bucket.currency,
-            spentMinor: bucket.spentMinor,
-            expenseCount: bucket.expenseCount,
-            paymentTotalMinor: bucket.paymentTotalMinor,
-            paymentCount: bucket.payments.length,
-            people: bucket.people.map(({ id, name, paidMinor, shareMinor, netMinor }) => ({
-              id,
-              name,
-              paidMinor,
-              shareMinor,
-              netMinor,
-            })),
-            expenses: bucket.expenses
-              .slice(0, EXPORT_PREVIEW_ROWS)
-              .map(({ id, date, description, tag, amountMinor }) => ({
-                id,
-                date,
-                description,
-                tag,
-                amountMinor,
-              })),
-          })),
-        },
+        statement: buildStatementPreview(statement),
       };
     }
     if (request.format === 'json') {
@@ -289,12 +261,11 @@ export class ExportService {
       timeZone: request.timeZone,
       fileName: plan.download,
       empty: tables.every((table) => table.rows.length === 0),
-      files: tables.map((table, index) => ({
+      // The reply's Text budget runs across its files, in this order.
+      files: buildCsvPreviews(tables).map((preview, index) => ({
         name: plan.files[index].name,
         kind: plan.files[index].kind,
-        header: table.header.map(spreadsheetCellText),
-        rows: table.rows.slice(0, EXPORT_PREVIEW_ROWS).map((row) => row.map(spreadsheetCellText)),
-        totalRows: table.rows.length,
+        ...preview,
       })),
     };
   }

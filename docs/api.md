@@ -1374,7 +1374,12 @@ JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
 - All formats carry `format`, `groupNames`, `generatedAt`, `from`, `to`,
   `timeZone` and `empty`.
 - CSV carries `fileName` and `files`: each file has `name`, `kind`, `header`,
-  at most five `rows`, and `totalRows`. Cells match parsed download cells,
+  at most five `rows`, `totalRows`, and `text` with the complete CSV file, including
+  its UTF-8 BOM and CRLF line endings, for a file of up to 256 KB in UTF-8
+  (`EXPORT_PREVIEW_TEXT_BYTES`), while the reply's files stay within 1 MB of `text`
+  together (`EXPORT_PREVIEW_TEXT_TOTAL_BYTES`), in file order. A larger file has no
+  `text` and takes none of that total; from the first file that would pass it, no later
+  file has `text` either. A file without `text` says in its Text view to download it. Table / Text selects the sample or raw file. Cells match parsed download cells,
   including the leading apostrophe protecting spreadsheet formulas. Queries,
   column order, exact money formatting and row order use the download builders.
 - JSON carries `fileName`, approximate `sizeBytes`, `earliestMonth`,
@@ -1391,8 +1396,10 @@ JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
   projects the canonical printable statement builder into `statement`, with
   its header and currency buckets: `spentMinor`, `expenseCount`,
   `paymentTotalMinor`, `paymentCount`, named `people` (Paid, Share, Net in
-  minor units for the period), and up to five first `expenses`. Currency buckets
-  remain separate; current all-time balances are not period contributions.
+  minor units for the period, plus current all-time `balanceMinor`),
+  `suggestedPayments`, and up to five first `expenses` including `paidBy` and
+  `splitBetween` allocations. Currency buckets remain separate; current all-time
+  balances and Suggested payments are not period contributions.
   The existing printable page still supplies print/save as PDF.
 
 Preview uses the same membership check and real row limit as its download or
