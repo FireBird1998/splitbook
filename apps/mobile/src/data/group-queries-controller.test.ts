@@ -1885,9 +1885,8 @@ describe('a Group shown offline reads again once the internet returns (#678)', (
 
 // #681, after #678 (owner decision, 2026-10-20). Members and Group details shows its Group's
 // read, or this phone's copy of it. When only the internet returns, a Members page that shows a
-// copy, or a read that failed offline, reads its Group again once, as a return to the foreground
-// does, and the offline banner clears when that read lands. A failure Splitbook answered stays
-// until Retry or a pull.
+// copy, or a read that failed offline, reads its Group again once, as Retry does, and the offline
+// banner clears when that read lands. A failure Splitbook answered stays until Retry or a pull.
 describe('Members shown offline reads its Group again once the internet returns (#681)', () => {
   it('reads its Group again once the internet returns, and the banner lifts', async () => {
     const f = fixture();
@@ -1922,7 +1921,7 @@ describe('Members shown offline reads its Group again once the internet returns 
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'members',
       offline: { active: false, refreshedAt: null },
-      detail: { status: 'ready', restored: false, refreshedAt: Date.now() },
+      detail: { status: 'ready', restored: false, refreshedAt: start + 60_000 },
     });
     // Read live, Members shows no copy: the internet dropping and returning reads nothing more.
     const again = f.calls.length;
@@ -1960,6 +1959,41 @@ describe('Members shown offline reads its Group again once the internet returns 
     expect(f.gets(sent)).toEqual([]);
     read.release();
     await pulling;
+    await settle();
+    // It ended on this phone's copy, so the Group is read once more, live, as Retry reads it.
+    expect(f.gets(sent)).toEqual(['/api/auth/get-session', '/api/auth/get-session', 'group']);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      offline: { active: false },
+      detail: { status: 'ready', restored: false },
+    });
+  });
+
+  it('reads its Group again after the Group’s own read under way when the internet returns, once it ends offline', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId, true, 'expenses');
+    await settle();
+    await controller.back();
+    later(60_000);
+    f.connect(true, false);
+    // The Group opens again just before the internet returns, its read's answer is lost, and
+    // Members opens while it is read.
+    f.server.offline = false;
+    const read = f.hold(maplePath, { exact: true, lost: true });
+    const opening = controller.openGroup(mapleId, true, 'expenses');
+    await read.reached;
+    controller.openMembers();
+    expect(controller.getSnapshot().screen).toBe('members');
+    const sent = f.calls.length;
+    f.connect(true, true);
+    await settle();
+    // Nothing is sent beside the read under way.
+    expect(f.gets(sent)).toEqual([]);
+    read.release();
+    await opening;
+    await settle();
     await settle();
     // It ended on this phone's copy, so the Group is read once more, live, as Retry reads it.
     expect(f.gets(sent)).toEqual(['/api/auth/get-session', '/api/auth/get-session', 'group']);
