@@ -67,6 +67,63 @@ export function setReduceMotion(enabled: boolean) {
   for (const listener of [...reduceMotionListeners]) listener(enabled);
 }
 
+/** Where a finger is on the screen, in dp, as a touch event reports it. */
+export interface TouchPoint {
+  pageX: number;
+  pageY: number;
+}
+
+type PressableNode = { props: Record<string, unknown> };
+const deliver = (node: PressableNode, handler: string, nativeEvent: Record<string, unknown>) => {
+  const handle = node.props[handler];
+  if (typeof handle === 'function') handle({ nativeEvent });
+};
+
+/**
+ * A finger on a Pressable stand-in, landing at the first point of `path`, moving through the
+ * rest and lifting at the last, delivered to the handlers in the order React Native calls them on
+ * Android, where the responder's events come before the touch events: `onPressIn` then
+ * `onTouchStart` where it lands, `onPressMove` then `onTouchMove` at each later point, then
+ * `onPressOut`, `onPress` and `onTouchEnd` where it lifts. With `lift: false` it stays down at the
+ * last point. With `moves: false` no move reaches the row: it lifts at the last point straight
+ * after landing, as a fast swipe can arrive once its moves are coalesced.
+ *
+ * This is what Android delivers for a drag on a list too short to scroll: nothing takes the
+ * touch, and Pressability still presses on release unless the touch left the row's measured
+ * area, which on a device it didn't always (#665). A row tells a drag from a tap itself.
+ * Wrap it in `act`.
+ */
+export function touchAlong(
+  node: PressableNode,
+  path: [TouchPoint, ...TouchPoint[]],
+  { lift = true, moves = true }: { lift?: boolean; moves?: boolean } = {},
+) {
+  const [landed, ...later] = path;
+  const touch = (point: TouchPoint) => ({ ...point, touches: [point], changedTouches: [point] });
+  deliver(node, 'onPressIn', touch(landed));
+  deliver(node, 'onTouchStart', touch(landed));
+  for (const point of moves ? later : []) {
+    deliver(node, 'onPressMove', touch(point));
+    deliver(node, 'onTouchMove', touch(point));
+  }
+  if (!lift) return;
+  // The finger that lifts is no longer among the touches.
+  const at = path.at(-1) ?? landed;
+  const lifted = { ...at, touches: [], changedTouches: [at] };
+  deliver(node, 'onPressOut', lifted);
+  deliver(node, 'onPress', lifted);
+  deliver(node, 'onTouchEnd', lifted);
+}
+
+/**
+ * A screen reader's activate, TalkBack's double tap: Android clicks the view, and Pressability
+ * calls `onPress` with the click, an event no finger made, so it has no position. Wrap it in
+ * `act`.
+ */
+export function activateWithScreenReader(node: PressableNode) {
+  deliver(node, 'onPress', {});
+}
+
 /** `Animated.spring`, recorded so a test can check how a sheet settles. */
 export const spring = vi.fn(() => ({ start: vi.fn() }));
 

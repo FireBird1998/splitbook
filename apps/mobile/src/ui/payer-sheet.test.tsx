@@ -17,7 +17,7 @@ import {
   largeTextWindows,
   layoutHeight,
 } from '../test-utils/layout';
-import { setWindow } from '../test-utils/native';
+import { setWindow, touchAlong } from '../test-utils/native';
 import { ExpenseEditor } from './expense-editor';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { ThemeContext } from './theme';
@@ -242,6 +242,9 @@ async function render(draft: Partial<ExpenseDraft> = {}, mode: 'light' | 'dark' 
       ),
     open: () => run(() => tile().props.onPress()),
     press: (label: string) => run(() => pressable(label).props.onPress()),
+    /** A finger on the option labelled `label`, along `path`; see `touchAlong`. */
+    touch: (label: string, path: Parameters<typeof touchAlong>[1]) =>
+      run(() => touchAlong(pressable(label), path)),
     type: (label: string, value: string) => run(() => input(label).props.onChangeText(value)),
     done: () => run(() => pressable('Done').props.onPress()),
     back: () => run(() => sheet().props.onRequestClose()),
@@ -299,6 +302,19 @@ describe('Who paid sheet', () => {
     expect(ui.tile().props.accessibilityLabel).toBe('Paid by: Sam Chen');
     expect(ui.stored()?.payerId).toBe(samId);
     expect(ui.writes).toEqual([]);
+  });
+
+  it('picks who paid on a tap, never on a drag that starts on a member (#665)', async () => {
+    const ui = await render({ amount: '1249.50' });
+    await ui.open();
+    const landed = { pageX: 180, pageY: 520 };
+    // Three members: the sheet's list can't scroll, so nothing takes a drag.
+    await ui.touch('Sam Chen', [landed, { pageX: 180, pageY: 440 }, { pageX: 181, pageY: 300 }]);
+    expect(ui.pressable('Sam Chen').props.accessibilityState.checked).toBe(false);
+    expect(ui.stored()?.payerId).toBe(alexId);
+    await ui.touch('Sam Chen', [landed, { pageX: 182, pageY: 516 }]);
+    expect(ui.pressable('Sam Chen').props.accessibilityState.checked).toBe(true);
+    expect(ui.stored()?.payerId).toBe(samId);
   });
 
   it('runs the remainder for several people and gives the rest to the first empty payer, without saving', async () => {

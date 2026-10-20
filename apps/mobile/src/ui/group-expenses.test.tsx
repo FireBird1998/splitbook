@@ -26,7 +26,7 @@ import {
   largeTextWindows,
   unreadText,
 } from '../test-utils/layout';
-import { setWindow } from '../test-utils/native';
+import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { ThemeContext } from './theme';
 
 // #116: the Expenses destination's summary, rows, pagination and draft states, rendered.
@@ -316,6 +316,36 @@ describe('Expense rows', () => {
     expect(shown).toContain('you owe ₹953.33');
     press(root, 'Electricity bill, ₹2,860.00, Sam Chen paid, Utilities, you owe ₹953.33');
     expect(onOpenExpense).toHaveBeenCalledWith(electricity.id);
+  });
+
+  it('open on a tap or a screen reader’s activate, never on a drag, in a Month too short to scroll (#665)', () => {
+    // Three rows in one Month, as on the device: the list can't scroll, so nothing takes a drag.
+    const { root, onOpenExpense } = view({
+      state: financial({
+        data: [groceries, electricity, lunch],
+        pagination: { page: 1, limit: 20, total: 3, totalPages: 1 },
+      }),
+    });
+    const row = labelled(
+      root,
+      'Electricity bill, ₹2,860.00, Sam Chen paid, Utilities, you owe ₹953.33',
+    )[0];
+    const landed = { pageX: 200, pageY: 620 };
+    // An upward drag of 250dp that starts on the row.
+    act(() =>
+      touchAlong(row, [
+        landed,
+        { pageX: 201, pageY: 560 },
+        { pageX: 202, pageY: 450 },
+        { pageX: 202, pageY: 370 },
+      ]),
+    );
+    expect(onOpenExpense).not.toHaveBeenCalled();
+    act(() => touchAlong(row, [landed, { pageX: 202, pageY: 616 }]));
+    expect(onOpenExpense).toHaveBeenCalledExactlyOnceWith(electricity.id);
+    act(() => activateWithScreenReader(row));
+    expect(onOpenExpense).toHaveBeenCalledTimes(2);
+    expect(onOpenExpense).toHaveBeenLastCalledWith(electricity.id);
   });
 
   it('sit under the day they are dated, in a zone behind UTC (#437)', () =>

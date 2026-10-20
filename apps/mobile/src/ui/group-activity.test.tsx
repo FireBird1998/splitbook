@@ -9,7 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyActivity, type ActivityEvent, type ActivityState } from '../data/activity';
 import { flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
-import { setWindow } from '../test-utils/native';
+import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { GroupActivity } from './group-activity';
 import { refreshedLabel } from './refresh-feedback';
@@ -334,6 +334,24 @@ describe('a row is drawn again only when what it says changes (#222, D6)', () =>
     expect(row(root, 'Fictional event 1')).toHaveLength(0);
     expect(row(root, 'Lake dinner')).toHaveLength(1);
     expect(text(row(root, 'Lake dinner')[0])).toContain('Lake dinner');
+  });
+
+  it('opens an event on a tap or a screen reader’s activate, never on a drag that starts on its row (#665)', () => {
+    // Three events: too few to scroll, so nothing takes a drag.
+    const { root, onSelect } = render({
+      state: activity({
+        events: events.slice(0, 3),
+        pagination: { page: 1, limit: 20, total: 3, totalPages: 1 },
+      }),
+    });
+    const shown = row(root, 'Fictional event 2')[0];
+    const landed = { pageX: 200, pageY: 380 };
+    act(() => touchAlong(shown, [landed, { pageX: 200, pageY: 300 }, { pageX: 201, pageY: 130 }]));
+    expect(onSelect).not.toHaveBeenCalled();
+    act(() => touchAlong(shown, [landed, { pageX: 204, pageY: 382 }]));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(events[1]._id);
+    act(() => activateWithScreenReader(shown));
+    expect(onSelect).toHaveBeenCalledTimes(2);
   });
 
   it('opens an event only once read: rows are disabled while read again, and enabled when it lands', () => {

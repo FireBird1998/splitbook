@@ -8,3 +8,4 @@ export * from './controls';
 export * from './navigation';
 export * from './feedback';
 export * from './sheet';
+export * from './tap';

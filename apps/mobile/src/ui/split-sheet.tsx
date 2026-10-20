@@ -7,7 +7,7 @@ import { previewSplit, roundingNote, type SplitStatus } from '../data/expense-sp
 import { acceptsNumericText } from '../data/field-feedback';
 import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
-import { Badge, BottomSheet, Chip, CompactText, Money, Stepper, radius } from './compact';
+import { Badge, BottomSheet, Chip, CompactText, Money, Stepper, radius, useTap } from './compact';
 import { fonts, useTheme } from './theme';
 
 const choices: { id: SplitChoice; label: string; hint: string }[] = [
@@ -77,6 +77,8 @@ export function SplitSheet({
   onDone: () => void;
 }) {
   const theme = useTheme();
+  // A drag that starts on a person never includes or leaves them out (#665).
+  const personTap = useTap();
   const choice = splitChoiceOf(draft.splitMethod);
   const preview = previewSplit(draft);
   const person = (id: string) => (id === currentUserId ? 'You' : name(id));
@@ -173,7 +175,7 @@ export function SplitSheet({
                     .join(', ')}
                   accessibilityState={{ checked: included, disabled: locked }}
                   disabled={locked}
-                  onPress={() => toggle(id)}
+                  {...personTap.on(() => toggle(id))}
                   style={{
                     flex: 1,
                     minWidth: 0,

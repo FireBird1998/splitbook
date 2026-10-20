@@ -22,6 +22,7 @@ import {
   type LineKind,
 } from './scale';
 import { CompactText, Money, type TextTone } from './text';
+import { useTap } from './tap';
 
 export const useLargeText = () => isLargeText(useWindowDimensions().fontScale);
 
@@ -324,7 +325,8 @@ function TrailingSkeleton() {
 
 /**
  * A compact row: leading icon or avatar, a one-line title and meta, and a trailing value.
- * Pressable rows need an accessibility label that states everything the row shows.
+ * Pressable rows need an accessibility label that states everything the row shows. A drag that
+ * starts on the row never presses it, whether or not its list can scroll (`useTap`, #665).
  *
  * At large text (from 130%) the trailing value goes onto a line of its own, at the row's end,
  * where it would leave the text less than `largeTextColumn` beside it, and from 150% the title
@@ -375,6 +377,7 @@ export const ListRow = memo(function ListRow({
   const reveal = useReveal(trailingLoading);
   const column = useTextColumn();
   const whole = useLargestText();
+  const tap = useTap();
   const after = trailingLoading ? <TrailingSkeleton /> : trailing;
   const content = (
     <>
@@ -427,10 +430,10 @@ export const ListRow = memo(function ListRow({
       accessibilityLabel={accessibilityLabel ?? [title, meta].filter(Boolean).join(', ')}
       accessibilityState={disabled ? { disabled } : undefined}
       disabled={disabled}
-      onPress={onPress}
+      {...tap.on(onPress)}
       style={({ pressed }) => [
         style,
-        pressed && { backgroundColor: theme.surfaceMuted },
+        pressed && !tap.dragged && { backgroundColor: theme.surfaceMuted },
         disabled && { opacity: 0.45 },
       ]}
     >

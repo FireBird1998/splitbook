@@ -35,6 +35,7 @@ import {
   denseHitSlop,
   touch,
   useLargeText,
+  useTap,
 } from './compact';
 import { useDismissAfter } from './group-snackbar';
 import { groupIcon } from './group-icon';
@@ -131,6 +132,8 @@ function ItemRow({
   // At large text the amount goes under the title, on a line of its own: beside it, a narrow
   // column would break the number in two (₹1,4 / 80.00).
   const large = useLargeText();
+  // A drag that starts on the row never opens it (#665).
+  const tap = useTap();
   const values = item.accountItem?.draft.values ?? item.deviceItem?.values;
   // An item in your account says what it needs once, in its Needs line, so a missing fact leaves
   // its place empty here rather than saying it again (#435). A save still waiting for its reply
@@ -194,10 +197,10 @@ function ItemRow({
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
       disabled={disabled}
-      onPress={onPress}
+      {...tap.on(onPress)}
       style={({ pressed }) => [
         row,
-        pressed && { backgroundColor: theme.surfaceMuted },
+        pressed && !tap.dragged && { backgroundColor: theme.surfaceMuted },
         disabled && { opacity: 0.5 },
       ]}
     >
@@ -744,6 +747,8 @@ export function ToReviewList({
 }) {
   const theme = useTheme();
   const state = useReviewSnapshot(controller);
+  // A drag that starts on a Who paid? or tag option never picks it (#665).
+  const optionTap = useTap();
   const collection = useMobileSnapshot(controller, (snapshot) => snapshot.sharedDraftCollection);
   const client = useMemo(
     () => controller.draftCollection(groupId),
@@ -1071,10 +1076,10 @@ export function ToReviewList({
                   }
                   accessibilityState={{ checked: false, disabled }}
                   disabled={disabled}
-                  onPress={() => {
+                  {...optionTap.on(() => {
                     if (more) fill(more.item, more.fact, option.id);
                     setMore(null);
-                  }}
+                  })}
                   style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 }}
                 >
                   <CompactText
