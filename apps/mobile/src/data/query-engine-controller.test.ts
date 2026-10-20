@@ -453,6 +453,71 @@ describe('query defaults (#214, M1-6)', () => {
     });
   });
 
+  it.each(['pull', 'retry', 'foreground'] as const)(
+    'reads current Home Groups and figures on %s after the clock moves backward',
+    async (origin) => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      const groupsBefore = f.reads('/api/groups');
+      const figuresBefore = f.reads('/api/user/balances');
+      f.state.ledger = 12;
+      f.answer((path) =>
+        path === '/api/groups'
+          ? Promise.resolve(json({ status: 200, data: [{ ...group, name: 'Maple renamed' }] }))
+          : null,
+      );
+      vi.setSystemTime(start - 60 * 60_000);
+      try {
+        await controller.refresh(origin);
+        expect(f.reads('/api/groups')).toBeGreaterThan(groupsBefore);
+        expect(f.reads('/api/user/balances')).toBeGreaterThan(figuresBefore);
+        expect(controller.getSnapshot()).toMatchObject({
+          screen: 'groups',
+          groups: { status: 'ready', data: [{ name: 'Maple renamed' }], restored: false },
+          home: {
+            status: 'ready',
+            data: [{ currency: 'INR', youOwe: 42, youAreOwed: 0 }],
+            refreshedAt: start - 60 * 60_000,
+            restored: false,
+          },
+        });
+      } finally {
+        controller.dispose();
+      }
+    },
+  );
+
+  it('rechecks future Home figures on return but reuses an ordinary fresh answer', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    controller.openSettings();
+    later(5_000);
+    const before = f.reads('/api/user/balances');
+    f.state.ledger = 12;
+    try {
+      await controller.back();
+      expect(f.reads('/api/user/balances')).toBe(before);
+      expect(controller.getSnapshot().home.data).toEqual([
+        { currency: 'INR', youOwe: 30, youAreOwed: 0 },
+      ]);
+      controller.openSettings();
+      await Promise.resolve();
+      vi.setSystemTime(start - 60 * 60_000);
+      await controller.back();
+      expect(f.reads('/api/user/balances')).toBeGreaterThan(before);
+      expect(controller.getSnapshot().home).toMatchObject({
+        status: 'ready',
+        data: [{ currency: 'INR', youOwe: 42, youAreOwed: 0 }],
+        refreshedAt: start - 60 * 60_000,
+        restored: false,
+      });
+    } finally {
+      controller.dispose();
+    }
+  });
+
   it('reuses a read for the adjustable display freshness window, on TanStack’s clock', async () => {
     const f = fixture({ freshness: 5_000 });
     const controller = f.create();

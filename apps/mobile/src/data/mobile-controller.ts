@@ -459,9 +459,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const ledgerChanges = new Map<string, number>();
   let offlineSession = false;
   const freshness = dependencies.displayFreshnessMs ?? DISPLAY_FRESHNESS_MS;
-  /** A saved copy is never fresh (ADR 0006, AMEND-2). */
-  const staleTime = ({ state }: { state: { data?: unknown } }) =>
-    (state.data as Envelope | undefined)?.source === 'saved' ? 0 : freshness;
+  /** A saved copy or a timestamp ahead of this device’s clock is never fresh (ADR 0006). */
+  const staleTime = ({ state }: { state: { data?: unknown; dataUpdatedAt: number } }) =>
+    (state.data as Envelope | undefined)?.source === 'saved' || state.dataUpdatedAt > Date.now()
+      ? -Infinity
+      : freshness;
   /**
    * The one owner of this controller's display reads (ADR 0006, M1-1): it fetches, joins and
    * keeps every server response a view shows, under the shared query keys (#210). No automatic
