@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { focusManager } from '@tanstack/query-core';
+import { focusManager, onlineManager } from '@tanstack/query-core';
 import type { AccountGroupRecordStore, FindableRecordStore } from './account-record-storage';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
@@ -499,6 +499,11 @@ const fullReconnect = async (f: ReturnType<typeof fixture>) => {
   await settle();
   await settle();
 };
+/** Each way the connection comes back, for what holds for both (#690). */
+const returns = [
+  ['when the internet returns', internetReturns],
+  ['on a full reconnect', fullReconnect],
+] as const;
 const septemberPath = (page: number) =>
   `/api/groups/${mapleId}/expenses?page=${page}&limit=20&includeMemberBreakdown=1`;
 /** The Expense rows listed, as `<month> expense <n>`. */
@@ -1953,82 +1958,91 @@ describe('Members shown offline reads its Group again once the internet returns 
     expect(f.gets(again)).toEqual([]);
   });
 
-  it('reads its Group again after a pull under way when the internet returns, once that pull ends offline', async () => {
-    const f = fixture();
-    const controller = f.create();
-    await controller.signIn('alex');
-    await controller.openGroup(mapleId, true, 'expenses');
-    await settle();
-    controller.openMembers();
-    later(60_000);
-    f.connect(true, false);
-    await controller.refresh('pull');
-    await settle();
-    expect(controller.getSnapshot()).toMatchObject({
-      screen: 'members',
-      offline: { active: true },
-      detail: { restored: true },
-    });
-    // A pull starts just before the internet returns, and the Group's answer is lost.
-    f.server.offline = false;
-    const read = f.hold(maplePath, { exact: true, lost: true });
-    const pulling = controller.refresh('pull');
-    await read.reached;
-    const sent = f.calls.length;
-    f.connect(true, true);
-    await settle();
-    // Nothing is sent beside the read under way.
-    expect(f.gets(sent)).toEqual([]);
-    read.release();
-    await pulling;
-    await settle();
-    // It ended on this phone's copy, so the Group is read once more, live, as Retry reads it.
-    expect(f.gets(sent)).toEqual(['/api/auth/get-session', '/api/auth/get-session', 'group']);
-    expect(controller.getSnapshot()).toMatchObject({
-      screen: 'members',
-      offline: { active: false },
-      detail: { status: 'ready', restored: false },
-    });
-  });
+  it.each(returns)(
+    'reads its Group again after a pull under way %s, once that pull ends offline',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(mapleId, true, 'expenses');
+      await settle();
+      controller.openMembers();
+      later(60_000);
+      f.connect(true, false);
+      await controller.refresh('pull');
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'members',
+        offline: { active: true },
+        detail: { restored: true },
+      });
+      // A pull starts just before the internet returns, and the Group's answer is lost.
+      f.server.offline = false;
+      const read = f.hold(maplePath, { exact: true, lost: true });
+      const pulling = controller.refresh('pull');
+      await read.reached;
+      const sent = f.calls.length;
+      await trigger(f);
+      // Nothing is sent beside the read under way.
+      expect(f.gets(sent)).toEqual([]);
+      read.release();
+      await pulling;
+      await settle();
+      // It ended on this phone's copy, so the Group is read once more, live, as Retry reads it.
+      expect(f.gets(sent)).toEqual(['/api/auth/get-session', '/api/auth/get-session', 'group']);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'members',
+        offline: { active: false },
+        detail: { status: 'ready', restored: false },
+      });
+    },
+  );
 
-  it('reads its Group again after the Group’s own read under way when the internet returns, once it ends offline', async () => {
-    const f = fixture();
-    const controller = f.create();
-    await controller.signIn('alex');
-    await controller.openGroup(mapleId, true, 'expenses');
-    await settle();
-    await controller.back();
-    later(60_000);
-    f.connect(true, false);
-    // The Group opens again just before the internet returns, its read's answer is lost, and
-    // Members opens while it is read.
-    f.server.offline = false;
-    const read = f.hold(maplePath, { exact: true, lost: true });
-    const opening = controller.openGroup(mapleId, true, 'expenses');
-    await read.reached;
-    controller.openMembers();
-    expect(controller.getSnapshot().screen).toBe('members');
-    const sent = f.calls.length;
-    f.connect(true, true);
-    await settle();
-    // Nothing is sent beside the read under way.
-    expect(f.gets(sent)).toEqual([]);
-    read.release();
-    await opening;
-    await settle();
-    await settle();
-    // It ended on this phone's copy, so the Group is read once more, live, as Retry reads it.
-    expect(f.gets(sent)).toEqual(['/api/auth/get-session', '/api/auth/get-session', 'group']);
-    expect(controller.getSnapshot()).toMatchObject({
-      screen: 'members',
-      offline: { active: false },
-      detail: { status: 'ready', restored: false },
-    });
-  });
+  it.each(returns)(
+    'reads its Group again after the Group’s own read under way %s, once it ends offline',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(mapleId, true, 'expenses');
+      await settle();
+      await controller.back();
+      later(60_000);
+      f.connect(true, false);
+      // The Group opens again just before the internet returns, its read's answer is lost, and
+      // Members opens while it is read.
+      f.server.offline = false;
+      const read = f.hold(maplePath, { exact: true, lost: true });
+      const opening = controller.openGroup(mapleId, true, 'expenses');
+      await read.reached;
+      controller.openMembers();
+      expect(controller.getSnapshot().screen).toBe('members');
+      const sent = f.calls.length;
+      await trigger(f);
+      // Nothing is sent beside the read under way.
+      expect(f.gets(sent)).toEqual([]);
+      read.release();
+      await opening;
+      await settle();
+      await settle();
+      // It ended on this phone's copy, so the Group is read once more, live, as Retry reads it.
+      expect(f.gets(sent)).toEqual(['/api/auth/get-session', '/api/auth/get-session', 'group']);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'members',
+        offline: { active: false },
+        detail: { status: 'ready', restored: false },
+      });
+    },
+  );
 
-  it.each(['a server failure', 'a refusal'] as const)(
-    'keeps %s Splitbook answered for Members, and reads nothing, when the internet returns',
-    async (failure) => {
+  it.each([
+    ['a server failure', ...returns[0]],
+    ['a refusal', ...returns[0]],
+    ['a server failure', ...returns[1]],
+    ['a refusal', ...returns[1]],
+  ] as const)(
+    'keeps %s Splitbook answered for Members, and reads nothing, %s',
+    async (failure, _, trigger) => {
       const f = fixture();
       const controller = f.create();
       await controller.signIn('alex');
@@ -2050,8 +2064,7 @@ describe('Members shown offline reads its Group again once the internet returns 
         detail: { status: failure === 'a server failure' ? 'error' : 'denied' },
       });
       const sent = f.calls.length;
-      f.connect(true, true);
-      await settle();
+      await trigger(f);
       expect(f.gets(sent)).toEqual([]);
       expect(controller.getSnapshot().detail).toEqual(shown.detail);
     },
@@ -2201,31 +2214,36 @@ describe('the Record payment sheet shown offline reads again once the internet r
     expect(f.gets(sent)).toEqual(['group', 'balances', '/api/auth/get-session', 'balances']);
   });
 
-  it('checks the payment again after a Try again under way when the internet returns, once it ends offline', async () => {
-    const f = fixture();
-    const controller = await openedLive(f, 'balances');
-    f.connect(true, false);
-    await controller.openRecordPayment(alex.id, sam.id, 'INR');
-    await settle();
-    expect(controller.getSnapshot().settlement.status).toBe('error');
-    // Try again starts just before the internet returns, and its Balances answer is lost.
-    f.server.offline = false;
-    const balances = f.hold(balancesPath, { exact: true, lost: true });
-    const retrying = controller.retrySettlementCheck();
-    await balances.reached;
-    const sent = f.calls.length;
-    f.connect(true, true);
-    await settle();
-    // Nothing is sent beside the read under way.
-    expect(f.gets(sent)).toEqual([]);
-    balances.release();
-    await retrying;
-    await settle();
-    await settle();
-    // It ended offline, so the payment is checked once more, live.
-    expect(f.gets(sent)).toEqual(['balances']);
-    expect(controller.getSnapshot().settlement).toMatchObject({ status: 'editing', message: null });
-  });
+  it.each(returns)(
+    'checks the payment again after a Try again under way %s, once it ends offline',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await openedLive(f, 'balances');
+      f.connect(true, false);
+      await controller.openRecordPayment(alex.id, sam.id, 'INR');
+      await settle();
+      expect(controller.getSnapshot().settlement.status).toBe('error');
+      // Try again starts just before the internet returns, and its Balances answer is lost.
+      f.server.offline = false;
+      const balances = f.hold(balancesPath, { exact: true, lost: true });
+      const retrying = controller.retrySettlementCheck();
+      await balances.reached;
+      const sent = f.calls.length;
+      await trigger(f);
+      // Nothing is sent beside the read under way.
+      expect(f.gets(sent)).toEqual([]);
+      balances.release();
+      await retrying;
+      await settle();
+      await settle();
+      // It ended offline, so the payment is checked once more, live.
+      expect(f.gets(sent)).toEqual(['balances']);
+      expect(controller.getSnapshot().settlement).toMatchObject({
+        status: 'editing',
+        message: null,
+      });
+    },
+  );
 
   // The same guards hold on a full reconnect (#690).
   it.each([
@@ -2349,24 +2367,90 @@ describe('Members and the Record payment sheet shown offline read again on a ful
     expect(writes(f, writing)).toEqual([`POST ${maplePath}/settlements`]);
   });
 
-  it('checks the payment once for a reconnect that flaps', async () => {
+  it('checks the payment once when the connection flaps while that check runs', async () => {
     const f = fixture();
     const controller = await openedLive(f, 'balances');
     f.connect(true, false);
     await controller.openRecordPayment(alex.id, sam.id, 'INR');
     await settle();
     expect(controller.getSnapshot().settlement.status).toBe('error');
+    const balances = f.hold(balancesPath, { exact: true });
     const sent = f.calls.length;
-    // Wi-Fi drops and returns twice before anything is read.
+    f.connect(false);
+    await settle();
+    f.connect(true, true);
+    await balances.reached;
+    // Wi-Fi drops and returns twice more while the check runs again.
     f.connect(false);
     f.connect(true, true);
     f.connect(false);
     f.connect(true, true);
+    await settle();
+    balances.release();
     await settle();
     await settle();
     expect(f.gets(sent)).toEqual(['balances']);
     expect(controller.getSnapshot().settlement).toMatchObject({ status: 'editing', message: null });
   });
+
+  it('reads Members’ Group once when the connection flaps while that read runs', async () => {
+    const f = fixture();
+    const controller = await openedLive(f, 'expenses');
+    controller.openMembers();
+    later(60_000);
+    f.connect(true, false);
+    await controller.refresh('pull');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      offline: { active: true },
+    });
+    const group = f.hold(maplePath, { exact: true });
+    const sent = f.calls.length;
+    f.connect(false);
+    await settle();
+    f.connect(true, true);
+    await group.reached;
+    // Wi-Fi drops and returns twice more while the Group is read again.
+    f.connect(false);
+    f.connect(true, true);
+    f.connect(false);
+    f.connect(true, true);
+    await settle();
+    group.release();
+    await settle();
+    await settle();
+    expect(f.gets(sent)).toEqual(['/api/auth/get-session', '/api/auth/get-session', 'group']);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      offline: { active: false },
+    });
+  });
+
+  it.each(['signing out', 'disposing'] as const)(
+    'reads nothing for the sheet after %s, however the connection comes back',
+    async (how) => {
+      const f = fixture();
+      const controller = await openedLive(f, 'balances');
+      f.connect(true, false);
+      await controller.openRecordPayment(alex.id, sam.id, 'INR');
+      await settle();
+      expect(controller.getSnapshot().settlement.status).toBe('error');
+      // Splitbook can be reached, so sign-out is confirmed; NetInfo hasn't said so yet.
+      f.server.offline = false;
+      if (how === 'signing out') await controller.signOut();
+      else controller.dispose();
+      await settle();
+      const sent = f.calls.length;
+      await internetReturns(f);
+      await fullReconnect(f);
+      // The online manager itself, as Android reports a reconnect to it.
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+      await settle();
+      expect(f.calls.slice(sent)).toEqual([]);
+    },
+  );
 
   it('checks the payment again once the internet is reached, after a reconnect that came back without it', async () => {
     const f = fixture();

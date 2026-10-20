@@ -1265,7 +1265,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     activityQueries.listen(focusManager, onlineManager),
     // A full reconnect reaches a Group's view, its Activity and an Expense record through their own
     // listeners; Members and the Record payment sheet, which this controller reads itself, recover
-    // here as when only the internet returns (#690).
+    // here as when only the internet returns (#690). It comes after homeQueries.listen: NetInfo
+    // reports its state synchronously while that wires it, which can flip the online manager, and
+    // recoverShown is declared further down, so subscribing first would call it before it exists.
     onlineManager.subscribe((online) => {
       if (online) void recoverShown();
     }),
@@ -6188,6 +6190,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       owner = generation;
     if (view.screen !== 'members' && view.screen !== 'settlement') return;
     const key = groupKey(account(), view.groupId);
+    // One recovery per visit: a return heard while it runs is counted, and handled after its read.
+    // A second would only repeat it: it waits for the same reads, then its re-read joins this
+    // one's (the session check is shared, as is a read of the Group in flight), and the sheet's
+    // check doesn't run twice once it has started again.
     if (shownRecovery?.view === view) {
       shownRecovery.heard += 1;
       return;
