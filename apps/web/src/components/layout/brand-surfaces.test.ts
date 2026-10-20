@@ -9,8 +9,9 @@ import { brandImages, links, text } from '@/lib/test-utils/markup';
 /*
  * Where the brand kit shows in the web app (the "Brand in the product" design): the logo in the
  * shell's sidebar and top bar, sign in, the invite page and the landing page, and the mark where a name sits beside
- * it or a page is loading. Each surface keeps its own words. The invite page's loaded card is
- * checked in the browser (playwright/theme-a11y.spec.ts), since it renders after a request.
+ * it or a page is loading. Each surface keeps its own words. The invite page's loaded card, and
+ * Join's one h1 through each of its states, are checked in the browser (theme-a11y.spec.ts and
+ * auth-headings.spec.ts under playwright/), since they render after a request.
  */
 
 const search = vi.hoisted(() => ({ params: new URLSearchParams() }));
@@ -104,6 +105,19 @@ describe('the shell', () => {
 });
 
 describe('sign in', () => {
+  it.each(['', 'email_not_allowed', 'google_sign_in_failed', 'unknown'])(
+    'Sign in has exactly one Welcome back h1 with error %j',
+    (error) => {
+      search.params = new URLSearchParams({ error });
+      for (const mode of MODES) {
+        const html = render(mode, createElement(LoginForm));
+        expect(html.match(/<h1\b/g) ?? []).toHaveLength(1);
+        expect(html).toMatch(/<h1\b[^>]*>Welcome back!<\/h1>/);
+        expect(text(html)).not.toContain('...');
+      }
+    },
+  );
+
   it('shows the 40 px logo, named Splitbook, above Welcome back', () => {
     for (const mode of MODES) {
       const html = render(mode, createElement(LoginForm));
@@ -120,12 +134,14 @@ describe('sign in', () => {
     );
   });
 
-  it('shows the 48 px mark, named Splitbook, while the page loads', async () => {
+  it('keeps one Welcome back h1 and Loading… while Sign in loads', async () => {
     const page = (await LoginPage()) as ReactElement<{ fallback: ReactElement }>;
     for (const mode of MODES) {
       const html = render(mode, page.props.fallback);
       expect(brand(html)).toEqual([...marks('Splitbook', '48px')]);
-      expect(text(html)).toBe('Loading...');
+      expect(text(html)).toBe('Welcome back! Loading…');
+      expect(html.match(/<h1\b/g) ?? []).toHaveLength(1);
+      expect(html).toMatch(/<h1\b[^>]*>Welcome back!<\/h1>/);
     }
   });
 
@@ -189,6 +205,18 @@ describe('the landing page', () => {
 });
 
 describe('the invite page', () => {
+  it('Join has exactly one h1 while its invite loads', () => {
+    const html = render(
+      'light',
+      createElement(JoinGroupClient, {
+        code: 'synthetic-invite',
+        authMode: 'google',
+      }),
+    );
+    expect(html.match(/<h1\b/g) ?? []).toHaveLength(1);
+    expect(html).toMatch(/<h1\b[^>]*>Join Group<\/h1>/);
+  });
+
   it('opens with a header holding the 32 px logo, linking home', () => {
     for (const mode of MODES) {
       const html = render(
