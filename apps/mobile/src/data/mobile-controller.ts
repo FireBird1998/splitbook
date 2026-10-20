@@ -430,7 +430,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let settlementRequest = 0;
   /**
    * The Record payment sheet whose check couldn't reach Splitbook: the internet's return checks
-   * again (#685).
+   * again (#685). It lasts for that visit of the sheet, since each visit is a new route.
    */
   let settlementUnreachable: Route | null = null;
   let pendingRequest = 0;
@@ -4918,7 +4918,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const checkChosenPayment = async (groupId: string, chosen: SettlementChoice) => {
     const { paidBy, paidTo, currency } = chosen;
-    await underway(openSettlements(groupId, chosen));
+    await trackRead(openSettlements(groupId, chosen));
     // Closed while the live read ran.
     const { screen, settlement: state } = latest();
     if (screen !== 'settlement' || state.groupId !== groupId) return;
@@ -4961,7 +4961,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   /** The sheet's check of the Group's unconfirmed payment: on Check payment, and on Try again. */
   const checkPendingPayment = async (groupId: string) => {
-    await underway(openSettlements(groupId));
+    await trackRead(openSettlements(groupId));
     const { screen, settlement: state } = latest();
     // Resolved since Balances showed it: nothing is waiting any more.
     if (screen === 'settlement' && state.groupId === groupId && state.status === 'ready')
@@ -6115,16 +6115,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * Reads of the screen shown still under way, which the internet's return waits for: a pull,
    * Retry or the foreground (#681), and the Record payment sheet's check (#685).
    */
-  const rereads = new Set<Promise<void>>();
-  /** `reading`, as one of the reads under way. */
-  const underway = (reading: Promise<void>) => {
-    rereads.add(reading);
-    const done = () => rereads.delete(reading);
+  const readsUnderway = new Set<Promise<void>>();
+  /** Counts `reading` among the reads under way until it ends. */
+  const trackRead = (reading: Promise<void>) => {
+    readsUnderway.add(reading);
+    const done = () => readsUnderway.delete(reading);
     reading.then(done, done);
     return reading;
   };
   /** Re-reads the screen shown, as one of the reads under way. */
-  const reread = (reuse: boolean) => underway(refreshView(reuse));
+  const reread = (reuse: boolean) => trackRead(refreshView(reuse));
   /**
    * Waits until the screen shown reads nothing: neither a read under way nor a read of its Group,
    * such as the open's, which a read now would join. Bounded, as Activity's `settle` is.
@@ -6132,31 +6132,46 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const untilReadsEnd = async (key: QueryKey) => {
     for (let round = 0; round < 1000; round += 1) {
       const group = queryClient.getQueryCache().find({ queryKey: key, exact: true });
-      const reading: Promise<unknown>[] = [...rereads];
+      const reading: Promise<unknown>[] = [...readsUnderway];
       if (group?.state.fetchStatus === 'fetching' && group.promise) reading.push(group.promise);
       if (!reading.length) return;
       await Promise.allSettled(reading);
     }
   };
+  /** The offline banner shows: the session, or a saved copy shown, hasn't been read live. */
+  const bannerShown = () => offlineSession || snapshot.offline.active;
   /**
    * What the internet's return reads on a screen the controller reads itself, if what it shows is
-   * offline: the Record payment sheet's check again after it couldn't reach Splitbook, as Try
-   * again does (#685); otherwise, under the offline banner, the screen as Retry reads it (#681).
+   * offline. The Record payment sheet whose check couldn't reach Splitbook checks again, as Try
+   * again does (#685). Under the offline banner still, the screen is read as Retry reads it
+   * (#681): the sheet's check reads its Group without the Group's saved copy, which keeps the
+   * banner until then.
    */
-  const offlineRead = (view: Route) =>
-    view.screen === 'settlement' &&
-    settlementUnreachable === view &&
-    snapshot.settlement.status === 'error'
-      ? retrySettlementCheck
-      : offlineSession || snapshot.offline.active
-        ? () => reread(false)
-        : null;
+  const recoveryRead = (view: Route) => {
+    const owner = generation,
+      check =
+        view.screen === 'settlement' &&
+        settlementUnreachable === view &&
+        snapshot.settlement.status === 'error';
+    if (!check && !bannerShown()) return null;
+    return async () => {
+      if (check) await retrySettlementCheck();
+      // Checking again opened the sheet anew, for the same Group, unless it was closed meanwhile.
+      const shown =
+        current(owner) &&
+        route.screen === view.screen &&
+        'groupId' in route &&
+        'groupId' in view &&
+        route.groupId === view.groupId;
+      if (shown && bannerShown()) await reread(false);
+    };
+  };
   /** The internet's return being handled on that screen: its view, and how many returns it heard. */
   let shownRecovery: { view: Route; heard: number } | null = null;
   /**
    * The internet returned while the device stayed connected, so the online manager didn't change
    * (#681, as #678 for a Group's view). Members and Group details, or the Record payment sheet,
-   * that shows this phone's copy or a read that failed offline reads again once (`offlineRead`):
+   * that shows this phone's copy or a read that failed offline reads again once (`recoveryRead`):
    * the offline banner clears, and Record is offered, when that read lands. A failure Splitbook
    * answered stays until Retry or a pull. A read under way may still end offline, so this first
    * waits for it to end, and a return heard meanwhile is handled once this one's read ends.
@@ -6176,7 +6191,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       for (let handled = 0; handled !== recovery.heard; ) {
         handled = recovery.heard;
         await untilReadsEnd(key);
-        const read = current(owner) && route === view ? offlineRead(view) : null;
+        const read = current(owner) && route === view ? recoveryRead(view) : null;
         if (!read) return;
         await read().catch(() => undefined);
       }
