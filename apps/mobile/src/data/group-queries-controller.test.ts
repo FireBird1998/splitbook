@@ -2213,6 +2213,58 @@ describe('the Record payment sheet shown offline reads again once the internet r
     expect(controller.getSnapshot().settlement).toMatchObject({ status: 'editing', message: null });
   });
 
+  it.each([
+    ['without the banner', false],
+    ['under the banner', true],
+  ] as const)(
+    'sends nothing of a payment stored on this phone when the internet returns, %s',
+    async (_, banner) => {
+      const f = fixture();
+      const controller = await onBalances(f);
+      await controller.openRecordPayment(alex.id, sam.id, 'INR');
+      await settle();
+      // Record is sent, but its answer is lost: the payment is stored here, unconfirmed.
+      const posting = f.hold(`${maplePath}/settlements`, { exact: true, lost: true });
+      const recording = controller.recordSettlement();
+      await posting.reached;
+      posting.release();
+      await recording;
+      await settle();
+      const key = controller.getSnapshot().settlement.attempt?.key;
+      expect(key).toBeTruthy();
+      await controller.back();
+      await settle();
+      // Its check, from Balances, can't reach Splitbook: it shows 'uncertain', with Retry payment.
+      f.connect(true, false);
+      await controller.openPendingPayment();
+      await settle();
+      if (banner) {
+        later(60_000);
+        await controller.refresh('pull');
+        await settle();
+      }
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'settlement',
+        offline: { active: banner },
+        settlement: { status: 'uncertain', attempt: { key } },
+      });
+      const sent = f.calls.length;
+      f.connect(true, true);
+      await settle();
+      await settle();
+      // Only what lifts the banner is read; the payment is never sent again by itself.
+      expect(f.calls.slice(sent).map(({ method, path }) => `${method} ${path}`)).toEqual(
+        banner
+          ? ['GET /api/auth/get-session', 'GET /api/auth/get-session', `GET ${maplePath}`]
+          : [],
+      );
+      expect(controller.getSnapshot().settlement).toMatchObject({
+        status: 'uncertain',
+        attempt: { key },
+      });
+    },
+  );
+
   it.each(['a server failure', 'a refusal'] as const)(
     'keeps %s Splitbook answered for the sheet’s check, and reads nothing, when the internet returns',
     async (failure) => {
