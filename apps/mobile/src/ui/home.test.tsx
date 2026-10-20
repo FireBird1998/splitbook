@@ -19,7 +19,12 @@ import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { ThemeContext } from './theme';
 import { flatten, hairSpace, labelRuns, largeTextWindows, unreadText } from '../test-utils/layout';
 import { refreshedLabel } from './refresh-feedback';
-import { setFileWindow, setWindow } from '../test-utils/native';
+import {
+  activateWithScreenReader,
+  setFileWindow,
+  setWindow,
+  touchAlong,
+} from '../test-utils/native';
 
 // #126: Home's balances, drafts to resume and Groups, rendered.
 setFileWindow({ width: 360, height: 640 });
@@ -324,6 +329,18 @@ describe('Home Groups', () => {
     expect(shown).toContain('Settled up');
     act(() => button(root, 'Open Lisbon Offsite, Work · 4 members').props.onPress());
     expect(onOpen).toHaveBeenCalledWith(lisbon);
+  });
+
+  it('opens a Group on a tap or a screen reader’s activate, never on a drag that starts on its row (#665)', () => {
+    const { root, onOpen } = view();
+    const row = button(root, 'Open Lisbon Offsite, Work · 4 members');
+    const landed = { pageX: 180, pageY: 420 };
+    act(() => touchAlong(row, [landed, { pageX: 180, pageY: 330 }, { pageX: 181, pageY: 170 }]));
+    expect(onOpen).not.toHaveBeenCalled();
+    act(() => touchAlong(row, [landed, { pageX: 178, pageY: 423 }]));
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(lisbon);
+    act(() => activateWithScreenReader(row));
+    expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
   it('keeps New Group, or continues an unfinished Group form', () => {

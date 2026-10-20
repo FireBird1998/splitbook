@@ -13,7 +13,7 @@ import type {
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { MobileFetch } from '../data/types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
-import { setWindow } from '../test-utils/native';
+import { setWindow, touchAlong } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import { ToReviewHomeCard, ToReviewGroupBanner, ToReviewList, ToReviewOverlay } from './to-review';
 import { ReviewRunOverlay } from './review-run';
@@ -599,6 +599,27 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     );
     for (const raw of ['Edit expense details', 'Currency (e.g. INR)', 'Date (YYYY-MM-DD)'])
       expect(text(list)).not.toContain(raw);
+  });
+  it('opens an item on a tap, never on a drag that starts on its row (#665)', async () => {
+    const f = fixture();
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    const landed = { pageX: 180, pageY: 360 };
+    await act(async () => {
+      touchAlong(button(list, 'Review Fare'), [
+        landed,
+        { pageX: 180, pageY: 260 },
+        { pageX: 181, pageY: 110 },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(f.controller.getSnapshot().toReview.run).toBeFalsy();
+    await act(async () => {
+      touchAlong(button(list, 'Review Fare'), [landed, { pageX: 182, pageY: 357 }]);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const run = f.controller.getSnapshot().toReview.run;
+    expect(run?.items[run.index].item.draft.id).toBe(row(2, '', 1).id);
   });
   it('shows an amount without a currency in the Group’s, and never asks for it (#512)', async () => {
     const f = fixture({ unpaid: true });

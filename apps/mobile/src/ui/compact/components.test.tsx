@@ -17,7 +17,7 @@ import {
   layoutHeight,
   unreadText,
 } from '../../test-utils/layout';
-import { setWindow } from '../../test-utils/native';
+import { activateWithScreenReader, setWindow, touchAlong } from '../../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -306,6 +306,81 @@ describe('Buttons and rows', () => {
   it('list rows without an action are not buttons', () => {
     const root = render(<ListRow title="Sam Chen" meta="Member" />);
     expect(byRole(root, 'button')).toHaveLength(0);
+  });
+});
+
+describe('a drag that starts on a list row never opens it (#665)', () => {
+  const landed = { pageX: 180, pageY: 400 };
+  const row = (open: () => void) =>
+    one(
+      byRole(
+        render(<ListRow title="Weekly groceries" meta="You paid · Groceries" onPress={open} />),
+        'button',
+        'Weekly groceries, You paid · Groceries',
+      ),
+    );
+  /** The row's background while Pressable reports it pressed. */
+  const pressedBackground = (node: ReactTestInstance) =>
+    flatten((node.props.style as (state: { pressed: boolean }) => unknown)({ pressed: true }))
+      .backgroundColor;
+
+  it('a touch that moves past the touch slop and lifts on the row does not open it', () => {
+    const open = vi.fn();
+    const pressable = row(open);
+    // 12dp up: still on the row, so Pressability itself presses on release.
+    act(() =>
+      touchAlong(pressable, [landed, { pageX: 180, pageY: 394 }, { pageX: 180, pageY: 388 }]),
+    );
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('an upward drag of 250dp does not open it, as on a list too short to scroll', () => {
+    const open = vi.fn();
+    const pressable = row(open);
+    act(() =>
+      touchAlong(pressable, [landed, { pageX: 181, pageY: 300 }, { pageX: 182, pageY: 150 }]),
+    );
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('a drag that comes back to where it landed does not open it', () => {
+    const open = vi.fn();
+    const pressable = row(open);
+    act(() => touchAlong(pressable, [landed, { pageX: 180, pageY: 300 }, landed]));
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('a tap opens it, though the finger moves a little', () => {
+    const open = vi.fn();
+    const pressable = row(open);
+    act(() => touchAlong(pressable, [landed, { pageX: 183, pageY: 396 }]));
+    expect(open).toHaveBeenCalledOnce();
+    // Each touch is judged on its own: a drag, then a tap elsewhere on the row.
+    act(() => touchAlong(pressable, [landed, { pageX: 180, pageY: 300 }]));
+    act(() => touchAlong(pressable, [{ pageX: 40, pageY: 380 }]));
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('a screen reader’s activate opens it, after a drag too', () => {
+    const open = vi.fn();
+    const pressable = row(open);
+    act(() => activateWithScreenReader(pressable));
+    expect(open).toHaveBeenCalledOnce();
+    act(() => touchAlong(pressable, [landed, { pageX: 180, pageY: 300 }]));
+    act(() => activateWithScreenReader(pressable));
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops looking pressed once the touch is a drag, and a tap still looks pressed', () => {
+    const light = getSemanticTokens('light');
+    const pressable = row(vi.fn());
+    act(() => touchAlong(pressable, [landed, { pageX: 182, pageY: 397 }], { lift: false }));
+    expect(pressedBackground(pressable)).toBe(light.surfaceMuted);
+    act(() => touchAlong(pressable, [landed, { pageX: 180, pageY: 380 }], { lift: false }));
+    expect(pressedBackground(pressable)).toBeUndefined();
+    // The next touch starts pressed again.
+    act(() => touchAlong(pressable, [landed], { lift: false }));
+    expect(pressedBackground(pressable)).toBe(light.surfaceMuted);
   });
 });
 
