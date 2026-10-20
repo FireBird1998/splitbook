@@ -176,7 +176,7 @@ test('a Group the member can’t open refuses its statement with the app’s own
     await expectThemeApplied(page, testInfo);
     const main = page.getByRole('main');
     await expect(main.getByRole('heading', { level: 1 })).toHaveText('Group not found');
-    await expect(main).toContainText("This group may have been deleted or you don't have access.");
+    await expect(main).toContainText('This group may have been deleted or you don’t have access.');
     await expect(main.getByRole('link', { name: 'Back to Home' })).toHaveAttribute(
       'href',
       '/dashboard',

@@ -26,7 +26,7 @@ describe('the refusal for a Group the member can’t open', () => {
     expect(html.match(/<h1\b/g)).toHaveLength(1);
     expect(/<h1\b[^>]*>([\s\S]*?)<\/h1>/.exec(html)?.[1]).toBe('Group not found');
     expect(text(html)).toBe(
-      "Group not found This group may have been deleted or you don't have access. Back to Home",
+      'Group not found This group may have been deleted or you don’t have access. Back to Home',
     );
     expect(anchors(html)).toEqual([{ href: '/dashboard', current: null, text: 'Back to Home' }]);
     // A page to read, not an error to announce, and never the bare word "Forbidden".

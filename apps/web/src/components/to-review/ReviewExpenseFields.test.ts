@@ -78,7 +78,7 @@ describe('the payer and split pickers in the web To review editor (#591)', () =>
     ]);
     expect(labels.filter((label) => label.endsWith(' share'))).toEqual([
       'Your share',
-      "Ankit Das's share",
+      'Ankit Das’s share',
     ]);
   });
 

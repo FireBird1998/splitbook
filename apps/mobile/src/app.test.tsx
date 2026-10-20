@@ -2425,6 +2425,50 @@ it('asks before discarding a lost Group’s unconfirmed Expense and sends nothin
   expect(app.controller.getSnapshot().screen).toBe('groups');
 });
 
+// #683: with the To review rollout on, this alert still said "draft" while the form said "item".
+it.each([
+  ['off', 'draft'],
+  ['on', 'item'],
+] as const)(
+  'asks before discarding a refused retry in the To review rollout’s words (review flag %s)',
+  async (flag, word) => {
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', flag === 'on' ? 'true' : 'false');
+    try {
+      const app = await renderApp();
+      await settle(app.controller.openExpense(groupId));
+      await settle(
+        app.controller.updateExpenseDraft({
+          description: 'Dinner',
+          amount: '10',
+          tagId: 'c00000000000000000000001',
+        }),
+      );
+      // The first save's reply is lost; Splitbook then refuses its retry.
+      let refuse = false;
+      app.use((path, init) =>
+        path === `/api/groups/${groupId}/expenses` && init.method === 'POST'
+          ? refuse
+            ? json({ status: 409, error: 'This retry no longer matches its save.' }, 409)
+            : Promise.reject(new TypeError('Reply lost'))
+          : undefined,
+      );
+      await settle(app.controller.saveExpense());
+      refuse = true;
+      await settle(app.controller.saveExpense());
+      await app.press('Discard unconfirmed save');
+
+      const [title, message, choices] = vi.mocked(Alert.alert).mock.lastCall!;
+      expect(title).toBe('Discard this unconfirmed save?');
+      expect(message).toBe(
+        `Check this Group’s Expenses first. If this Expense is already there, discard this save and don’t save the ${word} again. If it isn’t, discard this save, then correct the ${word} and save it. Discarding sends nothing.`,
+      );
+      expect(choices!.map((choice) => choice.text)).toEqual(['Cancel', 'Discard']);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  },
+);
+
 it('asks before discarding a lost Group’s unconfirmed payment', async () => {
   const app = await renderApp();
   let denied = false;

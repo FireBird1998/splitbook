@@ -130,7 +130,7 @@ describe('the table', () => {
 
   it('has a caption and header cells for assistive technology', () => {
     const html = render({ read: READ, initialView: 'table' });
-    expect(text(html)).toContain("Your share of spending in INR, by month, with each Group's part");
+    expect(text(html)).toContain('Your share of spending in INR, by month, with each Group’s part');
     expect(html.match(/scope="col"/g)).toHaveLength(4);
     expect(html.match(/scope="row"/g)).toHaveLength(6);
   });
