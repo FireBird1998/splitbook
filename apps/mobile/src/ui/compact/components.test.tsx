@@ -396,6 +396,89 @@ describe('a drag that starts on a list row never opens it (#665)', () => {
   });
 });
 
+describe('buttons, form tiles, tabs and the floating action press only on a tap (#693)', () => {
+  const landed = { pageX: 180, pageY: 400 };
+  /** A sideways drag that starts and ends on the control, as on the device. */
+  const sideways = [landed, { pageX: 260, pageY: 402 }, { pageX: 330, pageY: 403 }] as const;
+  const tap = [landed, { pageX: 183, pageY: 402 }] as const;
+  /** A control's opacity while Pressable reports it pressed. */
+  const pressedOpacity = (node: ReactTestInstance) =>
+    flatten((node.props.style as (state: { pressed: boolean }) => unknown)({ pressed: true }))
+      .opacity;
+
+  it('a CompactButton presses on a tap or a screen reader’s activate, never on a drag', () => {
+    const save = vi.fn();
+    const button = one(
+      byRole(
+        render(<CompactButton label="Save expense" onPress={save} />),
+        'button',
+        'Save expense',
+      ),
+    );
+    act(() => touchAlong(button, [...sideways]));
+    expect(save).not.toHaveBeenCalled();
+    act(() => touchAlong(button, [...tap]));
+    expect(save).toHaveBeenCalledOnce();
+    act(() => activateWithScreenReader(button));
+    expect(save).toHaveBeenCalledTimes(2);
+    // It stops looking pressed once the touch is a drag.
+    act(() => touchAlong(button, [...sideways], { lift: false }));
+    expect(pressedOpacity(button)).toBe(1);
+    act(() => touchAlong(button, [landed], { lift: false }));
+    expect(pressedOpacity(button)).toBe(0.8);
+  });
+
+  it('a form tile opens its editor on a tap or a screen reader’s activate, never on a drag', () => {
+    const open = vi.fn();
+    const tile = one(
+      byRole(
+        render(<SelectorTile icon="wallet-outline" label="Paid by" value="You" onPress={open} />),
+        'button',
+        'Paid by: You',
+      ),
+    );
+    act(() => touchAlong(tile, [...sideways]));
+    expect(open).not.toHaveBeenCalled();
+    act(() => touchAlong(tile, [...tap]));
+    expect(open).toHaveBeenCalledOnce();
+    act(() => activateWithScreenReader(tile));
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('a bottom tab is chosen on a tap or a screen reader’s activate, never on a drag', () => {
+    const choose = vi.fn();
+    const root = render(<GroupNavBar groupName="Maple House" value="expenses" onChange={choose} />);
+    const balances = one(byRole(root, 'tab', 'Balances'));
+    // The tab bar has no scrolling parent to take even a short vertical drag.
+    act(() =>
+      touchAlong(balances, [landed, { pageX: 181, pageY: 381 }, { pageX: 181, pageY: 362 }]),
+    );
+    act(() => touchAlong(balances, [...sideways]));
+    expect(choose).not.toHaveBeenCalled();
+    act(() => touchAlong(balances, [...tap]));
+    expect(choose).toHaveBeenCalledExactlyOnceWith('balances');
+    act(() => activateWithScreenReader(one(byRole(root, 'tab', 'Activity'))));
+    expect(choose).toHaveBeenLastCalledWith('activity');
+  });
+
+  it('the floating action presses on a tap or a screen reader’s activate, never on a drag', () => {
+    const add = vi.fn();
+    const action = one(
+      byRole(
+        render(<FloatingAction label="Add expense" icon="add" onPress={add} />),
+        'button',
+        'Add expense',
+      ),
+    );
+    act(() => touchAlong(action, [...sideways]));
+    expect(add).not.toHaveBeenCalled();
+    act(() => touchAlong(action, [...tap]));
+    expect(add).toHaveBeenCalledOnce();
+    act(() => activateWithScreenReader(action));
+    expect(add).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('Feedback', () => {
   it('interrupts for warnings and errors but announces info politely', () => {
     const root = render(
