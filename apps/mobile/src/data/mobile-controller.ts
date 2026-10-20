@@ -1269,8 +1269,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     expenseQueries.listen(focusManager, onlineManager),
     activityQueries.listen(focusManager, onlineManager),
     // A full reconnect reaches a Group's view, its Activity and an Expense record through their own
-    // listeners; Members and the Record payment sheet, which this controller reads itself, recover
-    // here as when only the internet returns (#690). It comes after homeQueries.listen: NetInfo
+    // listeners; Members, the Record payment sheet and an Expense that couldn't open offline, which
+    // this controller reads itself, recover here as when only the internet returns (#690, #694).
+    // It comes after homeQueries.listen: NetInfo
     // reports its state synchronously while that wires it, which can flip the online manager, and
     // recoverShown is declared further down, so subscribing first would call it before it exists.
     onlineManager.subscribe((online) => {
@@ -2726,8 +2727,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * Opens a new Expense, a Group's draft, or a saved Expense's record. `keptEdit`: × on an edit
    * begun on that record returns to it, which then shows the saved Expense with the edit beside it
    * (#664); opened any other way, an edit kept for it opens on its form, to resume or discard.
+   * Each open is one of the reads under way that the connection's return waits for (#694).
    */
-  const openExpense = async (
+  const openExpense = (...open: Parameters<typeof openExpenseNow>) =>
+    trackRead(openExpenseNow(...open));
+  const openExpenseNow = async (
     groupId: string,
     expenseId?: string,
     origin: { scrollY?: number; anchor?: ScrollAnchor } = {},
@@ -3038,15 +3042,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       if (known && shown.status === 'detail')
         return publish({ ...snapshot, expense: withdrawExpense(message) });
-      const unsaved =
+      const notOnPhone =
         error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE' && !shown.draft;
-      if (unsaved && expenseId) expenseUnreachable = view;
+      if (notOnPhone && expenseId) expenseUnreachable = view;
       publish({
         ...snapshot,
         expense: {
           ...snapshot.expense,
           status: denied ? 'blocked' : snapshot.expense.draft ? 'resume' : 'blocked',
-          message: unsaved
+          message: notOnPhone
             ? expenseNotOnPhone
             : error instanceof RequestError
               ? error.message
@@ -6158,10 +6162,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * phone (#694): the connection's return opens it again, as Try again does.
    */
   const reopensExpense = (view: Route) =>
-    view.screen === 'expense' &&
     expenseUnreachable === view &&
     snapshot.expense.status === 'blocked' &&
-    !snapshot.expense.draft;
+    !snapshot.expense.draft &&
+    !snapshot.expense.accessLost;
   /** The offline banner shows: the session, or a saved copy shown, hasn't been read live. */
   const bannerShown = () => offlineSession || snapshot.offline.active;
   /**
@@ -6175,10 +6179,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (view.screen === 'expense') {
       // An Expense that couldn't open offline, with nothing of it on this phone, opens again as Try
       // again opens it (#694). One that shows reads itself again (expense-queries, #681).
-      const { requestedExpenseId } = snapshot.expense;
-      return reopensExpense(view) && requestedExpenseId
-        ? () => openExpense(view.groupId, requestedExpenseId)
-        : null;
+      return reopensExpense(view) ? () => reread(false) : null;
     }
     const owner = generation,
       check =
@@ -6204,8 +6205,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * The internet returned while the device stayed connected, which the online manager doesn't
    * follow (#681, as #678 for a Group's view), or the device fully reconnected, which it does
    * (#690). Members and Group details, or the Record payment sheet, that shows this phone's copy
-   * or a read that failed offline reads again once (`recoveryRead`): the offline banner clears,
-   * and Record is offered, when that read lands. A failure Splitbook answered stays until Retry or
+   * or a read that failed offline reads again once (`recoveryRead`), and an Expense that couldn't
+   * open offline opens again (#694): the offline banner clears, and Record is offered, when that
+   * read lands. A failure Splitbook answered stays until Retry or
    * a pull. A read under way may still end offline, so this first waits for it to end, and a
    * return heard meanwhile is handled once this one's read ends.
    */
