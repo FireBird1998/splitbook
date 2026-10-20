@@ -118,7 +118,8 @@ async function openLastMonth(page: Page) {
 
 test('By Tag tooltips show the Tag, spending and six-month average on hover and focus', async ({
   page,
-}) => {
+}, testInfo) => {
+  test.skip(isPhone(testInfo), 'Hover is a pointer gesture; phones read the table.');
   const read = await openLastMonth(page);
   const tag = read.byTag.tags[0];
   expect(read.byTag.earlierMonths).toHaveLength(6);

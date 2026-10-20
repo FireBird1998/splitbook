@@ -203,6 +203,7 @@ describe('By Tag', () => {
     const row = tagWith(markup, 'data-testid="tag-bar-row"');
     expect(row).toContain('tabindex="0"');
     expect(row).toContain('aria-label="Household: ₹5,890.00 spent; 6-month average: ₹5,410.00"');
+    expect(markup).toContain('aria-label="Untagged: ₹3,580.00 spent; 6-month average: ₹0.00"');
     expect(markup.match(/data-testid="tag-bar-row"/g)).toHaveLength(4);
     expect(markup.match(/data-testid="tag-average-tick"/g)).toHaveLength(4);
     expect(markup).toMatch(/aria-pressed="true"[^>]*>Chart</);
@@ -220,7 +221,29 @@ describe('By Tag', () => {
 
   it('a first-Month Tag tooltip says there is no earlier average', () => {
     const row = tagWith(render({ read: FIRST }), 'data-testid="tag-bar-row"');
-    expect(row).toContain('aria-label="Household: ₹5,890.00 spent; Nothing earlier to compare"');
+    expect(row).toContain('aria-label="Household: ₹5,890.00 spent; nothing earlier to compare"');
+  });
+
+  it('a Tag without an average says nothing earlier to compare even with earlier months', () => {
+    const read: GroupInsightsRead = {
+      ...READ,
+      byTag: {
+        ...SEPTEMBER_DETAIL.byTag,
+        tags: SEPTEMBER_DETAIL.byTag.tags.map((tag) => ({ ...tag, averageMinor: null })),
+      },
+    };
+    const row = tagWith(render({ read }), 'data-testid="tag-bar-row"');
+    expect(row).toContain('aria-label="Household: ₹5,890.00 spent; nothing earlier to compare"');
+  });
+
+  it('hides the chart legend from screen readers and avoids duplicate native Tag titles', () => {
+    const markup = render();
+    const hiddenLegend =
+      /<div\b[^>]*aria-hidden="true"[^>]*>([\s\S]*?)<\/div>/.exec(markup)?.[1] ?? '';
+    expect(text(hiddenLegend)).toContain('September');
+    expect(text(hiddenLegend)).toContain('6-month average');
+    expect(markup).not.toContain('title="Household"');
+    expect(markup).not.toContain('title="Untagged"');
   });
 
   it('shows the table in a region the keyboard can scroll', () => {

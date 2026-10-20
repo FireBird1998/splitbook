@@ -114,7 +114,7 @@ function TagBars({ model }: { model: ByTagModel }) {
         {model.rows.map((row) => (
           <Tooltip
             key={row.key}
-            title={`${row.name}: ${row.spentText} spent; ${model.averageName ? `${model.averageName}: ${row.averageText}` : 'Nothing earlier to compare'}`}
+            title={`${row.name}: ${row.spentText} spent; ${row.averageText === null ? 'nothing earlier to compare' : `${model.averageName}: ${row.averageText}`}`}
             slotProps={{
               tooltip: {
                 sx: {
@@ -148,7 +148,6 @@ function TagBars({ model }: { model: ByTagModel }) {
             >
               <Typography
                 noWrap
-                title={row.name}
                 sx={{
                   fontSize: '0.875rem',
                   color: row.untagged ? 'text.secondary' : 'text.primary',
@@ -214,6 +213,7 @@ function TagBars({ model }: { model: ByTagModel }) {
         ))}
       </Box>
       <Box
+        aria-hidden="true"
         sx={{
           display: 'flex',
           flexWrap: 'wrap',
