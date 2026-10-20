@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildStatement } from './statement';
-import { buildCsvPreview, buildStatementPreview } from './export-preview';
+import { buildCsvPreview, buildCsvPreviews, buildStatementPreview } from './export-preview';
 import { serializeCsv } from './export-csv';
 import type { BackupGroupInput } from './export-backup';
 
@@ -111,5 +111,49 @@ describe('CSV Text in a preview reply is bounded (#698)', () => {
     const rupees = { header: ['Description'], rows: rows('₹'.repeat(46)) };
     expect(serializeCsv(rupees.header, rupees.rows)).toHaveLength(262_142);
     expect(buildCsvPreview(rupees).text).toBeUndefined();
+  });
+});
+
+describe('CSV Text across a preview reply’s files is bounded too (#698)', () => {
+  /** A file of 262,144 bytes, at the per-file limit (see above). */
+  const full = (cell = 'x') => ({
+    header: ['Description'],
+    rows: Array.from({ length: 5461 }, () => [cell.repeat(46)]),
+  });
+  const small = { header: ['Description'], rows: [['Lunch']] };
+  const texts = (tables: Parameters<typeof buildCsvPreviews>[0]) =>
+    buildCsvPreviews(tables).map((preview) => preview.text);
+
+  it('gives Text in order while the reply stays within 1 MB, and none from the file that would pass it', () => {
+    // Four full files are 1,048,576 bytes, the whole budget: the fifth would pass it, and the
+    // small file after it gets none either.
+    const tables = [full('a'), full('b'), full('c'), full('d'), full('e'), small];
+    expect(texts(tables)).toEqual([
+      serializeCsv(tables[0].header, tables[0].rows),
+      serializeCsv(tables[1].header, tables[1].rows),
+      serializeCsv(tables[2].header, tables[2].rows),
+      serializeCsv(tables[3].header, tables[3].rows),
+      undefined,
+      undefined,
+    ]);
+    // Each file keeps its table sample.
+    expect(buildCsvPreviews(tables).map((preview) => preview.totalRows)).toEqual([
+      5461, 5461, 5461, 5461, 5461, 1,
+    ]);
+  });
+
+  it('keeps every file’s exact bytes for a reply within 1 MB', () => {
+    const tables = [full('a'), small, full('b'), full('c')];
+    expect(texts(tables)).toEqual(tables.map((table) => serializeCsv(table.header, table.rows)));
+  });
+
+  it('leaves out only the Text of a file over 256 KB, which takes none of the budget', () => {
+    const over = full('x');
+    over.rows[0] = ['x'.repeat(47)];
+    const tables = [over, full('a'), full('b'), full('c'), full('d')];
+    expect(texts(tables)).toEqual([
+      undefined,
+      ...tables.slice(1).map((table) => serializeCsv(table.header, table.rows)),
+    ]);
   });
 });
