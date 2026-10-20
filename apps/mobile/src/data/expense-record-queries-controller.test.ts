@@ -2155,6 +2155,73 @@ describe('an Expense that couldn’t open offline opens by itself once the conne
     },
   );
 
+  it.each(returns)(
+    'opens it after its own open under way %s, once that ends offline',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await signedIn(f);
+      // The member opens the dinner just before the connection returns, and its answer is lost.
+      f.connect(true, false);
+      f.server.offline = false;
+      const record = f.hold(recordPath(dinnerId), { exact: true, lost: true });
+      const opening = controller.openExpense(mapleId, dinnerId);
+      await record.reached;
+      const from = f.calls.length;
+      await trigger(f);
+      // Nothing is sent beside the read under way.
+      expect(f.gets(from)).toEqual([]);
+      record.release();
+      await opening;
+      await settle();
+      await settle();
+      // That open ended offline, so it opens once more, live.
+      expect(f.gets(from)).toEqual([
+        '/api/auth/get-session',
+        'group',
+        'record dinner',
+        'history dinner p1',
+      ]);
+      expect(controller.getSnapshot()).toMatchObject({
+        offline: { active: false },
+        expense: { status: 'detail', draft: { original: { _id: dinnerId } } },
+      });
+    },
+  );
+
+  it.each(returns)(
+    'opens it again when the connection returns once more during its reopen, %s, once that ends offline',
+    async (_, trigger) => {
+      const f = fixture();
+      const controller = await openedOffline(f);
+      // The reopen's answer is lost as the connection drops and returns again.
+      const record = f.hold(recordPath(dinnerId), { exact: true, lost: true });
+      const from = f.calls.length;
+      await trigger(f);
+      await record.reached;
+      f.connect(true, false);
+      await settle();
+      await trigger(f);
+      record.release();
+      await settle();
+      await settle();
+      await settle();
+      // The reopen whose answer was lost, then one more for the second return, live.
+      expect(f.gets(from)).toEqual([
+        '/api/auth/get-session',
+        'group',
+        'record dinner',
+        '/api/auth/get-session',
+        'group',
+        'record dinner',
+        'history dinner p1',
+      ]);
+      expect(controller.getSnapshot()).toMatchObject({
+        offline: { active: false },
+        expense: { status: 'detail', draft: { original: { _id: dinnerId } } },
+      });
+    },
+  );
+
   it.each(returns)('reads nothing for it once the member has left it, %s', async (_, trigger) => {
     const f = fixture();
     const controller = await openedOffline(f);
