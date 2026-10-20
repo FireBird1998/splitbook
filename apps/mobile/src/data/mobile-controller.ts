@@ -6147,11 +6147,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** The offline banner shows: the session, or a saved copy shown, hasn't been read live. */
   const bannerShown = () => offlineSession || snapshot.offline.active;
   /**
-   * What the internet's return reads on a screen the controller reads itself, if what it shows is
-   * offline. The Record payment sheet whose check couldn't reach Splitbook checks again, as Try
-   * again does (#685). Under the offline banner still, the screen is read as Retry reads it
-   * (#681): the sheet's check reads its Group without the Group's saved copy, which keeps the
-   * banner until then.
+   * What the internet's return, or a full reconnect (#690), reads on a screen the controller reads
+   * itself, if what it shows is offline. The Record payment sheet whose check couldn't reach
+   * Splitbook checks again, as Try again does (#685). Under the offline banner still, the screen is
+   * read as Retry reads it (#681): the sheet's check reads its Group without the Group's saved
+   * copy, which keeps the banner until then.
    */
   const recoveryRead = (view: Route) => {
     const owner = generation,
@@ -6172,15 +6172,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (shown && bannerShown()) await reread(false);
     };
   };
-  /** The internet's return being handled on that screen: its view, and how many returns it heard. */
+  /** A recovery being handled on that screen: its view, and how many returns it heard. */
   let shownRecovery: { view: Route; heard: number } | null = null;
   /**
-   * The internet returned while the device stayed connected, so the online manager didn't change
-   * (#681, as #678 for a Group's view). Members and Group details, or the Record payment sheet,
-   * that shows this phone's copy or a read that failed offline reads again once (`recoveryRead`):
-   * the offline banner clears, and Record is offered, when that read lands. A failure Splitbook
-   * answered stays until Retry or a pull. A read under way may still end offline, so this first
-   * waits for it to end, and a return heard meanwhile is handled once this one's read ends.
+   * The internet returned while the device stayed connected, which the online manager doesn't
+   * follow (#681, as #678 for a Group's view), or the device fully reconnected, which it does
+   * (#690). Members and Group details, or the Record payment sheet, that shows this phone's copy
+   * or a read that failed offline reads again once (`recoveryRead`): the offline banner clears,
+   * and Record is offered, when that read lands. A failure Splitbook answered stays until Retry or
+   * a pull. A read under way may still end offline, so this first waits for it to end, and a
+   * return heard meanwhile is handled once this one's read ends.
    */
   const recoverShown = async () => {
     const view = route,
