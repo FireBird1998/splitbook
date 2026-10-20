@@ -827,8 +827,11 @@ export function createExpenseQueries(session: ExpenseSession) {
     }
     return reading;
   };
-  /** Waits until this open reads nothing: neither a re-read nor any query it shows. */
-  const quiet = async (opened: View) => {
+  /**
+   * Waits until this open reads nothing: neither a re-read nor any query it shows. Bounded, as
+   * Activity's `settle` is.
+   */
+  const untilReadsEnd = async (opened: View) => {
     for (let round = 0; round < 1000 && view === opened; round += 1) {
       const fetching = api
         .shownKeys(session.snapshot())
@@ -857,7 +860,7 @@ export function createExpenseQueries(session: ExpenseSession) {
     try {
       for (let handled = 0; handled !== opened.recoveries; ) {
         handled = opened.recoveries;
-        await quiet(opened);
+        await untilReadsEnd(opened);
         if (!session.current(owner) || view !== opened || !onScreen() || !session.offline()) return;
         await again('reconnect');
       }

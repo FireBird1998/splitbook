@@ -6108,6 +6108,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     reading.then(done, done);
     return reading;
   };
+  /**
+   * Waits until Members reads nothing: neither a re-read of the screen nor a read of its Group,
+   * such as the open's, which a read now would join. Bounded, as Activity's `settle` is.
+   */
+  const untilMembersReadsEnd = async (key: QueryKey) => {
+    for (let round = 0; round < 1000; round += 1) {
+      const group = queryClient.getQueryCache().find({ queryKey: key, exact: true });
+      const reading: Promise<unknown>[] = [...rereads];
+      if (group?.state.fetchStatus === 'fetching' && group.promise) reading.push(group.promise);
+      if (!reading.length) return;
+      await Promise.allSettled(reading);
+    }
+  };
   /** The internet's return being handled on Members: its view, and how many returns it heard. */
   let membersRecovery: { view: Route; heard: number } | null = null;
   /**
@@ -6122,6 +6135,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const view = route,
       owner = generation;
     if (view.screen !== 'members') return;
+    const key = groupKey(account(), view.groupId);
     if (membersRecovery?.view === view) {
       membersRecovery.heard += 1;
       return;
@@ -6131,7 +6145,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       for (let handled = 0; handled !== recovery.heard; ) {
         handled = recovery.heard;
-        while (rereads.size) await Promise.allSettled([...rereads]);
+        await untilMembersReadsEnd(key);
         if (!current(owner) || route !== view || !(offlineSession || snapshot.offline.active))
           return;
         await reread(false).catch(() => undefined);
