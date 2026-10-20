@@ -13,7 +13,7 @@ import type {
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { MobileFetch } from '../data/types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
-import { setWindow, touchAlong } from '../test-utils/native';
+import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import { ToReviewHomeCard, ToReviewGroupBanner, ToReviewList, ToReviewOverlay } from './to-review';
 import { ReviewRunOverlay } from './review-run';
@@ -511,6 +511,42 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     );
     expect(bar).toHaveLength(1);
     await tap(banner, bar[0]!.props.accessibilityLabel);
+    expect(f.controller.getSnapshot().toReview.groupId).toBe(groupId);
+  });
+  it('opens the list from the Group’s bar on a tap or a screen reader’s activate, never on a drag (#684)', async () => {
+    const f = fixture();
+    await signIn(f);
+    await act(async () => {
+      await f.controller.refreshToReview();
+    });
+    const banner = await render(
+      <ToReviewGroupBanner controller={f.controller} groupId={groupId} />,
+      mode,
+    );
+    const bar = () =>
+      banner.root.find(
+        (node) =>
+          String(node.type) === 'Pressable' &&
+          String(node.props.accessibilityLabel).startsWith('4 to review in Maple House'),
+      );
+    const landed = { pageX: 180, pageY: 300 };
+    const finger = async (path: Parameters<typeof touchAlong>[1]) =>
+      act(async () => {
+        touchAlong(bar(), path);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+    await finger([landed, { pageX: 180, pageY: 200 }, { pageX: 181, pageY: 60 }]);
+    expect(f.controller.getSnapshot().toReview.groupId).toBeNull();
+    await finger([landed, { pageX: 182, pageY: 297 }]);
+    expect(f.controller.getSnapshot().toReview.groupId).toBe(groupId);
+    await act(async () => {
+      await f.controller.back();
+    });
+    expect(f.controller.getSnapshot().toReview.groupId).toBeNull();
+    await act(async () => {
+      activateWithScreenReader(bar());
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
     expect(f.controller.getSnapshot().toReview.groupId).toBe(groupId);
   });
   it('shows an item’s day as it is, in a zone behind UTC (#437)', () =>

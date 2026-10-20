@@ -40,6 +40,7 @@ import {
   TopBar,
   denseHitSlop,
   touch,
+  useTap,
 } from './compact';
 import { Icon } from './primitives';
 import {
@@ -286,6 +287,8 @@ function ReviewRunContent({
   close(): void;
 }) {
   const theme = useTheme();
+  // A drag that starts on the duplicate checkbox never checks it (#684).
+  const duplicateTap = useTap();
   const machine = controller.reviewRun()!;
   const selected = state.items[state.index];
   const [invalid, setInvalid] = useState<string | null>(null);
@@ -641,7 +644,7 @@ function ReviewRunContent({
                 accessibilityLabel="It’s a different expense, save it anyway"
                 accessibilityState={{ checked: state.acknowledged, disabled: locked }}
                 disabled={locked}
-                onPress={machine.acknowledge}
+                {...duplicateTap.on(machine.acknowledge)}
                 hitSlop={denseHitSlop}
                 style={{
                   minHeight: touch.dense,

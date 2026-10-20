@@ -17,7 +17,7 @@ import {
 } from './group-balances';
 import type { PendingPayment } from '../data/settlement';
 import { findHosts, flatten, largeTextWindows, unreadText } from '../test-utils/layout';
-import { setWindow } from '../test-utils/native';
+import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import {
   RecordPaymentSheet,
@@ -151,6 +151,20 @@ describe('Balances destination', () => {
     expect(record.props.accessibilityRole).toBe('button');
     act(() => record.props.onPress());
     expect(onRecord).toHaveBeenCalledWith(you, sam, 'INR');
+  });
+
+  it('opens Record payment on a tap or a screen reader’s activate, never on a drag (#684)', () => {
+    const { root, onRecord } = view();
+    const record = () => labelled(root, 'Record your payment to Sam Chen')[0];
+    const landed = { pageX: 300, pageY: 400 };
+    act(() =>
+      touchAlong(record(), [landed, { pageX: 300, pageY: 300 }, { pageX: 301, pageY: 150 }]),
+    );
+    expect(onRecord).not.toHaveBeenCalled();
+    act(() => touchAlong(record(), [landed, { pageX: 302, pageY: 403 }]));
+    expect(onRecord).toHaveBeenCalledExactlyOnceWith(you, sam, 'INR');
+    act(() => activateWithScreenReader(record()));
+    expect(onRecord).toHaveBeenCalledTimes(2);
   });
 
   it('lists only payments the member pays or receives', () => {

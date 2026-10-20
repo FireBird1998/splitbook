@@ -10,7 +10,7 @@ import type {
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { MobileFetch } from '../data/types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
-import { setWindow } from '../test-utils/native';
+import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import { clockTime } from './activity-format';
 import { ToReviewHomeCard, ToReviewOverlay } from './to-review';
@@ -504,6 +504,37 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(tally(tree)).toContain('Saved 2');
     expect(tally(tree)).toContain('Deleted 1');
     expect(tally(tree)).toContain('Left for later 1');
+  });
+  it('checks “It’s a different expense” on a tap or a screen reader’s activate, never on a drag (#684)', async () => {
+    const f = fixture({ member: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    // As in the case above: save the first item and skip Fare, which brings the duplicate.
+    await tap(tree, 'Save expense');
+    await tap(tree, 'Skip for now');
+    expect(text(tree)).toContain('Possible duplicate');
+    const different = () => button(tree, 'It’s a different expense, save it anyway');
+    const checked = () => different().props.accessibilityState.checked;
+    const landed = { pageX: 180, pageY: 500 };
+    const finger = async (path: Parameters<typeof touchAlong>[1]) =>
+      act(async () => {
+        touchAlong(different(), path);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+    await finger([landed, { pageX: 180, pageY: 400 }, { pageX: 181, pageY: 250 }]);
+    expect(checked()).toBe(false);
+    expect(button(tree, 'Save expense').props.disabled).toBe(true);
+    await finger([landed, { pageX: 182, pageY: 503 }]);
+    expect(checked()).toBe(true);
+    expect(button(tree, 'Save expense').props.disabled).toBe(false);
+    await act(async () => {
+      activateWithScreenReader(different());
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(checked()).toBe(false);
   });
   it('is read-only offline and Close returns to the Group list that started it', async () => {
     const f = fixture();

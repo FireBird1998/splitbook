@@ -1,6 +1,6 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { setWindow } from '../test-utils/native';
+import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -114,5 +114,62 @@ describe('A long Group name (#554)', () => {
     expect(name().props.selection).toEqual({ start: 0, end: 0 });
     // Leaving the box still checks the name, as before.
     expect(onLeaveField).toHaveBeenCalledWith('name');
+  });
+});
+
+describe('choosing a new Group’s currency (#684)', () => {
+  it('opens the currencies and picks one on a tap or a screen reader’s activate, never on a drag', () => {
+    const onChange = vi.fn();
+    act(() => {
+      renderer = create(
+        <GroupCreateForm
+          draft={{
+            name: 'Maple House',
+            description: '',
+            category: 'home',
+            defaultCurrency: 'INR',
+            startDate: '',
+            endDate: '',
+          }}
+          onChange={onChange}
+          onSubmit={vi.fn()}
+          busy={false}
+          message={null}
+          uncertain={false}
+          onCheckGroups={vi.fn()}
+          onDiscard={vi.fn()}
+        />,
+      );
+    });
+    const pressable = (label: string) =>
+      renderer!.root.find(
+        (node: ReactTestInstance) =>
+          (node.type as unknown) === 'Pressable' &&
+          String(node.props.accessibilityLabel).startsWith(label),
+      );
+    const choosing = () =>
+      renderer!.root.find((node: ReactTestInstance) => (node.type as unknown) === 'Modal').props
+        .visible;
+    const landed = { pageX: 180, pageY: 400 };
+    const drag = [landed, { pageX: 180, pageY: 300 }, { pageX: 181, pageY: 150 }] as const;
+    const tap = [landed, { pageX: 182, pageY: 403 }] as const;
+
+    act(() => touchAlong(pressable('Currency, INR'), [...drag]));
+    expect(choosing()).toBe(false);
+    act(() => touchAlong(pressable('Currency, INR'), [...tap]));
+    expect(choosing()).toBe(true);
+
+    act(() => touchAlong(pressable('USD, '), [...drag]));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(choosing()).toBe(true);
+    act(() => touchAlong(pressable('USD, '), [...tap]));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ defaultCurrency: 'USD' });
+    expect(choosing()).toBe(false);
+
+    act(() => activateWithScreenReader(pressable('Currency, INR')));
+    expect(choosing()).toBe(true);
+    act(() => activateWithScreenReader(pressable('EUR, ')));
+    expect(onChange).toHaveBeenLastCalledWith({ defaultCurrency: 'EUR' });
+    expect(choosing()).toBe(false);
   });
 });

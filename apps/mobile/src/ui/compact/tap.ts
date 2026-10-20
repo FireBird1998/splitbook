@@ -67,3 +67,6 @@ export function useTap() {
     }),
   };
 }
+
+/** A screen's or sheet's one `useTap`, handed to the presses it keeps to taps. */
+export type Tap = ReturnType<typeof useTap>;

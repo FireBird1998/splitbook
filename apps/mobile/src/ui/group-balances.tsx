@@ -21,6 +21,7 @@ import {
   scaledSp,
   textVariants,
   useLargestText,
+  useTap,
   useTextColumn,
 } from './compact';
 import { inPlace, ReadTime, RetainedNotice } from './financial-views';
@@ -242,6 +243,8 @@ function SuggestedPayments({
 }) {
   const reason = offline ? recordNeedsConnection : unavailable;
   const theme = useTheme();
+  // A drag that starts on Record never opens Record payment (#684).
+  const recordTap = useTap();
   const { fontScale } = useWindowDimensions();
   const column = useTextColumn();
   const whole = useLargestText();
@@ -345,6 +348,7 @@ function SuggestedPayments({
                         : `Record ${payment.payer}’s payment to you`
                     }
                     onPress={() => onRecord(payment.paidBy, payment.paidTo, payment.currency)}
+                    tap={recordTap}
                   />
                 </Trailing>
               </View>
