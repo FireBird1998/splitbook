@@ -729,11 +729,19 @@ export function createActivityQueries(session: ActivitySession) {
    * (#681, as #678 for a Group's view). Activity that shows this phone's copy, or a read that
    * failed offline, reads again once, as on a reconnect: the offline banner clears when that read
    * lands. A failure Splitbook answered stays until Retry, a pull or the next open. A read under
-   * way may still end offline, so Activity first waits for its reads to end.
+   * way, its own or a Load older or newer, may still end offline, so Activity first waits for its
+   * reads to end.
    */
   const recover = () => {
-    if (!view) return;
-    if (view.reading) view.recovering = true;
+    const opened = view,
+      owner = session.generation();
+    if (!opened) return;
+    if (opened.reading) opened.recovering = true;
+    // A Load older or newer reads through the observer, not `read`: a read now would join it.
+    else if (held(activityKey(opened.groupId))?.state.fetchStatus === 'fetching')
+      void settle(owner).then(() => {
+        if (view === opened && session.current(owner)) recover();
+      });
     else if (session.offline()) again();
   };
 
