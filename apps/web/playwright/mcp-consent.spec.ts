@@ -273,3 +273,76 @@ for (const allowPreparation of [false, true]) {
     else await expect(kochi).toBeChecked();
   });
 }
+
+test('Not you returns a different account to the same signed approval without granting access (#735)', async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const redirectUri = 'https://switch-assistant.example.test/callback';
+  const registration = await request.post('/api/auth/oauth2/register', {
+    data: {
+      client_name: 'Fictional Account Switch Assistant',
+      redirect_uris: [redirectUri],
+      token_endpoint_auth_method: 'none',
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      scope: 'ledger:read drafts:write offline_access',
+    },
+  });
+  expect(registration.status()).toBe(201);
+  const { client_id: clientId } = await registration.json();
+  await enterAsPersona(page, 'alex');
+  const query = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    prompt: 'consent',
+    scope: 'ledger:read drafts:write offline_access',
+    resource: `${baseURL}/api/mcp`,
+    state: 'unchanged + & state',
+    code_challenge_method: 'S256',
+    code_challenge: createHash('sha256').update(randomBytes(32)).digest('base64url'),
+  });
+  await page.goto(`/api/auth/oauth2/authorize?${query}`);
+  await expect(page).toHaveURL(/\/mcp\/consent\?/);
+  const original = new URL(page.url());
+  await expect(page.getByText('Alex Rivera', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Not you?', exact: true }).click();
+  await expect(page).toHaveURL(/\/login\?/);
+  expect(new URL(page.url()).searchParams.get('callbackUrl')).toBe(
+    `/mcp/consent${original.search}`,
+  );
+  const anonymous = await page.request.get('/api/auth/get-session');
+  expect(await anonymous.json()).toBeNull();
+  await page.getByRole('button', { name: 'Continue as Sam Chen' }).click();
+  await expect(page).toHaveURL(original.href);
+  await expect(page.getByText('Sam Chen', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('Fictional Account Switch Assistant wants to use your Splitbook', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Allow connection', exact: true })).toBeEnabled();
+  await expect(
+    page.getByRole('checkbox', {
+      name: 'Also let it prepare Expenses for your To review',
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  const sam = await page.request.get('/api/auth/mcp/connections');
+  expect(sam.status()).toBe(200);
+  expect(
+    (await sam.json()).connections.some((row: { clientId: string }) => row.clientId === clientId),
+  ).toBe(false);
+  const alexLogin = await request.post('/api/auth/demo-persona/sign-in', {
+    data: { personaId: 'alex' },
+    headers: { origin: baseURL! },
+  });
+  expect(alexLogin.status()).toBe(200);
+  const alex = await request.get('/api/auth/mcp/connections');
+  expect(alex.status()).toBe(200);
+  expect(
+    (await alex.json()).connections.some((row: { clientId: string }) => row.clientId === clientId),
+  ).toBe(false);
+});
