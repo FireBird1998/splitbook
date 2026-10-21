@@ -32,6 +32,23 @@ describe('the currencies Insights and the Trip summary switch between (#729)', (
     ]);
     expect(spendingCurrencies(LISBON_AND_TOKYO, [])).toEqual([spent('INR', 0, 0)]);
   });
+
+  it('puts currencies the Group doesn’t list last, alphabetically, whatever order they come in', () => {
+    expect(
+      spendingCurrencies(LISBON_AND_TOKYO, [
+        spent('USD', 1, 2_000),
+        spent('GBP', 2, 3_000),
+        spent('JPY', 4, 9_000),
+        spent('CHF', 1, 500),
+      ]),
+    ).toEqual([
+      spent('INR', 0, 0),
+      spent('JPY', 4, 9_000),
+      spent('CHF', 1, 500),
+      spent('GBP', 2, 3_000),
+      spent('USD', 1, 2_000),
+    ]);
+  });
 });
 
 describe('the currency they open on (#729)', () => {
