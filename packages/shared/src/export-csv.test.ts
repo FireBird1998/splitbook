@@ -498,6 +498,7 @@ describe('the payments CSV', () => {
       'Amount paid',
       'Paid currency',
       'Rate (paid per cleared)',
+      'Rate attribution',
     ]);
   });
 
@@ -542,6 +543,7 @@ describe('the payments CSV', () => {
         '',
         '',
         '',
+        '',
       ],
       [
         '2026-09-02',
@@ -553,6 +555,7 @@ describe('the payments CSV', () => {
         '',
         'Priya Shah',
         'd00000000000000000000002',
+        '',
         '',
         '',
         '',
