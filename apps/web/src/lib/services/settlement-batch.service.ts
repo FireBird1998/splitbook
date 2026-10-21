@@ -124,6 +124,8 @@ export async function createSettlementBatch(
           ...row,
           note: undefined,
           settlementId: String(ids[index]),
+          batchId: String(ids[0]),
+          batchSize: rows.length,
           amountMinor,
           ...snapshot,
           paidByName: names.find((person) => String(person._id) === paidBy)?.name,

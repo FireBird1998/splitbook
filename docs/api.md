@@ -1306,8 +1306,13 @@ retry individual rows from an unconfirmed batch with new keys. Nothing retries
 a write without the member's explicit action.
 
 Activity uses **one `settlement_recorded` event per Settlement**, with that row's
-cleared amount, paid amount, rate provenance and immutable pair figures. Events
-are committed to each row's recoverable outbox with the ledger and published only
+cleared amount, paid amount, rate provenance and immutable pair figures. Each event
+also carries `metadata.batchId` (the first Settlement's id as a non-empty string)
+and `metadata.batchSize` (the number of Settlements, an integer of at least 1),
+including a one-row batch. The Group and user Activity reads retain both fields.
+A single `POST /settlements` event carries neither; older events remain valid.
+Clients collect events with the same batch reference and show **one payment** in
+Activity, including when a page boundary splits the batch. Events are committed to each row's recoverable outbox with the ledger and published only
 after the whole transaction commits. A retry cannot duplicate them.
 
 The shared module `@splitbook/shared/settlement-batch` exports:
