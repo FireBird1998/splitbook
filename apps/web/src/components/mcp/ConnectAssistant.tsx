@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import NextLink from 'next/link';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Breadcrumbs from '@mui/material/Breadcrumbs';
@@ -8,6 +8,7 @@ import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
 import IconButton from '@mui/material/IconButton';
+import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -143,8 +144,12 @@ export default function ConnectAssistant({
     <Container component="main" maxWidth="md" sx={{ py: { xs: 3, sm: 6 } }}>
       <Stack spacing={3}>
         <Breadcrumbs aria-label="Breadcrumb">
-          <Link href="/">{PRODUCT_NAME} home</Link>
-          <Link href="/settings#connected-assistants">Connected assistants</Link>
+          <Link component={NextLink} href="/" underline="hover">
+            {PRODUCT_NAME} home
+          </Link>
+          <Link component={NextLink} href="/settings#connected-assistants" underline="hover">
+            Connected assistants
+          </Link>
           <Typography color="text.primary" aria-current="page">
             Connect an assistant
           </Typography>
@@ -155,7 +160,17 @@ export default function ConnectAssistant({
               <Chip label="Staging only while we test" color="warning" size="small" />
             </Box>
           )}
-          <Typography component="h1" variant="h3">
+          <Typography
+            component="h1"
+            sx={{
+              m: 0,
+              fontSize: '1.75rem',
+              lineHeight: 1.15,
+              fontWeight: 600,
+              letterSpacing: '-0.02em',
+              color: 'text.primary',
+            }}
+          >
             Connect an assistant
           </Typography>
           <Typography color="text.secondary">
@@ -177,7 +192,7 @@ export default function ConnectAssistant({
             {CONNECT_CHOICES.map((choice) => (
               <Button
                 key={choice.id}
-                component={Link}
+                component={NextLink}
                 href={connectHref(choice.id)}
                 aria-current={choice.id === chosen ? 'page' : undefined}
                 variant={choice.id === chosen ? 'contained' : 'outlined'}
@@ -217,7 +232,7 @@ export default function ConnectAssistant({
           <Stack spacing={3}>
             <ChatGPTSetup resource={resource} staging={staging} canPrepare={canPrepare} />
             <AssistantAuthorization assistant={CHATGPT} returnTo={connectHref('chatgpt')} enabled />
-            <Button component={Link} href="/connect/chatgpt" sx={{ alignSelf: 'flex-start' }}>
+            <Button component={NextLink} href="/connect/chatgpt" sx={{ alignSelf: 'flex-start' }}>
               Full ChatGPT guide, with help
             </Button>
           </Stack>
@@ -236,7 +251,8 @@ export default function ConnectAssistant({
             />
             <SetupStep title="Try it">
               <Typography>
-                Ask in your own words, or start with one of the questions below.
+                Run /mcp in Claude Code to check its connection. Then ask in your own words, or
+                start with one of the questions below.
               </Typography>
             </SetupStep>
           </SetupSteps>
