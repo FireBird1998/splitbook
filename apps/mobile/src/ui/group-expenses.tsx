@@ -4,6 +4,7 @@ import type { RowPlaces } from './return-scroll';
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
+import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 import { mobileExpensePosition } from '../data/expense-position';
 import type {
@@ -12,7 +13,9 @@ import type {
   KeptDraft,
   MobileExpense,
   MobileGroup,
+  TripSummaryState,
 } from '../data/types';
+import { CurrencyTabs } from './currency-tabs';
 import {
   Banner,
   Card,
@@ -229,6 +232,50 @@ function summaryStats(summary: ExpenseWindowSummary, currentUserId: string) {
   return { stats, others };
 }
 
+/** "¥186,000": exact minor units in their currency. */
+const minorMoney = (minor: number, currency: string) =>
+  formatCurrency(toMajorAmount(minor, currency), currency);
+
+/**
+ * A Trip's spending, one currency at a time (#730), from its Trip summary: a tab per currency
+ * with what was spent in it, and the member's own figures in the one shown, once they are read in
+ * it. Null while the Trip has spent in only one currency: the card shows its usual figures.
+ */
+function tripSpending(trip: TripSummaryState | undefined, main: string) {
+  const read = trip?.data;
+  const currencies = read?.currencies ?? [];
+  if (!trip || !read || currencies.length < 2) return null;
+  const shown = trip.chosen ?? read.currency;
+  const tabs = currencies.map((row) => {
+    const spent = minorMoney(row.spentMinor, row.currency);
+    return {
+      currency: row.currency,
+      main: row.currency === main,
+      figure: spent,
+      // "JPY, ¥186,000 spent in 24 Expenses", as the web's switch names it (#729).
+      name: [
+        row.currency,
+        ...(row.currency === main ? ['main currency'] : []),
+        `${spent} spent in ${row.expenseCount} ${row.expenseCount === 1 ? 'Expense' : 'Expenses'}`,
+      ].join(', '),
+    };
+  });
+  // Another currency's figures never show under the one chosen.
+  const stats: SummaryStat[] | null =
+    read.currency === shown
+      ? [
+          { label: 'Spent', value: minorMoney(read.spentMinor, shown) },
+          { label: 'Your share', value: minorMoney(read.yourShareMinor, shown) },
+          { label: 'You paid', value: minorMoney(read.youPaidMinor, shown) },
+        ]
+      : null;
+  const opened = currencies.find((row) => row.currency === read.currency);
+  const note = trip.chosen
+    ? 'Each currency is shown on its own.'
+    : `Opened on ${read.currency}, the currency with the most Expenses (${opened?.expenseCount ?? read.expenseCount}). Each currency is shown on its own.`;
+  return { shown, tabs, stats, note };
+}
+
 /**
  * What the window cost: a Household's Month (or All time) and every other Theme's all time.
  * It describes spending only, never running Balances, so it renders again only when what it
@@ -238,6 +285,8 @@ const ExpenseSummary = memo(function ExpenseSummary({
   household,
   month,
   summary,
+  trip,
+  onChooseTripCurrency,
   currentUserId,
   refreshedAt,
   restored,
@@ -251,6 +300,9 @@ const ExpenseSummary = memo(function ExpenseSummary({
   household: boolean;
   month: string | null;
   summary: ExpenseWindowSummary | null;
+  /** A Trip's summary, for a Trip in more than one currency (#730). */
+  trip?: TripSummaryState;
+  onChooseTripCurrency?: (currency: string) => void;
   currentUserId: string;
   refreshedAt: number | null;
   /** The figures are this device's saved copy: "Saved", not "Updated". */
@@ -266,8 +318,17 @@ const ExpenseSummary = memo(function ExpenseSummary({
   onSelectMonth: (month: string | null) => void;
 }) {
   const figures = summary ? summaryStats(summary, currentUserId) : null;
+  const spending = household ? null : tripSpending(trip, summary?.currency ?? 'INR');
   const large = useLargeText();
-  const updated = (
+  const updated = spending ? (
+    // The figures shown are the Trip summary's: its time, and whether it is this phone's copy.
+    <ReadTime
+      refreshedAt={trip!.refreshedAt}
+      restored={trip!.restored === true}
+      updating={trip!.stale && trip!.status === 'loading'}
+      offline={offline}
+    />
+  ) : (
     <ReadTime refreshedAt={refreshedAt} restored={restored} updating={updating} offline={offline} />
   );
   const count = summary ? `${summary.count} ${summary.count === 1 ? 'expense' : 'expenses'}` : '';
@@ -285,6 +346,8 @@ const ExpenseSummary = memo(function ExpenseSummary({
           style={{
             minHeight: 32,
             flexDirection: 'row',
+            // At 200% the time goes under the title rather than past the card's edge.
+            flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 8,
@@ -298,7 +361,52 @@ const ExpenseSummary = memo(function ExpenseSummary({
           {updated}
         </View>
       )}
-      {figures ? (
+      {spending ? (
+        <>
+          <View style={{ paddingHorizontal: 14, paddingTop: 8 }}>
+            <CurrencyTabs
+              label="Spending in"
+              tabs={spending.tabs}
+              value={spending.shown}
+              onChange={(currency) => onChooseTripCurrency?.(currency)}
+            />
+          </View>
+          <SummaryStats stats={spending.stats ?? []} loading={!spending.stats} />
+          <CompactText
+            variant="caption"
+            tone="secondary"
+            style={{ paddingHorizontal: 14, marginTop: -6, paddingBottom: 10 }}
+          >
+            {spending.note}
+          </CompactText>
+          {trip!.status === 'error' && trip!.message ? (
+            <CompactText
+              variant="caption"
+              tone="secondary"
+              style={{ paddingHorizontal: 14, marginTop: -6, paddingBottom: 10 }}
+            >
+              {trip!.message}
+            </CompactText>
+          ) : null}
+          {summary ? (
+            <>
+              <Divider />
+              <View
+                style={{
+                  minHeight: 40,
+                  justifyContent: 'center',
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                }}
+              >
+                <CompactText variant="small" tone="secondary">
+                  {count}
+                </CompactText>
+              </View>
+            </>
+          ) : null}
+        </>
+      ) : figures ? (
         <>
           <SummaryStats stats={figures.stats} />
           {figures.others.length ? (
@@ -443,6 +551,7 @@ export const GroupExpensesView = memo(
     onOpenExpense,
     onResumeDraft,
     onDiscardDraft,
+    onChooseTripCurrency,
   }: {
     group: MobileGroup;
     currentUserId: string;
@@ -472,6 +581,8 @@ export const GroupExpensesView = memo(
     onOpenExpense: (expenseId: string) => void;
     onResumeDraft: () => void;
     onDiscardDraft: () => void;
+    /** The All time card's currency switch on a Trip in more than one currency (#730). */
+    onChooseTripCurrency?: (currency: string) => void;
   }) {
     const now = dayKey ? new Date(`${dayKey}T12:00:00`).getTime() : (legacyNow ?? Date.now());
     const theme = useTheme();
@@ -488,6 +599,11 @@ export const GroupExpensesView = memo(
       choosing.current = onSelectMonth;
     });
     const choose = useCallback((month: string | null) => choosing.current(month), []);
+    const pickingCurrency = useRef(onChooseTripCurrency);
+    useEffect(() => {
+      pickingCurrency.current = onChooseTripCurrency;
+    });
+    const pickCurrency = useCallback((currency: string) => pickingCurrency.current?.(currency), []);
     // When the window moves (#219), rows above the one on screen go or come: Load more past 5
     // pages drops the newest page, and Load newer brings it back above. The view moves by as much
     // as a row shown on both sides of the change moved, so the row on screen keeps its place.
@@ -589,6 +705,8 @@ export const GroupExpensesView = memo(
           household={household}
           month={state.month}
           summary={summary}
+          trip={state.trip}
+          onChooseTripCurrency={pickCurrency}
           currentUserId={currentUserId}
           refreshedAt={listed ? expenses.refreshedAt : null}
           restored={expenses.restored === true}
@@ -734,8 +852,9 @@ export const GroupExpensesView = memo(
   },
   (a, b) =>
     sameSelection(
-      { ...a, state: a.state.expenses, month: a.state.month },
-      { ...b, state: b.state.expenses, month: b.state.month },
+      // A Trip's summary (#730) lands on its own, after the Expenses it follows.
+      { ...a, state: a.state.expenses, month: a.state.month, trip: a.state.trip },
+      { ...b, state: b.state.expenses, month: b.state.month, trip: b.state.trip },
     ),
 );
 
