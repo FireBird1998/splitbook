@@ -295,6 +295,9 @@ describe('the selection panel (#610)', () => {
     expect(shown()).toContain('Old Berlin rent');
     expect(shown()).toContain('DEM 40.00');
     expect(shown()).toContain('Your position on theseyou lent₹827.00');
+    // Selected above the rupee one, it still comes last.
+    panel([marks, GROCERIES]);
+    expect(shown()).toMatch(/2 selected · ₹1,240\.50 \+ DEM\s40\.00/);
   });
 
   it('offers only the Group’s active Tags to move them to', async () => {

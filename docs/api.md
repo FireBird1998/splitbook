@@ -1072,7 +1072,7 @@ allocations, unchecked and never converted. It counts in `count` and
 `pagination.total`, and Spent includes it as its own line: `totalsByCurrency`
 ends with one entry per such currency, summed from the stored minor units at 2
 places (`readUnsupportedAmountMinor`), after the Group's currencies and any it
-no longer lists. Positions and per-currency views don't include it: it stays
+no longer lists, alphabetically. Positions and per-currency views don't include it: it stays
 out of `totalAmount`, `userOwes`, `userGetsBack`, `userByCurrency` and
 `byMember`. The apps show its amount with its code (`DEM 40.00`), last in Spent,
 and no position.

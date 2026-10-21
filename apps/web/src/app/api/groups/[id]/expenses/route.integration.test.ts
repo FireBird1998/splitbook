@@ -515,6 +515,38 @@ describe('an Expense in a currency Splitbook no longer supports (#810)', () => {
     });
   }
 
+  it('gives each currency Splitbook no longer supports its own Spent line, alphabetically, last', async () => {
+    const fixture = await household();
+    // Written first, the francs still come after the marks.
+    await Expense.collection.insertOne({
+      group: new mongoose.Types.ObjectId(fixture.groupId),
+      description: 'Old Paris taxi',
+      amount: 12.5,
+      currency: 'FRF',
+      category: 'transport',
+      date: new Date(2026, 8, 16, 12),
+      paidBy: [{ user: new mongoose.Types.ObjectId(alice), amount: 12.5 }],
+      splitMethod: 'equal',
+      splitBetween: [{ user: new mongoose.Types.ObjectId(alice), amount: 12.5 }],
+      tag: 'Household',
+      tagId: new mongoose.Types.ObjectId(fixture.tagIds.Household),
+      createdBy: new mongoose.Types.ObjectId(alice),
+      isDeleted: false,
+      createdAt: new Date(2026, 8, 16, 12),
+      updatedAt: new Date(2026, 8, 16, 12),
+    });
+    await berlinRent(fixture);
+    const { status, body } = await read(fixture.groupId, '?page=1&limit=20');
+    expect(status).toBe(200);
+    expect(
+      body.data.summary.totalsByCurrency.map((row: { currency: string }) => row.currency),
+    ).toEqual(['INR', 'DEM', 'FRF']);
+    expect(body.data.summary.totalsByCurrency.slice(1)).toEqual([
+      { currency: 'DEM', totalAmount: 40 },
+      { currency: 'FRF', totalAmount: 12.5 },
+    ]);
+  });
+
   it.each([
     ['the first page', '?page=1&limit=20&includeMemberBreakdown=1'],
     ['a page of two', '?page=1&limit=2&includeMemberBreakdown=1'],
