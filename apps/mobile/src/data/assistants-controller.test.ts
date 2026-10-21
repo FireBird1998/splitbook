@@ -285,6 +285,27 @@ describe('Connected assistants on Android (#622)', () => {
     controller.dispose();
   });
 
+  it('keeps the old assistant list and Settings row gone after a 404 and offline restart (#775)', async () => {
+    const f = fixture();
+    const { controller, state } = await readOnline(f);
+    f.server.assistantsOff = true;
+    await controller.refresh('pull');
+    expect(state()).toMatchObject({ available: false, assistants: null, status: 'ready' });
+
+    const restarted = await restartOffline(f, controller);
+    restarted.openSettings();
+    await vi.waitFor(() => expect(restarted.getSnapshot().assistants.status).toBe('ready'));
+    expect(restarted.getSnapshot().assistants).toMatchObject({
+      assistants: null,
+      saved: false,
+      unsaved: true,
+    });
+    expect(restarted.getSnapshot().assistants.available).not.toBe(true);
+    restarted.openAssistants();
+    expect(restarted.getSnapshot().screen).toBe('settings');
+    restarted.dispose();
+  });
+
   it('disconnects an assistant once the member confirms, and says so', async () => {
     const f = fixture();
     const { controller, state } = await readOnline(f);
