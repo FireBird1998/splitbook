@@ -10,6 +10,7 @@ import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import MoneyText from '@/components/common/MoneyText';
+import { getCurrency } from '@splitbook/shared/currency';
 import { displayMajorAmount } from '@splitbook/shared/exact-money';
 import { getSemanticTokens } from '@/lib/theme/tokens';
 import { zonedTimestamp } from '@splitbook/shared/export-csv';
@@ -133,7 +134,9 @@ function CurrencySection({
       </Box>
     );
   }
-  const name = (id: string) => bucket.people.find((row) => row.id === id)?.name ?? 'Former member';
+  const name = (id: string) => statement.names[id] ?? 'Former member';
+  // A currency Splitbook no longer supports has no position, so no one's figures here (#820).
+  const inBalances = !!getCurrency(currency);
   const amount = (minor: number) => (
     <MoneyText amount={displayMajorAmount(minor, currency)} currency={currency} tone="neutral" />
   );
@@ -161,50 +164,62 @@ function CurrencySection({
           Payments: {bucket.payments.length} · {amount(bucket.paymentTotalMinor)}
         </Typography>
       </Section>
-      <Section title="Paid, Share and Net">
-        <Typography color="text.secondary">
-          Expense contributions for this period. Net is Paid minus Share.
+      {inBalances ? null : (
+        <Typography sx={{ mt: 2 }}>
+          {currency} is a currency Splitbook no longer supports, so this money isn’t in Balances.
         </Typography>
-        <StatementTable title="People’s contributions" headers={['Person', 'Paid', 'Share', 'Net']}>
-          {bucket.people.map((person) => (
-            <TableRow key={person.id}>
-              <TableCell component="th" scope="row">
-                {person.name}
-              </TableCell>
-              <TableCell>{amount(person.paidMinor)}</TableCell>
-              <TableCell>{amount(person.shareMinor)}</TableCell>
-              <TableCell>{amount(person.netMinor)}</TableCell>
-            </TableRow>
-          ))}
-        </StatementTable>
-      </Section>
-      <Section title="Balances and suggested payments">
-        <Typography color="text.secondary">
-          Current all-time positions, including every recorded payment. These match Balances; the
-          period changes spending only.
-        </Typography>
-        <StatementTable title="Current balances" headers={['Person', 'Balance']}>
-          {bucket.people.map((person) => (
-            <TableRow key={person.id}>
-              <TableCell component="th" scope="row">
-                {person.name}
-              </TableCell>
-              <TableCell>{amount(person.balanceMinor)}</TableCell>
-            </TableRow>
-          ))}
-        </StatementTable>
-        {bucket.suggestedPayments.length ? (
-          <Box component="ul">
-            {bucket.suggestedPayments.map((row) => (
-              <li key={`${row.from}-${row.to}`}>
-                {name(row.from)} pays {name(row.to)} {amount(row.amountMinor)}
-              </li>
-            ))}
-          </Box>
-        ) : (
-          <Typography>Settled up.</Typography>
-        )}
-      </Section>
+      )}
+      {inBalances ? (
+        <>
+          <Section title="Paid, Share and Net">
+            <Typography color="text.secondary">
+              Expense contributions for this period. Net is Paid minus Share.
+            </Typography>
+            <StatementTable
+              title="People’s contributions"
+              headers={['Person', 'Paid', 'Share', 'Net']}
+            >
+              {bucket.people.map((person) => (
+                <TableRow key={person.id}>
+                  <TableCell component="th" scope="row">
+                    {person.name}
+                  </TableCell>
+                  <TableCell>{amount(person.paidMinor)}</TableCell>
+                  <TableCell>{amount(person.shareMinor)}</TableCell>
+                  <TableCell>{amount(person.netMinor)}</TableCell>
+                </TableRow>
+              ))}
+            </StatementTable>
+          </Section>
+          <Section title="Balances and suggested payments">
+            <Typography color="text.secondary">
+              Current all-time positions, including every recorded payment. These match Balances;
+              the period changes spending only.
+            </Typography>
+            <StatementTable title="Current balances" headers={['Person', 'Balance']}>
+              {bucket.people.map((person) => (
+                <TableRow key={person.id}>
+                  <TableCell component="th" scope="row">
+                    {person.name}
+                  </TableCell>
+                  <TableCell>{amount(person.balanceMinor)}</TableCell>
+                </TableRow>
+              ))}
+            </StatementTable>
+            {bucket.suggestedPayments.length ? (
+              <Box component="ul">
+                {bucket.suggestedPayments.map((row) => (
+                  <li key={`${row.from}-${row.to}`}>
+                    {name(row.from)} pays {name(row.to)} {amount(row.amountMinor)}
+                  </li>
+                ))}
+              </Box>
+            ) : (
+              <Typography>Settled up.</Typography>
+            )}
+          </Section>
+        </>
+      ) : null}
       <Section title="Expenses with shares">
         {bucket.expenses.length ? (
           <StatementTable

@@ -659,7 +659,7 @@ function ExpenseTask({
               : 'Couldn’t open a new Expense'
         }
         message={(state.message && expenseRecoveryWords(state.message)) ?? 'Please try again.'}
-        retry={onRetry}
+        retry={state.unopenable ? undefined : onRetry}
       />,
     );
   if (record)

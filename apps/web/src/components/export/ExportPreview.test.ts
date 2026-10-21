@@ -130,6 +130,8 @@ it.each([
           from: csv.from,
           to: csv.to,
           timeZone: 'UTC',
+          // Bob isn't among the names: a former member, named so.
+          names: { alice: 'Alice Tester' },
           currencies: [
             {
               currency: 'INR',
@@ -301,6 +303,7 @@ it('names each currency’s balances and Suggested payments for screen readers (
         from: csv.from,
         to: csv.to,
         timeZone: 'UTC',
+        names: { alice: 'Alice Tester', bob: 'Bob' },
         currencies: [bucket('INR'), bucket('USD')],
       },
     },

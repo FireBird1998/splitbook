@@ -205,7 +205,13 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
                       {!getCurrency(payment.currency) && (
                         <Box
                           component="span"
-                          sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}
+                          sx={{
+                            display: 'block',
+                            fontSize: '0.75rem',
+                            color: 'text.secondary',
+                            // Words, in the body font, under the amount's figures.
+                            fontFamily: (theme) => theme.typography.fontFamily,
+                          }}
                         >
                           {' '}
                           Not in Balances

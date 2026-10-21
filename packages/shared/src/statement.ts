@@ -69,6 +69,19 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
   ].sort();
   const name = (id: string) =>
     group.names[id] || group.members.find((row) => row.id === id)?.name || 'Former member';
+  // Everyone the statement names, the same in every currency's section: one Splitbook no longer
+  // supports has no people of its own to name them from (#820).
+  const names = Object.fromEntries(
+    [
+      ...new Set([
+        ...group.members.map((row) => row.id),
+        ...group.expenses.flatMap((row) =>
+          [...row.paidBy, ...row.splitBetween].map((person) => person.userId),
+        ),
+        ...group.settlements.flatMap((row) => [row.fromId, row.toId, row.recordedById]),
+      ]),
+    ].map((id) => [id, name(id)]),
+  );
   return {
     id: group.id,
     name: group.name,
@@ -78,6 +91,7 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
     from: window.from ?? null,
     to: window.to ?? null,
     wholeTrip: Boolean(window.wholeTrip),
+    names,
     currencies: currencies.map((currency) => {
       const expenses = selected
         .filter((row) => row.currency === currency)

@@ -81,6 +81,8 @@ export const statementPreviewSchema = z.object({
     from: day,
     to: day,
     timeZone: z.string().refine(isTimeZone),
+    /** Everyone the statement names, by id, the same in every currency's section (#820). */
+    names: z.record(z.string(), z.string()),
     currencies: z.array(
       z.object({
         currency: z.string(),

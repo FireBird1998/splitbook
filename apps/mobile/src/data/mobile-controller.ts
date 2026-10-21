@@ -3191,6 +3191,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         expense: {
           ...snapshot.expense,
           status: denied ? 'blocked' : snapshot.expense.draft ? 'resume' : 'blocked',
+          ...(error instanceof UnsupportedCurrencyExpenseError ? { unopenable: true } : {}),
           message: notOnPhone
             ? expenseNotOnPhone
             : error instanceof RequestError || error instanceof UnsupportedCurrencyExpenseError
