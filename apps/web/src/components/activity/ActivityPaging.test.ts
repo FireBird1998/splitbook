@@ -167,3 +167,29 @@ it('continues refreshing the newest events after adding paging', async () => {
     vi.useRealTimers();
   }
 });
+
+it('refreshes loaded older pages too, so a page shift cannot hide a loaded event', async () => {
+  vi.useFakeTimers();
+  try {
+    api.mockResolvedValueOnce(answer(1, [event(2), event(3)]));
+    api.mockResolvedValueOnce(answer(1, [event(2), event(3)]));
+    api.mockResolvedValueOnce(answer(2, [event(4)]));
+    await render();
+    await act(async () => {
+      button('Load older')!.props.onClick();
+    });
+    api.mockResolvedValueOnce(answer(1, [event(1), event(2)]));
+    api.mockResolvedValueOnce(answer(2, [event(3), event(4)]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(headlines()).toEqual([
+      'You added “Expense 1”',
+      'You added “Expense 2”',
+      'You added “Expense 3”',
+      'You added “Expense 4”',
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
