@@ -19,16 +19,12 @@ import { fetchWebActivity } from '@/lib/web-read';
 import { useState } from 'react';
 import ButtonBase from '@mui/material/ButtonBase';
 import { readCrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
-import {
-  groupSettlementBatches,
-  type SettlementBatchActivityItem,
-} from '@splitbook/shared/settlement-batch-activity';
-import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
+import { groupSettlementBatches } from '@splitbook/shared/settlement-batch-activity';
+import { batchWords, type ActivityBatch } from './batch-words';
 import BatchPaymentCard from './BatchPaymentCard';
 import PaymentRecordCard from './PaymentRecordCard';
 
-/** A payment that settled several Debts at once, as the shared rule collects it (#734). */
-type Batch = Extract<SettlementBatchActivityItem<ActivityLike>, { kind: 'batch' }>;
+type Batch = ActivityBatch<ActivityLike>;
 
 const ACTIVITY_ICONS: Record<string, string> = {
   expense_added: '🧾',
@@ -103,18 +99,7 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     !openBatch && opened?.type === 'settlement_recorded'
       ? readCrossCurrencyRecord(opened.metadata)
       : null;
-  // In the order the payment recorded its Settlements, as their ids keep it, not the feed's
-  // newest first: "₹1,480.00 and €20.00", main currency first.
-  const wordsOf = (batch: Batch) =>
-    settlementBatchWords(
-      [...batch.events].sort((a, b) =>
-        String(a.metadata?.settlementId ?? '').localeCompare(
-          String(b.metadata?.settlementId ?? ''),
-        ),
-      ),
-      batch.batchSize,
-      viewerId,
-    );
+  const wordsOf = (batch: Batch) => batchWords(batch, viewerId);
 
   const list = (
     <Stack spacing={3}>
