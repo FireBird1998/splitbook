@@ -9,6 +9,8 @@ export interface CurrencyTab {
   main: boolean;
   /** "¥186,000", or a member's position such as "−₹1,480.00". */
   figure: string;
+  /** The figure is words, such as "Settled up", in the text face rather than the money face. */
+  inWords?: boolean;
   figureTone?: TextTone;
   /** "JPY, ¥186,000 spent in 24 Expenses". */
   name: string;
@@ -84,10 +86,21 @@ export function CurrencyTabs({
                   </CompactText>
                 ) : null}
               </CompactText>
-              <Money
-                size="table"
-                tone={tab.figureTone ?? 'primary'}
-              >{`${tab.figure}${hairSpace}`}</Money>
+              {tab.inWords ? (
+                <CompactText
+                  variant="small"
+                  weight="medium"
+                  tone={tab.figureTone ?? 'primary'}
+                  spare
+                >
+                  {tab.figure}
+                </CompactText>
+              ) : (
+                <Money
+                  size="table"
+                  tone={tab.figureTone ?? 'primary'}
+                >{`${tab.figure}${hairSpace}`}</Money>
+              )}
             </View>
           </Pressable>
         );
