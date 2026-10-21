@@ -225,6 +225,8 @@ describe('Settle up with Sam (#734)', () => {
     await mount();
     await press('Change the rate for the EUR Debt');
     await typeRate('EUR', '92.50');
+    // Back to the suggestion, named for its Debt as Change is.
+    expect(button('Use the suggested rate for the EUR Debt, ₹92.10')).toBeDefined();
     expect(rows()[2]).toMatch(/^EUR €20\.00 .*Your rate.* ₹1,850\.00$/);
     expect(rows()[3]).toBe('Total ₹3,330.00');
 
