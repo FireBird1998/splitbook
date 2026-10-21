@@ -1974,6 +1974,24 @@ describe('the currency beside the amount (#720)', () => {
     expect(text(ui.root())).not.toContain('Started in JPY');
   });
 
+  it('asks for one of the Group’s currencies when it no longer uses the draft’s, and leads to the sheet', async () => {
+    const ui = await render(
+      async (controller) => {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({ currency: 'GBP' });
+      },
+      { readGroup: async () => json({ status: 200, data: travelling }) },
+    );
+    expect(text(ui.root())).toContain('This Group no longer uses GBP. Pick one of its currencies.');
+    // The Group has other currencies than its main one, so no shortcut to the main currency.
+    expect(() => ui.pressable('Use INR')).toThrow();
+    await ui.press('Pick a currency');
+    expect(visibleSheet(ui.root(), 'Currency')).toBeDefined();
+    await ui.press('EUR, Euro');
+    expect(ui.controller.getSnapshot().expense.draft?.currency).toBe('EUR');
+    expect(text(ui.root())).not.toContain('no longer uses GBP');
+  });
+
   it('takes yen whole, saying so in the web’s words', async () => {
     const ui = await render((controller) => controller.openExpense(groupId), {
       readGroup: async () => json({ status: 200, data: travelling }),

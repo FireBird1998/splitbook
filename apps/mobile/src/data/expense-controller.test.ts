@@ -4383,7 +4383,7 @@ describe('an Expense in one of the Group’s currencies (#720)', () => {
     });
     await controller.saveExpense();
     expect(controller.getSnapshot().expense.validation.errors.amount).toBe(
-      'Lisbon and Tokyo doesn’t use USD. Choose one of its currencies, then review the amount.',
+      'This Group no longer uses USD. Pick one of its currencies.',
     );
     expect(state.posted).toEqual([]);
   });
