@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
 import { betterAuth } from 'better-auth';
 import { memoryAdapter } from 'better-auth/adapters/memory';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { MongoClient } from 'mongodb';
+import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import { buildAuthOptions } from '@/lib/auth/create-auth';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 
@@ -151,6 +152,103 @@ export function switchAccountTests(mongo = false) {
   });
 
   describe('switching accounts on a pending assistant approval (#735)', () => {
+    it.each(['https://outside.example.test', '//outside.example.test', '/\\outside.example.test'])(
+      'refuses a supplied return address (%s) without ending the session',
+      async (callbackUrl) => {
+        const response = await request('/mcp/switch-account', firstCookie, {
+          oauth_query: signedQuery,
+          callbackUrl,
+        });
+        expect(response.status).toBe(400);
+        expect(response.headers.get('location')).toBeNull();
+        expect(response.headers.getSetCookie()).toEqual([]);
+        expect(await (await request('/get-session', firstCookie)).json()).toMatchObject({
+          user: { email: 'first@example.test' },
+        });
+      },
+    );
+
+    it('refuses a tampered or expired request without signing the member out', async () => {
+      const tampered = new URLSearchParams(signedQuery);
+      tampered.set('state', 'changed');
+      expect(
+        (await request('/mcp/switch-account', firstCookie, { oauth_query: tampered.toString() }))
+          .status,
+      ).toBe(400);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(
+          new Date((Number(new URLSearchParams(signedQuery).get('exp')) + 1) * 1000),
+        );
+        const expired = await request('/mcp/switch-account', firstCookie, {
+          oauth_query: signedQuery,
+        });
+        expect(expired.status).toBe(400);
+        expect(await expired.json()).toMatchObject({
+          message: 'This connection request is invalid or expired. Restart from your assistant.',
+        });
+        expect(expired.headers.getSetCookie()).toEqual([]);
+        expect(await (await request('/get-session', firstCookie)).json()).toMatchObject({
+          user: { email: 'first@example.test' },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('refuses consent when the unchanged approval expires while signing in again', async () => {
+      expect(
+        (await request('/mcp/switch-account', firstCookie, { oauth_query: signedQuery })).status,
+      ).toBe(200);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(
+          new Date((Number(new URLSearchParams(signedQuery).get('exp')) + 1) * 1000),
+        );
+        const secondCookie = await login('second@example.test');
+        expect(
+          (
+            await request(
+              `/mcp/consent-details?${new URLSearchParams({ oauth_query: signedQuery })}`,
+              secondCookie,
+            )
+          ).status,
+        ).toBe(400);
+        const response = await request('/oauth2/consent', secondCookie, {
+          accept: true,
+          oauth_query: signedQuery,
+          scope: 'ledger:read',
+        });
+        expect(response.ok).toBe(false);
+        expect(await connections(otherSession)).toEqual([]);
+        expect(await connections(secondCookie)).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('requires this session, its expected account and a trusted origin', async () => {
+      const body = { oauth_query: signedQuery };
+      expect((await request('/mcp/switch-account', '', body)).status).toBe(401);
+      expect(
+        (
+          await request('/mcp/switch-account', firstCookie, body, {
+            origin: 'https://outside.example.test',
+          })
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await request('/mcp/switch-account', firstCookie, body, {
+            [EXPECTED_ACCOUNT_HEADER]: 'other-account',
+          })
+        ).status,
+      ).toBe(419);
+      expect(await (await request('/get-session', firstCookie)).json()).toMatchObject({
+        user: { email: 'first@example.test' },
+      });
+    });
+
     it('ends only this session and returns the unchanged signed approval without granting either account access', async () => {
       const switched = await request('/mcp/switch-account', firstCookie, {
         oauth_query: signedQuery,
