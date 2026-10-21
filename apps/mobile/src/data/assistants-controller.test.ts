@@ -42,6 +42,8 @@ function fixture() {
     holdNextRead: null as Promise<void> | null,
     /** Splitbook can't be reached once a Disconnect is answered. */
     offlineAfterRevoke: false,
+    /** This phone can't remove saved copies. */
+    failRemoval: false,
     connections: [helper, reader],
   };
   let cookie: string | null = null,
@@ -49,7 +51,14 @@ function fixture() {
     identity: unknown = null,
     cleanup = false;
   const cache = new Map<string, unknown>();
-  const savedQueries = savedQueriesIn(cache);
+  const rows = savedQueriesIn(cache);
+  const savedQueries = {
+    ...rows,
+    remove: async (account: string, path: string) => {
+      if (server.failRemoval) throw new Error('The device storage is full');
+      await rows.remove(account, path);
+    },
+  };
   const untrusted = { current: null as unknown };
   const record = (value: { current: unknown }) => ({
     load: async () => structuredClone(value.current),
@@ -375,6 +384,23 @@ describe('Connected assistants on Android (#622)', () => {
       'Fictional Helper',
     );
     expect(f.savedAssistants() ?? []).not.toContain('Fictional Helper');
+    controller.dispose();
+  });
+
+  it('never shows a Saved copy it couldn’t remove at a Disconnect', async () => {
+    const f = fixture();
+    const { controller, state } = await readOnline(f);
+    f.server.failRemoval = true;
+    f.server.offlineAfterRevoke = true;
+    controller.askDisconnectAssistant('c1');
+    await controller.disconnectAssistant();
+    await vi.waitFor(() => expect(state().status).not.toBe('loading'));
+    // The copy from before is still on this phone, and never answers again.
+    expect(f.savedAssistants()).toContain('Fictional Helper');
+    expect(state()).toMatchObject({ saved: false, unsaved: true });
+    expect(state().assistants?.map((assistant) => assistant.name) ?? []).not.toContain(
+      'Fictional Helper',
+    );
     controller.dispose();
   });
 

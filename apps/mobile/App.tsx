@@ -602,8 +602,9 @@ function TaskScreen() {
               preferenceMessage={preference.message}
               onRetryPreference={() => void appearance.restore()}
               environment={environment}
-              assistantsAvailable={state.assistants.available === true}
-              onOpenAssistants={controller.openAssistants}
+              onOpenAssistants={
+                state.assistants.available === true ? controller.openAssistants : undefined
+              }
               onOpenWeb={() => {
                 void Linking.openURL(new URL('/settings', environment.webOrigin).href).catch(() => {
                   Alert.alert('Couldn’t open web settings', 'Check your browser and try again.');

@@ -17,6 +17,7 @@ import {
   groupsPath,
   homeBalancesPath,
   toReviewPath,
+  connectedAssistantsPath,
   invitationsPath,
   recurringExpensesPath,
   groupCurrenciesPath,
@@ -39,10 +40,10 @@ import type { ExpenseFilters } from './types';
  * Groups (its totals, latest changes and spending chart), one Group's details, its running
  * Balances, or the rest of its ledger (Expense pages and records, Activity, Settlements and
  * recurring Expenses). Invitations and search (#321), which reads across the member's Groups,
- * belong to no Group.
+ * belong to no Group, nor do the member's Connected assistants (#622).
  */
 export type QueryScope = AccountScope | GroupScope;
-export type AccountScope = 'groups' | 'home' | 'invitations' | 'search';
+export type AccountScope = 'groups' | 'home' | 'invitations' | 'search' | 'assistants';
 export type GroupScope = 'group' | 'balances' | 'ledger';
 
 const accountScopes: readonly unknown[] = [
@@ -50,6 +51,7 @@ const accountScopes: readonly unknown[] = [
   'home',
   'invitations',
   'search',
+  'assistants',
 ] satisfies AccountScope[];
 const groupScopes: readonly unknown[] = ['group', 'balances', 'ledger'] satisfies GroupScope[];
 
@@ -227,3 +229,6 @@ export const matchScope =
     isQueryKey(key) && key[0] === scope;
 
 export const toReviewKey = (account: QueryAccount) => accountKey('home', account, toReviewPath());
+/** The member's Connected assistants with their Group counts, for Android's Account (#622). */
+export const connectedAssistantsKey = (account: QueryAccount) =>
+  accountKey('assistants', account, connectedAssistantsPath());

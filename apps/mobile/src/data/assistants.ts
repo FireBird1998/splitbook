@@ -1,18 +1,24 @@
+import { CancelledError, type QueryClient } from '@tanstack/query-core';
 import { z } from 'zod';
+import { assistantGroupsPath, connectedAssistantsPath } from '@splitbook/shared/api-paths';
 import { ASSISTANT_RULES } from '@splitbook/shared/assistant-rule';
 import { assistantGroupCount } from '@splitbook/shared/connected-assistant';
+import {
+  connectedAssistantsKey,
+  type QueryAccount,
+  type QueryKey,
+} from '@splitbook/shared/query-keys';
 import type { AccountGroupRecordStore } from './account-record-storage';
 import { createSavedCopyQueue } from './home-queries';
 import { cachedRead } from './offline-cache';
+import { queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
 import type { AccountStorageLease } from './types';
 
 /** The member's Connected assistants, as Settings on the web reads them (#615, #620). */
-export const assistantsPath = '/api/auth/mcp/connections';
-/** The member's Groups as an assistant's reach counts them (#620). */
-export const assistantGroupsPath = '/api/user/assistant-groups';
+export const assistantsPath = connectedAssistantsPath();
 /** The most pages of connections read at once: 25 each, far more than a member connects. */
-const PAGES = 20;
+const MAX_PAGES = 20;
 
 const connectionSchema = z.object({
   id: z.string().min(1),
@@ -34,6 +40,8 @@ const groupsSchema = z.object({
 /** What this phone keeps: the connections as read, and the member's Groups when they were read. */
 const savedSchema = z.object({ connections: pageSchema, groups: groupsSchema.nullable() });
 type Saved = z.infer<typeof savedSchema>;
+/** The query's answer: from the server, or this phone's Saved copy with its own time. */
+type Answer = { source: 'network' | 'saved'; refreshedAt: number; value: Saved };
 
 /** One Connected assistant as Account → Connected assistants lists it. */
 export interface ListedAssistant {
@@ -113,6 +121,9 @@ function listed({ connections, groups }: Saved): ListedAssistant[] {
 
 /** What the screen needs from the controller that owns it. */
 export interface AssistantsSession {
+  client: QueryClient;
+  /** The signed-in account in this environment; throws `Superseded` when there is none. */
+  account(): QueryAccount;
   /** The persister's rows; without them nothing is saved or restored. */
   rows?: AccountGroupRecordStore;
   generation(): number;
@@ -121,10 +132,14 @@ export interface AssistantsSession {
   /** The account lease's own checks, at write time: still this account, with no clean-up. */
   owns(accountId: string): boolean;
   /** Sends the read, checking the session first while offline. */
-  read(path: string, owner: number): Promise<unknown>;
+  read(path: string, owner: number, signal?: AbortSignal): Promise<unknown>;
   send(path: string, owner: number, body: unknown): Promise<unknown>;
   /** Splitbook can be reached: a write may be sent. */
   online(): boolean;
+  /** A Saved copy of `key` stands in for a read only when verified after this. */
+  distrusted(key: QueryKey, early: boolean): number;
+  /** This account's Saved copies in these scopes couldn't be removed: never shown again. */
+  distrust(accountId: string, scopes: string[]): void;
   state(): AssistantsState;
   publish(next: AssistantsState): void;
   now(): number;
@@ -132,15 +147,17 @@ export interface AssistantsSession {
 
 /**
  * Account → Connected assistants (#622): the same connection list and Disconnect as the web,
- * each assistant's Group count from the member's Groups, and a Saved copy for offline, written on
- * the saved-copy queue and cleared with the account's other saved copies.
+ * each assistant's Group count from the member's Groups, and a Saved copy for offline. The read
+ * is a TanStack query (ADR 0006): reads join it, a Disconnect cancels it, and its Saved copy is
+ * written on the saved-copy queue, checked at write time, and cleared with the account's others.
  */
 export function createAssistants(session: AssistantsSession) {
   const queue = createSavedCopyQueue();
   const update = (next: Partial<AssistantsState>) =>
     session.publish({ ...session.state(), ...next });
 
-  const savedRow = async (lease: AccountStorageLease | null) => {
+  /** This phone's Saved copy, unless one it couldn't remove makes it untrusted. */
+  const savedRow = async (lease: AccountStorageLease | null, key: QueryKey) => {
     const { rows } = session;
     if (!lease || !rows) return null;
     const row = cachedRead(
@@ -150,52 +167,46 @@ export function createAssistants(session: AssistantsSession) {
       session.now(),
     );
     const value = row && savedSchema.safeParse(row.value);
-    return row && value?.success ? { refreshedAt: row.refreshedAt, value: value.data } : null;
+    return row && value?.success && row.refreshedAt > session.distrusted(key, false)
+      ? { refreshedAt: row.refreshedAt, value: value.data }
+      : null;
   };
-  /** Writes the answer as the Saved copy, checked at write time like every saved copy. */
-  const save = (lease: AccountStorageLease | null, owner: number, value: Saved, at: number) => {
+  /**
+   * A write of the Saved copy on the saved-copy queue, where the latest for it wins. The session,
+   * the account and the read's own query (`owns`) are checked at write time, so nothing lands
+   * after sign-out, an account change or a Disconnect that made the read obsolete.
+   */
+  const queueWrite = (
+    lease: AccountStorageLease | null,
+    owner: number,
+    owns: () => boolean,
+    write: (rows: AccountGroupRecordStore, accountId: string) => Promise<void>,
+  ) => {
     const { rows } = session;
     if (!lease || !rows) return;
     queue.push(assistantsPath, async () => {
-      if (!session.current(owner) || !session.owns(lease.accountId)) return;
-      const row = {
-        version: 1,
-        accountId: lease.accountId,
-        path: assistantsPath,
-        groupId: null,
-        refreshedAt: at,
-        value,
-      };
-      await rows.save(lease.accountId, assistantsPath, row).catch(() => undefined);
+      if (!session.current(owner) || !session.owns(lease.accountId) || !owns()) return;
+      await write(rows, lease.accountId).catch(() => undefined);
     });
   };
-  /** The server has assistants switched off: nothing of them is kept. */
-  const forget = (lease: AccountStorageLease | null, owner: number) => {
-    const { rows } = session;
-    if (!lease || !rows) return;
-    queue.push(assistantsPath, async () => {
-      if (!session.current(owner) || !session.owns(lease.accountId)) return;
-      await rows.remove(lease.accountId, assistantsPath).catch(() => undefined);
-    });
-  };
-  const show = (value: Saved, refreshedAt: number, saved: boolean) =>
+  const show = (answer: Answer) =>
     update({
       available: true,
       status: 'ready',
-      assistants: listed(value),
-      refreshedAt,
-      saved,
+      assistants: listed(answer.value),
+      refreshedAt: answer.refreshedAt,
+      saved: answer.source === 'saved',
       unsaved: false,
       message: '',
     });
 
   /** Every page of the member's connections, as one. */
-  const readConnections = async (owner: number) => {
+  const readConnections = async (owner: number, signal: AbortSignal) => {
     const connections: Saved['connections']['connections'] = [];
     let offset: number | null = 0;
-    for (let page = 0; offset !== null && page < PAGES; page += 1) {
+    for (let page = 0; offset !== null && page < MAX_PAGES; page += 1) {
       const path: string = offset ? `${assistantsPath}?offset=${offset}` : assistantsPath;
-      const read = pageSchema.parse(await session.read(path, owner));
+      const read = pageSchema.parse(await session.read(path, owner, signal));
       connections.push(...read.connections);
       offset = read.nextOffset;
     }
@@ -203,40 +214,88 @@ export function createAssistants(session: AssistantsSession) {
   };
 
   /**
-   * Reads the connections and the member's Groups. A 404 says the server has assistants
-   * switched off; out of reach, this phone's Saved copy answers with its own time.
+   * The query's read: the connections and the member's Groups. Out of reach, this phone's Saved
+   * copy answers with its own time; with none, it says so.
    */
-  const read = async () => {
-    const owner = session.generation(),
-      lease = session.lease();
-    update({ status: 'loading', message: '' });
+  const fetchAssistants = async (key: QueryKey, owner: number, signal: AbortSignal) => {
+    const lease = session.lease(),
+      owns = queryOwner(session.client, key);
+    let value: Saved;
     try {
-      const connections = await readConnections(owner);
+      const connections = await readConnections(owner, signal);
       let groups: Saved['groups'] = null;
       try {
-        groups = groupsSchema.parse(await session.read(assistantGroupsPath, owner));
+        groups = groupsSchema.parse(await session.read(assistantGroupsPath(), owner, signal));
       } catch (error) {
         // Without the Groups, the list still shows, without its counts.
-        if (error instanceof Superseded || !session.current(owner)) throw error;
+        if (error instanceof Superseded || signal.aborted || !session.current(owner)) throw error;
       }
-      if (!session.current(owner)) return;
-      const at = session.now();
-      show({ connections, groups }, at, false);
-      save(lease, owner, { connections, groups }, at);
+      value = { connections, groups };
     } catch (error) {
-      if (error instanceof Superseded || !session.current(owner)) return;
+      if (!(error instanceof RequestError) || !error.networkFailure) throw error;
+      const row = await savedRow(lease, key).catch(() => null);
+      if (!session.current(owner) || !owns()) throw new Superseded();
+      if (!row)
+        throw new RequestError(
+          notSavedAssistantsMessage,
+          0,
+          'OFFLINE_UNAVAILABLE',
+          false,
+          null,
+          'network',
+        );
+      return { source: 'saved', ...row } satisfies Answer;
+    }
+    if (!session.current(owner) || !owns()) throw new Superseded();
+    const refreshedAt = session.now();
+    queueWrite(lease, owner, owns, (rows, accountId) =>
+      rows.save(accountId, assistantsPath, {
+        version: 1,
+        accountId,
+        path: assistantsPath,
+        groupId: null,
+        refreshedAt,
+        value,
+      }),
+    );
+    return { source: 'network', refreshedAt, value } satisfies Answer;
+  };
+
+  /**
+   * Reads the connections through their query, which a read already under way joins. A 404 says
+   * the server has assistants switched off.
+   */
+  const read = async () => {
+    const owner = session.generation();
+    let key: QueryKey;
+    try {
+      key = connectedAssistantsKey(session.account());
+    } catch {
+      return;
+    }
+    update({ status: 'loading', message: '' });
+    try {
+      const answer = await session.client.fetchQuery({
+        queryKey: key,
+        queryFn: ({ signal }) => fetchAssistants(key, owner, signal),
+        staleTime: 0,
+        retry: false,
+      });
+      if (session.current(owner)) show(answer);
+    } catch (error) {
+      // Cancelled by a Disconnect, or a session that ended: the read that replaced it shows.
+      if (error instanceof CancelledError || error instanceof Superseded) return;
+      if (!session.current(owner)) return;
       if (error instanceof RequestError && error.status === 404) {
         update({ ...emptyAssistants(), available: false, status: 'ready' });
-        forget(lease, owner);
+        const lease = session.lease();
+        queueWrite(lease, owner, queryOwner(session.client, key), (rows, accountId) =>
+          rows.remove(accountId, assistantsPath),
+        );
         return;
       }
-      if (error instanceof RequestError && error.networkFailure) {
-        const row = await savedRow(lease).catch(() => null);
-        if (!session.current(owner)) return;
-        if (row) return show(row.value, row.refreshedAt, true);
-        update({ status: 'ready', unsaved: true, message: notSavedAssistantsMessage });
-        return;
-      }
+      if (error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE')
+        return update({ status: 'ready', unsaved: true, message: notSavedAssistantsMessage });
       update({ status: 'error', message: refreshFailedAssistantsMessage });
     }
   };
@@ -251,6 +310,25 @@ export function createAssistants(session: AssistantsSession) {
     if (!session.state().disconnecting) update({ confirming: null, disconnectMessage: '' });
   };
 
+  /**
+   * Nothing read before a Disconnect shows or is saved after it: its query is cancelled and
+   * removed, and the Saved copy goes before the Disconnect is sent. A copy this phone couldn't
+   * remove is never shown again.
+   */
+  const forgetBefore = async (owner: number) => {
+    const key = connectedAssistantsKey(session.account()),
+      lease = session.lease(),
+      { client, rows } = session;
+    await client.cancelQueries({ queryKey: key, exact: true });
+    client.removeQueries({ queryKey: key, exact: true });
+    queue.drop(assistantsPath);
+    await queue.idle();
+    if (!lease || !rows || !session.current(owner)) return;
+    await rows
+      .remove(lease.accountId, assistantsPath)
+      .catch(() => session.distrust(lease.accountId, [key[0]]));
+  };
+
   /** Disconnects the assistant whose sheet is open; it needs a connection. */
   const disconnect = async () => {
     const state = session.state(),
@@ -260,6 +338,7 @@ export function createAssistants(session: AssistantsSession) {
     const owner = session.generation();
     update({ disconnecting: true, disconnectMessage: '' });
     try {
+      await forgetBefore(owner);
       await session.send('/api/auth/mcp/revoke', owner, { id });
     } catch (error) {
       if (error instanceof Superseded || !session.current(owner)) return;
@@ -274,7 +353,7 @@ export function createAssistants(session: AssistantsSession) {
       assistants: shown.filter((assistant) => assistant.id !== id),
       snackbar: `${name} disconnected`,
     });
-    // The Saved copy follows what the server now lists.
+    // Read again: the server's list now, and its Saved copy.
     await read();
   };
 

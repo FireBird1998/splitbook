@@ -63,7 +63,9 @@ function AssistantRow({
       label="Disconnect"
       variant="text"
       dense
-      accessibilityLabel={`Disconnect ${assistant.name}`}
+      // Two assistants may share a name: the host, or else the last use, tells them apart, as
+      // on the web.
+      accessibilityLabel={`Disconnect ${assistant.name}, ${assistant.host ?? lastUsedLabel(assistant.lastUsedAt)}`}
       disabled={offline}
       hint={offline ? disconnectNeedsConnection : undefined}
       onPress={() => onAsk(assistant.id)}

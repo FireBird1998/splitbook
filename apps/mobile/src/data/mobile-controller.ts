@@ -1138,12 +1138,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   });
   /** Account → Connected assistants (#622), with its Saved copy among the account's others. */
   const assistantsData = createAssistants({
+    client: queryClient,
+    account: () => account(),
     rows: savedCopies.rows,
     generation: () => generation,
     current,
     lease: () => accountStorage(),
     owns: (accountId) => accountStorage()?.accountId === accountId,
-    read: (path, owner) => session.read(path, owner),
+    read: (path, owner, signal) => session.read(path, owner, signal),
+    distrusted: session.distrusted,
+    distrust: session.distrust,
     send: (path, owner, body) => request(path, owner, { method: 'POST', body }),
     online: () => !snapshot.offline.active && onlineManager.isOnline(),
     state: () => snapshot.assistants,

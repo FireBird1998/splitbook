@@ -218,6 +218,10 @@ export const exportPath = ({
   ])}`;
 
 export const toReviewPath = () => '/api/user/to-review';
+/** The member's Connected assistants, as Settings reads them on the web and on Android (#615). */
+export const connectedAssistantsPath = () => '/api/auth/mcp/connections';
+/** The member's Groups as an assistant's reach counts them (#620). */
+export const assistantGroupsPath = () => '/api/user/assistant-groups';
 
 /** Shared web/app-link destination for a Group's To review. */
 export const toReviewHref = (groupId: string) => `/groups/${segment(groupId)}/review`;

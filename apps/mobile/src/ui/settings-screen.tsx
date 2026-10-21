@@ -36,8 +36,7 @@ export interface SettingsScreenProps {
   environment: { label: string; apiOrigin: string; webOrigin: string };
   onOpenWeb: () => void;
   onSignOut: () => void;
-  /** The server has assistants switched on: Account offers Connected assistants (#622). */
-  assistantsAvailable?: boolean;
+  /** Account's Connected assistants, given where the server has assistants switched on (#622). */
   onOpenAssistants?: () => void;
 }
 
@@ -83,7 +82,6 @@ export function SettingsScreen({
   environment,
   onOpenWeb,
   onSignOut,
-  assistantsAvailable = false,
   onOpenAssistants,
 }: SettingsScreenProps) {
   const theme = useTheme();
@@ -193,7 +191,7 @@ export function SettingsScreen({
               </CompactText>
             </View>
           </View>
-          {assistantsAvailable && onOpenAssistants ? (
+          {onOpenAssistants ? (
             <>
               <Divider inset={58} />
               <ListRow
