@@ -132,6 +132,7 @@ describe('the Expenses tab’s footer', () => {
       ['J K', 'Move'],
       ['Enter', 'Open'],
       ['E', 'Edit'],
+      ['X', 'Select'],
       ['N', 'New expense'],
       ['/', 'Search'],
     ]);
@@ -142,8 +143,6 @@ describe('the Expenses tab’s footer', () => {
       /Shortcuts pause while you type in a field\. You can turn them off in Settings ?\.$/,
     );
     expect(anchors(html)).toEqual([{ href: '/settings', current: null, text: 'Settings' }]);
-    // No X: there is no row selection for it to act on.
-    expect(text(html)).not.toMatch(/\bX\b|Select/);
   });
 
   it('is gone while single-key shortcuts are off, and before this device’s setting is read', () => {
