@@ -65,7 +65,11 @@ import {
   type ExpenseListQuery,
 } from './expense-list-query';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
-import { groupCurrencies } from '@splitbook/shared/group-currencies';
+import {
+  groupCurrencies,
+  inGroupCurrencyOrder,
+  type GroupCurrencyList,
+} from '@splitbook/shared/group-currencies';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { visuallyHidden } from '@/components/common/visually-hidden';
 
@@ -613,7 +617,7 @@ export default function ExpenseListView({
         <ExpenseSummary
           summary={data.summary}
           currency={currency}
-          currencies={groupCurrencies(group)}
+          group={group}
           filtered={filters > 0}
         />
       )}
@@ -804,23 +808,22 @@ function ExpenseCards({
 function ExpenseSummary({
   summary,
   currency,
-  currencies,
+  group,
   filtered,
 }: {
   summary: ExpensePageRead['summary'];
   currency: string;
-  /** The Group's currencies in its order, main first: each stack follows it (#759). */
-  currencies: readonly string[];
+  /** Whose currencies' order each stack follows, main currency first (#759). */
+  group: GroupCurrencyList;
   filtered: boolean;
 }) {
-  // A currency the Group no longer lists comes after its own, in the read's order.
-  const rank = (code: string) => {
-    const at = currencies.indexOf(code);
-    return at < 0 ? currencies.length : at;
-  };
+  const order = inGroupCurrencyOrder(
+    group,
+    summary.totalsByCurrency.map((total) => total.currency),
+  );
   const others = summary.totalsByCurrency
     .filter((total) => total.currency !== currency)
-    .sort((a, b) => rank(a.currency) - rank(b.currency));
+    .sort((a, b) => order.indexOf(a.currency) - order.indexOf(b.currency));
   // The main currency's total, unless nothing was spent in it but something was in another
   // (#729): a trip spent in yen reads "¥2,500", not "₹0.00 / ¥2,500".
   const groupTotal = summary.totalsByCurrency.find(
@@ -837,7 +840,8 @@ function ExpenseSummary({
     />
   );
   // The member's position in each currency they have one in, never the main currency alone
-  // as if it were the whole (#759): one line each, as Spent stacks, read as one sentence.
+  // as if it were the whole (#759): one line each, as Spent stacks, read as one sentence. The
+  // read sends them in the Group's order.
   const positions = summary.userByCurrency ?? [
     { currency, userOwes: summary.userOwes, userGetsBack: summary.userGetsBack },
   ];
@@ -846,9 +850,7 @@ function ExpenseSummary({
     field: 'userOwes' | 'userGetsBack',
     tone: 'negative' | 'positive',
   ) => {
-    const rows = positions
-      .filter((row) => row[field] > 0)
-      .sort((a, b) => rank(a.currency) - rank(b.currency));
+    const rows = positions.filter((row) => row[field] > 0);
     if (rows.length === 0) return [];
     if (rows.length === 1) return [{ term, value: money(rows[0][field], rows[0].currency, tone) }];
     const said = rows.map((row) => formatCurrency(row[field], row.currency));

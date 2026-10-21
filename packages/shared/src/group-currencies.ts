@@ -61,6 +61,19 @@ export function groupCurrencies(group: GroupCurrencyList): string[] {
   ];
 }
 
+/**
+ * Currencies in the Group's order (#759): the main currency, then its extra currencies as listed,
+ * then any other one the records are still in (a currency since removed), alphabetically.
+ */
+export function inGroupCurrencyOrder(group: GroupCurrencyList, currencies: Iterable<string>) {
+  const given = new Set(currencies);
+  const listed = groupCurrencies(group);
+  return [
+    ...listed.filter((code) => given.has(code)),
+    ...[...given].filter((code) => !listed.includes(code)).sort(),
+  ];
+}
+
 /** Whether a record may use this currency in this Group. */
 export function isGroupCurrency(group: GroupCurrencyList, currency: string): boolean {
   return groupCurrencies(group).includes(currency);

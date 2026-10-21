@@ -1,4 +1,4 @@
-import { groupCurrencies } from '@splitbook/shared/group-currencies';
+import { inGroupCurrencyOrder } from '@splitbook/shared/group-currencies';
 import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
 import { afterGroupCommit, withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
@@ -356,15 +356,13 @@ export class ExpenseService {
         // On request, each currency's own figures the same way, in the Group's order: the main
         // currency, its extra currencies, then any other one the Expenses are still in (#759).
         if (filters.includeUserByCurrency) {
-          const listed = groupCurrencies({
-            defaultCurrency: tagGroup?.defaultCurrency ?? 'INR',
-            alternateCurrencies: tagGroup?.alternateCurrencies,
-          });
-          const present = [...new Set(allFiltered.map((row) => row.currency as string))];
-          userByCurrency = [
-            ...listed.filter((code) => present.includes(code)),
-            ...present.filter((code) => !listed.includes(code)).sort(),
-          ].map((currency) => ({
+          userByCurrency = inGroupCurrencyOrder(
+            {
+              defaultCurrency: tagGroup?.defaultCurrency ?? 'INR',
+              alternateCurrencies: tagGroup?.alternateCurrencies,
+            },
+            allFiltered.map((row) => row.currency as string),
+          ).map((currency) => ({
             currency,
             ...computeUserOweGetBack(
               allFiltered.filter((row) => row.currency === currency) as LeanExpenseContribution[],
