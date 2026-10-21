@@ -49,6 +49,9 @@ import PaymentsTable, { type PaymentRead, type PaymentsState } from './PaymentsT
 import EveryoneCard, { type EveryoneState } from './EveryoneCard';
 import type { EveryonePerson } from './everyone-chart';
 import SettleUpViews, { type Debt } from './SettleUpViews';
+import SettleAllOffers from './SettleAllOffers';
+import SettleAllDialog from '@/components/settlements/SettleAllDialog';
+import { settleAllOffers } from '@/components/settlements/settle-all';
 
 interface BalancesViewProps {
   groupId: string;
@@ -205,6 +208,9 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     [blank],
   );
   const [formPair, setFormPair] = useState({ from: userId, to: '' });
+  /** The two Settle up is open for (#734), and what its last payment came to. */
+  const [settling, setSettling] = useState<{ paidBy: string; paidTo: string } | null>(null);
+  const [settled, setSettled] = useState<string | null>(null);
   // Payments whose reply was lost, offered whatever the suggestions say (#198).
   const attempts = useSettlementAttempts(userId, groupId);
 
@@ -286,6 +292,24 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     ...groupCurrencies(group).filter((other) => other !== code),
   ];
 
+  // Settle up (#734): one payment for every Debt between the member and someone else, when
+  // they're in two currencies or more, paid in one of those the Group lists.
+  const offers = read ? settleAllOffers(buckets, userId, currencies) : [];
+  const listed = groupCurrencies(group);
+  const settlingOffer = settling
+    ? (offers.find(
+        (offer) => offer.paidBy === settling.paidBy && offer.paidTo === settling.paidTo,
+      ) ?? null)
+    : null;
+  const settlingStored = settling
+    ? (attempts.find(
+        (attempt) =>
+          [attempt.paidBy, attempt.paidTo].sort().join() ===
+          [settling.paidBy, settling.paidTo].sort().join(),
+      ) ?? null)
+    : null;
+  const names = Object.fromEntries(group.members.map(({ user }) => [user._id, user.name]));
+
   const members: PaymentParty[] = viewerFirst(group.members, userId).map((member) => ({
     id: member.user._id,
     name: member.user.name,
@@ -359,6 +383,11 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                 color="inherit"
                 size="small"
                 onClick={() => {
+                  // A settle-up is checked in its own sheet (#734).
+                  if (attempt.batch) {
+                    setSettling({ paidBy: attempt.paidBy, paidTo: attempt.paidTo });
+                    return;
+                  }
                   // The payment's own currency's tab shows it (#727).
                   setChosen(attempt.currency);
                   openForm(
@@ -701,6 +730,39 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     <Stack spacing={2.5}>
       {unconfirmedPayments}
       {currencySwitch}
+      {settled && (
+        <Alert severity="success" role="status" onClose={() => setSettled(null)}>
+          {settled}
+        </Alert>
+      )}
+      <SettleAllOffers
+        offers={offers}
+        disabled={!read}
+        onSettle={(offer) => {
+          setSettled(null);
+          setSettling({ paidBy: offer.paidBy, paidTo: offer.paidTo });
+        }}
+      />
+      {settling && (
+        <SettleAllDialog
+          key={`${settling.paidBy}:${settling.paidTo}`}
+          open
+          groupId={groupId}
+          accountId={userId}
+          offer={settlingOffer}
+          names={names}
+          payCurrencies={(settlingOffer?.debts ?? [])
+            .map(({ currency: code }) => code)
+            .filter((code) => listed.includes(code))}
+          stored={settlingStored}
+          onClose={() => setSettling(null)}
+          onDone={(outcome) => {
+            setSettling(null);
+            setSettled(outcome);
+          }}
+          onRefresh={refresh}
+        />
+      )}
       {/* Two columns once the tab is wide enough for both (web.css .duo: 600px + 340px), the
           form beside the figures; one column otherwise, the form straight after Settle up. The
           switch shows them one currency at a time. */}
