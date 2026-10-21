@@ -110,18 +110,19 @@ export function ungroupAmountEntry(text: string): string {
  *
  * Null where the text stays as typed, as blur leaves it: not an amount the currency takes even
  * without its commas, or with a comma that may be a decimal comma ("10,5", "10,50.", ",842", "1.5,00"),
- * so "10,5" is refused rather than read as 105. `deletedFrom` is the text a Backspace, Delete or
- * Cut took characters from: only when that was grouped is such a comma the field's own, as in
- * "1,842" less its 8, "1,42", which reads 142.
+ * so "10,5" is refused rather than read as 105. `keptFrom` is the text an edit that typed no digit
+ * and no comma kept its commas from: a Backspace, Delete or Cut, or a point typed alone. Only when
+ * that text was grouped is such a comma the field's own, as in "1,842" less its 8, "1,42", which
+ * reads 142, or "1,250" with a point after the 12, "1,2.50", which reads 12.50.
  */
 export function regroupAmountEntry(
   text: string,
   currency: string,
-  deletedFrom?: string,
+  keptFrom?: string,
 ): string | null {
   const plain = text.replaceAll(',', '');
   if (!plainAmount.test(plain)) return null;
-  if (decimalComma.test(text) && !thousandsGrouped.test(deletedFrom ?? '')) return null;
+  if (decimalComma.test(text) && !thousandsGrouped.test(keptFrom ?? '')) return null;
   try {
     parseAmountMinor(plain, currency);
   } catch {

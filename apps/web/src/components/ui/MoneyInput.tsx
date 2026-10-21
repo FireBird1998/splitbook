@@ -57,14 +57,18 @@ function useMoneyEntry(
     onBlur: () => setEditing(null),
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const typed = event.target.value;
-      // Regroup as the member types (#773), the caret after as many characters as before. Only
-      // the input type tells Backspace, Delete or Cut from typing over a selection; a change a
-      // password manager, autofill or a test sends may carry none. An IME's composition stays
-      // as typed while it lasts.
-      const { inputType = '', isComposing = false } =
-        (event.nativeEvent as Partial<InputEvent> | undefined) ?? {};
-      const deletedFrom = inputType.startsWith('delete') ? shown : undefined;
-      const regrouped = isComposing ? null : regroupAmountEntry(typed, currency, deletedFrom);
+      // Regroup as the member types (#773), the caret after as many characters as before. A
+      // Backspace, Delete or Cut, or a point typed alone, types no digit and no comma, so the
+      // commas it keeps of a grouped amount are the field's own. Only the browser's event tells
+      // those from typing over a selection; a change a password manager, autofill or a test
+      // sends may carry none. An IME's composition stays as typed while it lasts.
+      const {
+        inputType = '',
+        isComposing = false,
+        data = null,
+      } = (event.nativeEvent as Partial<InputEvent> | undefined) ?? {};
+      const keptFrom = inputType.startsWith('delete') || data === '.' ? shown : undefined;
+      const regrouped = isComposing ? null : regroupAmountEntry(typed, currency, keptFrom);
       // Not while unfocused, as autofill edits: the caret would wait for focus and undo Tab's
       // selection.
       if (editing !== null && regrouped !== null && regrouped !== typed) {

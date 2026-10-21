@@ -129,8 +129,10 @@ describe('grouped amount display (#773)', () => {
     ['.5', 'EUR', undefined, '.5'],
     ['1,42', 'JPY', '1,842', '142'],
     ['1,000,00', 'EUR', '1,000,000', '100,000'],
+    ['1,2.50', 'EUR', '1,250', '12.50'],
+    ['184,2.50', 'EUR', '184,250', '1,842.50'],
   ])(
-    'regroups %s in %s, deleted from %s, as it is typed: %s',
+    'regroups %s in %s, its commas kept from %s, as it is typed: %s',
     (typed, currency, from, regrouped) => {
       expect(regroupAmountEntry(typed, currency, from)).toBe(regrouped);
     },
@@ -154,7 +156,7 @@ describe('grouped amount display (#773)', () => {
     // A comma typed first groups nothing, so it may be a decimal comma too.
     [',842', 'EUR', undefined],
     [',842.50', 'EUR', undefined],
-    // Typing a 5 over 842 is no deletion, and deleting from a refused "10,55" is no deletion
+    // Typing a 5 over 842 keeps no commas, and deleting from a refused "10,55" keeps none
     // from grouped text, so the comma may still be a decimal comma.
     ['1,5', 'EUR', undefined],
     ['1,5.50', 'EUR', undefined],
@@ -165,7 +167,7 @@ describe('grouped amount display (#773)', () => {
     ['', 'EUR', undefined],
     ['1e3', 'EUR', undefined],
     ['-5', 'EUR', undefined],
-  ])('leaves %s in %s, deleted from %s, as typed', (typed, currency, from) => {
+  ])('leaves %s in %s, its commas kept from %s, as typed', (typed, currency, from) => {
     expect(regroupAmountEntry(typed, currency, from)).toBeNull();
   });
 
