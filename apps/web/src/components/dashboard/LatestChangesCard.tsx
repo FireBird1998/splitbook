@@ -23,7 +23,7 @@ import {
 } from '@splitbook/shared/user-activity-read';
 import { groupSettlementBatches } from '@splitbook/shared/settlement-batch-activity';
 import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
-import type { ActivityBatch } from '@/components/activity/batch-words';
+import { newestEvent, type ActivityBatch } from '@/components/activity/batch-words';
 import { fetcher } from '@/lib/utils/fetcher';
 import { RADIUS } from '@/lib/theme/tokens';
 
@@ -163,8 +163,8 @@ export function LatestChangesView({ state, viewerId, onRetry }: LatestChangesVie
               <LatestChangeRow key={item.event._id} event={item.event} viewerId={viewerId} />
             ) : (
               <LatestChangeRow
-                key={item.events[0]._id}
-                event={item.events[0]}
+                key={newestEvent(item, state.activities)._id}
+                event={newestEvent(item, state.activities)}
                 batch={item}
                 viewerId={viewerId}
               />

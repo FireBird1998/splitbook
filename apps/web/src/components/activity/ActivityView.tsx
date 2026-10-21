@@ -21,7 +21,7 @@ import ButtonBase from '@mui/material/ButtonBase';
 import { readCrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
 import { groupSettlementBatches } from '@splitbook/shared/settlement-batch-activity';
 import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
-import type { ActivityBatch } from './batch-words';
+import { newestEvent, type ActivityBatch } from './batch-words';
 import BatchPaymentCard from './BatchPaymentCard';
 import PaymentRecordCard from './PaymentRecordCard';
 
@@ -59,10 +59,12 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
   const activities = (data?.data?.activities || []) as ActivityLike[];
   // A payment that settled several Debts at once is one row, where its first event is (#734).
   const grouped = groupSettlementBatches(activities);
-  const rows = grouped.map((item) => (item.kind === 'event' ? item.event : item.events[0]));
+  const rows = grouped.map((item) =>
+    item.kind === 'event' ? item.event : newestEvent(item, activities),
+  );
   const batches = new Map(
     grouped.flatMap((item): [string, Batch][] =>
-      item.kind === 'batch' ? [[item.events[0]._id, item]] : [],
+      item.kind === 'batch' ? [[newestEvent(item, activities)._id, item]] : [],
     ),
   );
   const groups = groupActivitiesByDay(rows);
