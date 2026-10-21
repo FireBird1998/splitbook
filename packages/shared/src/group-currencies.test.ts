@@ -9,6 +9,7 @@ import {
   startingExpenseCurrency,
   unlistedCurrencyFix,
   inGroupCurrencyOrder,
+  unsupportedMoneyOnLeave,
 } from './group-currencies';
 import { amountReadAloud, wholeUnit } from './currency';
 import { assertGroupCurrency } from './expense-validation';
@@ -187,5 +188,26 @@ describe('inGroupCurrencyOrder (#759)', () => {
       'GBP',
       'DEM',
     ]);
+  });
+});
+
+describe('unsupportedMoneyOnLeave (#812)', () => {
+  it('names the currency Splitbook no longer supports, and says leaving doesn’t settle it', () => {
+    expect(unsupportedMoneyOnLeave(['DEM'])).toBe(
+      'Some of this Group’s money is in DEM, a currency Splitbook no longer supports. It isn’t in Balances, so leaving doesn’t settle it.',
+    );
+  });
+
+  it('names several the way a list is said', () => {
+    expect(unsupportedMoneyOnLeave(['DEM', 'FRF'])).toBe(
+      'Some of this Group’s money is in DEM and FRF, currencies Splitbook no longer supports. It isn’t in Balances, so leaving doesn’t settle it.',
+    );
+    expect(unsupportedMoneyOnLeave(['DEM', 'FRF', 'ITL'])).toContain(
+      'in DEM, FRF and ITL, currencies',
+    );
+  });
+
+  it('says nothing when there are none', () => {
+    expect(unsupportedMoneyOnLeave([])).toBeNull();
   });
 });
