@@ -3,6 +3,9 @@ import { focusManager, onlineManager } from '@tanstack/query-core';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
 
+/** The phone's zone as the app reads it, so these paths hold in every zone CI runs (#730). */
+const PHONE_ZONE = encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+
 // #730: a Trip in more than one currency reads its Trip summary (#729) beside its Expenses, so
 // the All time card switches between its currencies, as the web's Trip summary does, nothing
 // converted. These checks drive the controller's public commands and look only at the requests
@@ -317,12 +320,12 @@ describe('a Trip in several currencies reads its Trip summary (#730)', () => {
     const controller = started(made);
     await controller.signIn('alex');
     await controller.openGroup(lisbonId);
-    expect(made.tripReads()).toEqual([`${tripPath}?tz=UTC`]);
+    expect(made.tripReads()).toEqual([`${tripPath}?tz=${PHONE_ZONE}`]);
     const paths = made.calls.map(({ path }) => path);
     const expenses = paths.findIndex((path) =>
       path.startsWith(`/api/groups/${lisbonId}/expenses?`),
     );
-    expect(paths.indexOf(`${tripPath}?tz=UTC`)).toBeGreaterThan(expenses);
+    expect(paths.indexOf(`${tripPath}?tz=${PHONE_ZONE}`)).toBeGreaterThan(expenses);
     expect(controller.getSnapshot().financial.trip).toMatchObject({
       status: 'ready',
       chosen: null,
@@ -348,7 +351,10 @@ describe('a Trip in several currencies reads its Trip summary (#730)', () => {
     await controller.signIn('alex');
     await controller.openGroup(lisbonId);
     await controller.chooseTripCurrency('EUR');
-    expect(made.tripReads()).toEqual([`${tripPath}?tz=UTC`, `${tripPath}?tz=UTC&currency=EUR`]);
+    expect(made.tripReads()).toEqual([
+      `${tripPath}?tz=${PHONE_ZONE}`,
+      `${tripPath}?tz=${PHONE_ZONE}&currency=EUR`,
+    ]);
     expect(controller.getSnapshot().financial.trip).toMatchObject({
       status: 'ready',
       chosen: 'EUR',
@@ -373,7 +379,7 @@ describe('a Trip in several currencies reads its Trip summary (#730)', () => {
     await first.signIn('alex');
     await first.openGroup(lisbonId);
     const readAt = Date.now();
-    await vi.waitFor(() => expect(made.savedTrips()).toEqual([`${tripPath}?tz=UTC`]));
+    await vi.waitFor(() => expect(made.savedTrips()).toEqual([`${tripPath}?tz=${PHONE_ZONE}`]));
     first.dispose();
     made.server.offline = true;
     vi.setSystemTime(readAt + 60 * 60_000);
@@ -433,7 +439,7 @@ describe('a Trip in several currencies reads its Trip summary (#730)', () => {
     await controller.signIn('alex');
     await controller.openGroup(baliId);
     expect(made.calls.map(({ path }) => path)).toContain(
-      `/api/groups/${baliId}/trip-summary?tz=UTC`,
+      `/api/groups/${baliId}/trip-summary?tz=${PHONE_ZONE}`,
     );
     expect(controller.getSnapshot().financial.trip).toMatchObject({ status: 'ready' });
   });

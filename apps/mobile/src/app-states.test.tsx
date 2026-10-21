@@ -18,6 +18,9 @@ import { progressHeight, sweepTrack } from './ui/compact';
 import { savedQueriesIn } from './test-utils/saved-queries';
 import { mockDeviceLocale } from './test-utils/device-locale';
 
+/** The phone's zone as the app reads it, so these paths hold in every zone CI runs (#730). */
+const PHONE_ZONE = encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+
 // #127: the App's loading, refreshing, offline and cold-start states, rendered through the real
 // App tree and controller. Only native modules are replaced.
 // What the mocked `./runtime` serves: the controller under test and the appearance.
@@ -2486,7 +2489,9 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(seen()).toContain('INR · EUR · JPY');
 
     await app.press('EUR, €1,240.00 spent in 11 Expenses');
-    expect(phone.sent).toContain(`GET /api/groups/${lisbon}/trip-summary?tz=UTC&currency=EUR`);
+    expect(phone.sent).toContain(
+      `GET /api/groups/${lisbon}/trip-summary?tz=${PHONE_ZONE}&currency=EUR`,
+    );
     expect(app.hosts((p) => p.accessibilityLabel === 'Spent: €1,240.00')).toHaveLength(1);
     expect(app.hosts((p) => p.accessibilityLabel === 'Spent: ¥186,000')).toHaveLength(0);
     expect(seen()).toContain('Each currency is shown on its own.');
