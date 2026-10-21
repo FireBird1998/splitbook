@@ -179,3 +179,30 @@ test('Backspace after the 8 in 1,842.50 leaves 142.50, the caret after the 1, an
   expect((await request).postDataJSON()).toMatchObject({ amountMinor: 194250 });
   await expect(dialog).toBeHidden();
 });
+
+test('a point typed after the 12 in 1,250 reads 12.50 and saves it (#773)', async ({
+  page,
+  ledger,
+}) => {
+  const group = await euroGroup(ledger);
+  await page.context().addCookies((await ledger.alex.storageState()).cookies);
+  await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${group}`);
+  const dialog = await openAddExpense(page);
+  await dialog.getByLabel('What was it for?').fill('Keyboard dinner');
+  const amount = dialog.getByRole('textbox', { name: /^Amount,/ });
+  await amount.click();
+  await page.keyboard.type('1250');
+  await expect(amount).toHaveValue('1,250');
+  // The caret after "1,2", then a point: the field's own comma goes, the caret after the point.
+  await amount.press('Home');
+  for (let step = 0; step < 3; step++) await amount.press('ArrowRight');
+  await page.keyboard.type('.');
+  await expect(amount).toHaveValue('12.50');
+  expect(await amount.evaluate((input: HTMLInputElement) => input.selectionStart)).toBe(3);
+  const request = page.waitForRequest(
+    (r) => r.method() === 'POST' && r.url().endsWith(`/api/groups/${group}/expenses`),
+  );
+  await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({ amountMinor: 1250 });
+  await expect(dialog).toBeHidden();
+});

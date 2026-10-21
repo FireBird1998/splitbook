@@ -128,12 +128,17 @@ for (const [name, Field] of fields) {
     });
     const input = () => renderer.root.findByType('input');
     await act(async () => input().props.onFocus({ target: input().props }));
-    /** What the member's keystroke left in the field, the caret at `at`. */
-    const edit = (value: string, at = value.length, inputType = 'insertText') =>
+    /** What the member's keystroke left in the field, the caret at `at`; `data` is what it typed. */
+    const edit = (
+      value: string,
+      at = value.length,
+      inputType = 'insertText',
+      data: string | null = null,
+    ) =>
       act(async () =>
         input().props.onChange({
           target: { value, selectionStart: at, selectionEnd: at },
-          nativeEvent: { inputType },
+          nativeEvent: { inputType, data },
         }),
       );
     return { input, changed, caret, edit };
@@ -220,6 +225,27 @@ for (const [name, Field] of fields) {
     expect(caret).toHaveBeenLastCalledWith(1, 1);
   });
 
+  it(`${name}: a point typed after the 12 in 1,250 reads 12.50, the caret after the point`, async () => {
+    const { input, changed, caret, edit } = await focused('EUR', '');
+    for (const typed of ['1', '12', '125', '1250']) await edit(typed);
+    expect(input().props.value).toBe('1,250');
+    await edit('1,2.50', 4, 'insertText', '.');
+    expect(input().props.value).toBe('12.50');
+    expect(changed).toHaveBeenLastCalledWith('12.50');
+    expect(caret).toHaveBeenLastCalledWith(3, 3);
+  });
+
+  it(`${name}: Backspace over the point in 1,842.50, then the point typed back, gives 1,842.50`, async () => {
+    const { input, changed, caret, edit } = await focused('EUR', '1842.5');
+    await edit('1,84250', 5, 'deleteContentBackward');
+    expect(input().props.value).toBe('184,250');
+    expect(caret).toHaveBeenLastCalledWith(5, 5);
+    await edit('184,2.50', 6, 'insertText', '.');
+    expect(input().props.value).toBe('1,842.50');
+    expect(changed).toHaveBeenLastCalledWith('1842.50');
+    expect(caret).toHaveBeenLastCalledWith(6, 6);
+  });
+
   it(`${name}: a whole yen amount regroups too, and INR groups as it does on blur`, async () => {
     const yen = await focused('JPY', '1842');
     expect(yen.input().props.value).toBe('1,842');
@@ -248,7 +274,7 @@ for (const [name, Field] of fields) {
   it(`${name}: a 5 typed over 500.00 selected in 10,500.00 stays as typed and refused, never 105`, async () => {
     const { input, changed, edit } = await focused('EUR', '10500');
     expect(input().props.value).toBe('10,500.00');
-    await edit('10,5', 4);
+    await edit('10,5', 4, 'insertText', '5');
     expect(input().props.value).toBe('10,5');
     expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
   });
@@ -279,7 +305,8 @@ for (const [name, Field] of fields) {
 
   it(`${name}: "10,50" then a point stays as typed and refused, never 1,050`, async () => {
     const { input, changed, edit } = await focused('EUR', '');
-    for (const typed of ['1', '10', '10,', '10,5', '10,50', '10,50.']) await edit(typed);
+    for (const typed of ['1', '10', '10,', '10,5', '10,50']) await edit(typed);
+    await edit('10,50.', 6, 'insertText', '.');
     expect(input().props.value).toBe('10,50.');
     expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
   });
