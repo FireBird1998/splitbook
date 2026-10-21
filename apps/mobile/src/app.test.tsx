@@ -3163,4 +3163,41 @@ describe('Account → Connected assistants (#622)', () => {
     expect(shown).toContain('Read only · 1 of 1 Group');
     expect(app.pressable('Back to Settings')).toBeTruthy();
   });
+
+  it('says only that it’s offline above “not saved on this phone”', async () => {
+    const app = await renderApp((path) => {
+      if (path === '/api/auth/mcp/connections')
+        return json({
+          resource: 'http://localhost:4100/api/mcp',
+          connections: [
+            {
+              id: 'c1',
+              clientId: 'https://helper.example.test/client.json',
+              name: 'Fictional Helper',
+              scopes: ['ledger:read'],
+              access: 'Ledger',
+              lastUsedAt: null,
+              excludedGroupIds: [],
+            },
+          ],
+          nextOffset: null,
+        });
+      if (path === '/api/user/assistant-groups')
+        return json({ status: 200, data: { groups: [{ id: groupId, rule: 'allowed' }] } });
+      return undefined;
+    });
+    await app.press('Account and settings');
+    await app.press('Connected assistants');
+    // Splitbook stops answering as Disconnect is sent: its Saved copy went first.
+    app.use(() => Promise.reject(new TypeError('Network request failed')));
+    await app.press('Disconnect Fictional Helper, helper.example.test');
+    await settle(app.controller.disconnectAssistant());
+    expect(app.text()).toContain('Couldn’t confirm the disconnection.');
+    app.controller.cancelDisconnectAssistant();
+    await settle(app.controller.refresh('pull'));
+    const shown = app.text();
+    expect(shown).toContain('Connected assistants aren’t saved on this phone.');
+    expect(shown).toContain('You’re offline');
+    expect(shown).not.toContain('was saved on this device');
+  });
 });

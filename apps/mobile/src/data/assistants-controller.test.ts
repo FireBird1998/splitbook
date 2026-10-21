@@ -405,6 +405,25 @@ describe('Connected assistants on Android (#622)', () => {
     controller.dispose();
   });
 
+  it('closes the Disconnect sheet of an assistant a read no longer lists', async () => {
+    const f = fixture();
+    const { controller, state } = await readOnline(f);
+    f.connect(true, false);
+    await controller.refresh('pull');
+    await vi.waitFor(() => expect(controller.getSnapshot().offline.active).toBe(true));
+    controller.askDisconnectAssistant('c1');
+    expect(state().confirming).toBe('c1');
+    // Meanwhile Fictional Helper was disconnected on the web; the internet returns.
+    f.server.connections = [reader];
+    f.connect(true, true);
+    await vi.waitFor(() => expect(state().saved).toBe(false));
+    expect(state().confirming).toBeNull();
+    const sent = f.requests.length;
+    await controller.disconnectAssistant();
+    expect(f.requests.slice(sent).filter((request) => request.startsWith('POST'))).toEqual([]);
+    controller.dispose();
+  });
+
   it('doesn’t read again on the internet’s return when what it shows was read live', async () => {
     const f = fixture();
     const { controller, state } = await readOnline(f);
@@ -479,9 +498,8 @@ describe('Connected assistants on Android (#622)', () => {
     controller.askDisconnectAssistant('c1');
     await controller.disconnectAssistant();
     await vi.waitFor(() => expect(state().status).not.toBe('loading'));
-    expect(state().assistants?.map((assistant) => assistant.name) ?? []).not.toContain(
-      'Fictional Helper',
-    );
+    // Its Saved copy went before the Disconnect, so the read after it finds nothing to show.
+    expect(state()).toMatchObject({ assistants: null, unsaved: true });
     expect(f.savedAssistants() ?? []).not.toContain('Fictional Helper');
     controller.dispose();
   });
@@ -496,10 +514,7 @@ describe('Connected assistants on Android (#622)', () => {
     await vi.waitFor(() => expect(state().status).not.toBe('loading'));
     // The copy from before is still on this phone, and never answers again.
     expect(f.savedAssistants()).toContain('Fictional Helper');
-    expect(state()).toMatchObject({ saved: false, unsaved: true });
-    expect(state().assistants?.map((assistant) => assistant.name) ?? []).not.toContain(
-      'Fictional Helper',
-    );
+    expect(state()).toMatchObject({ saved: false, unsaved: true, assistants: null });
     controller.dispose();
   });
 
