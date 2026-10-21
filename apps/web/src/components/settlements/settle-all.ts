@@ -1,0 +1,230 @@
+/**
+ * Settle up (#734, board "Web · Settle both currencies at once"): one payment, in one currency,
+ * that clears every Debt between the member and another person, each at its own rate. Each
+ * Debt's own currency moves by its own amount only; nothing is converted on the ledger. Pure, so
+ * the sheet and its tests read the same thing.
+ */
+import {
+  crossCurrencyRateKind,
+  readCrossCurrencyEntry,
+  suggestedRateText,
+  type RateSuggestion,
+} from '@splitbook/shared/cross-currency-payment';
+import { getCurrencyPrecision } from '@splitbook/shared/currency';
+import { minorMoney } from '@splitbook/shared/cross-currency-settlement';
+import { readLegacyAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
+import {
+  calculateSettlementBatch,
+  type SettlementBatchAmounts,
+  type SettlementBatchRate,
+} from '@splitbook/shared/settlement-batch';
+import type { RateSuggestionState } from '@/lib/hooks/use-rate-suggestion';
+
+interface Person {
+  _id: string;
+  name: string;
+}
+
+/** A currency's Suggested payments, as Balances reads them. */
+export interface SuggestedPayments {
+  currency: string;
+  debts: ReadonlyArray<{ from: Person; to: Person; amount: number }>;
+}
+
+/** One Debt a settle-up clears, in its own currency's minor units. */
+export interface SettleAllDebt {
+  currency: string;
+  amountMinor: number;
+}
+
+/** A payment the member can record that clears Debts in several currencies at once. */
+export interface SettleAllOffer {
+  paidBy: string;
+  paidTo: string;
+  /** The other person's name. */
+  other: string;
+  /** Whether the member pays, or is paid. */
+  youPay: boolean;
+  /** In `currencies`' order: the main currency, then the Group's other currencies. */
+  debts: SettleAllDebt[];
+}
+
+/**
+ * Each person the member owes, or who owes the member, in two currencies or more, as the
+ * Suggested payments say: one offer each, its Debts in `currencies`' order.
+ */
+export function settleAllOffers(
+  buckets: readonly SuggestedPayments[],
+  viewerId: string,
+  currencies: readonly string[],
+): SettleAllOffer[] {
+  const offers = new Map<string, SettleAllOffer>();
+  const ordered = [...buckets].sort(
+    (a, b) => rank(currencies, a.currency) - rank(currencies, b.currency),
+  );
+  for (const { currency, debts } of ordered)
+    for (const debt of debts) {
+      if (!canRecordSettlement(viewerId, debt.from._id, debt.to._id)) continue;
+      let amountMinor: number;
+      try {
+        amountMinor = readLegacyAmountMinor(debt.amount, currency);
+      } catch {
+        continue;
+      }
+      if (amountMinor <= 0) continue;
+      const key = `${debt.from._id}:${debt.to._id}`;
+      const youPay = debt.from._id === viewerId;
+      const offer = offers.get(key) ?? {
+        paidBy: debt.from._id,
+        paidTo: debt.to._id,
+        other: youPay ? debt.to.name : debt.from.name,
+        youPay,
+        debts: [],
+      };
+      offer.debts.push({ currency, amountMinor });
+      offers.set(key, offer);
+    }
+  return [...offers.values()].filter((offer) => offer.debts.length > 1);
+}
+
+/** Its place in the Group's currencies; one the Group no longer lists comes after them. */
+const rank = (currencies: readonly string[], currency: string) => {
+  const at = currencies.indexOf(currency);
+  return at < 0 ? currencies.length : at;
+};
+
+/** "₹1,480.00 and €20.00", or "₹500.00, €12.50 and ¥900". */
+const andList = (words: string[]) =>
+  words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : (words[0] ?? '');
+
+/** What the offer and its sheet say, in the board's words. */
+export function settleAllWords(offer: SettleAllOffer) {
+  const count = offer.debts.length;
+  const lead = offer.youPay
+    ? `You owe ${offer.other} in ${count} currencies`
+    : `${offer.other} owes you in ${count} currencies`;
+  const clears = count === 2 ? 'clear both' : 'clear them all';
+  return {
+    lead,
+    amounts: andList(
+      offer.debts.map(({ currency, amountMinor }) => minorMoney(amountMinor, currency)),
+    ),
+    offer: `One payment can ${clears}.`,
+    action: count === 2 ? 'Settle both' : 'Settle all',
+    title: `Settle up with ${offer.other}`,
+    intro: `${lead}. One payment can ${clears}; each Debt keeps its own rate.`,
+    payColumn: offer.youPay ? 'You pay' : `${offer.other} pays`,
+    note: `Records ${count} Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.`,
+  };
+}
+
+/** A Debt in another currency than the payment's: its suggested rate, and the member's own. */
+export interface SettleAllRate {
+  state: RateSuggestionState;
+  /** The member's own rate, as typed; null while it pays at the suggestion. */
+  custom: string | null;
+}
+
+/** One Debt of a settle-up, as the sheet shows it. */
+export interface SettleAllLine {
+  currency: string;
+  debtMinor: number;
+  /** What it pays, in the paying currency; null until its rate is known. */
+  paidMinor: number | null;
+  /** The rate it is paid at, as a decimal; null in the paying currency, or until it's known. */
+  rate: string | null;
+  kind: 'same' | 'suggested' | 'custom' | 'entered' | null;
+  suggestion: RateSuggestion | null;
+}
+
+/** Record's reason while a Debt has no rate yet. */
+export const enterRateFor = (currency: string) =>
+  `Enter the rate for the ${currency} Debt to record it.`;
+
+/**
+ * A settle-up read by the shared rules: each Debt's line, and once every rate is known the
+ * payment's rows and total (`calculateSettlementBatch`), else what Record waits for.
+ */
+export function readSettleAll({
+  debts,
+  paidCurrency,
+  rates,
+}: {
+  debts: readonly SettleAllDebt[];
+  paidCurrency: string;
+  rates: Readonly<Record<string, SettleAllRate | undefined>>;
+}): { lines: SettleAllLine[]; amounts: SettlementBatchAmounts | null; waiting: string | null } {
+  let waiting: string | null = null;
+  const choices: Record<string, SettlementBatchRate> = {};
+  const lines = debts.map(({ currency, amountMinor: debtMinor }): SettleAllLine => {
+    if (currency === paidCurrency)
+      return {
+        currency,
+        debtMinor,
+        paidMinor: debtMinor,
+        rate: null,
+        kind: 'same',
+        suggestion: null,
+      };
+    const { state, custom } = rates[currency] ?? { state: { status: 'loading' }, custom: null };
+    const suggestion = state.status === 'ready' ? state.suggestion : null;
+    const unknown = { currency, debtMinor, paidMinor: null, rate: null, kind: null, suggestion };
+    const typed = custom?.trim() ? custom.trim() : suggestion && suggestedRateText(suggestion.rate);
+    if (!typed) {
+      waiting ??=
+        state.status === 'loading'
+          ? `Getting the suggested rate for ${currency}…`
+          : enterRateFor(currency);
+      return unknown;
+    }
+    const pair = { currency, paidCurrency };
+    const reading = readCrossCurrencyEntry(
+      {
+        cleared: toMajorAmount(debtMinor, currency).toFixed(getCurrencyPrecision(currency)),
+        rate: typed,
+        paid: '',
+        drivers: ['rate', 'cleared'],
+      },
+      pair,
+    );
+    if (reading.status !== 'valid') {
+      waiting ??= reading.status === 'invalid' ? reading.message : enterRateFor(currency);
+      return unknown;
+    }
+    const plain = typed.replaceAll(',', '').replace(/\.$/, '');
+    const kind = crossCurrencyRateKind(pair, reading.amounts, suggestion);
+    const provenance = suggestion && {
+      suggestedRate: suggestion.rate,
+      rateSource: suggestion.source,
+      rateAsOf: suggestion.asOf,
+      rateFetchedAt: suggestion.fetchedAt,
+    };
+    choices[currency] =
+      !provenance || kind === 'entered'
+        ? { rateKind: 'entered', rate: plain }
+        : kind === 'suggested'
+          ? { rateKind: 'suggested', ...provenance }
+          : { rateKind: 'custom', rate: plain, ...provenance };
+    return {
+      currency,
+      debtMinor,
+      paidMinor: reading.amounts.amountPaidMinor,
+      rate: kind === 'suggested' && suggestion ? suggestion.rate : plain,
+      kind,
+      suggestion,
+    };
+  });
+  let amounts: SettlementBatchAmounts | null = null;
+  if (!waiting)
+    try {
+      amounts = calculateSettlementBatch({
+        debts: lines.map(({ currency, debtMinor }) => ({ currency, amountMinor: debtMinor })),
+        paidCurrency,
+        rates: choices,
+      });
+    } catch {
+      waiting = 'This payment can’t be worked out from these rates. Check them.';
+    }
+  return { lines, amounts, waiting };
+}
