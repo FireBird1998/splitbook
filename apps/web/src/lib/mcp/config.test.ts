@@ -50,6 +50,11 @@ describe('MCP inactivity deployment boundary', () => {
   it('keeps staging at 90 days when no timeout is supplied', () => {
     expect(mcpIdleSeconds({ MCP_DEPLOYMENT: 'staging' })).toBe(7_776_000);
   });
+  it('keeps staging at 90 days when the timeout is empty', () => {
+    expect(mcpIdleSeconds({ MCP_DEPLOYMENT: 'staging', MCP_IDLE_TIMEOUT_SECONDS: '' })).toBe(
+      7_776_000,
+    );
+  });
   it('ignores copied staging overrides on the production mobile deployment', () => {
     for (const timeout of ['120', 'malformed']) {
       expect(
@@ -61,19 +66,19 @@ describe('MCP inactivity deployment boundary', () => {
       ).toBe(7_776_000);
     }
   });
-  it('fails closed and logs malformed staging configuration when auth initializes', () => {
+  it('disables MCP plugins and logs invalid staging configuration only once', () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      expect(() =>
-        mcpAuthPlugins({
-          MCP_ENABLED: 'true',
-          NEXT_PUBLIC_APP_URL: 'https://staging.example.test',
-          MCP_DEPLOYMENT: 'staging',
-          MCP_IDLE_TIMEOUT_SECONDS: 'malformed',
-        }),
-      ).toThrow('MCP_IDLE_TIMEOUT_SECONDS');
-      expect(log).toHaveBeenCalledWith(
-        'Invalid MCP inactivity configuration: MCP_IDLE_TIMEOUT_SECONDS must be an integer from 120 to 7776000. MCP initialization refused.',
+      const env = {
+        MCP_ENABLED: 'true',
+        NEXT_PUBLIC_APP_URL: 'https://staging.example.test',
+        MCP_DEPLOYMENT: 'staging',
+        MCP_IDLE_TIMEOUT_SECONDS: 'malformed',
+      };
+      expect(mcpAuthPlugins(env)).toEqual([]);
+      expect(mcpAuthPlugins(env)).toEqual([]);
+      expect(log).toHaveBeenCalledExactlyOnceWith(
+        'Invalid MCP inactivity configuration: MCP_IDLE_TIMEOUT_SECONDS must be an integer from 120 to 7776000. MCP is unavailable (503); normal sign-in and pages remain available.',
       );
     } finally {
       log.mockRestore();
