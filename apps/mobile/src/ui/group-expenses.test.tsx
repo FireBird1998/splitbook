@@ -435,8 +435,15 @@ describe('A Trip’s spending, one currency at a time (#730)', () => {
     expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe(
       'EUR, €1,240.00 spent in 11 Expenses',
     );
-    // The yen figures never show under euros.
+    // The yen figures never show under euros, in yen or formatted as euros ("Spent: €1,860.00",
+    // mutant T3): no figure shows at all until the euro read lands.
     expect(labelled(root, 'Spent: ¥186,000')).toHaveLength(0);
+    expect(
+      root
+        .findAll((node) => typeof node.type === 'string')
+        .map((node) => String(node.props.accessibilityLabel ?? ''))
+        .filter((label) => /^(Spent|Your share|You paid): /.test(label)),
+    ).toEqual([]);
     act(() =>
       screen!.update(
         <GroupExpensesView
