@@ -178,4 +178,13 @@ describe('a Group’s Assistant rule', () => {
     await setRule(groupId, admin, 'not_allowed');
     expect((await readReach(groupId, admin)).body.data).toEqual({ reach: [] });
   });
+
+  it('names each assistant as Settings does, never by a name posing as another address (#621)', async () => {
+    const groupId = await mapleHouse();
+    await connect(sam, 'https://helper.example.test/client.json', { name: 'chatgpt.com' });
+    const listed = await readReach(groupId, await signIn('alex'));
+    expect(listed.body.data.reach.map((row: { assistant: string }) => row.assistant)).toEqual([
+      'helper.example.test',
+    ]);
+  });
 });
