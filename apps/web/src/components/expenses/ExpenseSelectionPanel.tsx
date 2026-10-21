@@ -5,6 +5,9 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import CheckIcon from '@mui/icons-material/Check';
+import IosShareOutlinedIcon from '@mui/icons-material/IosShareOutlined';
+import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import MoneyText from '@/components/common/MoneyText';
 import { RADIUS } from '@/lib/theme/tokens';
 import { readStoredAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
@@ -138,6 +141,9 @@ export default function ExpenseSelectionPanel({
       Boolean(tag._id) && !tag.isArchived && !tag.isDeleted,
   );
   const count = expenses.length;
+  // The Tag every selected Expense already has, if they share one: its choice says so.
+  const shared = new Set(expenses.map((expense) => expense.tagId ?? null));
+  const currentTagId = shared.size === 1 ? [...shared][0] : null;
 
   const change = async (tag: PanelTag & { _id: string }) => {
     const asked = new Map(expenses.map((expense) => [expense._id, expense.description]));
@@ -200,6 +206,7 @@ export default function ExpenseSelectionPanel({
                 amount={toMajorAmount(minor, currency)}
                 currency={currency}
                 tone="neutral"
+                sx={{ fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 'inherit' }}
               />
             </Box>
           ))}
@@ -209,12 +216,19 @@ export default function ExpenseSelectionPanel({
         </Button>
       </Stack>
 
-      <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.5 }}>
+      <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.25 }}>
         {expenses.map((expense) => (
           <Box
             component="li"
             key={expense._id}
-            sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5, py: 0.75 }}
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 1.5,
+              py: 1.25,
+              borderTop: 1,
+              borderColor: 'divider',
+            }}
           >
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="body2" fontWeight={600}>
@@ -254,10 +268,11 @@ export default function ExpenseSelectionPanel({
         </Stack>
       </Stack>
 
-      <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mt: 2 }}>
+      <Stack gap={1} sx={{ mt: 2 }}>
         <Button
           variant="outlined"
-          size="small"
+          fullWidth
+          startIcon={<LocalOfferOutlinedIcon />}
           aria-expanded={step === 'choosing'}
           disabled={step === 'sending' || active.length === 0}
           onClick={() => setStep(step === 'choosing' ? 'idle' : 'choosing')}
@@ -267,7 +282,8 @@ export default function ExpenseSelectionPanel({
         {onExport && (
           <Button
             variant="outlined"
-            size="small"
+            fullWidth
+            startIcon={<IosShareOutlinedIcon />}
             disabled={exported?.status === 'preparing'}
             onClick={() => void exportThem()}
           >
@@ -298,18 +314,30 @@ export default function ExpenseSelectionPanel({
           aria-label={`Move ${count} ${noun(count)} to a Tag`}
           sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}
         >
-          {active.map((tag) => (
-            <Button
-              key={tag._id}
-              size="small"
-              variant="contained"
-              color="primary"
-              aria-label={`Move to ${tag.name}`}
-              onClick={() => void change(tag)}
-            >
-              {tag.name}
-            </Button>
-          ))}
+          {active.map((tag) => {
+            const current = tag._id === currentTagId;
+            return (
+              <Button
+                key={tag._id}
+                size="small"
+                variant="outlined"
+                aria-label={`Move to ${tag.name}`}
+                aria-current={current ? 'true' : undefined}
+                startIcon={current ? <CheckIcon /> : undefined}
+                onClick={() => void change(tag)}
+                sx={{
+                  borderRadius: 999,
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  color: current ? 'primary.main' : 'text.primary',
+                  borderColor: current ? 'primary.main' : 'divider',
+                  bgcolor: current ? 'tint.brand' : 'surface.muted',
+                }}
+              >
+                {tag.name}
+              </Button>
+            );
+          })}
           <Button size="small" onClick={() => setStep('idle')}>
             Cancel
           </Button>
