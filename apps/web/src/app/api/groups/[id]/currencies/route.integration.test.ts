@@ -35,6 +35,7 @@ let currency: typeof import('./[code]/route');
 let group: typeof import('../route');
 let expenses: typeof import('../expenses/route');
 let expense: typeof import('../expenses/[expenseId]/route');
+let tagChange: typeof import('../expenses/tag-change/route');
 let settlements: typeof import('../settlements/route');
 let drafts: typeof import('../drafts/route');
 let activity: typeof import('../activity/route');
@@ -46,6 +47,7 @@ beforeAll(async () => {
   group = await import('../route');
   expenses = await import('../expenses/route');
   expense = await import('../expenses/[expenseId]/route');
+  tagChange = await import('../expenses/tag-change/route');
   settlements = await import('../settlements/route');
   drafts = await import('../drafts/route');
   activity = await import('../activity/route');
@@ -324,7 +326,7 @@ describe('DELETE /api/groups/[id]/currencies/[code] (#721)', () => {
     expect(await extras(groupId)).toEqual(['EUR', 'JPY', 'GBP']);
   });
 
-  it('refuses one the Group doesn’t list, and the main currency', async () => {
+  it('refuses one the Group doesn’t list, and the main currency as a conflict', async () => {
     const groupId = await lisbonAndTokyo();
     expect(await remove(groupId, 'USD')).toEqual({
       status: 404,
@@ -334,14 +336,16 @@ describe('DELETE /api/groups/[id]/currencies/[code] (#721)', () => {
         code: 'CURRENCY_NOT_LISTED',
       },
     });
+    // The main currency is a conflict with the Group's state, like its lock.
     expect(await remove(groupId, 'INR')).toEqual({
-      status: 404,
+      status: 409,
       body: {
         error: 'INR is the main currency, so it can’t be removed.',
-        status: 404,
-        code: 'CURRENCY_NOT_LISTED',
+        status: 409,
+        code: 'CURRENCY_IS_MAIN',
       },
     });
+    expect(await extras(groupId)).toEqual(['EUR', 'JPY', 'GBP']);
   });
 
   it('refuses one still in use, listing what uses it and counting others’ To review items', async () => {
@@ -459,6 +463,28 @@ describe('an older Expense in a currency the Group doesn’t list (#721)', () =>
 
     expect(edited.status, JSON.stringify(edited.body)).toBe(200);
     expect(edited.body.data).toMatchObject({ description: 'High tea', currency: 'GBP' });
+  });
+
+  it('can still move to another Tag, keeping its currency', async () => {
+    const groupId = await lisbonAndTokyo();
+    const tea = await addExpense(groupId, dinner('Afternoon tea', 30, 'GBP'));
+    await Group.updateOne({ _id: groupId }, { $set: { alternateCurrencies: ['EUR'] } });
+    const stored = await Group.findById(groupId).lean();
+    const tagId = String(stored!.tags.find((tag) => tag.name !== 'Food')!._id);
+
+    const changed = await callRoute(tagChange.POST, {
+      method: 'POST',
+      path: `/api/groups/${groupId}/expenses/tag-change`,
+      params: { id: groupId },
+      cookie: await signIn('alex'),
+      body: { tagId, expenses: [{ id: tea._id, revision: tea.revision }] },
+    });
+
+    expect(changed.status, JSON.stringify(changed.body)).toBe(200);
+    expect(changed.body.data.results).toMatchObject([{ expenseId: tea._id, outcome: 'changed' }]);
+    expect(
+      await expenseService.getById({ actorId: alex, groupId, expenseId: tea._id }),
+    ).toMatchObject({ tagId, currency: 'GBP' });
   });
 });
 
