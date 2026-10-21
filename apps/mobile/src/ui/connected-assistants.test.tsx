@@ -231,6 +231,32 @@ describe.each(['light', 'dark'] as const)(
   },
 );
 
+// #770, from the Designer's #622 check: a long assistant name ran to three lines before it was
+// cut. Below the largest text it ends at two, so the rows stay even; at the largest it reads in
+// full, as every row's title does (#639). The screen reader keeps the whole name.
+describe.each(['light', 'dark'] as const)('a long assistant name in %s (#770)', (mode) => {
+  const companion = {
+    ...helper,
+    id: 'c3',
+    name: 'Household Ledger Companion for Shared Flats',
+    host: 'ledger-companion.example.test',
+  };
+  it.each([
+    { fontScale: 1, lines: 2 },
+    { fontScale: 1.3, lines: 2 },
+    { fontScale: 2, lines: 0 },
+  ])('takes $lines lines at most at $fontScale× text, 360dp (0: all it needs)', (size) => {
+    setWindow({ width: 360, height: 640, fontScale: size.fontScale });
+    render(listed({ assistants: [companion] }), { mode });
+    const name = renderer!.root.find(
+      (node: ReactTestInstance) =>
+        String(node.type) === 'Text' && node.props.children === companion.name,
+    );
+    expect(name.props.numberOfLines ?? 0).toBe(size.lines);
+    expect(pressable(`Disconnect ${companion.name}, ${companion.host}`)).toBeDefined();
+  });
+});
+
 describe('Settings → Account (#622)', () => {
   const settings = (assistantsAvailable: boolean) => {
     const onOpenAssistants = vi.fn();
