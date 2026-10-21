@@ -1,9 +1,6 @@
 'use client';
 
-import Box from '@mui/material/Box';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import Typography from '@mui/material/Typography';
+import CurrencySwitch from '@/components/common/CurrencySwitch';
 import MoneyText from '@/components/common/MoneyText';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
@@ -45,106 +42,26 @@ export default function SpendingCurrencySwitch({
   panelId?: string;
 }) {
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 1.5,
-      }}
-    >
-      <Tabs
-        value={value}
-        onChange={(_event, currency: string) => onChange(currency)}
-        aria-label="Spending in"
-        sx={{
-          // Cards on the page, not the theme's segmented track.
-          minHeight: 0,
-          p: 0,
-          borderRadius: 0,
-          bgcolor: 'transparent',
-          '& .MuiTabs-indicator': { display: 'none' },
-          '& .MuiTabs-flexContainer': { flexWrap: 'wrap', gap: 1 },
-        }}
-      >
-        {currencies.map((row) => {
-          const main = row.currency === mainCurrency;
-          return (
-            <Tab
-              key={row.currency}
-              value={row.currency}
-              id={spendingTabId(row.currency)}
-              aria-controls={panelId}
-              aria-label={tabName(row, main)}
-              disableRipple
-              label={
-                <>
-                  <Box
-                    component="span"
-                    sx={(theme) => ({
-                      ...theme.typography.money,
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: row.currency === value ? 'primary.main' : 'text.secondary',
-                    })}
-                  >
-                    {row.currency}
-                    {main && (
-                      <Box
-                        component="span"
-                        sx={{
-                          fontFamily: (theme) => theme.typography.fontFamily,
-                          fontWeight: 500,
-                          ml: 0.75,
-                        }}
-                      >
-                        · main
-                      </Box>
-                    )}
-                  </Box>
-                  <MoneyText
-                    amount={toMajorAmount(row.spentMinor, row.currency)}
-                    currency={row.currency}
-                    tone="neutral"
-                    sx={{ fontSize: '0.9375rem', fontWeight: 500 }}
-                  />
-                </>
-              }
-              sx={{
-                minWidth: 150,
-                minHeight: 0,
-                px: 2,
-                py: 1.25,
-                gap: '1px',
-                alignItems: 'flex-start',
-                textAlign: 'left',
-                textTransform: 'none',
-                color: 'text.primary',
-                opacity: 1,
-                border: 1,
-                borderColor: 'border.strong',
-                borderRadius: '12px',
-                bgcolor: 'background.paper',
-                '&.Mui-selected': {
-                  color: 'text.primary',
-                  borderColor: 'primary.main',
-                  bgcolor: 'tint.brand',
-                  boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.primary.main}`,
-                },
-              }}
-            />
-          );
-        })}
-      </Tabs>
-      {note ? (
-        <Typography
-          component="p"
-          sx={{ m: 0, maxWidth: 320, fontSize: '0.75rem', color: 'text.secondary' }}
-        >
-          {note}
-        </Typography>
-      ) : null}
-    </Box>
+    <CurrencySwitch
+      tabs={currencies.map((row) => ({
+        currency: row.currency,
+        main: row.currency === mainCurrency,
+        id: spendingTabId(row.currency),
+        accessibleName: tabName(row, row.currency === mainCurrency),
+        figure: (
+          <MoneyText
+            amount={toMajorAmount(row.spentMinor, row.currency)}
+            currency={row.currency}
+            tone="neutral"
+            sx={{ fontSize: '0.9375rem', fontWeight: 500 }}
+          />
+        ),
+      }))}
+      value={value}
+      onChange={onChange}
+      label="Spending in"
+      note={note}
+      panelId={panelId}
+    />
   );
 }
