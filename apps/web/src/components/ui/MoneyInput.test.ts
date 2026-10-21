@@ -104,6 +104,7 @@ function inputNode(caret: (start: number, end: number) => void = () => {}) {
     setSelectionRange: caret,
     focus: () => {},
     value: '',
+    readOnly: false,
     addEventListener: (type: string, listener: (event: unknown) => void) => {
       listeners.set(type, listener);
     },
@@ -177,18 +178,48 @@ for (const [name, Field] of fields) {
     /** An Undo or Redo the browser made itself, as its input event says. */
     const madeByBrowser = (inputType: 'historyUndo' | 'historyRedo') =>
       act(async () => listeners.get('input')?.({ inputType }));
-    /** A key pressed with Cmd, Ctrl, Shift or Alt. */
+    /** A key pressed with Cmd, Ctrl, Shift or Alt; `code` is its place on the keyboard. */
     const press = async (
       key: string,
-      { metaKey = false, ctrlKey = false, shiftKey = false, altKey = false } = {},
+      {
+        code = `Key${key.toUpperCase()}`,
+        metaKey = false,
+        ctrlKey = false,
+        shiftKey = false,
+        altKey = false,
+        isComposing = false,
+      } = {},
     ) => {
-      const event = { key, metaKey, ctrlKey, shiftKey, altKey, preventDefault: vi.fn() };
+      const event = {
+        key,
+        code,
+        metaKey,
+        ctrlKey,
+        shiftKey,
+        altKey,
+        isComposing,
+        preventDefault: vi.fn(),
+      };
       await act(async () => listeners.get('keydown')?.(event));
       return event;
     };
+    /** An IME's composition ends. */
+    const composed = () => act(async () => listeners.get('compositionend')?.({}));
     /** The form sets the amount itself, as a Suggested payment does. */
     const outside = (value: string) => act(async () => setOutside(value));
-    return { input, changed, caret, edit, compose, history, madeByBrowser, press, outside };
+    return {
+      input,
+      node,
+      changed,
+      caret,
+      edit,
+      compose,
+      composed,
+      history,
+      madeByBrowser,
+      press,
+      outside,
+    };
   }
 
   it(`${name}: still hands the caller's inputRef the input, as Record payment focuses it`, async () => {
@@ -478,6 +509,52 @@ for (const [name, Field] of fields) {
     await act(async () => input().props.onFocus({ target: input().props }));
     await history('historyUndo');
     expect(input().props.value).toBe('12.00');
+  });
+
+  it(`${name}: Cmd+Z leaves a read-only amount alone, as one in doubt is`, async () => {
+    const { input, node, changed, edit, press } = await focused('EUR', '');
+    for (const typed of ['1', '12']) await edit(typed);
+    node.readOnly = true;
+    changed.mockClear();
+    const undo = await press('z', { metaKey: true });
+    expect(undo.preventDefault).not.toHaveBeenCalled();
+    expect(input().props.value).toBe('12');
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it(`${name}: Ctrl+Z undoes on a Cyrillic layout too, and Cmd+Y stays the browser's`, async () => {
+    const { input, edit, press } = await focused('EUR', '');
+    for (const typed of ['1', '12']) await edit(typed);
+    const undo = await press('я', { code: 'KeyZ', ctrlKey: true });
+    expect(undo.preventDefault).toHaveBeenCalled();
+    expect(input().props.value).toBe('1');
+    const history = await press('y', { metaKey: true });
+    expect(history.preventDefault).not.toHaveBeenCalled();
+    expect(input().props.value).toBe('1');
+    // Cmd+Z while an IME composes is the IME's.
+    const composing = await press('z', { metaKey: true, isComposing: true });
+    expect(composing.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it(`${name}: two compositions are two Undo steps`, async () => {
+    const { input, compose, composed, history } = await focused('EUR', '');
+    for (const composing of ['1', '12']) await compose(composing);
+    await composed();
+    await compose('123');
+    await history('historyUndo');
+    expect(input().props.value).toBe('12');
+    await history('historyUndo');
+    expect(input().props.value).toBe('');
+  });
+
+  it(`${name}: an edit that changes nothing still ends what Redo would put back`, async () => {
+    const { input, edit, history } = await focused('EUR', '');
+    for (const typed of ['1', '12', '123', '1234', '12345']) await edit(typed);
+    await history('historyUndo');
+    expect(input().props.value).toBe('1,234');
+    await edit('1234', 1, 'deleteContentBackward');
+    await history('historyRedo');
+    expect(input().props.value).toBe('1,234');
   });
 
   it(`${name}: a whole yen amount regroups too, and INR groups as it does on blur`, async () => {
