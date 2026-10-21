@@ -4506,6 +4506,46 @@ describe('an Expense in one of the Group’s currencies (#720)', () => {
     expect(kept.attempt).toBeUndefined();
   });
 
+  // The Tester found the refusal's own words untested: when the Group can't be read again, the
+  // form keeps the message, the Group as it was read, the draft, and sends nothing again (#755).
+  it('keeps the refusal’s words and the draft when the Group can’t be read again after it (#755)', async () => {
+    let posts = 0;
+    let refused = false;
+    const { controller } = setup((path, init) => {
+      if (path === `/api/groups/${groupId}`)
+        return refused
+          ? Promise.resolve(json({ status: 500, error: 'Unavailable' }, 500))
+          : Promise.resolve(json({ data: travelling, status: 200 }));
+      if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST') {
+        posts += 1;
+        refused = true;
+        return Promise.resolve(
+          json({ status: 422, error: 'CURRENCY_MISMATCH', code: 'CURRENCY_MISMATCH' }, 422),
+        );
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      currency: 'EUR',
+      amount: '40',
+      description: 'Pastéis',
+      tagId,
+    });
+    await controller.saveExpense();
+    const { expense } = controller.getSnapshot();
+    expect(expense.message).toBe(
+      'This Group’s currencies changed. Review the currency before saving.',
+    );
+    expect(expense.status).toBe('editing');
+    expect(expense.attempt).toBeNull();
+    expect(expense.context?.group.alternateCurrencies).toEqual(
+      (travelling as { alternateCurrencies: string[] }).alternateCurrencies,
+    );
+    expect(expense.draft).toMatchObject({ currency: 'EUR', amount: '40', description: 'Pastéis' });
+    expect(posts).toBe(1);
+  });
+
   // #755 item 3: the Tester's mutant, which drops the picked-currency clause, passed every suite.
   it('keeps a currency picked offline when the live check answers before an amount is typed (#755)', async () => {
     const copies = new Map<string, unknown>();

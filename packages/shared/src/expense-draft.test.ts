@@ -295,3 +295,21 @@ it('refuses part of a yen paid by a payer in the amount field’s words (#755)',
   expect(refused.submission).toBeUndefined();
   expect(refused.draft.error).toBe(words);
 });
+
+// The Tester found the rewording unpinned: only part of a unit gets the whole-unit words, so a yen
+// Expense whose payers miss its amount keeps the payer-total refusal (#755).
+it('keeps the payer-total refusal for yen, never the whole-unit words (#755)', () => {
+  const yen = ExpenseDraft.open({ ...context, currency: 'JPY' }).edit({
+    description: 'Ramen',
+    amount: '2500',
+    multiPayerMode: true,
+    payers: [
+      { user: 'alice', amount: '1250' },
+      { user: 'bob', amount: '1249' },
+    ],
+  });
+  const error = yen.preview().error;
+  expect(error).toBeTruthy();
+  expect(error).not.toContain('no smaller unit');
+  expect(yen.prepare(['general-id'], 'key-1').draft.error).toBe(error);
+});
