@@ -343,6 +343,44 @@ function device() {
         },
       });
     const payment = typeof body === 'string' ? JSON.parse(body) : null;
+    // Alex settles both Debts to Sam in one payment (#734): one Settlement for each.
+    if (path === `/api/groups/${id}/settlements/batch` && method === 'POST') {
+      network.paid = true;
+      network.eurosPaid = true;
+      const settlements = (payment.settlements as Record<string, number | string>[]).map(
+        (row, index) => ({
+          ...row,
+          ...(row.amountPaidMinor === undefined ? {} : { paidCurrency: payment.paidCurrency }),
+          _id: `f0000000000000000000001${index}`,
+          group: id,
+          paidBy: { _id: alex.id, name: alex.name, image: null },
+          paidTo: { _id: sam._id, name: sam.name, image: null },
+          createdBy: { _id: alex.id, name: alex.name, image: null },
+          amountMinor: Math.round(Number(row.amount) * 100),
+          moneyVersion: 1,
+          note: '',
+          pairDebtBeforeMinor: -Math.round(Number(row.amount) * 100),
+          pairDebtAfterMinor: 0,
+          createdAt: iso,
+          updatedAt: iso,
+        }),
+      );
+      return json(
+        {
+          status: 201,
+          data: {
+            paidCurrency: payment.paidCurrency,
+            totalPaidMinor: settlements.reduce(
+              (sum, row: Record<string, unknown>) =>
+                sum + Number(row.amountPaidMinor ?? row.amountMinor),
+              0,
+            ),
+            settlements,
+          },
+        },
+        201,
+      );
+    }
     // Alex pays Sam's euro Debt, in whatever it was paid in (#728).
     if (
       path === `/api/groups/${id}/settlements` &&
@@ -449,8 +487,35 @@ function device() {
           activities: network.noActivity
             ? []
             : [
+                // Alex's settle-up, one event for each Settlement with the batch's reference (#734),
+                // newest first as the feed lists them: the last one recorded comes first.
+                ...(network.eurosPaid && id === lisbon && paymentBodies.at(-1)?.settlements
+                  ? (paymentBodies.at(-1)!.settlements as Record<string, number | string>[])
+                      .map((row, index, rows) => ({
+                        _id: `d0000000000000000000002${index}`,
+                        group: id,
+                        actor: { _id: alex.id, name: alex.name },
+                        type: 'settlement_recorded',
+                        createdAt: iso,
+                        metadata: {
+                          ...row,
+                          ...(row.amountPaidMinor === undefined
+                            ? {}
+                            : { paidCurrency: paymentBodies.at(-1)!.paidCurrency }),
+                          paidBy: alex.id,
+                          paidTo: sam._id,
+                          paidByName: alex.name,
+                          paidToName: sam.name,
+                          settlementId: `f0000000000000000000001${index}`,
+                          amountMinor: Math.round(Number(row.amount) * 100),
+                          batchId: 'f00000000000000000000010',
+                          batchSize: rows.length,
+                        },
+                      }))
+                      .reverse()
+                  : []),
                 // Alex's euro payment, as the server records it in Activity (#728).
-                ...(network.eurosPaid && id === lisbon
+                ...(network.eurosPaid && id === lisbon && !paymentBodies.at(-1)?.settlements
                   ? [
                       {
                         _id: 'd00000000000000000000009',
@@ -577,7 +642,7 @@ function device() {
         fetch: async (url, init) => {
           const path = new URL(url).pathname + new URL(url).search;
           sent.push(`${init.method ?? 'GET'} ${path}`);
-          if (path.endsWith('/settlements') && init.method === 'POST')
+          if (/\/settlements(\/batch)?$/.test(path) && init.method === 'POST')
             paymentBodies.push(JSON.parse(String(init.body)));
           if (!network.online) throw new Error('Offline');
           const index = holds.findIndex((item) => path.startsWith(item.prefix));
@@ -3255,6 +3320,83 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
       'INR balances didn’t change. Only the Debt’s own currency moves.',
     ])
       expect(app.text()).toContain(words);
+  });
+  // #734: Settle up with Sam, both currencies in one payment, through the real App and controller.
+  it('settles both of Lisbon’s Debts to Sam in one payment, shown and spoken at 130% (#734)', async () => {
+    setWindow({ fontScale: 1.3 });
+    const phone = device();
+    phone.network.currencies = true;
+    const first = phone.controller();
+    await first.signIn('alex');
+    first.dispose();
+    const app = await start(phone);
+    await settle();
+    await app.press('Open Lisbon Offsite, Work · 2 members');
+    await app.press('Balances');
+    expect(app.text()).toContain('You owe Sam Chen in 2 currencies');
+    expect(app.text()).toContain('₹30.00 and €20.00');
+    await app.press('Settle both with Sam Chen');
+    const settling = () =>
+      findHosts(screen!.toJSON(), (props, type) => type === 'Modal' && props.visible === true).find(
+        (modal) =>
+          findHosts(modal, (props) => props.accessibilityRole === 'header').some(
+            (header) => words(header) === 'Settle up with Sam Chen',
+          ),
+      ) ?? null;
+    expect(settling()).not.toBeNull();
+    expect(phone.sent).toContain(`GET /api/groups/${lisbon}/rates?from=EUR&to=INR`);
+    const sheetText = words(settling());
+    expect(sheetText).toContain('You owe Sam Chen in 2 currencies.');
+    expect(sheetText).toContain('Suggested · Frankfurter, 20 Oct');
+    expect(sheetText).toContain('₹1,872.00');
+    expect(
+      app.hosts(
+        (p) =>
+          p.accessibilityLabel ===
+          'EUR Debt €20.00 at ₹92.10 per €, suggested, Frankfurter, 20 Oct. Pays ₹1,842.00',
+      ),
+    ).toHaveLength(1);
+    // At 130% on this 360dp phone, every word reads in full.
+    expect(unreadText(settling(), 1.3, 360)).toEqual([]);
+
+    await app.press('Record ₹1,872.00');
+    expect(phone.sent.filter((request) => request.startsWith('POST /api/groups'))).toEqual([
+      `POST /api/groups/${lisbon}/settlements/batch`,
+    ]);
+    expect(phone.paymentBodies).toEqual([
+      {
+        paidBy: alex.id,
+        paidTo: sam._id,
+        paidCurrency: 'INR',
+        settlements: [
+          { amount: 30, currency: 'INR' },
+          {
+            amount: 20,
+            currency: 'EUR',
+            amountPaidMinor: 184200,
+            appliedRate: '92.1',
+            rateKind: 'suggested',
+            suggestedRate: '92.1',
+            rateSource: 'frankfurter',
+            rateAsOf: '2026-10-20',
+            rateFetchedAt: iso,
+          },
+        ],
+      },
+    ]);
+    expect(app.text()).toContain('Payment recorded');
+    expect(settling()).toBeNull();
+
+    // Activity shows the payment as one row, in the single payment's words.
+    await app.press('Activity');
+    const rows = app
+      .hosts(
+        (p) =>
+          p.accessibilityRole === 'button' && String(p.accessibilityLabel).includes('Sam Chen'),
+      )
+      .map((node) => String(node.props.accessibilityLabel));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain('You paid Sam Chen ₹1,872.00 to clear ₹30.00 and €20.00');
   });
 });
 

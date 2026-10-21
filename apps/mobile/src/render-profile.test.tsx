@@ -143,6 +143,7 @@ vi.mock('./ui/offline-notice', async (load) => counting.wrap(await load<Module>(
 vi.mock('./ui/payer-sheet', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/primitives', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/record-payment-sheet', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/settle-all-sheet', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/screens', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/settings-screen', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/split-sheet', async (load) => counting.wrap(await load<Module>()));

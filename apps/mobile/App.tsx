@@ -1429,6 +1429,7 @@ function GroupScreen() {
               onRecord={(paidBy, paidTo, currency) =>
                 void controller.openRecordPayment(paidBy, paidTo, currency)
               }
+              onSettleAll={(paidBy, paidTo) => void controller.openSettleAll(paidBy, paidTo)}
               onCheckPayment={() => void controller.openPendingPayment()}
               onRefreshBalances={() => void controller.refreshBalances()}
             />
@@ -1483,6 +1484,8 @@ function GroupScreen() {
           onChoosePaidCurrency={(currency) => void controller.choosePaidCurrency(currency)}
           onEditCrossCurrency={controller.editCrossCurrency}
           onUseSuggestedRate={controller.restoreSuggestedRate}
+          onEditBatchRate={controller.editBatchRate}
+          onRestoreBatchRate={controller.restoreBatchRate}
           onOpenLink={openOutside}
           onDiscard={() =>
             Alert.alert(

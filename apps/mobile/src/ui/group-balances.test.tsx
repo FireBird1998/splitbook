@@ -913,6 +913,67 @@ describe('Balances, one currency at a time (#725)', () => {
     expect(shown).not.toContain('Everyone · INR');
     expect(shown).not.toContain('Nothing is converted.');
   });
+  // #734, board "Android · Settle both currencies at once".
+  describe('settling up in several currencies at once (#734)', () => {
+    const settleAll = (
+      data: GroupCurrencyBalance[],
+      props: Partial<Parameters<typeof GroupBalancesView>[0]> = {},
+    ) => {
+      const onSettleAll = vi.fn();
+      const root = render(
+        <GroupBalancesView
+          group={trip()}
+          currentUserId={you}
+          state={financial({ data })}
+          pending={null}
+          offline={false}
+          onRecord={vi.fn()}
+          onSettleAll={onSettleAll}
+          onCheckPayment={vi.fn()}
+          onRefreshBalances={() => undefined}
+          {...props}
+        />,
+      );
+      return { root, onSettleAll };
+    };
+
+    it('offers to settle both with Sam in one payment, on every currency’s tab', () => {
+      const { root, onSettleAll } = settleAll(buckets());
+      const shown = text(root);
+      expect(shown).toContain('You owe Sam Chen in 2 currencies');
+      expect(shown).toContain('₹1,480.00 and €20.00');
+      const [button] = labelled(root, 'Settle both with Sam Chen');
+      act(() => button!.props.onPress());
+      expect(onSettleAll).toHaveBeenCalledWith(you, sam);
+      // On another tab, too: it spans the currencies.
+      choose(root, 'EUR, you owe €20.00');
+      expect(labelled(root, 'Settle both with Sam Chen')).toHaveLength(1);
+    });
+
+    it('offers it from the other side too, and never for Debts in one currency', () => {
+      const owed = (bucket: GroupCurrencyBalance): GroupCurrencyBalance => ({
+        ...bucket,
+        debts: bucket.debts.map(({ from, to, amount }) => ({ from: to, to: from, amount })),
+      });
+      const { root, onSettleAll } = settleAll([owed(eur), owed(tripInr()), jpy]);
+      // Sam owes Alex in all three now.
+      expect(text(root)).toContain('Sam Chen owes you in 3 currencies');
+      expect(text(root)).toContain('₹1,480.00, €20.00 and ¥8,400');
+      act(() => labelled(root, 'Settle all with Sam Chen')[0]!.props.onPress());
+      expect(onSettleAll).toHaveBeenCalledWith(sam, you);
+      act(() => screen?.unmount());
+      const single = settleAll([tripInr(), jpy]);
+      expect(text(single.root)).not.toContain('in 2 currencies');
+      expect(labelled(single.root, 'Settle both with Sam Chen')).toHaveLength(0);
+    });
+
+    it('waits for a connection offline', () => {
+      const { root } = settleAll(buckets(), { offline: true });
+      const [button] = labelled(root, 'Settle both with Sam Chen');
+      expect(button!.props.accessibilityState?.disabled).toBe(true);
+      expect(button!.props.accessibilityHint).toBe(recordNeedsConnection);
+    });
+  });
 });
 
 // #725, board "Balances" at 130%: the tabs wrap onto more lines rather than clipping, and each

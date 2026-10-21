@@ -43,14 +43,15 @@ import { inPlace } from './financial-views';
 import { Field, FieldError } from './group-workflows';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
-import { PRODUCT_NAME } from '../product';
+import {
+  checkingBalances,
+  recordPaymentFootnote,
+  recordWaitsForCheck,
+  retryWaitsForCheck,
+} from './payment-words';
+import { SettleAllSheet } from './settle-all-sheet';
 
-export const recordPaymentFootnote = `Records a payment made outside ${PRODUCT_NAME}. No money moves.`;
-/** Record's reason while the sheet checks the latest balances (#334). */
-export const recordWaitsForCheck = 'Record is available once the latest balances are checked.';
-/** Retry's, for an unconfirmed payment found on this phone. */
-export const retryWaitsForCheck = 'Retry is available once the latest balances are checked.';
-const checkingBalances = 'Checking the latest balances…';
+export { recordPaymentFootnote, recordWaitsForCheck, retryWaitsForCheck };
 
 /** Minor units, or null while the entry isn't a valid amount yet. */
 const minor = (amount: string | number, currency: string) => {
@@ -138,7 +139,26 @@ function Checkbox({
  * can't reach Splitbook, the figures stay and Try again checks again (#334). Nothing moves when
  * the progress bar comes or goes: the sheet keeps its room.
  */
-export function RecordPaymentSheet({
+/**
+ * Record payment, or Settle up for several Debts at once (#734), which has a sheet of its own.
+ */
+export function RecordPaymentSheet(
+  props: Parameters<typeof SinglePaymentSheet>[0] & {
+    /** The member's own rate for one Debt of a settle-up. */
+    onEditBatchRate?: (currency: string, text: string) => void;
+    /** Use ₹92.10: a settle-up Debt's suggested rate again. */
+    onRestoreBatchRate?: (currency: string) => void;
+  },
+) {
+  const { state } = props;
+  return state.batch || state.draft?.batch || state.chosen?.all ? (
+    <SettleAllSheet {...props} />
+  ) : (
+    <SinglePaymentSheet {...props} />
+  );
+}
+
+function SinglePaymentSheet({
   visible,
   state,
   currentUserId,

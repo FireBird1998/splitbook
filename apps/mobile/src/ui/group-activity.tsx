@@ -7,11 +7,16 @@ import {
   readCrossCurrencyRecord,
   type CrossCurrencyRecord,
 } from '@splitbook/shared/cross-currency-payment';
+import {
+  groupSettlementBatches,
+  type SettlementBatchActivityItem,
+} from '@splitbook/shared/settlement-batch-activity';
 import { activityExpenseId, type ActivityEvent, type ActivityState } from '../data/activity';
 import {
   activityDays,
   clockTime,
   describeActivity,
+  describeSettlementBatch,
   spokenActivity,
   type ActivityLine,
   type TextRun,
@@ -36,6 +41,8 @@ import { fonts, useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
 
 type Member = { id: string; name: string };
+/** A settle-up's events, as the shared groupSettlementBatches collects them (#734). */
+type Batch = Extract<SettlementBatchActivityItem<ActivityEvent>, { kind: 'batch' }>;
 
 interface GroupActivityProps {
   state: ActivityState;
@@ -178,6 +185,7 @@ const EventContent = memo(function EventContent({
 const ActivityRow = memo(
   function ActivityRow({
     event,
+    batch,
     currentUserId,
     currency,
     members,
@@ -185,6 +193,8 @@ const ActivityRow = memo(
     onSelect,
   }: {
     event: ActivityEvent;
+    /** A settle-up's Settlements, of which `event` is the newest in the feed: one row (#734). */
+    batch?: Batch;
     currentUserId: string;
     currency: string;
     members?: Member[];
@@ -194,9 +204,12 @@ const ActivityRow = memo(
     const theme = useTheme();
     const named = members?.map(({ id, name }) => `${id}:${name}`).join('|');
     const line = useMemo(
-      () => describeActivity(event, { currentUserId, currency, members }),
+      () =>
+        batch
+          ? describeSettlementBatch(batch.events, batch.batchSize, { currentUserId, currency })
+          : describeActivity(event, { currentUserId, currency, members }),
       // The members by what they say, not by the list that holds them.
-      [event, currentUserId, currency, named],
+      [event, batch, currentUserId, currency, named],
     );
     const time = clockTime(event.createdAt);
     // A drag that starts on the row never opens it (#665).
@@ -227,6 +240,7 @@ const ActivityRow = memo(
   },
   (a, b) =>
     a.event === b.event &&
+    a.batch === b.batch &&
     a.currentUserId === b.currentUserId &&
     a.currency === b.currency &&
     a.disabled === b.disabled &&
@@ -268,6 +282,20 @@ function ActivityList({
     selecting.current = onSelect;
   });
   const select = useCallback((id: string) => selecting.current(id), []);
+  // A settle-up's Settlements are one row, where its newest event is in the feed, so the row
+  // stays put as a batch a page boundary split joins once the older page loads; its words read
+  // in the order they were recorded (#734).
+  const { rows, batches } = useMemo(() => {
+    const placed = groupSettlementBatches(state.events).map((item) =>
+      item.kind === 'event'
+        ? { row: item.event }
+        : { row: state.events.find((event) => item.events.includes(event))!, batch: item },
+    );
+    return {
+      rows: placed.map(({ row }) => row),
+      batches: new Map(placed.flatMap(({ row, batch }) => (batch ? [[row._id, batch]] : []))),
+    };
+  }, [state.events]);
   // When the window moves, events above the one on screen go or come: Load older past 5 pages
   // drops the newest page, and Load newer brings it back above. The view moves by as much as an
   // event shown on both sides of the move moved, so the event on screen keeps its place (#215).
@@ -461,7 +489,7 @@ function ActivityList({
           </Card>
         ) : state.events.length ? (
           <Card onBodyOffset={(body) => place({ body })}>
-            {activityDays(state.events, now).map((day, index) => (
+            {activityDays(rows, now).map((day, index) => (
               <View
                 key={day.key}
                 onLayout={({ nativeEvent }) => place({ day: day.key, y: nativeEvent.layout.y })}
@@ -482,6 +510,7 @@ function ActivityList({
                   >
                     <ActivityRow
                       event={event}
+                      batch={batches.get(event._id)}
                       currentUserId={currentUserId}
                       currency={currency}
                       members={members}
@@ -562,6 +591,7 @@ function PaymentRecord({
   currentUserId,
   when,
   onOpenLink,
+  titled = true,
 }: {
   event: ActivityEvent;
   record: CrossCurrencyRecord;
@@ -569,6 +599,8 @@ function PaymentRecord({
   currentUserId: string;
   when: string;
   onOpenLink: (url: string) => void;
+  /** Under a settle-up's own "Payment", each record goes without one (#734). */
+  titled?: boolean;
 }) {
   const card = paymentRecord(record, currentUserId);
   const mono = { fontFamily: fonts.mono, fontVariant: ['tabular-nums' as const] };
@@ -576,9 +608,11 @@ function PaymentRecord({
     event.actor?._id === currentUserId ? 'you' : event.actor?.name || 'a former member';
   return (
     <>
-      <CompactText variant="title" accessibilityRole="header">
-        Payment
-      </CompactText>
+      {titled ? (
+        <CompactText variant="title" accessibilityRole="header">
+          Payment
+        </CompactText>
+      ) : null}
       <Card padded>
         <View
           accessible
@@ -690,6 +724,72 @@ function PaymentRecord({
   );
 }
 
+/**
+ * A payment that settled several Debts at once (#734): what it paid in all and each Debt it
+ * cleared, in the shared words its row says, then each Settlement's own record, as a single
+ * payment in another currency opens it (#728).
+ */
+function BatchRecord({
+  events,
+  batchSize,
+  currentUserId,
+  currency,
+  members,
+  when,
+  onOpenLink,
+}: {
+  events: ActivityEvent[];
+  batchSize: number;
+  currentUserId: string;
+  currency: string;
+  members?: Member[];
+  when: string;
+  onOpenLink: (url: string) => void;
+}) {
+  const line = describeSettlementBatch(events, batchSize, { currentUserId, currency });
+  return (
+    <>
+      <CompactText variant="title" accessibilityRole="header">
+        Payment
+      </CompactText>
+      <Card padded>
+        <View
+          accessible
+          accessibilityLabel={[line.actor, line.verb, line.subject, line.complement]
+            .filter(Boolean)
+            .join(' ')}
+          style={{ gap: 6 }}
+        >
+          <Headline line={line} />
+          {line.details.map((detail, index) => (
+            <CompactText key={index} variant="small" tone="secondary">
+              {detail.text}
+            </CompactText>
+          ))}
+          <CompactText variant="caption" tone="secondary">
+            {when}
+          </CompactText>
+        </View>
+      </Card>
+      {events.map((event) => {
+        const record = readCrossCurrencyRecord(event.metadata);
+        return record ? (
+          <PaymentRecord
+            key={event._id}
+            titled={false}
+            event={event}
+            record={record}
+            line={describeActivity(event, { currentUserId, currency, members })}
+            currentUserId={currentUserId}
+            when={when}
+            onOpenLink={onOpenLink}
+          />
+        ) : null;
+      })}
+    </>
+  );
+}
+
 function ActivityDetail({
   state,
   event,
@@ -705,12 +805,29 @@ function ActivityDetail({
   // "Mon 19 Oct 2026, 1:44 PM", day first on every phone (#640).
   const when = spellMoment(new Date(event.createdAt), { weekday: 'short', year: true });
   const check = recordCheck[state.target.status];
-  // A Debt paid in another currency opens its record (#728).
+  // A Debt paid in another currency opens its record (#728); a settle-up, all of its own (#734).
   const payment =
     event.type === 'settlement_recorded' ? readCrossCurrencyRecord(event.metadata) : null;
+  const { batchId, batchSize = 1 } = event.type === 'settlement_recorded' ? event.metadata : {};
+  const batch =
+    batchId && batchSize > 1
+      ? groupSettlementBatches(state.events).find(
+          (item): item is Batch => item.kind === 'batch' && item.batchId === batchId,
+        )?.events
+      : null;
   return (
     <View style={{ gap: 12 }}>
-      {payment ? (
+      {batch?.length ? (
+        <BatchRecord
+          events={batch}
+          batchSize={batchSize}
+          currentUserId={currentUserId}
+          currency={currency}
+          members={members}
+          when={when}
+          onOpenLink={onOpenLink}
+        />
+      ) : payment ? (
         <PaymentRecord
           event={event}
           record={payment}

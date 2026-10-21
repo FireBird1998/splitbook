@@ -29,7 +29,7 @@ const lookingUp = 'Looking up a suggested rate…';
 const rateNeedsConnection = 'A suggested rate needs a connection.';
 
 /** A currency's code, beside a field's label. */
-function CodeChip({ code }: { code: string }) {
+export function CodeChip({ code }: { code: string }) {
   const theme = useTheme();
   return (
     <View

@@ -5,11 +5,26 @@ import {
   crossCurrencySettlementReadShape,
   crossCurrencySettlementShape,
 } from '@splitbook/shared/validators/settlement';
-import type { CrossCurrencyEntry, RateSuggestion } from '@splitbook/shared/cross-currency-payment';
+import {
+  crossCurrencyRateKind,
+  readCrossCurrencyEntry,
+  suggestedRateText,
+  type CrossCurrencyEntry,
+  type RateSuggestion,
+} from '@splitbook/shared/cross-currency-payment';
+import { getCurrencyPrecision } from '@splitbook/shared/currency';
+import {
+  calculateSettlementBatch,
+  type SettlementBatchAmounts,
+  type SettlementBatchItem,
+  type SettlementBatchRate,
+} from '@splitbook/shared/settlement-batch';
+import { createSettlementBatchSchema } from '@splitbook/shared/validators/settlement-batch';
 import type { CrossCurrencySettlementFields } from '@splitbook/shared/cross-currency-settlement';
 import {
   parseAmountMinor,
   readStoredAmountMinor,
+  sumMinorAmounts,
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
 import { objectId } from './dto';
@@ -34,6 +49,11 @@ export interface SettlementDraft {
    * sheet's `crossCurrency` holds it.
    */
   paid?: CrossCurrencySettlementFields;
+  /**
+   * Several Debts settled at once (#734): each one's row as Record sends it, one Settlement for
+   * each. `currency` is then the one currency they are paid in, and `amount` what they pay in all.
+   */
+  batch?: SettlementBatchItem[];
 }
 /** Record's reason, and the Balances', while the phone has no connection. */
 export const recordNeedsConnection = 'Recording a payment needs a connection.';
@@ -49,6 +69,136 @@ export type RateState =
   | { status: 'none'; reason: string | null }
   /** The phone couldn't reach Splitbook: the rate, and recording, wait for a connection. */
   | { status: 'unreachable' };
+/** One Debt of a payment settling several at once, paid in another currency (#734). */
+export interface BatchRate {
+  rate: RateState;
+  /** The member's own rate, as typed; null while it pays at the suggestion. */
+  custom: string | null;
+}
+/**
+ * Settle up (#734): one payment, in one currency, that clears every Debt between two people,
+ * each at its own rate. A Debt in the paying currency needs none.
+ */
+export interface BatchPayment {
+  paidBy: string;
+  paidTo: string;
+  /** The Debts it clears, in the Group's order, in major units, as the latest Balances show them. */
+  debts: { currency: string; amount: number }[];
+  /** The one currency it is paid in: one of the Debts'. */
+  paidCurrency: string;
+  /** Each Debt in another currency, by its currency. */
+  rates: Record<string, BatchRate>;
+}
+/** Record's reason while a Debt of a settle-up has no rate yet (#734). */
+export const enterBatchRate = (currency: string) =>
+  `Enter the rate for the ${currency} Debt to record it.`;
+/** One Debt of a settle-up, as the sheet shows it. */
+export interface BatchLine {
+  currency: string;
+  debtMinor: number;
+  /** What it pays, in the paying currency; null until its rate is known. */
+  paidMinor: number | null;
+  /** The rate it is paid at, as a decimal; null in the paying currency, or until it is known. */
+  rate: string | null;
+  kind: 'same' | CrossCurrencySettlementFields['rateKind'] | null;
+}
+/**
+ * A settle-up read by the shared rules: each Debt's line, and the payment's rows and total once
+ * every rate is known (`calculateSettlementBatch`); else what Record waits for.
+ */
+export function readBatchPayment({ debts, paidCurrency, rates }: BatchPayment) {
+  let waiting: string | null = null;
+  const choices: Record<string, SettlementBatchRate> = {};
+  const lines = debts.map(({ currency, amount }): BatchLine => {
+    const debtMinor = parseAmountMinor(amount, currency);
+    if (currency === paidCurrency)
+      return { currency, debtMinor, paidMinor: debtMinor, rate: null, kind: 'same' };
+    const unknown = { currency, debtMinor, paidMinor: null, rate: null, kind: null };
+    const { rate, custom } = rates[currency] ?? { rate: { status: 'loading' }, custom: null };
+    if (rate.status === 'loading' || rate.status === 'unreachable') {
+      waiting ??= rate.status === 'loading' ? recordWaitsForRate : recordNeedsConnection;
+      return unknown;
+    }
+    const suggestion = rate.status === 'ready' ? rate.suggestion : null;
+    const typed = custom?.trim() ? custom : suggestion && suggestedRateText(suggestion.rate);
+    if (!typed) {
+      waiting ??= enterBatchRate(currency);
+      return unknown;
+    }
+    const pair = { currency, paidCurrency };
+    const places = getCurrencyPrecision(currency);
+    const reading = readCrossCurrencyEntry(
+      {
+        cleared: toMajorAmount(debtMinor, currency).toFixed(places),
+        rate: typed,
+        paid: '',
+        drivers: ['rate', 'cleared'],
+      },
+      pair,
+    );
+    if (reading.status !== 'valid') {
+      waiting ??= reading.status === 'invalid' ? reading.message : enterBatchRate(currency);
+      return unknown;
+    }
+    const plain = typed.trim().replaceAll(',', '').replace(/\.$/, '');
+    const kind = crossCurrencyRateKind(pair, reading.amounts, suggestion);
+    const provenance = suggestion && {
+      suggestedRate: suggestion.rate,
+      rateSource: suggestion.source,
+      rateAsOf: suggestion.asOf,
+      rateFetchedAt: suggestion.fetchedAt,
+    };
+    choices[currency] =
+      !provenance || kind === 'entered'
+        ? { rateKind: 'entered', rate: plain }
+        : kind === 'suggested'
+          ? { rateKind: 'suggested', ...provenance }
+          : { rateKind: 'custom', rate: plain, ...provenance };
+    return {
+      currency,
+      debtMinor,
+      paidMinor: reading.amounts.amountPaidMinor,
+      rate: kind === 'suggested' && suggestion ? suggestion.rate : plain,
+      kind,
+    };
+  });
+  let amounts: SettlementBatchAmounts | null = null;
+  if (!waiting)
+    try {
+      amounts = calculateSettlementBatch({
+        debts: lines.map(({ currency, debtMinor }) => ({ currency, amountMinor: debtMinor })),
+        paidCurrency,
+        rates: choices,
+      });
+    } catch {
+      waiting = 'This payment can’t be worked out from these rates. Check them.';
+    }
+  return { lines, amounts, waiting };
+}
+/** A settle-up's body: the payment's people, its currency and one row for each Debt. */
+export function batchBody({ paidBy, paidTo, currency, batch }: SettlementDraft) {
+  return JSON.stringify(
+    createSettlementBatchSchema.parse({
+      paidBy,
+      paidTo,
+      paidCurrency: currency,
+      settlements: batch,
+    }),
+  );
+}
+/** Whether a stored body is a settle-up's, sent to /settlements/batch (#734). */
+export const isBatchBody = (body: string) => {
+  try {
+    return Array.isArray(Object(JSON.parse(body)).settlements);
+  } catch {
+    return false;
+  }
+};
+/** What a settle-up's rows pay in all, in the paying currency's minor units. */
+const paidInAll = (rows: SettlementBatchItem[]) =>
+  sumMinorAmounts(
+    rows.map((row) => row.amountPaidMinor ?? parseAmountMinor(row.amount, row.currency)),
+  );
 /** A Debt the member is paying in another of the Group's currencies (#728). */
 export interface CrossCurrencyPayment {
   paidCurrency: string;
@@ -129,6 +279,8 @@ export interface SettlementChoice {
   paidTo: string;
   currency: string;
   shown: number | null;
+  /** Settle up: every Debt between the two, in several currencies at once (#734). */
+  all?: boolean;
 }
 export interface SettlementState {
   /** Group refusal keeps a stored payment blocked until leaving or Discard. */
@@ -152,6 +304,8 @@ export interface SettlementState {
   chosen: SettlementChoice | null;
   /** The Debt paid in another of the Group's currencies; null in its own (#728). */
   crossCurrency: CrossCurrencyPayment | null;
+  /** Several Debts settled at once while the member enters it; null for one (#734). */
+  batch: BatchPayment | null;
   /**
    * The Group's people by id, as this phone knew them when the sheet opened: its members, and
    * anyone its Balances named. They name payer and recipient until the check reads the Group,
@@ -172,6 +326,7 @@ export const emptySettlement = (): SettlementState => ({
   attempt: null,
   chosen: null,
   crossCurrency: null,
+  batch: null,
   known: {},
   suggested: null,
   acknowledged: false,
@@ -205,6 +360,24 @@ export function parseSettlementAttempt(value: unknown, accountId: string, groupI
       body: z.string(),
     })
     .parse(value);
+  if (isBatchBody(stored.body)) {
+    const batch = createSettlementBatchSchema
+      .safeExtend({ paidBy: objectId, paidTo: objectId })
+      .parse(JSON.parse(stored.body));
+    if (!canRecordSettlement(accountId, batch.paidBy, batch.paidTo))
+      throw new Error('Unexpected Settlement account');
+    return {
+      attempt: { key: stored.key, body: stored.body },
+      draft: {
+        paidBy: batch.paidBy,
+        paidTo: batch.paidTo,
+        currency: batch.paidCurrency,
+        amount: String(toMajorAmount(paidInAll(batch.settlements), batch.paidCurrency)),
+        note: '',
+        batch: batch.settlements,
+      } as SettlementDraft,
+    };
+  }
   const payload = createSettlementSchema
     .safeExtend({ paidBy: objectId, paidTo: objectId })
     .parse(JSON.parse(stored.body));
@@ -243,6 +416,46 @@ export function parseRecordedSettlement(value: unknown, groupId: string, body: s
     saved.note !== (expected.note ?? '') ||
     // A payment in another currency is recorded with the paid side and rate it was sent with.
     paidSideFields.some((field) => saved[field] !== expected[field])
+  )
+    throw new Error('Unexpected recorded payment');
+  return saved;
+}
+
+/** A settle-up's reply: each Settlement recorded as it was sent, in order, or it isn't trusted. */
+export function parseRecordedBatch(value: unknown, groupId: string, body: string) {
+  const saved = z
+    .object({
+      status: z.literal(201),
+      data: z.object({
+        paidCurrency: z.string(),
+        totalPaidMinor: z.number().int(),
+        settlements: z.array(record),
+      }),
+    })
+    .parse(value).data;
+  const expected = createSettlementBatchSchema
+    .safeExtend({ paidBy: objectId })
+    .parse(JSON.parse(body));
+  if (
+    saved.paidCurrency !== expected.paidCurrency ||
+    saved.totalPaidMinor !== paidInAll(expected.settlements) ||
+    saved.settlements.length !== expected.settlements.length ||
+    saved.settlements.some((row, index) => {
+      const sent = expected.settlements[index]!;
+      return (
+        row.group !== groupId ||
+        row.paidBy.id !== expected.paidBy ||
+        row.paidTo.id !== expected.paidTo ||
+        row.currency !== sent.currency ||
+        readStoredAmountMinor(row) !== parseAmountMinor(sent.amount, sent.currency) ||
+        paidSideFields.some((field) =>
+          field === 'paidCurrency'
+            ? row.paidCurrency !==
+              (sent.amountPaidMinor === undefined ? undefined : expected.paidCurrency)
+            : row[field] !== sent[field],
+        )
+      );
+    })
   )
     throw new Error('Unexpected recorded payment');
   return saved;
