@@ -363,6 +363,19 @@ describe('the currency switch (#729)', () => {
     expect(figures(html)).not.toContain('€');
   });
 
+  it('keeps a currency chosen in another Month as a tab at zero, to switch back from', () => {
+    const html = render({
+      read: {
+        ...READ,
+        currency: 'USD',
+        currencies: [{ currency: 'INR', expenseCount: 14, spentMinor: 1842000 }],
+      },
+      address: { month: '2026-09', compare: 6, currency: 'USD' },
+    });
+    expect(selectedTab(html)).toBe('USD, $0.00 spent in 0 Expenses');
+    expect(html).toContain('aria-label="INR, main currency, ₹18,420.00 spent in 14 Expenses"');
+  });
+
   it('shows no switch while one currency is spent in', () => {
     const html = render({
       read: { ...READ, currencies: [{ currency: 'INR', expenseCount: 14, spentMinor: 1842000 }] },
