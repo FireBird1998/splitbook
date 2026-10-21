@@ -23,6 +23,7 @@ let batch: typeof import('./route');
 let settlements: typeof import('../route');
 let balances: typeof import('../../balances/route');
 let activity: typeof import('../../activity/route');
+let userActivity: typeof import('@/app/api/user/activity/route');
 let expenses: typeof import('../../expenses/route');
 let currencies: typeof import('../../currencies/route');
 let currency: typeof import('../../currencies/[code]/route');
@@ -34,6 +35,7 @@ beforeAll(async () => {
   settlements = await import('../route');
   balances = await import('../../balances/route');
   activity = await import('../../activity/route');
+  userActivity = await import('@/app/api/user/activity/route');
   expenses = await import('../../expenses/route');
   currencies = await import('../../currencies/route');
   currency = await import('../../currencies/[code]/route');
@@ -137,6 +139,59 @@ async function events(id: string) {
   );
 }
 describe('Settlement batch HTTP contract (#734)', () => {
+  it('links both batch Activity events to the first Settlement and replays without new events', async () => {
+    const id = await trip();
+    const saved = await record(id);
+    expect(saved.status).toBe(201);
+    const batchId = saved.body.data.settlements[0]._id;
+    const log = await events(id);
+    expect(log).toHaveLength(2);
+    for (const event of log) expect(event.metadata).toMatchObject({ batchId, batchSize: 2 });
+
+    // Latest changes must retain the same reference, not just the Group's Activity page.
+    const latest = await callRoute(userActivity.GET, {
+      method: 'GET',
+      path: '/api/user/activity?limit=50',
+      cookie,
+    });
+    expect(latest.status).toBe(200);
+    const latestPayments = latest.body.data.activities.filter(
+      (event: { type: string }) => event.type === 'settlement_recorded',
+    );
+    expect(latestPayments).toHaveLength(2);
+    for (const event of latestPayments)
+      expect(event.metadata).toMatchObject({ batchId, batchSize: 2 });
+
+    expect((await record(id)).body).toEqual(saved.body);
+    expect(await events(id)).toEqual(log);
+  });
+
+  it('marks a one-row batch but leaves a single-route Settlement event without a batch reference', async () => {
+    const id = await trip();
+    const saved = await record(id, {
+      ...payment,
+      settlements: [{ currency: 'INR', amount: 20 }],
+    });
+    expect(saved.status).toBe(201);
+    const batchId = saved.body.data.settlements[0]._id;
+    expect((await events(id))[0].metadata).toMatchObject({ batchId, batchSize: 1 });
+
+    const single = await callRoute(settlements.POST, {
+      method: 'POST',
+      path: `/api/groups/${id}/settlements`,
+      params: { id },
+      cookie,
+      body: { paidTo: alex, currency: 'JPY', amount: 20 },
+    });
+    expect(single.status).toBe(201);
+    const singleEvent = (await events(id)).find(
+      (event) => event.metadata?.settlementId === single.body.data._id,
+    );
+    expect(singleEvent).toBeDefined();
+    expect(singleEvent!.metadata).not.toHaveProperty('batchId');
+    expect(singleEvent!.metadata).not.toHaveProperty('batchSize');
+  });
+
   it('never records a batch paid in a currency removed while the request is running', async () => {
     const adminCookie = await signIn('alex');
     const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
