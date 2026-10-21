@@ -6,6 +6,7 @@ import Alert from '@mui/material/Alert';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Link from '@mui/material/Link';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import Skeleton from '@mui/material/Skeleton';
@@ -120,14 +121,25 @@ export default function DesignSystemLab() {
             <Typography id="banners-heading" variant="h6" component="h2">
               Banners
             </Typography>
+            {/* A banner's text buttons and links take its status colour (#782). */}
             <Alert severity="info">
-              Prepared items wait in To review until someone saves them.
+              Prepared items wait in To review until someone saves them.{' '}
+              <Link href="#banners-heading">About To review</Link>
             </Alert>
             <Alert severity="warning">
               No rate suggested right now. Enter the rate you paid at.
             </Alert>
             <Alert severity="error">This sample Expense couldn’t be saved. Nothing changed.</Alert>
-            <Alert severity="success">Sample payment recorded.</Alert>
+            <Alert
+              severity="success"
+              action={
+                <Button color="inherit" size="small">
+                  Undo
+                </Button>
+              }
+            >
+              Sample payment recorded.
+            </Alert>
           </Stack>
         </Paper>
         <Paper

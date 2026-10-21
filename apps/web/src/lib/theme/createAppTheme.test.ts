@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Alert, Paper, Tabs, Tab, ThemeProvider } from '@mui/material';
+import { Alert, Button, Link, Paper, Tabs, Tab, ThemeProvider } from '@mui/material';
 import { createTheme, getContrastRatio, getLuminance, hexToRgb } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { createAppTheme } from './createAppTheme';
@@ -143,6 +143,17 @@ it('server-rendered Paper and tabs use scheme variables before preference adopti
   expect(html).toContain('color:var(--mui-palette-text-primary)');
 });
 
+/** The app's theme with both colour schemes, as the root layout serves it. */
+const schemeTheme = () =>
+  createTheme({
+    ...createAppTheme('light'),
+    cssVariables: { colorSchemeSelector: '[data-theme="%s"]' },
+    colorSchemes: {
+      light: { palette: createAppTheme('light').palette },
+      dark: { palette: createAppTheme('dark').palette },
+    },
+  });
+
 // #772: in dark mode MUI's own standard Alert tint is nearly black, so a banner looked like a hole
 // in its card. Each severity takes the palette's status tint, as the canvas's banner does: its
 // text in the primary colour, its icon in the status colour.
@@ -152,16 +163,12 @@ it.each([
   ['error', 'negative'],
   ['success', 'positive'],
 ] as const)('a standard %s banner takes the %s tint in either scheme', (severity, tone) => {
-  const theme = createTheme({
-    ...createAppTheme('light'),
-    cssVariables: { colorSchemeSelector: '[data-theme="%s"]' },
-    colorSchemes: {
-      light: { palette: createAppTheme('light').palette },
-      dark: { palette: createAppTheme('dark').palette },
-    },
-  });
   const html = renderToStaticMarkup(
-    createElement(ThemeProvider, { theme }, createElement(Alert, { severity }, 'Prepared items')),
+    createElement(
+      ThemeProvider,
+      { theme: schemeTheme() },
+      createElement(Alert, { severity }, 'Prepared items'),
+    ),
   );
   // The banner's root rule, Paper's and MUI's own styles first: the last of each wins.
   const root = html.match(/\.css-[\w-]+\{([^}]*)\}/)![1];
@@ -172,26 +179,77 @@ it.each([
   expect(html).toContain(`color:var(--mui-palette-status-${tone})`);
 });
 
-it('leaves a banner’s own colours to it, as the error state sets them (#772)', () => {
-  const theme = createTheme({
-    ...createAppTheme('light'),
-    cssVariables: { colorSchemeSelector: '[data-theme="%s"]' },
-    colorSchemes: {
-      light: { palette: createAppTheme('light').palette },
-      dark: { palette: createAppTheme('dark').palette },
-    },
-  });
+// #782: a banner's text buttons and links take its status colour, as the canvas draws banner
+// actions: brand blue on the dark info or success tint was just under 4.5:1, and each status
+// colour passes on its own tint (above).
+it.each([
+  ['info', 'info'],
+  ['warning', 'warning'],
+  ['error', 'negative'],
+  ['success', 'positive'],
+] as const)(
+  'a standard %s banner’s text buttons and links take the %s colour',
+  (severity, tone) => {
+    const html = renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        { theme: schemeTheme() },
+        createElement(
+          Alert,
+          { severity, action: createElement(Button, { size: 'small' }, 'Undo') },
+          'Payment recorded. ',
+          createElement(Link, { href: '#activity' }, 'See Activity'),
+        ),
+      ),
+    );
+    const rules = [...html.matchAll(/([^{}<>]+)\{([^}]*)\}/g)];
+    for (const action of ['MuiButton-text', 'MuiLink-root'])
+      expect(
+        rules.some(
+          ([, selector, body]) =>
+            selector.includes(`.${action}`) &&
+            body.includes(`color:var(--mui-palette-status-${tone})`),
+        ),
+        action,
+      ).toBe(true);
+  },
+);
+
+// #782: the error state follows every other banner: its message in the primary colour, its icon
+// and Retry in the status colour.
+it.each([
+  ['error', 'negative'],
+  ['warning', 'warning'],
+] as const)('the %s state’s message is primary, its icon and Retry %s', (severity, tone) => {
   const html = renderToStaticMarkup(
-    createElement(ThemeProvider, { theme }, createElement(ErrorState, { message: 'Not loaded.' })),
+    createElement(
+      ThemeProvider,
+      { theme: schemeTheme() },
+      createElement(ErrorState, { message: 'Not loaded.', severity, onRetry: () => undefined }),
+    ),
   );
-  // The banner's root rule: the last colour declared wins, and it is the error state's own.
+  // The banner's root rule: the last colour declared wins.
   const [, rootClass, root] = html.match(/(\.css-[\w-]+)\{([^}]*)\}/)!;
   const colours = [...root.matchAll(/(?:^|;)color:([^;]+)/g)].map((found) => found[1]);
-  expect(colours.at(-1)).toBe('var(--mui-palette-status-negative)');
+  expect(colours.at(-1)).toBe('var(--mui-palette-text-primary)');
   // No rule on the root with more classes outranks it.
   const outranking = [...html.matchAll(/([^{}<>]+)\{([^}]*)\}/g)].filter(
     ([, selector, body]) =>
       selector.startsWith(`${rootClass}.`) && !/\s/.test(selector) && /(?:^|;)color:/.test(body),
   );
   expect(outranking).toEqual([]);
+  const rules = [...html.matchAll(/([^{}<>]+)\{([^}]*)\}/g)];
+  // Nor does a rule reach into the message: it keeps the root's primary colour.
+  const message = rules.filter(
+    ([, selector, body]) => selector.includes('.MuiAlert-message') && /(?:^|;)color:/.test(body),
+  );
+  expect(message).toEqual([]);
+  for (const part of ['MuiAlert-icon', 'MuiButton-text'])
+    expect(
+      rules.some(
+        ([, selector, body]) =>
+          selector.includes(`.${part}`) && body.includes(`color:var(--mui-palette-status-${tone})`),
+      ),
+      part,
+    ).toBe(true);
 });

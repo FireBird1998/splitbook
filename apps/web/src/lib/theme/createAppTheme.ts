@@ -1,4 +1,6 @@
 import { alertClasses } from '@mui/material/Alert';
+import { buttonClasses } from '@mui/material/Button';
+import { linkClasses } from '@mui/material/Link';
 import { createTheme, darken, lighten, type Shadows, type Theme } from '@mui/material/styles';
 // Types only: lets the theme style the charts (MuiChartsGrid, MuiChartsXAxis, …).
 import type {} from '@mui/x-charts/themeAugmentation';
@@ -367,7 +369,9 @@ export function createAppTheme(mode: ThemeMode): Theme {
         styleOverrides: {
           // A standard banner takes its status tint, its text the primary colour and its icon
           // the status colour, as the canvas's banner does: MUI's own tint is near black in dark
-          // mode (#772). As variants, so a banner's own sx still wins.
+          // mode (#772). Its text buttons and links take the status colour too, as the canvas draws
+          // banner actions: each passes on its own tint, where brand blue on the dark info or
+          // success tint doesn't quite (#782). As variants, so a banner's own sx still wins.
           root: ({ theme }) => {
             const { palette } = theme.vars ?? theme;
             const tones = {
@@ -383,7 +387,7 @@ export function createAppTheme(mode: ThemeMode): Theme {
                 style: {
                   backgroundColor: palette.tint[tone],
                   color: palette.text.primary,
-                  [`& .${alertClasses.icon}`]: {
+                  [`& .${alertClasses.icon}, & .${buttonClasses.text}, & .${linkClasses.root}`]: {
                     color: palette.status[tone],
                   },
                 },
