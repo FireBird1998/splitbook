@@ -571,9 +571,11 @@ describe('A Household’s Balances', () => {
     [360, 1, 'beside', 1],
     [360, 1.3, 'beside', 1],
     [412, 1.3, 'beside', 1],
+    [412, 1.5, 'under', 1],
     [360, 2, 'under', 1],
     [412, 2, 'under', 1],
     [360, 1.3, 'beside', 2],
+    [412, 1.5, 'under', 2],
     [360, 2, 'under', 2],
   ] as const)(
     'the payments’ caption fits beside its title, %sdp wide at %s× text, or %s it, in %s currencies',

@@ -1215,6 +1215,16 @@ describe('Settle up, suggested or before simplifying (#612)', () => {
     for (const row of debtRows) expect(labelled(root, row)).toHaveLength(1);
     expect(labelled(root, 'You pay Sam Chen, ₹1,480.00')).toHaveLength(0);
     expect(labelled(root, 'Record your payment to Sam Chen')).toHaveLength(0);
+    // No Debt has a Record button, whatever it is called.
+    const [list] = labelled(root, 'Debts before simplifying');
+    expect(
+      list!.findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityRole === 'button' &&
+          /^Record/.test(String(node.props.accessibilityLabel ?? '')),
+      ),
+    ).toHaveLength(0);
     const shown = text(root);
     expect(shown).toContain('Settle up · INR');
     expect(shown).not.toContain('Record one once it’s paid');
@@ -1282,6 +1292,39 @@ describe('Settle up, suggested or before simplifying (#612)', () => {
       ['Before simplifying', false],
     ]);
     expect(labelled(root, 'You pay Sam Chen, ₹1,480.00')).toHaveLength(1);
+    // Back on the currency it was chosen in, too.
+    press(root, 'Before simplifying');
+    press(root, 'EUR, you owe €20.00');
+    press(root, 'INR, main currency, you owe ₹1,480.00');
+    expect(options(root)).toEqual([
+      ['Suggested', true],
+      ['Before simplifying', false],
+    ]);
+  });
+
+  it('opens on Suggested in another Group in the same currency', () => {
+    // App shows each Group's Balances in the same view, not one per Group.
+    const element = (id: string) => (
+      <ThemeContext.Provider value={getSemanticTokens('light')}>
+        <GroupBalancesView
+          group={{ ...group(), id }}
+          currentUserId={you}
+          state={{ ...financial({ data: [rupees] }), groupId: id }}
+          pending={null}
+          offline={false}
+          onRecord={vi.fn()}
+          onCheckPayment={vi.fn()}
+          onRefreshBalances={() => undefined}
+        />
+      </ThemeContext.Provider>
+    );
+    const root = render(element('b00000000000000000000001'));
+    press(root, 'Before simplifying');
+    act(() => screen!.update(element('b00000000000000000000002')));
+    expect(options(root)).toEqual([
+      ['Suggested', true],
+      ['Before simplifying', false],
+    ]);
   });
 
   it('opens on Suggested again once the member’s payments are gone and back', () => {
