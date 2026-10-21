@@ -31,6 +31,7 @@ import { invitationService } from '@/lib/services/invitation.service';
 import { defaultTagsForCategory } from '@splitbook/shared/default-tags';
 import { toPeriod } from '@splitbook/shared/recurring-due-periods';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
+import { captureDemoSeed } from '@/lib/test-utils/demo-seed-fixture';
 
 const db = integrationTestDb('seed-groups');
 const { alex, sam, priya } = DEMO_PERSONA_IDS;
@@ -116,17 +117,32 @@ async function seededLedger() {
   return ledger;
 }
 
-beforeAll(db.connect);
+let restoreRecurring: Awaited<ReturnType<typeof captureDemoSeed>>;
+let restoreManual: Awaited<ReturnType<typeof captureDemoSeed>>;
+// Cache both recurring modes once; the switch-transition reset test still seeds itself.
+// These two service-level seeds can exceed the ordinary 30-second hook limit under load.
+beforeAll(async () => {
+  await db.connect();
+  await db.reset();
+  switchRecurringExpenses(true);
+  restoreRecurring = await captureDemoSeed();
+  await db.reset();
+  switchRecurringExpenses(false);
+  restoreManual = await captureDemoSeed();
+  vi.unstubAllEnvs();
+}, 60_000);
 beforeEach(db.reset);
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 afterAll(db.teardown);
 
-describe('demo Groups beside the Goa trip (#302)', () => {
+// Real reset/idempotency operations still traverse the ledger services under database load.
+// Keep their 60-second budget local to this seed suite; other integration tests stay at 20 s.
+describe('demo Groups beside the Goa trip (#302)', { timeout: 60_000 }, () => {
   it('creates a Household, a week-long Trip and a Work Group with recurring Expenses on', async () => {
     switchRecurringExpenses(true);
-    const result = await seedDemoData();
+    const result = await restoreRecurring();
 
     expect(result.recurringExpenses).toBe('on');
     expect(result.demoGroups.map((group) => group.groupId).sort()).toEqual(
@@ -165,7 +181,7 @@ describe('demo Groups beside the Goa trip (#302)', () => {
 
   it('keeps one currency in every Group: Expenses, payments and templates', async () => {
     switchRecurringExpenses(true);
-    await seedDemoData();
+    await restoreRecurring();
 
     for (const groupId of DEMO_SEEDED_GROUP_IDS) {
       const group = await Group.findById(groupId).lean();
@@ -181,7 +197,7 @@ describe('demo Groups beside the Goa trip (#302)', () => {
 
   it('gives the Household six-plus months of history, edits, a deletion and recurring Months', async () => {
     switchRecurringExpenses(true);
-    await seedDemoData();
+    await restoreRecurring();
     const plan = planFor(DEMO_HOUSEHOLD_ID);
 
     const expenses = await Expense.find({ group: DEMO_HOUSEHOLD_ID }).lean();
@@ -235,7 +251,7 @@ describe('demo Groups beside the Goa trip (#302)', () => {
   });
 
   it('leaves the Trip with payments to settle and the Work Group settled, with an invitation', async () => {
-    await seedDemoData();
+    await restoreManual();
 
     const trip = await balancesOf(DEMO_WEEK_TRIP_ID);
     expect(trip.byUser).toEqual({ [sam]: 2812, [alex]: -8661, [priya]: 5849 });
@@ -258,7 +274,7 @@ describe('demo Groups beside the Goa trip (#302)', () => {
 
   it('enters the same bills by hand when recurring Expenses are off, so balances match', async () => {
     switchRecurringExpenses(false);
-    const off = await seedDemoData();
+    const off = await restoreManual();
     expect(off.recurringExpenses).toBe('off');
     expect(await RecurringExpense.countDocuments({})).toBe(0);
     expect(await Expense.countDocuments({ recurringExpense: { $ne: null } })).toBe(0);
@@ -277,7 +293,7 @@ describe('demo Groups beside the Goa trip (#302)', () => {
 
   it('is deterministic: a reset on the same day stores the same data again', async () => {
     switchRecurringExpenses(true);
-    await seedDemoData();
+    await restoreRecurring();
     const first = await seededLedger();
     await resetDemoData();
     expect(await seededLedger()).toEqual(first);
@@ -285,7 +301,7 @@ describe('demo Groups beside the Goa trip (#302)', () => {
 
   it('is idempotent: seeding again adds nothing to the demo Groups', async () => {
     switchRecurringExpenses(true);
-    await seedDemoData();
+    await restoreRecurring();
     const before = await seededLedger();
     const counts = async () => ({
       expenses: await Expense.countDocuments({}),
@@ -391,7 +407,7 @@ describe('demo Groups beside the Goa trip (#302)', () => {
   });
 
   it('leaves the mobile fixture Groups’ ids free', async () => {
-    await seedDemoData();
+    await restoreManual();
     expect(await Group.exists({ _id: 'a00000000000000000000020' })).toBeNull();
     expect(await Group.exists({ _id: 'a00000000000000000000030' })).toBeNull();
   });
