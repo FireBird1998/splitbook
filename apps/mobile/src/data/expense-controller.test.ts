@@ -861,6 +861,81 @@ describe('native Expense creation and editing', () => {
     expect(writes).toBe(0);
     expect(restarted.getSnapshot().expense.draft?.notes).toBe('Retained input');
   });
+  it.each(['create', 'edit'] as const)(
+    'treats INVALID_MONEY_PRECISION on %s as a clean refusal without reconciliation (#748)',
+    async (operation) => {
+      const message = 'Amount supports at most 0 decimal places';
+      let writes = 0;
+      let readsAfterWrite = 0;
+      const yenExpense = {
+        ...savedExpense,
+        currency: 'JPY',
+        amountMinor: 10,
+        paidBy: [{ user: { _id: memberIds[0], name: 'Alex' }, amount: 10, amountMinor: 10 }],
+        splitBetween: memberIds.map((user, index) => ({
+          user: { _id: user, name: people[index].name },
+          amount: [3, 4, 3][index],
+          amountMinor: [3, 4, 3][index],
+        })),
+      };
+      const { controller, create, records } = setup((path, init) => {
+        if (path === `/api/groups/${groupId}`)
+          return Promise.resolve(json({ status: 200, data: { ...group, defaultCurrency: 'JPY' } }));
+        if (
+          (path.endsWith('/expenses') && init.method === 'POST') ||
+          (path.endsWith(`/${expenseId}`) && init.method === 'PATCH')
+        ) {
+          writes++;
+          return Promise.resolve(
+            json({ status: 422, code: 'INVALID_MONEY_PRECISION', error: message }, 422),
+          );
+        }
+        if (path.endsWith(`/${expenseId}`)) {
+          if (writes) readsAfterWrite++;
+          return Promise.resolve(json({ status: 200, data: yenExpense }));
+        }
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId, operation === 'edit' ? expenseId : undefined);
+      if (operation === 'edit') await controller.editExpense();
+      // Exercise the server refusal seam, even though current local validation rejects fractional
+      // yen before sending. Older clients or changed server validation can receive this code.
+      await controller.updateExpenseDraft({ description: 'Keep my dinner', amount: '10', tagId });
+      const states: string[] = [];
+      const unsubscribe = controller.subscribe(() =>
+        states.push(controller.getSnapshot().expense.status),
+      );
+      await controller.saveExpense();
+      unsubscribe();
+      expect(writes).toBe(1);
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'editing',
+        attempt: null,
+        mutation: null,
+        message,
+        draft: { description: 'Keep my dinner', amount: '10', currency: 'JPY' },
+      });
+      expect(states).not.toContain('uncertain');
+      expect(states).not.toContain('reconciling');
+      expect(readsAfterWrite).toBe(0);
+      for (const record of records.values()) {
+        expect(record).not.toHaveProperty('attempt');
+        expect(record).not.toHaveProperty('mutation');
+      }
+      const restarted = create();
+      await restarted.restore();
+      await restarted.openExpense(groupId, operation === 'edit' ? expenseId : undefined);
+      restarted.resumeExpenseDraft();
+      expect(restarted.getSnapshot().expense).toMatchObject({
+        status: 'editing',
+        attempt: null,
+        mutation: null,
+        draft: { description: 'Keep my dinner' },
+      });
+      expect(writes).toBe(1);
+    },
+  );
+
   it('retains actionable correction and editable input after a definite edit rejection', async () => {
     const { controller, create } = setup((path, init) => {
       if (!path.endsWith(`/${expenseId}`)) return;
