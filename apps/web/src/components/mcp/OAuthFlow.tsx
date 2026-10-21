@@ -10,6 +10,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { PersonAvatar } from '@/components/balances/TabCard';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import { ASSISTANT_CANNOT } from '@/lib/mcp/assistant-limits';
 import type { AssistantDisplay } from '@/lib/mcp/assistant-name';
@@ -18,6 +19,9 @@ import { PRODUCT_NAME } from '@/lib/product';
 
 /** A connection request as the approval page shows it: the assistant, and what it asks for. */
 type ConsentDetails = AssistantDisplay & { scopes: string[] };
+
+/** The member signed in on this page, who approves or denies. */
+type SignedInAccount = { id: string; name: string; email: string };
 
 /**
  * The permissions a connection request asks for, as the approval page lists them: the assistant
@@ -93,14 +97,85 @@ export function ConsentPermissions({
   );
 }
 
+/** Who is approving: the signed-in member, by name and email (#614). */
+function SignedInAs({ account }: { account: SignedInAccount }) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        p: 1.5,
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 2,
+      }}
+    >
+      <PersonAvatar name={account.name || account.email} />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" component="p" color="text.secondary">
+          Signed in as
+        </Typography>
+        {account.name && (
+          <Typography variant="body2" fontWeight={500}>
+            {account.name}
+          </Typography>
+        )}
+        <Typography
+          variant="caption"
+          component="p"
+          color="text.secondary"
+          sx={{ overflowWrap: 'anywhere' }}
+        >
+          {account.email}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Allow or Deny, with the caution beside them: allow only an assistant the member asked to
+ * connect just now, named once the request's details arrive (#614).
+ */
+export function ConsentChoice({
+  name,
+  disabled,
+  onAllow,
+  onDeny,
+}: {
+  name: string | null;
+  disabled: boolean;
+  onAllow: () => void;
+  onDeny: () => void;
+}) {
+  return (
+    <Stack spacing={1}>
+      <Stack direction="row" spacing={2}>
+        <Button variant="contained" disabled={disabled} onClick={onAllow}>
+          Allow connection
+        </Button>
+        <Button disabled={disabled} onClick={onDeny}>
+          Deny
+        </Button>
+      </Stack>
+      {name && (
+        <Typography variant="body2" color="text.secondary">
+          Only allow this if you asked {name} to connect just now.
+        </Typography>
+      )}
+    </Stack>
+  );
+}
+
 export default function OAuthFlow({
   query,
   consent,
-  accountId,
+  account,
 }: {
   query: string;
   consent: boolean;
-  accountId: string;
+  account: SignedInAccount;
 }) {
   const [details, setDetails] = useState<ConsentDetails | null>(null);
   const [drafts, setDrafts] = useState(false);
@@ -110,7 +185,7 @@ export default function OAuthFlow({
     if (!consent) return;
     const controller = new AbortController();
     apiFetch(`/api/auth/mcp/consent-details?${new URLSearchParams({ oauth_query: query })}`, {
-      headers: { [EXPECTED_ACCOUNT_HEADER]: accountId },
+      headers: { [EXPECTED_ACCOUNT_HEADER]: account.id },
       signal: controller.signal,
       cache: 'no-store',
     })
@@ -128,7 +203,7 @@ export default function OAuthFlow({
         if (!controller.signal.aborted) setError(reason.message);
       });
     return () => controller.abort();
-  }, [query, consent, accountId]);
+  }, [query, consent, account.id]);
 
   async function submit(accept = true) {
     setBusy(true);
@@ -136,7 +211,7 @@ export default function OAuthFlow({
     try {
       const response = await apiFetch(`/api/auth/oauth2/${consent ? 'consent' : 'continue'}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', [EXPECTED_ACCOUNT_HEADER]: accountId },
+        headers: { 'Content-Type': 'application/json', [EXPECTED_ACCOUNT_HEADER]: account.id },
         body: JSON.stringify({
           oauth_query: query,
           ...(consent
@@ -175,6 +250,7 @@ export default function OAuthFlow({
           {error && <Alert severity="error">{error}</Alert>}
           {consent ? (
             <>
+              <SignedInAs account={account} />
               <Typography>
                 This connection can access all Groups you belong to now and any you join in the
                 future, while you remain a member.
@@ -194,18 +270,15 @@ export default function OAuthFlow({
                 Disconnect at any time in Settings. Your To review items stay yours; disconnecting
                 cannot erase information already shared with the assistant.
               </Typography>
-              <Stack direction="row" spacing={2}>
-                <Button
-                  variant="contained"
-                  disabled={busy || !details}
-                  onClick={() => void submit()}
-                >
-                  Allow connection
-                </Button>
-                <Button disabled={busy || !details} onClick={() => void submit(false)}>
-                  Deny
-                </Button>
-              </Stack>
+              <Typography variant="body2">
+                {PRODUCT_NAME} checks your access on every request.
+              </Typography>
+              <ConsentChoice
+                name={details?.name ?? null}
+                disabled={busy || !details}
+                onAllow={() => void submit()}
+                onDeny={() => void submit(false)}
+              />
             </>
           ) : (
             <>
