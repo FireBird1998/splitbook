@@ -4,12 +4,13 @@
  * outlives today's currency list (#779, #810, #812): such an Expense is listed as stored, never
  * converted, has no position, and Spent carries it as its own line. So Export lists it, the
  * spending, Insights and Trip summary reads leave it out, and it can be deleted; every one of
- * them answered 500 before.
+ * them answered 500 before. It can't be changed: an edit is refused as the request's fault.
  */
 
 import mongoose from 'mongoose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Expense from '@/lib/models/Expense';
+import Group from '@/lib/models/Group';
 import { exportService } from '@/lib/services/export.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
@@ -21,7 +22,11 @@ import { GET as readExport } from './export/route';
 import { GET as readSpending } from './user/spending/route';
 import { GET as readInsights } from './groups/[id]/insights/route';
 import { GET as readTripSummary } from './groups/[id]/trip-summary/route';
-import { DELETE as deleteExpense } from './groups/[id]/expenses/[expenseId]/route';
+import {
+  DELETE as deleteExpense,
+  PATCH as changeExpense,
+} from './groups/[id]/expenses/[expenseId]/route';
+import { POST as changeTags } from './groups/[id]/expenses/tag-change/route';
 
 const session = vi.hoisted(() => ({ userId: null as string | null }));
 vi.mock('next/headers', () => ({ headers: vi.fn(async () => new Headers()) }));
@@ -130,6 +135,17 @@ const exportRequest = (groupId: string, extra: Partial<ExportRequest> = {}): Exp
   timeZone: 'UTC',
   ...extra,
 });
+
+/** The DEM row as stored, every field. */
+const storedRow = (expenseId: string) =>
+  Expense.collection.findOne({ _id: new mongoose.Types.ObjectId(expenseId) });
+
+const refusal = {
+  status: 422,
+  code: 'UNSUPPORTED_CURRENCY',
+  error:
+    'This Expense is in DEM, which Splitbook no longer supports. It can’t be changed, only deleted.',
+};
 
 describe('an Expense in a currency Splitbook no longer supports (#820)', () => {
   it.each([
@@ -247,5 +263,62 @@ describe('an Expense in a currency Splitbook no longer supports (#820)', () => {
       currency: 'DEM',
       amountMinor: 4000,
     });
+  });
+
+  // A refusal, not a server fault: a 500 reads as an outage, and invites a retry.
+  it.each([
+    ['an edit of its description', { description: 'Old Berlin flat' }],
+    ['an edit of its amount', { amount: 50 }],
+    ['an edit with nothing new', { description: 'Old Berlin rent' }],
+    ['a restore once it is deleted', { isDeleted: false }],
+  ])('%s is refused, and nothing stored changes', async (_, change) => {
+    const groupId = await berlinTrip();
+    const expenseId = await oldBerlinRent(groupId);
+    if ('isDeleted' in change)
+      await expenseService.delete({ actorId: alice, groupId, expenseId }, 0);
+    const before = await storedRow(expenseId);
+    const response = await changeExpense(
+      new Request(`http://localhost/api/groups/${groupId}/expenses/${expenseId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Splitbook-Revision': String(before!.revision),
+        },
+        body: JSON.stringify(change),
+      }),
+      { params: Promise.resolve({ id: groupId, expenseId }) },
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual(refusal);
+    expect(await storedRow(expenseId)).toEqual(before);
+  });
+
+  it('a Tag change refuses it in those words, and changes the others', async () => {
+    const groupId = await berlinTrip();
+    const expenseId = await oldBerlinRent(groupId);
+    const before = await storedRow(expenseId);
+    const tags = (await Group.findById(groupId).lean())!.tags;
+    const transport = String(tags.find((tag) => tag.name === 'Transport')!._id);
+    const lunch = await Expense.findOne({ description: 'Station lunch' }).lean();
+    const response = await changeTags(
+      new Request(`http://localhost/api/groups/${groupId}/expenses/tag-change`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tagId: transport,
+          expenses: [
+            { id: expenseId, revision: 0 },
+            { id: String(lunch!._id), revision: 0 },
+          ],
+        }),
+      }),
+      { params: Promise.resolve({ id: groupId }) },
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).data.results).toEqual([
+      { expenseId, outcome: 'refused', code: refusal.code, reason: refusal.error },
+      { expenseId: String(lunch!._id), outcome: 'changed', revision: 1 },
+    ]);
+    expect(await storedRow(expenseId)).toEqual(before);
   });
 });
