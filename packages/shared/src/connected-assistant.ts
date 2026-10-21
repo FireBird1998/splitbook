@@ -33,3 +33,20 @@ const ACCESS_LABELS: Record<string, string> = {
 export function connectedAssistantAccessLabel(access: string): string {
   return ACCESS_LABELS[access] ?? access;
 }
+
+/**
+ * How many of the member's Groups an assistant reaches (#620), for "N of M Groups": those it
+ * isn't left out of and whose admins allow assistants (#621). A Group left out that the member
+ * has since left counts for nothing.
+ */
+export function assistantGroupCount(
+  groups: readonly { id: string; rule?: string }[],
+  excludedGroupIds: readonly string[] = [],
+): { reached: number; of: number } {
+  const excluded = new Set(excludedGroupIds);
+  return {
+    reached: groups.filter((group) => !excluded.has(group.id) && group.rule !== 'not_allowed')
+      .length,
+    of: groups.length,
+  };
+}
