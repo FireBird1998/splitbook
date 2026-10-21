@@ -519,6 +519,11 @@ export default function ExportPreviewPanel({
                 ))}
               </PreviewTable>
             )}
+            {csvView === 'table' && file.kind === 'payments' && file.rows.length > 0 && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Cross-currency payments add Amount paid, Paid currency and Rate
+              </Typography>
+            )}
             {csvView === 'table' && file.totalRows > file.rows.length && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 …and {file.totalRows - file.rows.length} more rows
