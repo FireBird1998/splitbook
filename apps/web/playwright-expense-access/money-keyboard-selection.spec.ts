@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { Locator, Page } from '@playwright/test';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { test, expect, dataOf, joinGroup, openAddExpense, type Ledger } from './fixtures';
@@ -114,12 +115,22 @@ for (const crossCurrency of [false, true]) {
     const request = page.waitForRequest(
       (r) => r.method() === 'POST' && r.url().endsWith(`/api/groups/${group}/settlements`),
     );
-    await sheet.getByRole('button', { name: 'Record payment', exact: true }).click();
-    expect((await request).postDataJSON()).toMatchObject(
+    await sheet.getByRole('button', { name: /^Record payment(?: |$)/ }).click();
+    const sent = await request;
+    const body = sent.postDataJSON();
+    // Single Settlements send amount in major units; check that exact POST value in minor
+    // units too, then the server's stored amountMinor. No display text stands in for a save.
+    expect(body).toMatchObject(
       crossCurrency
-        ? { amountMinor: 2000, amountPaidMinor: 200000, paidCurrency: 'INR' }
-        : { amountMinor: 30000 },
+        ? { amount: 20, currency: 'EUR', amountPaidMinor: 200000, paidCurrency: 'INR' }
+        : { amount: 300, currency: 'EUR' },
     );
+    expect(parseAmountMinor(String(body.amount), body.currency)).toBe(crossCurrency ? 2000 : 30000);
+    const response = await sent.response();
+    expect(response?.status()).toBe(201);
+    expect((await response!.json()).data).toMatchObject({
+      amountMinor: crossCurrency ? 2000 : 30000,
+    });
     await expect(page.getByText('Payment recorded.', { exact: false })).toBeVisible();
   });
 }
