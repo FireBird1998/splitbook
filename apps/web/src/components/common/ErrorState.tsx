@@ -15,17 +15,12 @@ export default function ErrorState({
   onRetry,
   retryLabel = 'Retry',
 }: ErrorStateProps) {
-  const tone = severity === 'error' ? 'negative' : 'warning';
+  // Its tint, primary text, and status-coloured icon and Retry are every banner's (#772, #782).
   return (
     <Alert
       severity={severity}
       role="alert"
-      sx={{
-        bgcolor: `tint.${tone}`,
-        color: `status.${tone}`,
-        '& .MuiAlert-icon': { color: 'inherit' },
-        '& .MuiAlert-message': { minWidth: 0, overflowWrap: 'anywhere' },
-      }}
+      sx={{ '& .MuiAlert-message': { minWidth: 0, overflowWrap: 'anywhere' } }}
       action={
         onRetry ? (
           <Button color="inherit" size="small" onClick={onRetry}>

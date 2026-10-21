@@ -436,6 +436,24 @@ describe('Settlement batch HTTP contract (#734)', () => {
       expect(await ledgers(id)).toEqual(before);
     },
   );
+  // A retry is sent with the first try's key. Its reply is the first's whenever that one landed,
+  // though the Debts it cleared are gone by then; only a payment that never landed meets them
+  // changed. Android says so on a refused retry (#802).
+  it('replays a landed payment once its Debts are cleared, where the same payment under a new key is refused', async () => {
+    const id = await trip();
+    const first = await record(id);
+    expect(first.status).toBe(201);
+    const cleared = (await ledgers(id)).filter((row) => ['INR', 'EUR'].includes(row.currency));
+    expect(cleared.flatMap((row) => row.debts)).toEqual([]);
+    const again = await record(id);
+    expect(again.status).toBe(201);
+    expect(again.body).toEqual(first.body);
+    const fresh = await record(id, payment, 'batch-payment-0002');
+    expect(fresh.status).toBe(422);
+    expect(fresh.body.code).toBe('NO_SETTLEMENT_DEBT');
+    expect((await read(id)).body.data).toHaveLength(2);
+    expect(await events(id)).toHaveLength(2);
+  });
   it('refuses non-members and a member who is not the payer or recipient of the Debt', async () => {
     const id = await trip();
     cookie = await signIn('priya');

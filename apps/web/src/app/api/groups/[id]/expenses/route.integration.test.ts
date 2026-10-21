@@ -503,3 +503,74 @@ describe('who may read', () => {
     expect((await read(fixture.groupId, `?involvesUser=${carol}`)).status).toBe(403);
   });
 });
+
+describe('each currency’s position, on request (#759)', () => {
+  /**
+   * Lisbon & Tokyo, a fictional Trip: rupees, with euros and yen. Bob paid in each currency for
+   * Alice and himself, and Alice paid ¥3,000 for Bob and herself.
+   */
+  async function lisbonAndTokyo() {
+    const group = await groupService.create(
+      {
+        name: 'Synthetic Lisbon & Tokyo',
+        category: 'trip',
+        defaultCurrency: 'INR',
+        alternateCurrencies: ['EUR', 'JPY'],
+      },
+      alice,
+    );
+    const groupId = String(group._id);
+    await groupService.addMember(groupId, bob);
+    const pair = [{ user: alice }, { user: bob }];
+    const add = (description: string, amount: number, currency: string, paidBy: string) =>
+      expenseService.create(
+        groupId,
+        {
+          description,
+          amount,
+          currency,
+          category: 'food',
+          date: new Date('2026-10-05T06:00:00.000Z'),
+          paidBy: [{ user: paidBy, amount }],
+          splitMethod: 'equal',
+          splitBetween: pair,
+          tag: 'General',
+        },
+        paidBy,
+      );
+    // Yen first, so the read's order is the Group's, not the order money arrived in.
+    await add('Hotel Gracery', 21000, 'JPY', bob);
+    await add('Matcha in Uji', 3000, 'JPY', alice);
+    await add('Pastéis de nata', 26.4, 'EUR', bob);
+    await add('Tram 28 passes', 42000, 'INR', bob);
+    return groupId;
+  }
+
+  it('says what the member owes and gets back in each currency, main currency first', async () => {
+    const groupId = await lisbonAndTokyo();
+    const { status, body } = await list(groupId, { includeUserByCurrency: true });
+    expect(status).toBe(200);
+    expect(body.data.summary.userByCurrency).toEqual([
+      { currency: 'INR', userOwes: 21000, userGetsBack: 0 },
+      { currency: 'EUR', userOwes: 13.2, userGetsBack: 0 },
+      { currency: 'JPY', userOwes: 10500, userGetsBack: 1500 },
+    ]);
+    // The main currency's figures are as they always were.
+    expect(body.data.summary).toMatchObject({ userOwes: 21000, userGetsBack: 0 });
+    expect(parseExpensePageResponse(body).summary.userByCurrency).toHaveLength(3);
+  });
+
+  it('is left out unless asked for, so every earlier request answers as before', async () => {
+    const groupId = await lisbonAndTokyo();
+    const { body } = await list(groupId, {});
+    expect(body.data.summary).not.toHaveProperty('userByCurrency');
+  });
+
+  it('follows the filters, as the rest of the summary does', async () => {
+    const groupId = await lisbonAndTokyo();
+    const { body } = await list(groupId, { includeUserByCurrency: true, search: 'matcha' });
+    expect(body.data.summary.userByCurrency).toEqual([
+      { currency: 'JPY', userOwes: 0, userGetsBack: 1500 },
+    ]);
+  });
+});

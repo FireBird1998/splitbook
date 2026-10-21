@@ -1,4 +1,6 @@
+import { unstable_serialize } from 'swr/infinite';
 import {
+  activityPageKey,
   matchAccount,
   matchGroup,
   matchScope,
@@ -22,3 +24,18 @@ export const isWebAccountGroupsRead = (key: unknown) =>
 /** Every read below a Group's own entry, which gets denial-as-data separately. */
 export const matchWebGroupContent = (groupId: string) => (key: unknown) =>
   matchWebGroupRead(groupId)(key) && !matchScope('group')(key);
+
+/** Events in each page of a Group's web Activity timeline (#800). */
+export const WEB_ACTIVITY_PAGE_SIZE = 50;
+
+/** Page `index` of a Group's Activity timeline, counted from 0 as `useSWRInfinite` does. */
+export const webActivityPage = (groupId: string, index: number) =>
+  activityPageKey(WEB_QUERY_ACCOUNT, groupId, { page: index + 1, limit: WEB_ACTIVITY_PAGE_SIZE });
+
+/**
+ * The key a Group's loaded Activity pages are kept under. SWR's filtered `mutate` skips
+ * `useSWRInfinite` keys, so the matchers above never reach them: whatever mutates a Group's
+ * reads mutates this key too (#800).
+ */
+export const webActivityPagesKey = (groupId: string) =>
+  unstable_serialize((index: number) => webActivityPage(groupId, index));

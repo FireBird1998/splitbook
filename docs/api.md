@@ -999,6 +999,7 @@ templates are materialized on read while recurring Expenses are switched on.
 &amountMin=500                 // inclusive, major units of the Group's currency (#310)
 &amountMax=1249.50             // inclusive (#310)
 &includeRecurringCount=1       // opt-in; adds summary.recurringCount (#310)
+&includeUserByCurrency=1       // opt-in; adds summary.userByCurrency (#759)
 ```
 
 **Added by #310, all additive.** A request that sends none of them answers
@@ -1019,6 +1020,13 @@ requests Android and the web made with answers recorded before #310):
 - `includeRecurringCount=1` adds `summary.recurringCount`, how many of the
   filtered Expenses recurring Expenses added. It is left out while recurring
   Expenses are switched off (#289), even when asked for.
+- `includeUserByCurrency=1` adds `summary.userByCurrency`: for each currency
+  the filtered Expenses are in, `{ currency, userOwes, userGetsBack }` for the
+  signed-in member, worked out as `userOwes` and `userGetsBack` always are for
+  the main currency, in that currency's own amounts. Nothing is converted. The
+  order is the Group's: the main currency, its extra currencies, then any other
+  currency the Expenses are still in, alphabetically. Without it, the response
+  is unchanged; `userOwes` and `userGetsBack` stay the main currency's (#759).
 - Each Expense already carried `recurringExpense` (the template's id, or null);
   the shared decoder now declares it.
 

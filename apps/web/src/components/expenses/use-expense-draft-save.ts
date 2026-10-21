@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { useSWRConfig } from 'swr';
 import type { ExpenseDraft } from '@splitbook/shared/expense-draft';
-import { matchWebGroupRead } from '@/lib/web-query-keys';
+import { matchWebGroupRead, webActivityPagesKey } from '@/lib/web-query-keys';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { buildDuplicateCheckUrl } from './expense-duplicate-check';
 
@@ -102,6 +102,7 @@ export function useExpenseDraftSave(setDraft: Dispatch<SetStateAction<ExpenseDra
         }
         setDraft((current) => current.complete(submission));
         void mutate(matchWebGroupRead(submission.groupId));
+        void mutate(webActivityPagesKey(submission.groupId));
         return { status: 'saved' };
       } catch (error) {
         const message =

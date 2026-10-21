@@ -233,6 +233,12 @@ export interface ExpenseFilters {
    * server leaves it out while recurring Expenses are switched off (#289, #310).
    */
   includeRecurringCount?: boolean;
+  /**
+   * Opt-in: what the member owes and gets back in each currency, as `summary.userByCurrency`
+   * (#759). Each currency's figures are worked out as the main currency's always are; nothing
+   * is converted.
+   */
+  includeUserByCurrency?: boolean;
 }
 
 // ─── Expense Summary Types ──────────────────────────────
@@ -253,6 +259,15 @@ export interface ExpenseSummary {
   userGetsBack: number;
   /** Present only when includeMemberBreakdown is requested. */
   byMember?: ExpenseMemberBreakdownRow[];
+  /** Present only when includeUserByCurrency is requested: the Group's order (#759). */
+  userByCurrency?: ExpenseCurrencyPosition[];
+}
+
+/** What the member owes and gets back in one currency, across the Expenses read (#759). */
+export interface ExpenseCurrencyPosition {
+  currency: string;
+  userOwes: number;
+  userGetsBack: number;
 }
 
 // ─── Balance Types ──────────────────────────────────────

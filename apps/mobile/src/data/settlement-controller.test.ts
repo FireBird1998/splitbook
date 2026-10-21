@@ -597,6 +597,35 @@ describe('native payment recording', () => {
     expect(records.size).toBe(1);
   });
 
+  // #802: only a settle-up's route answers a landed key's retry before any refusal. The single
+  // route checks its members first, so a refused Retry may follow a payment that was recorded,
+  // and the record stays, whatever the refusal.
+  it('keeps a single payment’s Retry refused with NO_SETTLEMENT_DEBT blocked, with its record (#802)', async () => {
+    let posts = 0;
+    const { controller, records } = setup((path, init) => {
+      if (!path.endsWith('/settlements') || init.method !== 'POST') return undefined;
+      // The first send's reply never arrives; its Retry is refused.
+      return ++posts === 1
+        ? Promise.reject(new Error('Lost response'))
+        : json({ status: 422, code: 'NO_SETTLEMENT_DEBT', error: 'No Debt to settle' }, 422);
+    });
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    await controller.recordSettlement();
+    const attempt = controller.getSnapshot().settlement.attempt;
+    expect(attempt).not.toBeNull();
+    await controller.recordSettlement();
+    expect(posts).toBe(2);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'blocked',
+      attempt,
+      message:
+        'This payment can’t be recorded with your current access or details. Any unconfirmed record stays on this device.',
+    });
+    expect(records.size).toBe(1);
+  });
+
   it('restores an immutable unresolved payment from Balances and retries the identical key/body only on explicit action', async () => {
     let committed = false,
       lose = true;

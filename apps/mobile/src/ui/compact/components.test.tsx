@@ -932,12 +932,23 @@ describe('a line the app cuts in the middle (#770)', () => {
     line()
       .children.filter((child) => typeof child === 'string')
       .join('');
+  /** The line shows `credit` as the app cuts it: one "…", no dot beside it, and it fits. */
+  const expectCut = (credit: string, width: number, fontScale: number) => {
+    const [start, end, ...more] = shown().split('…');
+    expect(more, `${width}dp: ${shown()}`).toEqual([]);
+    expect(end, `${width}dp: ${shown()}`).toBeDefined();
+    expect(credit.startsWith(start!) && credit.endsWith(end!.trimEnd()), shown()).toBe(true);
+    expect(start!.endsWith('.') || end!.startsWith('.'), shown()).toBe(false);
+    // With a dp to spare, as Android rounds the line's box to whole pixels.
+    expect(outfitRegularWidth(shown()) * scaledSp(12, fontScale), shown()).toBeLessThanOrEqual(
+      width - 1,
+    );
+  };
 
   it.each([1, 1.15, 1.3, 1.45])(
     'keeps its start and end, with no dot beside the "…", and fits, at %s× text',
     (fontScale) => {
       setWindow({ width: 360, height: 640, fontScale });
-      const size = scaledSp(12, fontScale);
       for (const credit of credits) {
         render(
           <CompactText variant="caption" tone="secondary" numberOfLines={1} ellipsizeMode="middle">
@@ -946,20 +957,14 @@ describe('a line the app cuts in the middle (#770)', () => {
         );
         for (let width = 180; width <= 330; width++) {
           layOut(width);
-          const [start, end, ...more] = shown().split('…');
-          expect(more, `${width}dp: ${shown()}`).toEqual([]);
-          expect(end, `${width}dp: ${shown()}`).toBeDefined();
-          expect(credit.startsWith(start!) && credit.endsWith(end!.trimEnd()), shown()).toBe(true);
-          expect(start!.endsWith('.') || end!.startsWith('.'), shown()).toBe(false);
-          // With a dp to spare, as Android rounds the line's box to whole pixels.
-          expect(outfitRegularWidth(shown()) * size, shown()).toBeLessThanOrEqual(width - 1);
+          expectCut(credit, width, fontScale);
         }
         act(() => renderer?.unmount());
       }
     },
   );
 
-  it('never cuts again a line its cut made narrower, and lays a new text out whole first', () => {
+  it('never cuts again a line its cut made narrower', () => {
     setWindow({ width: 360, height: 640, fontScale: 1.3 });
     const cut = (text: string) => (
       <CompactText variant="caption" tone="secondary" numberOfLines={1} ellipsizeMode="middle">
@@ -976,8 +981,6 @@ describe('a line the app cuts in the middle (#770)', () => {
     // A wider line is cut again, longer.
     layOut(300);
     expect(shown().length).toBeGreaterThan(first.length);
-    act(() => renderer!.update(cut(credits[1]!)));
-    expect(shown().trimEnd()).toBe(credits[1]);
   });
 
   const cut = (text: string, weight?: 'semibold') => (
@@ -991,6 +994,17 @@ describe('a line the app cuts in the middle (#770)', () => {
       {text}
     </CompactText>
   );
+
+  // #798: React Native sends no layout for a frame that hasn't changed, so a new text in the
+  // same line, as a row whose credit changes in place, is cut from the width the line has.
+  it('cuts a new text at once in an unchanged line, with no dot beside the "…" (#798)', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1.3 });
+    render(cut(credits[0]!));
+    layOut(250);
+    // No layout follows the new text: the line's frame is the same.
+    act(() => renderer!.update(cut(credits[1]!)));
+    expectCut(credits[1]!, 250, 1.3);
+  });
 
   // The Tester's M1 on 0b575404: a cut kept for the old window left Android to cut it again.
   it('lays the whole text out again, and cuts it shorter, in a narrower window', () => {
@@ -1165,4 +1179,85 @@ describe('a line cut at its tail draws its "…" inside its box (#785)', () => {
       act(() => renderer?.unmount());
     }
   });
+});
+
+// #807: a Banner's text actions take its tone's status colour, as the web's do (#782); the
+// neutral offline tone has none, so its actions keep the brand (the Designer's call).
+describe('a Banner’s text actions (#807)', () => {
+  const tones = ['info', 'warning', 'error', 'offline'] as const;
+  const labelColor = (root: ReactTestInstance, label: string) =>
+    one(byRole(root, 'button', label))
+      .findAll((node) => isHost(node, 'Text'))
+      .map((node) => node.props.style)
+      .flat()
+      // The label's own colour comes last, over the text's default.
+      .filter((style) => style && 'color' in style)
+      .at(-1)?.color;
+  /** WCAG's contrast ratio of two `#rrggbb` colours. */
+  const contrast = (a: string, b: string) => {
+    const luminance = (hex: string) => {
+      const [r, g, bl] = [1, 3, 5].map((at) => {
+        const c = parseInt(hex.slice(at, at + 2), 16) / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+    };
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  it.each(['light', 'dark'] as const)(
+    'take the tone’s status colour in %s, offline’s keep the brand, as one outside does',
+    (mode) => {
+      const tokens = getSemanticTokens(mode);
+      const root = render(
+        <ThemeContext.Provider value={tokens}>
+          {tones.map((tone) => (
+            <Banner key={tone} tone={tone} message={`A ${tone} notice.`}>
+              <CompactButton label={`Act on ${tone}`} variant="text" dense onPress={vi.fn()} />
+            </Banner>
+          ))}
+          <CompactButton label="Act outside" variant="text" onPress={vi.fn()} />
+        </ThemeContext.Provider>,
+      );
+      expect(labelColor(root, 'Act on info')).toBe(tokens.status.info);
+      expect(labelColor(root, 'Act on warning')).toBe(tokens.status.warning);
+      expect(labelColor(root, 'Act on error')).toBe(tokens.status.negative);
+      expect(labelColor(root, 'Act on offline')).toBe(tokens.brand.main);
+      expect(labelColor(root, 'Act outside')).toBe(tokens.brand.main);
+    },
+  );
+
+  it('keep a destructive, disabled, primary or tonal action’s own colours', () => {
+    const tokens = getSemanticTokens('light');
+    const root = render(
+      <ThemeContext.Provider value={tokens}>
+        <Banner tone="info" message="A notice.">
+          <CompactButton label="Discard" variant="text" destructive onPress={vi.fn()} />
+          <CompactButton label="Not now" variant="text" disabled onPress={vi.fn()} />
+          <CompactButton label="Resume" onPress={vi.fn()} />
+          <CompactButton label="Check" variant="tonal" onPress={vi.fn()} />
+        </Banner>
+      </ThemeContext.Provider>,
+    );
+    expect(labelColor(root, 'Discard')).toBe(tokens.status.negative);
+    expect(labelColor(root, 'Not now')).toBe(tokens.brand.main);
+    expect(labelColor(root, 'Resume')).toBe(tokens.brand.contrastText);
+    expect(labelColor(root, 'Check')).toBe(tokens.brand.main);
+  });
+
+  it.each(['light', 'dark'] as const)(
+    'each tone’s action colour reads at 4.5:1 or more on its own tint in %s',
+    (mode) => {
+      const tokens = getSemanticTokens(mode);
+      const pairs = {
+        info: [tokens.status.info, tokens.info.bg],
+        warning: [tokens.status.warning, tokens.warning.bg],
+        error: [tokens.status.negative, tokens.negative.bg],
+        offline: [tokens.brand.main, tokens.surfaceMuted],
+      };
+      for (const [tone, [action, tint]] of Object.entries(pairs))
+        expect(contrast(action, tint), tone).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });

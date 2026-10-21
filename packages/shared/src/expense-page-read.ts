@@ -66,6 +66,16 @@ const summary = z.looseObject({
     .optional(),
   /** Sent only on request, and only while recurring Expenses are switched on (#310). */
   recurringCount: z.number().int().nonnegative().optional(),
+  /** Sent only on request: the member's position in each currency, the Group's order (#759). */
+  userByCurrency: z
+    .array(
+      z.looseObject({
+        currency: currencyCode,
+        userOwes: amount.nonnegative(),
+        userGetsBack: amount.nonnegative(),
+      }),
+    )
+    .optional(),
 });
 const expensePage = z.looseObject({ expenses: z.array(expense), pagination, summary });
 

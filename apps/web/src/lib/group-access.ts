@@ -4,6 +4,7 @@ import {
   matchWebGroupRead,
   matchWebGroupContent,
   isWebAccountGroupsRead,
+  webActivityPagesKey,
 } from '@/lib/web-query-keys';
 import { forgetBrowserGroupSettlementAttempts } from '@/lib/settlement-attempts';
 import { forgetBrowserGroupTagActions } from '@/lib/tag-actions';
@@ -71,6 +72,7 @@ function forgetGroup(groupId: string, accountId: string | null) {
   void mutate(matchWebGroupContent(groupId), undefined, {
     revalidate: false,
   });
+  void mutate(webActivityPagesKey(groupId), undefined, { revalidate: false });
   void mutate(isWebAccountGroupsRead, undefined);
   if (accountId) {
     void forgetBrowserGroupSettlementAttempts(accountId, groupId);
@@ -90,6 +92,7 @@ function forgetGroup(groupId: string, accountId: string | null) {
 function reopenGroup(groupId: string) {
   lostGroups.delete(groupId);
   void mutate(matchWebGroupContent(groupId), undefined);
+  void mutate(webActivityPagesKey(groupId), undefined);
 }
 
 /** Writes that can change the account's Groups, or its balance in one of them. */

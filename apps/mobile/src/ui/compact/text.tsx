@@ -102,11 +102,13 @@ function middleCut(text: string, room: number, size: number): string | null {
 
 /**
  * A line cut in the middle: by the app (`middleCut`) once it knows its line's width, so no dot sits
- * beside the "…" (#770), and by Android until then, or when the app can't cut it. It takes its
- * line's whole width, as a line of its own does. Its width is the one it had with the whole text
- * in it, or a wider one: a line its cut made narrower never cuts itself again. A new text or window
- * lays the whole text out again. It ends in its room (`ellipsisRoom`), and a screen reader hears
- * the whole text.
+ * beside the "…" (#770), and by Android until then, or when the app can't cut it. It must be a
+ * line of its own in a column, whose whole width it takes (`alignSelf: 'stretch'`), as an
+ * assistant's credit is: its width is then the window's to give, whatever its text, and a new
+ * text is cut at once from it, as React Native sends no layout for a frame that hasn't changed
+ * (#798). A new window or text size lays the whole text out again. Its width only grows: a line
+ * that a parent sized to its words made narrower after its cut doesn't cut itself shorter again.
+ * It ends in its room (`ellipsisRoom`), and a screen reader hears the whole text.
  */
 function MiddleCutLine({
   text,
@@ -115,9 +117,10 @@ function MiddleCutLine({
   ...props
 }: TextProps & { text: string; look: StyleProp<TextStyle> }) {
   const window = useWindowDimensions();
-  const shape = `${text} ${window.width} ${window.fontScale}`;
-  const [line, setLine] = useState<{ shape: string; width: number } | null>(null);
-  const room = line?.shape === shape ? line.width : null;
+  /** The window the line's width was laid out in: its width and its text size. */
+  const screen = `${window.width} ${window.fontScale}`;
+  const [line, setLine] = useState<{ screen: string; width: number } | null>(null);
+  const room = line?.screen === screen ? line.width : null;
   const { fontFamily, fontSize, letterSpacing } = StyleSheet.flatten(look);
   const size = scaledSp(Number(fontSize), window.fontScale);
   // Only Outfit Regular's widths are known here.
@@ -129,7 +132,7 @@ function MiddleCutLine({
   const layOut = (event: LayoutChangeEvent) => {
     onLayout?.(event);
     const { width } = event.nativeEvent.layout;
-    if (room === null || width > room) setLine({ shape, width });
+    if (room === null || width > room) setLine({ screen, width });
   };
   return (
     <Text
