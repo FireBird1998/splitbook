@@ -14,6 +14,7 @@ import {
   type ActivityState,
 } from '../data/activity';
 import {
+  findHosts,
   flatten,
   largeTextWindows,
   layoutHeight,
@@ -1012,6 +1013,25 @@ describe('a payment that settled several Debts at once (#734)', () => {
     expect(onSelect).toHaveBeenCalledWith(euros._id);
   });
 
+  // #792: a batch's row has details, so from 130% its avatar keeps beside the headline.
+  it('keeps its avatar beside its headline at 130% text (#792)', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1.3 });
+    render({
+      state: activity({
+        events: [euros, rupees],
+        pagination: { page: 1, limit: 20, total: 2, totalPages: 1 },
+      }),
+    });
+    const [row] = findHosts(
+      screen!.toJSON() as ReactTestRendererJSON,
+      (props, type) =>
+        type === 'Pressable' &&
+        props.accessibilityRole === 'button' &&
+        String(props.accessibilityLabel).includes('Sam Chen'),
+    );
+    expect(flatten(row!.props.style).alignItems).toBe('flex-start');
+  });
+
   it('says where the rest of one a page boundary split is, and joins it once that page loads', () => {
     const { root, update } = render({
       state: activity({
@@ -1048,5 +1068,51 @@ describe('a payment that settled several Debts at once (#734)', () => {
         (node) => typeof node.type === 'string' && node.props.accessibilityLabel === whole,
       ),
     ).toHaveLength(1);
+  });
+});
+
+// #792, from the Designer's #770 check: at 130% text and above an Activity row runs three to six
+// lines, and its centred avatar drifted down beside the details, away from the headline that says
+// who did it. A row with details keeps its avatar beside the headline, at the top; a row without
+// details, and every row below 130%, keeps it centred, as a list row with a note does (#770).
+describe.each(['light', 'dark'] as const)('an Activity row’s avatar in %s (#792)', (mode) => {
+  const joined: ActivityEvent = { ...event(2), type: 'member_joined', metadata: {} };
+  const alignment = (label: string) => {
+    const [row] = findHosts(
+      screen!.toJSON() as ReactTestRendererJSON,
+      (props, type) =>
+        type === 'Pressable' &&
+        props.accessibilityRole === 'button' &&
+        String(props.accessibilityLabel).startsWith(label),
+    );
+    return flatten(row!.props.style).alignItems;
+  };
+  it.each([
+    { fontScale: 1, detailed: 'center' },
+    { fontScale: 1.3, detailed: 'flex-start' },
+    { fontScale: 2, detailed: 'flex-start' },
+  ])('$fontScale× text, 360dp: a row with details aligns it $detailed', (size) => {
+    setWindow({ width: 360, height: 640, fontScale: size.fontScale });
+    act(() => {
+      screen = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <GroupActivity
+            state={activity({ events: [event(1), joined] })}
+            currentUserId={you}
+            currency="INR"
+            offline={false}
+            now={now}
+            onRetry={vi.fn()}
+            onMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onShift={vi.fn()}
+            onSelect={vi.fn()}
+            onClose={vi.fn()}
+          />
+        </ThemeContext.Provider>,
+      );
+    });
+    expect(alignment('You added Fictional event 1')).toBe(size.detailed);
+    expect(alignment('You joined the Group')).toBe('center');
   });
 });
