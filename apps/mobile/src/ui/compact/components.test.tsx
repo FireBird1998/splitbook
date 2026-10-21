@@ -932,12 +932,23 @@ describe('a line the app cuts in the middle (#770)', () => {
     line()
       .children.filter((child) => typeof child === 'string')
       .join('');
+  /** The line shows `credit` as the app cuts it: one "…", no dot beside it, and it fits. */
+  const expectCut = (credit: string, width: number, fontScale: number) => {
+    const [start, end, ...more] = shown().split('…');
+    expect(more, `${width}dp: ${shown()}`).toEqual([]);
+    expect(end, `${width}dp: ${shown()}`).toBeDefined();
+    expect(credit.startsWith(start!) && credit.endsWith(end!.trimEnd()), shown()).toBe(true);
+    expect(start!.endsWith('.') || end!.startsWith('.'), shown()).toBe(false);
+    // With a dp to spare, as Android rounds the line's box to whole pixels.
+    expect(outfitRegularWidth(shown()) * scaledSp(12, fontScale), shown()).toBeLessThanOrEqual(
+      width - 1,
+    );
+  };
 
   it.each([1, 1.15, 1.3, 1.45])(
     'keeps its start and end, with no dot beside the "…", and fits, at %s× text',
     (fontScale) => {
       setWindow({ width: 360, height: 640, fontScale });
-      const size = scaledSp(12, fontScale);
       for (const credit of credits) {
         render(
           <CompactText variant="caption" tone="secondary" numberOfLines={1} ellipsizeMode="middle">
@@ -946,20 +957,14 @@ describe('a line the app cuts in the middle (#770)', () => {
         );
         for (let width = 180; width <= 330; width++) {
           layOut(width);
-          const [start, end, ...more] = shown().split('…');
-          expect(more, `${width}dp: ${shown()}`).toEqual([]);
-          expect(end, `${width}dp: ${shown()}`).toBeDefined();
-          expect(credit.startsWith(start!) && credit.endsWith(end!.trimEnd()), shown()).toBe(true);
-          expect(start!.endsWith('.') || end!.startsWith('.'), shown()).toBe(false);
-          // With a dp to spare, as Android rounds the line's box to whole pixels.
-          expect(outfitRegularWidth(shown()) * size, shown()).toBeLessThanOrEqual(width - 1);
+          expectCut(credit, width, fontScale);
         }
         act(() => renderer?.unmount());
       }
     },
   );
 
-  it('never cuts again a line its cut made narrower, and lays a new text out whole first', () => {
+  it('never cuts again a line its cut made narrower', () => {
     setWindow({ width: 360, height: 640, fontScale: 1.3 });
     const cut = (text: string) => (
       <CompactText variant="caption" tone="secondary" numberOfLines={1} ellipsizeMode="middle">
@@ -976,8 +981,6 @@ describe('a line the app cuts in the middle (#770)', () => {
     // A wider line is cut again, longer.
     layOut(300);
     expect(shown().length).toBeGreaterThan(first.length);
-    act(() => renderer!.update(cut(credits[1]!)));
-    expect(shown().trimEnd()).toBe(credits[1]);
   });
 
   const cut = (text: string, weight?: 'semibold') => (
@@ -991,6 +994,17 @@ describe('a line the app cuts in the middle (#770)', () => {
       {text}
     </CompactText>
   );
+
+  // #798: React Native sends no layout for a frame that hasn't changed, so a new text in the
+  // same line, as a row whose credit changes in place, is cut from the width the line has.
+  it('cuts a new text at once in an unchanged line, with no dot beside the "…" (#798)', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1.3 });
+    render(cut(credits[0]!));
+    layOut(250);
+    // No layout follows the new text: the line's frame is the same.
+    act(() => renderer!.update(cut(credits[1]!)));
+    expectCut(credits[1]!, 250, 1.3);
+  });
 
   // The Tester's M1 on 0b575404: a cut kept for the old window left Android to cut it again.
   it('lays the whole text out again, and cuts it shorter, in a narrower window', () => {
