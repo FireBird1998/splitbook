@@ -29,11 +29,11 @@ One calendar day of a Trip, numbered from the Trip's first day ("Day 2 · Fri 18
 _Avoid_: trip date, itinerary day
 
 **Main currency**:
-A Group's own currency (`Group.defaultCurrency`): its figures are in it, and a new Expense starts in it when the member has no latest Expense in another of the Group's currencies. It is locked once money is recorded, so existing amounts never change meaning.
+A Group's primary currency (`Group.defaultCurrency`), offered first in its currency list. A new Expense starts in it when the member has no latest non-deleted, non-recurring Expense, or that Expense’s currency is no longer listed. The main currency is locked once financial records exist; it does not convert the Group's other currencies or make their figures part of its own.
 _Avoid_: default currency, base currency, group currency
 
 **Extra currency**:
-One of up to 4 more currencies a Group lists besides its Main currency (stored as `Group.alternateCurrencies`). Expenses, Settlements and Drafts may be in the Main currency or any Extra currency (recurring Expenses stay in the Main currency for now), each kept in its own currency: amounts are never converted, and balances, Debts and Suggested payments are worked out per currency.
+One of up to 4 supported currencies a Group lists besides its Main currency (stored as `Group.alternateCurrencies`), with no repeats and never the Main currency itself. Any member can add one; only admins can remove one, and only while no live Expense, Settlement or active To review item uses it. Expenses, Settlements and Drafts may be in the Main currency or any Extra currency (recurring Expenses stay in the Main currency for now). Amounts are never converted, and balances, Debts and Suggested payments are worked out per currency.
 _Avoid_: alternate currency, secondary currency, foreign currency
 
 **Saved copy**:

@@ -1,38 +1,35 @@
 # Feature: Currency
 
-> **Status.** The multi-currency design below was **not** built. Each group is
-> **single-currency**: every expense and settlement must match the group's
-> `defaultCurrency` or the request is rejected with **422 `CURRENCY_MISMATCH`**
-> (enforced in `expense.service.ts`, `settlement.service.ts` and
-> `recurring-expense.service.ts`). `alternateCurrencies` is persisted and
-> API-accepted but no read or write path consults it.
->
-> Cross-group aggregation _is_ multi-currency: the dashboard buckets balances per
-> currency and never sums across them. That part is live — see
-> [Currency in balances](#currency-in-balances).
+> **Status.** Groups support a main currency and up to 4 extra currencies. Expenses
+> can use any listed currency; balances and spending keep each currency separate.
+> Nothing in the ledger is converted. The remaining multi-currency payment,
+> export and Quick add work is listed below, not described as live behaviour.
 
 ## Overview
 
-Each group has a **default currency**, fixed at creation and changeable by an
-admin in group settings. Every amount recorded in that group uses it.
+Each Group has a **main currency** (`defaultCurrency`) and an ordered list of
+**extra currencies** (`alternateCurrencies`). An admin can change the main currency
+only before the Group has financial records. Once an Expense, Settlement or
+recurring Expense exists, the main currency is locked; deleting records does not
+unlock it.
 
-A user also has a `preferredCurrency` on their profile (default `INR`). It is a
-display preference for currency pickers and does not affect any group's ledger.
+A member's `preferredCurrency` on their profile defaults to `INR`. The web's New
+Group form starts with that preference. It does not change an existing Group's
+currencies, choose an existing Group's Expense currency, or convert any amount.
 
 ---
 
 ## User Stories
 
-1. **As a group creator**, I set the currency when creating the group. ✅
-2. **As a group admin**, I can change the group's default currency later. ✅
-3. **As a user**, every expense I add uses the group's currency — there is no
-   per-expense currency choice. ✅
-4. **As a user**, I can set my preferred currency in my profile. ✅
-5. **As a user**, my dashboard shows what I owe and am owed **per currency**,
-   never merged into one number. ✅
-
-Not built: per-expense currency selection, alternate-currency quick-pick, and
-any form of FX conversion.
+1. **As a Group creator**, I choose its main currency. ✅
+2. **As a member**, I can add an extra currency the Group needs. ✅
+3. **As an admin**, I can remove an extra currency only while nothing uses it. ✅
+4. **As a member**, a new Expense starts in the currency of my latest Expense
+   here, while it is still listed, and I can choose another listed currency. ✅
+5. **As a member**, Balances shows what I owe or am owed one currency at a time,
+   and my dashboard keeps separate currency buckets. ✅
+6. **As a member on the web**, Insights and the Trip summary show spending one
+   currency at a time, without converting it. ✅
 
 ---
 
@@ -40,78 +37,56 @@ any form of FX conversion.
 
 ### In Group Settings
 
-The Currencies section (#721) shows the main currency, locked once money is
-recorded, and up to 4 extra currencies, each with what uses it and who added it.
-Any member adds one from a search of the supported currencies; only an admin
-removes one, and only while no Expense, Settlement or To review item uses it.
+The web's Currencies section (#721) shows the main currency and whether it is
+locked, then up to 4 extra currencies, each with what uses it and who added it.
+Any member adds one from a search by code or name in the supported currencies.
+Only an admin removes one, and only while no live Expense, Settlement or active
+To review item uses it. Deleted Expenses do not block removal. Recorded payments
+cannot be changed or deleted, so a currency used by a Settlement stays listed.
 
-```
-┌──────────────────────────────────────────────────┐
-│ Currencies                                       │
-├──────────────────────────────────────────────────┤
-│ Main currency                                    │
-│ INR  Indian Rupee  [Locked]                      │
-│ Money is already recorded in INR, so the main    │
-│ currency can’t change.                           │
-│                                                  │
-│ Extra currencies                          3 of 4 │
-│ EUR Euro [In use]                       Remove │
-│   11 Expenses · 1 Settlement · added by Sam, 1 Oct │
-│ JPY Japanese Yen [In use]               Remove │
-│   24 Expenses · whole amounts only · added by Sam  │
-│ GBP British Pound                       Remove │
-│   Nothing uses it · added by Priya, 2 Oct        │
-│ [Choose a currency]  [Add]   1 more can be added │
-└──────────────────────────────────────────────────┘
-```
+An in-use currency explains the refusal: it lists Expenses, counts Settlements,
+and separates the viewer's To review items from other members' items. Other
+members' private items are counted, never exposed. An older currency with no
+recorded addition has no invented name or date for who added it.
 
-### In Expense Form — Currency Dropdown
+### In the Expense Form
 
-```
-┌──────────────────────────────────────┐
-│ Currency                             │
-├──────────────────────────────────────┤
-│ ★ 🇪🇺 EUR - Euro (group default)   │  ← Group default (starred)
-│   🇺🇸 USD - US Dollar              │  ← Alternate 1
-│   🇮🇳 INR - Indian Rupee           │  ← Alternate 2
-│ ──────────────────────────────       │
-│   🇬🇧 GBP - British Pound          │  ← All other currencies
-│   🇯🇵 JPY - Japanese Yen           │  ← (alphabetically)
-│   ...                                │
-└──────────────────────────────────────┘
-```
+The web and Android share the starting-currency rule (#719, #720): use the
+viewer's latest non-deleted Expense in this Group, by creation time, excluding
+Expenses generated by recurring templates. If there is none, or its currency is
+no longer listed, start in the main currency. This is read from the ledger, not
+stored as another preference.
+
+The picker offers that latest currency first, then the main currency, then the
+remaining extras in their listed order. It labels the main currency "Main
+currency" and a different latest currency "Your latest Expense here". It does
+not offer every supported currency as an Expense choice.
+
+Editing keeps the Expense's own currency. If an older Expense uses a currency
+no longer listed, the picker retains it as "This Expense’s currency" so the
+member can see what was recorded; that does not bypass the save's currency
+check. Changing the currency does not convert or round the amount typed.
+
+If Android's save receives `CURRENCY_MISMATCH`, it re-reads the Group's current
+currencies and keeps the entered Expense for correction (#755). If that read
+fails, it says "This Group's currencies changed. Review the currency before
+saving." The refusal is not an uncertain save.
 
 ---
 
 ## Supported Currencies
 
-We support major world currencies. Stored as ISO 4217 codes.
+The registry in `packages/shared/src/currency.ts` is the source of truth for
+`CURRENCIES`, `CURRENCY_CODES`, symbols, names and precision. It contains 30
+supported ISO 4217 codes:
 
-```typescript
-const CURRENCIES = [
-  { code: 'USD', name: 'US Dollar', symbol: '$', flag: '🇺🇸' },
-  { code: 'EUR', name: 'Euro', symbol: '€', flag: '🇪🇺' },
-  { code: 'GBP', name: 'British Pound', symbol: '£', flag: '🇬🇧' },
-  { code: 'INR', name: 'Indian Rupee', symbol: '₹', flag: '🇮🇳' },
-  { code: 'JPY', name: 'Japanese Yen', symbol: '¥', flag: '🇯🇵' },
-  { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$', flag: '🇨🇦' },
-  { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', flag: '🇦🇺' },
-  { code: 'CHF', name: 'Swiss Franc', symbol: 'CHF', flag: '🇨🇭' },
-  { code: 'CNY', name: 'Chinese Yuan', symbol: '¥', flag: '🇨🇳' },
-  { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$', flag: '🇸🇬' },
-  { code: 'THB', name: 'Thai Baht', symbol: '฿', flag: '🇹🇭' },
-  { code: 'MYR', name: 'Malaysian Ringgit', symbol: 'RM', flag: '🇲🇾' },
-  { code: 'IDR', name: 'Indonesian Rupiah', symbol: 'Rp', flag: '🇮🇩' },
-  { code: 'PHP', name: 'Philippine Peso', symbol: '₱', flag: '🇵🇭' },
-  { code: 'KRW', name: 'South Korean Won', symbol: '₩', flag: '🇰🇷' },
-  { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', flag: '🇦🇪' },
-  { code: 'SAR', name: 'Saudi Riyal', symbol: '﷼', flag: '🇸🇦' },
-  { code: 'BRL', name: 'Brazilian Real', symbol: 'R$', flag: '🇧🇷' },
-  { code: 'MXN', name: 'Mexican Peso', symbol: 'MX$', flag: '🇲🇽' },
-  { code: 'ZAR', name: 'South African Rand', symbol: 'R', flag: '🇿🇦' },
-  // ... more as needed
-];
+```text
+INR USD EUR GBP JPY CAD AUD CHF CNY SGD THB MYR IDR PHP KRW
+AED SAR BRL MXN ZAR NZD SEK NOK DKK HKD TWD TRY RUB PLN CZK
 ```
+
+A valid ISO code outside this registry is not accepted. JPY and KRW use whole
+units; the other supported currencies use two decimal places.
 
 ---
 
@@ -119,92 +94,119 @@ const CURRENCIES = [
 
 ### Display Rules
 
+Use the shared `formatCurrency`, which follows the currency's precision:
+
 ```typescript
-function formatCurrency(amount: number, currencyCode: string): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currencyCode,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
+import { formatCurrency } from '@splitbook/shared/currency';
 
-// Examples:
-// formatCurrency(120, "EUR") → "€120.00"
-// formatCurrency(1500, "INR") → "₹1,500.00"
-// formatCurrency(25.5, "USD") → "$25.50"
-// formatCurrency(10000, "JPY") → "¥10,000.00"
+formatCurrency(120, 'EUR'); // "€120.00"
+formatCurrency(1500, 'INR'); // "₹1,500.00"
+formatCurrency(25.5, 'USD'); // "$25.50"
+formatCurrency(10000, 'JPY'); // "¥10,000"
+formatCurrency(2500, 'KRW'); // "₩2,500"
 ```
 
-### CurrencyAmount Component
+The web's `MoneyText` component supplies the money typography and semantic
+owe/owed colours. Android uses the same shared currency formatting. A refused
+amount is kept as entered, not displayed as if it had been rounded to a valid
+one.
 
-```tsx
-// Displays formatted amount with positive/negative coloring
-<CurrencyAmount amount={50} currency="EUR" />     // → "€50.00" (green if positive context)
-<CurrencyAmount amount={-30} currency="EUR" />    // → "-€30.00" (red)
-```
+### Whole-unit Amounts
+
+Amounts, payer contributions and exact shares cannot include a fraction of a
+yen or won. The forms share `wholeAmountWords` and `inAmountWords` (#748, #755):
+
+- "Yen has no smaller unit. Enter a whole amount, like ¥2,500."
+- "Won has no smaller unit. Enter a whole amount, like ₩2,500."
+
+An Expense create refused only for its total amount's precision answers 422
+`INVALID_MONEY_PRECISION`, retaining the field `details`. Mixed validation
+problems keep `VALIDATION_ERROR`; edit uses the money refusal code. Android
+recognises `INVALID_MONEY_PRECISION` on both create and edit as a definite
+refusal: the draft stays editable, without reconciliation or an uncertain-save
+state. See [Expense validation](../api.md#expenses) for the API contract.
 
 ---
 
 ## Currency in Balances
 
-**Important**: balances are bucketed **per-currency** and never converted.
+Balances are bucketed **per currency** and never converted, within a Group and
+across Groups on Home. `GET /api/user/balances` returns the member's `buckets`,
+computed from each Group's separate currency balances.
 
-Because a group is single-currency, the multi-currency case arises **across**
-groups, on the dashboard:
-
-```
-Alex belongs to:
-  Europe Trip   (EUR)  → owed  €50.00
-  Flat 302      (INR)  → owes  ₹500.00
-  Tokyo 2027    (JPY)  → owed  ¥1,200
-
-Dashboard display — one bucket per currency, never summed:
-  You are owed:
-    €50.00
-    ¥1,200
-  You owe:
-    ₹500.00
-```
-
-`GET /api/user/balances` returns these as `buckets`, computed by
-`aggregateCurrencyBalances`. Each group's contribution is calculated separately
-per currency before bucketing.
-
-### Within a group
+### Within a Group
 
 `GET /api/groups/[id]/balances` returns each currency's balances, Debts and
-Suggested payments in its own `byCurrency` entry, never summed or converted, plus
-a `hasMixedCurrencies` flag: true when the Group's money is in more than one
-currency (#724). The web's Balances shows one currency at a time behind a switch,
-opening on the main currency, or on the first currency the member isn't settled
-up in.
+Suggested payments in its own `byCurrency` entry. `hasMixedCurrencies` means
+money is recorded in more than one currency: euros alone in a rupee Group are
+not mixed.
 
-### Why No Auto-Conversion?
+Balances on the web and Android (#724, #725) shows one currency at a time. The
+switch offers the main currency first, then extras with recorded money in list
+order, then any historical unlisted currencies alphabetically. Each tab names
+the member's own position: "You owe", "You’re owed" or "Settled up". It opens on
+the first currency the member is not settled in, or the main currency when all
+are settled.
 
-1. Exchange rates fluctuate — converting would change historical balances
-2. Users settle in the original currency of the expense
-3. Simpler and more accurate for the user
-4. Avoids disputes about which exchange rate to use
+The Record payment UI still records in the main currency. Other currencies show
+"Payments are recorded in INR, the main currency." (using the Group's code).
+The Settlement API already accepts a listed extra currency for a payment in that
+same currency; paying in a different currency is not yet on main.
 
-### Future Enhancement (v2)
+## Currency in Spending
 
-Optional "estimated total" that converts everything to user's preferred currency using a snapshot exchange rate (clearly marked as estimate).
+On the web, Insights and the Trip summary use a "Spending in" switch (#729).
+Each tab shows that currency's spending; its accessible name also includes the
+Expense count. The main currency is always offered, followed by listed extras
+with spending in the period, then any historical currencies alphabetically.
+
+The opening currency has the **most Expenses**, not the largest numerical
+amount. A tie goes to the main currency if it is among the tied currencies,
+otherwise the first in switch order. With no Expenses it opens on the main
+currency. Insights uses the selected Month; the Trip summary uses the whole
+Trip. Every figure follows the chosen currency, and nothing is converted.
+
+Balances, Insights and the Trip summary share the web `CurrencySwitch` component
+(#757). Each supplies its own figures, accessible names, note and panel link;
+sharing the component changes neither the wording nor the selection rules.
+
+---
+
+## Activity
+
+A change only to the extra-currency list reads as "Sam added JPY to the Group’s
+currencies" or "Alex removed GBP from the Group’s currencies" on the web and
+Android (#721). The viewer is named "You". If an edit both adds and removes
+currencies, it says "changed the Group’s currencies".
+
+The addition's detail uses the name and currency list recorded with the event,
+for example "Lisbon & Tokyo now uses INR, EUR and JPY". It never substitutes the
+Group's current list. A removal recorded with that metadata says "Nothing used
+it". Older events without the metadata show no such detail.
 
 ---
 
 ## Validation
 
-Enforced:
+- The main currency is required on Group creation and must be in `CURRENCY_CODES`.
+- `alternateCurrencies` holds at most 4 supported codes, all distinct and none
+  equal to the main currency. Legacy lists are normalised when read: unsupported
+  codes, duplicates and the main currency are dropped, and the first 4 kept.
+- Any member can add an extra currency. Only admins can remove one, with
+  `CURRENCY_IN_USE` (409) while a live Expense, Settlement or active To review
+  item uses it. The main currency cannot be removed.
+- Expense and Settlement saves require a listed currency, otherwise 422
+  `CURRENCY_MISMATCH`. Recurring Expenses still require the main currency.
+- Restoring a deleted Expense may also use a historical currency still used by
+  another live Expense or a Settlement. Otherwise it asks the member to add the
+  currency back first.
+- Money keeps its own currency and exact minor units. Input with unsupported
+  precision is refused, never silently rounded.
 
-- Currency code must be a valid ISO 4217 code from `CURRENCY_CODES` (Zod)
-- Default currency is required when creating a group (Zod)
-- `alternateCurrencies`: at most 2 entries, each a valid code (Zod + schema)
-- Expense, settlement and recurring-template currency must equal the group's
-  `defaultCurrency` — 422 otherwise (service)
-- User's preferred currency defaults to `"INR"`
+## Still to Land
 
-Not enforced:
-
-- Alternate currencies being distinct from the default or from each other —
-  `["EUR", "EUR"]` on a EUR group is accepted
+The rate service is live (see [rates](../api.md#suggested-exchange-rates)), but no rate converts
+balances, Debts or spending. Cross-currency payments (#727), multi-currency
+exports (#731), one request for several payments (#734), and the Quick add and
+assistant/To review currency follow-ups (#732) are separate work. They are not
+part of the behaviour described above.
