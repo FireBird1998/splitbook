@@ -47,9 +47,11 @@ export function assistantAddress(clientId: string): string | null {
 
 /**
  * What reads as a dot in a hostname once NFKC has folded the compatibility forms (U+2024, U+FF0E,
- * U+FE52 and the like): ideographic and Syriac full stops, and bracketed dots such as "[.]".
+ * U+FE52, U+0387 into U+00B7, and U+318D into U+119E): ideographic and Syriac full stops, raised
+ * and middle dots, and bracketed dots such as "[.]".
  */
-const DOT_LOOKALIKE = /[\u3002\uff61\u0701\u0702\u2e33]|[[(]\s*\.\s*[\])]/gu;
+const DOT_LOOKALIKE =
+  /[\u3002\uff61\u0701\u0702\u2e33\u00b7\u2219\u22c5\u2e31\u30fb\u2027\u16eb\ua78f\u119e]|[[(]\s*\.\s*[\])]/gu;
 
 /**
  * A name that carries a scheme, or a hostname other than the assistant's own, once look-alike
