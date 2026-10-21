@@ -207,7 +207,7 @@ test('a point typed after the 12 in 1,250 reads 12.50 and saves it (#773)', asyn
   await expect(dialog).toBeHidden();
 });
 
-test('Undo after 1,234 steps back to 123, so a 5 saves 1,235, never 51,234 (#773)', async ({
+test('Undo after 1,234 steps back to 123 and Redo forward, so a 5 saves 1,235, never 51,234 (#773)', async ({
   page,
   ledger,
 }) => {
@@ -222,6 +222,10 @@ test('Undo after 1,234 steps back to 123, so a 5 saves 1,235, never 51,234 (#773
   await expect(amount).toHaveValue('1,234');
   await page.keyboard.press('ControlOrMeta+z');
   await expect(amount).toHaveValue('123');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(amount).toHaveValue('1,234');
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(amount).toHaveValue('123');
   await page.keyboard.type('5');
   await expect(amount).toHaveValue('1,235');
   const request = page.waitForRequest(
@@ -229,5 +233,32 @@ test('Undo after 1,234 steps back to 123, so a 5 saves 1,235, never 51,234 (#773
   );
   await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
   expect((await request).postDataJSON()).toMatchObject({ amountMinor: 123500 });
+  await expect(dialog).toBeHidden();
+});
+
+test('a 9 typed over 842 selected in 1,842.50 reads 19.50 and saves it (#773)', async ({
+  page,
+  ledger,
+}) => {
+  const group = await euroGroup(ledger);
+  await page.context().addCookies((await ledger.alex.storageState()).cookies);
+  await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${group}`);
+  const dialog = await openAddExpense(page);
+  await dialog.getByLabel('What was it for?').fill('Keyboard dinner');
+  const amount = dialog.getByRole('textbox', { name: /^Amount,/ });
+  await amount.click();
+  await page.keyboard.type('1842.50');
+  await expect(amount).toHaveValue('1,842.50');
+  await amount.press('Home');
+  for (let step = 0; step < 2; step++) await amount.press('ArrowRight');
+  for (let step = 0; step < 3; step++) await amount.press('Shift+ArrowRight');
+  await page.keyboard.type('9');
+  await expect(amount).toHaveValue('19.50');
+  expect(await amount.evaluate((input: HTMLInputElement) => input.selectionStart)).toBe(2);
+  const request = page.waitForRequest(
+    (r) => r.method() === 'POST' && r.url().endsWith(`/api/groups/${group}/expenses`),
+  );
+  await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({ amountMinor: 1950 });
   await expect(dialog).toBeHidden();
 });

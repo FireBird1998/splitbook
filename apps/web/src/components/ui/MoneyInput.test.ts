@@ -97,6 +97,23 @@ for (const [name, Field] of fields) {
   });
 }
 
+/** A DOM input as these tests need one: its caret, and the listeners the field adds to it. */
+function inputNode(caret: (start: number, end: number) => void = () => {}) {
+  const listeners = new Map<string, (event: unknown) => void>();
+  const node = {
+    setSelectionRange: caret,
+    focus: () => {},
+    value: '',
+    addEventListener: (type: string, listener: (event: unknown) => void) => {
+      listeners.set(type, listener);
+    },
+    removeEventListener: (type: string) => {
+      listeners.delete(type);
+    },
+  };
+  return { node, listeners };
+}
+
 // #773, the Designer's gap: while focused the field kept its grouped text and only took an edit
 // that left the commas in their usual places, so Backspace after the 8 in "1,842.50" gave
 // "1,42.50", which was refused. The field now regroups as the member types, the caret after as
@@ -122,21 +139,10 @@ for (const [name, Field] of fields) {
         },
       });
     }
-    let beforeInput: ((event: unknown) => void) | undefined;
+    const { node, listeners } = inputNode(caret);
     await act(async () => {
       renderer = create(createElement(Form), {
-        createNodeMock: (element) =>
-          element.type === 'input'
-            ? {
-                setSelectionRange: caret,
-                focus: () => {},
-                value: '',
-                addEventListener: (type: string, listener: (event: unknown) => void) => {
-                  if (type === 'beforeinput') beforeInput = listener;
-                },
-                removeEventListener() {},
-              }
-            : null,
+        createNodeMock: (element) => (element.type === 'input' ? node : null),
       });
     });
     const input = () => renderer.root.findByType('input');
@@ -154,26 +160,40 @@ for (const [name, Field] of fields) {
           nativeEvent: { inputType, data },
         }),
       );
+    /** An IME's composition so far. */
+    const compose = (value: string) =>
+      act(async () =>
+        input().props.onChange({
+          target: { value, selectionStart: value.length, selectionEnd: value.length },
+          nativeEvent: { inputType: 'insertCompositionText', data: value, isComposing: true },
+        }),
+      );
     /** Undo or Redo, as the browser asks for it before it would change the text. */
     const history = async (inputType: 'historyUndo' | 'historyRedo', cancelable = true) => {
       const event = { inputType, cancelable, preventDefault: vi.fn() };
-      await act(async () => beforeInput?.(event));
+      await act(async () => listeners.get('beforeinput')?.(event));
+      return event;
+    };
+    /** An Undo or Redo the browser made itself, as its input event says. */
+    const madeByBrowser = (inputType: 'historyUndo' | 'historyRedo') =>
+      act(async () => listeners.get('input')?.({ inputType }));
+    /** A key pressed with Cmd, Ctrl, Shift or Alt. */
+    const press = async (
+      key: string,
+      { metaKey = false, ctrlKey = false, shiftKey = false, altKey = false } = {},
+    ) => {
+      const event = { key, metaKey, ctrlKey, shiftKey, altKey, preventDefault: vi.fn() };
+      await act(async () => listeners.get('keydown')?.(event));
       return event;
     };
     /** The form sets the amount itself, as a Suggested payment does. */
     const outside = (value: string) => act(async () => setOutside(value));
-    return { input, changed, caret, edit, history, outside };
+    return { input, changed, caret, edit, compose, history, madeByBrowser, press, outside };
   }
 
   it(`${name}: still hands the caller's inputRef the input, as Record payment focuses it`, async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-    const node = {
-      setSelectionRange: () => {},
-      focus: () => {},
-      value: '',
-      addEventListener() {},
-      removeEventListener() {},
-    };
+    const { node } = inputNode();
     const inputRef = createRef<HTMLInputElement>();
     await act(async () => {
       renderer = create(
@@ -191,16 +211,7 @@ for (const [name, Field] of fields) {
       renderer = create(
         createElement(Field, { currency: 'EUR', value: '', onValueChange: () => {} }),
         {
-          createNodeMock: (element) =>
-            element.type === 'input'
-              ? {
-                  setSelectionRange: caret,
-                  focus: () => {},
-                  value: '',
-                  addEventListener() {},
-                  removeEventListener() {},
-                }
-              : null,
+          createNodeMock: (element) => (element.type === 'input' ? inputNode(caret).node : null),
         },
       );
     });
@@ -345,20 +356,24 @@ for (const [name, Field] of fields) {
     expect(input().props.value).toBe('1,842.50');
   });
 
-  it(`${name}: an Undo the browser makes itself steps the field's history, not the browser's`, async () => {
-    const { input, changed, edit } = await focused('EUR', '');
+  it(`${name}: an Undo the browser makes itself, as from its menu, steps the field's history once`, async () => {
+    const { input, changed, edit, madeByBrowser } = await focused('EUR', '');
     for (const typed of ['1', '12', '123', '1234']) await edit(typed);
-    await edit('', 0, 'historyUndo');
+    await madeByBrowser('historyUndo');
     expect(input().props.value).toBe('123');
     expect(changed).toHaveBeenLastCalledWith('123');
+    // Its change, with the browser's own text, steps nothing more.
+    await edit('', 0, 'historyUndo');
+    expect(input().props.value).toBe('123');
   });
 
-  it(`${name}: an Undo the browser won't let go of steps once, as its change`, async () => {
-    const { input, edit, history } = await focused('EUR', '');
+  it(`${name}: an Undo the browser won't let go of steps once, as it makes it`, async () => {
+    const { input, edit, history, madeByBrowser } = await focused('EUR', '');
     for (const typed of ['1', '12', '123', '1234']) await edit(typed);
     const undo = await history('historyUndo', false);
     expect(undo.preventDefault).not.toHaveBeenCalled();
     expect(input().props.value).toBe('1,234');
+    await madeByBrowser('historyUndo');
     await edit('', 0, 'historyUndo');
     expect(input().props.value).toBe('123');
   });
@@ -399,6 +414,55 @@ for (const [name, Field] of fields) {
     await edit('10,5', 4, 'insertFromPaste');
     expect(input().props.value).toBe('10,5');
     expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
+  });
+
+  it(`${name}: Cmd+Z, Ctrl+Shift+Z and Ctrl+Y step back and forward, whatever the browser's own Undo holds`, async () => {
+    const { input, edit, press } = await focused('EUR', '');
+    for (const typed of ['1', '12', '123', '1234']) await edit(typed);
+    const undo = await press('z', { metaKey: true });
+    expect(undo.preventDefault).toHaveBeenCalled();
+    expect(input().props.value).toBe('123');
+    await press('Z', { ctrlKey: true, shiftKey: true });
+    expect(input().props.value).toBe('1,234');
+    await press('z', { ctrlKey: true });
+    await press('y', { ctrlKey: true });
+    expect(input().props.value).toBe('1,234');
+    // Other shortcuts are the browser's.
+    const other = await press('z', { metaKey: true, altKey: true });
+    const all = await press('a', { metaKey: true });
+    expect(other.preventDefault).not.toHaveBeenCalled();
+    expect(all.preventDefault).not.toHaveBeenCalled();
+    expect(input().props.value).toBe('1,234');
+  });
+
+  it(`${name}: after the form sets the amount and the member types on, Undo goes back to the form's amount`, async () => {
+    const { input, changed, edit, history, outside } = await focused('EUR', '');
+    for (const typed of ['1', '12']) await edit(typed);
+    await outside('500');
+    await edit('5000');
+    expect(input().props.value).toBe('5,000');
+    await history('historyUndo');
+    expect(input().props.value).toBe('500');
+    expect(changed).toHaveBeenLastCalledWith('500');
+  });
+
+  it(`${name}: an edit that changes nothing, as Backspace over a grouping comma, is no Undo step`, async () => {
+    const { input, edit, history } = await focused('EUR', '');
+    for (const typed of ['1', '12', '123', '1234']) await edit(typed);
+    await edit('1234', 1, 'deleteContentBackward');
+    expect(input().props.value).toBe('1,234');
+    await history('historyUndo');
+    expect(input().props.value).toBe('123');
+  });
+
+  it(`${name}: Undo takes back an IME's composition at once`, async () => {
+    const { input, compose, history } = await focused('EUR', '');
+    for (const composing of ['1', '12', '123']) await compose(composing);
+    expect(input().props.value).toBe('123');
+    await history('historyUndo');
+    expect(input().props.value).toBe('');
+    await history('historyRedo');
+    expect(input().props.value).toBe('123');
   });
 
   it(`${name}: a whole yen amount regroups too, and INR groups as it does on blur`, async () => {
