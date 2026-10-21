@@ -23,6 +23,7 @@ function render(
   amount: string,
   mode: {
     isEditMode?: boolean;
+    multiPayerMode?: boolean;
     review?: boolean;
     currency?: string;
     currencyChoices?: ExpenseCurrencyChoice[];
@@ -36,7 +37,12 @@ function render(
     currency: mode.currency ?? 'INR',
     defaultTag: 'General',
     date: '2026-10-18',
-  }).edit({ description: 'Chai', amount });
+  }).edit({
+    description: 'Chai',
+    amount,
+    multiPayerMode: mode.multiPayerMode ?? false,
+    payers: [{ user: YOU, amount }],
+  });
   return renderToStaticMarkup(
     createElement(
       ThemeProvider,
@@ -165,4 +171,10 @@ describe('the Expense’s currency, beside its amount (#719)', () => {
     expect(currencyButton.exec(html)![0]).toMatch(/\sdisabled=""/);
     expect(attribute(html, amountInput, 'aria-label')).toBe('Amount, 100.00 Indian rupees');
   });
+});
+
+it('does not display a malformed money prefix as the payer total (#773)', () => {
+  const shown = text(render('1,84,250', { isEditMode: true, multiPayerMode: true }));
+  expect(shown).toContain('Enter an amount like 1,060.00.');
+  expect(shown).not.toContain('Total: ₹1.00 / ₹1.00');
 });
