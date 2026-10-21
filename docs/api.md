@@ -274,13 +274,15 @@ the balances decoder, so a malformed list fails Needs you only.
 
 ## Groups
 
-| Method | Path               | Description                 |
-| ------ | ------------------ | --------------------------- |
-| POST   | `/api/groups`      | Create group                |
-| GET    | `/api/groups`      | List user's groups          |
-| GET    | `/api/groups/[id]` | Get group detail            |
-| PATCH  | `/api/groups/[id]` | Update group                |
-| DELETE | `/api/groups/[id]` | Archive group (soft delete) |
+| Method | Path                               | Description                        |
+| ------ | ---------------------------------- | ---------------------------------- |
+| POST   | `/api/groups`                      | Create group                       |
+| GET    | `/api/groups`                      | List user's groups                 |
+| GET    | `/api/groups/[id]`                 | Get group detail                   |
+| PATCH  | `/api/groups/[id]`                 | Update group                       |
+| DELETE | `/api/groups/[id]`                 | Archive group (soft delete)        |
+| PUT    | `/api/groups/[id]/assistant-rule`  | Set the Assistant rule (admins)    |
+| GET    | `/api/groups/[id]/assistant-reach` | Whose assistants reach it (admins) |
 
 ### POST /api/groups
 
@@ -379,6 +381,39 @@ carries `latestExpenseCurrency` like the reads.
 An older Group's list is saved as the rule reads it, so a settings save never
 fails on old data. Changing `defaultCurrency` once money is recorded is 409
 `CURRENCY_LOCKED`.
+
+### PUT /api/groups/[id]/assistant-rule
+
+Sets whether members' Connected assistants may reach the Group (#621).
+
+**Body:** `{ "rule": "allowed" | "not_allowed" }`. Any other value answers **422**.
+
+**Authorization:** Only group admins; anyone else gets **403**. A change takes
+effect on every assistant's next call. It records one `assistant_rule_changed`
+Activity event (`metadata: { rule }`) in the same write. Setting the rule the
+Group already has records nothing. **Response:** `{ "data": { "rule": … } }`.
+
+### GET /api/groups/[id]/assistant-reach
+
+The members' Connected assistants that reach the Group, for its admins (#621):
+
+```json
+{
+  "reach": [
+    {
+      "member": { "id": "…", "name": "Sam Chen" },
+      "assistant": "Claude",
+      "lastUsedAt": "2026-10-20T09:30:00.000Z"
+    }
+  ]
+}
+```
+
+A connection appears while it is live and its member hasn't left this Group
+out. The list is empty when the Group is Not allowed or assistants are off.
+**Authorization:** Only group admins; anyone else gets **403**.
+`apps/web/src/app/api/groups/[id]/assistant-rule/route.integration.test.ts`
+covers both routes.
 
 ---
 
