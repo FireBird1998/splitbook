@@ -1,6 +1,7 @@
 'use client';
 
 import Paper from '@mui/material/Paper';
+import { ShortcutOverlay } from '@/lib/shortcuts/ShortcutOverlay';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -86,15 +87,17 @@ function TagManagerContent(scope: TagActionScope) {
             Close Tags
           </Button>
           {manager.discard && (
-            <Stack role="alertdialog" aria-label="Discard this name?" spacing={1}>
-              <Typography>Discard this name? Your unsubmitted text will be lost.</Typography>
-              <Stack direction="row">
-                <Button autoFocus onClick={manager.keepEditing}>
-                  Keep editing
-                </Button>
-                <Button onClick={manager.discardText}>Discard text</Button>
+            <ShortcutOverlay>
+              <Stack role="alertdialog" aria-label="Discard this name?" spacing={1}>
+                <Typography>Discard this name? Your unsubmitted text will be lost.</Typography>
+                <Stack direction="row">
+                  <Button autoFocus onClick={manager.keepEditing}>
+                    Keep editing
+                  </Button>
+                  <Button onClick={manager.discardText}>Discard text</Button>
+                </Stack>
               </Stack>
-            </Stack>
+            </ShortcutOverlay>
           )}
           {message && <Typography role="status">{message}</Typography>}
           {!manager.online && (

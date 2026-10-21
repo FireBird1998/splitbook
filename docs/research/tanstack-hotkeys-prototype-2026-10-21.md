@@ -1,5 +1,7 @@
 # Hotkeys prototype: compatibility is possible, maintenance benefit fails
 
+Historical first experiment, captured at `1e7db5db0c9eaa9887775d79ef4b20002c344c53`. The commands and counts below describe that commit. This branch now contains the [second scopes experiment](tanstack-hotkeys-scopes-prototype-2026-10-21.md).
+
 Throwaway prototype for [Prototype: prove TanStack Hotkeys simplifies existing web shortcuts](https://github.com/FireBird1998/splitbook/issues/715), based on `45485342f4e2b70f9497b13e14573bf3bfd6c0e2`. This branch is evidence, not a migration proposed for merging. Keep the existing web shortcut engine: the measured adapter increases owned production code while retaining the application's difficult responsibilities. The owner's significant-gain condition is not met.
 
 ## Run the proof

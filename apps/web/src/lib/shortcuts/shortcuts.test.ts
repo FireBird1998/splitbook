@@ -38,7 +38,6 @@ const PAGE: ShortcutTarget = { tagName: 'BODY' };
 const on = (extra: Partial<ShortcutContext> = {}): ShortcutContext => ({
   singleKeys: true,
   target: PAGE,
-  overlayOpen: false,
   ...extra,
 });
 
@@ -168,11 +167,6 @@ describe('the guard on single keys', () => {
     expect(run(press('j'), 'table', on({ target: { tagName: 'BUTTON' } }))).toBe('next-expense');
   });
 
-  it('never fires while a dialog or menu is open', () => {
-    expect(run(press('n'), 'page', on({ overlayOpen: true }))).toBeNull();
-    expect(run(press('/'), 'page', on({ overlayOpen: true }))).toBeNull();
-  });
-
   it('ignores Ctrl, Alt and ⌘, and keys an input method is composing', () => {
     for (const modifier of ['ctrlKey', 'altKey', 'metaKey'] as const) {
       expect(run(press('n', { [modifier]: true }))).toBeNull();
@@ -206,9 +200,7 @@ describe('the Settings switch', () => {
   it('leaves ⌘K working, with #321’s rule for fields: it closes search from its own field', () => {
     const off = on({ singleKeys: false });
     expect(run(press('k', { metaKey: true }), 'page', off)).toBe('search');
-    expect(run(press('k', { ctrlKey: true }), 'page', { ...off, overlayOpen: true })).toBe(
-      'search',
-    );
+    expect(run(press('k', { ctrlKey: true }), 'page', off)).toBe('search');
     const field: ShortcutTarget = { tagName: 'INPUT', type: 'text' };
     expect(run(press('k', { metaKey: true }), 'page', { ...off, target: field })).toBeNull();
     expect(

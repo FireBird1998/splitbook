@@ -210,8 +210,6 @@ export interface ShortcutContext {
   target: ShortcutTarget | null;
   /** The key was pressed in the search dialog's own field, where ⌘K closes the search. */
   inSearchField?: boolean;
-  /** A dialog or a menu is open. */
-  overlayOpen: boolean;
 }
 
 /** Whether `shortcut`, whose key this is, may act on the key press. */
@@ -230,7 +228,7 @@ export function shortcutAllowed(
   if (event.ctrlKey || event.altKey || event.metaKey) return false;
   if (event.repeat && !shortcut.repeats) return false;
   if (isFieldTarget(context.target)) return false;
-  return !context.overlayOpen;
+  return true;
 }
 
 /**

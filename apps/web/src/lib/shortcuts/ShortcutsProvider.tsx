@@ -1,7 +1,8 @@
 'use client';
 
-// THROWAWAY HOTKEYS PROTOTYPE (#715): one library-owned page event listener.
-import { useHotkeys } from '@tanstack/react-hotkeys';
+// THROWAWAY SCOPES PROTOTYPE (#715): the library owns dispatch and priority.
+import { getHotkeyManager } from '@tanstack/react-hotkeys';
+import { SEARCH_SCOPE } from './ShortcutOverlay';
 
 import {
   createContext,
@@ -18,7 +19,6 @@ import { setSingleKeysOn, singleKeysOn, subscribeSingleKeys } from './shortcut-s
 import {
   hintShows,
   shortcut,
-  SHORTCUTS,
   shortcutAllowed,
   type Shortcut,
   type ShortcutId,
@@ -26,12 +26,6 @@ import {
 } from './shortcuts';
 
 type Handler = () => void;
-
-interface Registration {
-  run: Handler;
-  /** Used only when nothing else on the page handles the shortcut. */
-  fallback: boolean;
-}
 
 export interface ShortcutsValue {
   /** Whether single-key shortcuts are on; null until this device's setting is read. */
@@ -71,14 +65,7 @@ export function describeTarget(element: Element | null): ShortcutTarget | null {
   };
 }
 
-/** Whether a dialog (the drawer, a form, search) or a menu or list of choices is open. */
-export function overlayOpen(): boolean {
-  return (
-    document.querySelector(
-      '[role="dialog"], [role="alertdialog"], [aria-modal="true"], [role="menu"], [role="listbox"]',
-    ) !== null
-  );
-}
+let nextScope = 0;
 
 /**
  * Keyboard shortcuts for the signed-in shell (#322): the member's single-key setting on this
@@ -91,68 +78,63 @@ export function ShortcutsProvider({ memberId, children }: PropsWithChildren<{ me
     () => singleKeysOn(memberId),
     () => null,
   );
-  const registry = useRef(new Map<ShortcutId, Registration[]>());
   const handedOn = useRef<{ id: ShortcutId; at: number } | null>(null);
 
-  useHotkeys(
-    SHORTCUTS.filter((entry) => entry.scope === 'page').flatMap((entry) =>
-      entry.bindings.map((hotkey) => ({
-        hotkey,
-        options: { enabled: !entry.singleKey || singleKeys === true },
-        callback: (event: KeyboardEvent) => {
-          if (event.defaultPrevented || event.key.toLowerCase() !== entry.key) return;
-          const target = event.target instanceof HTMLElement ? event.target : null;
-          if (
-            !shortcutAllowed(entry, event, {
-              singleKeys,
-              target: describeTarget(target),
-              inSearchField: target?.matches('[data-search-input]') ?? false,
-              overlayOpen: overlayOpen(),
-            })
-          )
-            return;
-          const handlers = registry.current.get(entry.id) ?? [];
-          const handler =
-            handlers.findLast((item) => !item.fallback) ??
-            handlers.findLast((item) => item.fallback);
-          if (!handler) return;
-          event.preventDefault();
-          handedOn.current = null;
-          handler.run();
-        },
-      })),
-    ),
-    {
-      // Resolve the actual window after mount; SSR never evaluates a browser global.
-      target: typeof window === 'undefined' ? null : window,
-      capture: false,
-      eventType: 'keydown',
-      ignoreInputs: false,
-      preventDefault: false,
-      stopPropagation: false,
-      requireReset: false,
-      conflictBehavior: 'error',
-    },
-  );
+  const currentSingleKeys = useRef(singleKeys);
+  useEffect(() => {
+    currentSingleKeys.current = singleKeys;
+  }, [singleKeys]);
 
   const register = useCallback(
     (id: ShortcutId, run: Handler, fallback: boolean) => {
-      const entry: Registration = { run, fallback };
-      const handlers = registry.current.get(id) ?? [];
-      registry.current.set(id, [...handlers, entry]);
+      const manager = getHotkeyManager();
+      const entry = shortcut(id);
+      // The shell's fallback is global; mounted page handlers outrank it automatically.
+      const scope = id === 'search' ? SEARCH_SCOPE : fallback ? 'global' : `page-${++nextScope}`;
+      const release = manager.activateScope(scope);
+      const bindings = entry.bindings.map((binding) =>
+        manager.register(
+          binding,
+          (event) => {
+            const target = event.target instanceof HTMLElement ? event.target : null;
+            if (
+              event.defaultPrevented ||
+              event.key.toLowerCase() !== entry.key ||
+              !shortcutAllowed(entry, event, {
+                singleKeys: currentSingleKeys.current,
+                target: describeTarget(target),
+                inSearchField: target?.matches('[data-search-input]') ?? false,
+              })
+            )
+              return;
+            event.preventDefault();
+            handedOn.current = null;
+            run();
+          },
+          {
+            scope,
+            target: window,
+            capture: false,
+            eventType: 'keydown',
+            ignoreInputs: false,
+            preventDefault: false,
+            stopPropagation: false,
+            requireReset: false,
+            conflictBehavior: 'allow',
+          },
+        ),
+      );
       const waiting = handedOn.current;
       if (!fallback && waiting?.id === id) {
         handedOn.current = null;
         if (Date.now() - waiting.at < HAND_ON_MS) run();
       }
       return () => {
-        registry.current.set(
-          id,
-          (registry.current.get(id) ?? []).filter((other) => other !== entry),
-        );
+        bindings.forEach((binding) => binding.unregister());
+        release();
       };
     },
-    [registry, handedOn],
+    [currentSingleKeys, handedOn],
   );
 
   const handOn = useCallback((id: ShortcutId) => {

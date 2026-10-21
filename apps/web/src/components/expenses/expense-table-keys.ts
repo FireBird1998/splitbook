@@ -29,8 +29,6 @@ export function useExpenseTableKeys({
     const match = shortcutFor(event.nativeEvent, 'table', {
       singleKeys,
       target: describeTarget(target),
-      // Focus is in the table, so no dialog or menu holds it.
-      overlayOpen: false,
     });
     if (!match) return;
     const row = target?.closest<HTMLElement>(ROW) ?? null;

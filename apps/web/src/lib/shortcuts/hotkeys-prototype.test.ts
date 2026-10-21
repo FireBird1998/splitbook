@@ -11,6 +11,10 @@ import {
 } from './ShortcutsProvider';
 import { singleKeysStorageKey } from './shortcut-setting';
 import type { ShortcutId } from './shortcuts';
+import { ShortcutOverlay } from './ShortcutOverlay';
+
+// Strict mode reproduces the two migration blockers as ordinary failing tests.
+const priorityTest = process.env.HOTKEYS_PROTOTYPE_STRICT === '1' ? it : it.fails;
 
 class ElementStub {
   constructor(
@@ -35,7 +39,7 @@ class InputStub extends ElementStub {
 }
 
 class WindowStub extends EventTarget {
-  document = { querySelector: () => (overlay ? {} : null) };
+  document = { querySelector: () => null };
   localStorage = {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
@@ -47,7 +51,6 @@ interface Registration {
   run: () => void;
   fallback?: boolean;
 }
-let overlay = false;
 let storage: Map<string, string>;
 let browser: WindowStub;
 let root: ReactTestRenderer | undefined;
@@ -99,7 +102,6 @@ function key(key: string, options: Record<string, unknown> = {}, target = new El
 beforeEach(() => {
   member++;
   storage = new Map();
-  overlay = false;
   browser = new WindowStub();
   vi.stubGlobal('window', browser);
   vi.stubGlobal('document', browser.document);
@@ -166,14 +168,44 @@ describe('real React Hotkeys prototype integration', () => {
     expect(key('Dead', { code: 'KeyN' }).defaultPrevented).toBe(false);
     expect(run).toHaveBeenCalledTimes(1);
   });
-  it('composition, overlays and editable ARIA widgets suppress single keys', async () => {
+  it('composition and editable ARIA widgets suppress single keys', async () => {
     const run = vi.fn();
     await mount([{ id: 'add-expense', run }]);
     expect(key('n', { isComposing: true }).defaultPrevented).toBe(false);
     expect(key('n', {}, new ElementStub('DIV', '', 'combobox')).defaultPrevented).toBe(false);
-    overlay = true;
-    expect(key('n').defaultPrevented).toBe(false);
     expect(run).not.toHaveBeenCalled();
+  });
+  it('nested overlay scopes suspend page keys until the last overlay closes, while search stays available', async () => {
+    const add = vi.fn(),
+      search = vi.fn();
+    const view = (outer: boolean, inner: boolean) =>
+      createElement(
+        ShortcutsProvider,
+        { memberId: `prototype-${member}` },
+        createElement(Handler, { id: 'add-expense', run: add }),
+        createElement(Handler, { id: 'search', run: search }),
+        createElement(
+          ShortcutOverlay,
+          { active: outer },
+          createElement(ShortcutOverlay, { active: inner }, null),
+        ),
+      );
+    await act(async () => {
+      root = create(view(true, true));
+    });
+    expect(key('n').defaultPrevented).toBe(false);
+    key('k', { ctrlKey: true });
+    expect(search).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      root?.update(view(true, false));
+    });
+    expect(key('n').defaultPrevented).toBe(false);
+    expect(add).not.toHaveBeenCalled();
+    await act(async () => {
+      root?.update(view(false, false));
+    });
+    key('n');
+    expect(add).toHaveBeenCalledTimes(1);
   });
   it('ordinary fields retain search chords; search field toggles search', async () => {
     const run = vi.fn();
@@ -211,6 +243,56 @@ describe('real React Hotkeys prototype integration', () => {
     key('/');
     expect(latest).toHaveBeenCalledTimes(2);
   });
+  it('unregistering the last real handler restores a fallback mounted after it', async () => {
+    await mount([]);
+    const real = vi.fn(),
+      fallback = vi.fn();
+    const remove = api.register('search-group', real, false);
+    const removeFallback = api.register('search-group', fallback, true);
+    key('/');
+    expect(real).toHaveBeenCalledTimes(1);
+    expect(fallback).not.toHaveBeenCalled();
+    remove();
+    key('/');
+    expect(fallback).toHaveBeenCalledTimes(1);
+    removeFallback();
+    expect(key('/').defaultPrevented).toBe(false);
+  });
+  // Known scope-only mismatch: expected to fail; this blocks migration, not an accepted regression.
+  priorityTest(
+    'the latest fallback wins and removing it restores the earlier fallback',
+    async () => {
+      await mount([]);
+      const first = vi.fn(),
+        latest = vi.fn();
+      const removeFirst = api.register('search-group', first, true);
+      const removeLatest = api.register('search-group', latest, true);
+      key('/');
+      expect(latest).toHaveBeenCalledTimes(1);
+      expect(first).not.toHaveBeenCalled();
+      removeLatest();
+      key('/');
+      expect(first).toHaveBeenCalledTimes(1);
+      removeFirst();
+    },
+  );
+  priorityTest(
+    'the latest global search handler wins and its predecessor resumes after unmount',
+    async () => {
+      await mount([]);
+      const first = vi.fn(),
+        latest = vi.fn();
+      const removeFirst = api.register('search', first, false);
+      const removeLatest = api.register('search', latest, false);
+      key('k', { ctrlKey: true });
+      expect(latest).toHaveBeenCalledTimes(1);
+      expect(first).not.toHaveBeenCalled();
+      removeLatest();
+      key('k', { ctrlKey: true });
+      expect(first).toHaveBeenCalledTimes(1);
+      removeFirst();
+    },
+  );
   it('handoff runs once before expiry and never after expiry', async () => {
     await mount([]);
     const run = vi.fn();
@@ -241,6 +323,47 @@ describe('real React Hotkeys prototype integration', () => {
     await act(async () => api.setSingleKeys(true));
     key('n');
     expect(run).toHaveBeenCalledTimes(1);
+  });
+  it('refused storage preserves the visit preference across remounts and keeps search available', async () => {
+    Object.defineProperty(browser, 'localStorage', {
+      get() {
+        throw new Error('Storage refused');
+      },
+    });
+    const add = vi.fn(),
+      search = vi.fn();
+    const registrations: Registration[] = [
+      { id: 'add-expense', run: add },
+      { id: 'search', run: search },
+    ];
+    await mount(registrations);
+    key('n');
+    expect(add).toHaveBeenCalledTimes(1);
+    await act(async () => api.setSingleKeys(false));
+    await act(async () => root?.unmount());
+    root = undefined;
+    await mount(registrations);
+    expect(key('n').defaultPrevented).toBe(false);
+    key('k', { ctrlKey: true });
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(search).toHaveBeenCalledTimes(1);
+  });
+  it('switching members replaces the shortcut preference without duplicating actions', async () => {
+    const add = vi.fn();
+    await mount([{ id: 'add-expense', run: add }]);
+    await act(async () => api.setSingleKeys(false));
+    expect(key('n').defaultPrevented).toBe(false);
+    await act(async () =>
+      root?.update(
+        createElement(
+          ShortcutsProvider,
+          { memberId: `another-${member}` },
+          createElement(Handler, { id: 'add-expense', run: add }),
+        ),
+      ),
+    );
+    key('n');
+    expect(add).toHaveBeenCalledTimes(1);
   });
   it('Strict Mode remount and route unmount leave no duplicate registrations', async () => {
     const run = vi.fn();

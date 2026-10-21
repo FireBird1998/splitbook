@@ -1,3 +1,4 @@
+import { ShortcutModalRoot, ShortcutPopper } from '@/lib/shortcuts/ShortcutOverlay';
 import { createTheme, darken, lighten, type Shadows, type Theme } from '@mui/material/styles';
 // Types only: lets the theme style the charts (MuiChartsGrid, MuiChartsXAxis, …).
 import type {} from '@mui/x-charts/themeAugmentation';
@@ -281,6 +282,12 @@ export function createAppTheme(mode: ThemeMode): Theme {
           }),
         },
       },
+      MuiModal: {
+        defaultProps: {
+          component: ShortcutModalRoot,
+        },
+      },
+      MuiAutocomplete: { defaultProps: { slots: { popper: ShortcutPopper } } },
       MuiDialog: {
         styleOverrides: {
           paper: { borderRadius: RADIUS.lg },
