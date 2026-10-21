@@ -31,12 +31,16 @@ const { alex, sam, priya } = DEMO_PERSONA_IDS;
 
 let rule: typeof import('./route');
 let reach: typeof import('../assistant-reach/route');
+let drafts: typeof import('../drafts/route');
+let draft: typeof import('../drafts/[draftId]/route');
 let adapter: Awaited<(typeof import('@/lib/auth'))['auth']['$context']>['adapter'];
 
 beforeAll(async () => {
   await connectSignedIn(db);
   rule = await import('./route');
   reach = await import('../assistant-reach/route');
+  drafts = await import('../drafts/route');
+  draft = await import('../drafts/[draftId]/route');
   adapter = (await (await import('@/lib/auth')).auth.$context).adapter;
 });
 beforeEach(async () => {
@@ -205,5 +209,59 @@ describe('a Group’s Assistant rule', () => {
     expect(listed.body.data.reach.map((row: { assistant: string }) => row.assistant)).toEqual([
       'helper.example.test',
     ]);
+  });
+});
+
+describe('a member’s own Drafts once the Group is Not allowed (#621)', () => {
+  it('still lists and discards a Draft an assistant prepared, though the assistant loses the Group', async () => {
+    vi.stubEnv('PERSISTENT_DRAFTS_ENABLED', 'true');
+    const groupId = await mapleHouse();
+    const stored = await Group.findById(groupId).lean();
+    const tagId = String(stored!.tags[0]._id);
+    const { expenseDraftService } = await import('@/lib/services/expense-draft.service');
+    const assistant = { id: sam, assistant: { name: 'Fictional helper' } };
+    await expenseDraftService.create(
+      assistant,
+      groupId,
+      {
+        drafts: [
+          {
+            description: 'Groceries',
+            category: 'food',
+            amount: 600,
+            currency: 'INR',
+            date: '2026-10-10',
+            tagId,
+            paidBy: [{ user: sam, amount: 600 }],
+            splitMethod: 'equal',
+            splitBetween: [{ user: alex }, { user: sam }],
+          },
+        ],
+      },
+      'assistant-groceries-0001',
+    );
+    expect((await setRule(groupId, await signIn('alex'), 'not_allowed')).status).toBe(200);
+
+    // The assistant loses the Group at once…
+    await expect(expenseDraftService.list(assistant, groupId)).rejects.toThrow('GROUP_NOT_FOUND');
+    // …while Sam still reviews what it prepared, and can discard it.
+    const cookie = await signIn('sam');
+    const listed = await callRoute(drafts.GET, {
+      method: 'GET',
+      path: `/api/groups/${groupId}/drafts`,
+      params: { id: groupId },
+      cookie,
+    });
+    expect(listed.status, JSON.stringify(listed.body)).toBe(200);
+    expect(listed.body.data).toHaveLength(1);
+    const [kept] = listed.body.data as { id: string; revision: number }[];
+    const discarded = await callRoute(draft.DELETE, {
+      method: 'DELETE',
+      path: `/api/groups/${groupId}/drafts/${kept.id}`,
+      params: { id: groupId, draftId: kept.id },
+      cookie,
+      headers: { 'X-Splitbook-Revision': String(kept.revision) },
+    });
+    expect(discarded.status, JSON.stringify(discarded.body)).toBe(200);
   });
 });
