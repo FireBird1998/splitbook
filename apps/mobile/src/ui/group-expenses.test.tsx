@@ -1227,3 +1227,61 @@ describe('an assistant’s credit on an Expense row (#751)', () => {
     },
   );
 });
+
+// #770, from the Designer's #751 check: at 200% an Expense row with a credit grew to about 11
+// lines, and its centred icon sat beside "prepared by…", away from the title. At large text the
+// icon keeps to the title, at the top of the row; below it, and in a row without a note, it stays
+// centred.
+describe.each(['light', 'dark'] as const)(
+  'an Expense row’s icon at large text in %s (#770)',
+  (mode) => {
+    const credited: MobileExpense = {
+      ...groceries,
+      preparedBy: {
+        kind: 'assistant',
+        name: 'chatgpt.com.secure-assistant-connector.evil.example.test',
+      },
+    };
+    const rowOf = (expense: MobileExpense) => {
+      act(() => {
+        screen = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <GroupExpensesView
+              group={group()}
+              currentUserId={you}
+              state={financial({
+                data: [expense],
+                pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+              })}
+              kept={null}
+              savedExpenseId={null}
+              now={now}
+              onSelectMonth={vi.fn()}
+              onRefreshExpenses={vi.fn()}
+              onLoadMore={vi.fn()}
+              onLoadNewer={vi.fn()}
+              onOpenExpense={vi.fn()}
+              onResumeDraft={vi.fn()}
+              onDiscardDraft={vi.fn()}
+            />
+          </ThemeContext.Provider>,
+        );
+      });
+      const [row] = findHosts(
+        screen!.toJSON() as ReactTestRendererJSON,
+        (props, type) => type === 'Pressable' && flatten(props.style).minHeight === 60,
+      );
+      return flatten(row!.props.style);
+    };
+    it.each([
+      { fontScale: 1, credited: 'center' },
+      { fontScale: 1.3, credited: 'flex-start' },
+      { fontScale: 2, credited: 'flex-start' },
+    ])('aligns it with the title at $fontScale× text, 360dp: $credited', (size) => {
+      setWindow({ width: 360, height: 640, fontScale: size.fontScale });
+      expect(rowOf(credited).alignItems).toBe(size.credited);
+      remount();
+      expect(rowOf(groceries).alignItems).toBe('center');
+    });
+  },
+);
