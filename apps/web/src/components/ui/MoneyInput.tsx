@@ -15,13 +15,16 @@ type MoneyEntryProps = {
 
 /** Group only the display; focus and blur never edit the form's stored value. */
 function useMoneyEntry({ value, currency, onValueChange }: MoneyEntryProps) {
-  const [focused, setFocused] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
   return {
-    value: focused ? value : formatAmountEntry(value, currency),
-    onFocus: () => setFocused(true),
-    onBlur: () => setFocused(false),
-    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      onValueChange(ungroupAmountEntry(event.target.value)),
+    value: editing ?? formatAmountEntry(value, currency),
+    onFocus: () => setEditing(ungroupAmountEntry(value)),
+    onBlur: () => setEditing(null),
+    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const typed = event.target.value;
+      setEditing((current) => (current === null ? null : typed));
+      onValueChange(ungroupAmountEntry(typed));
+    },
   };
 }
 
