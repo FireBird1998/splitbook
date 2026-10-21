@@ -131,7 +131,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(sheet.getByRole('row')).toHaveText([
       /Debt\s*Rate\s*You pay/,
       /INR\s*₹1,480\.00\s*Same currency\s*₹1,480\.00/,
-      /EUR\s*€20\.00\s*₹92\.10 per €.*Suggested.*₹1,842\.00/,
+      /EUR\s*€20\.00\s*₹92\.10 per €\s*Frankfurter.*Change\s*₹1,842\.00/,
       /Total\s*₹3,322\.00/,
     ]);
     await expect(sheet).toContainText('Activity shows them as one payment.');

@@ -181,7 +181,7 @@ describe('Settle up with Sam (#734)', () => {
       'Debt Rate You pay',
       'INR ₹1,480.00 Same currency ₹1,480.00',
       expect.stringMatching(
-        /^EUR €20\.00 ₹92\.10 per € Suggested · Frankfurter .* Change ₹1,842\.00$/,
+        /^EUR €20\.00 ₹92\.10 per € Frankfurter · rates of 20 Oct · fetched [^·]+ Change ₹1,842\.00$/,
       ),
       'Total ₹3,322.00',
     ]);
@@ -190,6 +190,16 @@ describe('Settle up with Sam (#734)', () => {
     );
     // Pay in reads as Record payment's does: a choice of one.
     expect(button('INR')!.props.role).toBe('radio');
+    // The source fits on its own line, and Change sits under it rather than after it.
+    const source = sheet().findAll(
+      (node) =>
+        typeof node.type === 'string' &&
+        node.props['data-rate-part'] === 'source' &&
+        textOf(node).startsWith('Frankfurter'),
+    );
+    expect(source).toHaveLength(1);
+    expect(textOf(source[0])).not.toContain('Change');
+    expect(textOf(source[0])).not.toContain('Suggested');
     expect(button('INR')!.props['aria-checked']).toBe(true);
 
     await press('Record ₹3,322.00');
@@ -260,7 +270,7 @@ describe('Settle up with Sam (#734)', () => {
     expect(button('EUR')!.props['aria-checked']).toBe(true);
     expect(rows()).toEqual([
       'Debt Rate You pay',
-      expect.stringMatching(/^INR ₹1,480\.00 €0\.010858 per ₹ Suggested .* €16\.07$/),
+      expect.stringMatching(/^INR ₹1,480\.00 €0\.010858 per ₹ Frankfurter .* Change €16\.07$/),
       'EUR €20.00 Same currency €20.00',
       'Total €36.07',
     ]);

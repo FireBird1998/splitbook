@@ -55,12 +55,17 @@ describe('Settle up offers on Balances (#734)', () => {
       /You owe Sam Chen in 2 currencies ₹1,480\.00 and €20\.00 ?\. One payment can clear both\./,
     );
     expect(text(html)).toMatch(
-      /Priya Shah owes you in 3 currencies ₹500\.00, €12\.50 and ¥900 ?\. One payment can clear them all\./,
+      /Priya Shah owes you in 3 currencies ₹500\.00 ?, €12\.50 and ¥900 ?\. One payment can clear them all\./,
     );
     expect(html).toMatch(
       /<button[^>]*aria-label="Settle both with Sam Chen"[^>]*>[\s\S]*?Settle both/,
     );
     expect(html).toMatch(/<button[^>]*aria-label="Settle all with Priya Shah"/);
+    // Only the amounts are mono: "and" and the commas are in the text face.
+    expect(html).toMatch(/>₹1,480\.00<\/span> and <span[^>]*>€20\.00<\/span>/);
+    expect(html).toMatch(
+      />₹500\.00<\/span>, <span[^>]*>€12\.50<\/span> and <span[^>]*>¥900<\/span>/,
+    );
   });
 
   it('shows nothing when no one is owed in more than one currency', () => {
