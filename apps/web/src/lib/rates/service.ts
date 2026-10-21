@@ -15,7 +15,7 @@ function fraction(value: string): [bigint, bigint] | null {
   if (!/^\d{1,12}(?:\.\d{1,18})?$/.test(value)) return null;
   const [whole, decimal = ''] = value.split('.');
   const numerator = BigInt(whole + decimal);
-  return numerator > 0n ? [numerator, 10n ** BigInt(decimal.length)] : null;
+  return numerator > BigInt(0) ? [numerator, BigInt(10) ** BigInt(decimal.length)] : null;
 }
 function usable(row: CachedRate, now: Date) {
   return fraction(row.rate) !== null && age(row.asOf, now) >= 0 && age(row.asOf, now) <= 3;
@@ -24,10 +24,10 @@ function usable(row: CachedRate, now: Date) {
 function crossRate(from: string, to: string): string {
   const [a, b] = fraction(from)!;
   const [c, d] = fraction(to)!;
-  const scale = 1_000_000_000_000n;
+  const scale = BigInt(1_000_000_000_000);
   const numerator = c * b * scale;
   const denominator = d * a;
-  const units = (2n * numerator + denominator) / (2n * denominator);
+  const units = (BigInt(2) * numerator + denominator) / (BigInt(2) * denominator);
   const decimals = (units % scale).toString().padStart(12, '0').replace(/0+$/, '');
   return `${units / scale}${decimals ? `.${decimals}` : ''}`;
 }
@@ -47,7 +47,7 @@ export async function refreshRates(providers: RateProviders, now = new Date()) {
       throw error;
   }
   const previous = await RateTable.findOneAndUpdate(
-    { _id: 'daily', attemptedOn: { $ne: day } },
+    { _id: 'daily', $or: [{ attemptedOn: { $lt: day } }, { attemptedOn: { $exists: false } }] },
     { $set: { attemptedOn: day } },
     { returnDocument: 'before' },
   ).lean();
