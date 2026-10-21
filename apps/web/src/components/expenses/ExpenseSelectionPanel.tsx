@@ -12,10 +12,10 @@ import MoneyText from '@/components/common/MoneyText';
 import { RADIUS } from '@/lib/theme/tokens';
 import { getCurrency } from '@splitbook/shared/currency';
 import {
+  displayMajorAmount,
   readStoredAmountMinor,
   readUnsupportedAmountMinor,
   toMajorAmount,
-  unsupportedMajorAmount,
 } from '@splitbook/shared/exact-money';
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
 import { expensePayerSummary, listedExpensePosition } from '@splitbook/shared/expense-row';
@@ -84,10 +84,6 @@ function totals(expenses: readonly ExpenseRead[]) {
     );
   return [...byCurrency].sort(([a], [b]) => Number(!getCurrency(a)) - Number(!getCurrency(b)));
 }
-
-/** Minor units in major units, as stored for a currency Splitbook no longer supports (#810). */
-const major = (minor: number, currency: string) =>
-  getCurrency(currency) ? toMajorAmount(minor, currency) : unsupportedMajorAmount(minor);
 
 /** What the Expenses mean for the member together, per currency: lent or owe, exactly. */
 function positions(expenses: readonly ExpenseRead[], userId: string) {
@@ -222,7 +218,7 @@ export default function ExpenseSelectionPanel({
             <Box component="span" key={currency}>
               {index > 0 ? ' + ' : ''}
               <MoneyText
-                amount={major(minor, currency)}
+                amount={displayMajorAmount(minor, currency)}
                 currency={currency}
                 tone="neutral"
                 sx={{ fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 'inherit' }}

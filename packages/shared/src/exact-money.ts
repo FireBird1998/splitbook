@@ -1,4 +1,4 @@
-import { getCurrencyPrecision } from './currency';
+import { getCurrency, getCurrencyPrecision } from './currency';
 import type { ExpenseSplitMethod } from './split-calculation';
 
 export const MONEY_VERSION = 1 as const;
@@ -150,6 +150,15 @@ export function readUnsupportedAmountMinor(record: {
 /** Such money's minor units in major units, at the same 2 places (#810). */
 export const unsupportedMajorAmount = (amountMinor: number) =>
   assertSafeMinorAmount(amountMinor) / 10 ** UNSUPPORTED_CURRENCY_PLACES;
+
+/**
+ * Minor units in major units to show: exact in a supported currency, at 2 places in one Splitbook
+ * no longer supports, as stored and never converted (#810, #820).
+ */
+export const displayMajorAmount = (amountMinor: number, currency: string) =>
+  getCurrency(currency)
+    ? toMajorAmount(amountMinor, currency)
+    : unsupportedMajorAmount(amountMinor);
 
 /** Only legacy reads tolerate the tiny binary tails produced by the old calculator. */
 export function readLegacyAmountMinor(amount: number, currency: string): number {

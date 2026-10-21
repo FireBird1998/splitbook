@@ -33,17 +33,9 @@ import type {
   HomeSuggestedPayment,
   UserBalancesResponse,
 } from '@splitbook/shared/types';
-import { getCurrency } from '@splitbook/shared/currency';
+import { getCurrency, inSupportedCurrencies } from '@splitbook/shared/currency';
 import { recurringExpenseService } from './recurring-expense.service';
 import { PERSON_FIELDS } from './person-fields';
-
-/**
- * Balances are positions, and no position includes a currency Splitbook no longer supports,
- * such as a legacy DEM Expense: the Expenses read gives it its own Spent line (#810), but it has
- * no Balance, Debt or Suggested payment here, so nothing is settled in it (#812).
- */
-const inSupportedCurrencies = <T extends { currency: string }>(rows: T[]) =>
-  rows.filter((row) => !!getCurrency(row.currency));
 
 type Party = { user?: unknown } | null | undefined;
 const idOf = (value: unknown) =>

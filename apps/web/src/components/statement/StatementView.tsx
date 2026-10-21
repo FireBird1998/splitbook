@@ -10,7 +10,7 @@ import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import MoneyText from '@/components/common/MoneyText';
-import { toMajorAmount } from '@splitbook/shared/exact-money';
+import { displayMajorAmount } from '@splitbook/shared/exact-money';
 import { getSemanticTokens } from '@/lib/theme/tokens';
 import { zonedTimestamp } from '@splitbook/shared/export-csv';
 import { categoryLabel } from '@splitbook/shared/categories';
@@ -135,7 +135,7 @@ function CurrencySection({
   }
   const name = (id: string) => bucket.people.find((row) => row.id === id)?.name ?? 'Former member';
   const amount = (minor: number) => (
-    <MoneyText amount={toMajorAmount(minor, currency)} currency={currency} tone="neutral" />
+    <MoneyText amount={displayMajorAmount(minor, currency)} currency={currency} tone="neutral" />
   );
   return (
     <Box component="section" aria-label={`${currency} statement`} sx={{ mt: 3 }}>

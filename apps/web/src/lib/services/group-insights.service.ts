@@ -5,6 +5,7 @@ import RecurringExpense from '@/lib/models/RecurringExpense';
 import User from '@/lib/models/User';
 import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
+import { CURRENCY_CODES, inSupportedCurrencies } from '@splitbook/shared/currency';
 import { assertStoredExpenseMoney, readStoredAmountMinor } from '@splitbook/shared/exact-money';
 import {
   openingSpendingCurrency,
@@ -101,7 +102,12 @@ export async function getGroupInsights(
     .lean();
   if (!group) return null;
 
-  const earliest = await Expense.findOne({ group: groupId, isDeleted: false })
+  // Only an Expense in a supported currency starts the Group's Months (#820).
+  const earliest = await Expense.findOne({
+    group: groupId,
+    isDeleted: false,
+    currency: { $in: CURRENCY_CODES },
+  })
     .sort({ date: 1 })
     .select('date')
     .lean();
@@ -117,15 +123,18 @@ export async function getGroupInsights(
 
   const months = [...earlierMonths(month, { previousMonths: compare, since: firstMonth }), month];
   const range = monthsQueryRange(months);
-  const expenses = await Expense.find({
-    group: groupId,
-    isDeleted: false,
-    date: { $gte: range.from, $lt: range.to },
-  })
-    .select(
-      'description currency moneyVersion amount amountMinor date paidBy splitBetween recurringExpense tag tagId',
-    )
-    .lean();
+  // A currency Splitbook no longer supports has no position, so it is left out (#812, #820).
+  const expenses = inSupportedCurrencies(
+    await Expense.find({
+      group: groupId,
+      isDeleted: false,
+      date: { $gte: range.from, $lt: range.to },
+    })
+      .select(
+        'description currency moneyVersion amount amountMinor date paidBy splitBetween recurringExpense tag tagId',
+      )
+      .lean(),
+  );
   // As Balances does: a stored allocation that doesn't add up is refused, never summed.
   for (const expense of expenses) assertStoredExpenseMoney(expense);
 

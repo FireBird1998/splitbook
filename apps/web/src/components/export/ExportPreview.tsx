@@ -8,7 +8,7 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Box from '@mui/material/Box';
 import LinearProgress from '@mui/material/LinearProgress';
 import MoneyText from '@/components/common/MoneyText';
-import { toMajorAmount } from '@splitbook/shared/exact-money';
+import { displayMajorAmount } from '@splitbook/shared/exact-money';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import ErrorState from '@/components/common/ErrorState';
 import Typography from '@mui/material/Typography';
@@ -194,7 +194,7 @@ export default function ExportPreviewPanel({
                   <Box>
                     <Typography variant="body2">Spent</Typography>
                     <MoneyText
-                      amount={toMajorAmount(bucket.spentMinor, bucket.currency)}
+                      amount={displayMajorAmount(bucket.spentMinor, bucket.currency)}
                       currency={bucket.currency}
                       tone="neutral"
                     />
@@ -207,7 +207,7 @@ export default function ExportPreviewPanel({
                     <Typography variant="body2">Payments</Typography>
                     <Typography component="span">{bucket.paymentCount} · </Typography>
                     <MoneyText
-                      amount={toMajorAmount(bucket.paymentTotalMinor, bucket.currency)}
+                      amount={displayMajorAmount(bucket.paymentTotalMinor, bucket.currency)}
                       currency={bucket.currency}
                       tone="neutral"
                     />
@@ -225,7 +225,7 @@ export default function ExportPreviewPanel({
                       {[person.paidMinor, person.shareMinor, person.netMinor].map((minor, i) => (
                         <TableCell key={i}>
                           <MoneyText
-                            amount={toMajorAmount(minor, bucket.currency)}
+                            amount={displayMajorAmount(minor, bucket.currency)}
                             currency={bucket.currency}
                             tone="neutral"
                           />
@@ -253,7 +253,7 @@ export default function ExportPreviewPanel({
                         </TableCell>
                         <TableCell>
                           <MoneyText
-                            amount={toMajorAmount(person.balanceMinor, bucket.currency)}
+                            amount={displayMajorAmount(person.balanceMinor, bucket.currency)}
                             currency={bucket.currency}
                             tone="neutral"
                           />
@@ -270,7 +270,7 @@ export default function ExportPreviewPanel({
                         <li key={`${payment.from}-${payment.to}`}>
                           {name(payment.from)} pays {name(payment.to)}{' '}
                           <MoneyText
-                            amount={toMajorAmount(payment.amountMinor, bucket.currency)}
+                            amount={displayMajorAmount(payment.amountMinor, bucket.currency)}
                             currency={bucket.currency}
                             tone="neutral"
                           />
@@ -316,7 +316,7 @@ export default function ExportPreviewPanel({
                               <>
                                 {name(payment.fromId)} paid {name(payment.toId)}{' '}
                                 <MoneyText
-                                  amount={toMajorAmount(payment.amountMinor, bucket.currency)}
+                                  amount={displayMajorAmount(payment.amountMinor, bucket.currency)}
                                   currency={bucket.currency}
                                   tone="neutral"
                                 />
@@ -350,7 +350,7 @@ export default function ExportPreviewPanel({
                           <TableCell>{expense.tag}</TableCell>
                           <TableCell>
                             <MoneyText
-                              amount={toMajorAmount(expense.amountMinor, bucket.currency)}
+                              amount={displayMajorAmount(expense.amountMinor, bucket.currency)}
                               currency={bucket.currency}
                               tone="neutral"
                             />
@@ -361,7 +361,7 @@ export default function ExportPreviewPanel({
                                 <Box key={person.userId}>
                                   {name(person.userId)}{' '}
                                   <MoneyText
-                                    amount={toMajorAmount(person.amountMinor, bucket.currency)}
+                                    amount={displayMajorAmount(person.amountMinor, bucket.currency)}
                                     currency={bucket.currency}
                                     tone="neutral"
                                   />

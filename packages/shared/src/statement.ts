@@ -1,4 +1,5 @@
 /** Statement figures: window spending, dated payments, and current all-time ledger positions. */
+import { getCurrency } from './currency';
 import { normaliseExtraCurrencies } from './group-currencies';
 import { formatCrossCurrencySettlement } from './cross-currency-settlement';
 import type { BackupGroupInput } from './export-backup';
@@ -89,38 +90,44 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
         .sort(
           (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime() || a.id.localeCompare(b.id),
         );
-      const ledgerExpenses = active
-        .filter((row) => row.currency === currency)
-        .map((row) => ({
-          amount: toMajorAmount(row.amountMinor, currency),
-          amountMinor: row.amountMinor,
-          currency,
-          moneyVersion: 1,
-          paidBy: row.paidBy.map((person) => ({
-            user: person.userId,
-            amount: toMajorAmount(person.amountMinor, currency),
-            amountMinor: person.amountMinor,
-          })),
-          splitBetween: row.splitBetween.map((person) => ({
-            user: person.userId,
-            amount: toMajorAmount(person.amountMinor, currency),
-            amountMinor: person.amountMinor,
-          })),
-        }));
-      const balances = calculateNetBalancesMinor(
-        ledgerExpenses,
-        group.settlements
+      // A currency Splitbook no longer supports, such as DEM, has a Spent line of its own and its
+      // Expenses, as stored, but no position: no one's figures and no Suggested payment (#820).
+      const supported = !!getCurrency(currency);
+      const ledgerExpenses = () =>
+        active
           .filter((row) => row.currency === currency)
           .map((row) => ({
-            paidBy: row.fromId,
-            paidTo: row.toId,
             amount: toMajorAmount(row.amountMinor, currency),
             amountMinor: row.amountMinor,
             currency,
             moneyVersion: 1,
-          })),
-        currency,
-      );
+            paidBy: row.paidBy.map((person) => ({
+              user: person.userId,
+              amount: toMajorAmount(person.amountMinor, currency),
+              amountMinor: person.amountMinor,
+            })),
+            splitBetween: row.splitBetween.map((person) => ({
+              user: person.userId,
+              amount: toMajorAmount(person.amountMinor, currency),
+              amountMinor: person.amountMinor,
+            })),
+          }));
+      const balances = !supported
+        ? []
+        : calculateNetBalancesMinor(
+            ledgerExpenses(),
+            group.settlements
+              .filter((row) => row.currency === currency)
+              .map((row) => ({
+                paidBy: row.fromId,
+                paidTo: row.toId,
+                amount: toMajorAmount(row.amountMinor, currency),
+                amountMinor: row.amountMinor,
+                currency,
+                moneyVersion: 1,
+              })),
+            currency,
+          );
       const ids = [
         ...new Set([
           ...group.members.map((row) => row.id),
@@ -145,7 +152,7 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
         spentMinor: sumMinorAmounts(expenses.map((row) => row.amountMinor)),
         expenseCount: expenses.length,
         paymentTotalMinor: sumMinorAmounts(payments.map((row) => row.amountMinor)),
-        people: ids.map((id) => {
+        people: (supported ? ids : []).map((id) => {
           const paidMinor = sumMinorAmounts(figures.map((row) => memberPaidMinor(row, id)));
           const shareMinor = sumMinorAmounts(figures.map((row) => memberShareMinor(row, id)));
           return {

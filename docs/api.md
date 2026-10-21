@@ -1077,6 +1077,17 @@ out of `totalAmount`, `userOwes`, `userGetsBack`, `userByCurrency` and
 `byMember`. The apps show its amount with its code (`DEM 40.00`), last in Spent,
 and no position.
 
+**The other reads, and Delete (#820).** The rule holds everywhere else. Export
+lists such an Expense and its allocations as stored, at 2 places (the CSV's
+amounts, the backup's `amountMinor`), and the statement gives its currency a
+section with Spent, the Expense count and the Expenses, but no one's figures and
+no Suggested payment. Home's spending (`GET /api/user/spending`), a Group's
+Insights and the Trip summary leave it out entirely, and Insights doesn't start a
+Group's Months at it. Deleting it works, keeping its money as stored; a change to
+its money is still checked, and refused. On the Balances tab, Payments mark a
+payment in such a currency "Not in Balances" and count only the others as in the
+balances above. Android lists it, and says why it can't open it.
+
 ### GET /api/groups/[id]/expenses/check-duplicate
 
 **Query params:** `?description=...&amount=...&date=...&excludeId=...`
@@ -2004,6 +2015,9 @@ exactly. The shared path, query key (scope `search`) and decoder are `searchPath
 The Export page's download (#317). It answers with a file: one CSV, a zip when
 there are several, or with `format=json` one JSON backup of every chosen Group
 (#318). Refusals and failures use the standard JSON error shape.
+
+An Expense in a currency Splitbook no longer supports is exported as stored, never
+converted (#820; see the Expenses read).
 
 **Query params:**
 

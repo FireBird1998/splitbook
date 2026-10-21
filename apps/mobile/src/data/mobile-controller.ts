@@ -77,7 +77,12 @@ import {
   assertSettlementMembers,
   assertSettlementAuthorization,
 } from '@splitbook/shared/expense-validation';
-import { canEditExpense, parseExpenseRecord, type ExpenseRecord } from './expense-record';
+import {
+  canEditExpense,
+  parseExpenseRecord,
+  UnsupportedCurrencyExpenseError,
+  type ExpenseRecord,
+} from './expense-record';
 import {
   parseAmountMinor,
   MoneyValidationError,
@@ -3188,7 +3193,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: denied ? 'blocked' : snapshot.expense.draft ? 'resume' : 'blocked',
           message: notOnPhone
             ? expenseNotOnPhone
-            : error instanceof RequestError
+            : error instanceof RequestError || error instanceof UnsupportedCurrencyExpenseError
               ? error.message
               : // Only a draft kept on this phone has one to keep (#334).
                 expenseId || snapshot.keptDraft?.groupId === groupId
