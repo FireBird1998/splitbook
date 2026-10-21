@@ -198,7 +198,13 @@ function SignedInAs({
           {account.email}
         </Typography>
       </Box>
-      <Button size="small" disabled={busy} onClick={onSwitch} sx={{ ml: 'auto', flexShrink: 0 }}>
+      <Button
+        size="small"
+        aria-label="Not you? Sign in with another account"
+        disabled={busy}
+        onClick={onSwitch}
+        sx={{ ml: 'auto', flexShrink: 0 }}
+      >
         Not you?
       </Button>
     </Box>

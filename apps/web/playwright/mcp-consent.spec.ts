@@ -25,7 +25,10 @@ async function setAssistantRule(page: Page, rule: 'allowed' | 'not_allowed') {
 
 // The demo Group goes back to Allowed, as the seed left it.
 test.afterEach(async ({ page }) => {
-  if (notAllowedId) await setAssistantRule(page, 'allowed');
+  if (notAllowedId) {
+    await setAssistantRule(page, 'allowed');
+    notAllowedId = null;
+  }
 });
 
 for (const allowPreparation of [false, true]) {

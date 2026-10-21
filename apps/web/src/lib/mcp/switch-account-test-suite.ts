@@ -101,6 +101,7 @@ export function switchAccountTests(mongo = false) {
               'oauthResource',
               'oauthClientResource',
               'mcpConnection',
+              'mcpPendingExclusion',
             ].map((name) => [name, []]),
           ),
         );
