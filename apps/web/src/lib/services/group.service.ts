@@ -22,6 +22,61 @@ import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import Settlement from '@/lib/models/Settlement';
 import { PERSON_FIELDS } from './person-fields';
+import mongoose from 'mongoose';
+import { MoneyValidationError } from '@splitbook/shared/exact-money';
+import {
+  extraCurrenciesProblem,
+  normaliseExtraCurrencies,
+} from '@splitbook/shared/group-currencies';
+
+/**
+ * A Group as its members read it: an older Group's extra currencies as the rule allows them
+ * (#719), so reading or saving it never fails on old data.
+ */
+function withReadableCurrencies<
+  T extends { defaultCurrency: string; alternateCurrencies?: unknown },
+>(group: T): T & { alternateCurrencies: string[] } {
+  return {
+    ...group,
+    alternateCurrencies: normaliseExtraCurrencies(
+      group.defaultCurrency,
+      Array.isArray(group.alternateCurrencies) ? group.alternateCurrencies : [],
+    ),
+  };
+}
+
+/** A Group as one member reads it, with where their next Expense starts (#719). */
+function readableFor<T extends { defaultCurrency: string; alternateCurrencies?: unknown }>(
+  group: T,
+  latestExpenseCurrency: string | null,
+) {
+  return { ...withReadableCurrencies(group), latestExpenseCurrency };
+}
+
+/**
+ * The currency of each member's latest Expense in these Groups, by Group id: where their next
+ * Expense starts (#710). Read from the Expenses; nothing new is stored.
+ */
+async function latestExpenseCurrencies(
+  groupIds: unknown[],
+  memberId: string,
+): Promise<Map<string, string>> {
+  if (!groupIds.length || !mongoose.isValidObjectId(memberId)) return new Map();
+  const latest = await Expense.aggregate<{ _id: unknown; currency: string }>([
+    {
+      $match: {
+        group: { $in: groupIds },
+        createdBy: new mongoose.Types.ObjectId(memberId),
+        isDeleted: { $ne: true },
+        // One a recurring Expense added isn't one the member recorded.
+        recurringExpense: null,
+      },
+    },
+    { $sort: { createdAt: -1, _id: -1 } },
+    { $group: { _id: '$group', currency: { $first: '$currency' } } },
+  ]);
+  return new Map(latest.map((entry) => [String(entry._id), entry.currency]));
+}
 
 /** Why a member can't leave yet: an open balance, or they are the last admin. */
 export class LeaveBlockedError extends Error {
@@ -128,18 +183,27 @@ export class GroupService {
       filter.isArchived = false;
     }
 
-    return Group.find(filter)
+    const groups = await Group.find(filter)
       .populate('members.user', PERSON_FIELDS)
       .sort({ updatedAt: -1 })
       .lean();
+    const latest = await latestExpenseCurrencies(
+      groups.map((group) => group._id),
+      userId,
+    );
+    return groups.map((group) => readableFor(group, latest.get(String(group._id)) ?? null));
   }
 
   /**
    * Get a single group by ID.
    */
-  async getById(groupId: string) {
+  async getById(groupId: string, viewerId?: string) {
     await connectDB();
-    return Group.findById(groupId).populate('members.user', PERSON_FIELDS).lean();
+    const group = await Group.findById(groupId).populate('members.user', PERSON_FIELDS).lean();
+    if (!group) return group;
+    if (!viewerId) return withReadableCurrencies(group);
+    const latest = await latestExpenseCurrencies([group._id], viewerId);
+    return readableFor(group, latest.get(String(group._id)) ?? null);
   }
 
   /**
@@ -166,6 +230,27 @@ export class GroupService {
       }
     }
 
+    // The Group's currency rule on what the Group will hold (#719): extra currencies sent are
+    // checked against its main currency, and a new main currency against those it keeps. An
+    // older Group's list is compared and saved as the rule reads it, so cleaning it up never
+    // counts as a member's change.
+    const mainCurrency = data.defaultCurrency ?? group.defaultCurrency;
+    const storedExtras = normaliseExtraCurrencies(group.defaultCurrency, group.alternateCurrencies);
+    const extraCurrencies = data.alternateCurrencies ?? storedExtras;
+    if (JSON.stringify(extraCurrencies) === JSON.stringify(storedExtras))
+      delete changes.alternateCurrencies;
+    else changes.alternateCurrencies = { old: storedExtras, new: extraCurrencies };
+    const problem = extraCurrenciesProblem(mainCurrency, extraCurrencies);
+    /** A refusal of the currencies themselves; a locked main currency is said first. */
+    const refuseCurrencies = () => {
+      // The Group settings refusal, shown at its field: it shares money refusals' 422 answer.
+      if (problem)
+        throw new MoneyValidationError('INVALID_GROUP_CURRENCIES', problem, [
+          'alternateCurrencies',
+        ]);
+    };
+    data = { ...data, alternateCurrencies: extraCurrencies };
+
     if (data.defaultCurrency && data.defaultCurrency !== group.defaultCurrency) {
       const hasRecords =
         group.currencyLocked ||
@@ -177,6 +262,7 @@ export class GroupService {
           ])
         ).some(Boolean);
       if (hasRecords) throw new Error('CURRENCY_LOCKED');
+      refuseCurrencies();
       // First financial writes set the monotonic lock using the old currency predicate.
       const changed = await withGroupMutation(groupId, async () =>
         Group.findOneAndUpdate(
@@ -192,8 +278,9 @@ export class GroupService {
       );
       if (!changed) throw new Error('CURRENCY_LOCKED');
       await activityService.log(groupId, 'group_updated', userId, { changes });
-      return changed.populate('members.user', PERSON_FIELDS);
+      return this.readAfterUpdate(await changed.populate('members.user', PERSON_FIELDS), userId);
     }
+    refuseCurrencies();
     Object.assign(group, data);
     await withGroupMutation(groupId, async () => group.save());
 
@@ -201,7 +288,13 @@ export class GroupService {
       await activityService.log(groupId, 'group_updated', userId, { changes });
     }
 
-    return group.populate('members.user', PERSON_FIELDS);
+    return this.readAfterUpdate(await group.populate('members.user', PERSON_FIELDS), userId);
+  }
+
+  /** The updated Group as its admin reads it, so the answer replaces their read whole (#719). */
+  private async readAfterUpdate(group: InstanceType<typeof Group>, viewerId: string) {
+    const latest = await latestExpenseCurrencies([group._id], viewerId);
+    return readableFor(group.toJSON(), latest.get(String(group._id)) ?? null);
   }
 
   /**
@@ -525,7 +618,8 @@ export class GroupService {
       isArchived: false,
     })
       .populate('members.user', PERSON_FIELDS)
-      .lean();
+      .lean()
+      .then((group) => group && withReadableCurrencies(group));
   }
 }
 

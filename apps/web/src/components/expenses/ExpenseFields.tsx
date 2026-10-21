@@ -20,14 +20,20 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { PREDEFINED_ITEMS } from '@splitbook/shared/predefined-items';
 import {
   CURRENCIES,
+  amountReadAloud,
   getCurrency,
   formatCurrency,
   getCurrencyPrecision,
+  wholeUnit,
 } from '@splitbook/shared/currency';
 import { parseDecimalUnits, sumMinorAmounts } from '@splitbook/shared/exact-money';
 import { readAmountEntry } from '@splitbook/shared/amount-entry';
 import type { ExpenseSplitMethod } from '@splitbook/shared/split-calculation';
 import { type ExpenseDraftValues } from '@splitbook/shared/expense-draft';
+import { type ExpenseCurrencyChoice } from '@splitbook/shared/group-currencies';
+import Menu from '@mui/material/Menu';
+import InputAdornment from '@mui/material/InputAdornment';
+import CheckIcon from '@mui/icons-material/Check';
 
 import {
   tagOptionValue,
@@ -61,6 +67,13 @@ export interface ExpenseFieldsProps {
   review?: boolean;
   /** In review, the Group's currency: the field offers only it, and a different one the item has. */
   groupCurrency?: string;
+  /**
+   * The currencies the Expense can be in, as Add and Edit expense offer them beside the amount
+   * (#719). Without them, only the Expense's own currency is offered.
+   */
+  currencyChoices?: ExpenseCurrencyChoice[];
+  /** Why the form started in its currency, such as the member's latest Expense's (#719). */
+  currencyHint?: string | null;
   currentTag?: string | null;
   currentTagId?: string | null;
   previewAmount: (id: string) => string;
@@ -81,6 +94,8 @@ export default function ExpenseFields({
   previewAmount,
   review = false,
   groupCurrency,
+  currencyChoices,
+  currencyHint = null,
 }: ExpenseFieldsProps) {
   const {
     description,
@@ -116,6 +131,18 @@ export default function ExpenseFields({
       currency === groupCurrency
         ? `${groupNounTitle} currency`
         : `This ${groupNounTitle} uses ${groupCurrency}`;
+  // Add and Edit expense keep the currency beside the amount, and read them together (#719).
+  const choices = currencyChoices ?? [];
+  const known = getCurrency(currency);
+  const chosen = choices.find((choice) => choice.code === currency) ?? {
+    code: currency,
+    name: known?.name ?? currency,
+    symbol: known?.symbol ?? currency,
+  };
+  const changeable = choices.length > 1;
+  const [currencyMenu, setCurrencyMenu] = useState<HTMLElement | null>(null);
+  const currencyListId = useId();
+  const unit = wholeUnit(currency);
   const [showSplitOptions, setShowSplitOptions] = useState(isEditMode);
   const [showMoreOptions, setShowMoreOptions] = useState(isEditMode);
   // ─── Derived Values ────────────────────────────────
@@ -335,9 +362,95 @@ export default function ExpenseFields({
                 min: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
                 step: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
                 'aria-describedby': amountReason ? amountReasonId : undefined,
+                ...(review ? {} : { 'aria-label': `Amount, ${amountReadAloud(amount, currency)}` }),
               },
+              input: review
+                ? undefined
+                : {
+                    startAdornment: (
+                      <InputAdornment position="start" sx={{ gap: 1, mr: 1 }}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="inherit"
+                          disabled={!changeable}
+                          aria-haspopup="listbox"
+                          aria-expanded={!!currencyMenu}
+                          aria-controls={currencyMenu ? currencyListId : undefined}
+                          aria-label={`Currency, ${chosen.code}, ${chosen.name}${changeable ? '. Change currency' : ''}`}
+                          endIcon={changeable ? <ExpandMoreIcon /> : undefined}
+                          onClick={(event) => setCurrencyMenu(event.currentTarget)}
+                          sx={(theme) => ({
+                            ...(theme.typography.money as React.CSSProperties),
+                            minWidth: 0,
+                            fontWeight: 600,
+                            px: 1,
+                          })}
+                        >
+                          {chosen.code}
+                        </Button>
+                        <Box
+                          component="span"
+                          aria-hidden="true"
+                          sx={(theme) => ({
+                            ...(theme.typography.money as React.CSSProperties),
+                            color: 'text.secondary',
+                          })}
+                        >
+                          {chosen.symbol}
+                        </Box>
+                      </InputAdornment>
+                    ),
+                  },
             }}
           />
+          <Menu
+            anchorEl={currencyMenu}
+            open={!!currencyMenu}
+            onClose={() => setCurrencyMenu(null)}
+            slotProps={{ list: { id: currencyListId, role: 'listbox', 'aria-label': 'Currency' } }}
+          >
+            {choices.map((choice) => (
+              <MenuItem
+                key={choice.code}
+                role="option"
+                aria-selected={choice.code === currency}
+                selected={choice.code === currency}
+                onClick={() => {
+                  if (choice.code !== currency) edit({ currency: choice.code });
+                  setCurrencyMenu(null);
+                }}
+                sx={{ gap: 1.5, minHeight: 44, minWidth: 280 }}
+              >
+                <Box
+                  component="span"
+                  sx={(theme) => ({
+                    ...(theme.typography.money as React.CSSProperties),
+                    minWidth: 40,
+                    fontWeight: 600,
+                  })}
+                >
+                  {choice.code}
+                </Box>
+                <Box component="span" sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                  <Box component="span" sx={{ fontWeight: 600 }}>
+                    {choice.name}
+                  </Box>
+                  {choice.note && (
+                    <Box component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                      {choice.note}
+                    </Box>
+                  )}
+                </Box>
+                {choice.code === currency && <CheckIcon fontSize="small" color="primary" />}
+              </MenuItem>
+            ))}
+          </Menu>
+          {!review && currencyHint && (
+            <Typography variant="caption" color="text.secondary" sx={{ mx: 1.75, mt: 0.5 }}>
+              {currencyHint}
+            </Typography>
+          )}
           {/* Always present, so even its first message is announced, and polite, so it never
               interrupts typing (#528, as Record payment, #514). */}
           <Typography
@@ -355,22 +468,24 @@ export default function ExpenseFields({
             {amountReason}
           </Typography>
         </Box>
-        <TextField
-          select
-          label="Currency"
-          value={currency}
-          size="small"
-          disabled={currencyCodes.length < 2}
-          onChange={(event) => edit({ currency: event.target.value })}
-          helperText={currencyHelp}
-          sx={{ width: review ? '100%' : { xs: '100%', sm: 120 } }}
-        >
-          {CURRENCIES.filter((option) => currencyCodes.includes(option.code)).map((option) => (
-            <MenuItem key={option.code} value={option.code}>
-              {option.flag} {option.code}
-            </MenuItem>
-          ))}
-        </TextField>
+        {review && (
+          <TextField
+            select
+            label="Currency"
+            value={currency}
+            size="small"
+            disabled={currencyCodes.length < 2}
+            onChange={(event) => edit({ currency: event.target.value })}
+            helperText={currencyHelp}
+            sx={{ width: '100%' }}
+          >
+            {CURRENCIES.filter((option) => currencyCodes.includes(option.code)).map((option) => (
+              <MenuItem key={option.code} value={option.code}>
+                {option.flag} {option.code}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
         <TextField
           label="Date"
           type="date"
@@ -434,6 +549,12 @@ export default function ExpenseFields({
           <span>{splitMethodLabel[splitMethod] || 'Split'}</span>
           {' · '}
           <span>{memberSummary}</span>
+          {unit && (
+            <>
+              {' · '}
+              <span>whole {unit}</span>
+            </>
+          )}
         </Box>
         <Button
           size="small"

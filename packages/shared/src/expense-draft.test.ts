@@ -245,6 +245,19 @@ describe('a duplicate of a saved Expense (#311)', () => {
     expect(copy.values.tag).toBe('home-id');
   });
 
+  it('keeps an extra currency’s amount and currency when the Group lists it (#719)', () => {
+    const inRupees = { ...shares, currency: 'INR' };
+    const copy = ExpenseDraft.duplicate({ ...today, currencies: ['USD', 'INR'] }, inRupees, [
+      'general-id',
+    ]);
+    expect(copy.values).toMatchObject({
+      amount: '30',
+      currency: 'INR',
+      payers: [{ user: 'bob', amount: '30' }],
+      customShares: { alice: '1', bob: '2' },
+    });
+  });
+
   it('leaves the amount to enter again when the stored money can’t be read or is another currency', () => {
     for (const unreadable of [
       { ...saved, moneyVersion: 1, amountMinor: 4 },

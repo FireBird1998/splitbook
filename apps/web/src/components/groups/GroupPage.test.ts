@@ -59,6 +59,7 @@ function groupRead(category: GroupRead['category'], name: string): GroupRead {
     defaultCurrency: 'INR',
     currencyLocked: false,
     alternateCurrencies: [],
+    latestExpenseCurrency: null,
     category,
     startDate: category === 'trip' ? TIME : null,
     endDate: category === 'trip' ? '2026-09-05T00:00:00.000Z' : null,

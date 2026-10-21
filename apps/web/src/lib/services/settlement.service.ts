@@ -66,7 +66,7 @@ export class SettlementService {
     }
     // A retry of a payment recorded before the archive is confirmed above; nothing new is (#578).
     if (group.isArchived) throw new Error('GROUP_ARCHIVED');
-    assertGroupCurrency(group.defaultCurrency, data.currency);
+    assertGroupCurrency(group, data.currency);
     await lockLedgerCurrency(groupId, data.currency);
 
     const settlementId = new Types.ObjectId();

@@ -129,7 +129,9 @@ test('real Group detail preserves settings, historical Tags and creation/invitat
     description: 'All settings survive',
     category: 'trip',
     defaultCurrency: 'EUR',
-    alternateCurrencies: ['DEM', 'FRF', 'USD'],
+    // A retired or unsupported stored code is dropped when read, so the list follows the
+    // Group's currency rule (#719).
+    alternateCurrencies: ['USD'],
     image: 'https://example.test/group.png',
     startDate: '2026-09-01T00:00:00.000Z',
     endDate: '2026-09-30T00:00:00.000Z',

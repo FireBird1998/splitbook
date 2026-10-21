@@ -1,6 +1,6 @@
 # Connected assistants: access and safety
 
-Updated 19 October 2026. The model below is chosen in [#603](https://github.com/FireBird1998/splitbook/issues/603). **Excluded Groups, the Assistant rule, idle expiry and the Disconnect confirmation are not implemented at baseline `5c700703`.** [Research](research.md) separates current behavior from requirements.
+Updated 21 October 2026. The model below is chosen in [#603](https://github.com/FireBird1998/splitbook/issues/603). **Settings with confirmed Disconnect (#615) and server-enforced idle expiry (#618) are implemented. Excluded Groups and the Assistant rule remain separate work.** [Research](research.md) separates current behavior from requirements.
 
 ## Group access
 
@@ -30,9 +30,9 @@ Ledger access alone cannot reveal private Drafts. Consent explains permanent dis
 
 ## Lifetime and disconnect
 
-Disconnect blocks further authorized calls immediately and keeps prepared Drafts. A confirmation step before disconnecting is planned (#615); today Settings disconnects at once. Signature validity alone is insufficient: current grant status is checked on each call. The implemented revocation boundary rotates a connection generation; old access tokens, refresh lineage and unexchanged codes cannot acquire a new grant after reconnecting. A request already authorized may finish; completed effects are not undone. Data already delivered cannot be recalled.
+Disconnect blocks further authorized calls immediately and keeps prepared Drafts. Settings requires confirmation before disconnecting (#615). Signature validity alone is insufficient: current grant status is checked on each call. The implemented revocation boundary rotates a connection generation; old access tokens, refresh lineage and unexchanged codes cannot acquire a new grant after reconnecting. A request already authorized may finish; completed effects are not undone. Data already delivered cannot be recalled.
 
-The chosen idle expiry is **90 days since last use**, with last used updated on authorized calls at most once per minute. Expired connections appear as gone and require reconnection. Token lifetimes must not end the connection earlier through disuse. Current five-minute access tokens and the provider's 30-day refresh default are not this policy; implementing and checking the 90-day lifecycle remains #618 work.
+The implemented idle expiry is **90 days since last use**, with last used updated on authorized calls at most once per minute. Expired connections appear as gone and require reconnection. Token lifetimes must not end the connection earlier through disuse. Five-minute access tokens are checked against the live idle deadline. Refresh tokens roll forward for 91 days while the server refuses refresh at 90 idle days. Never-used connections count from approval. Staging can shorten the window to at least 120 seconds; the production deployment ignores that override. An unset or empty timeout keeps 90 days. Malformed staging configuration logs once per server instance and disables only MCP (503); normal sign-in and app pages remain available. See the [runbook](../runbooks/mcp-connections.md) for configuration and redeploy requirements.
 
 ## Data and safety boundaries
 

@@ -16,13 +16,28 @@ import { getOAuthProviderState, verifyOAuthQueryParams } from '@better-auth/oaut
 import { z } from 'zod';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import type { AuthEnv } from '@/lib/auth/create-auth';
-import { MCP_DRAFT_SCOPE, MCP_LEDGER_SCOPE, MCP_SCOPES, mcpResource } from './config';
-import { currentMcpGrant, requireMcpMember, type McpConnection, type McpConsent } from './grants';
+import {
+  MCP_DRAFT_SCOPE,
+  MCP_LEDGER_SCOPE,
+  MCP_SCOPES,
+  MCP_REFRESH_TOKEN_SECONDS,
+  mcpResource,
+  mcpUnavailable,
+} from './config';
+import {
+  currentMcpGrant,
+  isMcpConnectionExpired,
+  requireMcpMember,
+  type McpConnection,
+  type McpConsent,
+} from './grants';
 import { PRODUCT_NAME } from '@/lib/product';
 
 export function mcpAuthPlugins(env: AuthEnv) {
   const resource = mcpResource(env);
   if (!resource) return [];
+  // Disable MCP plugins on a bad staging timeout; ordinary auth must still initialize.
+  if (mcpUnavailable(env)) return [];
   let context: AuthContext;
   const management = {
     id: 'splitbook-mcp-connections',
@@ -110,7 +125,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
                 { field: 'referenceId', value: row.generation },
               ],
             });
-            if (consent)
+            if (consent && !isMcpConnectionExpired(row, consent, env))
               connections.push({
                 id: row.id,
                 clientId: row.clientId,
@@ -199,6 +214,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
       consentPage: '/mcp/consent',
       scopes: MCP_SCOPES,
       accessTokenExpiresIn: 300,
+      refreshTokenExpiresIn: MCP_REFRESH_TOKEN_SECONDS,
       allowDynamicClientRegistration: env.MCP_ALLOW_DCR === 'true',
       allowUnauthenticatedClientRegistration: env.MCP_ALLOW_DCR === 'true',
       // No machine grants: connections always represent a member.
@@ -240,6 +256,29 @@ export function mcpAuthPlugins(env: AuthEnv) {
               if (!row) throw error;
             }
           }
+          const consent = await context.adapter.findOne<McpConsent>({
+            model: 'oauthConsent',
+            where: [
+              { field: 'userId', value: user.id },
+              { field: 'clientId', value: clientId },
+              { field: 'referenceId', value: row.generation },
+            ],
+          });
+          if (consent && isMcpConnectionExpired(row, consent, env)) {
+            // Reconnection starts a fresh authorization. Never let old tokens adopt
+            // it, or rotate over activity that landed after the expiry read.
+            const renewed = await context.adapter.update<McpConnection>({
+              model: 'mcpConnection',
+              where: [
+                { field: 'id', value: row.id },
+                { field: 'generation', value: row.generation },
+                { field: 'lastUsedAt', value: row.lastUsedAt ?? null },
+              ],
+              update: { generation: randomUUID(), lastUsedAt: null },
+            });
+            row = renewed ?? (await find());
+            if (!row) throw new APIError('FORBIDDEN');
+          }
           if (row.name !== name)
             await context.adapter.update({
               model: 'mcpConnection',
@@ -268,7 +307,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
                 ))
               )
                 throw new APIError('FORBIDDEN', {
-                  message: 'Connection revoked or account no longer eligible.',
+                  message: 'Connection expired, revoked or account no longer eligible.',
                 });
               return { splitbook_generation: referenceId };
             },

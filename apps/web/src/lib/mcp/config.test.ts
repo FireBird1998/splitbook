@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { mcpResource } from './config';
+import { describe, expect, it, vi } from 'vitest';
+import { mcpAuthPlugins } from './auth-plugin';
+import { mcpIdleSeconds, mcpResource } from './config';
 
 describe('MCP deployment boundary', () => {
   it('stays unavailable until explicitly enabled', () => {
@@ -37,4 +38,67 @@ describe('MCP deployment boundary', () => {
       }),
     ).toThrow();
   });
+});
+
+describe('MCP inactivity deployment boundary', () => {
+  it('keeps production at 90 days even when a short test timeout is present', () => {
+    expect(mcpIdleSeconds({})).toBe(7_776_000);
+    expect(mcpIdleSeconds({ NODE_ENV: 'production', MCP_IDLE_TIMEOUT_SECONDS: '120' })).toBe(
+      7_776_000,
+    );
+  });
+  it('keeps staging at 90 days when no timeout is supplied', () => {
+    expect(mcpIdleSeconds({ MCP_DEPLOYMENT: 'staging' })).toBe(7_776_000);
+  });
+  it('keeps staging at 90 days when the timeout is empty', () => {
+    expect(mcpIdleSeconds({ MCP_DEPLOYMENT: 'staging', MCP_IDLE_TIMEOUT_SECONDS: '' })).toBe(
+      7_776_000,
+    );
+  });
+  it('ignores copied staging overrides on the production mobile deployment', () => {
+    for (const timeout of ['120', 'malformed']) {
+      expect(
+        mcpIdleSeconds({
+          MOBILE_APP_ENV: 'production',
+          MCP_DEPLOYMENT: 'staging',
+          MCP_IDLE_TIMEOUT_SECONDS: timeout,
+        }),
+      ).toBe(7_776_000);
+    }
+  });
+  it('disables MCP plugins and logs invalid staging configuration only once', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const env = {
+        MCP_ENABLED: 'true',
+        NEXT_PUBLIC_APP_URL: 'https://staging.example.test',
+        MCP_DEPLOYMENT: 'staging',
+        MCP_IDLE_TIMEOUT_SECONDS: 'malformed',
+      };
+      expect(mcpAuthPlugins(env)).toEqual([]);
+      expect(mcpAuthPlugins(env)).toEqual([]);
+      expect(log).toHaveBeenCalledExactlyOnceWith(
+        'Invalid MCP inactivity configuration: MCP_IDLE_TIMEOUT_SECONDS must be an integer from 120 to 7776000. MCP is unavailable (503); normal sign-in and pages remain available.',
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it('allows an explicitly marked staging deployment to shorten inactivity', () => {
+    expect(
+      mcpIdleSeconds({
+        NODE_ENV: 'production',
+        MCP_DEPLOYMENT: 'staging',
+        MCP_IDLE_TIMEOUT_SECONDS: '120',
+      }),
+    ).toBe(120);
+  });
+  it.each(['0', '-1', '60', '119', 'abc', '1.5', '7776001'])(
+    'rejects invalid staging inactivity timeout %s',
+    (timeout) => {
+      expect(() =>
+        mcpIdleSeconds({ MCP_DEPLOYMENT: 'staging', MCP_IDLE_TIMEOUT_SECONDS: timeout }),
+      ).toThrow('MCP_IDLE_TIMEOUT_SECONDS');
+    },
+  );
 });

@@ -26,7 +26,7 @@ import { parseIdempotencyKey } from '@/lib/financial-write';
 const expenseValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'All payers and split participants must be group members',
   INVALID_TAG: 'Tag must be an active group tag',
-  CURRENCY_MISMATCH: 'Currency must match the group default currency',
+  CURRENCY_MISMATCH: 'Currency is not one of this Group’s currencies',
 };
 
 // POST /api/groups/[id]/expenses — Add expense

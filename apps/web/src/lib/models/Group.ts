@@ -1,5 +1,6 @@
 import mongoose, { Schema, Model } from 'mongoose';
 import { CreationRequestSchema, type ICreationRequest } from '@/lib/financial-write';
+import { MAX_EXTRA_CURRENCIES } from '@splitbook/shared/group-currencies';
 
 export interface IGroupMemberDocument {
   user: mongoose.Types.ObjectId;
@@ -76,9 +77,12 @@ const GroupSchema = new Schema<IGroupDocument>(
     alternateCurrencies: {
       type: [String],
       default: [],
+      // The Group's extra currencies (#719). Only the cap is checked here: every save validates
+      // the stored list, and an older Group's may hold repeats or retired codes that the service
+      // cleans up when the currencies are saved. The rule itself is the service's and Zod's.
       validate: {
-        validator: (v: string[]) => v.length <= 2,
-        message: 'Maximum 2 alternate currencies allowed',
+        validator: (v: string[]) => v.length <= MAX_EXTRA_CURRENCIES,
+        message: `At most ${MAX_EXTRA_CURRENCIES} extra currencies`,
       },
     },
     category: {

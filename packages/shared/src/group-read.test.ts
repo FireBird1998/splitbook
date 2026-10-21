@@ -26,6 +26,18 @@ describe('Group read contract', () => {
       isArchived: false,
       startDate: null,
       endDate: null,
+      latestExpenseCurrency: null,
+    });
+  });
+
+  it('reads the currency of the viewer’s latest Expense here, where a new one starts (#719)', () => {
+    const [read] = parseGroupListResponse({
+      status: 200,
+      data: [{ ...group, alternateCurrencies: ['EUR', 'JPY'], latestExpenseCurrency: 'JPY' }],
+    });
+    expect(read).toMatchObject({
+      alternateCurrencies: ['EUR', 'JPY'],
+      latestExpenseCurrency: 'JPY',
     });
   });
 });
