@@ -374,26 +374,26 @@ describe('Quick add with a currency the Group doesn’t list (#732)', () => {
     expect(button(html, 'Use another currency')).toBeDefined();
   });
 
-  it('reads a listed extra currency in its own money and says so', () => {
-    const { html, model } = view('€20 dinner', { group: LISBON });
-    expect(chips(html)).toContain('Amount €20.00');
+  it('reads a listed extra currency in its own money, and says so with what adding does', () => {
+    const { html, model } = view('€30 dinner', { group: LISBON });
+    expect(chips(html)).toContain('Amount €30.00');
     expect(model.ready).toBe(true);
     expect(model.message.text).toMatch(
-      /^Read as EUR, one of Lisbon & Tokyo’s currencies\. Press Enter to add it\./,
+      /^Read as EUR, one of Lisbon & Tokyo’s currencies\. Sam and Priya each owe you €10\.00\. Press Enter to add it\./,
     );
     expect(button(html, 'Use another currency')).toBeUndefined();
   });
 
   it('reads the line in the listed currency the member chose instead', () => {
-    const { html, model } = view('CHF 86 dinner', {
+    const { html, model } = view('CHF 90 dinner', {
       group: LISBON,
       currencyChoice: { said: 'CHF', code: 'EUR' },
     });
-    expect(chips(html)).toContain('Amount €86.00');
+    expect(chips(html)).toContain('Amount €90.00');
     expect(model.ready).toBe(true);
     // The line still says CHF, so the hint says what was read instead.
     expect(model.message.text).toMatch(
-      /^Read as EUR instead of CHF, one of Lisbon & Tokyo’s currencies\. Nothing is converted\. Press Enter to add it\./,
+      /^Read as EUR instead of CHF, one of Lisbon & Tokyo’s currencies\. Nothing is converted\. Sam and Priya each owe you €30\.00\. Press Enter to add it\./,
     );
   });
 });

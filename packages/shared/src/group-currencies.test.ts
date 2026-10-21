@@ -147,7 +147,8 @@ describe('unlistedCurrencyFix: an Expense in a currency the Group doesn’t list
       ask: 'Change this Expense’s currency.',
       add: null,
       choices: ['INR', 'EUR', 'JPY', 'USD', 'GBP'],
-      adding: 'Lisbon & Tokyo already has 4 extra currencies, the most a Group can have.',
+      adding:
+        'Lisbon & Tokyo already has 4 extra currencies, the most a Group can have. An admin can remove one nothing uses in Group settings.',
     });
   });
 
