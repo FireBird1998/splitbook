@@ -286,6 +286,7 @@ const ExpenseSummary = memo(function ExpenseSummary({
   month,
   summary,
   trip,
+  mainCurrency,
   onChooseTripCurrency,
   currentUserId,
   refreshedAt,
@@ -302,6 +303,8 @@ const ExpenseSummary = memo(function ExpenseSummary({
   summary: ExpenseWindowSummary | null;
   /** A Trip's summary, for a Trip in more than one currency (#730). */
   trip?: TripSummaryState;
+  /** The Group's main currency, marked on the Trip's switch. */
+  mainCurrency: string;
   onChooseTripCurrency?: (currency: string) => void;
   currentUserId: string;
   refreshedAt: number | null;
@@ -318,7 +321,7 @@ const ExpenseSummary = memo(function ExpenseSummary({
   onSelectMonth: (month: string | null) => void;
 }) {
   const figures = summary ? summaryStats(summary, currentUserId) : null;
-  const spending = household ? null : tripSpending(trip, summary?.currency ?? 'INR');
+  const spending = household ? null : tripSpending(trip, mainCurrency);
   const large = useLargeText();
   const updated = spending ? (
     // The figures shown are the Trip summary's: its time, and whether it is this phone's copy.
@@ -706,6 +709,7 @@ export const GroupExpensesView = memo(
           month={state.month}
           summary={summary}
           trip={state.trip}
+          mainCurrency={group.defaultCurrency}
           onChooseTripCurrency={pickCurrency}
           currentUserId={currentUserId}
           refreshedAt={listed ? expenses.refreshedAt : null}
