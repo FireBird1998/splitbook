@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildToReview } from '@splitbook/shared/to-review';
 import { toReviewQuickFixes, type QuickFixFact } from '@splitbook/shared/to-review-quick-fixes';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
+import { unlistedCurrencyFix } from '@splitbook/shared/group-currencies';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
 
@@ -20,6 +21,7 @@ function row(
   missingFields: string[],
   problems: string[] = [],
   category?: 'trip' | 'home',
+  extra: Partial<Parameters<typeof ReviewRow>[0]> = {},
 ) {
   const read = {
     draft: {
@@ -80,6 +82,7 @@ function row(
           onMore: vi.fn(),
           onSave: vi.fn(),
           onDelete: vi.fn(),
+          ...extra,
         }),
       ),
     ),
@@ -169,6 +172,64 @@ describe('a row whose item is in another currency, in a Trip (#596)', () => {
     );
     expect(shown).toBe(
       'Station dinner 2 Sep 2026 · You set this aside $30.00 Needs the Trip currency Fix the rest',
+    );
+  });
+});
+
+describe('a row in a currency its Group doesn’t list (#732)', () => {
+  // Lisbon & Tokyo, a fictional Trip: main currency INR, extra currencies EUR and JPY.
+  const lisbon = {
+    name: 'Lisbon & Tokyo',
+    defaultCurrency: 'INR',
+    alternateCurrencies: ['EUR', 'JPY'],
+  };
+  const dinner = {
+    description: 'Dinner in Zürich',
+    amount: 86,
+    currency: 'CHF',
+    date: '2026-10-12',
+    category: 'food',
+    paidBy: [{ user: alex, amount: 86 }],
+    splitMethod: 'equal',
+    splitBetween: [{ user: alex }, { user: sam }],
+    tag: 'Food',
+  };
+
+  it('explains the currency once and offers both fixes, as the board does', () => {
+    const shown = row(dinner, [], ['CURRENCY_NOT_LISTED'], 'trip', {
+      currencyFix: { currency: 'CHF', ...unlistedCurrencyFix(lisbon, 'CHF', 86) },
+      onAddCurrency: vi.fn(),
+      onChangeCurrency: vi.fn(),
+    });
+    expect(shown).toMatch(
+      /^Dinner in Zürich Currency not listed 12 Oct 2026 · You set this aside /,
+    );
+    expect(shown).toContain(
+      'CHF isn’t one of Lisbon & Tokyo’s currencies. Add it, or change this Expense’s currency.',
+    );
+    expect(shown).toContain('Add CHF to Lisbon & Tokyo');
+    expect(shown).toContain('Change currency to Change to… INR EUR JPY');
+    expect(shown).toContain(
+      'Adding lets everyone use CHF, the 3rd of 4 extra currencies. Changing keeps 86.00 and changes only the currency; nothing is converted.',
+    );
+    expect(shown).toContain('CHF 86.00');
+    expect(shown).not.toContain('a currency listed by the Group');
+    expect(shown).not.toContain('Fix the rest');
+  });
+
+  it('offers only a change once the Group has 4 extra currencies', () => {
+    const full = { ...lisbon, alternateCurrencies: ['EUR', 'JPY', 'USD', 'GBP'] };
+    const shown = row(dinner, [], ['CURRENCY_NOT_LISTED'], 'trip', {
+      currencyFix: { currency: 'CHF', ...unlistedCurrencyFix(full, 'CHF', 86) },
+      onAddCurrency: vi.fn(),
+      onChangeCurrency: vi.fn(),
+    });
+    expect(shown).toContain(
+      'CHF isn’t one of Lisbon & Tokyo’s currencies. Change this Expense’s currency.',
+    );
+    expect(shown).not.toContain('Add CHF');
+    expect(shown).toContain(
+      'Lisbon & Tokyo already has 4 extra currencies, the most a Group can have.',
     );
   });
 });
