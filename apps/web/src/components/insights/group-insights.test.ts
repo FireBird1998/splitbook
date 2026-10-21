@@ -105,6 +105,21 @@ describe('the address', () => {
       expect(readInsightsAddress(params(`compare=${compare}`), '2026-10').compare, compare).toBe(6);
   });
 
+  it('keeps a currency it names, and a currency code only (#729)', () => {
+    expect(readInsightsAddress(params('currency=JPY'), '2026-10')).toEqual({
+      month: '2026-10',
+      compare: 6,
+      currency: 'JPY',
+    });
+    expect(readInsightsAddress(params('currency=EURO'), '2026-10')).toEqual({
+      month: '2026-10',
+      compare: 6,
+    });
+    expect(insightsHref(GROUP, { month: '2026-09', compare: 6, currency: 'JPY' }, '2026-10')).toBe(
+      `/groups/${GROUP}/insights?month=2026-09&currency=JPY`,
+    );
+  });
+
   it('names only what isn’t the default, so the bare address is the current Month', () => {
     const at = (month: string, compare: 1 | 6 | 12) =>
       insightsHref(GROUP, { month, compare }, '2026-10');

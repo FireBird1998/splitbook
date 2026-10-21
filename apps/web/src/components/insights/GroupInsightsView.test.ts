@@ -313,3 +313,60 @@ describe('the tab’s states', () => {
     );
   });
 });
+
+describe('the currency switch (#729)', () => {
+  /** September in rupees, euros and dollars: the read opened on euros, the most Expenses. */
+  const travelling: GroupInsightsRead = {
+    ...READ,
+    currency: 'EUR',
+    otherCurrencies: [
+      { currency: 'INR', spentMinor: 1842000, expenseCount: 14 },
+      { currency: 'USD', spentMinor: 10000, expenseCount: 2 },
+    ],
+    currencies: [
+      { currency: 'INR', expenseCount: 14, spentMinor: 1842000 },
+      { currency: 'EUR', expenseCount: 16, spentMinor: 64000 },
+      { currency: 'USD', expenseCount: 2, spentMinor: 10000 },
+    ],
+  };
+  const selectedTab = (html: string) =>
+    /<button\b(?=[^>]*role="tab")(?=[^>]*aria-selected="true")[^>]*aria-label="([^"]*)"/.exec(
+      html,
+    )?.[1];
+
+  it('opens on the currency the read chose, says why, and replaces the left-out note', () => {
+    const html = render({ read: travelling });
+    expect(html).toMatch(/<div\b(?=[^>]*role="tablist")(?=[^>]*aria-label="Spending in")/);
+    expect(selectedTab(html)).toBe('EUR, €640.00 spent in 16 Expenses');
+    expect(text(html)).toContain(
+      'Opened on EUR, the currency with the most Expenses (16). Each currency is shown on its own; nothing is converted.',
+    );
+    expect(text(html)).not.toContain('left out');
+  });
+
+  it('says only that each currency is shown on its own once one is chosen', () => {
+    const html = render({
+      read: { ...travelling, currency: 'USD' },
+      address: { month: '2026-09', compare: 6, currency: 'USD' },
+    });
+    expect(selectedTab(html)).toBe('USD, $100.00 spent in 2 Expenses');
+    expect(text(html)).toContain('Each currency is shown on its own; nothing is converted.');
+    expect(text(html)).not.toContain('Opened on');
+  });
+
+  it('shows a read in another currency as loading, never under the chosen one', () => {
+    const html = render({
+      read: travelling,
+      address: { month: '2026-09', compare: 6, currency: 'USD' },
+    });
+    expect(figures(html)).toContain('aria-busy="true"');
+    expect(figures(html)).not.toContain('€');
+  });
+
+  it('shows no switch while one currency is spent in', () => {
+    const html = render({
+      read: { ...READ, currencies: [{ currency: 'INR', expenseCount: 14, spentMinor: 1842000 }] },
+    });
+    expect(html).not.toContain('aria-label="Spending in"');
+  });
+});
