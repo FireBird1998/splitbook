@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { ASSISTANT_CANNOT } from '@/lib/mcp/assistant-limits';
+import { TEST_PROMPT } from '@/lib/mcp/connect-choices';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
 import ConnectAssistant from './ConnectAssistant';
@@ -35,6 +36,23 @@ describe('Connect an assistant', () => {
     // Claude is chosen until the member picks another.
     expect(choiceLink(html, 'claude')).toContain('aria-current="page"');
     expect(choiceLink(html, 'chatgpt')).not.toContain('aria-current');
+  });
+
+  it('opens Claude’s setup for a choice it doesn’t know, as for none (#619)', () => {
+    for (const unknown of ['CLAUDE-CODE', '<script>', 'claude ', '']) {
+      const html = connect(unknown);
+      expect(choiceLink(html, 'claude'), unknown).toContain('aria-current="page"');
+      for (const other of ['chatgpt', 'claude-code', 'other'])
+        expect(choiceLink(html, other), `${unknown} ${other}`).not.toContain('aria-current');
+      expect(text(html), unknown).toContain('Add Splitbook to Claude as a custom connector');
+    }
+  });
+
+  it('gives a test prompt that reads nothing from the ledger (#619)', () => {
+    expect(TEST_PROMPT).toBe(
+      'Use Splitbook’s connection_status only and show the result. Don’t read my Groups, balances or Expenses.',
+    );
+    expect(text(connect('claude'))).toContain(TEST_PROMPT);
   });
 
   it.each([
