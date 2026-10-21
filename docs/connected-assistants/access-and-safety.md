@@ -1,6 +1,6 @@
 # Connected assistants: access and safety
 
-Updated 21 October 2026. The model below is chosen in [#603](https://github.com/FireBird1998/splitbook/issues/603). **Settings with confirmed Disconnect (#615) and server-enforced idle expiry (#618) are implemented. Excluded Groups are chosen at approval and enforced by every tool since #617. The Assistant rule remains separate work.** [Research](research.md) separates current behavior from requirements.
+Updated 21 October 2026. The model below is chosen in [#603](https://github.com/FireBird1998/splitbook/issues/603). **Settings with confirmed Disconnect (#615) and server-enforced idle expiry (#618) are implemented. Excluded Groups are chosen at approval and enforced by every tool since #617. The Assistant rule is set in Group settings and enforced by every tool since #621; the approval page shows a Not allowed Group greyed out, and it can't be ticked.** [Research](research.md) separates current behavior from requirements.
 
 ## Group access
 

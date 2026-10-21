@@ -1,10 +1,32 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 import { enterAsPersona, expectThemeApplied, reviewScreenshot } from './fixtures';
 
 // Run against the real, seeded MCP-enabled app with playwright.mcp-consent.config.ts.
 test.skip(process.env.MCP_CONSENT_TEST !== 'true', 'Requires the MCP consent configuration');
+
+/** Alex's own Group, which Alex sets to Not allowed for a run and back afterwards (#621). */
+const NOT_ALLOWED = 'Studio Lunch Club';
+let notAllowedId: string | null = null;
+
+async function setAssistantRule(page: Page, rule: 'allowed' | 'not_allowed') {
+  if (!notAllowedId) {
+    const groups = await page.request.get('/api/groups');
+    expect(groups.status()).toBe(200);
+    const listed = (await groups.json()).data as { _id: string; name: string }[];
+    notAllowedId = listed.find((group) => group.name === NOT_ALLOWED)!._id;
+  }
+  const changed = await page.request.put(`/api/groups/${notAllowedId}/assistant-rule`, {
+    data: { rule },
+  });
+  expect(changed.status()).toBe(200);
+}
+
+// The demo Group goes back to Allowed, as the seed left it.
+test.afterEach(async ({ page }) => {
+  if (notAllowedId) await setAssistantRule(page, 'allowed');
+});
 
 for (const allowPreparation of [false, true]) {
   test(`preparation permission is optional and accessible (opted in=${allowPreparation})`, async ({
@@ -31,6 +53,7 @@ for (const allowPreparation of [false, true]) {
     expect(registration.status()).toBe(201);
     const { client_id: clientId } = await registration.json();
     await enterAsPersona(page, 'alex');
+    await setAssistantRule(page, 'not_allowed');
     const verifier = randomBytes(32).toString('base64url');
     const query = new URLSearchParams({
       client_id: clientId,
@@ -107,11 +130,27 @@ for (const allowPreparation of [false, true]) {
         { exact: true },
       ),
     ).toBeVisible();
-    // Which Groups (#617): every Group ticked, with the warning about leaving one out.
+    // Which Groups (#617): every Group that allows assistants ticked, with the warning about
+    // leaving one out. A Group whose admins don't allow them is greyed out (#621).
     const groupChoice = page.getByRole('group', { name: 'Which Groups' });
     const groupBoxes = groupChoice.getByRole('checkbox');
-    expect(await groupBoxes.count()).toBeGreaterThan(1);
-    for (const box of await groupBoxes.all()) await expect(box).toBeChecked();
+    expect(await groupBoxes.count()).toBeGreaterThan(2);
+    const notAllowed = groupChoice.getByRole('checkbox', { name: new RegExp(`^${NOT_ALLOWED}`) });
+    await expect(notAllowed).toBeDisabled();
+    await expect(notAllowed).not.toBeChecked();
+    for (const box of await groupBoxes.all())
+      if (await box.isEnabled()) await expect(box).toBeChecked();
+    await expect(
+      groupChoice.getByText('You don’t allow assistants in this Group', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      groupChoice.getByText('A Group’s admins decide whether assistants can use it.', {
+        exact: true,
+      }),
+    ).toBeVisible();
+    // The To review checkbox lines up with the Groups' checkboxes (#621).
+    const left = async (box: typeof permission) => (await box.boundingBox())!.x;
+    expect(Math.abs((await left(permission)) - (await left(groupBoxes.first())))).toBeLessThan(1);
     await expect(
       page.getByText(
         'Groups you untick are left out of Fictional consent test assistant’s answers, so its totals won’t include them.',
@@ -182,6 +221,7 @@ for (const allowPreparation of [false, true]) {
     expect(listed.status()).toBe(200);
     const reply = await listed.text();
     expect(reply).toContain('Banyan Court Flat 4B');
+    expect(reply).not.toContain(NOT_ALLOWED);
     if (allowPreparation) expect(reply).not.toContain('Kochi to Alleppey');
     else expect(reply).toContain('Kochi to Alleppey');
     // Asked to approve the same assistant again, the page starts from the choice in force,

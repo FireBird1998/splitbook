@@ -14,6 +14,7 @@ import {
   type DraftSaveOutcome,
 } from '@splitbook/shared/validators/expense-draft';
 import { expenseService } from './expense.service';
+import { ASSISTANTS_ALLOWED } from './assistant-ledger.service';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
 import {
@@ -136,6 +137,8 @@ async function requireMembership(
       _id: reach ? { $eq: scope.group, $nin: reach.excluded } : scope.group,
       'members.user': scope.owner,
       deletionRequestedAt: null,
+      // Nor one whose admins don't allow assistants (#621).
+      ...(reach ? ASSISTANTS_ALLOWED : {}),
     },
     { session, projection: { _id: 1, defaultCurrency: 1, isArchived: 1 } },
   );

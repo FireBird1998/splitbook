@@ -1,3 +1,4 @@
+import { assistantRuleLabel } from './assistant-rule';
 import { formatCurrency } from './currency';
 import { formatDate, formatDateTime } from './date';
 import { toMajorAmount } from './exact-money';
@@ -83,6 +84,12 @@ export function formatActivityHeadline(activity: ActivityLike, viewerId?: string
       return `${actorName} created the group`;
     case 'group_updated':
       return `${actorName} updated group settings`;
+    case 'assistant_rule_changed': {
+      const rule = assistantRuleLabel(meta.rule);
+      return rule
+        ? `${actorName} set connected assistants to ${rule}`
+        : `${actorName} changed connected assistants`;
+    }
     default:
       return `${actorName} performed an action`;
   }
@@ -129,7 +136,7 @@ export function formatActivityTimestamp(activity: ActivityLike): string {
 export interface ActivityLineParts {
   actor: string;
   action: string;
-  /** The Expense the event is about, by its description; null for any other event. */
+  /** The Expense the event is about, by its description, or the Assistant rule set; else null. */
   subject: string | null;
 }
 
@@ -159,6 +166,12 @@ export function activityLineParts(activity: ActivityLike, viewerId?: string): Ac
       return line('created the Group');
     case 'group_updated':
       return line('updated the Group');
+    case 'assistant_rule_changed': {
+      const rule = assistantRuleLabel(meta.rule);
+      return rule
+        ? line('set connected assistants to', rule)
+        : line('changed connected assistants');
+    }
     default:
       return line('made a change');
   }

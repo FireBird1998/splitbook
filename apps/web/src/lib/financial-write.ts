@@ -31,6 +31,7 @@ export const ACTIVITY_TYPES: ActivityType[] = [
   'member_left',
   'group_created',
   'group_updated',
+  'assistant_rule_changed',
 ];
 
 export const PENDING_ACTIVITY_LIMIT = 100;

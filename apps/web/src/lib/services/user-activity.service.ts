@@ -37,7 +37,7 @@ const scalar = (value: unknown) =>
 
 /** The metadata fields Home's line and amount use, and the money fields of an edit. */
 const IDS = ['expenseId', 'settlementId'];
-const TEXTS = ['description', 'currency', 'paidByName', 'paidToName', 'action', 'method'];
+const TEXTS = ['description', 'currency', 'paidByName', 'paidToName', 'action', 'method', 'rule'];
 const MONEY_CHANGES = ['amount', 'amountMinor', 'currency'];
 
 /**
