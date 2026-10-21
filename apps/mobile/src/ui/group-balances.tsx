@@ -13,6 +13,7 @@ import {
   CompactButton,
   CompactText,
   Divider,
+  IconTile,
   Money,
   RowAmount,
   SectionHeader,
@@ -42,6 +43,102 @@ const recordWaitsShort = 'Record once updated';
 /** A Group whose details couldn't be read (owner decision 2A): the sheet needs them (#219). */
 export const recordWaitsForDetails = (name: string) =>
   `Record is available once ${name}’s details load.`;
+
+/** "₹1,480.00 and €20.00", or "₹1,480.00, €20.00 and ¥8,400". */
+const andList = (words: string[]) =>
+  words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : (words[0] ?? '');
+
+/**
+ * Settle up (#734): each person the member owes, or who owes the member, in two currencies or
+ * more, with those Debts in `currencies`' order. Each could be recorded on its own tab; one
+ * payment can clear them all.
+ */
+export function settleUpOffers(
+  balances: GroupCurrencyBalance[],
+  group: MobileGroup,
+  currentUserId: string,
+  currencies: string[],
+) {
+  const pairs = new Map<
+    string,
+    { paidBy: string; paidTo: string; other: string; youPay: boolean; debts: string[] }
+  >();
+  for (const currency of currencies)
+    for (const payment of recordablePayments(balances, group, currentUserId, currency)) {
+      const key = `${payment.paidBy}:${payment.paidTo}`;
+      const youPay = payment.paidBy === currentUserId;
+      const pair = pairs.get(key) ?? {
+        paidBy: payment.paidBy,
+        paidTo: payment.paidTo,
+        other: youPay ? payment.recipient : payment.payer,
+        youPay,
+        debts: [],
+      };
+      pair.debts.push(formatCurrency(payment.amount, currency));
+      pairs.set(key, pair);
+    }
+  return [...pairs.values()].filter(({ debts }) => debts.length > 1);
+}
+
+/** "You owe Sam Chen in 2 currencies", and Settle both (board "Settle both currencies at once"). */
+function SettleUpOffer({
+  offer,
+  offline,
+  locked,
+  unavailable,
+  onSettleAll,
+}: {
+  offer: ReturnType<typeof settleUpOffers>[number];
+  offline: boolean;
+  locked: boolean;
+  unavailable: string | null;
+  onSettleAll: (paidBy: string, paidTo: string) => void;
+}) {
+  const column = useTextColumn();
+  const count = offer.debts.length;
+  const action = count === 2 ? 'Settle both' : 'Settle all';
+  return (
+    <Card padded>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          ...(column ? { flexWrap: 'wrap', rowGap: 8 } : {}),
+        }}
+      >
+        <IconTile icon="swap-horizontal-outline" />
+        <View style={{ flex: 1, minWidth: column ?? 0, gap: 2 }}>
+          <CompactText weight="semibold">
+            {offer.youPay
+              ? `You owe ${offer.other} in ${count} currencies`
+              : `${offer.other} owes you in ${count} currencies`}
+          </CompactText>
+          <CompactText variant="caption" tone="secondary">
+            {andList(offer.debts)}
+          </CompactText>
+        </View>
+        <Trailing column={column}>
+          <CompactButton
+            label={action}
+            variant="tonal"
+            dense
+            accessibilityLabel={`${action} with ${offer.other}`}
+            disabled={offline || locked || unavailable !== null}
+            hint={
+              offline
+                ? recordNeedsConnection
+                : locked
+                  ? recordWaitsForBalances
+                  : (unavailable ?? undefined)
+            }
+            onPress={() => onSettleAll(offer.paidBy, offer.paidTo)}
+          />
+        </Trailing>
+      </View>
+    </Card>
+  );
+}
 
 /**
  * Whether Home last read the member as settled up in a Group: its balances there are known,
@@ -570,6 +667,7 @@ export function GroupBalancesView({
   knownSettled = false,
   recordUnavailable = null,
   onRecord,
+  onSettleAll,
   onCheckPayment,
   onRefreshBalances,
 }: {
@@ -587,6 +685,8 @@ export function GroupBalancesView({
   /** Why Record can't be used, such as a Group whose details couldn't be read (2A, #219). */
   recordUnavailable?: string | null;
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
+  /** Settle up: one payment for every Debt between two people, in several currencies (#734). */
+  onSettleAll?: (paidBy: string, paidTo: string) => void;
   onCheckPayment: () => void;
   onRefreshBalances: () => void;
 }) {
@@ -721,6 +821,18 @@ export function GroupBalancesView({
           onChange={(code) => setChosen({ groupId: group.id, currency: code })}
         />
       ) : null}
+      {onSettleAll
+        ? settleUpOffers(balances.data, group, currentUserId, currencies).map((offer) => (
+            <SettleUpOffer
+              key={`${offer.paidBy}:${offer.paidTo}`}
+              offer={offer}
+              offline={offline}
+              locked={balances.changed === true}
+              unavailable={recordUnavailable}
+              onSettleAll={onSettleAll}
+            />
+          ))
+        : null}
       {balances.data.length === 0 ? (
         <Card padded>
           <CompactText weight="semibold" tone="secondary">

@@ -51,8 +51,12 @@ import {
 } from '@splitbook/shared/cross-currency-payment';
 import { getCurrencyPrecision } from '@splitbook/shared/currency';
 import {
+  batchBody,
   emptySettlement,
   enterRateOrPaid,
+  isBatchBody,
+  parseRecordedBatch,
+  readBatchPayment,
   parseRecordedSettlement,
   parseSettlementAttempt,
   settlementBody,
@@ -165,8 +169,10 @@ import type {
   GroupCreation,
   GroupDestination,
   GroupDraft,
+  GroupCurrencyBalance,
   GroupFinancialState,
   GroupReturnContext,
+  MobileGroup,
   ScrollAnchor,
   GroupSnackbar,
   KeptDraft,
@@ -4704,6 +4710,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         status: 'editing',
         draft: { paidBy, paidTo, currency, amount: String(debt.amount), note: '' },
         crossCurrency: null,
+        batch: null,
         suggested: debt.amount,
         acknowledged: false,
         message: null,
@@ -4786,6 +4793,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const choosePaidCurrency = async (paidCurrency: string) => {
     const state = snapshot.settlement;
     if (!enteringSettlement() || !state.draft || !state.group || !state.groupId) return;
+    if (state.batch) return payBatchIn(paidCurrency);
     const { draft, crossCurrency, groupId } = state;
     if ((crossCurrency?.paidCurrency ?? draft.currency) === paidCurrency) return;
     if (paidCurrency !== draft.currency && !groupCurrencies(state.group).includes(paidCurrency))
@@ -4820,10 +4828,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * the connection returns to a sheet that couldn't reach Splitbook. The sheet opens at it unless
    * the member has already set the rate or the amount paid; theirs stays.
    */
-  const lookUpRate = async (groupId: string, pair: PaymentCurrencies, asked: number) => {
-    const owner = generation,
-      view = route;
-    let rate: RateState;
+  /** The Group's suggested rate for the pair (#726), read live; never saved on this phone. */
+  const readRate = async (groupId: string, pair: PaymentCurrencies, owner: number) => {
     try {
       const { suggestion, reason } = parseRateSuggestionResponse(
         await request(
@@ -4831,14 +4837,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           owner,
         ),
       );
-      rate = suggestion ? { status: 'ready', suggestion } : { status: 'none', reason };
+      return (
+        suggestion ? { status: 'ready', suggestion } : { status: 'none', reason }
+      ) as RateState;
     } catch (error) {
       // "No rate suggested" is for the rate service alone: offline, the sheet waits instead.
-      rate =
+      return (
         error instanceof RequestError && error.networkFailure
           ? { status: 'unreachable' }
-          : { status: 'none', reason: null };
+          : { status: 'none', reason: null }
+      ) as RateState;
     }
+  };
+  const lookUpRate = async (groupId: string, pair: PaymentCurrencies, asked: number) => {
+    const owner = generation,
+      view = route;
+    const rate = await readRate(groupId, pair, owner);
     const state = snapshot.settlement;
     const cross = state.crossCurrency;
     if (
@@ -4893,6 +4907,179 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (rate?.status === 'ready')
       editCrossCurrency('rate', suggestedRateText(rate.suggestion.rate));
   };
+  /**
+   * The Debts between two people as the Balances read them, one way, in the Group's order: its
+   * main currency, its others, then any it no longer lists (#734).
+   */
+  const debtsBetween = (
+    balances: GroupCurrencyBalance[],
+    group: MobileGroup,
+    paidBy: string,
+    paidTo: string,
+  ) => {
+    const listed = groupCurrencies(group);
+    const rank = (currency: string) =>
+      listed.includes(currency) ? listed.indexOf(currency) : listed.length;
+    return balances
+      .flatMap(({ currency, debts }) =>
+        debts
+          .filter((debt) => debt.from.id === paidBy && debt.to.id === paidTo && debt.amount > 0)
+          .map(({ amount }) => ({ currency, amount })),
+      )
+      .sort((a, b) => rank(a.currency) - rank(b.currency) || a.currency.localeCompare(b.currency));
+  };
+  /**
+   * Settle up (#734, board "Settle both currencies at once"): one payment, in one currency, for
+   * every Debt the payer owes the other in two currencies or more, each at its own rate. It is
+   * paid in the main currency when one of the Debts is in it, else the first of them the Group
+   * lists; the rates for the others are looked up live.
+   */
+  const selectSettleAll = async (paidBy: string, paidTo: string) => {
+    const state = snapshot.settlement,
+      account = snapshot.auth.user?.id;
+    if (
+      snapshot.screen !== 'settlement' ||
+      state.status !== 'ready' ||
+      state.attempt ||
+      !state.group ||
+      !state.groupId ||
+      !account ||
+      !canRecordSettlement(account, paidBy, paidTo) ||
+      !state.group.members.some((m) => m.user.id === paidBy) ||
+      !state.group.members.some((m) => m.user.id === paidTo)
+    )
+      return;
+    const debts = debtsBetween(state.balances, state.group, paidBy, paidTo);
+    const listed = groupCurrencies(state.group);
+    const payable = debts.map(({ currency }) => currency).filter((c) => listed.includes(c));
+    if (debts.length < 2 || !payable.length) return;
+    const paidCurrency = payable.includes(state.group.defaultCurrency)
+      ? state.group.defaultCurrency
+      : payable[0]!;
+    const asked = ++rateRequest;
+    publish({
+      ...snapshot,
+      settlement: {
+        ...state,
+        status: 'editing',
+        draft: { paidBy, paidTo, currency: paidCurrency, amount: '', note: '' },
+        crossCurrency: null,
+        batch: { paidBy, paidTo, debts, paidCurrency, rates: waitingRates(debts, paidCurrency) },
+        suggested: null,
+        acknowledged: false,
+        message: null,
+        validation: emptyFormValidation(),
+      },
+    });
+    await lookUpBatchRates(state.groupId, asked);
+  };
+  /** Each Debt in another currency than the paying one, its rate being looked up. */
+  const waitingRates = (debts: { currency: string }[], paidCurrency: string) =>
+    Object.fromEntries(
+      debts
+        .filter(({ currency }) => currency !== paidCurrency)
+        .map(({ currency }) => [
+          currency,
+          { rate: { status: 'loading' } as RateState, custom: null },
+        ]),
+    );
+  /** The settle-up's rates, looked up live, each into its Debt as it comes. */
+  const lookUpBatchRates = async (groupId: string, asked: number) => {
+    const owner = generation,
+      view = route,
+      batch = snapshot.settlement.batch;
+    if (!batch) return;
+    await Promise.all(
+      Object.keys(batch.rates).map(async (currency) => {
+        const rate = await readRate(groupId, { currency, paidCurrency: batch.paidCurrency }, owner);
+        const latest = snapshot.settlement.batch;
+        if (
+          !current(owner) ||
+          view !== route ||
+          asked !== rateRequest ||
+          latest?.paidCurrency !== batch.paidCurrency ||
+          !latest.rates[currency]
+        )
+          return;
+        publish({
+          ...snapshot,
+          settlement: {
+            ...snapshot.settlement,
+            batch: {
+              ...latest,
+              rates: { ...latest.rates, [currency]: { ...latest.rates[currency]!, rate } },
+            },
+          },
+        });
+      }),
+    );
+  };
+  /** Pay the settle-up in another of its Debts' currencies: each rate starts afresh. */
+  const payBatchIn = async (paidCurrency: string) => {
+    const state = snapshot.settlement,
+      batch = state.batch;
+    if (!batch || !state.group || !state.groupId || !state.draft) return;
+    if (
+      batch.paidCurrency === paidCurrency ||
+      !batch.debts.some(({ currency }) => currency === paidCurrency) ||
+      !groupCurrencies(state.group).includes(paidCurrency)
+    )
+      return;
+    const asked = ++rateRequest;
+    publish({
+      ...snapshot,
+      settlement: {
+        ...state,
+        status: 'editing',
+        draft: { ...state.draft, currency: paidCurrency },
+        batch: { ...batch, paidCurrency, rates: waitingRates(batch.debts, paidCurrency) },
+        message: null,
+      },
+    });
+    await lookUpBatchRates(state.groupId, asked);
+  };
+  /** The member's own rate for one Debt of the settle-up, or null for its suggestion again. */
+  const setBatchRate = (currency: string, custom: string | null) => {
+    const state = snapshot.settlement,
+      batch = state.batch;
+    if (!enteringSettlement() || !batch?.rates[currency]) return;
+    publish({
+      ...snapshot,
+      settlement: {
+        ...state,
+        status: 'editing',
+        batch: {
+          ...batch,
+          rates: { ...batch.rates, [currency]: { ...batch.rates[currency]!, custom } },
+        },
+        message: null,
+      },
+    });
+  };
+  const editBatchRate = (currency: string, text: string) => setBatchRate(currency, text);
+  /** Use ₹92.10: the Debt's suggested rate again (#734). */
+  const restoreBatchRate = (currency: string) => setBatchRate(currency, null);
+  /** A payment's retry identity, stored on this device before anything is sent. */
+  const storeAttempt = async (
+    lease: AccountStorageLease,
+    storage: NonNullable<MobileDependencies['settlementAttempts']>,
+    groupId: string,
+    body: string,
+    owner: number,
+  ) => {
+    const pending = { key: dependencies.newSubmissionKey?.() ?? '', body };
+    const value = { version: 1, accountId: lease.accountId, groupId, ...pending };
+    parseSettlementAttempt(value, lease.accountId, groupId);
+    try {
+      await lease.write(() => storage.save(lease.accountId, groupId, value));
+    } catch (error) {
+      if (error instanceof Superseded || !current(owner)) throw error;
+      throw new DeviceStorageError(
+        'Nothing was sent: this device couldn’t store a recovery copy of the payment. Your entries are kept. Choose Record payment again.',
+      );
+    }
+    return pending;
+  };
   const recordSettlement = async () => {
     const state = snapshot.settlement,
       lease = accountStorage(),
@@ -4925,8 +5112,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return;
       }
     }
+    // Settling up waits for every Debt's rate, by the same rules (#734).
+    const batch = state.attempt ? null : state.batch;
+    const batchReading = batch ? readBatchPayment(batch) : null;
+    if (batchReading?.waiting) {
+      publish({
+        ...snapshot,
+        settlement: { ...state, status: 'editing', message: batchReading.waiting },
+      });
+      return;
+    }
     // Corrections stay on their fields, every entry is kept, and nothing is requested.
-    if (!state.attempt) {
+    if (!state.attempt && !batch) {
       const errors = validateSettlementDraft(state.draft);
       const rejected = rejectFields(settlementFields, state.validation, errors);
       if (rejected) {
@@ -4982,6 +5179,59 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         draft.paidTo,
       );
       assertSettlementAuthorization(lease.accountId, draft.paidBy, draft.paidTo);
+      if (!attempt && batch && batchReading?.amounts) {
+        // Each Debt as the Balances just read it: one gone ends the payment; one changed shows,
+        // and waits to be recorded again. Nobody pays a Debt that isn't there (#734).
+        const latest = debtsBetween(context.balances, context.group, batch.paidBy, batch.paidTo);
+        const debts = batch.debts.map(({ currency }) =>
+          latest.find((debt) => debt.currency === currency),
+        );
+        if (debts.some((debt) => !debt)) {
+          publish({
+            ...snapshot,
+            settlement: {
+              ...state,
+              ...context,
+              status: 'ready',
+              draft: null,
+              batch: null,
+              message: suggestionChanged,
+              validation: emptyFormValidation(),
+            },
+          });
+          return;
+        }
+        if (debts.some((debt, index) => debt!.amount !== batch.debts[index]!.amount)) {
+          publish({
+            ...snapshot,
+            settlement: {
+              ...state,
+              ...context,
+              status: 'review',
+              batch: { ...batch, debts: debts as typeof batch.debts },
+              message: 'The Debts changed. Check the payment, then record again.',
+            },
+          });
+          return;
+        }
+      }
+      if (!attempt && batch && batchReading?.amounts) {
+        const { amounts } = batchReading;
+        // One Settlement for each Debt, in one request: its body is what's stored and resent.
+        const body = batchBody({
+          ...draft,
+          currency: amounts.paidCurrency,
+          amount: '',
+          batch: amounts.settlements,
+        });
+        stored = {
+          ...draft,
+          currency: amounts.paidCurrency,
+          amount: String(toMajorAmount(amounts.totalPaidMinor, amounts.paidCurrency)),
+          batch: JSON.parse(body).settlements,
+        };
+        attempt = await storeAttempt(lease, storage, groupId, body, owner);
+      }
       if (!attempt) {
         const suggested = settlementSuggestion(context.balances, draft);
         // The suggestion is gone: recording it anyway would be a payment nobody suggested.
@@ -5044,30 +5294,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               )
             : undefined;
         if (paid) stored = { ...draft, paid };
-        const body = settlementBody(stored);
-        const pending = { key: dependencies.newSubmissionKey?.() ?? '', body };
-        const value = { version: 1, accountId: lease.accountId, groupId, ...pending };
-        parseSettlementAttempt(value, lease.accountId, groupId);
-        try {
-          await lease.write(() => storage.save(lease.accountId, groupId, value));
-        } catch (error) {
-          if (error instanceof Superseded || !current(owner)) throw error;
-          throw new DeviceStorageError(
-            'Nothing was sent: this device couldn’t store a recovery copy of the payment. Your entries are kept. Choose Record payment again.',
-          );
-        }
-        attempt = pending;
+        attempt = await storeAttempt(lease, storage, groupId, settlementBody(stored), owner);
       }
       if (!current(owner) || view !== route || !owns()) return;
       draft = stored;
       publish({ ...snapshot, settlement: { ...snapshot.settlement, attempt, draft } });
       sending = true;
-      const response = await ledgerWrite(groupId, `/api/groups/${groupId}/settlements`, owner, {
-        method: 'POST',
-        serializedBody: attempt.body,
-        idempotencyKey: attempt.key,
-      });
-      parseRecordedSettlement(response, groupId, attempt.body);
+      // A settle-up goes to /settlements/batch: all its Settlements in one request, or none.
+      const settlingUp = isBatchBody(attempt.body);
+      const response = await ledgerWrite(
+        groupId,
+        `/api/groups/${groupId}/settlements${settlingUp ? '/batch' : ''}`,
+        owner,
+        { method: 'POST', serializedBody: attempt.body, idempotencyKey: attempt.key },
+      );
+      if (settlingUp) parseRecordedBatch(response, groupId, attempt.body);
+      else parseRecordedSettlement(response, groupId, attempt.body);
       await lease.write(async () => {
         const saved = await storage.load(lease.accountId, groupId);
         if (saved === null) return;
@@ -5111,6 +5353,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         SAME_PARTY: 'Payer and recipient must be different people.',
         FORBIDDEN_SETTLEMENT: 'Only the payer or recipient can record this payment.',
         VALIDATION_ERROR: 'Check the actual amount, currency precision, and note before recording.',
+        // A settle-up whose Debt has gone or turned around since the sheet's check (#734).
+        NO_SETTLEMENT_DEBT: 'These Debts changed. Close this and check them again.',
       };
       const correction =
         error instanceof RequestError && error.status === 422 && error.code
@@ -5122,7 +5366,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const changedGroup =
         error instanceof RequestError &&
         error.status === 422 &&
-        ['INVALID_MEMBERS', 'CURRENCY_MISMATCH'].includes(error.code ?? '');
+        ['INVALID_MEMBERS', 'CURRENCY_MISMATCH', 'NO_SETTLEMENT_DEBT'].includes(error.code ?? '');
       if (changedGroup && current(owner)) invalidateReads(`group:${groupId}`);
       if (attempt && !state.attempt && correction) {
         try {
@@ -5147,6 +5391,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                     status: 'ready' as const,
                     group: null,
                     draft: null,
+                    batch: null,
                     suggested: null,
                     validation: emptyFormValidation(),
                   }
@@ -5236,6 +5481,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * The sheet's check of the payment chosen on Balances, then that payment pre-filled from the
    * latest balances: on Record, and on Try again after the check couldn't run (#334).
    */
+  /**
+   * Settle both on Balances (#734) opens Settle up over Balances, filled in once a live read
+   * confirms the Debts. Recording needs a connection, so offline it does nothing.
+   */
+  const openSettleAll = async (paidBy: string, paidTo: string) => {
+    const groupId = snapshot.detail.data?.id;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'group' ||
+      snapshot.destination !== 'balances' ||
+      !groupId ||
+      snapshot.offline.active ||
+      snapshot.financial.balances.changed
+    )
+      return;
+    await checkChosenPayment(groupId, { paidBy, paidTo, currency: '', shown: null, all: true });
+  };
   const checkChosenPayment = async (groupId: string, chosen: SettlementChoice) => {
     const { paidBy, paidTo, currency } = chosen;
     await trackRead(openSettlements(groupId, chosen));
@@ -5256,6 +5518,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         },
       });
     if (state.status !== 'ready') return;
+    // Settle up: every Debt between the two, as the latest Balances have them (#734).
+    if (chosen.all) {
+      await selectSettleAll(paidBy, paidTo);
+      if (!snapshot.settlement.batch && snapshot.settlement.status === 'ready')
+        publish({
+          ...snapshot,
+          settlement: { ...snapshot.settlement, message: suggestionChanged },
+        });
+      return;
+    }
     selectSettlement(paidBy, paidTo, currency);
     if (!snapshot.settlement.draft)
       publish({ ...snapshot, settlement: { ...snapshot.settlement, message: suggestionChanged } });
@@ -6528,8 +6800,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             },
           }
         : null;
-    if (!check && !rate && !bannerShown()) return null;
+    // A settle-up's rates that couldn't be looked up offline are looked up again (#734).
+    const batch = view.screen === 'settlement' ? snapshot.settlement.batch : null;
+    const batchWaits =
+      !!batch &&
+      !!snapshot.settlement.groupId &&
+      Object.values(batch.rates).some(({ rate }) => rate.status === 'unreachable');
+    if (!check && !rate && !batchWaits && !bannerShown()) return null;
     return async () => {
+      if (batchWaits && batch && snapshot.settlement.groupId) {
+        const asked = ++rateRequest;
+        await lookUpBatchRates(snapshot.settlement.groupId, asked);
+      }
       if (rate) {
         const asked = ++rateRequest;
         publish({
@@ -7692,6 +7974,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     choosePaidCurrency,
     editCrossCurrency,
     restoreSuggestedRate,
+    selectSettleAll,
+    openSettleAll,
+    editBatchRate,
+    restoreBatchRate,
     touchSettlementField,
     updateCreation,
     touchCreationField,
