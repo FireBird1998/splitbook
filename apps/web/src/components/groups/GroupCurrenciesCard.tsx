@@ -195,7 +195,14 @@ export default function GroupCurrenciesCard({
                 Choose a currency
               </Typography>
             </Button>
-            <Button variant="contained" aria-haspopup="dialog" disabled={busy} onClick={onAdd}>
+            {/* Group Settings has Recurring's Add too, so this one says what it adds. */}
+            <Button
+              variant="contained"
+              aria-haspopup="dialog"
+              aria-label="Add a currency"
+              disabled={busy}
+              onClick={onAdd}
+            >
               Add
             </Button>
           </Stack>
