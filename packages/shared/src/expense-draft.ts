@@ -11,6 +11,8 @@ export interface ExpenseDraftContext {
   accountId: string;
   memberIds: string[];
   currency: string;
+  /** The Group's currencies: a duplicate keeps an Expense's money in any of them (#719). */
+  currencies?: readonly string[];
   defaultTag: string;
   date: string;
 }
@@ -132,7 +134,7 @@ export class ExpenseDraft {
    * Expense, with its own idempotency key and the same unconfirmed-save handling as any new
    * Expense. Anyone no longer in the Group is left out (the viewer pays when no payer is
    * left), a Tag that isn't active (`activeTagIds`) falls back to the default, and stored money
-   * that can't be read, or is in another currency, leaves the amount to enter again.
+   * that can't be read, or is in a currency the Group doesn't list, leaves the amount to enter again.
    */
   static duplicate(
     context: ExpenseDraftContext,
@@ -155,7 +157,10 @@ export class ExpenseDraft {
       date: context.date,
     };
     let values: ExpenseDraftValues = { ...blank, ...words };
-    if (!copy.invalidStoredMoney && copy.values.currency === context.currency) {
+    const listed =
+      copy.values.currency === context.currency ||
+      !!context.currencies?.includes(copy.values.currency);
+    if (!copy.invalidStoredMoney && listed) {
       const v = copy.values;
       const payers = v.payers.filter((payer) => inGroup(payer.user));
       const selectedMembers = v.selectedMembers.filter(inGroup);

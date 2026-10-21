@@ -21,7 +21,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!user) return unauthorized();
 
     const { id } = await routeIds(params);
-    const group = await groupService.getById(id);
+    const group = await groupService.getById(id, user.id!);
     if (!group) return notFound('Group');
 
     // Check membership

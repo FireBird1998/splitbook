@@ -4743,7 +4743,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           });
           return;
         }
-        assertGroupCurrency(context.group.defaultCurrency, draft.currency);
+        assertGroupCurrency(context.group, draft.currency);
         const body = settlementBody(draft);
         const pending = { key: dependencies.newSubmissionKey?.() ?? '', body };
         const value = { version: 1, accountId: lease.accountId, groupId, ...pending };

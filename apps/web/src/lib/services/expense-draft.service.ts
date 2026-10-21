@@ -253,7 +253,7 @@ function reviewValues(record: DraftRecord, group: IGroupDocument) {
         parsed.data.paidBy,
         parsed.data.splitBetween,
       );
-      assertGroupCurrency(group.defaultCurrency, parsed.data.currency);
+      assertGroupCurrency(group, parsed.data.currency);
       resolveTagReference(group.tags, parsed.data);
     } catch (error) {
       problems.push(error instanceof Error ? error.message : 'Invalid Expense');

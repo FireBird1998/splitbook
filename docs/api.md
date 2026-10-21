@@ -214,9 +214,12 @@ date semantics, and whether recurring expenses are available. See
 [`../packages/shared/src/group-themes.ts`](../packages/shared/src/group-themes.ts) and
 [`v4/README.md`](v4/README.md).
 
-`alternateCurrencies` accepts up to 2 codes and is persisted, but **no read or
-write path currently consults it**. `startDate` / `endDate` are validated
-together (end must not precede start).
+`alternateCurrencies` holds the Group's **extra currencies** (#719): at most 4
+supported codes, none twice and none equal to `defaultCurrency`, the **main
+currency**; anything else is refused with 422 `VALIDATION_ERROR`, saying why.
+An Expense, a Settlement or a Draft may be in the main currency or any extra
+currency; a recurring Expense stays in the main currency for now. `startDate` / `endDate` are validated together
+(end must not precede start).
 
 Creating a group seeds theme-appropriate default tags.
 
@@ -250,6 +253,13 @@ string is ignored — there is no archived filter.
 
 No balance is included — use `GET /api/user/balances` for that.
 
+Each Group also carries `latestExpenseCurrency`: the currency of the **viewer's**
+latest Expense in it (not one a recurring Expense added), or `null`. A new
+Expense starts in it while the Group still lists it, else in the main currency
+(#719). It is read from the Expenses; nothing is stored for it. An older Group's
+`alternateCurrencies` is read as the rule allows: unsupported codes, repeats and
+the main currency dropped, and the first 4 kept.
+
 ### GET /api/groups/[id]
 
 Returns the populated group. **Side effect:** this handler calls
@@ -270,6 +280,15 @@ create expenses while recurring Expenses are switched on (see
 ```
 
 **Authorization:** Only group admins can update.
+
+`alternateCurrencies`, when sent, is checked against the main currency the Group
+will have: one that includes the stored main currency, or a new `defaultCurrency`
+that is already one of the extra currencies, is refused with 422
+`INVALID_GROUP_CURRENCIES` (`field: ["alternateCurrencies"]`). The answer
+carries `latestExpenseCurrency` like the reads.
+An older Group's list is saved as the rule reads it, so a settings save never
+fails on old data. Changing `defaultCurrency` once money is recorded is 409
+`CURRENCY_LOCKED`.
 
 ---
 
@@ -583,8 +602,10 @@ created an expense, so any member can edit or delete any expense in the group.
 
 - `tag` — a **single required string** that must name a currently **active** tag
   on the group (`INVALID_TAG`). There is no `tags` array.
-- `currency` — must **equal the group's `defaultCurrency`** (`CURRENCY_MISMATCH`).
-  Per-expense currency selection is not supported.
+- `currency` — must be **one of the Group's currencies**: its main currency or an
+  extra currency (`CURRENCY_MISMATCH`, "Currency is not one of this Group’s
+  currencies"). An edit may change it to another of them. Amounts are kept in
+  their own currency, never converted; JPY and KRW take whole amounts.
 - every `paidBy.user` and `splitBetween.user` must be a group member
   (`INVALID_MEMBERS`).
 
@@ -817,7 +838,8 @@ template that existed then resumes from the month it was turned on (see
 `dayOfMonth` is 1–31 and is clamped to the last day of shorter months at
 generation time. `endsOn` must not precede `startsOn` (422 `INVALID_WINDOW`).
 The same member, active-tag and currency invariants as manual expenses apply
-(422 `INVALID_MEMBERS`, `INVALID_TAG`, `CURRENCY_MISMATCH`).
+(422 `INVALID_MEMBERS`, `INVALID_TAG`, `CURRENCY_MISMATCH`); a recurring Expense
+is in the Group's main currency.
 
 ### PATCH /api/groups/[id]/recurring/[recurringId]
 
@@ -891,7 +913,7 @@ switch off has no such document and generates exactly as before.
 **Authorization:** only the payer or the recipient may record a settlement —
 422 `FORBIDDEN_SETTLEMENT` otherwise. Payer and recipient must differ
 (`SAME_PARTY`), both must be members (`INVALID_MEMBERS`), and `currency` must
-equal the group default (`CURRENCY_MISMATCH`). An archived Group refuses a new
+be one of the Group's currencies (`CURRENCY_MISMATCH`). An archived Group refuses a new
 payment with **409** `GROUP_ARCHIVED`; a retry of one recorded before the
 archive is still confirmed.
 
