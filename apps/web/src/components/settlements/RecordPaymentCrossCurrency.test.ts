@@ -167,7 +167,7 @@ describe('paying a euro Debt in rupees (#727)', () => {
     expect(page()).toContain('Lisbon & Tokyo · Debt in EUR');
     expect(page()).toContain('EUR is the Debt’s own currency; INR is the main currency.');
     expect(radio('INR').props['aria-checked']).toBe(true);
-    expect(fields()).toEqual(['20.00', '92.10', '1842.00']);
+    expect(fields()).toEqual(['20.00', '92.10', '1,842.00']);
     expect(page()).toContain('Change any one; the other two follow.');
     expect(page()).toContain('Amount cleared the whole Debt');
     expect(page()).toContain('Suggested');
@@ -201,7 +201,7 @@ describe('paying a euro Debt in rupees (#727)', () => {
 
     await type('record-payment-rate', '92.50');
 
-    expect(fields()).toEqual(['20.00', '92.50', '1850.00']);
+    expect(fields()).toEqual(['20.00', '92.50', '1,850.00']);
     expect(page()).toContain('Your rate');
     expect(page()).toContain('Your rate. Suggested ₹92.10 from Frankfurter, rates of 20 Oct.');
     expect(page()).toContain('Clears your €20.00 Debt to Sam. Sam gets ₹1,850.00.');
@@ -214,13 +214,13 @@ describe('paying a euro Debt in rupees (#727)', () => {
     });
 
     await press(button('Use ₹92.10'));
-    expect(fields()).toEqual(['20.00', '92.10', '1842.00']);
+    expect(fields()).toEqual(['20.00', '92.10', '1,842.00']);
   });
 
   it('works the rate out from the amount paid', async () => {
     await open({ status: 'ready', suggestion: frankfurter });
     await type('record-payment-paid', '1850');
-    expect(fields()).toEqual(['20.00', '92.50', '1850']);
+    expect(fields()).toEqual(['20.00', '92.50', '1,850.00']);
   });
 
   // The Tester found this unpinned: keeping the rupee entry across a switch to yen recorded
@@ -228,12 +228,12 @@ describe('paying a euro Debt in rupees (#727)', () => {
   it('starts afresh at the new currency’s suggestion when the paying currency changes', async () => {
     await open({ status: 'ready', suggestion: frankfurter });
     await type('record-payment-paid', '1850');
-    expect(fields()).toEqual(['20.00', '92.50', '1850']);
+    expect(fields()).toEqual(['20.00', '92.50', '1,850.00']);
 
     rate.state = { status: 'ready', suggestion: { ...frankfurter, rate: '160' } };
     await press(radio('JPY'));
 
-    expect(fields()).toEqual(['20.00', '160.00', '3200']);
+    expect(fields()).toEqual(['20.00', '160.00', '3,200']);
     await submit();
     expect(saved.payments[0]).toMatchObject({
       paidCurrency: 'JPY',
@@ -279,7 +279,7 @@ describe('paying a euro Debt in rupees (#727)', () => {
 
     await type('record-payment-paid', '1850.00');
 
-    expect(fields()).toEqual(['20.00', '92.50', '1850.00']);
+    expect(fields()).toEqual(['20.00', '92.50', '1,850.00']);
     await submit();
     expect(saved.payments[0]).toEqual(
       expect.objectContaining({
@@ -304,7 +304,7 @@ describe('paying a euro Debt in rupees (#727)', () => {
       },
     });
 
-    expect(fields()).toEqual(['20.00', '92.06', '1841.20']);
+    expect(fields()).toEqual(['20.00', '92.06', '1,841.20']);
     expect(page()).toContain('Rates of 21 Oct · fetched today 06:00');
     const link = hosts('a').find((node) => textOf(node) === 'Rates By Exchange Rate API');
     expect(link?.props.href).toBe('https://www.exchangerate-api.com');
@@ -316,7 +316,7 @@ describe('paying a euro Debt in rupees (#727)', () => {
       suggestion: { ...frankfurter, rate: '91.4', asOf: '2026-10-16', ageDays: 5 },
     });
 
-    expect(fields()).toEqual(['20.00', '91.40', '1828.00']);
+    expect(fields()).toEqual(['20.00', '91.40', '1,828.00']);
     expect(page()).toContain('5 days old');
     expect(page()).toContain(
       'Frankfurter · rates of 16 Oct, 5 days old. Today’s rates aren’t in yet.',
@@ -328,7 +328,7 @@ describe('paying a euro Debt in rupees (#727)', () => {
 
     await type('record-payment-cleared', '25.00');
 
-    expect(fields()).toEqual(['25.00', '92.10', '2302.50']);
+    expect(fields()).toEqual(['25.00', '92.10', '2,302.50']);
     expect(page()).toContain('Amount cleared more than the €20.00 Debt');
     expect(page()).toContain(
       'That’s €5.00 more than you owe Sam in EUR, so Sam would owe you €5.00.',
@@ -406,11 +406,42 @@ describe('paying a euro Debt in rupees (#727)', () => {
     await open({ status: 'ready', suggestion: { ...frankfurter, rate: '92.123456789' } });
     await type('record-payment-rate', '92.50');
     await press(button('Use ₹92.123457'));
-    expect(fields()).toEqual(['20.00', '92.123456789', '1842.47']);
+    expect(fields()).toEqual(['20.00', '92.123456789', '1,842.47']);
     await submit();
     expect(saved.payments[0]).toMatchObject({
       rateKind: 'suggested',
       suggestedRate: '92.123456789',
     });
   });
+});
+
+it('groups Record payment and both cross-currency amounts on blur without changing recorded money (#773)', async () => {
+  rate.state = { status: 'ready', suggestion: frankfurter };
+  await act(async () => {
+    renderer = create(sheet(euros, '1842.5'), {
+      createNodeMock: () => ({ focus() {}, addEventListener() {}, removeEventListener() {} }),
+    });
+  });
+  const input = (id: string) => hosts('input').find((node) => node.props.id === id)!;
+  expect(value('record-payment-amount')).toBe('1,842.50');
+  await act(async () => input('record-payment-amount').props.onFocus?.({}));
+  await type('record-payment-amount', '20');
+  expect(value('record-payment-amount')).toBe('20');
+  await act(async () => input('record-payment-amount').props.onBlur?.({}));
+  expect(value('record-payment-amount')).toBe('20.00');
+  await press(radio('INR'));
+  expect(value('record-payment-paid')).toBe('1,842.00');
+  await act(async () => input('record-payment-cleared').props.onFocus?.({}));
+  await type('record-payment-cleared', '15');
+  expect(value('record-payment-cleared')).toBe('15');
+  await act(async () => input('record-payment-cleared').props.onBlur?.({}));
+  expect(value('record-payment-cleared')).toBe('15.00');
+  expect(value('record-payment-paid')).toBe('1,381.50');
+  await act(async () => input('record-payment-paid').props.onFocus?.({}));
+  await type('record-payment-paid', '1,500.00');
+  expect(value('record-payment-paid')).toBe('1,500.00');
+  await act(async () => input('record-payment-paid').props.onBlur?.({}));
+  expect(value('record-payment-paid')).toBe('1,500.00');
+  await submit();
+  expect(saved.payments[0]).toMatchObject({ amount: 15, amountPaidMinor: 150000 });
 });

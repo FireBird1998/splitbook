@@ -61,7 +61,7 @@ test(
     await expect(tab.amount).toBeFocused();
     await expect(tab.from).toHaveValue(DEMO_PERSONA_IDS.alex);
     await expect(tab.to).toHaveValue(priya);
-    await expect(tab.amount).toHaveValue(owed.toFixed(2));
+    await expect(tab.amount).toHaveValue(rupees(owed).slice(1));
     await expect(tab.form.getByRole('button', { name: /^Suggested / })).toHaveText(
       `Suggested ${rupees(owed)}`,
     );
@@ -149,7 +149,7 @@ test('paying more than suggested warns, and Record waits for the tick', async ({
   await enterAsPersona(page, 'alex');
   const tab = await openBalances(page, DEMO_HOUSEHOLD_ID);
   await tab.settleUp.getByRole('button', { name: 'Record your payment to Priya Shah' }).click();
-  const owed = Number(await tab.amount.inputValue());
+  const owed = parseMoneyText(`₹${await tab.amount.inputValue()}`);
 
   await tab.amount.fill((owed + 10).toFixed(2));
   const warning = tab.form.getByText(/more than suggested\./);
@@ -167,7 +167,7 @@ test('paying more than suggested warns, and Record waits for the tick', async ({
   await expect(tab.meantMore).not.toBeChecked();
   await expect(tab.record).toBeDisabled();
   await tab.form.getByRole('button', { name: /^Suggested / }).click();
-  await expect(tab.amount).toHaveValue(owed.toFixed(2));
+  await expect(tab.amount).toHaveValue(rupees(owed).slice(1));
   await expect(warning).toHaveCount(0);
   await expect(tab.record).toBeEnabled();
   await expectNoSeriousA11yViolations(page, testInfo, 'record-payment-filled');

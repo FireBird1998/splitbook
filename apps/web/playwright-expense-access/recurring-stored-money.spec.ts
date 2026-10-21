@@ -74,7 +74,7 @@ test('recurring legacy float tails display exact fields and allow a metadata-onl
   const dialog = page.getByRole('dialog', { name: 'Edit recurring expense' });
   const amounts = dialog.getByLabel('Amount', { exact: true });
   await expect(amounts).toHaveCount(3);
-  await expect(amounts.nth(0)).toHaveValue('0.3');
+  await expect(amounts.nth(0)).toHaveValue('0.30');
   await expect(amounts.nth(1)).toHaveValue('0.15');
   await expect(amounts.nth(2)).toHaveValue('0.15');
   await dialog.getByLabel('Description').fill('Reviewed legacy utilities');

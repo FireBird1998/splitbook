@@ -9,6 +9,7 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Popover from '@mui/material/Popover';
 import Stack from '@mui/material/Stack';
+import { MoneyTextField } from '@/components/ui/MoneyInput';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
@@ -355,8 +356,21 @@ function AmountChip({
             Amount range
           </Typography>
           <Stack direction="row" spacing={1}>
-            <AmountField label="From" symbol={symbol} value={low} onChange={setLow} autoFocus />
-            <AmountField label="To" symbol={symbol} value={high} onChange={setHigh} />
+            <AmountField
+              currency={currency}
+              label="From"
+              symbol={symbol}
+              value={low}
+              onChange={setLow}
+              autoFocus
+            />
+            <AmountField
+              currency={currency}
+              label="To"
+              symbol={symbol}
+              value={high}
+              onChange={setHigh}
+            />
           </Stack>
           {problem && (
             <Typography
@@ -387,12 +401,14 @@ function AmountChip({
 }
 
 function AmountField({
+  currency,
   label,
   symbol,
   value,
   onChange,
   autoFocus,
 }: {
+  currency: string;
   label: string;
   symbol: string;
   value: string;
@@ -400,10 +416,11 @@ function AmountField({
   autoFocus?: boolean;
 }) {
   return (
-    <TextField
+    <MoneyTextField
+      currency={currency}
       label={label}
       value={value}
-      onChange={(event) => onChange(event.target.value)}
+      onValueChange={onChange}
       autoFocus={autoFocus}
       size="small"
       slotProps={{

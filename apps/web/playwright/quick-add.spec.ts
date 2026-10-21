@@ -217,7 +217,7 @@ test('More options opens the full form with what was read, and saving it clears 
   const form = page.getByRole('dialog', { name: /^Add expense/ });
   await expect(form).toBeVisible();
   await expect(form.getByLabel('What was it for?')).toHaveValue(description);
-  await expect(form.getByLabel('Amount')).toHaveValue('300');
+  await expect(form.getByLabel('Amount')).toHaveValue('300.00');
   await expect(form.getByLabel('Date')).toHaveValue(await browserDay(page, 1));
   await expect(form).toContainText('You paid · Split equally · All 1 members');
   // No Tag fitted, so none is picked for the member: the form waits for one.

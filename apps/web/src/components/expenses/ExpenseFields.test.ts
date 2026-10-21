@@ -23,6 +23,7 @@ function render(
   amount: string,
   mode: {
     isEditMode?: boolean;
+    multiPayerMode?: boolean;
     review?: boolean;
     currency?: string;
     currencyChoices?: ExpenseCurrencyChoice[];
@@ -36,7 +37,12 @@ function render(
     currency: mode.currency ?? 'INR',
     defaultTag: 'General',
     date: '2026-10-18',
-  }).edit({ description: 'Chai', amount });
+  }).edit({
+    description: 'Chai',
+    amount,
+    multiPayerMode: mode.multiPayerMode ?? false,
+    payers: [{ user: YOU, amount }],
+  });
   return renderToStaticMarkup(
     createElement(
       ThemeProvider,
@@ -63,7 +69,7 @@ function render(
 
 /** The amount field: whether it's marked invalid, and the message it points to, if any. */
 function amountField(html: string) {
-  const input = /<input\b[^>]*\stype="number"[^>]*>/.exec(html)![0];
+  const input = /<input\b[^>]*\sinputMode="(?:decimal|numeric)"[^>]*>/.exec(html)![0];
   const described = /\saria-describedby="([^"]*)"/.exec(input)?.[1];
   const reason = /<p\b([^>]*\saria-live="polite"[^>]*)>([\s\S]*?)<\/p>/.exec(html);
   return {
@@ -113,7 +119,7 @@ const trip = { defaultCurrency: 'INR', alternateCurrencies: ['EUR', 'JPY'] };
 const attribute = (html: string, tag: RegExp, name: string) =>
   new RegExp(`\\s${name}="([^"]*)"`).exec(tag.exec(html)?.[0] ?? '')?.[1] ?? null;
 const currencyButton = /<button\b[^>]*aria-haspopup="listbox"[^>]*>/;
-const amountInput = /<input\b[^>]*\stype="number"[^>]*>/;
+const amountInput = /<input\b[^>]*\sinputMode="(?:decimal|numeric)"[^>]*>/;
 
 describe('the Expense’s currency, beside its amount (#719)', () => {
   it('is a button that says the currency and offers to change it, with the symbol before the amount', () => {
@@ -165,4 +171,10 @@ describe('the Expense’s currency, beside its amount (#719)', () => {
     expect(currencyButton.exec(html)![0]).toMatch(/\sdisabled=""/);
     expect(attribute(html, amountInput, 'aria-label')).toBe('Amount, 100.00 Indian rupees');
   });
+});
+
+it('does not display a malformed money prefix as the payer total (#773)', () => {
+  const shown = text(render('1,84,250', { isEditMode: true, multiPayerMode: true }));
+  expect(shown).toContain('Enter an amount like 1,060.00.');
+  expect(shown).not.toContain('Total: ₹1.00 / ₹1.00');
 });

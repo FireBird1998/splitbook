@@ -134,7 +134,7 @@ describe('a new payment', () => {
   it('a suggested payment fills in the suggestion, shows the positions after, and can be recorded', () => {
     const { html, text: shown } = render({ to: SAM, amount: '1060.00' });
     expect(field(html, 'record-payment-to').value).toBe('Sam Chen');
-    expect(field(html, 'record-payment-amount').value).toBe('1060.00');
+    expect(field(html, 'record-payment-amount').value).toBe('1,060.00');
     expect(shown).toContain('Suggested ₹1,060.00');
     expect(shown).toContain('After this payment You owe ₹420.00 Sam Chen is settled up');
     expect(shown).toContain('Either of you can record it. Sam will see it in Activity.');

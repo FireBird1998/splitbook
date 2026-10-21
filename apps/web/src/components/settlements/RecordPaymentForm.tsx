@@ -9,6 +9,7 @@ import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import InputBase from '@mui/material/InputBase';
+import { MoneyInputBase } from '@/components/ui/MoneyInput';
 import NativeSelect from '@mui/material/NativeSelect';
 import Typography from '@mui/material/Typography';
 import type { Theme } from '@mui/material/styles';
@@ -779,11 +780,12 @@ export default function RecordPaymentForm({
               )}
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <InputBase
+              <MoneyInputBase
+                currency={shown?.currency ?? currency}
                 inputRef={amountField}
                 value={amountText}
-                onChange={(event) => {
-                  setAmount(event.target.value);
+                onValueChange={(value) => {
+                  setAmount(value);
                   setAmountTyped(true);
                   setAck(false);
                   setShowOutcome(false);

@@ -1,6 +1,7 @@
 'use client';
 import { useId, useState } from 'react';
 import type { GroupCategory } from '@splitbook/shared/types';
+import { MoneyTextField } from '@/components/ui/MoneyInput';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
@@ -26,7 +27,7 @@ import {
   getCurrencyPrecision,
   wholeUnit,
 } from '@splitbook/shared/currency';
-import { parseDecimalUnits, sumMinorAmounts } from '@splitbook/shared/exact-money';
+import { parseDecimalUnits, sumMinorAmounts, toMajorAmount } from '@splitbook/shared/exact-money';
 import { readAmountEntry } from '@splitbook/shared/amount-entry';
 import type { ExpenseSplitMethod } from '@splitbook/shared/split-calculation';
 import { type ExpenseDraftValues } from '@splitbook/shared/expense-draft';
@@ -154,16 +155,6 @@ export default function ExpenseFields({
   const [showSplitOptions, setShowSplitOptions] = useState(isEditMode);
   const [showMoreOptions, setShowMoreOptions] = useState(isEditMode);
   // ─── Derived Values ────────────────────────────────
-  const parsedAmount = parseFloat(amount) || 0;
-
-  // Equal split calculated amount per person
-
-  // Unequal totals
-  const unequalTotal = selectedMembers.reduce(
-    (sum, id) => sum + (parseFloat(customAmounts[id]) || 0),
-    0,
-  );
-
   // Percentage total
   const percentageTotal = selectedMembers.reduce(
     (sum, id) => sum + (parseFloat(customPercentages[id]) || 0),
@@ -195,6 +186,19 @@ export default function ExpenseFields({
         getCurrency(currency) ? getCurrencyPrecision(currency) : 2,
       )
     : amountMinor;
+  // Display figures use the same exact reading as validation, never a numeric prefix.
+  const majorAmount = (minor: number) => {
+    try {
+      return toMajorAmount(minor, currency);
+    } catch {
+      return null;
+    }
+  };
+  const parsedAmount = majorAmount(amountMinor) ?? 0;
+  const totalText = (minor: number) => {
+    const value = majorAmount(minor);
+    return value === null ? '—' : formatCurrency(value, currency);
+  };
   const splitsBalanced = amountMinor > 0 && unequalMinor === amountMinor;
   const percentagesBalanced = percentageUnits === 10000;
   const payersBalanced = amountMinor > 0 && payerMinor === amountMinor;
@@ -205,11 +209,6 @@ export default function ExpenseFields({
     0,
   );
   const perShareAmount = sharesTotal > 0 ? parsedAmount / sharesTotal : 0;
-
-  // Payer total
-  const payerTotal = multiPayerMode
-    ? payers.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
-    : parsedAmount;
 
   // ─── Summary Line ──────────────────────────────────
   const payerName = memberName(payers[0]?.user || userId);
@@ -350,12 +349,12 @@ export default function ExpenseFields({
       {/* ─── Amount + Currency + Date (fast path) ─ */}
       <Stack direction={review ? 'column' : { xs: 'column', sm: 'row' }} spacing={1.5}>
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <TextField
+          <MoneyTextField
+            currency={currency}
             label="Amount"
             value={amount}
-            onChange={(e) => edit({ amount: e.target.value })}
+            onValueChange={(value) => edit({ amount: value })}
             required
-            type="number"
             size="small"
             error={!!amountReason}
             sx={{
@@ -678,16 +677,16 @@ export default function ExpenseFields({
                         </MenuItem>
                       ))}
                     </TextField>
-                    <TextField
+                    <MoneyTextField
+                      currency={currency}
                       value={payer.amount}
-                      onChange={(e) => updatePayer(i, 'amount', e.target.value)}
-                      type="number"
+                      onValueChange={(value) => updatePayer(i, 'amount', value)}
                       size="small"
                       placeholder="Amount"
                       sx={{ width: 120 }}
                       slotProps={{
                         htmlInput: {
-                          'aria-label': review ? `Paid by ${memberName(payer.user)}` : undefined,
+                          'aria-label': `Paid by ${memberName(payer.user)}`,
                           min: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
                           step: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
                         },
@@ -715,8 +714,7 @@ export default function ExpenseFields({
                       color: !payersBalanced ? 'status.negative' : 'status.positive',
                     }}
                   >
-                    Total: {formatCurrency(payerTotal, currency)} /{' '}
-                    {formatCurrency(parsedAmount, currency)}
+                    Total: {totalText(payerMinor)} / {formatCurrency(parsedAmount, currency)}
                     {payersBalanced && ' ✓'}
                   </Box>
                 )}
@@ -850,25 +848,23 @@ export default function ExpenseFields({
                     )}
 
                     {(splitMethod === 'unequal' || splitMethod === 'exact') && isSelected && (
-                      <TextField
+                      <MoneyTextField
+                        currency={currency}
                         value={customAmounts[id] || ''}
-                        onChange={(e) =>
+                        onValueChange={(value) =>
                           edit({
                             customAmounts: {
                               ...customAmounts,
-                              [id]: e.target.value,
+                              [id]: value,
                             },
                           })
                         }
-                        type="number"
                         size="small"
                         placeholder="0.00"
                         sx={{ width: 110 }}
                         slotProps={{
                           htmlInput: {
-                            'aria-label': review
-                              ? `${id === viewerId ? 'Your' : `${memberName(id)}’s`} share`
-                              : undefined,
+                            'aria-label': `${id === viewerId ? 'Your' : `${memberName(id)}’s`} share`,
                             min: 0,
                             step:
                               10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
@@ -968,8 +964,7 @@ export default function ExpenseFields({
                       color: !splitsBalanced ? 'status.negative' : 'status.positive',
                     }}
                   >
-                    Total: {formatCurrency(unequalTotal, currency)} /{' '}
-                    {formatCurrency(parsedAmount, currency)}
+                    Total: {totalText(unequalMinor)} / {formatCurrency(parsedAmount, currency)}
                     {splitsBalanced && ' ✓'}
                   </Box>
                 )}

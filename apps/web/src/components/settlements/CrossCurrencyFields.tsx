@@ -6,7 +6,8 @@ import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import InputBase from '@mui/material/InputBase';
+import InputBase, { type InputBaseProps } from '@mui/material/InputBase';
+import { MoneyInputBase } from '@/components/ui/MoneyInput';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
 import type { Theme } from '@mui/material/styles';
@@ -89,12 +90,11 @@ export default function CrossCurrencyFields({
   const invalid = reading.status === 'invalid' ? reading : null;
   const clearedMinor = reading.status === 'valid' ? reading.amounts.amountClearedMinor : null;
 
-  const input = (field: CrossCurrencyField, code: string, lead: string | null, label: string) => (
-    <InputBase
-      value={entry[field]}
-      onChange={(event) => onEdit(field, event.target.value)}
-      placeholder={field === 'cleared' ? undefined : field === 'rate' ? 'Rate' : 'Amount'}
-      startAdornment={
+  const input = (field: CrossCurrencyField, code: string, lead: string | null, label: string) => {
+    const props: InputBaseProps = {
+      value: entry[field],
+      placeholder: field === 'cleared' ? undefined : field === 'rate' ? 'Rate' : 'Amount',
+      startAdornment: (
         <Box
           component="span"
           sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, flex: 'none' }}
@@ -115,8 +115,8 @@ export default function CrossCurrencyFields({
             {symbol(code)}
           </Box>
         </Box>
-      }
-      inputProps={{
+      ),
+      inputProps: {
         id: `record-payment-${field}`,
         inputMode: 'decimal',
         autoComplete: 'off',
@@ -124,10 +124,20 @@ export default function CrossCurrencyFields({
         'aria-label': label,
         'aria-invalid': invalid?.field === field ? 'true' : 'false',
         'aria-describedby': invalid?.field === field ? `record-payment-${field}-error` : undefined,
-      }}
-      sx={(theme) => fieldBox(theme, invalid?.field === field)}
-    />
-  );
+      },
+      sx: (theme) => fieldBox(theme, invalid?.field === field),
+    };
+    return field === 'rate' ? (
+      <InputBase {...props} onChange={(event) => onEdit(field, event.target.value)} />
+    ) : (
+      <MoneyInputBase
+        {...props}
+        value={entry[field]}
+        currency={code}
+        onValueChange={(value) => onEdit(field, value)}
+      />
+    );
+  };
 
   const error = (field: CrossCurrencyField) => (
     <Typography

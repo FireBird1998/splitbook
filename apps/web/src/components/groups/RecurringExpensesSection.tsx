@@ -8,6 +8,7 @@ import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { MoneyTextField } from '@/components/ui/MoneyInput';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
@@ -693,11 +694,11 @@ export default function RecurringExpensesSection({
               slotProps={{ htmlInput: { maxLength: 200 } }}
             />
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <TextField
+              <MoneyTextField
+                currency={defaultCurrency}
                 label="Amount"
-                type="text"
                 value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                onValueChange={(value) => setForm({ ...form, amount: value })}
                 fullWidth
                 size="small"
                 slotProps={{
@@ -809,12 +810,12 @@ export default function RecurringExpensesSection({
                       />
                       {draft.included &&
                         (form.splitMethod === 'exact' || form.splitMethod === 'unequal') && (
-                          <TextField
-                            type="text"
+                          <MoneyTextField
+                            currency={defaultCurrency}
                             size="small"
                             label="Amount"
                             value={draft.amount}
-                            onChange={(e) => setSplit(member.user._id, { amount: e.target.value })}
+                            onValueChange={(value) => setSplit(member.user._id, { amount: value })}
                             sx={{ width: 120 }}
                             slotProps={{
                               htmlInput: { inputMode: precision === 0 ? 'numeric' : 'decimal' },

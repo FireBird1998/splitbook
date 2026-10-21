@@ -14,6 +14,7 @@ import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-dra
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import { toReviewHref } from '@splitbook/shared/api-paths';
 import { apiFetch } from '@/lib/utils/api-fetch';
+import { readAmountEntry } from '@splitbook/shared/amount-entry';
 export function useKeepExpenseDraft({
   draft,
   groupId,
@@ -94,6 +95,12 @@ export function useKeepExpenseDraft({
         return;
       }
       const v = draft.values;
+      // Resolve a retained request first; a new local refusal is never an uncertain save.
+      const amount = readAmountEntry(v.amount, v.currency);
+      if (amount.status === 'invalid') {
+        setError(amount.message);
+        return;
+      }
       const entries: DraftEntries = {
         description: v.description,
         amount: v.amount,

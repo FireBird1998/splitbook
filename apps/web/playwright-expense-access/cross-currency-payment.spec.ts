@@ -122,7 +122,7 @@ for (const scheme of ['light', 'dark'] as const) {
     const [cleared, rate, paid] = fieldsOf(sheet);
     await expect(cleared).toHaveValue('20.00');
     await expect(rate).toHaveValue('92.10');
-    await expect(paid).toHaveValue('1842.00');
+    await expect(paid).toHaveValue('1,842.00');
     await expect(sheet).toContainText('· Debt in EUR');
     await expect(sheet).toContainText('EUR is the Debt’s own currency; INR is the main currency.');
     await expect(sheet).toContainText('Clears your €20.00 Debt to Sam. Sam gets ₹1,842.00.');
@@ -133,16 +133,16 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.getByRole('tab', { name: /^INR, main currency/ }).click();
     await page.getByRole('tab', { name: /^EUR, you owe/ }).click();
     await expect(cleared).toHaveValue('15.00');
-    await expect(paid).toHaveValue('1381.50');
+    await expect(paid).toHaveValue('1,381.50');
     await cleared.fill('20.00');
 
     // Your rate, with the suggestion one click away.
     await rate.fill('92.50');
-    await expect(paid).toHaveValue('1850.00');
+    await expect(paid).toHaveValue('1,850.00');
     await expect(sheet).toContainText('Your rate. Suggested ₹92.10 from Frankfurter');
     await shoot(page, testInfo, `your-rate-${scheme}`);
     await sheet.getByRole('button', { name: 'Use ₹92.10' }).click();
-    await expect(paid).toHaveValue('1842.00');
+    await expect(paid).toHaveValue('1,842.00');
 
     // Part of the Debt.
     await cleared.fill('10.00');
@@ -152,7 +152,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
     // More than the Debt: Record waits for the tick.
     await cleared.fill('25.00');
-    await expect(paid).toHaveValue('2302.50');
+    await expect(paid).toHaveValue('2,302.50');
     await expect(sheet).toContainText(
       'That’s €5.00 more than you owe Sam in EUR, so Sam would owe you €5.00.',
     );
@@ -178,7 +178,7 @@ for (const scheme of ['light', 'dark'] as const) {
       attribution: { text: 'Rates By Exchange Rate API', url: 'https://www.exchangerate-api.com' },
     });
     sheet = await openSheet(page, ledger, group);
-    await expect(fieldsOf(sheet)[2]).toHaveValue('1841.20');
+    await expect(fieldsOf(sheet)[2]).toHaveValue('1,841.20');
     await expect(sheet.getByRole('link', { name: 'Rates By Exchange Rate API' })).toHaveAttribute(
       'href',
       'https://www.exchangerate-api.com',
@@ -188,7 +188,7 @@ for (const scheme of ['light', 'dark'] as const) {
     // An older suggestion shows its age.
     await answerRate(page, { ...frankfurter, rate: '91.4', asOf: dayOf(5), ageDays: 5 });
     sheet = await openSheet(page, ledger, group);
-    await expect(fieldsOf(sheet)[2]).toHaveValue('1828.00');
+    await expect(fieldsOf(sheet)[2]).toHaveValue('1,828.00');
     await expect(sheet).toContainText('5 days old. Today’s rates aren’t in yet.');
     await shoot(page, testInfo, `older-suggestion-${scheme}`);
 
