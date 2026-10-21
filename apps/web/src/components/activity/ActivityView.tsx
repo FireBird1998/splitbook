@@ -41,7 +41,7 @@ interface ActivityViewProps {
 }
 
 export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
-  const { data, isLoading, error, size, setSize } = useSWRInfinite(
+  const { data, isLoading, error, isValidating, size, setSize } = useSWRInfinite(
     (index, previous: Awaited<ReturnType<typeof fetchWebActivity>> | null) => {
       if (previous && previous.data.pagination.page >= previous.data.pagination.totalPages)
         return null;
@@ -56,10 +56,16 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
 
   /** The payment whose card is open beside the list (#727). */
   const [openId, setOpenId] = useState<string | null>(null);
-  const activities = (data?.flatMap((page) => page.data.activities) || []) as ActivityLike[];
+  // A new event can move the last event of a page onto the next one.
+  const seen = new Set<string>();
+  const activities = (data?.flatMap((page) => page.data.activities) || []).filter((activity) => {
+    if (seen.has(activity._id)) return false;
+    seen.add(activity._id);
+    return true;
+  }) as ActivityLike[];
   const lastPage = data?.at(-1)?.data.pagination;
   const hasOlder = Boolean(lastPage && lastPage.page < lastPage.totalPages);
-  const loadingOlder = !error && Boolean(data && size > data.length);
+  const loadingOlder = isValidating && Boolean(data && size > data.length);
   const groups = groupActivitiesByDay(activities);
 
   if (isLoading) {
@@ -72,7 +78,7 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return <Typography color="error.main">{error.message}</Typography>;
   }
 
@@ -196,14 +202,14 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
           </Stack>
         </Box>
       ))}
-      {hasOlder && (
+      {(hasOlder || error) && (
         <Button
           variant="text"
           disabled={loadingOlder}
-          onClick={() => void setSize(size + 1)}
+          onClick={() => void setSize((data?.length ?? 0) + (hasOlder ? 1 : 0))}
           sx={{ alignSelf: 'center' }}
         >
-          {loadingOlder ? 'Loading older…' : 'Load older'}
+          {loadingOlder ? 'Loading older…' : error ? 'Try again' : 'Load older'}
         </Button>
       )}
     </Stack>
