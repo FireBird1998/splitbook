@@ -1,3 +1,4 @@
+import { switchMcpAccount } from './switch-account';
 import { assistantForApproval, connectionName } from './assistant-name';
 import { randomUUID } from 'node:crypto';
 import type { AuthContext, BetterAuthPlugin } from 'better-auth';
@@ -189,6 +190,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
       },
     },
     endpoints: {
+      switchMcpAccount,
       mcpConnections: createAuthEndpoint(
         '/mcp/connections',
         {

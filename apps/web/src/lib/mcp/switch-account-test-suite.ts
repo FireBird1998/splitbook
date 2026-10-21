@@ -15,7 +15,7 @@ export function switchAccountTests(mongo = false) {
   const redirectUri = 'https://assistant.example.test/callback';
   const db = integrationTestDb('mcp-switch-account');
   let client: MongoClient | undefined;
-  let auth: ReturnType<typeof betterAuth>;
+  let auth: { handler: (request: Request) => Promise<Response> };
   let firstCookie: string;
   let otherSession: string;
   let clientId: string;
@@ -185,7 +185,7 @@ export function switchAccountTests(mongo = false) {
         });
         expect(expired.status).toBe(400);
         expect(await expired.json()).toMatchObject({
-          message: 'This connection request is invalid or expired. Restart from your assistant.',
+          error: 'invalid_signature',
         });
         expect(expired.headers.getSetCookie()).toEqual([]);
         expect(await (await request('/get-session', firstCookie)).json()).toMatchObject({
