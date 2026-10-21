@@ -214,7 +214,11 @@ export default function ToReviewPage({
     refocus.current = item.id;
     await action(async () => {
       const refused = await addGroupCurrency(groupId, code);
-      if (refused) throw new Error(refused);
+      // Its own words: they're about the Group's currencies, not this item's details.
+      if (refused) {
+        setError(refused);
+        return;
+      }
       await Promise.all([refresh(), mutate(isWebGroupsRead)]);
       setAnnounce(`${code} added to ${group?.name || 'the Group'}`);
     });
