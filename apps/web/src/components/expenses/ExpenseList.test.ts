@@ -595,6 +595,14 @@ describe('the Expense list', () => {
     );
   });
 
+  it('leaves out the main currency when nothing was spent in it and something was in another (#729)', () => {
+    reads.set(LIST, {
+      data: page(EXPENSES, { totalsByCurrency: [{ currency: 'JPY', totalAmount: 2500 }] }),
+    });
+    expect(text(list())).toMatch(/Spent ¥2,500 Expenses 4/);
+    expect(text(list())).not.toContain('₹0.00');
+  });
+
   it('leaves the summary to the Month bar in a Household, and leaves out the date quick-filters', () => {
     reads.set(LIST, { data: page(EXPENSES) });
     const html = list('home');
