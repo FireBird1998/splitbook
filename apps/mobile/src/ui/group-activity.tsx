@@ -521,6 +521,12 @@ function ActivityDetail({
           <CompactAvatar name={event.actor?.name || 'Former member'} />
           <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
             <Headline line={line} />
+            {/* Whole here, where the event is read in full (#751). */}
+            {line.credit ? (
+              <CompactText variant="caption" tone="secondary">
+                {line.credit}
+              </CompactText>
+            ) : null}
             <Details
               line={{ ...line, details: line.changes.length ? [] : line.details }}
               time={when}

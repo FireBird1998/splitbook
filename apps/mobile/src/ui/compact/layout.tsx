@@ -458,7 +458,7 @@ export const ListRow = memo(function ListRow({
     <Pressable
       ref={rowRef}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? [title, meta].filter(Boolean).join(', ')}
+      accessibilityLabel={accessibilityLabel ?? [title, meta, note].filter(Boolean).join(', ')}
       accessibilityState={disabled ? { disabled } : undefined}
       disabled={disabled}
       {...tap.on(onPress)}
