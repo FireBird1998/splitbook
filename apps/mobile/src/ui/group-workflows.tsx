@@ -340,7 +340,16 @@ export function GroupCreateForm({
         // currencies" shows them; a Household adds them later in settings.
         <Card padded>
           <View style={{ gap: 10 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* At large text the tag and count go onto a line of their own. */}
+            <View
+              style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                columnGap: 8,
+                rowGap: 4,
+              }}
+            >
               <CompactText variant="heading" accessibilityRole="header">
                 Spending abroad?
               </CompactText>
