@@ -374,6 +374,18 @@ for (const [name, Field] of fields) {
     expect(input().props.value).toBe('1,234');
   });
 
+  it(`${name}: a new edit after two Undos ends both Redos, so Redo never jumps to an old amount`, async () => {
+    const { input, changed, edit, history } = await focused('EUR', '');
+    for (const typed of ['1', '12', '123', '1234']) await edit(typed);
+    await history('historyUndo');
+    await history('historyUndo');
+    expect(input().props.value).toBe('12');
+    await edit('129');
+    await history('historyRedo');
+    expect(input().props.value).toBe('129');
+    expect(changed).toHaveBeenLastCalledWith('129');
+  });
+
   it(`${name}: Undo of a Backspace puts the 8 back, the caret after it, and stops at the amount focus showed`, async () => {
     const { input, changed, caret, edit, history } = await focused('EUR', '1842.5');
     await edit('1,42.50', 2, 'deleteContentBackward');
