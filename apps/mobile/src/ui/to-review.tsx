@@ -652,7 +652,8 @@ function AccountRow({
         badge={unlistedCurrency(item) ? 'Currency not listed' : undefined}
       />
       <View style={{ paddingLeft: rowInset, paddingRight: 8, paddingBottom: 8, gap: 8 }}>
-        {quick?.summary ? (
+        {/* On Ready rows: the web shows it on a needs-details row too (#793). */}
+        {quick?.summary && item.state === 'ready' ? (
           <CompactText variant="caption" tone="secondary">
             {quick.summary}
           </CompactText>

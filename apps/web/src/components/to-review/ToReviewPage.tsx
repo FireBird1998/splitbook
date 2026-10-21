@@ -214,9 +214,13 @@ export default function ToReviewPage({
     refocus.current = item.id;
     await action(async () => {
       const refused = await addGroupCurrency(groupId, code);
-      // Its own words: they're about the Group's currencies, not this item's details.
+      // Its own words: they're about the Group's currencies, not this item's details. The Group
+      // may have changed meanwhile, its list filled by another member, so its reads go again and
+      // the item's fix follows: with no room left, it offers only a change (#804). A read that
+      // fails leaves the refusal's words as they are.
       if (refused) {
         setError(refused);
+        await mutate(isWebGroupsRead).catch(() => undefined);
         return;
       }
       await Promise.all([refresh(), mutate(isWebGroupsRead)]);

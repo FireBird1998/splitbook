@@ -147,7 +147,7 @@ describe('a row whose item is in another currency than its Group’s (#567)', ()
       ['CURRENCY_MISMATCH'],
     );
     expect(shown).toBe(
-      'Station dinner 2 Sep 2026 · You set this aside $30.00 Needs the Group currency Fix the rest',
+      'Station dinner 2 Sep 2026 · You set this aside You paid · Split equally · Food $30.00 Needs the Group currency Fix the rest',
     );
   });
 });
@@ -171,7 +171,7 @@ describe('a row whose item is in another currency, in a Trip (#596)', () => {
       'trip',
     );
     expect(shown).toBe(
-      'Station dinner 2 Sep 2026 · You set this aside $30.00 Needs the Trip currency Fix the rest',
+      'Station dinner 2 Sep 2026 · You set this aside You paid · Split equally · Food $30.00 Needs the Trip currency Fix the rest',
     );
   });
 });
@@ -215,6 +215,31 @@ describe('a row in a currency its Group doesn’t list (#732)', () => {
     expect(shown).toContain('CHF 86.00');
     expect(shown).not.toContain('a currency listed by the Group');
     expect(shown).not.toContain('Fix the rest');
+  });
+
+  // #793: what saving it records, as a Ready row says it, once its payer and split are known.
+  it('says who paid and how it’s split, as a Ready row does', () => {
+    const shown = row(dinner, [], ['CURRENCY_NOT_LISTED'], 'trip', {
+      currencyFix: unlistedCurrencyFix(lisbon, 'CHF', 86),
+      onAddCurrency: vi.fn(),
+      onChangeCurrency: vi.fn(),
+    });
+    expect(shown).toContain('You set this aside You paid · Split equally · Food');
+  });
+
+  it('keeps the shorter line while it doesn’t say who paid', () => {
+    const shown = row(
+      { ...dinner, paidBy: undefined },
+      ['paidBy'],
+      ['CURRENCY_NOT_LISTED'],
+      'trip',
+      {
+        currencyFix: unlistedCurrencyFix(lisbon, 'CHF', 86),
+        onAddCurrency: vi.fn(),
+        onChangeCurrency: vi.fn(),
+      },
+    );
+    expect(shown).not.toContain('Split equally');
   });
 
   it('offers only a change once the Group has 4 extra currencies', () => {

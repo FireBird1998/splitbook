@@ -27,7 +27,10 @@ export interface ItemQuickFixes {
   fixes: QuickFix[];
   /** Missing facts the chips don't cover, in the shared member wording. */
   stillNeeds: string[];
-  /** What saving a Ready item records, e.g. "You paid · Split equally · Food". */
+  /**
+   * What saving it records, e.g. "You paid · Split equally · Food": a Ready item's, and a
+   * needs-details one's once its payer and split are known (#793).
+   */
   summary: string | null;
 }
 
@@ -94,8 +97,22 @@ export function toReviewQuickFixes(
           .map((need) => reviewNeedWords(need, item.theme)),
       ),
     ],
-    summary: item.state === 'ready' ? summarize(values, context) : null,
+    summary:
+      item.state === 'ready' || (item.state === 'needs-details' && knowsPayerAndSplit(item))
+        ? summarize(values, context)
+        : null,
   };
+}
+
+/** Whether an item says who paid and how it's split, with nothing wrong in either (#793). */
+function knowsPayerAndSplit(item: ReviewItemModel) {
+  const values = item.accountItem?.draft.values ?? {};
+  return (
+    !!values.paidBy?.length &&
+    !!values.splitMethod &&
+    !!values.splitBetween?.length &&
+    !item.needs.some((need) => ['paidBy', 'splitMethod', 'splitBetween'].includes(need.field))
+  );
 }
 
 function summarize(values: ExpenseDraftValues, context: QuickFixContext) {
