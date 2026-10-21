@@ -27,6 +27,8 @@ let balances: typeof import('../balances/route');
 let activity: typeof import('../activity/route');
 let homeActivity: typeof import('@/app/api/user/activity/route');
 let leave: typeof import('../leave/route');
+let expenses: typeof import('../expenses/route');
+let expense: typeof import('../expenses/[expenseId]/route');
 let cookie: string;
 
 beforeAll(async () => {
@@ -37,6 +39,8 @@ beforeAll(async () => {
   activity = await import('../activity/route');
   homeActivity = await import('@/app/api/user/activity/route');
   leave = await import('../leave/route');
+  expenses = await import('../expenses/route');
+  expense = await import('../expenses/[expenseId]/route');
 });
 beforeEach(async () => {
   await db.reset();
@@ -260,6 +264,29 @@ describe('cross-currency Settlement HTTP contract (#727)', () => {
       (await ledgers(id)).find((row) => row.currency === 'EUR')?.balances.map((row) => row.balance),
     ).toEqual([0, 0]);
     expect((await leaveGroup(id)).status).toBe(200);
+  });
+  it('refuses a historical currency whose only Expense is deleted', async () => {
+    const id = await trip();
+    const page = await callRoute(expenses.GET, {
+      method: 'GET',
+      path: `/api/groups/${id}/expenses`,
+      params: { id },
+      cookie,
+    });
+    const row = page.body.data.expenses[0];
+    const removed = await callRoute(expense.DELETE, {
+      method: 'DELETE',
+      path: `/api/groups/${id}/expenses/${row._id}`,
+      params: { id, expenseId: row._id },
+      cookie: await signIn('alex'),
+      headers: { 'X-Splitbook-Revision': String(row.revision) },
+    });
+    expect(removed.status).toBe(200);
+    await Group.updateOne({ _id: id }, { alternateCurrencies: [] });
+    const refused = await record(id);
+    expect(refused.status).toBe(422);
+    expect(refused.body.code).toBe('CURRENCY_MISMATCH');
+    expect((await read(id)).body.data).toEqual([]);
   });
   it('refuses an unused unlisted cleared currency and a legacy unlisted paid currency', async () => {
     const id = await trip();
