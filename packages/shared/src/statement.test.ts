@@ -352,6 +352,13 @@ it('normalises legacy extra currencies for the statement and preview while the b
   const legacy = { ...group, alternateCurrencies };
   const statement = buildStatement(legacy);
   expect(statement.currencies.map((row) => row.currency)).toEqual(['EUR', 'INR', 'JPY']);
-  expect(buildStatementPreview(statement).currencies.map((row) => row.currency)).toEqual(['EUR', 'INR', 'JPY']);
-  expect(buildBackup([legacy], { exportedAt: '2026-10-21T12:00:00Z', include: [] }).groups[0].alternateCurrencies).toEqual(alternateCurrencies);
+  expect(buildStatementPreview(statement).currencies.map((row) => row.currency)).toEqual([
+    'EUR',
+    'INR',
+    'JPY',
+  ]);
+  expect(
+    buildBackup([legacy], { exportedAt: '2026-10-21T12:00:00Z', include: [] }).groups[0]
+      .alternateCurrencies,
+  ).toEqual(alternateCurrencies);
 });

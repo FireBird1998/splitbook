@@ -1,3 +1,4 @@
+import { normaliseExtraCurrencies } from './group-currencies';
 /** Statement figures: window spending, dated payments, and current all-time ledger positions. */
 import { formatCrossCurrencySettlement } from './cross-currency-settlement';
 import type { BackupGroupInput } from './export-backup';
@@ -60,7 +61,7 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
   const currencies = [
     ...new Set([
       group.currency,
-      ...(group.alternateCurrencies ?? []),
+      ...normaliseExtraCurrencies(group.currency, group.alternateCurrencies),
       ...active.map((row) => row.currency),
       ...group.settlements.map((row) => row.currency),
     ]),
