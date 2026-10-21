@@ -53,18 +53,26 @@ export function parseGroupBalances(value: unknown): GroupCurrencyBalance[] {
     body.byCurrency.map((row) => row.currency),
     GroupBalancesReadError,
   );
-  return body.byCurrency.map((row) => ({
-    currency: row.currency,
-    balances: row.balances.map((item) => ({
-      user: personData(item.user),
-      balance: exact(item.balance, row.currency),
-    })),
-    debts: row.debts.map((item) => ({
-      from: personData(item.from),
-      to: personData(item.to),
-      amount: exact(item.amount, row.currency),
-    })),
-  }));
+  return body.byCurrency.map((row) => {
+    const owedAmounts = (list: typeof row.debts) =>
+      list.map((item) => ({
+        from: personData(item.from),
+        to: personData(item.to),
+        amount: exact(item.amount, row.currency),
+      }));
+    return {
+      currency: row.currency,
+      balances: row.balances.map((item) => ({
+        user: personData(item.user),
+        balance: exact(item.balance, row.currency),
+      })),
+      debts: owedAmounts(row.debts),
+      // Missing in an older reply or Saved copy, which is not the same as none (#612).
+      ...(row.debtsBeforeSimplifying
+        ? { debtsBeforeSimplifying: owedAmounts(row.debtsBeforeSimplifying) }
+        : {}),
+    };
+  });
 }
 
 /** An Expense in a currency Splitbook no longer supports, as stored (#810). */

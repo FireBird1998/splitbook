@@ -57,6 +57,41 @@ describe('parseGroupBalances', () => {
     ]);
   });
 
+  // #612: a reply's Debts, before simplifying, are kept with each currency's figures; an older
+  // reply, or a copy saved before this update, has none, which is not the same as an empty list.
+  it('keeps each currency’s Debts when the reply has them, and none when it doesn’t', () => {
+    const body = clone(response) as typeof response & {
+      data: { byCurrency: { debtsBeforeSimplifying?: unknown[] }[] };
+    };
+    body.data.byCurrency[0].debtsBeforeSimplifying = [
+      { from: person, to: { _id: priya, name: 'Priya Shah' }, amount: 18.5 },
+      { from: null, to: person, amount: 11.5 },
+    ];
+    const [withDebts] = parseGroupBalances(body);
+    expect(withDebts!.debtsBeforeSimplifying).toStrictEqual([
+      {
+        from: { id: sam, name: 'Sam Chen', image: null },
+        to: { id: priya, name: 'Priya Shah', image: null },
+        amount: 18.5,
+      },
+      {
+        from: { id: null, name: 'Former member', image: null },
+        to: { id: sam, name: 'Sam Chen', image: null },
+        amount: 11.5,
+      },
+    ]);
+    const [older] = parseGroupBalances(clone(response));
+    expect(older).not.toHaveProperty('debtsBeforeSimplifying');
+  });
+
+  it('rejects an inexact Debt before simplifying', () => {
+    const body = clone(response) as typeof response & {
+      data: { byCurrency: { debtsBeforeSimplifying?: unknown[] }[] };
+    };
+    body.data.byCurrency[0].debtsBeforeSimplifying = [{ from: person, to: priya, amount: 0.001 }];
+    expect(() => parseGroupBalances(body)).toThrow();
+  });
+
   it.each([
     [
       'a historical currency',
