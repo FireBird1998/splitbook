@@ -36,6 +36,16 @@ function metadataDocumentUrl(clientId: string) {
 }
 
 /**
+ * An assistant's address as the approval page and Settings show it: host and path, never a query,
+ * so publishers on one host can be told apart. A registered client's id is not an address, and an
+ * http one isn't a metadata document, so neither has one.
+ */
+export function assistantAddress(clientId: string): string | null {
+  const url = metadataDocumentUrl(clientId);
+  return url ? `${url.host}${url.pathname}` : null;
+}
+
+/**
  * What reads as a dot in a hostname once NFKC has folded the compatibility forms (U+2024, U+FF0E,
  * U+FE52 and the like): ideographic and Syriac full stops, and bracketed dots such as "[.]".
  */
@@ -55,9 +65,8 @@ function posesAsAddress(name: string, hostname: string | undefined) {
 /**
  * How the approval page names an assistant (#614): by the name its metadata document publishes,
  * cleaned as Draft attribution cleans it, else by its address's host. A name with no letter or
- * number, or one posing as another address, is no name. The address shown beside it is host and
- * path, never a query, so publishers on one host can be told apart. A registered client's id is not an address,
- * so it has none.
+ * number, or one posing as another address, is no name. Settings names a connection the same way
+ * (#615), with the same address beside it.
  */
 export function assistantDisplay(
   clientId: string,
@@ -69,10 +78,7 @@ export function assistantDisplay(
     published && /[\p{L}\p{N}]/u.test(published) && !posesAsAddress(published, url?.hostname)
       ? published
       : null;
-  return {
-    name: trusted ?? url?.host ?? 'Assistant',
-    address: url ? `${url.host}${url.pathname}` : null,
-  };
+  return { name: trusted ?? url?.host ?? 'Assistant', address: assistantAddress(clientId) };
 }
 
 /** The assistant a connection request comes from, as the approval page shows it (#614). */

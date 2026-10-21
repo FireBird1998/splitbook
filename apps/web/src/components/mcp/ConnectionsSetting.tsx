@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -17,6 +18,7 @@ import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import Link from 'next/link';
 import { formatDate } from '@splitbook/shared/date';
 import { PRODUCT_NAME } from '@/lib/product';
+import { assistantAddress } from '@/lib/mcp/assistant-name';
 
 interface Connection {
   id: string;
@@ -40,17 +42,11 @@ function lastUsedLabel(value: string | null): string {
   return `Last used ${formatDate(date, { omitCurrentYear: true })}`;
 }
 
-/** A metadata address helps distinguish same-named assistants; registered ids are not URLs. */
-function assistantAddress(clientId: string): string | null {
-  try {
-    const url = new URL(clientId);
-    return ['https:', 'http:'].includes(url.protocol)
-      ? `${url.host}${url.pathname === '/' ? '' : url.pathname}`
-      : null;
-  } catch {
-    return null;
-  }
-}
+/** The server's access, in the approval page's words (#615); the server's value decides it. */
+const ACCESS_LABELS: Record<string, string> = {
+  Ledger: 'Read only',
+  'Ledger + To review': 'Read only + To review',
+};
 
 /**
  * Settings' Connected assistants once they have loaded: the MCP URL to add, what assistants can
@@ -83,27 +79,66 @@ export function ConnectionsList({
       {data.connections.length === 0 && (
         <Typography variant="body2">No assistants connected.</Typography>
       )}
-      {data.connections.map((connection) => (
-        <Stack key={connection.id} spacing={1}>
-          <Typography sx={{ overflowWrap: 'anywhere' }}>{connection.name}</Typography>
-          {assistantAddress(connection.clientId) && (
-            <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-              {assistantAddress(connection.clientId)}
-            </Typography>
-          )}
-          <Typography variant="body2">{connection.access}</Typography>
-          <Typography variant="body2" color="text.secondary">
-            {lastUsedLabel(connection.lastUsedAt)}
-          </Typography>
-          <Button
-            variant="outlined"
-            disabled={busy !== null}
-            onClick={() => onRevoke(connection.id)}
-          >
-            Disconnect
-          </Button>
-        </Stack>
-      ))}
+      {data.connections.length > 0 && (
+        <Box
+          component="ul"
+          aria-label="Connected assistants"
+          sx={{ listStyle: 'none', p: 0, m: 0 }}
+        >
+          {data.connections.map((connection, index) => {
+            const address = assistantAddress(connection.clientId);
+            return (
+              <Box
+                component="li"
+                key={connection.id}
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  columnGap: 2,
+                  rowGap: 1,
+                  py: 1.5,
+                  borderTop: index > 0 ? 1 : 0,
+                  borderColor: 'divider',
+                }}
+              >
+                <Box sx={{ flex: '1 1 16rem', minWidth: 0 }}>
+                  <Typography fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>
+                    {connection.name}
+                  </Typography>
+                  {address && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ overflowWrap: 'anywhere' }}
+                    >
+                      {address}
+                    </Typography>
+                  )}
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                    {ACCESS_LABELS[connection.access] ?? connection.access}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {lastUsedLabel(connection.lastUsedAt)}
+                  </Typography>
+                </Box>
+                {/* Compact and red, as Sign Out is. */}
+                <Button
+                  variant="outlined"
+                  color="error"
+                  size="small"
+                  sx={{ color: 'status.negative', borderColor: 'status.negative' }}
+                  aria-label={`Disconnect ${connection.name}`}
+                  disabled={busy !== null}
+                  onClick={() => onRevoke(connection.id)}
+                >
+                  Disconnect
+                </Button>
+              </Box>
+            );
+          })}
+        </Box>
+      )}
       {data.nextOffset !== null && (
         <Button disabled={busy !== null} onClick={onLoadMore}>
           Load more connections

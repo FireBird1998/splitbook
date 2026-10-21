@@ -26,7 +26,7 @@ The owner and Designer own the [canvas](https://claude.ai/artifact/R73Hkvu43SAkD
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Connect an assistant            | ChatGPT, Claude and Other assistant picker; keep the ChatGPT guide, verify the Claude guide on staging, and show the server address and standard steps for Other |
 | Approve access                  | Assistant name with address in small text; Groups all ticked; leave-out warning; optional To review access; explicit “It can't” list                             |
-| Settings · Connected assistants | Name, Ledger or Ledger + To review, N of M Groups, last used                                                                                                     |
+| Settings · Connected assistants | Name, Read only or Read only + To review, N of M Groups, last used                                                                                               |
 | One assistant                   | Change Groups immediately; Disconnect after confirmation; reconnect to change To review access                                                                   |
 | Maple House · Assistant rule    | Admin changes Allowed/Not allowed; members see the rule; admins also see the reach list                                                                          |
 | What assistants can use         | Short explanation of ledger reads and Draft preparation; only members save Expenses                                                                              |

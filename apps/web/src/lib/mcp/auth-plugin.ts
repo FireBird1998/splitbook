@@ -1,4 +1,4 @@
-import { assistantForApproval, connectedAssistantName } from './assistant-name';
+import { assistantForApproval } from './assistant-name';
 import { randomUUID } from 'node:crypto';
 import type { AuthContext, BetterAuthPlugin } from 'better-auth';
 import {
@@ -114,7 +114,9 @@ export function mcpAuthPlugins(env: AuthEnv) {
               connections.push({
                 id: row.id,
                 clientId: row.clientId,
-                name: row.name ?? (await connectedAssistantName(ctx.context.adapter, row.clientId)),
+                // A row stored without a name is named as the approval page names it (#615).
+                name:
+                  row.name ?? (await assistantForApproval(ctx.context.adapter, row.clientId)).name,
                 lastUsedAt: row.lastUsedAt ?? null,
                 access: consent.scopes.includes(MCP_DRAFT_SCOPE) ? 'Ledger + To review' : 'Ledger',
                 scopes: consent.scopes,
@@ -207,7 +209,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
           const query = new URLSearchParams(state?.query);
           const clientId = query.get('client_id');
           if (!clientId) throw new APIError('BAD_REQUEST');
-          const name = await connectedAssistantName(context.adapter, clientId);
+          // Stored as the approval page names it (#615): a posing or missing name gives the host.
+          const { name } = await assistantForApproval(context.adapter, clientId);
           const key = JSON.stringify([user.id, clientId]);
           const find = () =>
             context.adapter.findOne<McpConnection>({
