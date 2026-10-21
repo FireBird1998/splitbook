@@ -237,10 +237,11 @@ export function unreadText(
 }
 
 /**
- * How much of its end a one-line text cut in the middle (`ellipsizeMode="middle"`) still shows,
- * as `layoutHeight` lays the tree out `width` wide at this text size: Android keeps as much of
- * the end as fits in half its line beside the ellipsis. `said` picks the text by its words; null
- * when no text says it. The widths are estimates (see `layoutWidth`), so check on a device too.
+ * How much of its end a text still shows, as `layoutHeight` lays the tree out `width` wide at this
+ * text size: all of it when it may wrap (no `numberOfLines`) or fits its line; cut on one line in
+ * the middle (`ellipsizeMode="middle"`), as much of the end as fits in half its line beside the
+ * ellipsis, as Android keeps it; cut any other way, none. `said` picks the text by its words;
+ * null when no text says it. The widths are estimates (see `layoutWidth`), so check on a device.
  */
 export function middleCutEnd(node: Node | null, fontScale: number, width: number, said: string) {
   let kept: string | null = null;
@@ -252,8 +253,11 @@ export function middleCutEnd(node: Node | null, fontScale: number, width: number
       if (words !== said) return;
       const measure = (characters: string) =>
         textWidth({ ...text, children: [characters] }, fontScale);
+      const lines = Number(text.props.numberOfLines) || 0;
+      if (lines === 0 || measure(words) <= room) return void (kept = words);
+      if (lines !== 1 || text.props.ellipsizeMode !== 'middle') return void (kept = '');
       const half = (room - measure('…')) / 2;
-      let end = measure(words) <= room ? words : '';
+      let end = '';
       while (end.length < words.length && measure(words.slice(-end.length - 1)) <= half)
         end = words.slice(-end.length - 1);
       kept = end;

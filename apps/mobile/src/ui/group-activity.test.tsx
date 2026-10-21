@@ -527,6 +527,13 @@ describe('an assistant’s credit in an Activity row (#751)', () => {
     ...event(1),
     metadata: { ...event(1).metadata, preparedBy: { kind: 'assistant', name: host } },
   };
+  /** The issue's second host, 120 characters, ending in the same domain. */
+  const long =
+    'claude.ai.household-ledger-reconciliation-assistant-for-shared-expenses.connectorgateway.region-euwest.evil.example.test';
+  const preparedBy = (name: string): ActivityEvent => ({
+    ...event(1),
+    metadata: { ...event(1).metadata, preparedBy: { kind: 'assistant', name } },
+  });
   const credit = (root: ReactTestInstance) =>
     root.find(
       (node) =>
@@ -547,16 +554,26 @@ describe('an assistant’s credit in an Activity row (#751)', () => {
     expect(credit(root).props.numberOfLines).toBe(0);
   });
 
-  it.each([1, 1.3])('keeps the domain readable on a 360dp phone at %s× text', (fontScale) => {
+  it('shows whole in the event’s details', () => {
+    const { root } = render({ state: activity({ selected: prepared }) });
+    expect(credit(root).props.numberOfLines ?? 0).toBe(0);
+  });
+
+  it.each([
+    [1, host],
+    [1.3, host],
+    [1, long],
+    [1.3, long],
+  ])('keeps the domain readable on a 360dp phone at %s× text: %s', (fontScale, name) => {
     setWindow({ width: 360, height: 640, fontScale });
-    render({ state: activity({ events: [prepared] }) });
+    render({ state: activity({ events: [preparedBy(name)] }) });
     // The list lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
     expect(
       middleCutEnd(
         screen!.toJSON() as ReactTestRendererJSON,
         fontScale,
         360 - 34,
-        `prepared by ${host}`,
+        `prepared by ${name}`,
       ),
     ).toContain('evil.example.test');
   });

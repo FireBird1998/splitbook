@@ -303,6 +303,20 @@ describe('Buttons and rows', () => {
     expect(open).toHaveBeenCalledOnce();
   });
 
+  it('a list row’s own label says its note too (#751)', () => {
+    const root = render(
+      <ListRow
+        title="Weekly groceries"
+        meta="You paid · Groceries"
+        note="prepared by helper.example.test"
+        onPress={() => undefined}
+      />,
+    );
+    expect(byRole(root, 'button')[0]?.props.accessibilityLabel).toBe(
+      'Weekly groceries, You paid · Groceries, prepared by helper.example.test',
+    );
+  });
+
   it('list rows without an action are not buttons', () => {
     const root = render(<ListRow title="Sam Chen" meta="Member" />);
     expect(byRole(root, 'button')).toHaveLength(0);
