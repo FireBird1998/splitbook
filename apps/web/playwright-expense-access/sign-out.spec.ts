@@ -270,7 +270,7 @@ test.describe('on a phone', () => {
     const drawer = await openDrawer(page);
     await drawer.getByRole('button', { name: 'Account menu' }).click();
     // From here the notice's 6 s run only as the test says.
-    await page.clock.pauseAt(Date.now() + 1_000);
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
     await page.getByRole('menuitem', { name: 'Sign Out' }).click();
     await unreachable.failed;
     // The open drawer hides the page from assistive technology, so it announces the failure.
