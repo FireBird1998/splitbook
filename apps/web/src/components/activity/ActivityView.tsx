@@ -3,7 +3,8 @@ import PreparedBy from '@/components/expenses/PreparedBy';
 
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { activityPageKey } from '@splitbook/shared/query-keys';
-import useSWR from 'swr';
+import useSWRInfinite from 'swr/infinite';
+import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -40,17 +41,25 @@ interface ActivityViewProps {
 }
 
 export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
-  const { data, isLoading, error } = useSWR(
-    activityPageKey(WEB_QUERY_ACCOUNT, groupId, { page: 1, limit: 50 }),
+  const { data, isLoading, error, size, setSize } = useSWRInfinite(
+    (index, previous: Awaited<ReturnType<typeof fetchWebActivity>> | null) => {
+      if (previous && previous.data.pagination.page >= previous.data.pagination.totalPages)
+        return null;
+      return activityPageKey(WEB_QUERY_ACCOUNT, groupId, { page: index + 1, limit: 50 });
+    },
     fetchWebActivity,
     {
       refreshInterval: 10_000,
+      revalidateFirstPage: false,
     },
   );
 
   /** The payment whose card is open beside the list (#727). */
   const [openId, setOpenId] = useState<string | null>(null);
-  const activities = (data?.data?.activities || []) as ActivityLike[];
+  const activities = (data?.flatMap((page) => page.data.activities) || []) as ActivityLike[];
+  const lastPage = data?.at(-1)?.data.pagination;
+  const hasOlder = Boolean(lastPage && lastPage.page < lastPage.totalPages);
+  const loadingOlder = !error && Boolean(data && size > data.length);
   const groups = groupActivitiesByDay(activities);
 
   if (isLoading) {
@@ -187,6 +196,16 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
           </Stack>
         </Box>
       ))}
+      {hasOlder && (
+        <Button
+          variant="text"
+          disabled={loadingOlder}
+          onClick={() => void setSize(size + 1)}
+          sx={{ alignSelf: 'center' }}
+        >
+          {loadingOlder ? 'Loading older…' : 'Load older'}
+        </Button>
+      )}
     </Stack>
   );
 

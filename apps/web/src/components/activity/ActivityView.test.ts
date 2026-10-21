@@ -11,12 +11,17 @@ import { text } from '@/lib/test-utils/markup';
  */
 
 const page = vi.hoisted(() => ({ activities: [] as unknown[] }));
-vi.mock('swr', async (original) => {
-  const actual = await original<typeof import('swr')>();
+vi.mock('swr/infinite', async (original) => {
+  const actual = await original<typeof import('swr/infinite')>();
   return {
     ...actual,
     default: () => ({
-      data: { status: 200, data: { activities: page.activities } },
+      data: [
+        {
+          status: 200,
+          data: { activities: page.activities, pagination: { page: 1, totalPages: 1 } },
+        },
+      ],
       isLoading: false,
       error: undefined,
     }),
