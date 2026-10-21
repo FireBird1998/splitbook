@@ -141,3 +141,19 @@ it('keeps the first copy when a newer event shifts an event onto two pages', asy
   ]);
   expect(textOf(renderer.root)).not.toContain('Later copy');
 });
+
+it('continues refreshing the newest events after adding paging', async () => {
+  vi.useFakeTimers();
+  try {
+    api.mockResolvedValueOnce(answer(1, [event(2)], 1));
+    api.mockResolvedValueOnce(answer(1, [event(1), event(2)], 2));
+    await render();
+    expect(headlines()).toEqual(['You added “Expense 2”']);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(headlines()).toEqual(['You added “Expense 1”', 'You added “Expense 2”']);
+  } finally {
+    vi.useRealTimers();
+  }
+});
