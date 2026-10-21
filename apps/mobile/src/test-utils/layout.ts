@@ -237,11 +237,22 @@ export function unreadText(
 }
 
 /**
+ * The phone's own font's "…", in em: Roboto's (0.669), read from the emulator's
+ * /system/fonts/Roboto-Regular.ttf. React Native's text view cuts a line with its own paint,
+ * which has the phone's font and the text's size in dp, not scaled with the phone's text size,
+ * though it draws the "…" in the text's font at that size (#766).
+ */
+const phoneEllipsis = 0.669;
+
+/**
  * How much of its end a text still shows, as `layoutHeight` lays the tree out `width` wide at this
  * text size: all of it when it may wrap (no `numberOfLines`) or fits its line; cut on one line in
  * the middle (`ellipsizeMode="middle"`), as much of the end as fits in half its line beside the
- * ellipsis, as Android keeps it; cut any other way, none. `said` picks the text by its words;
- * null when no text says it. The widths are estimates (see `layoutWidth`), so check on a device.
+ * ellipsis, as Android keeps it; cut any other way, none. Android sizes that ellipsis as the text
+ * view's paint measures it (`phoneEllipsis`), so the line it draws can run past its box, and what
+ * runs past isn't seen (#766). `said` picks the text by its words, ignoring white space after
+ * them; null when no text says it. The widths are estimates (see `layoutWidth`), so check on a
+ * device.
  */
 export function middleCutEnd(node: Node | null, fontScale: number, width: number, said: string) {
   let kept: string | null = null;
@@ -250,16 +261,30 @@ export function middleCutEnd(node: Node | null, fontScale: number, width: number
       const words = runs(text, {})
         .map(({ characters }) => characters)
         .join('');
-      if (words !== said) return;
+      if (words.trimEnd() !== said) return;
       const measure = (characters: string) =>
         textWidth({ ...text, children: [characters] }, fontScale);
       const lines = Number(text.props.numberOfLines) || 0;
       if (lines === 0 || measure(words) <= room) return void (kept = words);
       if (lines !== 1 || text.props.ellipsizeMode !== 'middle') return void (kept = '');
-      const half = (room - measure('…')) / 2;
+      const ellipsis = phoneEllipsis * number(flatten(text.props.style).fontSize);
+      // Android keeps the end that fits in half the line beside the ellipsis, then the start
+      // that fits in the rest.
       let end = '';
-      while (end.length < words.length && measure(words.slice(-end.length - 1)) <= half)
+      while (
+        end.length < words.length &&
+        measure(words.slice(-end.length - 1)) <= (room - ellipsis) / 2
+      )
         end = words.slice(-end.length - 1);
+      let start = '';
+      while (
+        start.length < words.length - end.length &&
+        measure(words.slice(0, start.length + 1)) <= room - ellipsis - measure(end)
+      )
+        start = words.slice(0, start.length + 1);
+      // It draws them with the text's own "…", and what runs past the box is cut off.
+      const before = measure(start) + measure('…');
+      while (end && before + measure(end) > room) end = end.slice(0, -1);
       kept = end;
     },
   });
