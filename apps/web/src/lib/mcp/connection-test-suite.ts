@@ -1194,6 +1194,77 @@ export function connectionTests(mongo = false) {
       });
 
     if (mongo)
+      it('leaves a Not allowed Group out of every tool at once, answering as for a Group that does not exist (#621)', async () => {
+        const db = mongoClient!.db();
+        const user = await db.collection('users').findOne({ email: 'connection@example.test' });
+        const [allowed, refused, missing] = Array.from(
+          { length: 3 },
+          () => new mongoose.Types.ObjectId(),
+        );
+        await db
+          .collection('groups')
+          .insertMany([
+            exclusionGroup(allowed, 'Rule Allowed Flat', user!._id),
+            exclusionGroup(refused, 'Rule Refused Club', user!._id),
+          ]);
+        const grant = await authorizeClient(true, true);
+        await withExcludedGroupClient(grant.access_token, async (reply) => {
+          const created = await reply('create_drafts', {
+            groupId: String(refused),
+            requestKey: 'assistant-rule-before',
+            drafts: [{ amount: 75 }],
+          });
+          expect(created.isError, created.text).toBe(false);
+          const draftId = JSON.parse(created.text).drafts[0].id as string;
+          // An admin switches the Group's Assistant rule to Not allowed; the same token's next
+          // call no longer reaches it.
+          await db
+            .collection('groups')
+            .updateOne({ _id: refused }, { $set: { assistantRule: 'not_allowed' } });
+          const asked = (groupId: mongoose.Types.ObjectId) =>
+            [
+              ['group_context', { groupId: String(groupId) }],
+              ['group_balances', { groupId: String(groupId) }],
+              [
+                'group_spending',
+                { groupId: String(groupId), from: '2026-10-01', to: '2026-10-31' },
+              ],
+              ['list_drafts', { groupId: String(groupId) }],
+              [
+                'create_drafts',
+                {
+                  groupId: String(groupId),
+                  requestKey: 'assistant-rule-after',
+                  drafts: [{ amount: 9 }],
+                },
+              ],
+              [
+                'replace_draft',
+                { groupId: String(groupId), draftId, revision: 0, values: { amount: 9 } },
+              ],
+              ['discard_draft', { groupId: String(groupId), draftId, revision: 0 }],
+            ] as const;
+          const listed = await reply('list_groups', {});
+          expect(listed.text).toContain('Rule Allowed Flat');
+          expect(listed.text).not.toContain('Rule Refused Club');
+          expect(listed.text).not.toContain(String(refused));
+          for (const [index, [tool, args]] of asked(refused).entries()) {
+            const answer = await reply(tool, args);
+            expect(answer, tool).toEqual({ isError: true, text: 'Group not found' });
+            expect(await reply(tool, asked(missing)[index][1]), tool).toEqual(answer);
+          }
+          expect((await reply('group_context', { groupId: String(allowed) })).isError).toBe(false);
+          // The member's item in To review stays as it was.
+          expect(
+            await db
+              .collection('expensedrafts')
+              .findOne({ _id: new mongoose.Types.ObjectId(draftId) }),
+          ).toMatchObject({ state: 'active', revision: 0, values: { amount: 75 } });
+        });
+        await authorizeClient(); // return to ledger-only consent for later assertions
+      });
+
+    if (mongo)
       it('reaches a Group joined after approval, and applies a new approval on the next call (#617)', async () => {
         const db = mongoClient!.db();
         const user = await db.collection('users').findOne({ email: 'connection@example.test' });
