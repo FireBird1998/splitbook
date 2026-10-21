@@ -598,7 +598,13 @@ function TaskScreen() {
             ) : undefined
           }
         >
-          {!invite && <OfflineNotice state={state.offline} />}
+          {/* Connected assistants shows this device's copy only while its Saved copy shows (#622). */}
+          {!invite && (
+            <OfflineNotice
+              state={state.offline}
+              savedShown={state.screen !== 'assistants' || state.assistants.saved}
+            />
+          )}
           {state.screen === 'settings' ? (
             <SettingsScreen
               user={state.auth.user!}

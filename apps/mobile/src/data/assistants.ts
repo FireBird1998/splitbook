@@ -189,16 +189,23 @@ export function createAssistants(session: AssistantsSession) {
       await write(rows, lease.accountId).catch(() => undefined);
     });
   };
-  const show = (answer: Answer) =>
+  const show = (answer: Answer) => {
+    const assistants = listed(answer.value),
+      { confirming } = session.state();
     update({
       available: true,
       status: 'ready',
-      assistants: listed(answer.value),
+      assistants,
       refreshedAt: answer.refreshedAt,
       saved: answer.source === 'saved',
       unsaved: false,
       message: '',
+      // A sheet open for an assistant no longer listed closes, as it can't be disconnected again.
+      ...(confirming && !assistants.some(({ id }) => id === confirming)
+        ? { confirming: null, disconnectMessage: '' }
+        : {}),
     });
+  };
 
   /** Every page of the member's connections, as one. */
   const readConnections = async (owner: number, signal: AbortSignal) => {
