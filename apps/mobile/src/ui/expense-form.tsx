@@ -1,7 +1,7 @@
 import { memo, useState, type ReactNode, type Ref } from 'react';
 import { Pressable, type TextInput, View, useWindowDimensions } from 'react-native';
 import { EXPENSE_CATEGORIES, getCategory } from '@splitbook/shared/categories';
-import { formatCurrency } from '@splitbook/shared/currency';
+import { formatCurrency, wholeUnit } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import {
   isMoneyField,
@@ -259,7 +259,10 @@ const AllocationHeading = memo(function AllocationHeading({
       }}
     >
       <CompactText variant="overline" accessibilityRole="header">
-        {currency ? `Who owes what · ${currency}` : 'Who owes what'}
+        {currency
+          ? // "· whole yen" for a currency without a smaller unit, as the web says (#720).
+            `Who owes what · ${currency}${wholeUnit(currency) ? ` · whole ${wholeUnit(currency)}` : ''}`
+          : 'Who owes what'}
       </CompactText>
       {savedLabel ? (
         <CompactText variant="caption" tone="secondary">
