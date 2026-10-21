@@ -25,7 +25,7 @@ import {
   startingExpenseCurrency,
 } from '@splitbook/shared/group-currencies';
 import { useSWRConfig } from 'swr';
-import { groupCurrenciesPath } from '@splitbook/shared/api-paths';
+import { groupCurrenciesPath, groupPath } from '@splitbook/shared/api-paths';
 import AddCurrencyDialog, { answerOf } from '@/components/groups/AddCurrencyDialog';
 import { isWebGroupsRead } from '@/lib/web-query-keys';
 import { readAmountEntry } from '@splitbook/shared/amount-entry';
@@ -36,7 +36,7 @@ import {
 } from '@splitbook/shared/expense-draft';
 import { useExpenseDraftSave } from './use-expense-draft-save';
 import { getDefaultExpenseTag } from './expense-form-helpers';
-import type { GroupRead } from '@splitbook/shared/group-read';
+import { parseGroupResponse, type GroupRead } from '@splitbook/shared/group-read';
 import { apiFetch } from '@/lib/utils/api-fetch';
 
 // ─── Types ─────────────────────────────────────────────
@@ -192,9 +192,28 @@ function ExpenseDraftDialog({
     ...added,
   ]);
   const listing = { ...group, alternateCurrencies: extras };
-  const addCurrency = async (code: string) => {
-    setAddBusy(true);
-    setAddError('');
+  /** The currency is the Group's now: the Expense is in it, and the dialog closes. */
+  const takeAdded = (code: string) => {
+    setAdded((current) => [...current, code]);
+    edit({ currency: code });
+    setAddingCurrency(false);
+    // The Group's reads, which the form and the rest of the page take its currencies from.
+    void refreshReads(isWebGroupsRead);
+  };
+  /**
+   * Whether the Group, read again, lists the currency: after a failure, it may have been added all
+   * the same, its reply lost on the way back, or by another member first.
+   */
+  const listedNow = async (code: string) => {
+    try {
+      const response = await apiFetch(groupPath(groupId));
+      return groupCurrencies(parseGroupResponse(await response.json())).includes(code);
+    } catch {
+      return false;
+    }
+  };
+  /** The Group's answer to adding the currency: added, or why not. */
+  const tryAdding = async (code: string) => {
     try {
       const answer = await answerOf(
         await apiFetch(groupCurrenciesPath(groupId), {
@@ -203,17 +222,18 @@ function ExpenseDraftDialog({
           body: JSON.stringify({ currency: code }),
         }),
       );
-      if (!answer.settings) {
-        setAddError(answer.message);
-        return;
-      }
-      setAdded((current) => [...current, code]);
-      edit({ currency: code });
-      setAddingCurrency(false);
-      // The Group's reads, which the form and the rest of the page take its currencies from.
-      void refreshReads(isWebGroupsRead);
+      return answer.settings ? null : answer.message;
     } catch {
-      setAddError('Couldn’t add the currency. Check your connection and try again.');
+      return 'Couldn’t add the currency. Check your connection and try again.';
+    }
+  };
+  const addCurrency = async (code: string) => {
+    setAddBusy(true);
+    setAddError('');
+    try {
+      const failure = await tryAdding(code);
+      if (failure === null || (await listedNow(code))) takeAdded(code);
+      else setAddError(failure);
     } finally {
       setAddBusy(false);
     }

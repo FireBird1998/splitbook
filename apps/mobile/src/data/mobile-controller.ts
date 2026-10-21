@@ -110,6 +110,7 @@ import { getCurrency } from '@splitbook/shared/currency';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { currentMonthKey, toDateParam } from '@splitbook/shared/date';
 import {
+  groupCurrencies,
   normaliseExtraCurrencies,
   startingExpenseCurrency,
 } from '@splitbook/shared/group-currencies';
@@ -6621,6 +6622,38 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * a refusal says why in the server's words. Adding one already listed is refused, so a reply
    * that was lost is settled by reading the Group again.
    */
+  /** The Group as it is now, as the Expense form takes it, or null when it can't be read. */
+  const contextNow = async (groupId: string, owner: number) => {
+    try {
+      const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
+      return context.group.id === groupId ? context : null;
+    } catch {
+      return null;
+    }
+  };
+  /**
+   * A currency the Group now lists, added here: the form being entered offers it at once, with
+   * the Group's currencies in `context`, and the Expense is in it.
+   */
+  const takeCurrency = async (
+    groupId: string,
+    currency: string,
+    context: ExpenseContext | null,
+  ) => {
+    const settled = { groupId, status: 'idle' as const, message: null };
+    const editor = snapshot.expense;
+    if (
+      snapshot.screen !== 'expense' ||
+      editor.groupId !== groupId ||
+      !editor.context ||
+      !context
+    ) {
+      publish({ ...snapshot, currencyAdd: settled });
+      return;
+    }
+    publish({ ...snapshot, currencyAdd: settled, expense: { ...editor, context } });
+    await updateExpenseDraft({ currency });
+  };
   const addGroupCurrency = async (currency: string) => {
     const groupId =
       snapshot.screen === 'expense'
@@ -6638,7 +6671,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return false;
     const owner = generation;
     publish({ ...snapshot, currencyAdd: { groupId, status: 'adding', message: null } });
-    const settled = { groupId, status: 'idle' as const, message: null };
     try {
       const value = await request(groupCurrenciesPath(groupId), owner, {
         method: 'POST',
@@ -6667,26 +6699,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         });
       }
       const editor = snapshot.expense;
-      if (snapshot.screen !== 'expense' || editor.groupId !== groupId || !editor.context) {
-        publish({ ...snapshot, currencyAdd: settled });
-        return true;
-      }
-      // The form offers it at once, and the Expense being entered is in it.
-      publish({
-        ...snapshot,
-        currencyAdd: settled,
-        expense: {
-          ...editor,
-          context: {
-            ...editor.context,
-            group: { ...editor.context.group, alternateCurrencies: extras },
-          },
+      await takeCurrency(
+        groupId,
+        currency,
+        editor.context && {
+          ...editor.context,
+          group: { ...editor.context.group, alternateCurrencies: extras },
         },
-      });
-      await updateExpenseDraft({ currency });
+      );
       return true;
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return false;
+      // Splitbook may have added it all the same, its reply lost on the way back, or another
+      // member may have added it first: the Group, read again, says so, and then it's added here
+      // too. Otherwise adding it again would only be refused as already listed.
+      const now = await contextNow(groupId, owner);
+      if (!current(owner)) return false;
+      if (now && groupCurrencies(now.group).includes(currency)) {
+        await takeCurrency(groupId, currency, now);
+        // The Group's Currencies, where they show, read it again.
+        if (snapshot.currenciesOpenFor === groupId) void openCurrencies(groupId);
+        return true;
+      }
       publish({
         ...snapshot,
         currencyAdd: {
