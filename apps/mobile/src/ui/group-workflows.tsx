@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CURRENCIES, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
 import { MAX_EXTRA_CURRENCIES } from '@splitbook/shared/group-currencies';
+import { addableCurrencies } from '@splitbook/shared/group-currency-settings';
 import type { GroupField, GroupFieldErrors } from '../data/group-draft';
 import type { GroupDraft, InvitationPreview as InvitationPreviewModel } from '../data/types';
 import {
@@ -16,7 +17,9 @@ import {
   SectionHeader,
   TileGrid,
   TopBar,
+  denseHitSlop,
   radius,
+  touch,
   useTap,
 } from './compact';
 import { savingNeedsConnection } from './offline-notice';
@@ -186,17 +189,17 @@ export function GroupCreateForm({
   const noun = descriptor.nouns.singular;
   const capitalizedNoun = noun.charAt(0).toUpperCase() + noun.slice(1);
   const extras = draft.extraCurrencies;
-  const listed =
-    choosing === 'extra'
-      ? CURRENCIES.filter(
-          (item) => item.code !== draft.defaultCurrency && !extras.includes(item.code),
-        )
-      : CURRENCIES;
-  const matchingCurrencies = listed.filter((item) =>
-    `${item.code} ${item.name}`.toLowerCase().includes(currencySearch.trim().toLowerCase()),
-  );
+  const full = extras.length >= MAX_EXTRA_CURRENCIES;
+  // The list adds an extra currency, the rest the Group doesn't list yet, or picks the main one.
+  const adding = choosing === 'extra';
+  const matchingCurrencies = adding
+    ? addableCurrencies([draft.defaultCurrency, ...extras], currencySearch)
+    : CURRENCIES.filter((item) =>
+        `${item.code} ${item.name}`.toLowerCase().includes(currencySearch.trim().toLowerCase()),
+      );
   const chip = (pressed: boolean, added: boolean) => ({
-    minHeight: 40,
+    minHeight: touch.dense,
+    opacity: locked || (!added && full) ? 0.5 : 1,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 6,
@@ -352,7 +355,12 @@ export function GroupCreateForm({
                   Optional
                 </CompactText>
               </View>
-              <CompactText variant="caption" tone="secondary" style={{ marginLeft: 'auto' }}>
+              <CompactText
+                variant="caption"
+                tone="secondary"
+                accessibilityLiveRegion="polite"
+                style={{ marginLeft: 'auto' }}
+              >
                 {`${extras.length} of ${MAX_EXTRA_CURRENCIES}`}
               </CompactText>
             </View>
@@ -368,6 +376,7 @@ export function GroupCreateForm({
                   accessibilityLabel={`${code}, ${getCurrency(code)?.name ?? code}, added. Remove`}
                   accessibilityState={{ disabled: locked }}
                   disabled={locked}
+                  hitSlop={denseHitSlop}
                   {...fieldTap.on(() =>
                     onChange({ extraCurrencies: extras.filter((item) => item !== code) }),
                   )}
@@ -382,16 +391,14 @@ export function GroupCreateForm({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Add a currency"
-                accessibilityState={{ disabled: locked || extras.length >= MAX_EXTRA_CURRENCIES }}
-                disabled={locked || extras.length >= MAX_EXTRA_CURRENCIES}
+                accessibilityState={{ disabled: locked || full }}
+                disabled={locked || full}
+                hitSlop={denseHitSlop}
                 {...fieldTap.on(() => {
                   setCurrencySearch('');
                   setChoosing('extra');
                 })}
-                style={({ pressed }) => ({
-                  ...chip(pressed && !fieldTap.dragged, false),
-                  opacity: extras.length >= MAX_EXTRA_CURRENCIES ? 0.5 : 1,
-                })}
+                style={({ pressed }) => chip(pressed && !fieldTap.dragged, false)}
               >
                 <Icon name="add-outline" size={18} />
                 <CompactText weight="medium">Add a currency</CompactText>
@@ -510,7 +517,7 @@ export function GroupCreateForm({
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
           <TopBar
-            title={choosing === 'extra' ? 'Add a currency' : 'Choose currency'}
+            title={adding ? 'Add a currency' : 'Choose currency'}
             actions={
               <CompactButton label="Done" variant="text" dense onPress={() => setChoosing(null)} />
             }
@@ -536,16 +543,14 @@ export function GroupCreateForm({
                   <View key={item.code}>
                     {index > 0 ? <Divider /> : null}
                     <Pressable
-                      accessibilityRole={choosing === 'extra' ? 'button' : 'radio'}
+                      accessibilityRole={adding ? 'button' : 'radio'}
                       accessibilityLabel={`${item.code}, ${item.name}`}
                       accessibilityState={
-                        choosing === 'extra'
-                          ? undefined
-                          : { checked: item.code === draft.defaultCurrency }
+                        adding ? undefined : { checked: item.code === draft.defaultCurrency }
                       }
                       {...currencyTap.on(() => {
                         onChange(
-                          choosing === 'extra'
+                          adding
                             ? { extraCurrencies: [...extras, item.code] }
                             : { defaultCurrency: item.code },
                         );
@@ -564,7 +569,7 @@ export function GroupCreateForm({
                     >
                       <CompactText style={{ fontFamily: fonts.mono }}>{item.code}</CompactText>
                       <CompactText style={{ flex: 1 }}>{item.name}</CompactText>
-                      {choosing === 'main' && item.code === draft.defaultCurrency && (
+                      {!adding && item.code === draft.defaultCurrency && (
                         <Icon name="checkmark" color={theme.brand.main} />
                       )}
                     </Pressable>
