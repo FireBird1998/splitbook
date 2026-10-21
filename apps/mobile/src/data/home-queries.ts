@@ -721,12 +721,13 @@ export function createHomeQueries(session: HomeSession) {
   };
   /**
    * Reads a query now, joining a read in flight; one a change cancels is read again. `reuse`
-   * keeps an answer still within its stale time instead.
+   * keeps an answer still within its stale time instead. Zero is not a forced read when the
+   * clock moved behind dataUpdatedAt; unconditional staleness also bypasses that future answer.
    */
   const readNow = async (index: 0 | 1, owner: number, reuse = false): Promise<void> => {
     while (session.current(owner)) {
       const option = options()[index],
-        reading = client.fetchQuery(reuse ? option : { ...option, staleTime: 0 }),
+        reading = client.fetchQuery(reuse ? option : { ...option, staleTime: -Infinity }),
         read = reads.get([listPath, homePath][index]);
       try {
         await reading;
