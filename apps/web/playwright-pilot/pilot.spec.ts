@@ -161,7 +161,7 @@ test('empty dashboard and settled balances remain distinct from errors', async (
   await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
 });
 
-test('a Payments failure preserves debts, warns about mixed currency, and recovers', async ({
+test('a Payments failure preserves debts, keeps currencies apart, and recovers', async ({
   page,
 }) => {
   await installPilotFixtures(page, {
@@ -182,10 +182,12 @@ test('a Payments failure preserves debts, warns about mixed currency, and recove
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}?tab=balances`);
   await expect(page.getByRole('heading', { name: 'Settle up' })).toBeVisible();
+  await expect(page.getByRole('tablist', { name: 'Balances in' }).getByRole('tab')).toHaveCount(2);
   await expect(
-    page.getByRole('alert').filter({ hasText: 'Each balance is shown separately' }),
+    page.getByText(
+      'Each currency keeps its own balances, Debts and payments. Nothing is converted.',
+    ),
   ).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'Balance currency' })).toBeVisible();
   const error = page.getByRole('alert').filter({ hasText: 'Payments could not be loaded.' });
   await expect(error).toBeVisible();
   failing = false;
