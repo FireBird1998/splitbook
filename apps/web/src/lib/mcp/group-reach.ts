@@ -1,5 +1,5 @@
 import type { AuthContext } from 'better-auth';
-import { connectedAssistantName } from './assistant-name';
+import { assistantDisplay, assistantForApproval } from './assistant-name';
 import type { McpConnection, McpConsent } from './grants';
 
 type Adapter = Pick<AuthContext['adapter'], 'findMany' | 'findOne'>;
@@ -49,7 +49,12 @@ export async function groupReach(
       if (!live) continue;
       reach.push({
         member: { id: row.userId, name: names.get(row.userId) ?? '' },
-        assistant: row.name ?? (await connectedAssistantName(adapter, row.clientId)),
+        // Named as Settings names it (#747): a stored name posing as another address, or none,
+        // gives the assistant's own host.
+        assistant:
+          row.name != null
+            ? assistantDisplay(row.clientId, row.name).name
+            : (await assistantForApproval(adapter, row.clientId)).name,
         lastUsedAt: row.lastUsedAt ?? null,
       });
     }
