@@ -586,3 +586,35 @@ it('exports both stored payment amounts beside their currencies and the exact ap
   });
   expect(csv.header.indexOf('Paid currency')).toBe(csv.header.indexOf('Amount paid') + 1);
 });
+
+it('keeps fallback rate attribution in the downloadable CSV', () => {
+  const csv = buildPaymentCsv({
+    payments: [
+      {
+        id: 'p',
+        at: '2026-10-21T12:00:00Z',
+        fromId: ALEX,
+        toId: SAM,
+        recordedById: ALEX,
+        amountMinor: 2000,
+        currency: 'EUR',
+        amountPaidMinor: 3200,
+        paidCurrency: 'JPY',
+        appliedRate: '160',
+        rateKind: 'suggested',
+        suggestedRate: '160',
+        rateSource: 'exchange-rate-api',
+        rateAsOf: '2026-10-20',
+        rateFetchedAt: '2026-10-21T12:00:00Z',
+      },
+    ],
+    names: NAMES,
+    timeZone: 'UTC',
+  });
+  const row = Object.fromEntries(csv.header.map((key, index) => [key, csv.rows[0][index]]));
+  expect(row).toMatchObject({
+    'Amount paid': '3200',
+    'Paid currency': 'JPY',
+    'Rate attribution': 'Rates By Exchange Rate API (https://www.exchangerate-api.com)',
+  });
+});
