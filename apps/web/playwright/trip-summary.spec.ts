@@ -286,8 +286,12 @@ test('a wrap-up Record opens Balances with Record payment filled in for the pair
   await expect(form.getByRole('combobox', { name: 'To', exact: true })).toHaveValue(
     pays ? other.id : alex,
   );
+  // Money inputs group their digits (#773).
   await expect(form.getByRole('textbox', { name: 'Amount paid' })).toHaveValue(
-    (payment.amountMinor / 100).toFixed(2),
+    (payment.amountMinor / 100).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
   );
   // Nothing is recorded, and the address drops the link once the form has it.
   await expect.poll(() => new URL(page.url()).search).toBe('');
