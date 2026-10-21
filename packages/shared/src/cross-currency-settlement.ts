@@ -82,3 +82,15 @@ export function calculateCrossCurrencySettlement(
     appliedRate: decimalRatio(BigInt(paid!) * clearedScale, BigInt(cleared!) * paidScale),
   };
 }
+
+/** Stored snapshots, never refreshed or recomputed from the current rate service. */
+export interface CrossCurrencySettlementFields {
+  amountPaidMinor: number;
+  paidCurrency: string;
+  appliedRate: string;
+  rateKind: 'suggested' | 'custom' | 'entered';
+  suggestedRate?: string;
+  rateSource?: 'frankfurter' | 'exchange-rate-api' | 'mixed';
+  rateAsOf?: string;
+  rateFetchedAt?: string;
+}

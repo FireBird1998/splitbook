@@ -1,3 +1,4 @@
+import { crossCurrencySettlementShape } from '@splitbook/shared/validators/settlement';
 import { assistantAttributionSchema } from '@splitbook/shared/draft-attribution';
 import { Types } from 'mongoose';
 import connectDB from '@/lib/db';
@@ -57,6 +58,13 @@ function publicMetadata(type: string, metadata: unknown): Fields {
   for (const key of TEXTS) if (typeof source[key] === 'string') sent[key] = source[key];
   if (typeof source.amount === 'number' && Number.isFinite(source.amount))
     sent.amount = source.amount;
+  if (type === 'settlement_recorded') {
+    if (Number.isSafeInteger(source.amountMinor)) sent.amountMinor = source.amountMinor;
+    for (const [key, schema] of Object.entries(crossCurrencySettlementShape)) {
+      const parsed = schema.safeParse(source[key]);
+      if (parsed.success && parsed.data !== undefined) sent[key] = parsed.data;
+    }
+  }
   if (type === 'expense_updated' && isRecord(source.changes)) {
     const changes: Fields = {};
     for (const key of MONEY_CHANGES) {

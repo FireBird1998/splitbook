@@ -1,3 +1,4 @@
+import type { CrossCurrencySettlementFields } from './cross-currency-settlement';
 // ─── User ───────────────────────────────────────────────
 export interface IUser {
   _id: string;
@@ -132,7 +133,7 @@ export interface IRecurringExpense {
 }
 
 // ─── Settlement ─────────────────────────────────────────
-export interface ISettlement {
+export interface ISettlement extends Partial<CrossCurrencySettlementFields> {
   _id: string;
   group: string | IGroup;
   paidBy: string | IUser;
