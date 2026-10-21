@@ -1,9 +1,11 @@
+import { useContext } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
 import { useReducedMotion } from './motion';
 import { denseHitSlop, radius, touch } from './scale';
 import { useTap, type Tap } from './tap';
+import { BannerActionColor } from './feedback';
 import { CompactText, FieldMarker, Money } from './text';
 
 /** Spinning while busy; with reduce motion on, a still hourglass instead. */
@@ -67,9 +69,14 @@ export function CompactButton({
   const theme = useTheme();
   const own = useTap();
   const press = tap ?? own;
+  // In a Banner, an enabled text action takes the Banner's status colour (#807).
+  const inBanner = useContext(BannerActionColor);
   const tones = destructive
     ? { main: theme.status.negative, bg: theme.negative.bg }
-    : { main: theme.brand.main, bg: theme.brand.bg };
+    : {
+        main: variant === 'text' && !disabled && inBanner ? inBanner : theme.brand.main,
+        bg: theme.brand.bg,
+      };
   const color = variant === 'primary' ? theme.brand.contrastText : tones.main;
   const size = dense ? 14 : 15;
   // Room to spare (#331): a button as wide as its words, opened again, otherwise wrapped its last
