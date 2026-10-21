@@ -204,6 +204,20 @@ describe('a new Trip’s extra currencies (#723)', () => {
     expect(await submit()).toMatchObject({ defaultCurrency: 'EUR', alternateCurrencies: ['JPY'] });
   });
 
+  it('don’t bring back one the saved currency took, when the main currency changes', async () => {
+    let answer!: () => void;
+    profile.currency = 'EUR';
+    profile.answered = new Promise((resolve) => (answer = resolve));
+    await mount();
+    await choose(addCurrency(), 'EUR');
+    await choose(addCurrency(), 'JPY');
+    await act(async () => answer());
+    await choose(mainCurrency(), 'INR');
+    expect(shown()).toContain('1 of 4');
+    await name('Lisbon & Tokyo');
+    expect(await submit()).toMatchObject({ defaultCurrency: 'INR', alternateCurrencies: ['JPY'] });
+  });
+
   it('aren’t offered for a Household, and none are sent, even ones chosen for a Trip', async () => {
     await mount();
     await choose(addCurrency(), 'EUR');
