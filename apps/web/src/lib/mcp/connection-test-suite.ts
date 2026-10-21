@@ -14,7 +14,7 @@ import { createMcpConnectionHandler, MCP_LEDGER_SCOPE } from './connection';
 import { MongoClient } from 'mongodb';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
-import { currentMcpGrant } from './grants';
+import { currentMcpGrant, type McpConnection } from './grants';
 import { MCP_DRAFT_SCOPE } from './config';
 import { expenseDraftService } from '@/lib/services/expense-draft.service';
 
@@ -2041,6 +2041,66 @@ export function connectionTests(mongo = false) {
         expect((await post('/mcp/revoke', { id: own.id }, true)).status).toBe(200);
         expect((await setAssistantGroups(own.id, [])).status).toBe(404);
         expect((await readAssistant(own.id)).status).toBe(404);
+      }));
+
+    it('refuses a stale Group choice after a newer approval rotates the connection generation (#763)', () =>
+      withAnotherClient('Synthetic Reapproved Client', async () => {
+        await authorizeCode();
+        const { id } = await connectionOf(clientId);
+        const adapter = (await auth.$context).adapter;
+        const originalFind = adapter.findOne.bind(adapter);
+        const previous = await originalFind<McpConnection>({
+          model: 'mcpConnection',
+          where: [{ field: 'id', value: id }],
+        });
+        if (!previous) throw new Error('Missing test connection');
+        const generation = 'reapproved-generation-763';
+        const freshChoice = ['c00000000000000000000763'];
+        const staleChoice = ['c00000000000000000000764'];
+        let rotated = false;
+        const find = vi.spyOn(adapter, 'findOne').mockImplementation(async (args) => {
+          const row = await originalFind(args);
+          if (
+            !rotated &&
+            row &&
+            args.model === 'mcpConnection' &&
+            args.where?.some((condition) => condition.field === 'id' && condition.value === id)
+          ) {
+            // Hold the old read even if the memory adapter mutates its stored row in place.
+            const snapshot = structuredClone(row);
+            rotated = true;
+            // Keep the old consent long enough for this in-flight read to finish its live check;
+            // the new approval has its own generation and choices before the stale write lands.
+            await adapter.create({
+              model: 'oauthConsent',
+              data: {
+                userId: previous.userId,
+                clientId: previous.clientId,
+                referenceId: generation,
+                scopes: [MCP_LEDGER_SCOPE],
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              },
+            });
+            await adapter.update({
+              model: 'mcpConnection',
+              where: [{ field: 'id', value: id }],
+              update: { generation, excludedGroupIds: freshChoice },
+            });
+            return snapshot;
+          }
+          return row;
+        });
+        try {
+          const refused = await setAssistantGroups(id, staleChoice);
+          expect(rotated).toBe(true);
+          expect(refused.status).toBe(404);
+          const current = await readAssistant(id);
+          expect(current.status).toBe(200);
+          expect(await current.json()).toMatchObject({ id, excludedGroupIds: freshChoice });
+        } finally {
+          find.mockRestore();
+        }
       }));
 
     if (mongo)
