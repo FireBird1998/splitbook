@@ -10,13 +10,51 @@ export function mcpIdleSeconds(env: AuthEnv): number {
   if (
     env.MOBILE_APP_ENV === 'production' ||
     env.MCP_DEPLOYMENT !== 'staging' ||
-    env.MCP_IDLE_TIMEOUT_SECONDS === undefined
+    !env.MCP_IDLE_TIMEOUT_SECONDS?.trim()
   )
     return MCP_IDLE_SECONDS;
   const seconds = Number(env.MCP_IDLE_TIMEOUT_SECONDS);
   if (!Number.isInteger(seconds) || seconds < 120 || seconds > MCP_IDLE_SECONDS)
     throw new Error('MCP_IDLE_TIMEOUT_SECONDS must be an integer from 120 to 7776000');
   return seconds;
+}
+
+let loggedInvalidTimeout = false;
+
+/** Validate on auth initialization without disabling the app's own sign-in/session routes. */
+export function mcpUnavailable(env: AuthEnv = process.env): boolean {
+  if (env.MCP_ENABLED !== 'true') return false;
+  try {
+    mcpIdleSeconds(env);
+    return false;
+  } catch {
+    if (!loggedInvalidTimeout) {
+      console.error(
+        'Invalid MCP inactivity configuration: MCP_IDLE_TIMEOUT_SECONDS must be an integer from 120 to 7776000. MCP is unavailable (503); normal sign-in and pages remain available.',
+      );
+      loggedInvalidTimeout = true;
+    }
+    return true;
+  }
+}
+
+/** Shared by MCP, its OAuth routes and discovery; never intercept ordinary app routes. */
+export function mcpUnavailableResponse(request: Request): Response | null {
+  const path = new URL(request.url).pathname;
+  const isMcp =
+    path === '/api/mcp' ||
+    path.startsWith('/api/auth/mcp/') ||
+    path.startsWith('/api/auth/oauth2/') ||
+    path === '/api/auth/jwks' ||
+    path.startsWith('/.well-known/oauth-') ||
+    path.startsWith('/api/auth/.well-known/oauth-') ||
+    path === '/api/auth/.well-known/openid-configuration';
+  return isMcp && mcpUnavailable()
+    ? Response.json(
+        { error: 'MCP_UNAVAILABLE' },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } },
+      )
+    : null;
 }
 
 export const MCP_LEDGER_SCOPE = 'ledger:read';

@@ -1554,7 +1554,9 @@ export function connectionTests(mongo = false) {
       };
 
       it('enforces a shortened staging idle timeout on the next MCP request', async () => {
-        const start = Math.floor(Date.now() / 1000) * 1000;
+        // Freeze at or after earlier credential timestamps, never backwards into the
+        // preceding second. All deadline checks below advance this frozen clock explicitly.
+        const start = Math.ceil(Date.now() / 1000) * 1000;
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(start);
         env.MCP_DEPLOYMENT = 'staging';
@@ -1563,6 +1565,7 @@ export function connectionTests(mongo = false) {
         try {
           const issued = await freshConnection();
           await callAssistant(issued.access_token);
+          expect((await connectionList())[0].lastUsedAt).toBe(new Date(start).toISOString());
           vi.setSystemTime(start + 119_000);
           expect(await connectionList()).toHaveLength(1);
           vi.setSystemTime(start + 120_000);

@@ -14,6 +14,9 @@ const state = vi.hoisted(() => ({
 // and the singleton's database so each run owns its synthetic users and sessions.
 vi.mock('@/lib/auth', () => ({
   auth: {
+    get $context() {
+      return state.auth!.$context;
+    },
     handler: (request: Request) => state.auth!.handler(request),
     api: {
       getSession: (args: { headers: Headers }) => state.auth!.api.getSession(args),
@@ -23,7 +26,7 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('next/headers', () => ({ headers: async () => state.headers }));
 
 import { GET, POST } from '@/app/api/auth/[...all]/route';
-import { POST as mcpPost } from '@/app/api/mcp/route';
+import { GET as mcpGet, POST as mcpPost } from '@/app/api/mcp/route';
 import { GET as discovery } from '@/app/.well-known/[...path]/route';
 import Home from '@/app/page';
 
@@ -42,7 +45,22 @@ export function availabilityTests(mongo = false) {
       createdAt: now,
       updatedAt: now,
     }));
-    const records: MemoryDB = { user: users, session: [], account: [], verification: [] };
+    const records: MemoryDB = {
+      user: users,
+      session: [],
+      account: [],
+      verification: [],
+      rateLimit: [],
+      jwks: [],
+      oauthClient: [],
+      oauthAccessToken: [],
+      oauthRefreshToken: [],
+      oauthConsent: [],
+      oauthClientAssertion: [],
+      oauthResource: [],
+      oauthClientResource: [],
+      mcpConnection: [],
+    };
     database = memoryAdapter(records);
     if (mongo) {
       const target = integrationTestDb('mcp-availability');
@@ -73,6 +91,7 @@ export function availabilityTests(mongo = false) {
         const env = {
           NODE_ENV: 'test',
           AUTH_MODE: 'demo',
+          MOBILE_APP_ENV: 'staging',
           AUTH_SECRET: 'synthetic-mcp-availability-test-secret-32-characters',
           AUTH_RATE_LIMIT_ENABLED: 'false',
           NEXT_PUBLIC_APP_URL: origin,
@@ -108,7 +127,12 @@ export function availabilityTests(mongo = false) {
           '/oauth2/authorize',
           '/oauth2/token',
           '/oauth2/register',
+          '/oauth2/consent',
+          '/oauth2/continue',
+          '/mcp/revoke',
           '/jwks',
+          '/.well-known/oauth-authorization-server',
+          '/.well-known/openid-configuration',
         ]) {
           for (const handler of [GET, POST]) {
             const response = await handler(
@@ -121,6 +145,7 @@ export function availabilityTests(mongo = false) {
             expect(response.headers.get('Cache-Control')).toBe('no-store');
           }
         }
+        expect((await mcpGet(new Request(`${origin}/api/mcp`))).status).toBe(503);
         expect((await mcpPost(new Request(`${origin}/api/mcp`, { method: 'POST' }))).status).toBe(
           503,
         );
@@ -129,5 +154,32 @@ export function availabilityTests(mongo = false) {
         ).toBe(503);
       },
     );
+    it.each([
+      { label: 'empty staging timeout', timeout: '', deployment: 'staging' },
+      { label: 'copied invalid production override', timeout: 'abc', deployment: 'production' },
+    ])('keeps MCP available with $label', async ({ timeout, deployment }) => {
+      const env = {
+        NODE_ENV: 'test',
+        AUTH_MODE: 'demo',
+        AUTH_SECRET: 'synthetic-mcp-availability-test-secret-32-characters',
+        NEXT_PUBLIC_APP_URL: origin,
+        MCP_ENABLED: 'true',
+        MCP_DEPLOYMENT: 'staging',
+        MOBILE_APP_ENV: deployment,
+        MCP_IDLE_TIMEOUT_SECONDS: timeout,
+      };
+      for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+      state.auth = createSplitbookAuth({ database, env });
+      expect(await Home()).toBeTruthy();
+      expect((await GET(new Request(`${origin}/api/auth/get-session`))).status).toBe(200);
+      expect(
+        (await discovery(new Request(`${origin}/.well-known/oauth-authorization-server/api/auth`)))
+          .status,
+      ).toBe(200);
+      // A missing bearer token still gets the normal OAuth challenge, not quarantine.
+      expect((await mcpPost(new Request(`${origin}/api/mcp`, { method: 'POST' }))).status).toBe(
+        401,
+      );
+    });
   });
 }

@@ -22,7 +22,7 @@ import {
   MCP_SCOPES,
   MCP_REFRESH_TOKEN_SECONDS,
   mcpResource,
-  mcpIdleSeconds,
+  mcpUnavailable,
 } from './config';
 import {
   currentMcpGrant,
@@ -36,16 +36,8 @@ import { PRODUCT_NAME } from '@/lib/product';
 export function mcpAuthPlugins(env: AuthEnv) {
   const resource = mcpResource(env);
   if (!resource) return [];
-  // Validate once at auth initialization, before exposing any endpoints. Invalid staging
-  // configuration fails closed instead of first surfacing on each authorized request.
-  try {
-    mcpIdleSeconds(env);
-  } catch {
-    const message =
-      'Invalid MCP inactivity configuration: MCP_IDLE_TIMEOUT_SECONDS must be an integer from 120 to 7776000. MCP initialization refused.';
-    console.error(message);
-    throw new Error(message);
-  }
+  // Disable MCP plugins on a bad staging timeout; ordinary auth must still initialize.
+  if (mcpUnavailable(env)) return [];
   let context: AuthContext;
   const management = {
     id: 'splitbook-mcp-connections',
