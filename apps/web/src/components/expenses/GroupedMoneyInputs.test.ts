@@ -22,7 +22,7 @@ it.each(['INR', 'EUR', 'JPY'])(
   async (currency) => {
     const initial = currency === 'JPY' ? '1842' : '1842.5';
     const shown = currency === 'JPY' ? '1,842' : '1,842.50';
-    let draft = ExpenseDraft.open({
+    const draft = ExpenseDraft.open({
       groupId: 'g',
       accountId: 'you',
       memberIds: ['you', 'sam'],
@@ -41,8 +41,7 @@ it.each(['INR', 'EUR', 'JPY'])(
       return createElement(ExpenseFields, {
         values: current.values,
         edit: (change) => {
-          draft = current.edit(change);
-          setCurrent(draft);
+          setCurrent(current.edit(change));
         },
         chooseSplitMethod: () => {},
         members: [
@@ -80,10 +79,10 @@ it.each(['INR', 'EUR', 'JPY'])(
       expect(field(kind).props.value).toBe(shown);
       const stored = () =>
         kind === 0
-          ? draft.values.amount
+          ? renderer.root.findByType(ExpenseFields).props.values.amount
           : kind === 1
-            ? draft.values.payers[0].amount
-            : draft.values.customAmounts.you;
+            ? renderer.root.findByType(ExpenseFields).props.values.payers[0].amount
+            : renderer.root.findByType(ExpenseFields).props.values.customAmounts.you;
       expect(stored()).toBe(initial);
       await act(async () => field(kind).props.onFocus?.({}));
       await act(async () => field(kind).props.onChange({ target: { value: shown } }));
