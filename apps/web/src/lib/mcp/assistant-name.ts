@@ -25,23 +25,44 @@ export async function connectedAssistantName(
   return cleanAssistantName(await publishedName(adapter, clientId));
 }
 
+/** A metadata document's address: https only, as Client ID Metadata Documents require. */
+function metadataDocumentUrl(clientId: string) {
+  try {
+    const url = new URL(clientId);
+    return url.protocol === 'https:' ? url : null;
+  } catch {
+    return null; // A registered client's id, not an address.
+  }
+}
+
+/** A name that carries a scheme, or a hostname other than the assistant's own. */
+function posesAsAddress(name: string, hostname: string | undefined) {
+  if (name.includes('://')) return true;
+  const named = name.toLowerCase().match(/(?:[\p{L}\p{N}-]+\.)+\p{L}{2,}/gu) ?? [];
+  return named.some((host) => !hostname || (host !== hostname && !hostname.endsWith(`.${host}`)));
+}
+
 /**
  * How the approval page names an assistant (#614): by the name its metadata document publishes,
- * cleaned as Draft attribution cleans it, else by its address's host. The address shown beside it
- * is that host. A registered client's id is not an address, so it has none.
+ * cleaned as Draft attribution cleans it, else by its address's host. A name with no letter or
+ * number, or one posing as another address, is no name. The address shown beside it is host and
+ * path, so publishers on one host can be told apart. A registered client's id is not an address,
+ * so it has none.
  */
 export function assistantDisplay(
   clientId: string,
   name: string | null | undefined,
 ): AssistantDisplay {
-  let address: string | null = null;
-  try {
-    const url = new URL(clientId);
-    if (url.protocol === 'https:' || url.protocol === 'http:') address = url.host;
-  } catch {
-    // A registered client's id, not a metadata document address.
-  }
-  return { name: cleanPublishedAssistantName(name ?? '') ?? address ?? 'Assistant', address };
+  const url = metadataDocumentUrl(clientId);
+  const published = cleanPublishedAssistantName(name ?? '');
+  const trusted =
+    published && /[\p{L}\p{N}]/u.test(published) && !posesAsAddress(published, url?.hostname)
+      ? published
+      : null;
+  return {
+    name: trusted ?? url?.host ?? 'Assistant',
+    address: url ? `${url.host}${url.pathname}${url.search}` : null,
+  };
 }
 
 /** The assistant a connection request comes from, as the approval page shows it (#614). */

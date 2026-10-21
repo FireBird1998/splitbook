@@ -7,7 +7,8 @@ import { z } from 'zod/v4';
 export function cleanPublishedAssistantName(name: string): string | null {
   const cleaned = name
     .replace(/\s+/gu, ' ')
-    .replace(/[\p{Cc}\p{Cf}]/gu, '')
+    // Control and format characters, and the letters that draw as blanks (#614).
+    .replace(/[\p{Cc}\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/gu, '')
     .replace(/\s+/gu, ' ')
     .trim();
   return Array.from(cleaned).slice(0, 40).join('').trim() || null;

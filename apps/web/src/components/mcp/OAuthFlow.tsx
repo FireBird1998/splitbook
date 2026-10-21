@@ -43,18 +43,18 @@ export function ConsentPermissions({
   return (
     <>
       <Box>
-        <Typography variant="h6" component="h2">
-          {details.name} wants to use your {PRODUCT_NAME}
+        <Typography variant="h6" component="h2" sx={{ overflowWrap: 'anywhere' }}>
+          <bdi>{details.name}</bdi> wants to use your {PRODUCT_NAME}
         </Typography>
-        {details.address && (
-          <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-            {details.address} · identified by its published details
-          </Typography>
-        )}
+        <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+          {details.address
+            ? `${details.address} · identified by its published details`
+            : 'Registered by the assistant itself. Its address isn’t published.'}
+        </Typography>
       </Box>
       <Box>
-        <Typography variant="subtitle2" component="h3">
-          What {details.name} can do
+        <Typography variant="subtitle2" component="h3" sx={{ overflowWrap: 'anywhere' }}>
+          What <bdi>{details.name}</bdi> can do
         </Typography>
         <Typography>Ledger permission: read Group details, Balances and spending.</Typography>
       </Box>
@@ -82,8 +82,8 @@ export function ConsentPermissions({
         </Typography>
       )}
       <Box>
-        <Typography variant="subtitle2" component="h3">
-          What {details.name} can’t do
+        <Typography variant="subtitle2" component="h3" sx={{ overflowWrap: 'anywhere' }}>
+          What <bdi>{details.name}</bdi> can’t do
         </Typography>
         <Box component="ul" sx={{ m: 0, pl: 3 }}>
           {ASSISTANT_CANNOT.map((limit) => (
@@ -161,7 +161,7 @@ export function ConsentChoice({
       </Stack>
       {name && (
         <Typography variant="body2" color="text.secondary">
-          Only allow this if you asked {name} to connect just now.
+          Only allow this if you asked <bdi>{name}</bdi> to connect just now.
         </Typography>
       )}
     </Stack>
