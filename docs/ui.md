@@ -480,6 +480,9 @@ in a `HomeSlot` of its width.
   its input (#823), except an errored field, whose border is already red: the ring goes around
   the whole field. A bare input whose box lights on focus, as Quick add and search do, turns the
   ring off too; one in a box that doesn't keeps it
+- Buttons, toggle buttons and chips focused from the keyboard draw the ring too (#830): the theme
+  restores it over ButtonBase's `outline: 0` and `disableElevation`. Menu items and list item
+  buttons show their highlight instead
 - Screen reader labels on icon-only buttons
 
 Enforced by `playwright/theme-a11y.spec.ts`, which runs **axe-core** across four

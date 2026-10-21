@@ -101,10 +101,6 @@ declare module '@mui/material/Typography' {
   }
 }
 
-/**
- * Build the MUI theme from the shared semantic tokens so light and dark
- * always set the same keys. Components must consume tokens, never hex.
- */
 /** The keyboard focus ring: a focus.main outline and a soft focus.ring halo around it. */
 const focusRing = (theme: Omit<Theme, 'components'>) => ({
   outline: `2px solid ${(theme.vars ?? theme).palette.focus.main}`,
@@ -112,6 +108,10 @@ const focusRing = (theme: Omit<Theme, 'components'>) => ({
   boxShadow: `0 0 0 4px ${(theme.vars ?? theme).palette.focus.ring}`,
 });
 
+/**
+ * Build the MUI theme from the shared semantic tokens so light and dark
+ * always set the same keys. Components must consume tokens, never hex.
+ */
 export function createAppTheme(mode: ThemeMode): Theme {
   const tokens = getSemanticTokens(mode);
   const base = createTheme();
@@ -312,8 +312,9 @@ export function createAppTheme(mode: ThemeMode): Theme {
           root: ({ theme }) => ({
             borderRadius: 999,
             fontWeight: 600,
-            // A chip that acts takes the ring, not only its halo (#830).
-            '&.MuiChip-clickable.Mui-focusVisible': focusRing(theme),
+            // A chip takes focus only when it acts, clicked or deleted, and then the ring, not only
+            // its halo (#830).
+            '&.Mui-focusVisible': focusRing(theme),
           }),
         },
       },
