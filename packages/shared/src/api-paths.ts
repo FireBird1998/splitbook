@@ -185,6 +185,12 @@ export const settlementsPath = (groupId: string) => `${group(groupId)}/settlemen
 export const recurringExpensesPath = (groupId: string) => `${group(groupId)}/recurring`;
 /** A Group's currencies and what uses each one, for its settings (#721). */
 export const groupCurrenciesPath = (groupId: string) => `${group(groupId)}/currencies`;
+/** A suggested rate between two of the Group's currencies (#726), for Record payment (#727). */
+export const groupRatesPath = (groupId: string, { from, to }: { from: string; to: string }) =>
+  `${group(groupId)}/rates${query([
+    ['from', from],
+    ['to', to],
+  ])}`;
 /**
  * Search across the member's Groups (#321), for the query as it is searched: trimmed, its
  * whitespace collapsed, so the same search always has one path.

@@ -1,4 +1,6 @@
 import { z } from 'zod/v4';
+import type { CrossCurrencySettlementFields } from '@splitbook/shared/cross-currency-settlement';
+import { crossCurrencySettlementShape } from '@splitbook/shared/validators/settlement';
 
 /**
  * Unconfirmed Settlements on the web (#198).
@@ -27,8 +29,12 @@ const PREFIX = 'splitbook:settlement-attempt:v1:';
 /** The server's `parseIdempotencyKey` rule. */
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 
-/** Who pays whom, how much, as the settlements route takes it. */
-export interface SettlementPayment {
+/**
+ * Who pays whom, how much, as the settlements route takes it. A Debt paid in another currency
+ * also carries its paid side and rate (#727); `amount` and `currency` are always the amount
+ * cleared.
+ */
+export interface SettlementPayment extends Partial<CrossCurrencySettlementFields> {
   paidBy: string;
   paidTo: string;
   amount: number;
@@ -69,11 +75,27 @@ const sentBody = z.object({
   amount: z.number().positive(),
   currency: z.string().min(1),
   note: z.string(),
+  ...crossCurrencySettlementShape,
 });
 
-/** The request body, field for field as the dialog has always sent it. */
-export function settlementBody({ paidBy, paidTo, amount, currency, note }: SettlementPayment) {
-  return JSON.stringify({ paidBy, paidTo, amount, currency, note });
+/** A payment in another currency's paid side and rate, in the order the route documents them. */
+const PAID_SIDE = Object.keys(
+  crossCurrencySettlementShape,
+) as (keyof CrossCurrencySettlementFields)[];
+
+/**
+ * The request body, field for field as the dialog has always sent it, then a payment in
+ * another currency's paid side and rate.
+ */
+export function settlementBody(payment: SettlementPayment) {
+  const { paidBy, paidTo, amount, currency, note } = payment;
+  const paidSide = Object.fromEntries(
+    PAID_SIDE.filter((field) => payment[field] !== undefined).map((field) => [
+      field,
+      payment[field],
+    ]),
+  );
+  return JSON.stringify({ paidBy, paidTo, amount, currency, note, ...paidSide });
 }
 
 const groupPrefix = (accountId: string, groupId: string) => `${PREFIX}${accountId}:${groupId}:`;

@@ -17,6 +17,17 @@ import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
 import { suggestedSettlementMinor } from '@splitbook/shared/settlement-preview';
+import {
+  crossCurrencyPaymentFields,
+  crossCurrencyRateKind,
+  editCrossCurrencyEntry,
+  readCrossCurrencyEntry,
+  startCrossCurrencyEntry,
+  type CrossCurrencyEntry,
+  type CrossCurrencyField,
+} from '@splitbook/shared/cross-currency-payment';
+import { useRateSuggestion } from '@/lib/hooks/use-rate-suggestion';
+import CrossCurrencyFields from './CrossCurrencyFields';
 import { apiFetch, pinExpectedAccount, reloadForAccountChange } from '@/lib/utils/api-fetch';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import {
@@ -31,6 +42,7 @@ import {
   RECORD_PAYMENT_FOOTNOTE,
   amountInputText,
   checkNewPayment,
+  crossCurrencySummary,
   currencyLabel,
   money,
   standing,
@@ -72,6 +84,8 @@ export interface RecordPaymentStart {
   purpose?: 'record' | 'check';
   /** Move focus into the form: to From, to the amount, or to what the last payment came to. */
   focus?: 'from' | 'amount' | 'outcome';
+  /** The currency it is paid in, when that isn't the Debt's (#727). */
+  paidCurrency?: string;
 }
 
 export interface RecordPaymentFormProps {
@@ -79,8 +93,15 @@ export interface RecordPaymentFormProps {
   groupName: string;
   /** The account the page was rendered for; it owns the payments stored in this browser. */
   accountId: string;
-  /** The Group's currency: every new payment is in it. */
+  /** The Debt's currency: every new payment clears an amount in it. */
   currency: string;
+  /**
+   * The currencies a Debt in `currency` can be paid in, the Debt's own first, then the main
+   * currency and the Group's other currencies (#727). With only one, it is paid in its own.
+   */
+  payCurrencies?: string[];
+  /** The Group's main currency, which the Pay in note names. */
+  mainCurrency?: string;
   /** The Group's members, who can be picked as From and To. */
   members: PaymentParty[];
   /** The Group's balances in its currency, for the suggestion and the overpayment check. */
@@ -157,6 +178,8 @@ export default function RecordPaymentForm({
   groupName,
   accountId,
   currency,
+  payCurrencies = [currency],
+  mainCurrency = currency,
   members,
   ledger,
   start,
@@ -172,6 +195,10 @@ export default function RecordPaymentForm({
   const [amountTyped, setAmountTyped] = useState(false);
   const [note, setNote] = useState(start.note ?? '');
   const [ack, setAck] = useState(start.ack ?? false);
+  /** The currency it is paid in; the Debt's own unless another is chosen (#727). */
+  const [paidCurrency, setPaidCurrency] = useState(start.paidCurrency ?? currency);
+  /** The amount cleared, the rate and the amount paid, while it is paid in another currency. */
+  const [entry, setEntry] = useState<CrossCurrencyEntry | null>(null);
   const [purpose, setPurpose] = useState(start.purpose ?? 'record');
   const [showOutcome, setShowOutcome] = useState(Boolean(outcome));
   const [loading, setLoading] = useState(false);
@@ -243,12 +270,52 @@ export default function RecordPaymentForm({
   const realName = (id: string) => realNames.get(id) ?? 'Former member';
   const label = (id: string) => (id === accountId ? 'You' : realName(id));
 
+  const pair = { currency, paidCurrency };
+  const cross = !readOnly && paidCurrency !== currency;
+  const rate = useRateSuggestion(groupId, currency, paidCurrency);
+  const suggestion = rate.status === 'ready' ? rate.suggestion : null;
+  // The sheet opens on the amount typed or suggested, and the suggestion once it is read.
+  const crossEntry = cross && (entry ?? startCrossCurrencyEntry(pair, amount, suggestion));
+  const crossReading = crossEntry ? readCrossCurrencyEntry(crossEntry, pair) : null;
+  const crossKind =
+    crossReading?.status === 'valid'
+      ? crossCurrencyRateKind(pair, crossReading.amounts, suggestion)
+      : suggestion
+        ? 'suggested'
+        : 'entered';
+
   const check = readOnly
     ? null
     : checkNewPayment(
-        { from, to, amount, note, ack },
+        { from, to, amount: crossEntry ? crossEntry.cleared : amount, note, ack },
         { viewerId: accountId, currency, ledger, nameOf: label },
       );
+
+  useEffect(() => {
+    if (!cross || !suggestion || !entry) return;
+    if (entry.rate !== '' || entry.drivers.includes('rate') || entry.drivers.includes('paid'))
+      return;
+    setEntry(startCrossCurrencyEntry({ currency, paidCurrency }, entry.cleared, suggestion));
+  }, [cross, suggestion, entry, currency, paidCurrency]);
+
+  /** Pay in another currency, or the Debt's own: the sheet starts again on the amount cleared. */
+  const choosePaidCurrency = (next: string) => {
+    setPaidCurrency(next);
+    setEntry(null);
+    setAck(false);
+    setShowOutcome(false);
+    if (crossEntry) setAmount(crossEntry.cleared);
+  };
+
+  const editCross = (field: CrossCurrencyField, text: string) => {
+    if (!crossEntry) return;
+    const next = editCrossCurrencyEntry(crossEntry, pair, field, text);
+    setEntry(next);
+    setAmount(next.cleared);
+    setAmountTyped(true);
+    setAck(false);
+    setShowOutcome(false);
+  };
 
   const startFresh = () => {
     shownAttempt.current = null;
@@ -278,6 +345,7 @@ export default function RecordPaymentForm({
         ? suggestedSettlementMinor(ledger.ledger, nextFrom, nextTo)
         : 0;
     setAmount(suggested > 0 ? amountInputText(suggested, currency) : '');
+    setEntry(null);
   };
 
   const handleSubmit = async () => {
@@ -288,6 +356,7 @@ export default function RecordPaymentForm({
     let payment: NamedSettlementPayment | undefined;
     if (!stored) {
       if (!check?.ready || check.amount.status !== 'valid') return;
+      if (crossEntry && crossReading?.status !== 'valid') return;
       payment = {
         paidBy: from,
         paidTo: to,
@@ -296,6 +365,10 @@ export default function RecordPaymentForm({
         note,
         paidByName: realName(from),
         paidToName: realName(to),
+        // Paid in another currency: its paid side and the rate, beside the amount cleared.
+        ...(crossReading?.status === 'valid'
+          ? crossCurrencyPaymentFields(pair, crossReading.amounts, suggestion)
+          : {}),
       };
     }
     const sending = stored ?? payment!;
@@ -398,15 +471,36 @@ export default function RecordPaymentForm({
   const noteText = shown ? shown.note : note;
   const sendLabel = shown
     ? formatCurrency(shown.amount, shown.currency)
-    : check?.amount.status === 'valid'
-      ? money(check.amount.amountMinor, currency)
-      : null;
+    : crossEntry
+      ? null
+      : check?.amount.status === 'valid'
+        ? money(check.amount.amountMinor, currency)
+        : null;
   const amountError = check?.amount.status === 'invalid' ? check.amount.message : null;
-  const canSend = !loading && !blocked && (stored !== null || check?.ready === true);
-  const why = check?.waitingFor ?? null;
+  const crossReady = !crossEntry || crossReading?.status === 'valid';
+  const canSend =
+    !loading && !blocked && (stored !== null || (check?.ready === true && crossReady));
+  const why =
+    crossEntry && crossReading?.status === 'incomplete' && check?.waitingFor == null
+      ? 'Enter the rate or the amount paid to record it'
+      : (check?.waitingFor ?? null);
   const suggestedMinor = check?.suggestedMinor ?? null;
   const preview = check?.preview ?? null;
+  const crossWords =
+    crossEntry && check?.amount.status === 'valid' && suggestedMinor !== null
+      ? crossCurrencySummary({
+          clearedMinor: check.amount.amountMinor,
+          debtMinor: suggestedMinor,
+          paidMinor: crossReading?.status === 'valid' ? crossReading.amounts.amountPaidMinor : null,
+          currency,
+          paidCurrency,
+          payer: { isViewer: from === accountId, name: realName(from) },
+          payee: { isViewer: to === accountId, name: realName(to) },
+        })
+      : null;
   const pairValid = Boolean(shownFrom && shownTo) && !check?.partyError;
+  /** The Group has other currencies this Debt can be paid in (#727). */
+  const payable = payCurrencies.length > 1;
 
   // Members first, then anyone shown who has since left (named by the stored payment).
   const options = [
@@ -459,7 +553,7 @@ export default function RecordPaymentForm({
           Record payment
         </Typography>
         <Typography sx={{ m: 0, fontSize: '0.75rem', color: 'text.secondary' }}>
-          {groupName} · {currency}
+          {groupName} · {payable ? `Debt in ${currency}` : currency}
         </Typography>
       </Box>
 
@@ -560,119 +654,182 @@ export default function RecordPaymentForm({
           )}
         </Box>
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 1.5,
-              minHeight: 24,
-            }}
-          >
-            <Box component="label" htmlFor="record-payment-amount" sx={labelSx}>
-              Amount paid
-            </Box>
+        {payable && !readOnly && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
             {suggestedMinor !== null && suggestedMinor > 0 && (
-              <Button
-                variant="text"
-                size="small"
-                aria-label={`Suggested ${money(suggestedMinor, currency)}: use this amount`}
-                onClick={() => {
-                  setAmount(amountInputText(suggestedMinor, currency));
-                  setAmountTyped(false);
+              <Typography sx={{ m: 0, fontSize: '0.875rem', color: 'text.secondary' }}>
+                Debt{' '}
+                <Box
+                  component="span"
+                  sx={(theme) => ({ ...theme.typography.money, color: 'text.primary' })}
+                >
+                  {money(suggestedMinor, currency)}
+                </Box>
+              </Typography>
+            )}
+            <Box id="record-payment-pay-in" sx={labelSx}>
+              Pay in
+            </Box>
+            <Box
+              role="radiogroup"
+              aria-labelledby="record-payment-pay-in"
+              sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
+            >
+              {payCurrencies.map((code) => (
+                <Button
+                  key={code}
+                  role="radio"
+                  aria-checked={code === paidCurrency}
+                  variant={code === paidCurrency ? 'contained' : 'outlined'}
+                  disabled={loading}
+                  onClick={() => code !== paidCurrency && choosePaidCurrency(code)}
+                  sx={(theme) => ({
+                    ...theme.typography.money,
+                    minHeight: 40,
+                    minWidth: 64,
+                    borderRadius: '10px',
+                  })}
+                >
+                  {code}
+                </Button>
+              ))}
+            </Box>
+            <Typography sx={{ m: 0, fontSize: '0.75rem', color: 'text.secondary' }}>
+              {mainCurrency === currency
+                ? `${currency} is the Debt’s own currency and the main currency.`
+                : `${currency} is the Debt’s own currency; ${mainCurrency} is the main currency.`}
+            </Typography>
+          </Box>
+        )}
+
+        {crossEntry && crossReading ? (
+          <CrossCurrencyFields
+            currencies={pair}
+            debtMinor={suggestedMinor}
+            entry={crossEntry}
+            reading={crossReading}
+            kind={crossKind}
+            rate={rate}
+            now={new Date()}
+            readOnly={loading}
+            onEdit={editCross}
+            onUseSuggestion={(text) => editCross('rate', text)}
+          />
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1.5,
+                minHeight: 24,
+              }}
+            >
+              <Box component="label" htmlFor="record-payment-amount" sx={labelSx}>
+                Amount paid
+              </Box>
+              {suggestedMinor !== null && suggestedMinor > 0 && (
+                <Button
+                  variant="text"
+                  size="small"
+                  aria-label={`Suggested ${money(suggestedMinor, currency)}: use this amount`}
+                  onClick={() => {
+                    setAmount(amountInputText(suggestedMinor, currency));
+                    setAmountTyped(false);
+                    setAck(false);
+                    setShowOutcome(false);
+                  }}
+                  sx={{ minHeight: 32, px: 1, mr: -1, fontSize: '0.75rem', fontWeight: 500 }}
+                >
+                  Suggested&nbsp;
+                  <Box component="span" sx={(theme) => ({ ...theme.typography.money })}>
+                    {money(suggestedMinor, currency)}
+                  </Box>
+                </Button>
+              )}
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+              <InputBase
+                inputRef={amountField}
+                value={amountText}
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  setAmountTyped(true);
                   setAck(false);
                   setShowOutcome(false);
                 }}
-                sx={{ minHeight: 32, px: 1, mr: -1, fontSize: '0.75rem', fontWeight: 500 }}
-              >
-                Suggested&nbsp;
-                <Box component="span" sx={(theme) => ({ ...theme.typography.money })}>
-                  {money(suggestedMinor, currency)}
-                </Box>
-              </Button>
-            )}
-          </Box>
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            <InputBase
-              inputRef={amountField}
-              value={amountText}
-              onChange={(event) => {
-                setAmount(event.target.value);
-                setAmountTyped(true);
-                setAck(false);
-                setShowOutcome(false);
-              }}
-              startAdornment={
-                <Box
-                  component="span"
-                  role="img"
-                  aria-label={currencyLabel(shown?.currency ?? currency)}
-                  sx={(theme) => ({
+                startAdornment={
+                  <Box
+                    component="span"
+                    role="img"
+                    aria-label={currencyLabel(shown?.currency ?? currency)}
+                    sx={(theme) => ({
+                      ...theme.typography.money,
+                      flex: 'none',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      color: 'text.secondary',
+                      bgcolor: 'surface.muted',
+                      borderRadius: '8px',
+                      px: 1.125,
+                      py: 0.625,
+                      mr: 1.25,
+                    })}
+                  >
+                    {shown?.currency ?? currency}
+                  </Box>
+                }
+                inputProps={{
+                  id: 'record-payment-amount',
+                  inputMode: 'decimal',
+                  autoComplete: 'off',
+                  readOnly,
+                  'aria-invalid': amountError ? 'true' : 'false',
+                  'aria-describedby': amountError ? 'record-payment-amount-error' : undefined,
+                }}
+                sx={(theme) => ({
+                  minHeight: 60,
+                  border: 1,
+                  borderColor: amountError ? 'status.negative' : 'border.strong',
+                  boxShadow: amountError
+                    ? `inset 0 0 0 1px ${(theme.vars ?? theme).palette.status.negative}`
+                    : 'none',
+                  borderRadius: '12px',
+                  bgcolor: readOnly ? 'surface.muted' : 'background.paper',
+                  color: 'text.primary',
+                  pl: 1.25,
+                  pr: 1.75,
+                  '&.Mui-focused': {
+                    borderColor: 'focus.main',
+                    boxShadow: `0 0 0 3px ${(theme.vars ?? theme).palette.focus.ring}`,
+                  },
+                  '& input:focus-visible': { outline: 'none', boxShadow: 'none' },
+                  '& input': {
                     ...theme.typography.money,
-                    flex: 'none',
-                    fontSize: '0.8125rem',
-                    fontWeight: 600,
-                    color: 'text.secondary',
-                    bgcolor: 'surface.muted',
-                    borderRadius: '8px',
-                    px: 1.125,
-                    py: 0.625,
-                    mr: 1.25,
-                  })}
-                >
-                  {shown?.currency ?? currency}
-                </Box>
-              }
-              inputProps={{
-                id: 'record-payment-amount',
-                inputMode: 'decimal',
-                autoComplete: 'off',
-                readOnly,
-                'aria-invalid': amountError ? 'true' : 'false',
-                'aria-describedby': amountError ? 'record-payment-amount-error' : undefined,
-              }}
-              sx={(theme) => ({
-                minHeight: 60,
-                border: 1,
-                borderColor: amountError ? 'status.negative' : 'border.strong',
-                boxShadow: amountError
-                  ? `inset 0 0 0 1px ${(theme.vars ?? theme).palette.status.negative}`
-                  : 'none',
-                borderRadius: '12px',
-                bgcolor: readOnly ? 'surface.muted' : 'background.paper',
-                color: 'text.primary',
-                pl: 1.25,
-                pr: 1.75,
-                '&.Mui-focused': {
-                  borderColor: 'focus.main',
-                  boxShadow: `0 0 0 3px ${(theme.vars ?? theme).palette.focus.ring}`,
-                },
-                '& input:focus-visible': { outline: 'none', boxShadow: 'none' },
-                '& input': {
-                  ...theme.typography.money,
-                  fontSize: '1.625rem',
-                  letterSpacing: '-0.03em',
-                  py: 1,
-                },
-              })}
-            />
-            {/* Always present, so even its first message is announced, and polite, so it never
+                    fontSize: '1.625rem',
+                    letterSpacing: '-0.03em',
+                    py: 1,
+                  },
+                })}
+              />
+              {/* Always present, so even its first message is announced, and polite, so it never
                 interrupts typing (#514). */}
-            <Typography
-              id="record-payment-amount-error"
-              aria-live="polite"
-              sx={{
-                m: 0,
-                mt: amountError ? 0.75 : 0,
-                fontSize: '0.75rem',
-                color: 'status.negative',
-              }}
-            >
-              {amountError}
-            </Typography>
+              <Typography
+                id="record-payment-amount-error"
+                aria-live="polite"
+                sx={{
+                  m: 0,
+                  mt: amountError ? 0.75 : 0,
+                  fontSize: '0.75rem',
+                  color: 'status.negative',
+                }}
+              >
+                {amountError}
+              </Typography>
+            </Box>
           </Box>
-        </Box>
+        )}
 
         {check?.overpayment && (
           <Box
@@ -710,7 +867,7 @@ export default function RecordPaymentForm({
               <path d="M12 10v4M12 17h.01" />
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
-              <span role="status">{check.overpayment}</span>
+              <span role="status">{crossWords?.overpaid ?? check.overpayment}</span>
               <FormControlLabel
                 control={
                   <Checkbox
@@ -727,7 +884,24 @@ export default function RecordPaymentForm({
           </Box>
         )}
 
-        {preview && (
+        {crossWords && (
+          <Typography
+            role="status"
+            sx={{
+              m: 0,
+              px: 1.75,
+              py: 1.25,
+              borderRadius: '12px',
+              bgcolor: 'surface.muted',
+              fontSize: '0.875rem',
+              color: 'text.primary',
+            }}
+          >
+            {crossWords.clears}
+          </Typography>
+        )}
+
+        {preview && !crossEntry && (
           <Box
             component="section"
             aria-labelledby="record-payment-after"
