@@ -1,4 +1,5 @@
 import type { TagManagerState } from './tag-manager';
+import type { AssistantsState } from './assistants';
 import type { ToReviewState } from './to-review';
 import type { SharedDraftCollectionState } from './shared-draft-collection';
 import type { OfflineIdentityStore } from './offline-cache';
@@ -293,7 +294,9 @@ export type Route =
   | { screen: 'settlement'; groupId: string; reread: GroupReread | null }
   | { screen: 'invite' }
   | { screen: 'create' }
-  | { screen: 'settings' };
+  | { screen: 'settings' }
+  /** Account → Connected assistants, over Settings (#622). */
+  | { screen: 'assistants' };
 
 /** Confirms a ledger change on the Group view it returned to. */
 export interface GroupSnackbar {
@@ -388,6 +391,8 @@ export interface PendingInvitationStore {
 }
 
 export interface MobileSnapshot {
+  /** Account → Connected assistants (#622): its list, Saved copy and Disconnect. */
+  assistants: AssistantsState;
   tagManager: TagManagerState;
   /**
    * The Group whose Tags screen is open over its view. Leaving that view closes it, and it stays

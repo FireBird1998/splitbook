@@ -1,5 +1,6 @@
 import { tagActionsPath, tagActionCheckPath } from '@splitbook/shared/api-paths';
 import { emptyTagManager, tagManager } from './tag-manager';
+import { createAssistants, emptyAssistants } from './assistants';
 import { tagManagement, tagRead, unresolvedTagRecord, type TagRead } from './tag-management';
 import { createReviewRun } from './review-run';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
@@ -316,6 +317,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
   return {
     auth,
     sharedDraftCollection: emptySharedDraftCollection(),
+    assistants: emptyAssistants(),
     tagManager: emptyTagManager(),
     tagsOpenFor: null,
     toReview: emptyToReview(),
@@ -685,6 +687,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     unconfirmedTags.clear();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
+    assistantsData.reset();
     groupQueries.reset();
     expenseQueries.reset();
     activityQueries.reset();
@@ -867,6 +870,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // A saved copy being written finishes first; those waiting were cancelled (M3-2).
       await Promise.all([
         homeQueries.idle(),
+        assistantsData.idle(),
         groupQueries.idle(),
         expenseQueries.idle(),
         activityQueries.idle(),
@@ -1131,6 +1135,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     },
     distrust: (accountId, scopes) => untrusted.mark(accountId, scopes, now()),
     invalidate: (...scopes) => invalidateReads(...scopes),
+  });
+  /** Account → Connected assistants (#622), with its Saved copy among the account's others. */
+  const assistantsData = createAssistants({
+    rows: savedCopies.rows,
+    generation: () => generation,
+    current,
+    lease: () => accountStorage(),
+    owns: (accountId) => accountStorage()?.accountId === accountId,
+    read: (path, owner) => session.read(path, owner),
+    send: (path, owner, body) => request(path, owner, { method: 'POST', body }),
+    online: () => !snapshot.offline.active && onlineManager.isOnline(),
+    state: () => snapshot.assistants,
+    publish: (assistants) => publish({ ...snapshot, assistants }),
+    now,
   });
   /** A Group's own view: the Group, its Expenses and its Balances (ADR 0006, M1-1, #219). */
   const groupQueries = createGroupQueries({
@@ -5144,6 +5162,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openSettings = () => {
     if (snapshot.auth.status !== 'authenticated' || expenseNavigationBlocked()) return;
     navigate({ screen: 'settings' });
+    // Whether the server has assistants switched on decides Account's Connected assistants.
+    void assistantsData.read();
+  };
+  /** Account → Connected assistants (#622), where the server has assistants switched on. */
+  const openAssistants = () => {
+    if (route.screen !== 'settings' || snapshot.assistants.available !== true) return;
+    navigate({ screen: 'assistants' });
+    void assistantsData.read();
   };
 
   /**
@@ -6135,6 +6161,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return closeSettlement();
       case 'members':
         return snapshot.leave.status === 'closed' ? closeMembers() : cancelLeaveGroup();
+      case 'assistants':
+        // Its Disconnect sheet closes first, and holds while disconnecting.
+        if (snapshot.assistants.confirming) return assistantsData.cancel();
+        return navigate({ screen: 'settings' });
       default:
         return showHome();
     }
@@ -6300,6 +6330,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (showingActivity() && snapshot.detail.status === 'ready')
       return reuse ? activityQueries.settle(generation) : refreshActivity();
     if (snapshot.screen === 'expense') return refreshExpense(reuse);
+    if (snapshot.screen === 'assistants') return assistantsData.read();
     if (['create', 'invite', 'settings', 'settlement', 'members'].includes(snapshot.screen)) {
       const owner = generation,
         view = route,
@@ -7170,6 +7201,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     signInWithGoogle,
     startCreate,
     openSettings,
+    openAssistants,
+    askDisconnectAssistant: (id: string) => assistantsData.ask(id),
+    cancelDisconnectAssistant: () => assistantsData.cancel(),
+    disconnectAssistant: () => assistantsData.disconnect(),
+    dismissAssistantsSnackbar: () => assistantsData.dismiss(),
     openMembers,
     closeMembers,
     reviewLeaveGroup,

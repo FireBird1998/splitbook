@@ -1713,8 +1713,9 @@ describe('a new Group opens ready (#189)', () => {
       detail: { id: null },
       creation: { status: 'editing', attempt: null, draft: { name: '' } },
     });
-    // Home lists it, and nothing of it is read until the member opens it.
+    // Home lists it, and nothing of it is read until the member opens it. Settings only asks
+    // whether the server has assistants switched on (#622).
     expect(controller.getSnapshot().groups.data.some(({ id }) => id === created)).toBe(true);
-    expect(sent()).toEqual([]);
+    expect(sent().filter((call) => !call.endsWith('/api/auth/mcp/connections'))).toEqual([]);
   });
 });
