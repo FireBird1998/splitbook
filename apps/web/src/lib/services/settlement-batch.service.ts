@@ -124,9 +124,9 @@ export async function createSettlementBatch(
           amountMinor,
           { requireDebt: true },
         );
-        const { note: _note, ...metadata } = row;
         const event = makePendingActivity(groupId, 'settlement_recorded', userId, {
-          ...metadata,
+          ...row,
+          note: undefined,
           settlementId: String(ids[index]),
           amountMinor,
           ...snapshot,

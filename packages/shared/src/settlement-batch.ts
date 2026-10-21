@@ -67,12 +67,8 @@ export function calculateSettlementBatch(
           : {}),
       };
     }
-    const { paidTo: _paidTo, ...row } = createSettlementSchema.parse({
-      paidTo: 'recipient',
-      amount,
-      currency,
-      ...fields,
-    });
+    const row = { amount, currency, ...fields };
+    createSettlementSchema.parse({ paidTo: 'recipient', ...row });
     return row;
   });
   return {
