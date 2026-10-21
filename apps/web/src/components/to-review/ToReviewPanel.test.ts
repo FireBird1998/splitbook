@@ -201,8 +201,9 @@ describe('what an assistant left to the member, in the web To review panel (#683
       undefined,
       { kind: 'assistant', name: host },
     );
-    const wrapping = [...html.matchAll(/<p[^>]*style="overflow-wrap:anywhere"[^>]*>(.*?)<\/p>/g)]
-      .map(([, inner]) => inner.replace(/<[^>]+>/g, ''));
+    const wrapping = [
+      ...html.matchAll(/<p[^>]*style="overflow-wrap:anywhere"[^>]*>(.*?)<\/p>/g),
+    ].map(([, inner]) => inner.replace(/<[^>]+>/g, ''));
     expect(wrapping.some((line) => line.includes(`From ${host}`))).toBe(true);
     expect(wrapping.some((line) => line.includes(`${host} didn’t know who paid`))).toBe(true);
   });
