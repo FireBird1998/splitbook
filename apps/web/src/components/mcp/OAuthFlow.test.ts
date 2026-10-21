@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
+import type { ApprovalGroup } from '@/lib/services/assistant-ledger.service';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
 import OAuthFlow, {
@@ -11,6 +12,7 @@ import OAuthFlow, {
   ConsentGroups,
   ConsentPermissions,
   consentRequest,
+  leavesOutEveryGroup,
 } from './OAuthFlow';
 
 /* The approval page's permissions, rendered to static markup with the details the server sends. */
@@ -32,30 +34,50 @@ const groups = [
     name: 'Maple House',
     theme: 'home',
     currency: 'INR',
+    currencies: ['INR'],
     archived: false,
+    rule: 'allowed',
+    ruleSetBy: null,
   },
   {
     id: 'b00000000000000000000002',
     name: 'Goa Friends Trip',
     theme: 'trip',
     currency: 'INR',
+    currencies: ['INR'],
     archived: false,
+    rule: 'allowed',
+    ruleSetBy: null,
   },
   {
     id: 'b00000000000000000000003',
     name: 'Lisbon Offsite',
     theme: 'work',
     currency: 'EUR',
+    currencies: ['EUR'],
     archived: true,
+    rule: 'allowed',
+    ruleSetBy: null,
   },
 ] as const;
-const groupChoice = (
-  excluded: readonly string[],
-  listed: readonly (typeof groups)[number][] = groups,
-) =>
+type ListedGroup = ApprovalGroup;
+/** A Group whose admins don't allow assistants (#621). */
+const stopped = (ruleSetBy: ListedGroup['ruleSetBy']): ListedGroup => ({
+  id: 'b00000000000000000000004',
+  name: 'Studio Lunch Club',
+  theme: 'work',
+  currency: 'INR',
+  currencies: ['INR', 'USD'],
+  archived: false,
+  rule: 'not_allowed',
+  ruleSetBy,
+});
+const priya = { id: 'a00000000000000000000003', name: 'Priya Shah' };
+const groupChoice = (excluded: readonly string[], listed: readonly ListedGroup[] = groups) =>
   markup(
     createElement(ConsentGroups, {
       name: 'Fictional Assistant',
+      viewerId: account.id,
       groups: listed,
       excluded,
       disabled: false,
@@ -289,6 +311,55 @@ describe('the consent screen', () => {
     const html = groupChoice(groups.map((group) => group.id));
     expect(html.match(/<input[^>]*checked=""[^>]*>/g)).toBeNull();
     expect(text(html)).toContain('Pick at least one Group.');
+  });
+
+  it('greys out a Group whose admins don’t allow assistants, which can’t be ticked (#621)', () => {
+    const html = groupChoice([], [...groups, stopped(priya)]);
+    const boxes = html.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? [];
+    expect(boxes.map((box) => [box.includes('checked=""'), box.includes('disabled=""')])).toEqual([
+      [true, false],
+      [true, false],
+      [true, false],
+      [false, true],
+    ]);
+    const shown = text(html);
+    expect(shown).toContain('Studio Lunch Club');
+    expect(shown).toContain('Priya Shah doesn’t allow assistants in this Group');
+    expect(shown).toContain('A Group’s admins decide whether assistants can use it.');
+  });
+
+  it('says the member stopped assistants themself, or that the Group’s admins did (#621)', () => {
+    expect(text(groupChoice([], [stopped({ id: account.id, name: account.name })]))).toContain(
+      'You don’t allow assistants in this Group',
+    );
+    expect(text(groupChoice([], [stopped(null)]))).toContain(
+      'This Group’s admins don’t allow assistants',
+    );
+  });
+
+  it('shows no note about admins while every Group allows assistants (#621)', () => {
+    expect(text(groupChoice([]))).not.toContain('A Group’s admins decide');
+  });
+
+  it('names every currency a Group uses (#621)', () => {
+    expect(text(groupChoice([], [stopped(priya)]))).toContain('Work · INR, USD');
+  });
+
+  it('asks for a Group only among those that allow assistants (#621)', () => {
+    const allowedLeftOut = groupChoice(
+      groups.map((group) => group.id),
+      [...groups, stopped(priya)],
+    );
+    expect(text(allowedLeftOut)).toContain('Pick at least one Group.');
+    // Only Not allowed Groups: nothing to pick now, and Groups joined later are included.
+    expect(text(groupChoice([], [stopped(priya)]))).not.toContain('Pick at least one Group.');
+    expect(leavesOutEveryGroup([stopped(priya)], [])).toBe(false);
+    expect(
+      leavesOutEveryGroup(
+        [...groups, stopped(priya)],
+        groups.map((group) => group.id),
+      ),
+    ).toBe(true);
   });
 
   it('says Groups joined later are included when the member has none yet (#617)', () => {
