@@ -102,3 +102,42 @@ it('offers Load older, appends the next 50-event page in order, and ends at the 
     `/api/groups/${GROUP}/activity?page=2&limit=50`,
   ]);
 });
+
+it('keeps loaded events after an older-page failure and retries that same page', async () => {
+  api.mockResolvedValueOnce(answer(1, [event(1)]));
+  api.mockResolvedValueOnce(Response.json({ error: 'Unavailable' }, { status: 503 }));
+  api.mockResolvedValueOnce(answer(2, [event(2)]));
+  await render();
+  await act(async () => {
+    button('Load older')!.props.onClick();
+  });
+  expect(headlines()).toEqual(['You added “Expense 1”']);
+  expect(button('Try again')).toBeDefined();
+  await act(async () => {
+    button('Try again')!.props.onClick();
+  });
+  expect(headlines()).toEqual(['You added “Expense 1”', 'You added “Expense 2”']);
+  expect(button('Try again')).toBeUndefined();
+  expect(button('Load older')).toBeUndefined();
+  expect(api.mock.calls.at(-1)?.[0]).toBe(`/api/groups/${GROUP}/activity?page=2&limit=50`);
+});
+
+it('keeps the first copy when a newer event shifts an event onto two pages', async () => {
+  api.mockResolvedValueOnce(answer(1, [event(1), event(2)]));
+  api.mockResolvedValueOnce(
+    answer(2, [
+      { ...event(2), metadata: { ...event(2).metadata, description: 'Later copy' } },
+      event(3),
+    ]),
+  );
+  await render();
+  await act(async () => {
+    button('Load older')!.props.onClick();
+  });
+  expect(headlines()).toEqual([
+    'You added “Expense 1”',
+    'You added “Expense 2”',
+    'You added “Expense 3”',
+  ]);
+  expect(textOf(renderer.root)).not.toContain('Later copy');
+});
