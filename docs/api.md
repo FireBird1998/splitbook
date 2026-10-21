@@ -307,15 +307,18 @@ the balances decoder, so a malformed list fails Needs you only.
 
 ## Groups
 
-| Method | Path                               | Description                        |
-| ------ | ---------------------------------- | ---------------------------------- |
-| POST   | `/api/groups`                      | Create group                       |
-| GET    | `/api/groups`                      | List user's groups                 |
-| GET    | `/api/groups/[id]`                 | Get group detail                   |
-| PATCH  | `/api/groups/[id]`                 | Update group                       |
-| DELETE | `/api/groups/[id]`                 | Archive group (soft delete)        |
-| PUT    | `/api/groups/[id]/assistant-rule`  | Set the Assistant rule (admins)    |
-| GET    | `/api/groups/[id]/assistant-reach` | Whose assistants reach it (admins) |
+| Method | Path                                 | Description                               |
+| ------ | ------------------------------------ | ----------------------------------------- |
+| POST   | `/api/groups`                        | Create group                              |
+| GET    | `/api/groups`                        | List user's groups                        |
+| GET    | `/api/groups/[id]`                   | Get group detail                          |
+| PATCH  | `/api/groups/[id]`                   | Update group                              |
+| DELETE | `/api/groups/[id]`                   | Archive group (soft delete)               |
+| GET    | `/api/groups/[id]/currencies`        | The Group's currencies and what uses them |
+| POST   | `/api/groups/[id]/currencies`        | Add an extra currency (any member)        |
+| DELETE | `/api/groups/[id]/currencies/[code]` | Remove an extra currency (admins)         |
+| PUT    | `/api/groups/[id]/assistant-rule`    | Set the Assistant rule (admins)           |
+| GET    | `/api/groups/[id]/assistant-reach`   | Whose assistants reach it (admins)        |
 
 ### POST /api/groups
 
@@ -412,8 +415,101 @@ that is already one of the extra currencies, is refused with 422
 `INVALID_GROUP_CURRENCIES` (`field: ["alternateCurrencies"]`). The answer
 carries `latestExpenseCurrency` like the reads.
 An older Group's list is saved as the rule reads it, so a settings save never
-fails on old data. Changing `defaultCurrency` once money is recorded is 409
+fails on old data. Dropping an extra currency that something still uses is
+refused as `DELETE /api/groups/[id]/currencies/[code]` refuses it (409
+`CURRENCY_IN_USE`, below).
+
+**The main currency's lock:** changing `defaultCurrency` once money is recorded
+(any Expense, Settlement or recurring Expense, ever) is 409:
+
+```json
+{
+  "error": "Currency cannot change after this Group has financial records.",
+  "status": 409,
+  "code": "CURRENCY_LOCKED"
+}
+```
+
+### GET /api/groups/[id]/currencies
+
+A Group's currencies as its settings show them (#721): the main currency and
+whether it is locked, then each extra currency with what uses it and who added
+it. Members only (403 otherwise).
+
+```json
+{
+  "data": {
+    "mainCurrency": { "code": "INR", "locked": true },
+    "extraCurrencies": [
+      {
+        "code": "JPY",
+        "use": {
+          "expenses": {
+            "count": 24,
+            "items": [{ "_id": "...", "description": "Ramen at Ichiran" }]
+          },
+          "settlements": 0,
+          "toReview": { "yours": 0, "others": 2 }
+        },
+        "added": {
+          "by": { "_id": "...", "name": "Sam Chen" },
+          "at": "2026-10-05T09:12:00.000Z"
+        }
+      }
+    ]
+  }
+}
+```
+
+- `use.expenses` counts the Expenses in the currency, deleted ones aside, and
+  lists up to 100 of them, latest first by date.
+- `use.toReview` counts the active To review items (Drafts) in the currency:
+  the viewer's own, and other members', which are only counted, never shown.
+- `added` is the latest recorded change that added the currency. One no
+  recorded change added was there when the Group was created, so it names the
+  Group's creator. It is null when that person no longer exists.
+
+### POST /api/groups/[id]/currencies
+
+Any member adds an extra currency: `{ "currency": "CHF" }`. 201 with the
+currencies read above. The Group's currency rule refuses, with 422
+`INVALID_GROUP_CURRENCIES` (`field: ["currency"]`), an unsupported code, the
+main currency, a currency already on the list ("CHF is already one of this
+Group’s currencies.") and a fifth extra currency. Two members adding the last
+place at once: one is added, the other refused. Activity records a
+`group_updated` event whose `changes.alternateCurrencies` holds the list before
+and after, with `groupName` and `currencies` as described under Activity Feed.
+
+### DELETE /api/groups/[id]/currencies/[code]
+
+An admin removes an extra currency (403 for anyone else). 200 with the
+currencies read. A code that isn't one of the Group's extra currencies is 404
+`CURRENCY_NOT_LISTED`. The main currency is 409 `CURRENCY_IS_MAIN` ("INR is the
+main currency, so it can’t be removed."), a conflict with the Group's state like
 `CURRENCY_LOCKED`.
+
+While any Expense (not deleted), Settlement or To review item uses the currency,
+removing it is refused, saying what uses it in the read's `use` shape:
+
+```json
+{
+  "error": "JPY can’t be removed while Lisbon & Tokyo uses it.",
+  "status": 409,
+  "code": "CURRENCY_IN_USE",
+  "use": {
+    "expenses": { "count": 24, "items": [{ "_id": "...", "description": "Ramen at Ichiran" }] },
+    "settlements": 0,
+    "toReview": { "yours": 0, "others": 2 }
+  }
+}
+```
+
+The check and the removal are one Group mutation, as is each Expense and
+Settlement write's check that its currency is listed, so no Expense or
+Settlement in the currency arrives in between. A Draft may still arrive in it
+afterwards; To review then shows it as not one of the Group's currencies. A deleted Expense comes back in its currency while the Group lists it, or while another live
+Expense or a Settlement still uses it (an older Group's currency). Otherwise restoring it is 422
+`CURRENCY_MISMATCH`, "Add GBP to the Group’s currencies to restore it." Activity records the removal like an addition.
 
 ### PUT /api/groups/[id]/assistant-rule
 
@@ -1467,9 +1563,19 @@ Android Expense record reads its history this way.
 Expenses generated from a recurring template log with `recurring: true`,
 `recurringExpenseId` and `period` in their metadata.
 
-Activity writes are on the critical path — every mutation `await`s the log, and
-there are no transactions, so a logging failure fails the request after the
-primary write has already committed.
+A `group_updated` event whose only change is `alternateCurrencies` (an extra currency added or
+removed, #721) reads as "Sam added JPY to the Group’s currencies" or "Alex removed GBP from the
+Group’s currencies" on the web and on Android. Its metadata also keeps `groupName` and
+`currencies`, the Group's name and its currencies (main first) as they were after the change,
+so the line under an addition ("Lisbon & Tokyo now uses INR, EUR and JPY") never changes
+later. Under a removal recorded with them the line is "Nothing used it", since removing a
+currency in use is refused. An entry without them, added or removed, shows no such line: a
+removal before #721 could drop a currency still in use.
+
+Activity writes are on the critical path — every mutation `await`s the log.
+Most log after their write has committed, so a logging failure fails the request
+after the primary write has already committed. Adding or removing an extra
+currency (#721) logs inside the same Group mutation as the change.
 
 ### GET /api/user/activity
 

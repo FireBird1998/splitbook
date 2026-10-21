@@ -12,6 +12,7 @@ import {
   homeBalancesPath,
   invitationsPath,
   recurringExpensesPath,
+  groupCurrenciesPath,
   searchPath,
   settlementsPath,
   tripSummaryPath,
@@ -118,10 +119,11 @@ describe("the paths Android's controller builds today", () => {
 });
 
 describe('the reads only the web makes', () => {
-  it('invitations, Settlements and recurring Expenses', () => {
+  it('invitations, Settlements, recurring Expenses and a Group’s currencies', () => {
     expect(invitationsPath()).toBe('/api/invitations');
     expect(settlementsPath(groupId)).toBe(`/api/groups/${groupId}/settlements`);
     expect(recurringExpensesPath(groupId)).toBe(`/api/groups/${groupId}/recurring`);
+    expect(groupCurrenciesPath(groupId)).toBe(`/api/groups/${groupId}/currencies`);
   });
 
   it('a search, with the query as it is searched', () => {
@@ -378,6 +380,7 @@ describe('encoding', () => {
       expect(segments(groupBalancesPath(id))).toEqual(['', 'api', 'groups', id, 'balances']);
       expect(segments(settlementsPath(id))).toEqual(['', 'api', 'groups', id, 'settlements']);
       expect(segments(recurringExpensesPath(id))).toEqual(['', 'api', 'groups', id, 'recurring']);
+      expect(segments(groupCurrenciesPath(id))).toEqual(['', 'api', 'groups', id, 'currencies']);
       expect(segments(expenseRecordPath(id, id))).toEqual([
         '',
         'api',

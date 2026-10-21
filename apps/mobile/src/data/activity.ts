@@ -30,6 +30,9 @@ const metadata = z.object({
   changes: z
     .record(z.string(), z.object({ old: z.unknown().optional(), new: z.unknown().optional() }))
     .optional(),
+  /** A change to the Group's currencies: its name and what they became, as recorded (#721). */
+  groupName: z.string().optional(),
+  currencies: z.array(z.string()).optional(),
 });
 const eventSchema = z.object({
   _id: objectId,

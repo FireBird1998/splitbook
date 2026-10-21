@@ -19,9 +19,8 @@ import type { CreateGroupInput, UpdateGroupInput } from '@splitbook/shared/valid
 import crypto from 'crypto';
 import { cache } from 'react';
 import { tagManagementService } from './tag-management.service';
+import { hasLedgerRecords, refuseCurrenciesInUse } from './group-currency.service';
 import Expense from '@/lib/models/Expense';
-import RecurringExpense from '@/lib/models/RecurringExpense';
-import Settlement from '@/lib/models/Settlement';
 import { PERSON_FIELDS } from './person-fields';
 import mongoose from 'mongoose';
 import { MoneyValidationError } from '@splitbook/shared/exact-money';
@@ -152,6 +151,11 @@ export class GroupService {
     // Log activity
     await activityService.log(group._id.toString(), 'group_created', userId, {
       groupName: group.name,
+      // The extra currencies it started with, which its creator added (#721).
+      alternateCurrencies: normaliseExtraCurrencies(
+        group.defaultCurrency,
+        group.alternateCurrencies,
+      ),
     });
 
     return group.populate('members.user', PERSON_FIELDS);
@@ -233,15 +237,12 @@ export class GroupService {
 
     // The Group's currency rule on what the Group will hold (#719): extra currencies sent are
     // checked against its main currency, and a new main currency against those it keeps. An
-    // older Group's list is compared and saved as the rule reads it, so cleaning it up never
-    // counts as a member's change.
+    // older Group's list is saved as the rule reads it, so cleaning it up never counts as a
+    // member's change.
     const mainCurrency = data.defaultCurrency ?? group.defaultCurrency;
     const storedExtras = normaliseExtraCurrencies(group.defaultCurrency, group.alternateCurrencies);
-    const extraCurrencies = data.alternateCurrencies ?? storedExtras;
-    if (JSON.stringify(extraCurrencies) === JSON.stringify(storedExtras))
-      delete changes.alternateCurrencies;
-    else changes.alternateCurrencies = { old: storedExtras, new: extraCurrencies };
-    const problem = extraCurrenciesProblem(mainCurrency, extraCurrencies);
+    const sentExtras = data.alternateCurrencies;
+    const problem = extraCurrenciesProblem(mainCurrency, sentExtras ?? storedExtras);
     /** A refusal of the currencies themselves; a locked main currency is said first. */
     const refuseCurrencies = () => {
       // The Group settings refusal, shown at its field: it shares money refusals' 422 answer.
@@ -250,23 +251,48 @@ export class GroupService {
           'alternateCurrencies',
         ]);
     };
-    data = { ...data, alternateCurrencies: extraCurrencies };
+    // Only a list that was sent, or an older one to clean up, is written, so saving other
+    // settings never puts back a list a member has changed since it was read (#721).
+    const cleaning =
+      JSON.stringify([...(group.alternateCurrencies ?? [])]) !== JSON.stringify(storedExtras);
+    data = { ...data };
+    delete data.alternateCurrencies;
+    delete changes.alternateCurrencies;
+    if (sentExtras || cleaning) data.alternateCurrencies = sentExtras ?? storedExtras;
+    // The list as the save finds it (#721): a currency the sent list drops is refused while
+    // anything uses it, checked in the save's own Group mutation, so no record in it can arrive
+    // in between, and Activity records the change from that list.
+    let listAtSave = storedExtras;
+    const groupAsRead = { _id: group._id, name: group.name };
+    const refuseDroppedInUse = async (session?: mongoose.ClientSession) => {
+      if (!sentExtras) return;
+      const current = await Group.findById(groupId)
+        .select('defaultCurrency alternateCurrencies')
+        .session(session ?? null)
+        .lean();
+      if (!current) throw new Error('FORBIDDEN');
+      listAtSave = normaliseExtraCurrencies(current.defaultCurrency, current.alternateCurrencies);
+      const dropped = listAtSave.filter((code) => !sentExtras.includes(code));
+      await refuseCurrenciesInUse(groupAsRead, dropped, userId, session ?? null);
+    };
+    /** Activity keeps what the list became, and the Group's name, as they were then (#721). */
+    let listRecord: { groupName: string; currencies: string[] } | undefined;
+    const recordListChange = () => {
+      if (!sentExtras || JSON.stringify(sentExtras) === JSON.stringify(listAtSave)) return;
+      changes.alternateCurrencies = { old: listAtSave, new: sentExtras };
+      listRecord = {
+        groupName: data.name ?? group.name,
+        currencies: [mainCurrency, ...sentExtras],
+      };
+    };
 
     if (data.defaultCurrency && data.defaultCurrency !== group.defaultCurrency) {
-      const hasRecords =
-        group.currencyLocked ||
-        (
-          await Promise.all([
-            Expense.exists({ group: groupId }),
-            Settlement.exists({ group: groupId }),
-            RecurringExpense.exists({ group: groupId }),
-          ])
-        ).some(Boolean);
-      if (hasRecords) throw new Error('CURRENCY_LOCKED');
+      if (await hasLedgerRecords(group)) throw new Error('CURRENCY_LOCKED');
       refuseCurrencies();
       // First financial writes set the monotonic lock using the old currency predicate.
-      const changed = await withGroupMutation(groupId, async () =>
-        Group.findOneAndUpdate(
+      const changed = await withGroupMutation(groupId, async (session) => {
+        await refuseDroppedInUse(session);
+        return Group.findOneAndUpdate(
           {
             _id: groupId,
             defaultCurrency: group.defaultCurrency,
@@ -275,18 +301,23 @@ export class GroupService {
           },
           { $set: data },
           { returnDocument: 'after', runValidators: true },
-        ),
-      );
+        );
+      });
       if (!changed) throw new Error('CURRENCY_LOCKED');
-      await activityService.log(groupId, 'group_updated', userId, { changes });
+      recordListChange();
+      await activityService.log(groupId, 'group_updated', userId, { changes, ...listRecord });
       return this.readAfterUpdate(await changed.populate('members.user', PERSON_FIELDS), userId);
     }
     refuseCurrencies();
     Object.assign(group, data);
-    await withGroupMutation(groupId, async () => group.save());
+    await withGroupMutation(groupId, async (session) => {
+      await refuseDroppedInUse(session);
+      return group.save();
+    });
 
+    recordListChange();
     if (Object.keys(changes).length > 0) {
-      await activityService.log(groupId, 'group_updated', userId, { changes });
+      await activityService.log(groupId, 'group_updated', userId, { changes, ...listRecord });
     }
 
     return this.readAfterUpdate(await group.populate('members.user', PERSON_FIELDS), userId);

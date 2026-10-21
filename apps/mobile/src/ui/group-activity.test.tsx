@@ -7,7 +7,12 @@ import {
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { emptyActivity, type ActivityEvent, type ActivityState } from '../data/activity';
+import {
+  emptyActivity,
+  parseActivityPage,
+  type ActivityEvent,
+  type ActivityState,
+} from '../data/activity';
 import { flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
@@ -517,5 +522,80 @@ describe('an event’s detail', () => {
     });
     // The time is the last run of the details line, a string inside its text.
     expect(JSON.stringify(screen!.toJSON())).toContain(`"Wed 30 Sep 2026, ${clock}"`);
+  });
+});
+
+describe('a change to the Group’s currencies, as read from the server (#721)', () => {
+  it('names the currency added and what the list became, from what was recorded', () => {
+    const sam = 'a00000000000000000000002';
+    // The event as the API answers it, read the way the app reads every page.
+    const page = parseActivityPage(
+      {
+        data: {
+          activities: [
+            {
+              _id: hex('f', 1),
+              group: groupId,
+              type: 'group_updated',
+              actor: { _id: sam, name: 'Sam Chen' },
+              createdAt: new Date(2026, 8, 30, 11, 0).toISOString(),
+              metadata: {
+                changes: { alternateCurrencies: { old: ['EUR'], new: ['EUR', 'JPY'] } },
+                groupName: 'Lisbon & Tokyo',
+                currencies: ['INR', 'EUR', 'JPY'],
+              },
+            },
+          ],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        },
+        status: 200,
+      },
+      groupId,
+      1,
+    );
+
+    const { root } = render({
+      state: activity({
+        events: page.events,
+        pagination: page.pagination,
+      }),
+    });
+
+    expect(text(root)).toContain('added JPY to the Group’s currencies');
+    // The row as it is spoken, with the line below the headline.
+    expect(buttons(root)).toContain(
+      'Sam Chen added JPY to the Group’s currencies, Lisbon & Tokyo now uses INR, EUR and JPY, 11:00 AM',
+    );
+  });
+});
+
+describe('an older removal from the Group’s currencies, as read from the server (#721)', () => {
+  it('never says nothing used it without the list recorded with it', () => {
+    const page = parseActivityPage(
+      {
+        data: {
+          activities: [
+            {
+              _id: hex('f', 2),
+              group: groupId,
+              type: 'group_updated',
+              actor: { _id: you, name: 'Alex Rivera' },
+              createdAt: new Date(2026, 8, 30, 11, 0).toISOString(),
+              metadata: { changes: { alternateCurrencies: { old: ['EUR', 'GBP'], new: ['EUR'] } } },
+            },
+          ],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        },
+        status: 200,
+      },
+      groupId,
+      1,
+    );
+
+    const { root } = render({
+      state: activity({ events: page.events, pagination: page.pagination }),
+    });
+
+    expect(buttons(root)).toContain('You removed GBP from the Group’s currencies, 11:00 AM');
   });
 });

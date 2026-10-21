@@ -183,6 +183,8 @@ export const tripSummaryPath = (groupId: string, { timeZone, currency }: TripSum
 export const invitationsPath = () => '/api/invitations';
 export const settlementsPath = (groupId: string) => `${group(groupId)}/settlements`;
 export const recurringExpensesPath = (groupId: string) => `${group(groupId)}/recurring`;
+/** A Group's currencies and what uses each one, for its settings (#721). */
+export const groupCurrenciesPath = (groupId: string) => `${group(groupId)}/currencies`;
 /**
  * Search across the member's Groups (#321), for the query as it is searched: trimmed, its
  * whitespace collapsed, so the same search always has one path.

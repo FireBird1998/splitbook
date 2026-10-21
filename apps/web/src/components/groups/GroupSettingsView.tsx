@@ -33,10 +33,10 @@ import PersonIcon from '@mui/icons-material/Person';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ShareIcon from '@mui/icons-material/Share';
-import { CURRENCIES, getSortedCurrencies } from '@splitbook/shared/currency';
 import AssistantRuleSection from '@/components/groups/AssistantRuleSection';
 import LeaveGroupSection from '@/components/groups/LeaveGroupSection';
 import TagManager from '@/components/groups/TagManager';
+import GroupCurrenciesSection from '@/components/groups/GroupCurrenciesSection';
 import GroupUnavailable from '@/components/groups/GroupUnavailable';
 import { formatDate } from '@splitbook/shared/date';
 import { useGroup } from '@/lib/hooks/use-groups';
@@ -84,11 +84,6 @@ function GroupSettingsContent({
   const [generalSaving, setGeneralSaving] = useState(false);
   const [generalInitialized, setGeneralInitialized] = useState(false);
 
-  const [defaultCurrency, setDefaultCurrency] = useState('');
-  const [alternateCurrencies, setAlternateCurrencies] = useState<string[]>([]);
-  const [currencySaving, setCurrencySaving] = useState(false);
-  const [currencyInitialized, setCurrencyInitialized] = useState(false);
-
   const [memberMenuAnchor, setMemberMenuAnchor] = useState<HTMLElement | null>(null);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [memberLoading, setMemberLoading] = useState(false);
@@ -110,13 +105,6 @@ function GroupSettingsContent({
     setEndDate(group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '');
     setGeneralInitialized(true);
   }, [group, generalInitialized]);
-
-  useEffect(() => {
-    if (!group || currencyInitialized) return;
-    setDefaultCurrency(group.defaultCurrency);
-    setAlternateCurrencies(group.alternateCurrencies);
-    setCurrencyInitialized(true);
-  }, [group, currencyInitialized]);
 
   if (isLoading && !group) {
     return (
@@ -148,6 +136,26 @@ function GroupSettingsContent({
 
   const currentUserMember = members.find((m) => m.user._id === userId);
   const isAdmin = currentUserMember?.role === 'admin';
+  const currenciesSection = (
+    <GroupCurrenciesSection
+      groupId={groupId}
+      groupName={group.name}
+      viewerId={userId}
+      isAdmin={isAdmin}
+      adminNames={members
+        .filter((m) => m.role === 'admin' && m.user._id !== userId)
+        .map((m) => m.user.name)}
+      onNotify={(message) => setSnackbar({ open: true, message })}
+    />
+  );
+  const snackbarView = (
+    <Snackbar
+      open={snackbar.open}
+      autoHideDuration={3000}
+      onClose={() => setSnackbar({ open: false, message: '' })}
+      message={snackbar.message}
+    />
+  );
   const assistantSection = assistantsAvailable && (
     <AssistantRuleSection
       groupId={groupId}
@@ -175,6 +183,7 @@ function GroupSettingsContent({
               Back to Group
             </Button>
           </Box>
+          {currenciesSection}
           <TagManager groupId={groupId} accountId={userId} />
           {assistantSection}
           <LeaveGroupSection
@@ -183,11 +192,11 @@ function GroupSettingsContent({
             memberCount={members.length}
           />
         </Stack>
+        {snackbarView}
       </Container>
     );
   }
 
-  const currencies = getSortedCurrencies(group.defaultCurrency, group.alternateCurrencies);
   const tripDateError = validateTripDates(startDate || null, endDate || null);
   const theme = getGroupTheme(group.category);
 
@@ -217,27 +226,6 @@ function GroupSettingsContent({
       setSnackbar({ open: true, message: 'Failed to update' });
     } finally {
       setGeneralSaving(false);
-    }
-  };
-
-  const handleSaveCurrency = async () => {
-    setCurrencySaving(true);
-    try {
-      const res = await apiFetch(`/api/groups/${groupId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ defaultCurrency, alternateCurrencies }),
-      });
-      if (!res.ok) {
-        setSnackbar({ open: true, message: await failureMessage(res, 'Failed to update') });
-        return;
-      }
-      mutate();
-      setSnackbar({ open: true, message: 'Currency settings updated' });
-    } catch {
-      setSnackbar({ open: true, message: 'Failed to update' });
-    } finally {
-      setCurrencySaving(false);
     }
   };
 
@@ -430,89 +418,7 @@ function GroupSettingsContent({
           </Stack>
         </Paper>
 
-        {/* ─── Currency Settings ───────────────────── */}
-        <Paper variant="outlined" sx={{ p: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 2 }}>
-            Currency Settings
-          </Typography>
-          <Stack spacing={2}>
-            <TextField
-              select
-              label="Default Currency"
-              value={defaultCurrency}
-              onChange={(e) => setDefaultCurrency(e.target.value)}
-              fullWidth
-              size="small"
-            >
-              {currencies.map((c) => (
-                <MenuItem key={c.code} value={c.code}>
-                  {c.flag} {c.code} — {c.name}
-                </MenuItem>
-              ))}
-            </TextField>
-
-            <Box>
-              <Typography
-                variant="caption"
-                fontWeight={500}
-                color="text.secondary"
-                sx={{ mb: 1, display: 'block' }}
-              >
-                Alternate Currencies (max 2)
-              </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 1 }}>
-                {alternateCurrencies.map((code) => {
-                  const curr = CURRENCIES.find((c) => c.code === code);
-                  return (
-                    <Chip
-                      key={code}
-                      label={`${curr?.flag || ''} ${code}`}
-                      onDelete={() =>
-                        setAlternateCurrencies(alternateCurrencies.filter((c) => c !== code))
-                      }
-                      size="small"
-                    />
-                  );
-                })}
-              </Stack>
-              {alternateCurrencies.length < 2 && (
-                <TextField
-                  select
-                  label="Add currency"
-                  value=""
-                  onChange={(e) => {
-                    if (
-                      e.target.value &&
-                      !alternateCurrencies.includes(e.target.value) &&
-                      e.target.value !== defaultCurrency
-                    ) {
-                      setAlternateCurrencies([...alternateCurrencies, e.target.value]);
-                    }
-                  }}
-                  fullWidth
-                  size="small"
-                >
-                  <MenuItem value="" disabled>
-                    Select currency...
-                  </MenuItem>
-                  {CURRENCIES.filter(
-                    (c) => c.code !== defaultCurrency && !alternateCurrencies.includes(c.code),
-                  ).map((c) => (
-                    <MenuItem key={c.code} value={c.code}>
-                      {c.flag} {c.code} — {c.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              )}
-            </Box>
-
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button variant="contained" onClick={handleSaveCurrency} disabled={currencySaving}>
-                {currencySaving ? <CircularProgress size={20} /> : 'Save Currency'}
-              </Button>
-            </Box>
-          </Stack>
-        </Paper>
+        {currenciesSection}
 
         <TagManager groupId={groupId} accountId={userId} />
 
@@ -731,13 +637,7 @@ function GroupSettingsContent({
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={() => setSnackbar({ open: false, message: '' })}
-        message={snackbar.message}
-      />
+      {snackbarView}
     </Container>
   );
 }
