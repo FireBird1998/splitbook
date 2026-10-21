@@ -161,7 +161,7 @@ describe('readQuickAdd: amounts', () => {
     expect(read('Sushi 3000', { currency: 'JPY' }).amountMinor).toBe(3000);
     expect(read('Sushi 3000.5', { currency: 'JPY' }).problems[0]).toMatchObject({
       code: 'amount-decimals',
-      message: 'JPY amounts have no decimal places. Nothing is rounded for you.',
+      message: 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.',
     });
     expect(read('Bibimbap 12000', { currency: 'KRW' }).amountMinor).toBe(12000);
     expect(read('Lunch 12.34', { currency: 'EUR' }).amountMinor).toBe(1234);
@@ -852,4 +852,17 @@ describe('Quick add distinguishes ordinary words from listed currency marks (#73
       expect.objectContaining({ code: 'amount-currency' }),
     );
   });
+});
+
+it.each([
+  ['Sushi 2500.5', 'JPY', 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.'],
+  ['Dinner 2500.5', 'KRW', 'Won has no smaller unit. Enter a whole amount, like ₩2,500.'],
+])('uses the form’s whole-unit wording for %s in %s', (text, currency, message) => {
+  for (const group of [{ currency }, { alternateCurrencies: [currency] }]) {
+    expect(read(`${text} ${currency}`, group)).toMatchObject({
+      currency,
+      amountMinor: null,
+      problems: [expect.objectContaining({ code: 'amount-decimals', message })],
+    });
+  }
 });
