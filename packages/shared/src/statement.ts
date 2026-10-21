@@ -1,5 +1,5 @@
-import { normaliseExtraCurrencies } from './group-currencies';
 /** Statement figures: window spending, dated payments, and current all-time ledger positions. */
+import { normaliseExtraCurrencies } from './group-currencies';
 import { formatCrossCurrencySettlement } from './cross-currency-settlement';
 import type { BackupGroupInput } from './export-backup';
 import { calculateNetBalancesMinor, simplifyDebtsMinor } from './debt-simplifier';

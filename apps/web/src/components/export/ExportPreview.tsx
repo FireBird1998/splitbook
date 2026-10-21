@@ -1,5 +1,6 @@
+'use client';
+
 import { isEmptyStatementCurrency } from '@splitbook/shared/statement';
-('use client');
 import ExportPaymentDescription from './ExportPaymentDescription';
 import { useState, type ReactNode } from 'react';
 import ToggleButton from '@mui/material/ToggleButton';
