@@ -28,6 +28,14 @@ _Avoid_: cycle, period, billing month
 One calendar day of a Trip, numbered from the Trip's first day ("Day 2 · Fri 18 Sep"). The Trip's dates and its Expenses' dates are calendar days, the same for every member wherever they are (#437), so an Expense on the first day is always on Day 1. An Expense dated before the first day or after the last still counts toward the whole trip, but is never on a Trip day.
 _Avoid_: trip date, itinerary day
 
+**Main currency**:
+A Group's own currency (`Group.defaultCurrency`): its figures are in it, and a new Expense starts in it when the member has no latest Expense in another of the Group's currencies. It is locked once money is recorded, so existing amounts never change meaning.
+_Avoid_: default currency, base currency, group currency
+
+**Extra currency**:
+One of up to 4 more currencies a Group lists besides its Main currency (stored as `Group.alternateCurrencies`). Expenses, Settlements and Drafts may be in the Main currency or any Extra currency (recurring Expenses stay in the Main currency for now), each kept in its own currency: amounts are never converted, and balances, Debts and Suggested payments are worked out per currency.
+_Avoid_: alternate currency, secondary currency, foreign currency
+
 **Saved copy**:
 Server data stored on a member's device so a Group can be shown offline. It always shows when it was last verified and is never treated as current.
 _Avoid_: cache (in product copy), offline data, local data

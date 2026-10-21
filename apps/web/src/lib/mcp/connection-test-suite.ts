@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { betterAuth } from 'better-auth';
 import { memoryAdapter, type MemoryDB } from 'better-auth/adapters/memory';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { buildAuthOptions } from '@/lib/auth/create-auth';
+import { buildAuthOptions, type AuthEnv } from '@/lib/auth/create-auth';
 import { createMcpConnectionHandler, MCP_LEDGER_SCOPE } from './connection';
 import { MongoClient } from 'mongodb';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
@@ -47,8 +47,10 @@ export function connectionTests(mongo = false) {
   let clientId: string;
   let cookie: string;
   let exposeTools = false;
+  // What the approval page was last told about the assistant (#614).
+  let approvalShown: unknown;
 
-  const env = {
+  const env: AuthEnv = {
     AUTH_SECRET: 'synthetic-mcp-connection-test-secret-32-characters',
     AUTH_ALLOWED_EMAILS: 'connection@example.test,other@example.test',
     NODE_ENV: 'test',
@@ -119,6 +121,7 @@ export function connectionTests(mongo = false) {
       { headers: { cookie } },
     );
     expect(details.status).toBe(200);
+    approvalShown = await details.json();
     const consent = await post(
       '/oauth2/consent',
       {
@@ -561,6 +564,11 @@ export function connectionTests(mongo = false) {
       const issuer = await as.json();
       expect(issuer.client_id_metadata_document_supported).toBe(true);
       expect(issuer.registration_endpoint).toContain('/oauth2/register');
+    });
+
+    it('names the assistant on the approval page by the name it registered, never by its client id (#614)', async () => {
+      await authorizeClient();
+      expect(approvalShown).toMatchObject({ name: 'Synthetic MCP Client', address: null });
     });
 
     it('preserves the signed login request and keeps Draft permission opt-in', async () => {
@@ -1103,6 +1111,8 @@ export function connectionTests(mongo = false) {
           update: { name: '  Synthetic\n Assistant\u0000  ' },
         });
         const grant = await authorizeClient(true, true);
+        // The approval page cleans the published name the way Draft attribution does (#614).
+        expect(approvalShown).toMatchObject({ name: 'Synthetic Assistant', address: null });
         const client = new Client({ name: 'to-review-test', version: '1' });
         const payload = (result: Awaited<ReturnType<Client['callTool']>>) =>
           JSON.parse((result.content as Array<{ text: string }>)[0].text);
@@ -1504,6 +1514,166 @@ export function connectionTests(mongo = false) {
           .status,
       ).toBe(403);
       expect((await refresh(refreshed.refresh_token)).ok).toBe(false);
+    });
+    // Keep these last: freshConnection revokes every connection, invalidating the earlier
+    // tests' shared credentials. Each inactivity scenario establishes its own fresh grant.
+    describe('inactivity expiry', () => {
+      const day = 86_400_000;
+      const signIn = async () => {
+        const response = await post('/sign-in/email', {
+          email: 'connection@example.test',
+          password: 'synthetic-password-for-test-only',
+        });
+        expect(response.status).toBe(200);
+        cookie = response.headers
+          .getSetCookie()
+          .map((value) => value.split(';')[0])
+          .join('; ');
+      };
+      const refresh = (value: string) =>
+        fetch(`${origin}/api/auth/oauth2/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: clientId,
+            refresh_token: value,
+            resource,
+          }),
+        });
+      const callAssistant = async (accessToken: string) => {
+        const client = new Client({ name: 'expiry-test', version: '1' });
+        try {
+          await client.connect(
+            new StreamableHTTPClientTransport(new URL(resource), {
+              requestInit: { headers: { Authorization: `Bearer ${accessToken}` } },
+            }),
+          );
+          expect((await client.listTools()).tools.map((tool) => tool.name)).toContain(
+            'connection_status',
+          );
+        } finally {
+          await client.close();
+        }
+      };
+      const freshConnection = async () => {
+        await signIn();
+        for (const connection of await connectionList())
+          expect((await post('/mcp/revoke', { id: connection.id }, true)).status).toBe(200);
+        return authorizeClient();
+      };
+
+      it('enforces a shortened staging idle timeout on the next MCP request', async () => {
+        // Freeze at or after earlier credential timestamps, never backwards into the
+        // preceding second. All deadline checks below advance this frozen clock explicitly.
+        const start = Math.ceil(Date.now() / 1000) * 1000;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(start);
+        env.MCP_DEPLOYMENT = 'staging';
+        env.MCP_IDLE_TIMEOUT_SECONDS = '120';
+        auth = makeAuth(origin);
+        try {
+          const issued = await freshConnection();
+          await callAssistant(issued.access_token);
+          expect((await connectionList())[0].lastUsedAt).toBe(new Date(start).toISOString());
+          vi.setSystemTime(start + 119_000);
+          expect(await connectionList()).toHaveLength(1);
+          vi.setSystemTime(start + 120_000);
+          expect(
+            (
+              await fetch(resource, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${issued.access_token}`,
+                },
+              })
+            ).status,
+          ).toBe(403);
+          expect((await refresh(issued.refresh_token)).ok).toBe(false);
+          expect(await connectionList()).toEqual([]);
+        } finally {
+          vi.useRealTimers();
+          delete env.MCP_DEPLOYMENT;
+          delete env.MCP_IDLE_TIMEOUT_SECONDS;
+          auth = makeAuth(origin);
+          await signIn();
+        }
+      });
+
+      it('expires a never-used connection at 90 days and lets the member reconnect', async () => {
+        const start = Math.floor(Date.now() / 1000) * 1000;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(start);
+        try {
+          const issued = await freshConnection();
+          expect((await connectionList())[0].lastUsedAt).toBeNull();
+          vi.setSystemTime(start + 90 * day);
+          await signIn();
+          expect(await connectionList()).toEqual([]);
+          expect((await refresh(issued.refresh_token)).ok).toBe(false);
+          const reconnected = await authorizeClient();
+          await callAssistant(reconnected.access_token);
+          expect(await connectionList()).toHaveLength(1);
+          expect((await refresh(issued.refresh_token)).ok).toBe(false);
+        } finally {
+          vi.useRealTimers();
+          await signIn();
+        }
+      });
+
+      it('keeps rolling refresh alive within 90 days of use and refuses a fresh token at idle expiry', async () => {
+        const start = Math.floor(Date.now() / 1000) * 1000;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(start);
+        try {
+          const issued = await freshConnection();
+          await callAssistant(issued.access_token);
+          vi.setSystemTime(start + 89 * day);
+          const response = await refresh(issued.refresh_token);
+          expect(response.status, await response.clone().text()).toBe(200);
+          const active = await response.json();
+          await callAssistant(active.access_token);
+          // Rotating tokens alone is not assistant use. Mint a token just before
+          // the idle deadline so its five-minute JWT lifetime cannot hide the bug.
+          vi.setSystemTime(start + 179 * day - 60_000);
+          const late = await refresh(active.refresh_token);
+          expect(late.status, await late.clone().text()).toBe(200);
+          const stillValid = await late.json();
+          await signIn();
+          expect((await connectionList())[0].lastUsedAt).toBe(
+            new Date(start + 89 * day).toISOString(),
+          );
+          vi.setSystemTime(start + 179 * day);
+          expect(
+            (
+              await fetch(resource, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${stillValid.access_token}`,
+                },
+              })
+            ).status,
+          ).toBe(403);
+          expect((await refresh(stillValid.refresh_token)).ok).toBe(false);
+          expect(await connectionList()).toEqual([]);
+          const reconnected = await authorizeClient();
+          await callAssistant(reconnected.access_token);
+          expect(
+            (
+              await fetch(resource, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${stillValid.access_token}`,
+                },
+              })
+            ).status,
+          ).toBe(403);
+          expect((await refresh(stillValid.refresh_token)).ok).toBe(false);
+        } finally {
+          vi.useRealTimers();
+          await signIn();
+        }
+      });
     });
   });
 }

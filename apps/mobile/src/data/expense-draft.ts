@@ -490,7 +490,7 @@ export function expenseCorrectionSummary(errors: ExpenseFieldErrors): string | n
 }
 
 export function buildExpenseBody(draft: ExpenseDraft, context: ExpenseContext): string {
-  assertGroupCurrency(context.group.defaultCurrency, draft.currency);
+  assertGroupCurrency(context.group, draft.currency);
   const { amount, paidBy, splitBetween } = expenseMoney(draft);
   assertExpenseParticipants(
     new Set(context.group.members.map((member) => member.user.id)),
@@ -613,8 +613,7 @@ export function buildExpensePatch(draft: ExpenseDraft, context: ExpenseContext):
       money.paidBy,
       money.splitBetween,
     );
-  if (draft.currency !== original.currency)
-    assertGroupCurrency(context.group.defaultCurrency, draft.currency);
+  if (draft.currency !== original.currency) assertGroupCurrency(context.group, draft.currency);
   const tagChanged = draft.tagId !== (original.tagId ?? '');
   const tag = resolveTagReference(
     context.tags.map(({ id, ...rest }) => ({ _id: id, ...rest })),

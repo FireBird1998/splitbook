@@ -18,7 +18,7 @@ import { assertRecurringExpensesOn } from '@/lib/recurring-expenses-switch';
 const recurringValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'All payers and split participants must be group members',
   INVALID_TAG: 'Tag must be an active group tag',
-  CURRENCY_MISMATCH: 'Currency must match the group default currency',
+  CURRENCY_MISMATCH: 'Currency is not one of this Group’s currencies',
   INVALID_WINDOW: 'End date must be on or after the start date',
   NOT_HOUSEHOLD: 'Recurring expenses are only available in Household groups',
 };

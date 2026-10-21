@@ -81,7 +81,8 @@ function assertTemplateData(group: IGroupDocument, data: TemplateData): void {
   const memberIds = new Set(group.members.map((member) => member.user.toString()));
   assertExpenseParticipants(memberIds, data.paidBy, data.splitBetween);
   resolveTagReference(group.tags, data);
-  assertGroupCurrency(group.defaultCurrency, data.currency);
+  // Recurring Expenses stay in the main currency while extra currencies are new (#710).
+  assertGroupCurrency({ defaultCurrency: group.defaultCurrency }, data.currency);
   assertValidWindow(data.startsOn, data.endsOn);
 }
 
@@ -227,7 +228,7 @@ export class RecurringExpenseService {
     const original = template.toObject();
     const { money } = decideExpenseMoneyEdit(original, data);
     assertExpenseParticipants(memberIds, money.paidBy, money.splitBetween);
-    assertGroupCurrency(group.defaultCurrency, money.currency);
+    assertGroupCurrency({ defaultCurrency: group.defaultCurrency }, money.currency);
     const tagReference = resolveTagReference(group.tags, data, template);
 
     const mergedStartsOn = data.startsOn ?? template.startsOn;

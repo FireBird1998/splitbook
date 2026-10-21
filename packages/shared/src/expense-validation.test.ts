@@ -103,11 +103,13 @@ describe('expense validation', () => {
 
   describe('assertGroupCurrency', () => {
     it('accepts the group default currency', () => {
-      expect(() => assertGroupCurrency('USD', 'USD')).not.toThrow();
+      expect(() => assertGroupCurrency({ defaultCurrency: 'USD' }, 'USD')).not.toThrow();
     });
 
     it('throws CURRENCY_MISMATCH when currency differs from the group default', () => {
-      expect(() => assertGroupCurrency('USD', 'EUR')).toThrow('CURRENCY_MISMATCH');
+      expect(() => assertGroupCurrency({ defaultCurrency: 'USD' }, 'EUR')).toThrow(
+        'CURRENCY_MISMATCH',
+      );
     });
   });
 });

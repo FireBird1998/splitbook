@@ -158,7 +158,7 @@ describe('PATCH /api/groups/[id]/recurring/[recurringId] refusals name their cod
     },
     {
       code: 'CURRENCY_MISMATCH',
-      error: 'Currency must match the group default currency',
+      error: 'Currency is not one of this Group’s currencies',
       change: { currency: 'USD' },
     },
   ])('answers 422 $code and leaves the template as it was', async ({ code, error, change }) => {

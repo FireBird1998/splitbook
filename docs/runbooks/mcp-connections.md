@@ -8,14 +8,19 @@ Group context and the item tools list the Category choices. An assistant sets a 
 
 MCP is disabled by default. Enable it only on the deployment intended for connector testing:
 
-| Variable              | Staging                                                      | Production, after acceptance          |
-| --------------------- | ------------------------------------------------------------ | ------------------------------------- |
-| `MCP_ENABLED`         | `true`                                                       | `true`                                |
-| `MCP_RESOURCE_URL`    | `https://mcp.staging.splitbook.in/api/mcp`                   | `https://mcp.splitbook.in/api/mcp`    |
-| `NEXT_PUBLIC_APP_URL` | Canonical staging app HTTPS origin                           | Canonical production app HTTPS origin |
-| `AUTH_MODE`           | `google`                                                     | `google`                              |
-| `AUTH_ALLOWED_EMAILS` | Explicit staging testers                                     | Approved members                      |
-| `MCP_ALLOW_DCR`       | `false` by default; enable only for a host that requires DCR | Same tested policy                    |
+| Variable                   | Staging                                                                            | Production, after acceptance                               |
+| -------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `MCP_ENABLED`              | `true`                                                                             | `true`                                                     |
+| `MCP_RESOURCE_URL`         | `https://mcp.staging.splitbook.in/api/mcp`                                         | `https://mcp.splitbook.in/api/mcp`                         |
+| `NEXT_PUBLIC_APP_URL`      | Canonical staging app HTTPS origin                                                 | Canonical production app HTTPS origin                      |
+| `AUTH_MODE`                | `google`                                                                           | `google`                                                   |
+| `AUTH_ALLOWED_EMAILS`      | Explicit staging testers                                                           | Approved members                                           |
+| `MCP_ALLOW_DCR`            | `false` by default; enable only for a host that requires DCR                       | Same tested policy                                         |
+| `MCP_DEPLOYMENT`           | `staging` only for shortened inactivity checks; otherwise unset                    | Unset                                                      |
+| `MCP_IDLE_TIMEOUT_SECONDS` | Optional integer 120–7776000 with the staging marker; unset or empty means 90 days | Unset; ignored when `MOBILE_APP_ENV=production`            |
+| `MOBILE_APP_ENV`           | `staging`                                                                          | `production`; prevents copied staging inactivity overrides |
+
+A Vercel environment-variable change requires a staging redeploy before it takes effect.
 
 The current staging app origin is `https://splitbook-staging.vercel.app`, retaining its existing Google callback configuration. The optional `https://staging.splitbook.in` app hostname has not been provisioned. Do not point a staging MCP hostname to the production data environment. Give staging its own MongoDB database, auth secret and Google OAuth callback configuration. Never copy production session or signing-key records into staging. MCP requires an explicit canonical app origin; localhost HTTP is permitted only outside production.
 
@@ -99,3 +104,48 @@ starts at Not used yet. Existing Drafts and the immediate revocation boundary ar
 Settings asks for confirmation before `POST /api/auth/mcp/revoke`. Cancelling makes no
 revocation request; confirming explains that access stops at once and To review stays.
 The server remains responsible for ownership and live generation checks.
+
+## Inactive connections (#618)
+
+An authorization expires at **90 days without an authorized MCP request**. The server checks
+this on every MCP request and on token issuance, including refresh; an unexpired access token
+cannot bypass it. Settings omits expired connections. Reading Settings or rotating tokens
+alone does not keep a connection active. Reconnecting creates a new generation and requires
+consent again; old access tokens, refresh tokens and authorization codes cannot adopt it.
+Existing To review items remain untouched.
+
+The last-use timestamp is the `mcpConnection.lastUsedAt` added in #615. A connection never
+used by an assistant ages from its current OAuth consent's `createdAt`, falling back to the
+durable connection's `createdAt` for legacy consent records. This also gives a never-used
+reconnection its own full idle window. No additional connection fields or migration are
+introduced. Reconnection rotates `generation` and clears `lastUsedAt` with a compare-and-set
+predicate so it cannot overwrite newer activity or another reconnection.
+
+Effective lifetimes:
+
+- Access tokens: **300 seconds**, with live generation, membership, scope and inactivity
+  checks at the MCP boundary.
+- Refresh tokens: **91 days from each issuance/rotation**, replacing the provider's 30-day
+  default. The extra day covers use of a five-minute access token after it was issued, so a
+  refresh token cannot end an active connection before 90 days from its last use. The server
+  still refuses refresh at 90 idle days; the extra lifetime does not extend permission.
+- Consent/grant records: no independent earlier expiry. The server's idle deadline and
+  generation control authorization. Browser sign-in sessions keep their existing lifetime;
+  expiring a browser session does not expire an assistant's refresh grant.
+
+For a shortened check on an isolated staging deployment, set **both**
+`MCP_DEPLOYMENT=staging` and `MCP_IDLE_TIMEOUT_SECONDS=120`. The timeout must be an integer
+from 120 through 7776000: last use is written at most once a minute, so shorter timeouts
+could expire an active connection. With an unset or empty timeout, even staging keeps 90 days.
+Timeout overrides are ignored unless the marker is explicitly staging, and always ignored
+when `MOBILE_APP_ENV=production`, even if staging variables were copied. A malformed staging
+value logs a clear configuration error once per server instance and disables the MCP plugins
+at auth initialization. MCP, its OAuth routes and discovery return 503 with no-store responses;
+normal sign-in, session reads and other app routes keep working. Remove both staging variables to restore
+90 days, then redeploy staging so the Vercel environment change takes effect. Do not change production settings for
+this check. These settings alter server enforcement, not just the displayed list.
+
+The moved-clock real-client suite runs against memory and MongoDB adapters. It covers a
+never-used connection at day 90, refresh and use at day 89, another refresh just before day
+179, refusal of that still-valid JWT at the idle deadline, disappearance from Settings,
+reconnection without reviving old tokens, and the shortened staging deadline.

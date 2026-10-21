@@ -158,7 +158,7 @@ export class ExpenseService {
     if (group.isArchived) throw new Error('GROUP_ARCHIVED');
     const memberIds = new Set(group.members.map((member) => String(member.user)));
     assertExpenseParticipants(memberIds, data.paidBy, data.splitBetween);
-    assertGroupCurrency(group.defaultCurrency, data.currency);
+    assertGroupCurrency(group, data.currency);
     await lockLedgerCurrency(groupId, data.currency);
     const id = new mongoose.Types.ObjectId();
     const event = makePendingActivity(groupId, 'expense_added', userId, {
@@ -471,7 +471,7 @@ export class ExpenseService {
         money.splitBetween,
       );
     if (data.currency !== undefined && data.currency !== original.currency)
-      assertGroupCurrency(group.defaultCurrency, data.currency);
+      assertGroupCurrency(group, data.currency);
     const tagReference = resolveTagReference(group.tags, data, expense);
     const changes: Record<string, { old: unknown; new: unknown }> = {};
     const resultingChanges = { ...data, ...(financialEdit ? money : {}), ...tagReference };

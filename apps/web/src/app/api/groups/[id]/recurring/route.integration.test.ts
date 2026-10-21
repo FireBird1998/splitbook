@@ -237,7 +237,7 @@ describe('POST /api/groups/[id]/recurring refusals name their code (#523)', () =
     },
     {
       code: 'CURRENCY_MISMATCH',
-      error: 'Currency must match the group default currency',
+      error: 'Currency is not one of this Group’s currencies',
       setup: household,
       change: { currency: 'USD' },
     },
