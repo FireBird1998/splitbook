@@ -53,6 +53,9 @@ describe('readQuickAdd: the design canvas’s line', () => {
   it('reads "Dinner 2400 paid by me" into every part, with nothing left to fix', () => {
     expect(read('Dinner 2400 paid by me')).toEqual({
       description: 'Dinner',
+      currency: 'INR',
+      currencyCandidates: [],
+      currencyListed: true,
       amountMinor: 240000,
       amountText: '2400',
       payer: { memberId: ALEX.id, said: 'me', candidates: [] },
@@ -221,7 +224,7 @@ describe('readQuickAdd: amounts', () => {
         field: 'amount',
         code: 'amount-currency',
         kind: 'invalid',
-        message: 'This Group records INR, so write the amount in INR, like ₹2400.',
+        message: `${line.currency} is not one of this Group’s currencies. Add it to the Group or choose a listed currency.`,
       });
     }
     // Words that happen to be currency codes, written as words, are words.

@@ -7,10 +7,10 @@
  * The grammar, read word by word and case-insensitively. Any order works; whatever no rule
  * takes is the description.
  *
- * - **Amount**: one number in the Group's currency, read in exact minor units: `2400`,
+ * - **Amount**: one number in a listed currency (main currency when unsaid), read in exact minor units: `2400`,
  *   `2,400`, `1,00,000`, `2400.50`, `₹2400`, `Rs 2400`, `INR 2400`, `2400 INR`, `2400/-`.
  *   Its decimals are checked against the currency (INR 2, JPY 0) and nothing is rounded.
- *   Zero, a minus sign, more than the largest Expense, another currency's code or symbol, and a
+ *   Zero, a minus sign, more than the largest Expense, an unlisted or ambiguous currency, and a
  *   comma used as a decimal point are refused. When several plain numbers appear ("Dinner for
  *   4 2400"), the one marked with the currency wins, otherwise the largest; the others stay in
  *   the description.
@@ -35,6 +35,7 @@ import {
   parseAmountMinor,
   toMajorAmount,
 } from './exact-money';
+import { groupCurrencies } from './group-currencies';
 import type { ExpenseDraftValues } from './expense-draft';
 
 /** The longest description an Expense takes, as the create request counts it. */
@@ -46,8 +47,10 @@ export interface QuickAddMember {
 }
 
 export interface QuickAddContext {
-  /** The Group's currency: its decimals, its symbol and its code. */
+  /** The Group's main currency, used when no currency is written. */
   currency: string;
+  /** Extra currencies listed by the Group. */
+  alternateCurrencies?: readonly string[];
   /** Today in the viewer's own zone, `yyyy-MM-dd`, as the full form's date picker starts. */
   today: string;
   /** The member typing, whom "me" and "I" name. */
@@ -103,6 +106,12 @@ export interface QuickAddSplit {
 }
 
 export interface QuickAddRead {
+  /** Currency actually read, including an unlisted one; null for an ambiguous symbol. */
+  currency: string | null;
+  /** Candidates for an ambiguous symbol; otherwise empty. */
+  currencyCandidates: string[];
+  /** False when the member must add the currency or choose a listed one. */
+  currencyListed: boolean;
   /** What it was for: the words no rule took, or '' when there are none. */
   description: string;
   /** The amount in exact minor units, or null while it is missing or refused. */
@@ -418,41 +427,48 @@ function readDate(tokens: Token[], today: string): DateRead {
 // ─── Amounts ────────────────────────────────────────────────────────────
 
 interface Marks {
-  /** The Group's own code, symbol and common names, folded: "inr", "₹", "rs". */
-  own: Set<string>;
-  /** Other currencies' symbols that aren't letters, folded: "$", "€", "£". */
-  otherSymbols: Set<string>;
-  /** Other currencies' codes, in capitals: "USD". "rub" and "try" are words; "RUB" isn't. */
-  otherCodes: Set<string>;
+  listed: readonly string[];
+  symbols: Map<string, string[]>;
 }
 
-/** The marks that say a number is in the Group's currency, and those that say it isn't. */
-function currencyMarks(currency: string): Marks {
-  const own = new Set<string>([currency.toLowerCase()]);
-  const symbol = getCurrency(currency)?.symbol;
-  if (symbol) own.add(fold(symbol));
-  // "$12" in a Group in Canadian, Australian or Singapore dollars.
-  if (symbol?.endsWith('$')) own.add('$');
-  if (currency === 'INR') ['rs', 'rs.', 'rupee', 'rupees'].forEach((mark) => own.add(mark));
-  const otherSymbols = new Set<string>();
-  const otherCodes = new Set<string>();
-  for (const { code, symbol: theirs } of CURRENCIES) {
-    if (code === currency) continue;
-    otherCodes.add(code);
-    // Letter symbols ("kr", "R", "RM") are words too often to refuse a line over.
-    if (/[^\p{L}]/u.test(theirs) && !own.has(fold(theirs))) otherSymbols.add(fold(theirs));
+function currencyMarks(listed: readonly string[]): Marks {
+  const symbols = new Map<string, string[]>();
+  const add = (mark: string, code: string) => {
+    const codes = symbols.get(fold(mark)) ?? [];
+    if (!codes.includes(code)) codes.push(code);
+    symbols.set(fold(mark), codes);
+  };
+  for (const { code, symbol } of CURRENCIES) {
+    add(symbol, code);
+    // Preserve a listed dollar currency's familiar shorthand, but never guess between extras.
+    if (listed.includes(code) && symbol.endsWith('$')) add('$', code);
   }
-  return { own, otherSymbols, otherCodes };
+  for (const mark of ['rs', 'rs.', 'rupee', 'rupees']) add(mark, 'INR');
+  return { listed, symbols };
 }
 
-type Mark = 'none' | 'own' | 'other';
+type Mark = 'none' | string[];
 
 function markOf(text: string, marks: Marks): Mark | null {
+  if (!text) return 'none';
   const value = fold(text);
-  if (value === '') return 'none';
-  if (marks.own.has(value)) return 'own';
-  if (marks.otherCodes.has(text) || marks.otherSymbols.has(value)) return 'other';
-  return null;
+  // Unlisted codes must be uppercase: “rub” and “try” remain description words.
+  const code =
+    marks.listed.find((code) => code.toLowerCase() === value) ??
+    CURRENCIES.find((currency) => currency.code === text)?.code;
+  if (code) return [code];
+  const matches = marks.symbols.get(value);
+  if (!matches) return null;
+  const listed = matches.filter((code) => marks.listed.includes(code));
+  if (listed.includes(marks.listed[0])) return [marks.listed[0]];
+  // Unlisted letter symbols are recognised only in their printed case.
+  if (
+    !listed.length &&
+    !/[^\p{L}]/u.test(text) &&
+    !CURRENCIES.some((currency) => currency.symbol === text)
+  )
+    return null;
+  return listed.length ? listed : matches;
 }
 
 interface AmountCandidate {
@@ -511,11 +527,11 @@ function amountCandidates(tokens: Token[], marks: Marks): AmountCandidate[] {
         token && !token.taken ? markOf(token.raw.replace(/[,;:]+$/u, ''), marks) : null;
       const markBefore = apart(before);
       const markAfter = apart(after);
-      if (markBefore === 'own' || markBefore === 'other') {
+      if (Array.isArray(markBefore)) {
         mark = markBefore;
         start = index - 1;
         length = 2;
-      } else if (markAfter === 'own' || markAfter === 'other') {
+      } else if (Array.isArray(markAfter)) {
         mark = markAfter;
         length = 2;
       }
@@ -531,32 +547,34 @@ function example(currency: string): string {
 }
 
 interface AmountRead {
+  currency: string | null;
+  currencyCandidates: string[];
+  currencyListed: boolean;
   amountMinor: number | null;
   amountText: string | null;
   problem?: QuickAddProblem;
 }
 
-function readAmount(tokens: Token[], currency: string): AmountRead {
-  const candidates = amountCandidates(tokens, currencyMarks(currency));
+function readAmount(tokens: Token[], listed: readonly string[]): AmountRead {
+  let currency = listed[0];
+  let currencyRead: Pick<AmountRead, 'currency' | 'currencyCandidates' | 'currencyListed'> = {
+    currency,
+    currencyCandidates: [],
+    currencyListed: true,
+  };
+  const candidates = amountCandidates(tokens, currencyMarks(listed));
   const invalid = (
     code: QuickAddProblemCode,
     message: string,
     amountText: string | null = null,
   ): AmountRead => ({
+    ...currencyRead,
     amountMinor: null,
     amountText,
     problem: { field: 'amount', code, kind: 'invalid', message },
   });
 
-  const foreign = candidates.find((candidate) => candidate.mark === 'other');
-  if (foreign) {
-    take(tokens, foreign.start, foreign.length);
-    return invalid(
-      'amount-currency',
-      `This Group records ${currency}, so write the amount in ${currency}, like ${example(currency)}.`,
-    );
-  }
-  const marked = candidates.filter((candidate) => candidate.mark === 'own');
+  const marked = candidates.filter((candidate) => candidate.mark !== 'none');
   if (marked.length > 1) {
     for (const candidate of marked) take(tokens, candidate.start, candidate.length);
     return invalid('amount-several', `Keep one amount, like ${example(currency)}.`);
@@ -578,6 +596,7 @@ function readAmount(tokens: Token[], currency: string): AmountRead {
     );
   if (!chosen) {
     return {
+      ...currencyRead,
       amountMinor: null,
       amountText: null,
       problem: {
@@ -590,6 +609,24 @@ function readAmount(tokens: Token[], currency: string): AmountRead {
   }
   take(tokens, chosen.start, chosen.length);
   const number = chosen.number!;
+  if (chosen.mark !== 'none') {
+    if (chosen.mark.length !== 1) {
+      currencyRead = { currency: null, currencyCandidates: chosen.mark, currencyListed: false };
+      return invalid(
+        'amount-currency',
+        `Write the currency code (${chosen.mark.join(' or ')}) so the amount is unambiguous.`,
+        number,
+      );
+    }
+    currency = chosen.mark[0];
+    currencyRead = { currency, currencyCandidates: [], currencyListed: listed.includes(currency) };
+    if (!currencyRead.currencyListed)
+      return invalid(
+        'amount-currency',
+        `${currency} is not one of this Group’s currencies. Add it to the Group or choose a listed currency.`,
+        number,
+      );
+  }
   if (chosen.negative)
     return invalid(
       'amount-negative',
@@ -617,7 +654,7 @@ function readAmount(tokens: Token[], currency: string): AmountRead {
       `One Expense can be at most ${formatCurrency(MAX_EXPENSE_AMOUNT, currency)}.`,
       number,
     );
-  return { amountMinor: minor, amountText: number };
+  return { ...currencyRead, amountMinor: minor, amountText: number };
 }
 
 // ─── Paid by and split ──────────────────────────────────────────────────
@@ -864,7 +901,13 @@ export function readQuickAdd(text: string, context: QuickAddContext): QuickAddRe
   const date = readDate(tokens, context.today);
   const payer = readPayer(tokens, context, names, nameOf);
   const split = readSplit(tokens, context, names, nameOf);
-  const amount = readAmount(tokens, context.currency);
+  const amount = readAmount(
+    tokens,
+    groupCurrencies({
+      defaultCurrency: context.currency,
+      alternateCurrencies: context.alternateCurrencies,
+    }),
+  );
   const description = readDescription(tokens);
 
   const problems: QuickAddProblem[] = [];
@@ -893,6 +936,9 @@ export function readQuickAdd(text: string, context: QuickAddContext): QuickAddRe
 
   return {
     description,
+    currency: amount.currency,
+    currencyCandidates: amount.currencyCandidates,
+    currencyListed: amount.currencyListed,
     amountMinor: amount.amountMinor,
     amountText: amount.amountText,
     payer: payer.payer,
@@ -1156,9 +1202,10 @@ export function quickAddDraftValues(
   const payerId = choices.payerId ?? context.viewerId;
   return {
     description: read.description,
+    currency: read.currency ?? '',
     amount:
       read.amountMinor !== null
-        ? String(toMajorAmount(read.amountMinor, context.currency))
+        ? String(toMajorAmount(read.amountMinor, read.currency ?? context.currency))
         : (read.amountText ?? ''),
     date: read.date,
     tag: choices.tagId,
