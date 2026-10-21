@@ -40,6 +40,11 @@ describe('Draft attribution', () => {
     ['  Synthetic\n\t Assistant  ', 'Synthetic Assistant'],
     [' \t\u0000\u200b ', null],
     ['', null],
+    // Letters that draw as blanks (#614).
+    ['\u3164\u3164', null],
+    ['\u2800', null],
+    ['\u115f\u1160\uffa0', null],
+    ['Cl\u3164aude', 'Claude'],
   ])(
     'says when a published name has nothing left to show, so callers choose the fallback: %j',
     (input, expected) => {

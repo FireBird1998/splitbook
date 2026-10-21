@@ -46,7 +46,7 @@ for (const allowPreparation of [false, true]) {
     await page.goto(`/api/auth/oauth2/authorize?${query}`);
     await expect(page).toHaveURL(/\/mcp\/consent\?/);
     // Named by the name it registered, with what it can't do (#614). A registered client
-    // publishes no details, so no address is shown for it.
+    // publishes no details, so the page says it has no published address.
     await expect(
       page.getByText('Fictional consent test assistant wants to use your Splitbook', {
         exact: true,
@@ -58,11 +58,16 @@ for (const allowPreparation of [false, true]) {
     for (const limit of [
       'Save Expenses or payments',
       'Change anything in a Group',
-      'See Groups left out',
       'See anyone’s email',
     ])
       await expect(page.getByText(limit, { exact: true })).toBeVisible();
+    await expect(page.getByText('See Groups left out')).toHaveCount(0);
     await expect(page.getByText('identified by its published details')).toHaveCount(0);
+    await expect(
+      page.getByText('Registered by the assistant itself. Its address isn’t published.', {
+        exact: true,
+      }),
+    ).toBeVisible();
     // Who is approving, and a caution beside Allow naming the assistant (#614).
     await expect(page.getByText('Signed in as', { exact: true })).toBeVisible();
     await expect(page.getByText('Alex Rivera', { exact: true })).toBeVisible();

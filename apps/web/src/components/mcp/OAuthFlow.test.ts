@@ -15,16 +15,15 @@ const account = {
   email: 'alex.rivera@example.com',
 };
 
-const render = (element: ReactElement) =>
-  text(
-    renderToStaticMarkup(createElement(ThemeProvider, { theme: createAppTheme('light') }, element)),
-  );
+const markup = (element: ReactElement) =>
+  renderToStaticMarkup(createElement(ThemeProvider, { theme: createAppTheme('light') }, element));
+const render = (element: ReactElement) => text(markup(element));
 
 const permissions = (
   scopes: string[],
   assistant: { name: string; address: string | null } = {
     name: 'Fictional Assistant',
-    address: 'assistant.example.test',
+    address: 'assistant.example.test/client.json',
   },
 ) =>
   render(
@@ -72,15 +71,44 @@ describe('the consent screen', () => {
   it('names the assistant, with its address in small text, never as a raw client identity (#614)', () => {
     const shown = permissions(['ledger:read']);
     expect(shown).toContain('Fictional Assistant wants to use your Splitbook');
-    expect(shown).toContain('assistant.example.test · identified by its published details');
+    expect(shown).toContain(
+      'assistant.example.test/client.json · identified by its published details',
+    );
     expect(shown).not.toContain('Client identity');
     expect(shown).not.toContain('https://assistant.example.test/client.json');
   });
 
-  it('shows no address for a registered client, which publishes no details (#614)', () => {
+  it('says a registered client publishes no address (#614)', () => {
     const shown = permissions(['ledger:read'], { name: 'Synthetic MCP Client', address: null });
     expect(shown).toContain('Synthetic MCP Client wants to use your Splitbook');
     expect(shown).not.toContain('identified by its published details');
+    expect(shown).toContain('Registered by the assistant itself. Its address isn’t published.');
+  });
+
+  it('isolates the assistant’s name from the text around it wherever it appears (#614)', () => {
+    const html = markup(
+      createElement(ConsentPermissions, {
+        details: {
+          scopes: ['ledger:read'],
+          name: 'Fictional Assistant',
+          address: 'assistant.example.test/client.json',
+        },
+        drafts: false,
+        busy: false,
+        onDraftsChange: () => {},
+      }),
+    );
+    expect(html.match(/<bdi>Fictional Assistant<\/bdi>/g)).toHaveLength(3);
+    expect(
+      markup(
+        createElement(ConsentChoice, {
+          name: 'Fictional Assistant',
+          disabled: false,
+          onAllow: () => {},
+          onDeny: () => {},
+        }),
+      ),
+    ).toContain('<bdi>Fictional Assistant</bdi>');
   });
 
   it.each([[['ledger:read']], [['ledger:read', MCP_DRAFT_SCOPE, 'offline_access']]])(
@@ -91,10 +119,11 @@ describe('the consent screen', () => {
       for (const limit of [
         'Save Expenses or payments',
         'Change anything in a Group',
-        'See Groups left out',
         'See anyone’s email',
       ])
         expect(shown).toContain(limit);
+      // Not until the server leaves Groups out (#617): the page never claims a limit it lacks.
+      expect(shown).not.toContain('See Groups left out');
     },
   );
 
