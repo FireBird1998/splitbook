@@ -91,7 +91,10 @@ test('Balances shows one currency at a time, opening on the first Sam isn’t se
   );
   await expect(yen.getByRole('region', { name: 'Settle up', exact: true })).not.toContainText('€');
 
-  await recordInMain.getByRole('button', { name: 'Show INR' }).click();
+  await yen
+    .getByRole('region', { name: 'Record payment', exact: true })
+    .getByRole('button', { name: 'Show INR' })
+    .click();
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
   await expect(
     page
