@@ -9,11 +9,10 @@ import { text } from '@/lib/test-utils/markup';
 import OAuthFlow, {
   ApprovalHeading,
   ConsentChoice,
-  ConsentGroups,
   ConsentPermissions,
   consentRequest,
-  leavesOutEveryGroup,
 } from './OAuthFlow';
+import { AssistantGroupChecklist, leavesOutEveryGroup } from './AssistantGroupChecklist';
 
 /* The approval page's permissions, rendered to static markup with the details the server sends. */
 
@@ -74,7 +73,7 @@ const notAllowed = (ruleSetBy: ApprovalGroup['ruleSetBy']): ApprovalGroup => ({
 const priya = { id: 'a00000000000000000000003', name: 'Priya Shah' };
 const groupChoice = (excluded: readonly string[], listed: readonly ApprovalGroup[] = groups) =>
   markup(
-    createElement(ConsentGroups, {
+    createElement(AssistantGroupChecklist, {
       name: 'Fictional Assistant',
       viewerId: account.id,
       groups: listed,

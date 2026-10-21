@@ -205,25 +205,55 @@ for (const allowPreparation of [false, true]) {
     expect(exchange.status()).toBe(200);
     const issued = await exchange.json();
     expect(issued.scope.split(' ').includes('drafts:write')).toBe(allowPreparation);
-    const listed = await request.post(resource, {
-      headers: {
-        Authorization: `Bearer ${issued.access_token}`,
-        Accept: 'application/json, text/event-stream',
-        'Content-Type': 'application/json',
-      },
-      data: {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: { name: 'list_groups', arguments: {} },
-      },
-    });
-    expect(listed.status()).toBe(200);
-    const reply = await listed.text();
+    /** The assistant's list of Groups, as it reads it on its next call. */
+    const listGroups = async () => {
+      const listed = await request.post(resource, {
+        headers: {
+          Authorization: `Bearer ${issued.access_token}`,
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json',
+        },
+        data: {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'list_groups', arguments: {} },
+        },
+      });
+      expect(listed.status()).toBe(200);
+      return listed.text();
+    };
+    const reply = await listGroups();
     expect(reply).toContain('Banyan Court Flat 4B');
     expect(reply).not.toContain(NOT_ALLOWED);
     if (allowPreparation) expect(reply).not.toContain('Kochi to Alleppey');
     else expect(reply).toContain('Kochi to Alleppey');
+    // Its own page (#620): a Group unticked and saved there leaves the assistant's next call,
+    // with the same token, and comes back once ticked again.
+    if (!allowPreparation) {
+      const listing = await page.request.get('/api/auth/mcp/connections');
+      const connections = (await listing.json()).connections as { id: string; clientId: string }[];
+      const own = connections.find((connection) => connection.clientId === clientId)!;
+      await page.goto(`/settings/assistants/${own.id}`);
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Fictional consent test assistant' }),
+      ).toBeVisible();
+      const onItsPage = page.getByRole('group', { name: 'Which Groups' });
+      const banyan = onItsPage.getByRole('checkbox', { name: /^Banyan Court Flat 4B/ });
+      const save = page.getByRole('button', { name: 'Save changes', exact: true });
+      await banyan.uncheck();
+      await save.click();
+      await expect(page.getByText(/^Saved\. /)).toBeVisible();
+      expect(await listGroups()).not.toContain('Banyan Court Flat 4B');
+      const accessibility = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        .analyze();
+      expect(accessibility.violations).toEqual([]);
+      await banyan.check();
+      await save.click();
+      await expect(save).toBeDisabled();
+      expect(await listGroups()).toContain('Banyan Court Flat 4B');
+    }
     // Asked to approve the same assistant again, the page starts from the choice in force,
     // never from every Group ticked (#617).
     await page.goto(

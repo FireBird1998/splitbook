@@ -1968,6 +1968,110 @@ export function connectionTests(mongo = false) {
       ).toBe(403);
       expect((await refresh(refreshed.refresh_token)).ok).toBe(false);
     });
+    /** One assistant's page (#620): its Groups, changed without a new consent. */
+    const setAssistantGroups = (id: string, excludedGroupIds: unknown) =>
+      post('/mcp/connection-groups', { id, excludedGroupIds }, true);
+    const readAssistant = (id: string) =>
+      fetch(`${origin}/api/auth/mcp/connection?${new URLSearchParams({ id })}`, {
+        headers: { cookie },
+      });
+    const connectionOf = async (client: string) =>
+      ((await connectionList()) as Array<{ id: string; clientId?: string }>).find(
+        (row) => row.clientId === client,
+      )!;
+
+    it('lists and reads each assistant with the Groups it leaves out (#620)', () =>
+      withAnotherClient('Synthetic Page Client', async () => {
+        const leftOut = 'c00000000000000000000625';
+        await authorizeCode(false, false, false, [leftOut]);
+        const listed = await connectionOf(clientId);
+        expect(listed).toMatchObject({ excludedGroupIds: [leftOut] });
+        const read = await readAssistant(listed.id);
+        expect(read.status).toBe(200);
+        expect(await read.json()).toEqual(listed);
+      }));
+
+    it('changes only the member’s own live assistant, and only with Group ids (#620)', () =>
+      withAnotherClient('Synthetic Guarded Client', async () => {
+        await authorizeCode();
+        const own = await connectionOf(clientId);
+        for (const excluded of [['not-a-group'], 'c00000000000000000000626', [42]])
+          expect((await setAssistantGroups(own.id, excluded)).status, String(excluded)).toBe(400);
+        const saved = await setAssistantGroups(own.id, ['c00000000000000000000626']);
+        expect(saved.status).toBe(200);
+        expect(await saved.json()).toEqual({ excludedGroupIds: ['c00000000000000000000626'] });
+        // Another account's live connection is not found by its id, to read or to change.
+        const adapter = (await auth.$context).adapter;
+        const strangerConsent = await adapter.create<{ id: string }>({
+          model: 'oauthConsent',
+          data: {
+            userId: '000000000000000000000620',
+            clientId,
+            scopes: [MCP_LEDGER_SCOPE],
+            referenceId: 'stranger-generation',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+        const stranger = await adapter.create<{ id: string }>({
+          model: 'mcpConnection',
+          data: {
+            key: JSON.stringify(['000000000000000000000620', clientId]),
+            userId: '000000000000000000000620',
+            clientId,
+            generation: 'stranger-generation',
+            createdAt: new Date(),
+            excludedGroupIds: [],
+          },
+        });
+        try {
+          expect((await setAssistantGroups(stranger.id, [])).status).toBe(404);
+          expect((await readAssistant(stranger.id)).status).toBe(404);
+        } finally {
+          await adapter.delete({
+            model: 'mcpConnection',
+            where: [{ field: 'id', value: stranger.id }],
+          });
+          await adapter.delete({
+            model: 'oauthConsent',
+            where: [{ field: 'id', value: strangerConsent.id }],
+          });
+        }
+        // Nor is a disconnected one.
+        expect((await post('/mcp/revoke', { id: own.id }, true)).status).toBe(200);
+        expect((await setAssistantGroups(own.id, [])).status).toBe(404);
+        expect((await readAssistant(own.id)).status).toBe(404);
+      }));
+
+    if (mongo)
+      it('applies the Groups changed on an assistant’s page to its next call, without a new consent (#620)', async () => {
+        const db = mongoClient!.db();
+        const user = await db.collection('users').findOne({ email: 'connection@example.test' });
+        const [kept, toggled] = Array.from({ length: 2 }, () => new mongoose.Types.ObjectId());
+        await db
+          .collection('groups')
+          .insertMany([
+            exclusionGroup(kept, 'Page Kept Flat', user!._id),
+            exclusionGroup(toggled, 'Page Toggled Club', user!._id),
+          ]);
+        const grant = await authorizeClient();
+        const { id } = await connectionOf(clientId);
+        await withExcludedGroupClient(grant.access_token, async (reply) => {
+          expect((await reply('list_groups', {})).text).toContain('Page Toggled Club');
+          expect((await setAssistantGroups(id, [String(toggled)])).status).toBe(200);
+          const without = await reply('list_groups', {});
+          expect(without.text).toContain('Page Kept Flat');
+          expect(without.text).not.toContain('Page Toggled Club');
+          expect(await reply('group_context', { groupId: String(toggled) })).toEqual({
+            isError: true,
+            text: 'Group not found',
+          });
+          // Ticked again: back at the next call, on the same token.
+          expect((await setAssistantGroups(id, [])).status).toBe(200);
+          expect((await reply('list_groups', {})).text).toContain('Page Toggled Club');
+        });
+      });
+
     // Keep these last: freshConnection revokes every connection, invalidating the earlier
     // tests' shared credentials. Each inactivity scenario establishes its own fresh grant.
     describe('inactivity expiry', () => {
@@ -2107,6 +2211,24 @@ export function connectionTests(mongo = false) {
           await approvalRequest();
           expect(approvalShown).toMatchObject({ excludedGroupIds: [laterLeftOut] });
           expect(await heldChoices()).toEqual([]);
+        } finally {
+          vi.useRealTimers();
+          await signIn();
+        }
+      });
+
+      it('neither reads nor changes an expired assistant’s Groups (#620, #618)', async () => {
+        const start = Math.floor(Date.now() / 1000) * 1000;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(start);
+        try {
+          await freshConnection();
+          const { id } = (await connectionList())[0];
+          expect((await readAssistant(id)).status).toBe(200);
+          vi.setSystemTime(start + 90 * day);
+          await signIn();
+          expect((await readAssistant(id)).status).toBe(404);
+          expect((await setAssistantGroups(id, [])).status).toBe(404);
         } finally {
           vi.useRealTimers();
           await signIn();

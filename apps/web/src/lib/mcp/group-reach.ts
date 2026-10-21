@@ -1,7 +1,7 @@
 import type { AuthContext } from 'better-auth';
-import { assistantDisplay, assistantForApproval } from './assistant-name';
+import { connectionName } from './assistant-name';
 import type { AuthEnv } from '@/lib/auth/create-auth';
-import { isMcpConnectionExpired, type McpConnection, type McpConsent } from './grants';
+import { liveMcpConsent, type McpConnection } from './grants';
 
 type Adapter = Pick<AuthContext['adapter'], 'findMany' | 'findOne'>;
 
@@ -39,23 +39,11 @@ export async function groupReach(
     });
     for (const row of rows) {
       if (row.excludedGroupIds?.includes(id)) continue;
-      const live = await adapter.findOne<McpConsent>({
-        model: 'oauthConsent',
-        where: [
-          { field: 'userId', value: row.userId },
-          { field: 'clientId', value: row.clientId },
-          { field: 'referenceId', value: row.generation },
-        ],
-      });
-      if (!live || isMcpConnectionExpired(row, live, env)) continue;
+      if (!(await liveMcpConsent(adapter, row, env))) continue;
       reach.push({
         member: { id: row.userId, name: names.get(row.userId) ?? '' },
-        // Named as Settings names it (#747): a stored name posing as another address, or none,
-        // gives the assistant's own host.
-        assistant:
-          row.name != null
-            ? assistantDisplay(row.clientId, row.name).name
-            : (await assistantForApproval(adapter, row.clientId)).name,
+        // Named as Settings names it (#747).
+        assistant: await connectionName(adapter, row),
         lastUsedAt: row.lastUsedAt ?? null,
       });
     }
