@@ -564,13 +564,14 @@ describe('A Household’s Balances', () => {
   // room the title leaves, wrapping there, and the reason Record waits takes the caption's place.
   // #639: at 360dp and 200% that room was a column a letter wide, and the title sat out of sight
   // in the middle of the tall row; where the title leaves less than the caption's longest word,
-  // the caption goes on a line of its own under it.
+  // the caption goes on a line of its own under it. #612: "Settle up", shorter than "Suggested
+  // payments" was, leaves it that room at 200% in a Group with one currency.
   it.each([
     [360, 1, 'beside'],
     [360, 1.3, 'beside'],
     [412, 1.3, 'beside'],
-    [360, 2, 'under'],
-    [412, 2, 'under'],
+    [360, 2, 'beside'],
+    [412, 2, 'beside'],
   ])(
     'the payments’ caption fits beside its title, %sdp wide at %s× text, or %s it',
     (width, scale, place) => {
@@ -586,7 +587,7 @@ describe('A Household’s Balances', () => {
           return type === 'View' && style.flexDirection === 'row' && style.minHeight === 32;
         }).filter((node) =>
           findHosts(node, (_props, type) => type === 'Text').some((title) =>
-            (title.children ?? []).includes('Suggested payments'),
+            (title.children ?? []).includes('Settle up'),
           ),
         );
         const [title, caption] = row!.children as ReactTestRendererJSON[];

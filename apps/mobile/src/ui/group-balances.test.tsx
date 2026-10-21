@@ -19,6 +19,7 @@ import type { PendingPayment } from '../data/settlement';
 import { findHosts, flatten, largeTextWindows, outerTexts, unreadText } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { hairSpace } from './compact';
+import { refreshedLabel } from './refresh-feedback';
 import { ThemeContext, fonts } from './theme';
 import {
   RecordPaymentSheet,
@@ -838,7 +839,7 @@ describe('Balances, one currency at a time (#725)', () => {
     const shown = text(root);
     expect(shown).toContain('All-time balance · INR');
     expect(labelled(root, 'You owe ₹1,480.00')).toHaveLength(2);
-    expect(shown).toContain('Suggested payments · INR');
+    expect(shown).toContain('Settle up · INR');
     expect(shown).toContain('Everyone · INR');
     expect(labelled(root, 'Sam Chen gets back ₹2,210.00')).toHaveLength(1);
     expect(shown).toContain('Each currency keeps its own balances. Nothing is converted.');
@@ -877,7 +878,7 @@ describe('Balances, one currency at a time (#725)', () => {
     expect(shown).toContain('All-time balance · JPY');
     expect(labelled(root, 'You’re owed ¥8,400')).toHaveLength(1);
     expect(labelled(root, 'You get back ¥8,400')).toHaveLength(1);
-    expect(shown).toContain('Suggested payments · JPY');
+    expect(shown).toContain('Settle up · JPY');
     expect(labelled(root, 'Sam Chen pays you, ¥8,400')).toHaveLength(1);
     // A Debt is recorded on its own currency's tab, in its currency (#728).
     expect(shown).toContain('Record one once it’s paid');
@@ -1080,4 +1081,361 @@ describe.each(['light', 'dark'] as const)('a settled currency’s tab in %s (#77
     // The tab beside it keeps its amount.
     expect(text(labelled(root, 'EUR, you owe €20.00')[0]!)).toContain('−€20.00');
   });
+});
+
+// #612, boards "Before simplifying" (#609): the section is "Settle up", and a switch in it shows
+// the Debts before simplifying in place of the member's Suggested payments, as on the web. A
+// reply or Saved copy without Debts keeps Suggested alone.
+describe('Settle up, suggested or before simplifying (#612)', () => {
+  const alex = person(you, 'Alex Rivera'),
+    samChen = person(sam, 'Sam Chen'),
+    priyaShah = person(priya, 'Priya Shah');
+  const trip = (): MobileGroup => ({
+    ...group('trip'),
+    name: 'Lisbon & Tokyo',
+    alternateCurrencies: ['EUR', 'JPY'],
+  });
+  /** Board "Before simplifying": 2 payments settle the same 3 Debts. */
+  const rupees: GroupCurrencyBalance = {
+    currency: 'INR',
+    balances: [
+      { user: alex, balance: -1480 },
+      { user: samChen, balance: 2210 },
+      { user: priyaShah, balance: -730 },
+    ],
+    debts: [
+      { from: alex, to: samChen, amount: 1480 },
+      { from: priyaShah, to: samChen, amount: 730 },
+    ],
+    debtsBeforeSimplifying: [
+      { from: alex, to: samChen, amount: 2390 },
+      { from: priyaShah, to: alex, amount: 910 },
+      { from: samChen, to: priyaShah, amount: 180 },
+    ],
+  };
+  /** Board "no note": as many payments as Debts. */
+  const euros: GroupCurrencyBalance = {
+    currency: 'EUR',
+    balances: [
+      { user: alex, balance: -20 },
+      { user: samChen, balance: 64.5 },
+      { user: priyaShah, balance: -44.5 },
+    ],
+    debts: [
+      { from: alex, to: samChen, amount: 20 },
+      { from: priyaShah, to: samChen, amount: 44.5 },
+    ],
+    debtsBeforeSimplifying: [
+      { from: alex, to: samChen, amount: 20 },
+      { from: priyaShah, to: samChen, amount: 44.5 },
+    ],
+  };
+  /** From an older server, or a copy saved before this update: no Debts. */
+  const yen: GroupCurrencyBalance = {
+    currency: 'JPY',
+    balances: [
+      { user: alex, balance: 8400 },
+      { user: samChen, balance: -8400 },
+    ],
+    debts: [{ from: samChen, to: alex, amount: 8400 }],
+  };
+  const note = '2 payments settle the same 3 debts. Everyone ends settled up either way.';
+  const view = (
+    data: GroupCurrencyBalance[],
+    props: Partial<Parameters<typeof GroupBalancesView>[0]> = {},
+    theme = getSemanticTokens('light'),
+  ) =>
+    render(
+      <ThemeContext.Provider value={theme}>
+        <GroupBalancesView
+          group={data.length > 1 ? trip() : group()}
+          currentUserId={you}
+          state={financial({ data })}
+          pending={null}
+          offline={false}
+          onRecord={vi.fn()}
+          onCheckPayment={vi.fn()}
+          onRefreshBalances={() => undefined}
+          {...props}
+        />
+      </ThemeContext.Provider>,
+    );
+  const switches = (root: ReactTestInstance) =>
+    root.findAll(
+      (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'radiogroup',
+    );
+  /** Each option's name, and whether it is the view shown. */
+  const options = (root: ReactTestInstance) =>
+    switches(root)
+      .flatMap((group) =>
+        group.findAll(
+          (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'radio',
+        ),
+      )
+      .map((option) => [option.props.accessibilityLabel, option.props.accessibilityState?.checked]);
+  const press = (root: ReactTestInstance, label: string) => {
+    const [target] = labelled(root, label);
+    act(() => target!.props.onPress());
+  };
+  const debtRows = [
+    'You owe Sam Chen, ₹2,390.00',
+    'Priya Shah owes you, ₹910.00',
+    'Sam Chen owes Priya Shah, ₹180.00',
+  ];
+
+  it('names the section “Settle up” and opens on Suggested, with Record and its caption', () => {
+    const root = view([euros, rupees, yen]);
+    const shown = text(root);
+    expect(shown).toContain('Settle up · INR');
+    expect(shown).not.toContain('Suggested payments');
+    expect(switches(root).map((group) => group.props.accessibilityLabel)).toEqual([
+      'Settle up view',
+    ]);
+    expect(options(root)).toEqual([
+      ['Suggested', true],
+      ['Before simplifying', false],
+    ]);
+    expect(shown).toContain('Record one once it’s paid');
+    expect(labelled(root, 'You pay Sam Chen, ₹1,480.00')).toHaveLength(1);
+    expect(labelled(root, 'Record your payment to Sam Chen')).toHaveLength(1);
+    // The note counts payments Suggested doesn't list, so it stays out of it.
+    expect(shown).not.toContain(note);
+    expect(labelled(root, 'Debts before simplifying')).toHaveLength(0);
+  });
+
+  it('lists every Debt in the currency before simplifying, each read as one with nothing to record, and says how few payments settle them', () => {
+    const theme = getSemanticTokens('light');
+    const root = view([euros, rupees, yen], {}, theme);
+    press(root, 'Before simplifying');
+    expect(options(root)).toEqual([
+      ['Suggested', false],
+      ['Before simplifying', true],
+    ]);
+    expect(labelled(root, 'Debts before simplifying')).toHaveLength(1);
+    for (const row of debtRows) expect(labelled(root, row)).toHaveLength(1);
+    expect(labelled(root, 'You pay Sam Chen, ₹1,480.00')).toHaveLength(0);
+    expect(labelled(root, 'Record your payment to Sam Chen')).toHaveLength(0);
+    const shown = text(root);
+    expect(shown).toContain('Settle up · INR');
+    expect(shown).not.toContain('Record one once it’s paid');
+    expect(shown).toContain(note);
+    // A Debt is neither good nor bad news: its amount is in the text colour, never red or green.
+    for (const amount of ['₹2,390.00', '₹910.00', '₹180.00']) {
+      // The outermost text that reads the amount: the one that paints it.
+      const [words] = root.findAll((node) => isHost(node, 'Text') && text(node) === amount);
+      expect(flatten(words!.props.style).color).toBe(theme.text);
+    }
+
+    press(root, 'Suggested');
+    expect(labelled(root, 'You pay Sam Chen, ₹1,480.00')).toHaveLength(1);
+    expect(text(root)).not.toContain(note);
+  });
+
+  it('says “1 payment settles” when one payment settles the Debts', () => {
+    const root = view([
+      {
+        currency: 'INR',
+        balances: [
+          { user: alex, balance: -1480 },
+          { user: samChen, balance: 1480 },
+          { user: priyaShah, balance: 0 },
+        ],
+        debts: [{ from: alex, to: samChen, amount: 1480 }],
+        debtsBeforeSimplifying: [
+          { from: alex, to: priyaShah, amount: 1480 },
+          { from: priyaShah, to: samChen, amount: 1480 },
+        ],
+      },
+    ]);
+    // One currency: the section's title names none, as the others don't.
+    expect(text(root)).toContain('Settle up');
+    expect(text(root)).not.toContain('Settle up · INR');
+    press(root, 'Before simplifying');
+    expect(labelled(root, 'You owe Priya Shah, ₹1,480.00')).toHaveLength(1);
+    expect(labelled(root, 'Priya Shah owes Sam Chen, ₹1,480.00')).toHaveLength(1);
+    expect(text(root)).toContain(
+      '1 payment settles the same 2 debts. Everyone ends settled up either way.',
+    );
+  });
+
+  it('leaves the note out when there are as many payments as Debts', () => {
+    const root = view([euros, rupees, yen]);
+    press(root, 'EUR, you owe €20.00');
+    press(root, 'Before simplifying');
+    expect(labelled(root, 'You owe Sam Chen, €20.00')).toHaveLength(1);
+    expect(labelled(root, 'Priya Shah owes Sam Chen, €44.50')).toHaveLength(1);
+    expect(text(root)).not.toContain('settle the same');
+  });
+
+  it('goes back to Suggested when another currency is shown', () => {
+    const root = view([euros, rupees, yen]);
+    press(root, 'Before simplifying');
+    press(root, 'EUR, you owe €20.00');
+    expect(options(root)).toEqual([
+      ['Suggested', true],
+      ['Before simplifying', false],
+    ]);
+    press(root, 'Before simplifying');
+    press(root, 'INR, main currency, you owe ₹1,480.00');
+    expect(options(root)).toEqual([
+      ['Suggested', true],
+      ['Before simplifying', false],
+    ]);
+    expect(labelled(root, 'You pay Sam Chen, ₹1,480.00')).toHaveLength(1);
+  });
+
+  it('shows Suggested alone, with no switch, for a reply without Debts', () => {
+    const root = view([euros, rupees, yen]);
+    press(root, 'JPY, you’re owed ¥8,400');
+    expect(text(root)).toContain('Settle up · JPY');
+    expect(text(root)).toContain('Record one once it’s paid');
+    expect(switches(root)).toHaveLength(0);
+    expect(labelled(root, 'Record Sam Chen’s payment to you')).toHaveLength(1);
+    act(() => screen?.unmount());
+
+    // The Balances destination's own fixture: a reply from before #612.
+    const older = view([inr]);
+    expect(switches(older)).toHaveLength(0);
+    expect(labelled(older, 'You pay Sam Chen, ₹1,060.00')).toHaveLength(1);
+  });
+
+  it('shows no switch where the member has no payment to record', () => {
+    const root = view([
+      {
+        currency: 'INR',
+        balances: [
+          { user: alex, balance: 0 },
+          { user: samChen, balance: 100 },
+          { user: priyaShah, balance: -100 },
+        ],
+        debts: [{ from: priyaShah, to: samChen, amount: 100 }],
+        debtsBeforeSimplifying: [{ from: priyaShah, to: samChen, amount: 100 }],
+      },
+    ]);
+    expect(switches(root)).toHaveLength(0);
+    expect(labelled(root, 'Debts before simplifying')).toHaveLength(0);
+  });
+
+  it('shows the Saved copy’s Debts offline, the switch still working while Record waits for a connection', () => {
+    const root = view([rupees], {
+      offline: true,
+      state: financial({ data: [rupees], restored: true }),
+    });
+    expect(text(root)).toContain(`Saved ${refreshedLabel(at.getTime())}`);
+    const [record] = labelled(root, 'Record your payment to Sam Chen');
+    expect(record!.props.accessibilityState?.disabled).toBe(true);
+    expect(text(root)).toContain(recordNeedsConnection);
+    press(root, 'Before simplifying');
+    for (const row of debtRows) expect(labelled(root, row)).toHaveLength(1);
+    expect(text(root)).toContain(note);
+  });
+});
+
+// #612 boards at 130% and 200%: from 150% text the switch's options stack, one a row, the chosen
+// one checked; a Debt's row, as a Suggested payment's, keeps its avatars beside its first line
+// from 130% (#792); and everything reads in full.
+describe.each(['light', 'dark'] as const)('Settle up at large text in %s (#612)', (mode) => {
+  const alex = person(you, 'Alex Rivera'),
+    samChen = person(sam, 'Sam Chen'),
+    priyaShah = person(priya, 'Priya Shah');
+  const rupees: GroupCurrencyBalance = {
+    currency: 'INR',
+    balances: [
+      { user: alex, balance: -1480 },
+      { user: samChen, balance: 2210 },
+      { user: priyaShah, balance: -730 },
+    ],
+    debts: [
+      { from: alex, to: samChen, amount: 1480 },
+      { from: priyaShah, to: samChen, amount: 730 },
+    ],
+    debtsBeforeSimplifying: [
+      { from: alex, to: samChen, amount: 2390 },
+      { from: priyaShah, to: alex, amount: 910 },
+      { from: samChen, to: priyaShah, amount: 180 },
+    ],
+  };
+  const show = () => {
+    const root = render(
+      <ThemeContext.Provider value={getSemanticTokens(mode)}>
+        <GroupBalancesView
+          group={{ ...group('trip'), alternateCurrencies: ['EUR'] }}
+          currentUserId={you}
+          state={financial({
+            data: [
+              rupees,
+              {
+                currency: 'EUR',
+                balances: [
+                  { user: alex, balance: -20 },
+                  { user: samChen, balance: 20 },
+                ],
+                debts: [{ from: alex, to: samChen, amount: 20 }],
+                debtsBeforeSimplifying: [{ from: alex, to: samChen, amount: 20 }],
+              },
+            ],
+          })}
+          pending={null}
+          offline={false}
+          onRecord={vi.fn()}
+          onCheckPayment={vi.fn()}
+          onRefreshBalances={() => undefined}
+        />
+      </ThemeContext.Provider>,
+    );
+    return root;
+  };
+  const tree = () => screen!.toJSON() as ReactTestRendererJSON;
+  /** The row that holds what is read as `label`. */
+  const row = (label: string) =>
+    findHosts(
+      tree(),
+      (props, type) => type === 'View' && flatten(props.style).minHeight === 60,
+    ).filter(
+      (node) => findHosts(node, (props) => props.accessibilityLabel === label).length > 0,
+    )[0]!;
+
+  it.each(largeTextWindows)(
+    'Suggested and Before simplifying read in full, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      const root = show();
+      // The screen's content is inset 16dp on each side.
+      expect(unreadText(tree(), size.fontScale, size.width - 32)).toEqual([]);
+      const [before] = labelled(root, 'Before simplifying');
+      act(() => before!.props.onPress());
+      expect(unreadText(tree(), size.fontScale, size.width - 32)).toEqual([]);
+    },
+  );
+
+  it.each([
+    { fontScale: 1, options: 'row', rows: 'center' },
+    { fontScale: 1.3, options: 'row', rows: 'flex-start' },
+    { fontScale: 2, options: 'column', rows: 'flex-start' },
+  ])(
+    '$fontScale× text, 360dp: the options lay out in a $options, and a row aligns its avatars $rows',
+    (size) => {
+      setWindow({ width: 360, height: 640, fontScale: size.fontScale });
+      const root = show();
+      expect(flatten(row('You pay Sam Chen, ₹1,480.00').props.style).alignItems).toBe(size.rows);
+      const [before] = labelled(root, 'Before simplifying');
+      act(() => before!.props.onPress());
+      const [group] = findHosts(tree(), (props) => props.accessibilityRole === 'radiogroup');
+      expect(flatten(group!.props.style).flexDirection ?? 'row').toBe(size.options);
+      const checks = (label: string) => {
+        const [option] = findHosts(
+          group!,
+          (props) => props.accessibilityRole === 'radio' && props.accessibilityLabel === label,
+        );
+        return findHosts(option!, (props) => props.name === 'checkmark').length;
+      };
+      // Stacked, the chosen option is checked; side by side, its fill says so.
+      expect([checks('Suggested'), checks('Before simplifying')]).toEqual(
+        size.options === 'column' ? [0, 1] : [0, 0],
+      );
+      expect(flatten(row('Sam Chen owes Priya Shah, ₹180.00').props.style).alignItems).toBe(
+        size.rows,
+      );
+    },
+  );
 });

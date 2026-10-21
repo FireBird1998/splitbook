@@ -2498,7 +2498,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
       const height = contentHeight(scale);
       expect(seen()).toContain(`All-time balance · INRUpdated ${readAt}You owe₹30.00`);
       // A section's title keeps a hair space to spare (#639).
-      expect(seen()).toContain('Suggested payments\u200aRecord one once it’s paid');
+      expect(seen()).toContain('Settle up\u200aRecord one once it’s paid');
 
       // Alex records the ₹30.00 owed to Sam; it is confirmed, and Balances are read again after it.
       phone.clock.now += 2 * 60_000;
@@ -2512,7 +2512,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
       // The old debt says it is being updated, where its time was, and Record says why it waits,
       // where its caption was: nothing moves.
       expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
-      expect(seen()).toContain('Suggested payments\u200aRecord once updated');
+      expect(seen()).toContain('Settle up\u200aRecord once updated');
       expect(seen()).not.toContain(`Updated ${readAt}`);
       expect(app.disabled('Record your payment to Sam Chen')).toBe(true);
       expect(contentHeight(scale)).toBe(height);
@@ -2571,7 +2571,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     const since = sent.slice(sent.indexOf(`POST /api/groups/${maple}/settlements`) + 1);
     expect(since.filter((request) => /\/(expenses\?|balances$)/.test(request))).toEqual([]);
     expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
-    expect(seen()).toContain('Suggested payments\u200aRecord once updated');
+    expect(seen()).toContain('Settle up\u200aRecord once updated');
     // Nothing fades from the old time or caption into these: neither is drawn at any opacity
     // beside "Payment recorded".
     expect(fading()).not.toContain(`Updated ${readAt}`);
@@ -2630,7 +2630,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
 
     await app.press('JPY, you’re owed ¥8,400');
     expect(seen()).toContain('All-time balance · JPY');
-    expect(seen()).toContain('Suggested payments · JPY');
+    expect(seen()).toContain('Settle up · JPY');
     // Sam's yen Debt is recorded on its own tab (#728).
     expect(seen()).toContain('Record one once it’s paid');
     expect(app.button('Record Sam Chen’s payment to you')).not.toBeNull();
