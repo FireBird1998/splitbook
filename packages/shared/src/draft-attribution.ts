@@ -11,7 +11,10 @@ export function cleanPublishedAssistantName(name: string): string | null {
     .replace(/[\p{Cc}\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/gu, '')
     .replace(/\s+/gu, ' ')
     .trim();
-  return Array.from(cleaned).slice(0, 40).join('').trim() || null;
+  const characters = Array.from(cleaned);
+  // A name cut at 40 characters says so (#614).
+  const shown = characters.length > 40 ? `${characters.slice(0, 39).join('').trim()}…` : cleaned;
+  return shown || null;
 }
 
 /** An assistant's name as Draft attribution and Settings show it: cleaned, else Assistant. */

@@ -35,10 +35,20 @@ function metadataDocumentUrl(clientId: string) {
   }
 }
 
-/** A name that carries a scheme, or a hostname other than the assistant's own. */
+/**
+ * What reads as a dot in a hostname once NFKC has folded the compatibility forms (U+2024, U+FF0E,
+ * U+FE52 and the like): ideographic and Syriac full stops, and bracketed dots such as "[.]".
+ */
+const DOT_LOOKALIKE = /[\u3002\uff61\u0701\u0702\u2e33]|[[(]\s*\.\s*[\])]/gu;
+
+/**
+ * A name that carries a scheme, or a hostname other than the assistant's own, once look-alike
+ * characters are read as what they look like. The name shown stays as cleaned.
+ */
 function posesAsAddress(name: string, hostname: string | undefined) {
-  if (name.includes('://')) return true;
-  const named = name.toLowerCase().match(/(?:[\p{L}\p{N}-]+\.)+\p{L}{2,}/gu) ?? [];
+  const plain = name.normalize('NFKC').replace(DOT_LOOKALIKE, '.').toLowerCase();
+  if (plain.includes('://')) return true;
+  const named = plain.match(/(?:[\p{L}\p{N}-]+\.)+\p{L}{2,}/gu) ?? [];
   return named.some((host) => !hostname || (host !== hostname && !hostname.endsWith(`.${host}`)));
 }
 
@@ -46,7 +56,7 @@ function posesAsAddress(name: string, hostname: string | undefined) {
  * How the approval page names an assistant (#614): by the name its metadata document publishes,
  * cleaned as Draft attribution cleans it, else by its address's host. A name with no letter or
  * number, or one posing as another address, is no name. The address shown beside it is host and
- * path, so publishers on one host can be told apart. A registered client's id is not an address,
+ * path, never a query, so publishers on one host can be told apart. A registered client's id is not an address,
  * so it has none.
  */
 export function assistantDisplay(
@@ -61,7 +71,7 @@ export function assistantDisplay(
       : null;
   return {
     name: trusted ?? url?.host ?? 'Assistant',
-    address: url ? `${url.host}${url.pathname}${url.search}` : null,
+    address: url ? `${url.host}${url.pathname}` : null,
   };
 }
 
