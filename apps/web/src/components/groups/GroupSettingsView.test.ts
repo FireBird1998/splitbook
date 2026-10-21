@@ -13,7 +13,7 @@ const ADMIN = 'b00000000000000000000001';
 const MEMBER = 'b00000000000000000000002';
 const GROUP = 'b00000000000000000000010';
 
-const read = vi.hoisted(() => ({ category: 'home' }));
+const read = vi.hoisted(() => ({ category: 'home', assistantRule: 'allowed' }));
 
 vi.mock('@/lib/hooks/use-groups', () => ({
   useGroup: () => ({
@@ -27,6 +27,7 @@ vi.mock('@/lib/hooks/use-groups', () => ({
       startDate: null,
       endDate: null,
       isArchived: false,
+      assistantRule: read.assistantRule,
       createdBy: ADMIN,
       members: [
         {
@@ -54,7 +55,12 @@ vi.mock('@/lib/hooks/use-groups', () => ({
 function settingsPage(category: string, recurringExpensesEnabled: boolean) {
   read.category = category;
   const html = renderToStaticMarkup(
-    createElement(GroupSettingsView, { groupId: GROUP, userId: ADMIN, recurringExpensesEnabled }),
+    createElement(GroupSettingsView, {
+      groupId: GROUP,
+      userId: ADMIN,
+      recurringExpensesEnabled,
+      assistantsAvailable: false,
+    }),
   );
   return {
     members: html.includes('Members (2)'),
@@ -75,5 +81,34 @@ describe('the Group settings page’s recurring section', () => {
     for (const category of ['trip', 'couple', 'work', 'other']) {
       expect(settingsPage(category, true), category).toEqual({ members: true, recurring: false });
     }
+  });
+});
+
+describe('the Group settings page’s Assistants section (#621)', () => {
+  const assistants = (userId: string, assistantsAvailable: boolean) => {
+    read.assistantRule = 'not_allowed';
+    const html = renderToStaticMarkup(
+      createElement(GroupSettingsView, {
+        groupId: GROUP,
+        userId,
+        recurringExpensesEnabled: false,
+        assistantsAvailable,
+      }),
+    );
+    return {
+      section: html.includes('Assistants in Synthetic Lakeview Flat'),
+      rule: html.includes('Not allowed'),
+      choice: html.includes('type="radio"'),
+    };
+  };
+
+  it('shows the Group’s rule to its admin to change, and to a member to read', () => {
+    expect(assistants(ADMIN, true)).toEqual({ section: true, rule: true, choice: true });
+    expect(assistants(MEMBER, true)).toEqual({ section: true, rule: true, choice: false });
+  });
+
+  it('is absent where assistants can’t connect', () => {
+    expect(assistants(ADMIN, false).section).toBe(false);
+    expect(assistants(MEMBER, false).section).toBe(false);
   });
 });
