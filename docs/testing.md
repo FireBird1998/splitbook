@@ -124,6 +124,25 @@ with no mocked models. Of the 60 files:
 - **The rest**: the four data migrations, the demo seed and its reset, Group cleanup (with the
   standalone-compatibility file), the MCP connection and the Auth.js to Better Auth migration.
 
+### Demo seed checks under load
+
+`vitest.seed-load.config.ts` runs only the two demo-seed integration files, with one worker
+and the same assertions as the ordinary suite. Its setup adds 10 ms to each ledger read,
+write and transaction commit for the `splitbook-seed-load` application name, simulating
+contended database responses without CPU stress processes. It removes the delay on teardown.
+Use a **dedicated** local `mongo:7.0.39` replica set started with
+`--setParameter enableTestCommands=1`; never point this runner at a shared server.
+
+```sh
+# Supply your isolated replica-set port. Normal integration checks do not add any delay.
+TEST_MONGODB_URI='mongodb://127.0.0.1:27740/?directConnection=true' \
+  pnpm web test --config vitest.seed-load.config.ts
+```
+
+Run the command five consecutive times when changing seed setup (#740). Keep the container
+for those runs, then remove it and its volumes. The load configuration does not raise any
+suite's timeout.
+
 ### Database isolation
 
 [`src/lib/test-utils/integration-db.ts`](../apps/web/src/lib/test-utils/integration-db.ts):
