@@ -32,6 +32,7 @@ import type { ExpenseSplitMethod } from '@splitbook/shared/split-calculation';
 import { type ExpenseDraftValues } from '@splitbook/shared/expense-draft';
 import { type ExpenseCurrencyChoice } from '@splitbook/shared/group-currencies';
 import Menu from '@mui/material/Menu';
+import Divider from '@mui/material/Divider';
 import InputAdornment from '@mui/material/InputAdornment';
 import CheckIcon from '@mui/icons-material/Check';
 
@@ -74,6 +75,11 @@ export interface ExpenseFieldsProps {
   currencyChoices?: ExpenseCurrencyChoice[];
   /** Why the form started in its currency, such as the member's latest Expense's (#719). */
   currencyHint?: string | null;
+  /**
+   * The picker's "Add a currency…" (#722), with what it does, such as "Adds it to Lisbon & Tokyo
+   * for everyone": it adds one to the Group for this Expense. Absent where none can be added.
+   */
+  addCurrency?: { note: string; onAdd: () => void };
   currentTag?: string | null;
   currentTagId?: string | null;
   previewAmount: (id: string) => string;
@@ -96,6 +102,7 @@ export default function ExpenseFields({
   groupCurrency,
   currencyChoices,
   currencyHint = null,
+  addCurrency,
 }: ExpenseFieldsProps) {
   const {
     description,
@@ -139,7 +146,8 @@ export default function ExpenseFields({
     name: known?.name ?? currency,
     symbol: known?.symbol ?? currency,
   };
-  const changeable = choices.length > 1;
+  // A Group in one currency still opens the picker to add one (#722).
+  const changeable = choices.length > 1 || !!addCurrency;
   const [currencyMenu, setCurrencyMenu] = useState<HTMLElement | null>(null);
   const currencyListId = useId();
   const unit = wholeUnit(currency);
@@ -445,6 +453,28 @@ export default function ExpenseFields({
                 {choice.code === currency && <CheckIcon fontSize="small" color="primary" />}
               </MenuItem>
             ))}
+            {addCurrency && <Divider sx={{ my: 0.75 }} />}
+            {addCurrency && (
+              <MenuItem
+                role="option"
+                aria-selected={false}
+                onClick={() => {
+                  setCurrencyMenu(null);
+                  addCurrency.onAdd();
+                }}
+                sx={{ gap: 1.5, minHeight: 44, minWidth: 280 }}
+              >
+                <AddIcon fontSize="small" color="primary" sx={{ minWidth: 40 }} />
+                <Box component="span" sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                  <Box component="span" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                    Add a currency…
+                  </Box>
+                  <Box component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                    {addCurrency.note}
+                  </Box>
+                </Box>
+              </MenuItem>
+            )}
           </Menu>
           {!review && currencyHint && (
             <Typography variant="caption" color="text.secondary" sx={{ mx: 1.75, mt: 0.5 }}>

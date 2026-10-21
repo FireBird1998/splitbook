@@ -2,6 +2,7 @@ import { Pressable, View } from 'react-native';
 import { getCurrencyPrecision } from '@splitbook/shared/currency';
 import type { ExpenseCurrencyChoice } from '@splitbook/shared/group-currencies';
 import { Banner, BottomSheet, CompactText, radius, touch, useTap } from './compact';
+import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 
 /** "Your latest Expense here · whole amounts only": why a currency is offered, and its rule. */
@@ -24,7 +25,8 @@ function choiceLabel(choice: ExpenseCurrencyChoice) {
  * Choosing an Expense's currency (#720, board "Pick the currency"): the Group's currencies as
  * radios, the member's latest Expense's first, then the main currency, then the others, as on
  * the web. Choosing one closes the sheet and keeps the number typed; nothing is converted.
- * Offline, the choices are the ones saved on this phone, and picking one still works.
+ * Offline, the choices are the ones saved on this phone, and picking one still works. "Add a
+ * currency" adds one to the Group (#722); it needs a connection.
  */
 export function CurrencySheet({
   visible,
@@ -34,6 +36,7 @@ export function CurrencySheet({
   locked,
   offline,
   onChoose,
+  onAdd,
   onDone,
 }: {
   visible: boolean;
@@ -44,6 +47,8 @@ export function CurrencySheet({
   locked: boolean;
   offline: boolean;
   onChoose: (currency: string) => void;
+  /** Adds a currency to the Group, while it has room for another; absent otherwise. */
+  onAdd?: () => void;
   onDone: () => void;
 }) {
   const theme = useTheme();
@@ -142,6 +147,48 @@ export function CurrencySheet({
           );
         })}
       </View>
+      {onAdd ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Add a currency. ${
+            offline ? 'Needs a connection' : `Adds it to ${groupName} for everyone`
+          }`}
+          accessibilityState={{ disabled: offline || locked }}
+          disabled={offline || locked}
+          {...tap.on(() => !offline && !locked && onAdd())}
+          style={({ pressed }) => ({
+            minHeight: touch.min,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 14,
+            marginHorizontal: -20,
+            paddingHorizontal: 20,
+            paddingVertical: 6,
+            opacity: offline || locked ? 0.5 : 1,
+            backgroundColor: pressed && !tap.dragged ? theme.surfaceMuted : undefined,
+          })}
+        >
+          <View
+            style={{
+              minWidth: 48,
+              paddingVertical: 4,
+              alignItems: 'center',
+              borderRadius: radius.tile,
+              backgroundColor: theme.brand.bg,
+            }}
+          >
+            <Icon name="add" size={20} color={theme.brand.main} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <CompactText weight="semibold" tone="brand">
+              Add a currency
+            </CompactText>
+            <CompactText variant="small" tone="secondary">
+              {offline ? 'Needs a connection' : `Adds it to ${groupName} for everyone`}
+            </CompactText>
+          </View>
+        </Pressable>
+      ) : null}
     </BottomSheet>
   );
 }
