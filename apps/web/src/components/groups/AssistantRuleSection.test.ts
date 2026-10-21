@@ -70,6 +70,13 @@ describe('a Group’s Assistant rule in its settings (#621)', () => {
     expect(page).toMatch(/Priya Shah Admin No assistant connected/);
   });
 
+  it('marks each member with their initials, as Balances and the approval page do', () => {
+    const page = text(section(ALEX, 'allowed'));
+    expect(page).toMatch(/AR You Admin/);
+    expect(page).toMatch(/SC Sam Chen Member/);
+    expect(page).toMatch(/PS Priya Shah Admin/);
+  });
+
   it('tells an admin no assistant reaches a Not allowed Group', () => {
     const page = text(section(PRIYA, 'not_allowed'));
     expect(page).toContain('No assistant can reach Maple House while assistants are Not allowed.');
