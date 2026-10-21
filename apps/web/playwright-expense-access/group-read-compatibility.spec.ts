@@ -1,3 +1,4 @@
+import { normaliseExtraCurrencies } from '@splitbook/shared/group-currencies';
 import { test, expect } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { readWebGroupListResponse } from '../src/lib/group-read';
@@ -21,12 +22,16 @@ test('authenticated Group list has the same meaning through web and native adapt
     defaultCurrency: 'INR',
   });
   expect(webGroup.tags.some((tag) => tag.name === 'Rent')).toBe(true);
+  const sent = payload.data.find((group: { _id: string }) => group._id === ledger.groupB);
   expect(mobileGroup).toEqual({
     id: webGroup._id,
     name: webGroup.name,
     description: webGroup.description,
     category: webGroup.category,
     defaultCurrency: webGroup.defaultCurrency,
+    // Android keeps the Group's extra currencies, normalised, and its latest Expense's (#720).
+    alternateCurrencies: normaliseExtraCurrencies(sent.defaultCurrency, sent.alternateCurrencies),
+    latestExpenseCurrency: sent.latestExpenseCurrency ?? null,
     startDate: null,
     endDate: null,
     createdAt: new Date(webGroup.createdAt),
