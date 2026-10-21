@@ -96,9 +96,10 @@ test('Balances shows one currency at a time, opening on the first Sam isn’t se
     .getByRole('button', { name: 'Show INR' })
     .click();
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
+  // Nothing is in rupees: settled up in INR, while euros and yen are still owed.
   await expect(
     page
       .getByRole('tabpanel', { name: 'INR, main currency, you’re settled up' })
-      .getByRole('region', { name: 'All-time balance', exact: true }),
-  ).toContainText(/You’re settled up\s*₹0\.00/);
+      .getByRole('region', { name: 'Balances', exact: true }),
+  ).toContainText('No one owes anyone in INR right now.');
 });
