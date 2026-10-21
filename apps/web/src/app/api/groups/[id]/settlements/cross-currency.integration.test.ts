@@ -21,7 +21,7 @@ vi.mock('next/server', async (original) =>
   (await import('@/lib/test-utils/signed-in-route')).nextServer(original),
 );
 const db = integrationTestDb('cross-currency-settlements');
-const { alex, sam } = DEMO_PERSONA_IDS;
+const { alex, sam, priya } = DEMO_PERSONA_IDS;
 let settlements: typeof import('./route');
 let balances: typeof import('../balances/route');
 let activity: typeof import('../activity/route');
@@ -192,6 +192,102 @@ describe('cross-currency Settlement HTTP contract (#727)', () => {
       )?.metadata,
     ).toMatchObject({ amountMinor: 2000, ...rateFields });
   });
+  it.each([20, 5, 21])(
+    'stores the signed simplified pair Debt before and after clearing EUR %s',
+    async (amount) => {
+      const id = await trip();
+      const body = { ...payment, amount, amountPaidMinor: amount * 9250 };
+      const snapshot = {
+        pairDebtBeforeMinor: -2000,
+        pairDebtAfterMinor: { 20: 0, 5: -1500, 21: 100 }[amount],
+      };
+      const saved = await record(id, {
+        ...body,
+        pairDebtBeforeMinor: 999,
+        pairDebtAfterMinor: 999,
+      });
+      expect(saved.status).toBe(201);
+      expect(saved.body.data).toMatchObject(snapshot);
+      // Later ledger changes and an idempotent retry must not rewrite this historical snapshot.
+      await expenseService.create(
+        id,
+        {
+          description: 'Later fictional dinner',
+          amount: 80,
+          currency: 'EUR',
+          category: 'food',
+          tag: 'Food',
+          date: new Date('2026-10-22T12:00:00Z'),
+          paidBy: [{ user: alex, amount: 80 }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: alex }, { user: sam }],
+        },
+        alex,
+      );
+      expect((await record(id, body)).body.data).toMatchObject({
+        _id: saved.body.data._id,
+        ...snapshot,
+      });
+      expect((await read(id)).body.data[0]).toMatchObject(snapshot);
+      const page = await callRoute(activity.GET, {
+        method: 'GET',
+        path: `/api/groups/${id}/activity`,
+        params: { id },
+        cookie,
+      });
+      expect(
+        parseActivityPageResponse(page.body).activities.find(
+          (event) => event.type === 'settlement_recorded',
+        )?.metadata,
+      ).toMatchObject(snapshot);
+      const home = await callRoute(homeActivity.GET, {
+        method: 'GET',
+        path: '/api/user/activity',
+        cookie,
+      });
+      expect(
+        parseUserActivityResponse(home.body).activities.find(
+          (event) => event.type === 'settlement_recorded',
+        )?.metadata,
+      ).toMatchObject(snapshot);
+    },
+  );
+  it('snapshots no direct suggested transfer as zero when simplification routes through a third member', async () => {
+    const id = await trip();
+    await groupService.addMember(id, priya);
+    await expenseService.create(
+      id,
+      {
+        description: 'Fictional ticket for Alex',
+        amount: 20,
+        currency: 'EUR',
+        category: 'food',
+        tag: 'Food',
+        date: new Date('2026-10-21T12:00:00Z'),
+        paidBy: [{ user: priya, amount: 20 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }],
+      },
+      priya,
+    );
+    const before = (await ledgers(id)).find((row) => row.currency === 'EUR');
+    expect(before?.debts).toMatchObject([{ from: { _id: sam }, to: { _id: priya }, amount: 20 }]);
+    expect(before?.debtsBeforeSimplifying).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          from: expect.objectContaining({ _id: sam }),
+          to: expect.objectContaining({ _id: alex }),
+          amount: 20,
+        }),
+      ]),
+    );
+    const saved = await record(id);
+    expect(saved.status).toBe(201);
+    expect(saved.body.data).toMatchObject({ pairDebtBeforeMinor: 0, pairDebtAfterMinor: 0 });
+    expect((await ledgers(id)).find((row) => row.currency === 'EUR')?.debts).toMatchObject([
+      { from: { _id: alex }, to: { _id: priya }, amount: 20 },
+    ]);
+  });
   it('settles an extra-currency balance and lets the member leave without a manual currency conversion', async () => {
     const id = await trip();
     expect((await leaveGroup(id)).body.code).toBe('OPEN_BALANCE');
@@ -287,6 +383,58 @@ describe('cross-currency Settlement HTTP contract (#727)', () => {
     expect(refused.status).toBe(422);
     expect(refused.body.code).toBe('CURRENCY_MISMATCH');
     expect((await read(id)).body.data).toEqual([]);
+  });
+  it('serializes a legacy-currency Settlement against deletion of the last live Expense', async () => {
+    const alexCookie = await signIn('alex');
+    const outcomes = new Set<number>();
+    // Ordered endpoints pin both legal outcomes; alternating simultaneous starts exercise conflicts.
+    for (let round = 0; round < 10; round++) {
+      const id = await trip();
+      await Group.updateOne({ _id: id }, { alternateCurrencies: [] });
+      const page = await callRoute(expenses.GET, {
+        method: 'GET',
+        path: `/api/groups/${id}/expenses`,
+        params: { id },
+        cookie,
+      });
+      const row = page.body.data.expenses[0];
+      const remove = () =>
+        callRoute(expense.DELETE, {
+          method: 'DELETE',
+          path: `/api/groups/${id}/expenses/${row._id}`,
+          params: { id, expenseId: row._id },
+          cookie: alexCookie,
+          headers: { 'X-Splitbook-Revision': String(row.revision) },
+        });
+      const save = () => record(id);
+      const [removed, saved] =
+        round === 0
+          ? [await remove(), await save()]
+          : round === 1
+            ? await (async () => {
+                const saved = await save();
+                return [await remove(), saved];
+              })()
+            : round % 2
+              ? await Promise.all([remove(), save()])
+              : (await Promise.all([save(), remove()])).reverse();
+      expect(removed.status).toBe(200);
+      expect([201, 422]).toContain(saved.status);
+      outcomes.add(saved.status);
+      const records = (await read(id)).body.data;
+      if (saved.status === 201) {
+        // A successful save must have serialized before deletion; no zero-Debt late insert.
+        expect(saved.body.data).toMatchObject({
+          pairDebtBeforeMinor: -2000,
+          pairDebtAfterMinor: 0,
+        });
+        expect(records).toHaveLength(1);
+      } else {
+        expect(saved.body.code).toBe('CURRENCY_MISMATCH');
+        expect(records).toEqual([]);
+      }
+    }
+    expect([...outcomes].sort()).toEqual([201, 422]);
   });
   it('refuses an unused unlisted cleared currency and a legacy unlisted paid currency', async () => {
     const id = await trip();
