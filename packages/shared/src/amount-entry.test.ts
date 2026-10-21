@@ -60,11 +60,15 @@ describe('readAmountEntry: what an amount field reads, in its words', () => {
       status: 'invalid',
       message: 'Use at most 2 decimal places.',
     });
-    expect(readAmountEntry('10.5', 'JPY')).toEqual({
+    // As the "Yen takes whole amounts" board words it (#719).
+    expect(readAmountEntry('2,500.50', 'JPY')).toEqual({
       status: 'invalid',
-      message: 'JPY amounts have no decimal places.',
+      message: 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.',
     });
-    expect(readAmountEntry('1,060.5', 'KRW')).toMatchObject({ status: 'invalid' });
+    expect(readAmountEntry('1,060.5', 'KRW')).toEqual({
+      status: 'invalid',
+      message: 'Won has no smaller unit. Enter a whole amount, like ₩2,500.',
+    });
   });
 
   it('refuses zero and anything above the largest amount', () => {
