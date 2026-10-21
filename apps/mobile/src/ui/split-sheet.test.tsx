@@ -293,7 +293,7 @@ async function render(open: (controller: MobileController) => Promise<void>, rec
 const newExpense = (controller: MobileController) => controller.openExpense(groupId);
 async function withAmount(amount: string) {
   const ui = await render(newExpense);
-  await ui.type('Amount, required', amount);
+  await ui.type('Amount, Indian Rupee, required', amount);
   await ui.openSplit();
   return ui;
 }

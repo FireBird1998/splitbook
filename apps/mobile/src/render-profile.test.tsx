@@ -1012,11 +1012,11 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       const app = await renderApp();
       await app.press('Open Maple House');
       await app.press('Add expense');
-      await app.type('Amount, required', '12.34');
+      await app.type('Amount, Indian Rupee, required', '12.34');
       await app.press(tile);
       const release = app.holdDraftWrites();
       try {
-        await app.type('Amount, required', '23.45');
+        await app.type('Amount, Indian Rupee, required', '23.45');
         expect(app.controller.getSnapshot().expense.persistence).toBe('saving');
         await journey(
           `Store entries with ${tile} open`,
@@ -1047,10 +1047,10 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       `Type ${amount.length} characters into Amount`,
       async () => {
         for (let length = 1; length <= amount.length; length++)
-          await app.type('Amount, required', amount.slice(0, length));
+          await app.type('Amount, Indian Rupee, required', amount.slice(0, length));
       },
       () => {
-        expect(app.value('Amount, required')).toBe(amount);
+        expect(app.value('Amount, Indian Rupee, required')).toBe(amount);
         expect(app.rows('share ₹12.34')).toBe(1);
         expect(app.count('Save expense ₹12.34')).toBe(1);
       },
@@ -1078,14 +1078,14 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       async () => {
         for (let length = 1; length <= amount.length; length++) {
           const before = [...counting.renders.values()].reduce((sum, count) => sum + count, 0);
-          await app.type('Amount, required', amount.slice(0, length));
+          await app.type('Amount, Indian Rupee, required', amount.slice(0, length));
           strokes.push(
             [...counting.renders.values()].reduce((sum, count) => sum + count, 0) - before,
           );
         }
       },
       () => {
-        expect(app.value('Amount, required')).toBe(amount);
+        expect(app.value('Amount, Indian Rupee, required')).toBe(amount);
         expect(app.rows('share ₹123,456.78')).toBe(1);
         expect(app.count('Save expense ₹123,456.78')).toBe(1);
         if (process.env.RENDER_PROFILE)

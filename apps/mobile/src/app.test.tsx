@@ -468,9 +468,10 @@ describe('App refresh rendering', () => {
         .root()
         .find(
           (node) =>
-            node.props.accessibilityLabel === 'Amount, required' && typeof node.type === 'string',
+            node.props.accessibilityLabel === 'Amount, Indian Rupee, required' &&
+            typeof node.type === 'string',
         );
-      await app.type('Amount, required', '19.99');
+      await app.type('Amount, Indian Rupee, required', '19.99');
       await app.type('Description, required', 'Phone beta dinner');
       expect(app.pressable('Save expense').props.accessibilityState.disabled).toBe(true);
       checking.release(json({ status: 200, data: { ...group, _id: 'a00000000000000000000099' } }));
@@ -486,7 +487,8 @@ describe('App refresh rendering', () => {
           .root()
           .find(
             (node) =>
-              node.props.accessibilityLabel === 'Amount, required' && typeof node.type === 'string',
+              node.props.accessibilityLabel === 'Amount, Indian Rupee, required' &&
+              typeof node.type === 'string',
           ),
       ).toBe(amount);
       expect(amount.props.value).toBe('19.99');
@@ -1139,7 +1141,7 @@ describe('App return from an Expense', () => {
       return { ...resolvedOptions.call(this), locale: 'en-IN' };
     });
     await app.press('Add expense');
-    await app.type('Amount, required', '12.50');
+    await app.type('Amount, Indian Rupee, required', '12.50');
     await app.type('Description, required', 'Weekly groceries');
     await app.press('Date: ');
     for (const step of date) await app.press(step);
@@ -2287,7 +2289,7 @@ describe('App Home', () => {
     const app = await renderApp();
     await app.press('Open Maple House');
     await app.press('Add expense');
-    await app.type('Amount, required', '12.50');
+    await app.type('Amount, Indian Rupee, required', '12.50');
     await app.type('Description, required', 'Kept for later');
     expect(await app.androidBack()).toBe(true);
 
@@ -2334,7 +2336,7 @@ describe('App Home', () => {
         });
         await app.press('Open Maple House');
         await app.press('Add expense');
-        await app.type('Amount, required', '12.50');
+        await app.type('Amount, Indian Rupee, required', '12.50');
         await app.type('Description, required', 'Phone-only groceries');
         expect(await app.androidBack()).toBe(true);
         expect(await app.androidBack()).toBe(true);
@@ -2961,7 +2963,7 @@ describe('App after Android recreates the activity (#634)', () => {
     const app = await renderApp();
     await app.press('Open Maple House');
     await app.press('Add expense');
-    await app.type('Amount, required', '19.99');
+    await app.type('Amount, Indian Rupee, required', '19.99');
     await app.type('Description, required', 'Phone beta dinner');
 
     await app.recreate();
@@ -2970,7 +2972,7 @@ describe('App after Android recreates the activity (#634)', () => {
       app
         .root()
         .find((node) => node.props.accessibilityLabel === label && typeof node.type === 'string');
-    expect(field('Amount, required').props.value).toBe('19.99');
+    expect(field('Amount, Indian Rupee, required').props.value).toBe('19.99');
     expect(field('Description, required').props.value).toBe('Phone beta dinner');
     expect(await app.androidBack()).toBe(true);
     expect(app.text()).toContain('Draft: Phone beta dinner');
