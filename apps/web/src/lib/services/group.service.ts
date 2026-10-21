@@ -14,6 +14,7 @@ import { activityService } from './activity.service';
 import { balanceService } from './balance.service';
 import { recurringExpenseService } from './recurring-expense.service';
 import { buildDefaultGroupTags } from '@splitbook/shared/default-tags';
+import type { AssistantRule } from '@splitbook/shared/assistant-rule';
 import type { CreateGroupInput, UpdateGroupInput } from '@splitbook/shared/validators/group';
 import crypto from 'crypto';
 import { cache } from 'react';
@@ -295,6 +296,27 @@ export class GroupService {
   private async readAfterUpdate(group: InstanceType<typeof Group>, viewerId: string) {
     const latest = await latestExpenseCurrencies([group._id], viewerId);
     return readableFor(group.toJSON(), latest.get(String(group._id)) ?? null);
+  }
+
+  /**
+   * Set whether members' Connected assistants may reach the Group (#621). Only admins set it, and
+   * only a change is recorded: one Activity event naming the rule, in the same write.
+   */
+  async setAssistantRule(groupId: string, rule: AssistantRule, userId: string) {
+    await connectDB();
+    const admin = { members: { $elemMatch: { user: userId, role: 'admin' } } };
+    // A Group stored without a rule is Allowed.
+    const otherRule = rule === 'allowed' ? 'not_allowed' : { $ne: 'not_allowed' };
+    const changed = await withGroupMutation(groupId, async () => {
+      const group = await Group.findOneAndUpdate(
+        { _id: groupId, ...admin, assistantRule: otherRule },
+        { $set: { assistantRule: rule, assistantRuleSetBy: userId } },
+      );
+      if (group) await activityService.log(groupId, 'assistant_rule_changed', userId, { rule });
+      return !!group;
+    });
+    if (!changed && !(await Group.exists({ _id: groupId, ...admin }))) throw new Error('FORBIDDEN');
+    return { rule };
   }
 
   /**

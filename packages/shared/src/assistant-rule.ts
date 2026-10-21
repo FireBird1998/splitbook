@@ -10,3 +10,10 @@ export const ASSISTANT_RULE_LABELS: Record<AssistantRule, string> = {
   allowed: 'Allowed',
   not_allowed: 'Not allowed',
 };
+
+/** A recorded rule as members read it; null for a value this version doesn't know. */
+export function assistantRuleLabel(value: unknown): string | null {
+  return ASSISTANT_RULES.some((rule) => rule === value)
+    ? ASSISTANT_RULE_LABELS[value as AssistantRule]
+    : null;
+}
