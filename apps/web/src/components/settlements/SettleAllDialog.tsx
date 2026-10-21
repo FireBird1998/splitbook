@@ -38,7 +38,8 @@ import {
   type SettleAllLine,
   type SettleAllOffer,
   type SettleAllRate,
-} from './settle-all';
+  type SettleAllRateState,
+} from '@splitbook/shared/settle-all';
 
 export interface SettleAllDialogProps {
   open: boolean;
@@ -506,7 +507,7 @@ function RateCell({
   fixed: boolean;
   changing: boolean;
   custom: string | null;
-  state: RateSuggestionState;
+  state: SettleAllRateState;
   onChange: () => void;
   onType: (value: string) => void;
   onUseSuggestion: () => void;

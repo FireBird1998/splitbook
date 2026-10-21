@@ -6,7 +6,7 @@ import type { RateSuggestion } from '@splitbook/shared/cross-currency-payment';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import type { RateSuggestionState } from '@/lib/hooks/use-rate-suggestion';
 import { listSettlementAttempts, type SettlementAttempt } from '@/lib/settlement-attempts';
-import type { SettleAllOffer } from './settle-all';
+import type { SettleAllOffer } from '@splitbook/shared/settle-all';
 import SettleAllDialog, { type SettleAllDialogProps } from './SettleAllDialog';
 
 /*

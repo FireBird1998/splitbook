@@ -1,25 +1,31 @@
 /**
  * Settle up (#734, board "Web · Settle both currencies at once"): one payment, in one currency,
  * that clears every Debt between the member and another person, each at its own rate. Each
- * Debt's own currency moves by its own amount only; nothing is converted on the ledger. Pure, so
- * the sheet and its tests read the same thing.
+ * Debt's own currency moves by its own amount only; nothing is converted on the ledger. Pure and
+ * framework-free, for the web and Android.
  */
 import {
   crossCurrencyRateKind,
+  plainRate,
   readCrossCurrencyEntry,
   suggestedRateText,
   type RateSuggestion,
-} from '@splitbook/shared/cross-currency-payment';
-import { getCurrencyPrecision } from '@splitbook/shared/currency';
-import { minorMoney } from '@splitbook/shared/cross-currency-settlement';
-import { readLegacyAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
-import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
+} from './cross-currency-payment';
+import { getCurrencyPrecision } from './currency';
+import { minorMoney } from './cross-currency-settlement';
+import { readLegacyAmountMinor, toMajorAmount } from './exact-money';
+import { canRecordSettlement } from './settlement-authorization';
 import {
   calculateSettlementBatch,
   type SettlementBatchAmounts,
   type SettlementBatchRate,
-} from '@splitbook/shared/settlement-batch';
-import type { RateSuggestionState } from '@/lib/hooks/use-rate-suggestion';
+} from './settlement-batch';
+
+/** What a client knows of a Debt's suggested rate: still reading, none, or the suggestion. */
+export type SettleAllRateState =
+  | { status: 'loading' }
+  | { status: 'none'; reason?: string | null }
+  | { status: 'ready'; suggestion: RateSuggestion };
 
 interface Person {
   _id: string;
@@ -121,7 +127,7 @@ export function settleAllWords(offer: SettleAllOffer) {
 
 /** A Debt in another currency than the payment's: its suggested rate, and the member's own. */
 export interface SettleAllRate {
-  state: RateSuggestionState;
+  state: SettleAllRateState;
   /** The member's own rate, as typed; null while it pays at the suggestion. */
   custom: string | null;
 }
@@ -192,7 +198,7 @@ export function readSettleAll({
       waiting ??= reading.status === 'invalid' ? reading.message : enterRateFor(currency);
       return unknown;
     }
-    const plain = typed.replaceAll(',', '').replace(/\.$/, '');
+    const plain = plainRate(typed) ?? typed;
     const kind = crossCurrencyRateKind(pair, reading.amounts, suggestion);
     const provenance = suggestion && {
       suggestedRate: suggestion.rate,

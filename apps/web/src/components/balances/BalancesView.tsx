@@ -51,7 +51,7 @@ import type { EveryonePerson } from './everyone-chart';
 import SettleUpViews, { type Debt } from './SettleUpViews';
 import SettleAllOffers from './SettleAllOffers';
 import SettleAllDialog from '@/components/settlements/SettleAllDialog';
-import { settleAllOffers } from '@/components/settlements/settle-all';
+import { settleAllOffers } from '@splitbook/shared/settle-all';
 
 interface BalancesViewProps {
   groupId: string;

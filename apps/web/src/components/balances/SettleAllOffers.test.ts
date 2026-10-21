@@ -4,7 +4,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
-import type { SettleAllOffer } from '@/components/settlements/settle-all';
+import type { SettleAllOffer } from '@splitbook/shared/settle-all';
 import SettleAllOffers from './SettleAllOffers';
 
 /*

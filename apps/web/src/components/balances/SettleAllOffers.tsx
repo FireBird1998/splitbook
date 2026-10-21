@@ -5,7 +5,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import { RADIUS } from '@/lib/theme/tokens';
-import { settleAllWords, type SettleAllOffer } from '@/components/settlements/settle-all';
+import { settleAllWords, type SettleAllOffer } from '@splitbook/shared/settle-all';
 
 /**
  * Settle up's offers on Balances (#734, board "Web · Settle both currencies at once"): each
