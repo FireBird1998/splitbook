@@ -11,6 +11,7 @@ import {
 import { groupService } from '@/lib/services/group.service';
 import { getGroupInsights } from '@/lib/services/group-insights.service';
 import { readCompareMonths } from '@splitbook/shared/insights';
+import { CURRENCY_CODES } from '@splitbook/shared/currency';
 import { TimeZoneError, isMonthKey, readTimeZone } from '@splitbook/shared/zoned-calendar';
 
 /**
@@ -24,6 +25,9 @@ import { TimeZoneError, isMonthKey, readTimeZone } from '@splitbook/shared/zoned
  * - `tz` is required: a Month is the viewer's, never the server's. Unknown zones are refused.
  * - `month` (`YYYY-MM`) defaults to the current Month in that zone.
  * - `compare` is how many Months before it to compare it with, 1–12; 6 by default.
+ * - `currency` picks the currency the figures are in (#729). Without it the read opens on the
+ *   currency with the most Expenses in the Month, a tie going to the Group's main currency.
+ *   `currencies` lists what was spent in each, for the currency switch.
  */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -54,10 +58,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       throw err;
     }
 
+    // Empty is unset. Any supported code is read, a currency nothing was spent in as zeros.
+    const currency = searchParams.get('currency') || null;
+    if (currency !== null && !CURRENCY_CODES.includes(currency))
+      return error('Send a currency code, such as INR.', 400, 'INVALID_CURRENCY');
+
     const insights = await getGroupInsights(id, user.id, {
       month: month ?? undefined,
       compare,
       timeZone,
+      currency: currency ?? undefined,
     });
     if (!insights) return notFound('Group');
     return success(insights);

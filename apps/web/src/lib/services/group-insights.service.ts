@@ -5,7 +5,12 @@ import RecurringExpense from '@/lib/models/RecurringExpense';
 import User from '@/lib/models/User';
 import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
-import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';
+import { assertStoredExpenseMoney, readStoredAmountMinor } from '@splitbook/shared/exact-money';
+import {
+  openingSpendingCurrency,
+  spendingCurrencies,
+  type CurrencySpending,
+} from '@splitbook/shared/spending-currencies';
 import {
   earlierMonths,
   groupMonthInsights,
@@ -46,6 +51,8 @@ export interface GroupInsightsResponse extends Omit<GroupMonthInsights, 'biggest
   recurring?: Omit<GroupRecurringMonth, 'templates'> & {
     templates: Array<Omit<RecurringTemplateMonth, 'paidBy'> & { paidBy: NamedPerson[] }>;
   };
+  /** What was spent in the Month in each currency, for the currency switch (#729). */
+  currencies: CurrencySpending[];
 }
 
 /**
@@ -75,8 +82,9 @@ export async function getGroupInsights(
     month: requestedMonth,
     compare,
     timeZone,
+    currency: requestedCurrency,
     now = new Date(),
-  }: { month?: MonthKey; compare: number; timeZone: string; now?: Date },
+  }: { month?: MonthKey; compare: number; timeZone: string; currency?: string; now?: Date },
 ): Promise<GroupInsightsResponse | null> {
   // Fails before any read when the zone is wrong.
   const zone = readTimeZone(timeZone);
@@ -89,7 +97,7 @@ export async function getGroupInsights(
   const recurringExpenses = recurringExpensesEnabled();
 
   const group = await Group.findById(groupId)
-    .select('defaultCurrency createdAt tags members')
+    .select('defaultCurrency alternateCurrencies createdAt tags members')
     .lean();
   if (!group) return null;
 
@@ -144,7 +152,22 @@ export async function getGroupInsights(
     tagId: expense.tagId ? String(expense.tagId) : null,
     tag: expense.tag,
   }));
-  const currency = group.defaultCurrency;
+  // What the Month spent in each currency (#729): the switch lists them, and without a currency
+  // asked for, the read opens on the one with the most Expenses. Nothing is converted.
+  const spending = new Map<string, CurrencySpending>();
+  for (const expense of stored) {
+    if (expenseMonth(expense.date) !== month) continue;
+    const row = spending.get(expense.currency) ?? {
+      currency: expense.currency,
+      expenseCount: 0,
+      spentMinor: 0,
+    };
+    row.expenseCount += 1;
+    row.spentMinor += readStoredAmountMinor(expense);
+    spending.set(expense.currency, row);
+  }
+  const currencies = spendingCurrencies(group, [...spending.values()]);
+  const currency = requestedCurrency ?? openingSpendingCurrency(group, [...spending.values()]);
 
   const insights = groupMonthInsights({
     memberId: userId,
@@ -244,5 +267,6 @@ export async function getGroupInsights(
           },
         }
       : {}),
+    currencies,
   };
 }
