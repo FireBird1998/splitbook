@@ -71,6 +71,18 @@ describe('an assistant as the approval page names it', () => {
         ).toBe('evil.example.test');
   });
 
+  it('reads raised and middle dots as dots too', () => {
+    for (const dot of [
+      ...['\u00b7', '\u0387', '\u2219', '\u22c5', '\u2e31'],
+      ...['\u30fb', '\u2027', '\u16eb', '\ua78f', '\u318d'],
+    ])
+      for (const name of [`claude${dot}ai`, `Claude by claude${dot}ai`])
+        expect(
+          assistantDisplay('https://evil.example.test/client.json', name).name,
+          JSON.stringify(name),
+        ).toBe('evil.example.test');
+  });
+
   it('keeps an honest name that names its own address or one it sits under', () => {
     expect(
       assistantDisplay('https://chat.claude.ai/oauth/client.json', 'Claude by claude.ai').name,
