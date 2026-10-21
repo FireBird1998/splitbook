@@ -562,6 +562,7 @@ function RateCell({
               <Button
                 variant="text"
                 size="small"
+                aria-label={`Use the suggested rate for the ${line.currency} Debt, ${decimalMoney(suggestedRateText(suggestion.rate), paidCurrency)}`}
                 onClick={onUseSuggestion}
                 sx={{ minWidth: 0, p: 0, fontSize: 'inherit', verticalAlign: 'baseline' }}
               >
