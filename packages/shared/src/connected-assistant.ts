@@ -10,6 +10,8 @@ export interface ConnectedAssistant {
   /** `Ledger`, or `Ledger + To review` when it may prepare Expenses for the member's To review. */
   access: string;
   lastUsedAt: string | null;
+  /** The Groups the member left out of its reach (#617, #620); absent from older servers. */
+  excludedGroupIds?: string[];
 }
 
 /** One page of a member's Connected assistants, with the MCP URL to add. */
