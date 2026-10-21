@@ -11,10 +11,12 @@ export default async function globalSetup() {
       email: 'auth-recovery@splitbook.test',
       idTokenSecret,
     },
-    false,
+    // Build the isolated snapshot once; no request in a test can start compilation.
+    true,
     {
       onOutput: (output) => {
-        if (testsStarted && /Compiling \//.test(output)) lateCompilations.push(output.trim());
+        if (testsStarted && /(?:Compiling|Compiled) \//.test(output))
+          lateCompilations.push(output.trim());
       },
     },
   );

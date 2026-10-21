@@ -7,6 +7,8 @@ export default defineConfig({
   globalSetup: './playwright-auth-recovery/global-setup.ts',
   fullyParallel: false,
   workers: 1,
+  // Compilation belongs to setup; retries must not hide a first-paint regression.
+  retries: 0,
   timeout: 90_000,
   reporter: 'list',
   use: { trace: 'off' },

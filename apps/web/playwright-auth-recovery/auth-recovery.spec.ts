@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { MongoClient } from 'mongodb';
+import { expenseAccessMongoUri } from '../playwright-expense-access/mongo-target';
 import { signTestIdToken } from '../src/lib/auth/test-id-token';
 
 function appURL(path: string) {
@@ -79,7 +80,7 @@ test('a valid database session redirects login to the dashboard', async ({ page 
   const session = await (await page.request.get(appURL('/api/auth/get-session'))).json();
   expect(session.user.email).toBe(email);
 
-  const client = new MongoClient(`mongodb://127.0.0.1:27017/${dbName}?directConnection=true`);
+  const client = new MongoClient(expenseAccessMongoUri(dbName));
   try {
     const db = client.db(dbName);
     const user = await db.collection('users').findOne({ email });

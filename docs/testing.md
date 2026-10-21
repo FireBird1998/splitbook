@@ -204,9 +204,11 @@ Its MongoDB is `127.0.0.1:27017` unless `EXPENSE_ACCESS_MONGO_PORT` names anothe
 To review saves and Tag actions need transactions, so give it a replica set (CI's expense-access
 job starts one of its own on 27038). With `CI` set it serves a production build of the snapshot, otherwise `next dev`. On `next dev`, global setup first requests the pages the suite
 opens and the reads they make first (the landing and sign-in pages signed out, the rest signed in
-as a persona), so no route compiles while a test waits on it. That warm-up runs for demo-mode
-apps only: the Google sign-in recovery suite reuses the isolated app in Google mode, which has no
-persona sign-in.
+as a persona), so no route compiles while a test waits on it. That warm-up runs for demo-mode apps only. The Google sign-in recovery/theme suite instead
+builds its isolated snapshot and uses `next start`: every route is compiled before tests begin,
+including the sign-in POST and the reads Home and a Group make during hydration. Every invocation
+builds from a fresh snapshot with no `.next`, and each test keeps a fresh browser. Retries stay
+off, and a compilation guard fails the step if routes start compiling during tests.
 
 Isolation is deliberately stricter than the browser journeys':
 
