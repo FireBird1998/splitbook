@@ -47,6 +47,8 @@ const group = (id: string, name: string, category: MobileGroup['category']): Mob
   description: '',
   category,
   defaultCurrency: 'INR',
+  alternateCurrencies: [],
+  latestExpenseCurrency: null,
   members: [person(you, 'Alex Rivera'), person('a00000000000000000000002', 'Sam Chen')].map(
     (user) => ({ user: { ...user, email: '' }, role: 'member' as const, joinedAt: at }),
   ),

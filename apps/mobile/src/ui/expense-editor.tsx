@@ -37,6 +37,7 @@ import {
   expenseContextPending,
   expenseFieldLabels,
   expenseTagPending,
+  expenseCurrencyPending,
   expenseFields,
   expenseMoney,
   refusedRetryNotice,
@@ -46,6 +47,8 @@ import {
   type ExpenseField,
 } from '../data/expense-draft';
 import { DateSheet } from './date-sheet';
+import { CurrencySheet } from './currency-sheet';
+import { expenseCurrencyChoices, isGroupCurrency } from '@splitbook/shared/group-currencies';
 import { Button, Loading, Notice } from './primitives';
 import {
   Badge,
@@ -364,7 +367,9 @@ function ExpenseTask({
 }) {
   const theme = useTheme();
   const [editor, setEditor] = useState<'payers' | null>(null);
-  const [sheet, setSheet] = useState<'date' | 'split' | 'tag' | 'options' | null>(null);
+  const [sheet, setSheet] = useState<'date' | 'split' | 'tag' | 'currency' | 'options' | null>(
+    null,
+  );
   const scroll = useRef<ScrollView>(null);
   const content = useRef<View>(null);
   const sections = useRef<Partial<Record<ExpenseField, View | null>>>({});
@@ -446,6 +451,7 @@ function ExpenseTask({
     [],
   );
   const amountDone = useCallback(() => inputs.current.description?.focus(), []);
+  const openCurrency = useCallback(() => setSheet('currency'), []);
   const SplitEditor = controller ? SelectedSplitSheet : SplitSheet;
   const SaveAction = controller ? SelectedSaveBar : SaveBar;
   const PayerEditor = controller ? SelectedPayerSheet : PayerSheet;
@@ -642,8 +648,23 @@ function ExpenseTask({
   const checking = state.contextCheck;
   const pendingContext = expenseContextPending(state, offline);
   const financialLocked = locked || pendingContext;
-  // Offline, the Tag is picked from the Group's saved Tags, a new Expense's too (#638).
+  // Offline, the Tag is picked from the Group's saved Tags, a new Expense's too (#638), and the
+  // currency from its saved currencies (#720).
   const tagLocked = locked || expenseTagPending(state, offline);
+  const currencyLocked = locked || expenseCurrencyPending(state, offline);
+  // The Group's currencies, the member's latest Expense's first, as on the web (#720).
+  const currencyChoices = context
+    ? expenseCurrencyChoices(context.group, context.group.latestExpenseCurrency, draft.currency)
+    : null;
+  const startedNote =
+    context &&
+    !draft.original &&
+    currencyChoices &&
+    currencyChoices.length > 1 &&
+    draft.currency === state.blank?.currency &&
+    draft.currency === context.group.latestExpenseCurrency
+      ? `Started in ${draft.currency}, the currency of your latest Expense here.`
+      : null;
   const checkNotice = checking ? contextNotices[checking.status] : null;
   const checkingMessage = checkNotice?.message ?? '';
   const invalidMembers =
@@ -838,7 +859,15 @@ function ExpenseTask({
             onChange={onChange}
             onLeave={onLeaveField}
             onAmountDone={amountDone}
-          ></AmountDescriptionCard>
+            onCurrency={currencyChoices && currencyChoices.length > 1 ? openCurrency : undefined}
+            currencyLocked={currencyLocked}
+          >
+            {startedNote ? (
+              <CompactText variant="small" tone="secondary">
+                {startedNote}
+              </CompactText>
+            ) : null}
+          </AmountDescriptionCard>
           {controller ? (
             <SelectedExpenseTiles
               controller={controller}
@@ -923,26 +952,44 @@ function ExpenseTask({
             {!checking &&
             !draft.original &&
             context &&
-            draft.currency !== context.group.defaultCurrency ? (
-              <View style={{ gap: 6 }}>
-                {!errors.amount && (
-                  <CompactText variant="small" tone="warning" accessibilityRole="alert">
-                    This{' '}
-                    {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
-                      ? 'item'
-                      : 'draft'}{' '}
-                    uses {draft.currency}; the Group now uses {context.group.defaultCurrency}.
-                    Review the amount before choosing the new currency.
-                  </CompactText>
-                )}
-                <CompactButton
-                  label={`Use ${context.group.defaultCurrency}`}
-                  variant="tonal"
-                  dense
-                  disabled={financialLocked}
-                  onPress={() => onChange({ currency: context.group.defaultCurrency })}
-                />
-              </View>
+            !isGroupCurrency(context.group, draft.currency) ? (
+              context.group.alternateCurrencies.length ? (
+                // A Group with extra currencies offers them all, in the Currency sheet (#720).
+                <View style={{ gap: 6 }}>
+                  {!errors.amount && (
+                    <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                      This Group no longer uses {draft.currency}. Pick one of its currencies.
+                    </CompactText>
+                  )}
+                  <CompactButton
+                    label="Pick a currency"
+                    variant="tonal"
+                    dense
+                    disabled={currencyLocked}
+                    onPress={openCurrency}
+                  />
+                </View>
+              ) : (
+                <View style={{ gap: 6 }}>
+                  {!errors.amount && (
+                    <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                      This{' '}
+                      {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
+                        ? 'item'
+                        : 'draft'}{' '}
+                      uses {draft.currency}; the Group now uses {context.group.defaultCurrency}.
+                      Review the amount before choosing the new currency.
+                    </CompactText>
+                  )}
+                  <CompactButton
+                    label={`Use ${context.group.defaultCurrency}`}
+                    variant="tonal"
+                    dense
+                    disabled={financialLocked}
+                    onPress={() => onChange({ currency: context.group.defaultCurrency })}
+                  />
+                </View>
+              )
             ) : null}
             {tagNotice ? (
               <CompactText variant="small" tone="warning" accessibilityRole="alert">
@@ -1097,6 +1144,21 @@ function ExpenseTask({
             setSheet(null);
             onLeaveField('tag');
           }}
+        />
+      ) : null}
+      {sheet === 'currency' && context && currencyChoices ? (
+        <CurrencySheet
+          visible={sheet === 'currency'}
+          groupName={context.group.name}
+          choices={currencyChoices}
+          currency={draft.currency}
+          locked={currencyLocked}
+          offline={offline}
+          onChoose={(currency) => {
+            onChange({ currency });
+            setSheet(null);
+          }}
+          onDone={() => setSheet(null)}
         />
       ) : null}
       {sheet === 'options' ? (

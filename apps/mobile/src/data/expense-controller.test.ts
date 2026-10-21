@@ -3515,7 +3515,7 @@ describe('native Expense field corrections', () => {
     await controller.updateExpenseDraft({ amount: '1500.5', description: 'Ramen', tagId });
     await controller.saveExpense();
     expect(controller.getSnapshot().expense.validation.errors).toEqual({
-      amount: 'JPY amounts can’t include decimal places. Nothing is rounded for you.',
+      amount: 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.',
     });
     await controller.updateExpenseDraft({ amount: '1500' });
     expect(controller.getSnapshot().expense.validation.errors).toEqual({});
@@ -4283,6 +4283,148 @@ describe('acknowledging an interrupted shared Draft upload', () => {
       expect(controller.getSnapshot().sharedDraftCollection.rows).toEqual([]);
     } finally {
       controller.dispose();
+    }
+  });
+});
+
+describe('an Expense in one of the Group’s currencies (#720)', () => {
+  // Lisbon and Tokyo: rupees, with euros and yen as extra currencies. Alex's latest Expense here
+  // was in yen.
+  const travelling = {
+    ...group,
+    name: 'Lisbon and Tokyo',
+    alternateCurrencies: ['EUR', 'JPY'],
+    latestExpenseCurrency: 'JPY',
+  };
+  const euroDinner = {
+    ...savedExpense,
+    description: 'Pastéis',
+    amount: 40,
+    currency: 'EUR',
+    amountMinor: 4000,
+    revision: 0,
+    paidBy: [{ user: { _id: memberIds[0], name: 'Alex' }, amount: 40, amountMinor: 4000 }],
+    splitBetween: memberIds.map((user, index) => ({
+      user: { _id: user, name: people[index].name },
+      amount: [13.33, 13.34, 13.33][index],
+      amountMinor: [1333, 1334, 1333][index],
+    })),
+    editHistory: [],
+  };
+  /** The Group's server, which keeps what each new Expense is sent and can drop off the network. */
+  const server = (value: object) => {
+    const state = { offline: false, posted: [] as Array<Record<string, unknown>> };
+    const intercept = (path: string, init: RequestInit) => {
+      if (path === `/api/groups/${groupId}`)
+        return state.offline
+          ? Promise.reject(new Error('Offline'))
+          : Promise.resolve(json({ data: value, status: 200 }));
+      if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST') {
+        state.posted.push(JSON.parse(String(init.body)));
+        return Promise.resolve(json({ status: 201, data: euroDinner }));
+      }
+    };
+    return { state, intercept };
+  };
+  const opened = async (value: object) => {
+    const { state, intercept } = server(value);
+    const { controller } = setup(intercept);
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    return { controller, state };
+  };
+
+  it('starts a new Expense in the currency of the member’s latest Expense here, else the main currency', async () => {
+    expect((await opened(travelling)).controller.getSnapshot().expense.draft?.currency).toBe('JPY');
+    const first = await opened({ ...travelling, latestExpenseCurrency: null });
+    expect(first.controller.getSnapshot().expense.draft?.currency).toBe('INR');
+    // A currency the Group no longer lists starts in the main currency.
+    const dropped = await opened({ ...travelling, latestExpenseCurrency: 'USD' });
+    expect(dropped.controller.getSnapshot().expense.draft?.currency).toBe('INR');
+  });
+
+  it('saves an Expense in the extra currency picked, never converted', async () => {
+    const { controller, state } = await opened(travelling);
+    expect(controller.getSnapshot().expense.context?.group).toMatchObject({
+      defaultCurrency: 'INR',
+      alternateCurrencies: ['EUR', 'JPY'],
+      latestExpenseCurrency: 'JPY',
+    });
+    await controller.updateExpenseDraft({
+      currency: 'EUR',
+      amount: '40',
+      description: 'Pastéis',
+      tagId,
+    });
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({});
+    await controller.saveExpense();
+    expect(state.posted).toMatchObject([{ currency: 'EUR', amount: 40, description: 'Pastéis' }]);
+  });
+
+  it('refuses part of a yen, in the words the web uses', async () => {
+    const { controller, state } = await opened(travelling);
+    await controller.updateExpenseDraft({ amount: '2500.50', description: 'Ramen', tagId });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({
+      amount: 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.',
+    });
+    expect(state.posted).toEqual([]);
+    await controller.updateExpenseDraft({ amount: '2500' });
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({});
+  });
+
+  it('asks for another currency when the Group no longer lists the draft’s', async () => {
+    const { controller, state } = await opened(travelling);
+    await controller.updateExpenseDraft({
+      currency: 'USD',
+      amount: '12',
+      description: 'Taxi',
+      tagId,
+    });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.validation.errors.amount).toBe(
+      'This Group no longer uses USD. Pick one of its currencies.',
+    );
+    expect(state.posted).toEqual([]);
+  });
+
+  it('offline, picks from the currencies saved on this phone and keeps the Expense there', async () => {
+    const copies = new Map<string, unknown>();
+    const { state, intercept } = server(travelling);
+    const { controller, create } = setup(intercept, { savedQueries: savedQueriesIn(copies) });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await vi.waitFor(() => expect(copies.has(memberIds[0] + `/api/groups/${groupId}`)).toBe(true));
+    controller.dispose();
+    state.offline = true;
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId);
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      contextCheck: { status: 'saved', saved: true },
+      context: { group: { alternateCurrencies: ['EUR', 'JPY'] } },
+      draft: { currency: 'JPY' },
+    });
+    await restarted.updateExpenseDraft({
+      currency: 'EUR',
+      amount: '40',
+      description: 'Pastéis',
+      tagId,
+    });
+    expect(restarted.getSnapshot().expense.draft).toMatchObject({ currency: 'EUR', amount: '40' });
+    // Saving needs a connection: nothing is sent, and the Expense stays on this phone.
+    await restarted.saveExpense();
+    expect(state.posted).toEqual([]);
+    restarted.dispose();
+    const again = create();
+    try {
+      await again.restore();
+      await again.openExpense(groupId);
+      again.resumeExpenseDraft();
+      expect(again.getSnapshot().expense.draft).toMatchObject({ currency: 'EUR', amount: '40' });
+    } finally {
+      again.dispose();
     }
   });
 });

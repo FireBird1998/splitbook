@@ -35,7 +35,12 @@ export interface MobileGroup {
   name: string;
   description: string;
   category: GroupCategory;
+  /** The main currency. */
   defaultCurrency: string;
+  /** The Group's extra currencies, which an Expense may also be in (#710, #720). */
+  alternateCurrencies: string[];
+  /** The member's latest Expense's currency in this Group, where a new Expense starts (#720). */
+  latestExpenseCurrency: string | null;
   /** Set when the server says it was archived: the app treats it as a Group it lost (#578). */
   isArchived?: true;
   members: Array<{

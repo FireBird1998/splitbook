@@ -440,7 +440,7 @@ describe('the Expense form presses only on a tap (#693)', () => {
   it('saves on a tap, never on a sideways drag across Save expense', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     await ui.type('Description, required', 'Groceries');
-    await ui.type('Amount, required', '250.50');
+    await ui.type('Amount, Indian Rupee, required', '250.50');
     await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await finger(ui.pressable('Save expense'), sideways);
@@ -478,7 +478,7 @@ describe('the Expense form presses only on a tap (#693)', () => {
 describe('rendered Expense corrections', () => {
   it('moves a blank Description submission to its field and saves once after correction', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
-    await ui.type('Amount, required', '250.50');
+    await ui.type('Amount, Indian Rupee, required', '250.50');
     await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await ui.press('Save expense');
@@ -487,13 +487,13 @@ describe('rendered Expense corrections', () => {
     expect(ui.writes).toEqual([]);
     expect(corrections(fieldOf(description))).toEqual(['Add a description, such as Groceries.']);
     expect(description.props.accessibilityHint).toContain('Add a description, such as Groceries.');
-    expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([]);
+    expect(corrections(fieldOf(ui.input('Amount, Indian Rupee, required')))).toEqual([]);
     expect(ui.focusCount('Description, required')).toBe(1);
-    expect(ui.focusCount('Amount, required')).toBe(0);
+    expect(ui.focusCount('Amount, Indian Rupee, required')).toBe(0);
     expect(ui.revealed).toHaveLength(1);
     expect(text(ui.root())).toContain('One thing to fix before saving');
     expect(ui.pressable('Go to Description')).toBeTruthy();
-    expect(ui.input('Amount, required').props.value).toBe('250.50');
+    expect(ui.input('Amount, Indian Rupee, required').props.value).toBe('250.50');
     expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Groceries');
 
     await ui.type('Description, required', 'Groceries');
@@ -530,7 +530,7 @@ describe('rendered Expense corrections', () => {
     await ui.press('Save expense');
 
     expect(ui.writes).toEqual([]);
-    expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([
+    expect(corrections(fieldOf(ui.input('Amount, Indian Rupee, required')))).toEqual([
       'Enter the amount, such as 250.50.',
     ]);
     expect(corrections(fieldOf(ui.input('Description, required')))).toEqual([
@@ -549,13 +549,13 @@ describe('rendered Expense corrections', () => {
     expect(text(ui.root())).toContain('4 things to fix before saving');
     for (const field of ['Amount', 'Description', 'Date', 'Tag'])
       expect(ui.pressable(`Go to ${field}`)).toBeTruthy();
-    expect(ui.focusCount('Amount, required')).toBe(1);
+    expect(ui.focusCount('Amount, Indian Rupee, required')).toBe(1);
   });
 
   it('waits until a field is left before showing its correction', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     const border = () => {
-      let node: ReactTestInstance | null = ui.input('Amount, required');
+      let node: ReactTestInstance | null = ui.input('Amount, Indian Rupee, required');
       while (node) {
         const style = flatten(node.props.style);
         if (isHost(node, 'View') && style.padding === 14 && style.borderWidth !== undefined)
@@ -564,22 +564,22 @@ describe('rendered Expense corrections', () => {
       }
       throw new Error('Amount and Description card not found');
     };
-    await ui.type('Amount, required', '10.005');
-    expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([]);
-    await ui.leave('Amount, required');
+    await ui.type('Amount, Indian Rupee, required', '10.005');
+    expect(corrections(fieldOf(ui.input('Amount, Indian Rupee, required')))).toEqual([]);
+    await ui.leave('Amount, Indian Rupee, required');
     expect(border()).toBe(2);
-    expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([
+    expect(corrections(fieldOf(ui.input('Amount, Indian Rupee, required')))).toEqual([
       'INR amounts can have at most 2 decimal places. Nothing is rounded for you.',
     ]);
     expect(corrections(fieldOf(ui.input('Description, required')))).toEqual([]);
-    expect(ui.focusCount('Amount, required')).toBe(0);
-    await ui.type('Amount, required', '10.05');
-    expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([]);
-    expect(ui.input('Amount, required').props.accessibilityHint).toBeUndefined();
+    expect(ui.focusCount('Amount, Indian Rupee, required')).toBe(0);
+    await ui.type('Amount, Indian Rupee, required', '10.05');
+    expect(corrections(fieldOf(ui.input('Amount, Indian Rupee, required')))).toEqual([]);
+    expect(ui.input('Amount, Indian Rupee, required').props.accessibilityHint).toBeUndefined();
     expect(border()).toBe(1);
     // Leaving it made corrections visible: a later invalid entry marks the card immediately.
-    await ui.type('Amount, required', '10.005');
-    expect(ui.input('Amount, required').props.accessibilityHint).toBeTruthy();
+    await ui.type('Amount, Indian Rupee, required', '10.005');
+    expect(ui.input('Amount, Indian Rupee, required').props.accessibilityHint).toBeTruthy();
     expect(border()).toBe(2);
   });
 
@@ -660,7 +660,7 @@ describe('rendered Expense corrections', () => {
 
   it('moves screen-reader focus to a missing Tag instead of opening the keyboard', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
-    await ui.type('Amount, required', '12');
+    await ui.type('Amount, Indian Rupee, required', '12');
     await ui.type('Description, required', 'Milk');
     await ui.press('Save expense');
 
@@ -669,7 +669,7 @@ describe('rendered Expense corrections', () => {
     expect((target as unknown as NodeMock).element.props.accessibilityLabel).toBe(
       'Choose a Tag for this Expense.',
     );
-    expect(ui.focusCount('Amount, required')).toBe(0);
+    expect(ui.focusCount('Amount, Indian Rupee, required')).toBe(0);
     expect(ui.focusCount('Description, required')).toBe(0);
     await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
@@ -725,7 +725,7 @@ describe('rendered Expense corrections', () => {
 
   it('keeps Save enabled and the bar steady while a draft write is pending', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
-    await ui.type('Amount, required', '120');
+    await ui.type('Amount, Indian Rupee, required', '120');
     await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     let release!: () => void;
@@ -764,7 +764,7 @@ describe('rendered Expense corrections', () => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
     const ui = await render((controller) => controller.openExpense(groupId), { holdCreate: held });
-    await ui.type('Amount, required', '120');
+    await ui.type('Amount, Indian Rupee, required', '120');
     await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await ui.type('Description, required', 'Milk');
@@ -829,7 +829,7 @@ describe('rendered draft recovery', () => {
 
     await ui.press('Resume draft');
     expect(text(ui.root())).not.toContain('Unfinished draft');
-    expect(ui.input('Amount, required').props.value).toBe('42.00');
+    expect(ui.input('Amount, Indian Rupee, required').props.value).toBe('42.00');
     expect(ui.input('Description, required').props.value).toBe('Milk and bread');
     expect(ui.input('Description, required').props.editable).toBe(true);
     expect(ui.writes).toEqual([]);
@@ -909,7 +909,7 @@ describe('rendered save not confirmed', () => {
     expect(icon(warning)).toBe('alert-circle-outline');
     expect(words(ui.root())).toContain('Not confirmed');
     expect(draftStatus(ui.root())).toEqual([]);
-    expect(ui.input('Amount, required').props.editable).toBe(false);
+    expect(ui.input('Amount, Indian Rupee, required').props.editable).toBe(false);
     expect(ui.input('Description, required').props.editable).toBe(false);
     for (const tile of ['Date', 'Paid by', 'Split', 'Tag'])
       expect(ui.tile(tile).props.accessibilityLabel).toMatch(/\. locked$/);
@@ -943,7 +943,7 @@ describe('rendered save not confirmed', () => {
     expect(text(ui.root())).not.toContain('Unfinished draft');
     expect(() => ui.pressable('Resume draft')).toThrow();
     expect(() => ui.pressable('Discard draft')).toThrow();
-    expect(ui.input('Amount, required').props.editable).toBe(false);
+    expect(ui.input('Amount, Indian Rupee, required').props.editable).toBe(false);
     expect(ui.pressable('Keep for later')).toBeTruthy();
 
     await ui.press('Check and finish saving');
@@ -963,7 +963,7 @@ describe('rendered save not confirmed', () => {
     expect(text(warning)).toContain('Check the amount, description, date, and participants');
     expect(text(warning)).toContain('Check this Group’s Expenses first');
     expect(words(ui.root())).toContain('Not confirmed');
-    expect(ui.input('Amount, required').props.editable).toBe(false);
+    expect(ui.input('Amount, Indian Rupee, required').props.editable).toBe(false);
 
     await ui.press('Discard unconfirmed save');
     expect(calls.discardUnconfirmed).toHaveBeenCalledOnce();
@@ -985,7 +985,7 @@ describe('rendered save not confirmed', () => {
     expect(text(notice)).toContain(
       'If it’s there, discard this save and don’t save the draft again.',
     );
-    expect(ui.input('Amount, required').props.editable).toBe(false);
+    expect(ui.input('Amount, Indian Rupee, required').props.editable).toBe(false);
 
     await ui.press('Discard unconfirmed save');
     expect(calls.discardUnconfirmed).toHaveBeenCalledOnce();
@@ -1091,7 +1091,7 @@ describe('rendered edit conflict', () => {
       editable: true,
     });
     // The amount is neither kept nor taken until the member chooses.
-    expect(ui.input('Amount, required').props.value).toBe('10');
+    expect(ui.input('Amount, Indian Rupee, required').props.value).toBe('10');
     expect(labelled(ui.root(), 'Amount: yours ₹10.00, saved now ₹12.00')).toHaveLength(1);
     expect(labelled(ui.root(), 'Notes: yours none, saved now Paid in cash')).toEqual([]);
     const reason = 'Choose which version to keep for each change in What’s different first.';
@@ -1103,7 +1103,7 @@ describe('rendered edit conflict', () => {
     expect(ui.input('Notes').props.value).toBe('Paid in cash');
 
     await ui.press('Use the saved amount');
-    expect(ui.input('Amount, required').props.value).toBe('12');
+    expect(ui.input('Amount, Indian Rupee, required').props.value).toBe('12');
     expect(text(ui.root())).not.toContain('What’s different');
     await ui.press('Save changes');
     expect(ui.writes).toEqual([
@@ -1324,7 +1324,7 @@ describe('compact Expense form', () => {
               : Promise.resolve(json({ status: 200, data: group }));
           },
         });
-        await form.type('Amount, required', '12.34');
+        await form.type('Amount, Indian Rupee, required', '12.34');
         await form.type('Description, required', 'Saved dinner');
         await form.press('Category and notes, optional');
         await form.type('Notes', 'Keep this note');
@@ -1334,7 +1334,7 @@ describe('compact Expense form', () => {
         expect(text(form.root())).toContain('You’re offline');
         await measureForm(scale);
         const offlineExtent = scrollExtent(scale);
-        const labels = ['Amount, required', 'Description, required', 'Notes'];
+        const labels = ['Amount, Indian Rupee, required', 'Description, required', 'Notes'];
         const inputs = labels.map(form.input);
         const positions = () => {
           const layout = screen!.toJSON();
@@ -1399,11 +1399,11 @@ describe('compact Expense form', () => {
           opening = form.controller.openExpense(groupId);
         });
         await settle();
-        const amount = form.input('Amount, required');
+        const amount = form.input('Amount, Indian Rupee, required');
         const description = form.input('Description, required');
         await form.press('Category and notes, optional');
         const layout = screen!.toJSON();
-        const labels = ['Amount, required', 'Description, required', 'Notes'];
+        const labels = ['Amount, Indian Rupee, required', 'Description, required', 'Notes'];
         const before = labels.map((label) =>
           inputTop(Array.isArray(layout) ? (layout[0] ?? null) : layout, label, scale),
         );
@@ -1413,17 +1413,17 @@ describe('compact Expense form', () => {
         for (const label of ['Paid by', 'Split', 'Tag'])
           expect(form.tile(label).props.accessibilityState.disabled).toBe(true);
         expect(form.pressable('Save expense').props.accessibilityState.disabled).toBe(true);
-        await form.type('Amount, required', '12.34');
+        await form.type('Amount, Indian Rupee, required', '12.34');
         await form.type('Description, required', 'Dinner while checking');
         await act(async () => {
           release();
           await opening;
         });
-        expect(form.input('Amount, required')).toBe(amount);
+        expect(form.input('Amount, Indian Rupee, required')).toBe(amount);
         expect(form.input('Description, required')).toBe(description);
         expect(description.props.value).toBe('Dinner while checking');
         expect(form.tile('Tag').props.accessibilityState.disabled).toBe(false);
-        expect(form.focusCount('Amount, required')).toBe(0);
+        expect(form.focusCount('Amount, Indian Rupee, required')).toBe(0);
         const ready = screen!.toJSON();
         expect(
           labels.map((label) =>
@@ -1517,7 +1517,7 @@ describe('compact Expense form', () => {
 
   it('uses a decimal keypad for Amount beside its read-only currency, then moves to Description', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
-    const amount = ui.input('Amount, required');
+    const amount = ui.input('Amount, Indian Rupee, required');
     expect(amount.props).toMatchObject({ keyboardType: 'decimal-pad', returnKeyType: 'next' });
     expect(
       ui
@@ -1537,20 +1537,21 @@ describe('compact Expense form', () => {
   // A hardware keyboard or a paste bypasses the numeric keypad.
   it('refuses letters and symbols in numbers, but never converts a value it keeps for correction', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
-    await ui.type('Amount, required', '-5');
-    expect(ui.input('Amount, required').props.value).toBe('-5');
+    await ui.type('Amount, Indian Rupee, required', '-5');
+    expect(ui.input('Amount, Indian Rupee, required').props.value).toBe('-5');
     await ui.type('Description, required', 'Milk');
     await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await ui.press('Save expense');
     expect(ui.writes).toEqual([]);
-    expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([
+    expect(corrections(fieldOf(ui.input('Amount, Indian Rupee, required')))).toEqual([
       'Enter an amount greater than 0.',
     ]);
 
-    await ui.type('Amount, required', '12.5');
-    for (const edit of ['12.5x', '₹12.5', '12.5 ']) await ui.type('Amount, required', edit);
-    expect(ui.input('Amount, required').props.value).toBe('12.5');
+    await ui.type('Amount, Indian Rupee, required', '12.5');
+    for (const edit of ['12.5x', '₹12.5', '12.5 '])
+      await ui.type('Amount, Indian Rupee, required', edit);
+    expect(ui.input('Amount, Indian Rupee, required').props.value).toBe('12.5');
 
     await ui.press(ui.tile('Split').props.accessibilityLabel);
     await ui.press('Amounts');
@@ -1632,7 +1633,7 @@ describe('compact Expense form', () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     expect(text(ui.root())).toContain('Enter a valid amount to see who owes what.');
     expect(ui.pressable('Save expense').props.accessibilityLabel).toBe('Save expense');
-    await ui.type('Amount, required', '250.50');
+    await ui.type('Amount, Indian Rupee, required', '250.50');
     expect(
       ui
         .root()
@@ -1875,7 +1876,7 @@ describe('the Add expense header at large text (#639)', () => {
     async (size) => {
       setWindow(size);
       const form = await render((controller) => controller.openExpense(groupId));
-      await form.type('Amount, required', '42.50');
+      await form.type('Amount, Indian Rupee, required', '42.50');
       await form.type('Description, required', 'QA matrix dinner');
       const [bar] = findHosts(
         screen!.toJSON(),
@@ -1911,5 +1912,140 @@ describe('the Description placeholder at large text (#639)', () => {
       children: [placeholder],
     } as unknown as ReactTestRendererJSON;
     expect(layoutWidth(line, size.fontScale)).toBeLessThanOrEqual(size.width - 32 - 2 - 28);
+  });
+});
+
+describe('the currency beside the amount (#720)', () => {
+  // Lisbon and Tokyo: rupees, with euros and yen as extra currencies. Alex's latest Expense here
+  // was in yen.
+  const travelling = {
+    ...group,
+    name: 'Lisbon and Tokyo',
+    alternateCurrencies: ['EUR', 'JPY'],
+    latestExpenseCurrency: 'JPY',
+  };
+  const visibleSheet = (root: ReactTestInstance, title: string) =>
+    root
+      .findAll((node) => isHost(node, 'Modal') && node.props.visible === true)
+      .find((modal) => text(modal).includes(title));
+  const radios = (scope: ReactTestInstance) =>
+    scope
+      .findAll((node) => isHost(node, 'Pressable') && node.props.accessibilityRole === 'radio')
+      .map((node) => ({
+        label: node.props.accessibilityLabel,
+        checked: !!node.props.accessibilityState?.checked,
+        disabled: !!node.props.disabled,
+      }));
+
+  it('starts in the latest Expense’s currency, and a sheet beside the amount picks another, keeping the number typed', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId), {
+      readGroup: async () => json({ status: 200, data: travelling }),
+    });
+    expect(text(ui.root())).toContain('Started in JPY, the currency of your latest Expense here.');
+    // Yen are whole: the number keypad, and TalkBack hears the currency with the amount.
+    expect(ui.input('Amount, Japanese Yen, required').props.keyboardType).toBe('number-pad');
+    await ui.type('Amount, Japanese Yen, required', '2500');
+    await ui.press('Currency, JPY, Japanese Yen. Change currency');
+    const sheet = visibleSheet(ui.root(), 'Currency')!;
+    expect(text(sheet)).toContain('Lisbon and Tokyo · 3 currencies');
+    expect(radios(sheet)).toEqual([
+      {
+        label: 'JPY, Japanese Yen, your latest Expense here, whole amounts only',
+        checked: true,
+        disabled: false,
+      },
+      { label: 'INR, Indian Rupee, main currency', checked: false, disabled: false },
+      { label: 'EUR, Euro', checked: false, disabled: false },
+    ]);
+    expect(text(sheet)).toContain(
+      'Changing the currency keeps the number you typed. Nothing is converted.',
+    );
+    await ui.press('EUR, Euro');
+    expect(ui.controller.getSnapshot().expense.draft).toMatchObject({
+      currency: 'EUR',
+      amount: '2500',
+    });
+    expect(visibleSheet(ui.root(), 'Currency')).toBeUndefined();
+    expect(ui.input('Amount, Euro, required').props).toMatchObject({
+      value: '2500',
+      keyboardType: 'decimal-pad',
+    });
+    expect(ui.pressable('Currency, EUR, Euro. Change currency').props.disabled).toBe(false);
+    expect(text(ui.root())).not.toContain('Started in JPY');
+  });
+
+  it('asks for one of the Group’s currencies when it no longer uses the draft’s, and leads to the sheet', async () => {
+    const ui = await render(
+      async (controller) => {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({ currency: 'GBP' });
+      },
+      { readGroup: async () => json({ status: 200, data: travelling }) },
+    );
+    expect(text(ui.root())).toContain('This Group no longer uses GBP. Pick one of its currencies.');
+    // The Group has other currencies than its main one, so no shortcut to the main currency.
+    expect(() => ui.pressable('Use INR')).toThrow();
+    await ui.press('Pick a currency');
+    expect(visibleSheet(ui.root(), 'Currency')).toBeDefined();
+    await ui.press('EUR, Euro');
+    expect(ui.controller.getSnapshot().expense.draft?.currency).toBe('EUR');
+    expect(text(ui.root())).not.toContain('no longer uses GBP');
+  });
+
+  it('says the shares are in whole yen, as the web does, and drops it for euros', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId), {
+      readGroup: async () => json({ status: 200, data: travelling }),
+    });
+    await ui.type('Amount, Japanese Yen, required', '2500');
+    expect(text(ui.root())).toContain('Who owes what · JPY · whole yen');
+    await ui.press('Currency, JPY, Japanese Yen. Change currency');
+    await ui.press('EUR, Euro');
+    expect(text(ui.root())).toContain('Who owes what · EUR');
+    expect(text(ui.root())).not.toContain('whole yen');
+  });
+
+  it('takes yen whole, saying so in the web’s words', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId), {
+      readGroup: async () => json({ status: 200, data: travelling }),
+    });
+    await ui.type('Amount, Japanese Yen, required', '2500.50');
+    await ui.leave('Amount, Japanese Yen, required');
+    expect(text(ui.root())).toContain(
+      'Yen has no smaller unit. Enter a whole amount, like ¥2,500.',
+    );
+    expect(ui.writes).toEqual([]);
+  });
+
+  it('offline, picks from the currencies saved on this phone', async () => {
+    let time = localNoon;
+    let disconnected = false;
+    const ui = await render(
+      async (controller) => {
+        // Opening the Group keeps it, with its currencies, in its Saved copy.
+        await controller.openGroup(groupId);
+        await controller.back();
+        disconnected = true;
+        time += 31_000;
+        await controller.openExpense(groupId);
+      },
+      {
+        now: () => time,
+        readGroup: async () => {
+          if (disconnected) throw new Error('Offline');
+          return json({ status: 200, data: travelling });
+        },
+      },
+    );
+    expect(ui.controller.getSnapshot().offline.active).toBe(true);
+    await ui.press('Currency, JPY, Japanese Yen. Change currency');
+    const sheet = visibleSheet(ui.root(), 'Currency')!;
+    expect(text(sheet)).toContain(
+      'You’re offline. These are the currencies saved on this phone, so picking one still works.',
+    );
+    expect(radios(sheet).map(({ disabled }) => disabled)).toEqual([false, false, false]);
+    await ui.press('EUR, Euro');
+    expect(ui.controller.getSnapshot().expense.draft?.currency).toBe('EUR');
+    // Saving still needs a connection.
+    expect(ui.writes).toEqual([]);
   });
 });

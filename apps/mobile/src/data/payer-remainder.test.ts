@@ -8,7 +8,7 @@ describe('payer entry errors', () => {
       'INR amounts can have at most 2 decimal places. Nothing is rounded for you.',
     );
     expect(payerEntryError('1.5', 'JPY')).toBe(
-      'JPY amounts can’t include decimal places. Nothing is rounded for you.',
+      'Yen has no smaller unit. Enter a whole amount, like ¥2,500.',
     );
     expect(payerEntryError('1.2.3', 'INR')).toBe(
       'Use digits and one decimal point, such as 250.50.',

@@ -898,6 +898,8 @@ const unlistedGroup = (id: string): MobileGroup => ({
   description: '',
   category: 'other',
   defaultCurrency: 'XXX',
+  alternateCurrencies: [],
+  latestExpenseCurrency: null,
   members: [],
   startDate: null,
   endDate: null,

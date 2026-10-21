@@ -34,6 +34,8 @@ const group: MobileGroup = {
   description: '',
   category: 'home',
   defaultCurrency: 'INR',
+  alternateCurrencies: [],
+  latestExpenseCurrency: null,
   members: [
     {
       user: { id: you, name: 'Alex Rao', email: 'a@x.test', image: null },
