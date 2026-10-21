@@ -17,7 +17,7 @@ import { ASSISTANT_CANNOT } from '@/lib/mcp/assistant-limits';
 import type { AssistantDisplay } from '@/lib/mcp/assistant-name';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { PRODUCT_NAME } from '@/lib/product';
-import type { AssistantGroup } from '@/lib/services/assistant-ledger.service';
+import type { ApprovalGroup } from '@/lib/services/assistant-ledger.service';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 
 /** A connection request as the approval page shows it: the assistant, and what it asks for. */
@@ -82,16 +82,19 @@ export function ConsentPermissions({
         </Typography>
       </Box>
       {details.scopes.includes(MCP_DRAFT_SCOPE) && (
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={drafts}
-              onChange={(event) => onDraftsChange(event.target.checked)}
-              disabled={busy}
-            />
-          }
-          label="Also let it prepare Expenses for your To review"
-        />
+        // In a Box, the label keeps its own offset, so the box lines up with the Groups' (#621).
+        <Box>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={drafts}
+                onChange={(event) => onDraftsChange(event.target.checked)}
+                disabled={busy}
+              />
+            }
+            label="Also let it prepare Expenses for your To review"
+          />
+        </Box>
       )}
       {details.scopes.includes(MCP_DRAFT_SCOPE) && (
         <Typography variant="body2">
@@ -121,34 +124,50 @@ export function ConsentPermissions({
   );
 }
 
-/** "Trip · INR", or "Work · EUR · Archived": what a Group is, beside its name. */
-function groupMeta(group: AssistantGroup) {
-  return [getGroupTheme(group.theme ?? 'other').label, group.currency]
+/** "Trip · INR, EUR", or "Work · EUR · Archived": what a Group is, beside its name. */
+function groupMeta(group: ApprovalGroup) {
+  return [getGroupTheme(group.theme ?? 'other').label, group.currencies.join(', ')]
     .concat(group.archived ? ['Archived'] : [])
     .join(' · ');
 }
 
-/** Every one of the member's Groups unticked: the assistant would reach none of them now. */
+/** Why a Group can't be ticked: who stopped assistants there (#621). */
+function stoppedBy(group: ApprovalGroup, viewerId: string) {
+  if (!group.ruleSetBy) return 'This Group’s admins don’t allow assistants';
+  return group.ruleSetBy.id === viewerId
+    ? 'You don’t allow assistants in this Group'
+    : `${group.ruleSetBy.name} doesn’t allow assistants in this Group`;
+}
+
+/**
+ * Every Group the member could tick is unticked: the assistant would reach none of them now. A
+ * Group whose admins don't allow assistants can't be ticked, so it doesn't count (#621).
+ */
 export function leavesOutEveryGroup(
-  groups: readonly AssistantGroup[],
+  groups: readonly Pick<ApprovalGroup, 'id' | 'rule'>[],
   excluded: readonly string[],
 ) {
-  return groups.length > 0 && groups.every((group) => excluded.includes(group.id));
+  const open = groups.filter((group) => group.rule !== 'not_allowed');
+  return open.length > 0 && open.every((group) => excluded.includes(group.id));
 }
 
 /**
  * Which Groups the assistant reaches (#617): every Group ticked to start. The ones the member
- * unticks become that connection's Excluded Groups, and Groups joined later are included.
+ * unticks become that connection's Excluded Groups, and Groups joined later are included. A Group
+ * whose admins don't allow assistants is greyed out and can't be ticked (#621).
  */
 export function ConsentGroups({
   name,
+  viewerId,
   groups,
   excluded,
   disabled,
   onExcludedChange,
 }: {
   name: string;
-  groups: readonly AssistantGroup[];
+  /** The member approving, who reads as "You" when they stopped assistants in a Group. */
+  viewerId: string;
+  groups: readonly ApprovalGroup[];
   excluded: readonly string[];
   disabled: boolean;
   onExcludedChange: (excluded: string[]) => void;
@@ -163,40 +182,61 @@ export function ConsentGroups({
       </Typography>
       {groups.length > 0 && (
         <FormGroup>
-          {groups.map((group) => (
-            <FormControlLabel
-              key={group.id}
-              control={
-                <Checkbox
-                  checked={!excluded.includes(group.id)}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    onExcludedChange(
-                      event.target.checked
-                        ? excluded.filter((id) => id !== group.id)
-                        : [...excluded, group.id],
-                    )
-                  }
-                />
-              }
-              label={
-                <Box sx={{ py: 0.5 }}>
-                  <Typography variant="body2" fontWeight={500}>
-                    {group.name}
-                  </Typography>
-                  <Typography variant="caption" component="p" color="text.secondary">
-                    {groupMeta(group)}
-                  </Typography>
-                </Box>
-              }
-            />
-          ))}
+          {groups.map((group) => {
+            const stopped = group.rule === 'not_allowed';
+            return (
+              <FormControlLabel
+                key={group.id}
+                control={
+                  <Checkbox
+                    checked={!stopped && !excluded.includes(group.id)}
+                    disabled={disabled || stopped}
+                    onChange={(event) =>
+                      onExcludedChange(
+                        event.target.checked
+                          ? excluded.filter((id) => id !== group.id)
+                          : [...excluded, group.id],
+                      )
+                    }
+                  />
+                }
+                label={
+                  <Box sx={{ py: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      fontWeight={500}
+                      color={stopped ? 'text.disabled' : undefined}
+                    >
+                      {group.name}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      component="p"
+                      color={stopped ? 'text.disabled' : 'text.secondary'}
+                    >
+                      {groupMeta(group)}
+                    </Typography>
+                    {stopped && (
+                      <Typography variant="caption" component="p" color="text.secondary">
+                        {stoppedBy(group, viewerId)}
+                      </Typography>
+                    )}
+                  </Box>
+                }
+              />
+            );
+          })}
         </FormGroup>
       )}
       {groups.length > 0 && (
         <Typography variant="body2">
           Groups you untick are left out of <bdi>{name}</bdi>’s answers, so its totals won’t include
           them.
+        </Typography>
+      )}
+      {groups.some((group) => group.rule === 'not_allowed') && (
+        <Typography variant="body2" color="text.secondary">
+          A Group’s admins decide whether assistants can use it.
         </Typography>
       )}
       {leavesOutEveryGroup(groups, excluded) && (
@@ -317,7 +357,7 @@ export default function OAuthFlow({
   consent: boolean;
   account: SignedInAccount;
   /** The member's Groups, for the approval page to tick or leave out (#617). */
-  groups?: readonly AssistantGroup[];
+  groups?: readonly ApprovalGroup[];
 }) {
   const [details, setDetails] = useState<ConsentDetails | null>(null);
   const [drafts, setDrafts] = useState(false);
@@ -403,6 +443,7 @@ export default function OAuthFlow({
                   groupChoice={
                     <ConsentGroups
                       name={details.name}
+                      viewerId={account.id}
                       groups={groups}
                       excluded={excluded}
                       disabled={busy}

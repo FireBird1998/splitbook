@@ -1,6 +1,8 @@
 import 'server-only';
 import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
+import '@/lib/models/User'; // Registered for the rule's admin, populated below
+import type { AssistantRule } from '@splitbook/shared/assistant-rule';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import {
   moneyParticipantId,
@@ -125,6 +127,16 @@ function assistantGroup(group: {
 }
 export type AssistantGroup = ReturnType<typeof assistantGroup>;
 
+/**
+ * A Group as the approval page lists it (#617): every currency it uses, default first, and its
+ * Assistant rule with the admin who set Not allowed (#621).
+ */
+export type ApprovalGroup = AssistantGroup & {
+  currencies: readonly string[];
+  rule: AssistantRule;
+  ruleSetBy: { id: string; name: string } | null;
+};
+
 export const assistantLedgerService = {
   async groups(reader: LedgerReader, after?: string) {
     await connectDB();
@@ -148,16 +160,32 @@ export const assistantLedgerService = {
     };
   },
   /** Every Group the member belongs to, as the approval page lists them to tick or leave out. */
-  async approvalGroups(memberId: string): Promise<AssistantGroup[]> {
+  async approvalGroups(memberId: string): Promise<ApprovalGroup[]> {
     await connectDB();
     const groups = await Group.find({
       'members.user': draftObjectId.parse(memberId),
       deletionRequestedAt: null,
     })
       .sort({ name: 1, _id: 1 })
-      .select('name defaultCurrency category isArchived')
+      .select(
+        'name defaultCurrency alternateCurrencies category isArchived assistantRule assistantRuleSetBy',
+      )
+      .populate<{ assistantRuleSetBy: { _id: unknown; name: string } | null }>(
+        'assistantRuleSetBy',
+        'name',
+      )
       .lean();
-    return groups.map(assistantGroup);
+    return groups.map((group) => {
+      // A Group stored before the rule is Allowed.
+      const rule = group.assistantRule ?? 'allowed';
+      const setBy = rule === 'not_allowed' ? group.assistantRuleSetBy : null;
+      return {
+        ...assistantGroup(group),
+        currencies: [group.defaultCurrency, ...(group.alternateCurrencies ?? [])],
+        rule,
+        ruleSetBy: setBy ? { id: String(setBy._id), name: setBy.name } : null,
+      };
+    });
   },
   async context(reader: LedgerReader, groupId: string) {
     const group = await requireLedgerMembership(reader, groupId);

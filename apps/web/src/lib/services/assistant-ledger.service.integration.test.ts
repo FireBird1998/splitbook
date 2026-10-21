@@ -40,8 +40,11 @@ describe('the approval page’s Groups', () => {
 
   it('marks a Group whose admins don’t allow assistants, with the admin who stopped them (#621)', async () => {
     const stopped = await createGroup('Maple House');
-    await createGroup('Weekend Hike');
+    const reopened = await createGroup('Weekend Hike');
     await groupService.setAssistantRule(stopped, 'not_allowed', alice);
+    // Allowed again: no one is stopping assistants there now.
+    await groupService.setAssistantRule(reopened, 'not_allowed', alice);
+    await groupService.setAssistantRule(reopened, 'allowed', alice);
 
     const listed = await assistantLedgerService.approvalGroups(bob);
     expect(listed.map(({ name, rule, ruleSetBy }) => ({ name, rule, ruleSetBy }))).toEqual([
