@@ -266,6 +266,26 @@ describe('Settle up with Sam (#734)', () => {
     expect(network.sent[0].body).toMatchObject({ paidCurrency: 'EUR' });
   });
 
+  it('never pays a Debt at another paying currency’s rate after Pay in changes', async () => {
+    // Sam is owed in yen too. In rupees both rates are known; the yen-to-euro one isn't yet.
+    const three: SettleAllOffer = {
+      ...offer,
+      debts: [...offer.debts, { currency: 'JPY', amountMinor: 2500 }],
+    };
+    rates.byPair = {
+      'EUR>INR': { status: 'ready', suggestion: suggestion('92.1') },
+      'JPY>INR': { status: 'ready', suggestion: suggestion('0.56') },
+      'INR>EUR': { status: 'ready', suggestion: suggestion('0.010858') },
+    };
+    await mount({ offer: three, payCurrencies: ['INR', 'EUR', 'JPY'] });
+    expect(rows()[3]).toMatch(/^JPY ¥2,500 ₹0\.56 per ¥/);
+
+    await press('EUR');
+    expect(rows()[3]).toBe('JPY ¥2,500 Getting the suggested rate… —');
+    expect(shown()).toContain('Getting the suggested rate for JPY…');
+    expect(button('Record')!.props.disabled).toBe(true);
+  });
+
   it('keeps a payment whose reply was lost, and Record again sends the very same one', async () => {
     network.replies = ['lost'];
     await mount();
