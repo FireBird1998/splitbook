@@ -439,6 +439,7 @@ it('groups Record payment and both cross-currency amounts on blur without changi
   expect(value('record-payment-paid')).toBe('1,381.50');
   await act(async () => input('record-payment-paid').props.onFocus?.({}));
   await type('record-payment-paid', '1,500.00');
+  expect(value('record-payment-paid')).toBe('1,500.00');
   await act(async () => input('record-payment-paid').props.onBlur?.({}));
   expect(value('record-payment-paid')).toBe('1,500.00');
   await submit();

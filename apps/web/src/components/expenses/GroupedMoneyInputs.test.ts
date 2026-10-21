@@ -86,6 +86,7 @@ it.each(['INR', 'EUR', 'JPY'])(
       expect(stored()).toBe(initial);
       await act(async () => field(kind).props.onFocus?.({}));
       await act(async () => field(kind).props.onChange({ target: { value: shown } }));
+      expect(field(kind).props.value).toBe(shown);
       expect(stored()).toBe(currency === 'JPY' ? '1842' : '1842.50');
       await act(async () => field(kind).props.onBlur?.({}));
     }
