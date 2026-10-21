@@ -8,6 +8,7 @@ import {
   normaliseExtraCurrencies,
   startingExpenseCurrency,
   unlistedCurrencyFix,
+  inGroupCurrencyOrder,
 } from './group-currencies';
 import { amountReadAloud, wholeUnit } from './currency';
 import { assertGroupCurrency } from './expense-validation';
@@ -165,5 +166,16 @@ describe('unlistedCurrencyFix: an Expense in a currency the Group doesn’t list
     expect(unlistedCurrencyFix(lisbon, 'CHF', undefined).changing).toBe(
       'Changing changes only the currency; nothing is converted.',
     );
+  });
+});
+
+describe('inGroupCurrencyOrder (#759)', () => {
+  it('puts the main currency first, then the extra currencies in the Group’s order', () => {
+    expect(inGroupCurrencyOrder(trip, ['JPY', 'INR', 'EUR'])).toEqual(['INR', 'EUR', 'JPY']);
+  });
+
+  it('keeps only the currencies given, and puts one the Group no longer lists after, alphabetically', () => {
+    expect(inGroupCurrencyOrder(trip, ['USD', 'JPY', 'GBP'])).toEqual(['JPY', 'GBP', 'USD']);
+    expect(inGroupCurrencyOrder(trip, [])).toEqual([]);
   });
 });

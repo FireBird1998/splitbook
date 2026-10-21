@@ -603,6 +603,70 @@ describe('the Expense list', () => {
     expect(text(list())).not.toContain('₹0.00');
   });
 
+  describe('in a Group with several currencies (#759)', () => {
+    // Lisbon & Tokyo: rupees, with euros and yen. The read lists yen's total first.
+    const lisbon = () =>
+      list('trip', {
+        group: { ...group('trip'), name: 'Lisbon & Tokyo', alternateCurrencies: ['EUR', 'JPY'] },
+      });
+    const several = page(EXPENSES, {
+      totalsByCurrency: [
+        { currency: 'JPY', totalAmount: 24000 },
+        { currency: 'INR', totalAmount: 42000 },
+        { currency: 'EUR', totalAmount: 26.4 },
+      ],
+      userOwes: 21000,
+      userGetsBack: 0,
+      userByCurrency: [
+        { currency: 'INR', userOwes: 21000, userGetsBack: 0 },
+        { currency: 'EUR', userOwes: 13.2, userGetsBack: 0 },
+        { currency: 'JPY', userOwes: 10500, userGetsBack: 1500 },
+      ],
+    });
+
+    it('stacks what the member owes and gets back in each currency, in the Group’s order, as Spent does', () => {
+      reads.set(LIST, { data: several });
+      const html = lisbon();
+      const summary = html.slice(html.search(/<section\b[^>]*aria-label="Summary"/));
+      // Heard as one sentence, then seen one line per currency (hidden from screen readers),
+      // main currency first, as Spent stacks.
+      expect(text(summary)).toMatch(
+        /^Spent ₹42,000\.00 €26\.40 ¥24,000 Expenses 4 You owe ₹21,000\.00, €13\.20 and ¥10,500 ₹21,000\.00 €13\.20 ¥10,500 You get back ¥1,500/,
+      );
+      expect(summary).toMatch(/aria-hidden="true"[^>]*>[\s\S]*?₹21,000\.00[\s\S]*?¥10,500/);
+      expect(text(summary)).toContain('You get back ¥1,500');
+    });
+
+    it('leaves out a currency the member is square in', () => {
+      reads.set(LIST, {
+        data: page(EXPENSES, {
+          ...several.summary,
+          userGetsBack: 0,
+          userByCurrency: [
+            { currency: 'INR', userOwes: 0, userGetsBack: 0 },
+            { currency: 'EUR', userOwes: 13.2, userGetsBack: 0 },
+            { currency: 'JPY', userOwes: 0, userGetsBack: 0 },
+          ],
+        }),
+      });
+      const summary = text(lisbon());
+      expect(summary).toMatch(/You owe €13\.20/);
+      expect(summary).not.toContain('You get back');
+      expect(summary).not.toContain('₹21,000.00');
+    });
+
+    it('keeps a one-currency Group’s card exactly as it was', () => {
+      reads.set(LIST, { data: page(EXPENSES) });
+      const before = list();
+      reads.set(LIST, {
+        data: page(EXPENSES, {
+          userByCurrency: [{ currency: 'INR', userOwes: 1286.33, userGetsBack: 833 }],
+        }),
+      });
+      expect(list()).toBe(before);
+    });
+  });
+
   it('leaves the summary to the Month bar in a Household, and leaves out the date quick-filters', () => {
     reads.set(LIST, { data: page(EXPENSES) });
     const html = list('home');

@@ -1,3 +1,4 @@
+import { inGroupCurrencyOrder } from '@splitbook/shared/group-currencies';
 import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
 import { afterGroupCommit, withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
@@ -226,7 +227,9 @@ export class ExpenseService {
   async getGroupExpenses(groupId: string, filters: ExpenseFilters = {}, userId?: string) {
     await connectDB();
 
-    const tagGroup = await Group.findById(groupId).select('tags defaultCurrency').lean();
+    const tagGroup = await Group.findById(groupId)
+      .select('tags defaultCurrency alternateCurrencies')
+      .lean();
     const groupTags = tagGroup?.tags ?? [];
     const page = filters.page || 1;
     const limit = filters.limit || 20;
@@ -327,6 +330,7 @@ export class ExpenseService {
     let userOwes = 0;
     let userGetsBack = 0;
     let byMember: import('@splitbook/shared/types').ExpenseMemberBreakdownRow[] | undefined;
+    let userByCurrency: import('@splitbook/shared/types').ExpenseCurrencyPosition[] | undefined;
 
     if (userId || filters.includeMemberBreakdown) {
       // For efficiency, if total <= limit we already have all. Otherwise run a lean query.
@@ -349,6 +353,24 @@ export class ExpenseService {
         );
         userOwes = oweGetBack.userOwes;
         userGetsBack = oweGetBack.userGetsBack;
+        // On request, each currency's own figures the same way, in the Group's order: the main
+        // currency, its extra currencies, then any other one the Expenses are still in (#759).
+        if (filters.includeUserByCurrency) {
+          userByCurrency = inGroupCurrencyOrder(
+            {
+              defaultCurrency: tagGroup?.defaultCurrency ?? 'INR',
+              alternateCurrencies: tagGroup?.alternateCurrencies,
+            },
+            allFiltered.map((row) => row.currency as string),
+          ).map((currency) => ({
+            currency,
+            ...computeUserOweGetBack(
+              allFiltered.filter((row) => row.currency === currency) as LeanExpenseContribution[],
+              userId,
+              currency,
+            ),
+          }));
+        }
       }
 
       if (filters.includeMemberBreakdown) {
@@ -416,6 +438,7 @@ export class ExpenseService {
         userOwes,
         userGetsBack,
         ...(byMember ? { byMember } : {}),
+        ...(userByCurrency ? { userByCurrency } : {}),
         ...(filters.includeRecurringCount
           ? { recurringCount: summaryAgg.filter((record) => record.recurringExpense).length }
           : {}),
