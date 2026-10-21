@@ -171,7 +171,8 @@ test('the Balances tab debt and the Record payment prefill include this month’
   const form = page.getByRole('region', { name: 'Record payment', exact: true });
   const amount = form.getByRole('textbox', { name: 'Amount paid' });
   await expect(amount).toBeFocused();
-  await expect(amount).toHaveValue('30000.00');
+  // Focus retains the displayed text, preserving native selection (#773).
+  await expect(amount).toHaveValue('30,000.00');
   await amount.blur();
   await expect(amount).toHaveValue('30,000.00');
   // Inspect the prefill only; nothing is recorded.

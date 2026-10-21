@@ -253,7 +253,7 @@ test('narrow and breakpoint layouts keep Record reachable, and Record moves focu
   // Record fills the form in on the page and moves focus to the amount, then the form's order.
   const amount = form.getByRole('textbox', { name: 'Amount paid' });
   await expect(amount).toBeFocused();
-  await expect(amount).toHaveValue('1480.00');
+  await expect(amount).toHaveValue('1,480.00');
   await page.keyboard.press('Tab');
   await expect(form.getByRole('textbox', { name: 'Note, optional' })).toBeFocused();
   await page.keyboard.press('Tab');

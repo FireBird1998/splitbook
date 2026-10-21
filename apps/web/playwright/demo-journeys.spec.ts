@@ -123,7 +123,7 @@ test('alex: Needs you → Record opens the payment’s Group on its Balances, wi
   // person, for the suggested amount. Nothing is recorded.
   const form = main.getByRole('region', { name: 'Record payment', exact: true });
   const amountField = form.getByRole('textbox', { name: 'Amount paid' });
-  await expect(amountField).toHaveValue((payment!.amountMinor / 100).toFixed(2));
+  await expect(amountField).toHaveValue(amount.slice(1));
   await expect(amountField).toBeFocused();
   await expect(form.getByRole('combobox', { name: 'From', exact: true })).toHaveValue(
     DEMO_PERSONA_IDS.alex,
