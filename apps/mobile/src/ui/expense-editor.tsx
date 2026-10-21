@@ -953,25 +953,43 @@ function ExpenseTask({
             !draft.original &&
             context &&
             !isGroupCurrency(context.group, draft.currency) ? (
-              <View style={{ gap: 6 }}>
-                {!errors.amount && (
-                  <CompactText variant="small" tone="warning" accessibilityRole="alert">
-                    This{' '}
-                    {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
-                      ? 'item'
-                      : 'draft'}{' '}
-                    uses {draft.currency}; the Group now uses {context.group.defaultCurrency}.
-                    Review the amount before choosing the new currency.
-                  </CompactText>
-                )}
-                <CompactButton
-                  label={`Use ${context.group.defaultCurrency}`}
-                  variant="tonal"
-                  dense
-                  disabled={financialLocked}
-                  onPress={() => onChange({ currency: context.group.defaultCurrency })}
-                />
-              </View>
+              context.group.alternateCurrencies.length ? (
+                // A Group with extra currencies offers them all, in the Currency sheet (#720).
+                <View style={{ gap: 6 }}>
+                  {!errors.amount && (
+                    <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                      This Group no longer uses {draft.currency}. Pick one of its currencies.
+                    </CompactText>
+                  )}
+                  <CompactButton
+                    label="Pick a currency"
+                    variant="tonal"
+                    dense
+                    disabled={currencyLocked}
+                    onPress={openCurrency}
+                  />
+                </View>
+              ) : (
+                <View style={{ gap: 6 }}>
+                  {!errors.amount && (
+                    <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                      This{' '}
+                      {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
+                        ? 'item'
+                        : 'draft'}{' '}
+                      uses {draft.currency}; the Group now uses {context.group.defaultCurrency}.
+                      Review the amount before choosing the new currency.
+                    </CompactText>
+                  )}
+                  <CompactButton
+                    label={`Use ${context.group.defaultCurrency}`}
+                    variant="tonal"
+                    dense
+                    disabled={financialLocked}
+                    onPress={() => onChange({ currency: context.group.defaultCurrency })}
+                  />
+                </View>
+              )
             ) : null}
             {tagNotice ? (
               <CompactText variant="small" tone="warning" accessibilityRole="alert">

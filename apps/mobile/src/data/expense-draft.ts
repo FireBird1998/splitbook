@@ -379,7 +379,7 @@ function amountError(draft: ExpenseDraft, context: ExpenseContext | null) {
   if (!draft.original && group && !isGroupCurrency(group, currency))
     // A Group with extra currencies offers them; one with only its main currency offers that.
     return group.alternateCurrencies.length
-      ? `${group.name} doesn’t use ${currency}. Choose one of its currencies, then review the amount.`
+      ? `This Group no longer uses ${currency}. Pick one of its currencies.`
       : `This draft uses ${currency}, but the Group now uses ${group.defaultCurrency}. Choose Use ${group.defaultCurrency}, then review the amount.`;
   return moneyAmountError(draft.amount, currency);
 }
