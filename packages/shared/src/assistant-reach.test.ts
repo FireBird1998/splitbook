@@ -11,6 +11,10 @@ describe('assistantReachesGroup', () => {
   it('treats a Group with no stored rule as Allowed', () => {
     expect(assistantReachesGroup({ id: 'a' }, ['another-group'])).toBe(true);
   });
+  it('treats stored null exclusions as no excluded Groups (#753)', () => {
+    expect(assistantReachesGroup({ id: 'a' }, null)).toBe(true);
+    expect(assistantReachesGroup({ id: 'a', assistantRule: 'not_allowed' }, null)).toBe(false);
+  });
   it('includes an Allowed Group and accepts a capitalised route id', () => {
     expect(assistantReachesGroup({ id: 'a', assistantRule: 'allowed' })).toBe(true);
     expect(assistantReachesGroup({ id: 'AB12', assistantRule: 'allowed' }, ['ab12'])).toBe(false);

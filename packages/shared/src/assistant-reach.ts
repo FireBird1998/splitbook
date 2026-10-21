@@ -14,9 +14,12 @@ const NOT_ALLOWED: AssistantRule = 'not_allowed';
  */
 export function assistantReachesGroup(
   group: AssistantReachGroup,
-  excludedGroupIds: readonly string[] = [],
+  excludedGroupIds: readonly string[] | null = [],
 ): boolean {
-  return group.assistantRule !== NOT_ALLOWED && !excludedGroupIds.includes(group.id.toLowerCase());
+  return (
+    group.assistantRule !== NOT_ALLOWED &&
+    !(excludedGroupIds ?? []).includes(group.id.toLowerCase())
+  );
 }
 
 /**

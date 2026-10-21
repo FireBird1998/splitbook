@@ -202,6 +202,31 @@ describe('a Group’s Assistant rule', () => {
     expect((await readReach(groupId, admin)).body.data).toEqual({ reach: [] });
   });
 
+  it('lists a live assistant with stored null exclusions for the Group admin (#753)', async () => {
+    const groupId = await mapleHouse();
+    const clientId = 'https://null-exclusions.example.test/client.json';
+    const lastUsedAt = daysAgo(1);
+    await connect(sam, clientId, { name: 'Fictional Helper', lastUsedAt });
+    // Legacy storage can contain explicit null, not just an absent exclusions field.
+    const stored = await adapter.update({
+      model: 'mcpConnection',
+      where: [{ field: 'clientId', value: clientId }],
+      update: { excludedGroupIds: null },
+    });
+    expect(stored).toMatchObject({ excludedGroupIds: null });
+    const listed = await readReach(groupId, await signIn('alex'));
+    expect(listed.status).toBe(200);
+    expect(listed.body.data).toEqual({
+      reach: [
+        {
+          member: { id: sam, name: 'Sam Chen' },
+          assistant: 'Fictional Helper',
+          lastUsedAt: lastUsedAt.toISOString(),
+        },
+      ],
+    });
+  });
+
   it('names each assistant as Settings does, never by a name posing as another address (#621)', async () => {
     const groupId = await mapleHouse();
     await connect(sam, 'https://helper.example.test/client.json', { name: 'chatgpt.com' });

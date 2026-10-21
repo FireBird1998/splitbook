@@ -37,7 +37,7 @@ export async function groupReach(
       sortBy: { field: 'createdAt', direction: 'asc' },
     });
     for (const row of rows) {
-      if (!assistantReachesGroup(group, row.excludedGroupIds ?? [])) continue;
+      if (!assistantReachesGroup(group, row.excludedGroupIds)) continue;
       if (!(await liveMcpConsent(adapter, row, env))) continue;
       reach.push({
         member: { id: row.userId, name: names.get(row.userId) ?? '' },
