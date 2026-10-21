@@ -1225,7 +1225,7 @@ describe('multi-currency exports (#731)', () => {
       'Rate (paid per cleared)': '92.5',
     });
     const preview = exportPreviewSchema.parse(
-      json(await request(alice, path + '&preview=1')).data,
+      json(await request(alice, path + '&preview=1')),
     );
     expect(preview.format).toBe('csv');
     if (preview.format !== 'csv') throw new Error('Expected CSV preview');

@@ -1,6 +1,9 @@
 import { buildBackup, type BackupGroupInput } from '@splitbook/shared/export-backup';
 import { buildStatement } from '@splitbook/shared/statement';
 import { Types } from 'mongoose';
+import { z } from 'zod';
+import { crossCurrencySettlementReadShape } from '@splitbook/shared/validators/settlement';
+import type { CrossCurrencySettlementFields } from '@splitbook/shared/cross-currency-settlement';
 import { zipSync } from 'fflate';
 import connectDB from '@/lib/db';
 import Expense, { type IExpenseDocument } from '@/lib/models/Expense';
@@ -489,9 +492,11 @@ export class ExportService {
       | 'currency'
       | 'note'
       | 'createdBy'
-    >,
+    > &
+      Partial<CrossCurrencySettlementFields>,
   ): ExportPayment {
     return {
+      ...z.object(crossCurrencySettlementReadShape).parse(payment),
       id: String(payment._id),
       at: payment.createdAt,
       fromId: String(payment.paidBy),

@@ -495,6 +495,9 @@ describe('the payments CSV', () => {
       'Note',
       'Recorded by',
       'Payment ID',
+      'Amount paid',
+      'Paid currency',
+      'Rate (paid per cleared)',
     ]);
   });
 
@@ -536,6 +539,9 @@ describe('the payments CSV', () => {
         'Rent, August',
         'Sam Chen',
         'd00000000000000000000001',
+        '',
+        '',
+        '',
       ],
       [
         '2026-09-02',
@@ -547,6 +553,9 @@ describe('the payments CSV', () => {
         '',
         'Priya Shah',
         'd00000000000000000000002',
+        '',
+        '',
+        '',
       ],
     ]);
   });
