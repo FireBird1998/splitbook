@@ -60,6 +60,7 @@ import {
   type ExpenseListQuery,
 } from './expense-list-query';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { groupCurrencies } from '@splitbook/shared/group-currencies';
 
 /** Expenses on one page of the list, on a computer or a phone. */
 export const EXPENSE_LIST_PAGE_SIZE = 50;
@@ -311,6 +312,7 @@ export default function ExpenseListView({
           accountId: userId,
           memberIds: group.members.map(({ user }) => user._id),
           currency,
+          currencies: groupCurrencies(group),
           defaultTag: getDefaultExpenseTag(group.tags),
           date: toDateParam(new Date()),
         },

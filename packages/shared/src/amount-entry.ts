@@ -3,7 +3,7 @@
  * shows: Record payment's (#312, #514) and an Expense's (#528). Framework-free, so any form can
  * use it.
  */
-import { formatCurrency, getCurrencyPrecision } from './currency';
+import { formatCurrency, getCurrencyPrecision, wholeUnit } from './currency';
 import { MAX_EXPENSE_AMOUNT, MoneyValidationError, parseAmountMinor } from './exact-money';
 
 export type AmountReading =
@@ -40,12 +40,13 @@ export function readAmountEntry(text: string, currency: string): AmountReading {
   } catch (error) {
     if (error instanceof MoneyValidationError && error.code === 'INVALID_MONEY_PRECISION') {
       const places = getCurrencyPrecision(currency);
+      const unit = wholeUnit(currency);
       return {
         status: 'invalid',
-        message:
-          places === 0
-            ? `${currency} amounts have no decimal places.`
-            : `Use at most ${places} decimal places.`,
+        // "Yen has no smaller unit. Enter a whole amount, like ¥2,500." (#719)
+        message: unit
+          ? `${unit.charAt(0).toUpperCase()}${unit.slice(1)} has no smaller unit. Enter a whole amount, like ${formatCurrency(2500, currency)}.`
+          : `Use at most ${places} decimal places.`,
       };
     }
     return { status: 'invalid', message: like };

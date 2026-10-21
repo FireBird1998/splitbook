@@ -17,6 +17,11 @@ import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { toDateParam } from '@splitbook/shared/date';
 import { formatCurrency } from '@splitbook/shared/currency';
+import {
+  expenseCurrencyChoices,
+  groupCurrencies,
+  startingExpenseCurrency,
+} from '@splitbook/shared/group-currencies';
 import { readAmountEntry } from '@splitbook/shared/amount-entry';
 import {
   ExpenseDraft,
@@ -90,7 +95,10 @@ function ExpenseDraftDialog({
 }: ExpenseFormDialogProps) {
   const members = group.members;
   const groupTags = group.tags;
-  const defaultCurrency = group.defaultCurrency;
+  // A new Expense starts in the currency of the member's latest Expense here, while the Group
+  // lists it, else in the main currency; nothing new is stored for it (#710, #719).
+  const currencies = groupCurrencies(group);
+  const startCurrency = startingExpenseCurrency(group, group.latestExpenseCurrency);
 
   const [draft, setDraft] = useState(() =>
     initialDraft && !initialExpense
@@ -100,7 +108,8 @@ function ExpenseDraftDialog({
             groupId,
             accountId: userId,
             memberIds: members.map((member) => member.user._id),
-            currency: defaultCurrency,
+            currency: startCurrency,
+            currencies,
             defaultTag: getDefaultExpenseTag(groupTags),
             date: defaultDate ?? toDateParam(new Date()),
           },
@@ -120,7 +129,8 @@ function ExpenseDraftDialog({
         groupId,
         accountId: userId,
         memberIds: members.map((member) => member.user._id),
-        currency: defaultCurrency,
+        currency: startCurrency,
+        currencies,
         defaultTag: getDefaultExpenseTag(groupTags),
         date: defaultDate ?? toDateParam(new Date()),
       }).values,
@@ -164,6 +174,15 @@ function ExpenseDraftDialog({
     onClose();
   };
 
+  const currencyChoices = expenseCurrencyChoices(group, group.latestExpenseCurrency, currency);
+  const currencyHint =
+    !isEditMode &&
+    !initialDraft &&
+    currencies.length > 1 &&
+    currency === startCurrency &&
+    startCurrency === group.latestExpenseCurrency
+      ? `Started in ${currency}, the currency of your latest Expense here.`
+      : null;
   const preview = draft.preview();
   const previewAmount = (id: string): string => {
     const row = preview.money?.splitBetween.find((row) => row.user === id);
@@ -257,7 +276,8 @@ function ExpenseDraftDialog({
             </Box>
           )}
 
-          {amount && preview.error && preview.error !== error && (
+          {/* The amount field says itself why it can't take the amount (#528), once (#719). */}
+          {amount && !amountUnreadable && preview.error && preview.error !== error && (
             <Box role="status" sx={{ color: 'status.negative' }}>
               {preview.error}
             </Box>
@@ -275,6 +295,8 @@ function ExpenseDraftDialog({
             currentTag={expense?.tag as string | undefined}
             currentTagId={expense?.tagId as string | undefined}
             previewAmount={previewAmount}
+            currencyChoices={currencyChoices}
+            currencyHint={currencyHint}
           />
         </Stack>
       </DialogContent>
