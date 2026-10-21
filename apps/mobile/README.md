@@ -176,7 +176,7 @@ Resuming an ordinary draft is marked as never sent. A save that may already be r
 
 ## Record actual payments (#56)
 
-Open **Payments** in a Group to view authorized Settlement history and eligible suggested debts involving you. Review the amount actually paid; partial payments are supported. Review refreshes the suggestion while retaining your entry. An amount above the current suggestion requires a separate acknowledgment, which resets if the suggestion changes before submission. This records an existing payment; Splitbook neither transfers funds nor confirms bank/provider status.
+Open **Payments** in a Group to view authorized Settlement history and eligible suggested debts involving you. Review the amount actually paid; partial payments are supported. Review refreshes the suggestion while retaining your entry. An amount above the current suggestion requires a separate acknowledgment, which resets if the suggestion changes before submission. This records an existing payment; Splitbook neither transfers funds nor confirms bank/provider status. A Debt is recorded on its own currency's tab of Balances, in that currency, even one the Group no longer lists, which the server allows for a currency the Group has used (#727, #728).
 
 Recording requires an online membership/party check. SQLite stores one unresolved Settlement per Group with the exact payload and submission key before any POST. Restart and foreground refresh do not resend it. **Retry same payment record** explicitly reuses the persisted body/key; a changed balance never rewrites that attempt. Confirmed success reloads Settlement history, suggestions, and Home; opening the Group reloads its ledger. Backend Activity is recorded by the shared service; native Activity remains #57.
 

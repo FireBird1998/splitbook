@@ -51,7 +51,6 @@ import { canRecordSettlement } from '@splitbook/shared/settlement-authorization'
 import {
   assertSettlementMembers,
   assertSettlementAuthorization,
-  assertGroupCurrency,
 } from '@splitbook/shared/expense-validation';
 import { canEditExpense, parseExpenseRecord, type ExpenseRecord } from './expense-record';
 import {
@@ -4645,9 +4644,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const debt = state.balances
       .find((b) => b.currency === currency)
       ?.debts.find((d) => d.from.id === paidBy && d.to.id === paidTo);
+    // A Debt is recorded in its own currency, whichever of the Group's it is (#728).
     if (
       !debt ||
-      currency !== state.group.defaultCurrency ||
       !canRecordSettlement(account, paidBy, paidTo) ||
       !state.group.members.some((m) => m.user.id === paidBy) ||
       !state.group.members.some((m) => m.user.id === paidTo)
@@ -4833,7 +4832,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           });
           return;
         }
-        assertGroupCurrency(context.group, draft.currency);
+        // The Debt's own currency needs no other check: the Balances just read have a Debt in it,
+        // and the server records one in a currency the Group no longer lists, too (#727, #728).
         const body = settlementBody(draft);
         const pending = { key: dependencies.newSubmissionKey?.() ?? '', body };
         const value = { version: 1, accountId: lease.accountId, groupId, ...pending };
