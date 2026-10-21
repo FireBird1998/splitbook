@@ -44,7 +44,13 @@ import {
   type SettlementAttempt,
 } from '@/lib/settlement-attempts';
 import {
+  DISCARDED,
+  GONE,
+  NOT_DISCARDED,
+  NOT_STORED,
   RECORD_PAYMENT_FOOTNOTE,
+  STALE,
+  UNCONFIRMED,
   amountInputText,
   checkNewPayment,
   currencyLabel,
@@ -54,17 +60,6 @@ import {
   type LedgerState,
 } from './record-payment';
 
-const UNCONFIRMED =
-  'This payment may already be recorded. Recording it again sends the same record, so it can’t be counted twice.';
-const GONE =
-  'That payment was confirmed or discarded in another tab, so this can’t send anything. Check Payments below before recording another payment.';
-const NOT_STORED =
-  'Nothing was sent: this browser couldn’t keep a copy of the payment to retry it safely. Allow this site to store data, then record it again.';
-const STALE =
-  'Nothing was sent: this page was opened for a different account than the one signed in now. It reloads for the current account.';
-const NOT_DISCARDED = 'This browser couldn’t discard the payment. Try again.';
-export const DISCARDED =
-  'This browser’s copy of the payment was discarded. Nothing was removed from the Group.';
 
 /** Someone who can be picked as From or To. */
 export interface PaymentParty {
