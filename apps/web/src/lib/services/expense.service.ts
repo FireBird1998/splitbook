@@ -37,7 +37,7 @@ import {
   makePendingActivity,
   requestTagForReplay,
 } from '@/lib/financial-write';
-import { lockLedgerCurrency } from '@/lib/ledger-currency';
+import { lockLedgerCurrency, lockRestoredCurrency } from '@/lib/ledger-currency';
 import { assertExpectedRevision } from '@/lib/ledger-revision';
 import mongoose from 'mongoose';
 import {
@@ -511,14 +511,15 @@ export class ExpenseService {
       );
     }
     // An edit that keeps an older Expense's currency stays allowed, as the check above says.
-    const currencyChecked =
-      restoring || (data.currency !== undefined && data.currency !== original.currency);
+    const currencyMoved = data.currency !== undefined && data.currency !== original.currency;
     await withGroupMutation(
       access.groupId,
       async () => {
-        // A restored Expense, or one moved to another currency, needs the currency still listed
-        // (#721), checked in the save's own mutation so a removal can't come in between.
-        if (currencyChecked) await lockLedgerCurrency(access.groupId, expense.currency);
+        // A restored Expense, or one moved to another currency, needs its currency still the
+        // Group's (#721), checked in the save's own mutation so a removal can't come in between.
+        if (restoring)
+          await lockRestoredCurrency(access.groupId, expense.currency, access.expenseId);
+        else if (currencyMoved) await lockLedgerCurrency(access.groupId, expense.currency);
         return expense.save();
       },
       { ledger: true },

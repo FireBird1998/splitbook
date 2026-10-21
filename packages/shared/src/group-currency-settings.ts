@@ -204,8 +204,10 @@ export function extraCurrencyChangeDetail(
   change: ExtraCurrencyChange,
   record: ExtraCurrencyChangeRecord,
 ): string | null {
-  if (!change.added.length) return 'Nothing used it';
   const listed = codes(record.currencies);
   const named = typeof record.groupName === 'string' && record.groupName.trim();
-  return named && listed.length ? `${named} now uses ${spokenList(listed)}` : null;
+  // Only an entry recorded with its list says more: a removal before #721 may have dropped a
+  // currency still in use.
+  if (!named || !listed.length) return null;
+  return change.added.length ? `${named} now uses ${spokenList(listed)}` : 'Nothing used it';
 }

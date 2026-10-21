@@ -472,9 +472,9 @@ removing it is refused, saying what uses it in the read's `use` shape:
 The check and the removal are one Group mutation, as is each Expense and
 Settlement write's check that its currency is listed, so no Expense or
 Settlement in the currency arrives in between. A Draft may still arrive in it
-afterwards; To review then shows it as not one of the Group's currencies. A deleted Expense in a currency the Group no
-longer lists can't be restored (422 `CURRENCY_MISMATCH`) until the currency is
-added again. Activity records the removal like an addition.
+afterwards; To review then shows it as not one of the Group's currencies. A deleted Expense comes back in its currency while the Group lists it, or while another live
+Expense or a Settlement still uses it (an older Group's currency). Otherwise restoring it is 422
+`CURRENCY_MISMATCH`, "Add GBP to the Group’s currencies to restore it." Activity records the removal like an addition.
 
 ---
 
@@ -1480,8 +1480,9 @@ removed, #721) reads as "Sam added JPY to the Group’s currencies" or "Alex rem
 Group’s currencies" on the web and on Android. Its metadata also keeps `groupName` and
 `currencies`, the Group's name and its currencies (main first) as they were after the change,
 so the line under an addition ("Lisbon & Tokyo now uses INR, EUR and JPY") never changes
-later; an entry without them shows no such line. Under a removal the line is "Nothing used
-it", since removing a currency in use is refused.
+later. Under a removal recorded with them the line is "Nothing used it", since removing a
+currency in use is refused. An entry without them, added or removed, shows no such line: a
+removal before #721 could drop a currency still in use.
 
 Activity writes are on the critical path — every mutation `await`s the log.
 Most log after their write has committed, so a logging failure fails the request
