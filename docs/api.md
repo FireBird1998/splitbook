@@ -443,7 +443,7 @@ main currency, a currency already on the list ("CHF is already one of this
 Group’s currencies.") and a fifth extra currency. Two members adding the last
 place at once: one is added, the other refused. Activity records a
 `group_updated` event whose `changes.alternateCurrencies` holds the list before
-and after.
+and after, with `groupName` and `currencies` as described under Activity Feed.
 
 ### DELETE /api/groups/[id]/currencies/[code]
 
@@ -1475,9 +1475,13 @@ Android Expense record reads its history this way.
 Expenses generated from a recurring template log with `recurring: true`,
 `recurringExpenseId` and `period` in their metadata.
 
-A `group_updated` event whose only change is `alternateCurrencies` (an extra
-currency added or removed, #721) reads as "Sam added the extra currency CHF" or
-"Alex removed the extra currency GBP" on the web and on Android.
+A `group_updated` event whose only change is `alternateCurrencies` (an extra currency added or
+removed, #721) reads as "Sam added JPY to the Group’s currencies" or "Alex removed GBP from the
+Group’s currencies" on the web and on Android. Its metadata also keeps `groupName` and
+`currencies`, the Group's name and its currencies (main first) as they were after the change,
+so the line under an addition ("Lisbon & Tokyo now uses INR, EUR and JPY") never changes
+later; an entry without them shows no such line. Under a removal the line is "Nothing used
+it", since removing a currency in use is refused.
 
 Activity writes are on the critical path — every mutation `await`s the log.
 Most log after their write has committed, so a logging failure fails the request

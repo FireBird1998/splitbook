@@ -180,9 +180,32 @@ export function extraCurrencyChange(changes: unknown): ExtraCurrencyChange | nul
   return added.length || removed.length ? { added, removed } : null;
 }
 
-/** The change in Activity's words: "added the extra currency CHF". */
+/** The change in Activity's words: "added JPY to the Group’s currencies". */
 export function extraCurrencyChangeWords({ added, removed }: ExtraCurrencyChange): string {
-  if (added.length && removed.length) return 'changed the extra currencies';
-  const [verb, list] = added.length ? ['added', added] : ['removed', removed];
-  return `${verb} the extra ${list.length === 1 ? 'currency' : 'currencies'} ${spokenList(list)}`;
+  if (added.length && removed.length) return 'changed the Group’s currencies';
+  return added.length
+    ? `added ${spokenList(added)} to the Group’s currencies`
+    : `removed ${spokenList(removed)} from the Group’s currencies`;
+}
+
+/** What Activity keeps with a change to the list: the Group's name and what the list became. */
+export interface ExtraCurrencyChangeRecord {
+  groupName?: unknown;
+  currencies?: unknown;
+}
+
+/**
+ * The line under the change: a removal left nothing unused ("Nothing used it", since removing
+ * one in use is refused), and otherwise the list as it was recorded with the change ("Lisbon &
+ * Tokyo now uses INR, EUR and JPY"), never today's, so a later change never rewrites it. An
+ * entry recorded without its list says nothing more.
+ */
+export function extraCurrencyChangeDetail(
+  change: ExtraCurrencyChange,
+  record: ExtraCurrencyChangeRecord,
+): string | null {
+  if (!change.added.length) return 'Nothing used it';
+  const listed = codes(record.currencies);
+  const named = typeof record.groupName === 'string' && record.groupName.trim();
+  return named && listed.length ? `${named} now uses ${spokenList(listed)}` : null;
 }

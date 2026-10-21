@@ -195,18 +195,23 @@ async function settings(groupId: string, viewerId: string) {
   return read(await memberGroup(groupId, viewerId, null), viewerId);
 }
 
-/** Save the new list and record the change, in the same Group mutation. */
+/**
+ * Save the new list and record the change, in the same Group mutation. Activity keeps the
+ * Group's name and what its currencies became then, so the entry never changes later.
+ */
 async function saveList(
-  groupId: string,
+  group: GroupRecord,
   actorId: string,
   list: { old: string[]; new: string[] },
   session: ClientSession | null,
 ) {
-  await Group.updateOne({ _id: groupId }, { $set: { alternateCurrencies: list.new } }).session(
+  await Group.updateOne({ _id: group._id }, { $set: { alternateCurrencies: list.new } }).session(
     session,
   );
-  await activityService.log(groupId, 'group_updated', actorId, {
+  await activityService.log(String(group._id), 'group_updated', actorId, {
     changes: { alternateCurrencies: list },
+    groupName: group.name,
+    currencies: [group.defaultCurrency, ...list.new],
   });
 }
 
@@ -228,12 +233,7 @@ export const groupCurrencyService = {
         : extraCurrenciesProblem(group.defaultCurrency, [...listed, currency]);
       if (problem)
         throw new MoneyValidationError('INVALID_GROUP_CURRENCIES', problem, ['currency']);
-      await saveList(
-        groupId,
-        actorId,
-        { old: listed, new: [...listed, currency] },
-        session ?? null,
-      );
+      await saveList(group, actorId, { old: listed, new: [...listed, currency] }, session ?? null);
     });
     return settings(groupId, actorId);
   },
@@ -249,7 +249,7 @@ export const groupCurrencyService = {
       if (!listed.includes(currency)) throw new CurrencyNotListedError(currency);
       await refuseCurrenciesInUse(group, [currency], actorId, session ?? null);
       const next = listed.filter((code) => code !== currency);
-      await saveList(groupId, actorId, { old: listed, new: next }, session ?? null);
+      await saveList(group, actorId, { old: listed, new: next }, session ?? null);
     });
     return settings(groupId, actorId);
   },

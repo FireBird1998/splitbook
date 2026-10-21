@@ -274,9 +274,15 @@ export class GroupService {
       const dropped = listAtSave.filter((code) => !sentExtras.includes(code));
       await refuseCurrenciesInUse(groupAsRead, dropped, userId, session ?? null);
     };
+    /** Activity keeps what the list became, and the Group's name, as they were then (#721). */
+    let listRecord: { groupName: string; currencies: string[] } | undefined;
     const recordListChange = () => {
-      if (sentExtras && JSON.stringify(sentExtras) !== JSON.stringify(listAtSave))
-        changes.alternateCurrencies = { old: listAtSave, new: sentExtras };
+      if (!sentExtras || JSON.stringify(sentExtras) === JSON.stringify(listAtSave)) return;
+      changes.alternateCurrencies = { old: listAtSave, new: sentExtras };
+      listRecord = {
+        groupName: data.name ?? group.name,
+        currencies: [mainCurrency, ...sentExtras],
+      };
     };
 
     if (data.defaultCurrency && data.defaultCurrency !== group.defaultCurrency) {
@@ -298,7 +304,7 @@ export class GroupService {
       });
       if (!changed) throw new Error('CURRENCY_LOCKED');
       recordListChange();
-      await activityService.log(groupId, 'group_updated', userId, { changes });
+      await activityService.log(groupId, 'group_updated', userId, { changes, ...listRecord });
       return this.readAfterUpdate(await changed.populate('members.user', PERSON_FIELDS), userId);
     }
     refuseCurrencies();
@@ -310,7 +316,7 @@ export class GroupService {
 
     recordListChange();
     if (Object.keys(changes).length > 0) {
-      await activityService.log(groupId, 'group_updated', userId, { changes });
+      await activityService.log(groupId, 'group_updated', userId, { changes, ...listRecord });
     }
 
     return this.readAfterUpdate(await group.populate('members.user', PERSON_FIELDS), userId);

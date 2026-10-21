@@ -1,7 +1,11 @@
 import { formatCurrency } from './currency';
 import { formatDate, formatDateTime } from './date';
 import { toMajorAmount } from './exact-money';
-import { extraCurrencyChange, extraCurrencyChangeWords } from './group-currency-settings';
+import {
+  extraCurrencyChange,
+  extraCurrencyChangeDetail,
+  extraCurrencyChangeWords,
+} from './group-currency-settings';
 
 export interface ActivityLike {
   _id: string;
@@ -116,6 +120,11 @@ export function formatActivityDetail(activity: ActivityLike, viewerId?: string):
       return formatCurrency(meta.amount, meta.currency);
     }
     return null;
+  }
+
+  if (activity.type === 'group_updated') {
+    const currencies = currencyListChange(meta.changes);
+    return currencies ? extraCurrencyChangeDetail(currencies, meta) : null;
   }
 
   if (activity.type === 'settlement_recorded') {
