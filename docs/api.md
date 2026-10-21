@@ -448,8 +448,10 @@ and after.
 ### DELETE /api/groups/[id]/currencies/[code]
 
 An admin removes an extra currency (403 for anyone else). 200 with the
-currencies read. A code that isn't one of the Group's extra currencies,
-including its main currency, is 404 `CURRENCY_NOT_LISTED`.
+currencies read. A code that isn't one of the Group's extra currencies is 404
+`CURRENCY_NOT_LISTED`. The main currency is 409 `CURRENCY_IS_MAIN` ("INR is the
+main currency, so it can’t be removed."), a conflict with the Group's state like
+`CURRENCY_LOCKED`.
 
 While any Expense (not deleted), Settlement or To review item uses the currency,
 removing it is refused, saying what uses it in the read's `use` shape:

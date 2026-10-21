@@ -6,7 +6,11 @@
 import mongoose, { type ClientSession } from 'mongoose';
 import connectDB from '@/lib/db';
 import { withGroupMutation } from '@/lib/group-mutation';
-import { CurrencyInUseError, CurrencyNotListedError } from '@/lib/group-currency-refusals';
+import {
+  CurrencyInUseError,
+  CurrencyIsMainError,
+  CurrencyNotListedError,
+} from '@/lib/group-currency-refusals';
 import Activity from '@/lib/models/Activity';
 import Expense from '@/lib/models/Expense';
 import Group, { type IGroupDocument } from '@/lib/models/Group';
@@ -241,8 +245,8 @@ export const groupCurrencyService = {
       const group = await memberGroup(groupId, actorId, session ?? null);
       if (!isAdmin(group, actorId)) throw new Error('FORBIDDEN');
       const listed = extrasOf(group);
-      if (!listed.includes(currency))
-        throw new CurrencyNotListedError(currency, group.defaultCurrency);
+      if (currency === group.defaultCurrency) throw new CurrencyIsMainError(currency);
+      if (!listed.includes(currency)) throw new CurrencyNotListedError(currency);
       await refuseCurrenciesInUse(group, [currency], actorId, session ?? null);
       const next = listed.filter((code) => code !== currency);
       await saveList(groupId, actorId, { old: listed, new: next }, session ?? null);

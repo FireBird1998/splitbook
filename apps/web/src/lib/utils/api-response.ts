@@ -10,7 +10,11 @@ import {
   EXPECTED_ACCOUNT_HEADER,
 } from '@/lib/expected-account';
 import { RECURRING_EXPENSES_OFF } from '@/lib/recurring-expenses-switch';
-import { CurrencyInUseError, CurrencyNotListedError } from '@/lib/group-currency-refusals';
+import {
+  CurrencyInUseError,
+  CurrencyIsMainError,
+  CurrencyNotListedError,
+} from '@/lib/group-currency-refusals';
 
 export interface AuthUser {
   /** 24-hex user id, byte-for-byte the stored ObjectId string. */
@@ -125,6 +129,7 @@ export function serverError(err?: unknown) {
       { status: 409 },
     );
   if (err instanceof CurrencyNotListedError) return error(err.message, 404, err.code);
+  if (err instanceof CurrencyIsMainError) return error(err.message, 409, err.code);
   if (err instanceof Error) {
     const messages: Record<string, [string, number]> = {
       FORBIDDEN: ['Forbidden', 403],

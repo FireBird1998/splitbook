@@ -17,16 +17,22 @@ export class CurrencyInUseError extends Error {
   }
 }
 
-/** A currency to remove that isn't one of the Group's extra currencies, such as its main one. */
+/** A currency to remove that isn't one of the Group's extra currencies. */
 export class CurrencyNotListedError extends Error {
   readonly code = 'CURRENCY_NOT_LISTED';
 
-  constructor(currency: string, mainCurrency: string) {
-    super(
-      currency === mainCurrency
-        ? `${currency} is the main currency, so it can’t be removed.`
-        : `${currency} isn’t one of this Group’s extra currencies.`,
-    );
+  constructor(currency: string) {
+    super(`${currency} isn’t one of this Group’s extra currencies.`);
     this.name = 'CurrencyNotListedError';
+  }
+}
+
+/** The Group's main currency, which can't be removed: a conflict with its state, like its lock. */
+export class CurrencyIsMainError extends Error {
+  readonly code = 'CURRENCY_IS_MAIN';
+
+  constructor(currency: string) {
+    super(`${currency} is the main currency, so it can’t be removed.`);
+    this.name = 'CurrencyIsMainError';
   }
 }
