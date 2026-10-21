@@ -31,6 +31,7 @@ import {
   Divider,
   LinearProgress,
   SectionHeader,
+  useLargeText,
   useLargestText,
   useTap,
 } from './compact';
@@ -212,6 +213,9 @@ const ActivityRow = memo(
       [event, batch, currentUserId, currency, named],
     );
     const time = clockTime(event.createdAt);
+    // At large text a row with details runs several lines: its avatar keeps to the headline, at
+    // the top, rather than the middle, beside the details, as a list row with a note does (#792).
+    const top = useLargeText() && line.details.length > 0;
     // A drag that starts on the row never opens it (#665).
     const tap = useTap();
     return (
@@ -227,7 +231,7 @@ const ActivityRow = memo(
         style={({ pressed }) => ({
           minHeight: 60,
           flexDirection: 'row',
-          alignItems: 'center',
+          alignItems: top ? 'flex-start' : 'center',
           gap: 12,
           paddingVertical: 8,
           paddingHorizontal: 14,
