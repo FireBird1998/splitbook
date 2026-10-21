@@ -4706,6 +4706,58 @@ describe('an Expense in one of the Group’s currencies (#720)', () => {
       },
     );
 
+    it('when adding one fails and the Group can’t be read again either, says so and keeps the Expense’s currency', async () => {
+      const { state, intercept } = currencies();
+      const { controller } = setup((path, init) => {
+        if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST') {
+          state.added.push(JSON.parse(String(init.body)));
+          // From here on, nothing reaches Splitbook: the add, then the Group's re-read.
+          state.offline = true;
+          return Promise.reject(new TypeError('Network request failed'));
+        }
+        return intercept(path, init);
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ amount: '18', description: 'Fondue', tagId });
+      expect(await controller.addGroupCurrency('CHF')).toBe(false);
+      expect(state.added).toEqual([{ currency: 'CHF' }]);
+      const { expense, currencyAdd } = controller.getSnapshot();
+      expect(currencyAdd).toMatchObject({
+        status: 'error',
+        message: 'Could not reach Splitbook. Check your connection and try again.',
+      });
+      expect(expense.context?.group.alternateCurrencies).toEqual(['EUR', 'JPY']);
+      expect(expense.draft).toMatchObject({ currency: 'JPY', amount: '18' });
+    });
+
+    it('when adding one from the Group’s Currencies loses its reply, they read it again and show it', async () => {
+      const { state, intercept } = currencies();
+      const { controller } = setup((path, init) => {
+        if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST') {
+          state.added.push(JSON.parse(String(init.body)));
+          // Splitbook adds CHF, but its reply is lost on the way back.
+          state.extras = [...state.extras, 'CHF'];
+          return Promise.reject(new TypeError('Network request failed'));
+        }
+        return intercept(path, init);
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      await controller.openCurrencies(groupId);
+      const codes = () =>
+        controller.getSnapshot().groupCurrencies.data?.extraCurrencies.map(({ code }) => code);
+      expect(codes()).toEqual(['EUR', 'JPY']);
+      expect(await controller.addGroupCurrency('CHF')).toBe(true);
+      expect(state.added).toEqual([{ currency: 'CHF' }]);
+      await vi.waitFor(() => expect(codes()).toEqual(['EUR', 'JPY', 'CHF']));
+      expect(controller.getSnapshot()).toMatchObject({
+        currenciesOpenFor: groupId,
+        currencyAdd: { status: 'idle', message: null },
+        groupCurrencies: { groupId, status: 'ready' },
+      });
+    });
+
     // The Group's Currencies (board "Group currencies"), from its options, as on the web.
     it('reads the Group’s Currencies, and shows one added there at once', async () => {
       const { state, intercept } = currencies();

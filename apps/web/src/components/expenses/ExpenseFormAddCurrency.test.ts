@@ -276,6 +276,11 @@ describe('adding a currency from the Expense form (#722)', () => {
         code: 'INVALID_GROUP_CURRENCIES',
       },
     });
+    // The Group, read again after the refusal, still doesn't list CHF.
+    answers.set(`GET /api/groups/${GROUP}`, {
+      status: 200,
+      body: { status: 200, data: lisbon(['EUR', 'JPY']) },
+    });
     await mount();
     await openPicker();
     await click(option('Add a currency…'));
@@ -288,6 +293,10 @@ describe('adding a currency from the Expense form (#722)', () => {
       )[0]!,
     );
     await click(buttonIn(addDialog()!, 'Add CHF'));
+    expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      `POST ${PATH}`,
+      `GET /api/groups/${GROUP}`,
+    ]);
     expect(textOf(addDialog())).toContain('A Group can have at most 4 extra currencies.');
     expect(currencyButton().props['aria-label']).toBe(
       'Currency, JPY, Japanese Yen. Change currency',
