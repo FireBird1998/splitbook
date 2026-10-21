@@ -2119,6 +2119,49 @@ describe('the currency beside the amount (#720)', () => {
     expect(ui.pressable('Currency, CHF, Swiss Franc. Change currency')).toBeDefined();
   });
 
+  // The Designer's gap at 279134f2: a Group in one currency kept #720's read-only badge, so its
+  // member could never reach Add a currency (spec #710, story 16).
+  it('lets a Group in one currency open the sheet to add one (#722)', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await ui.press('Currency, INR, Indian Rupee. Change currency');
+    const sheet = visibleSheet(ui.root(), 'Currency')!;
+    expect(radios(sheet).map(({ label }) => label)).toEqual(['INR, Indian Rupee, main currency']);
+    expect(
+      ui.pressable('Add a currency. Adds it to Shared home for everyone').props.accessibilityState,
+    ).toMatchObject({ disabled: false });
+  });
+
+  it('offline, keeps a Group in one currency’s read-only badge (#722)', async () => {
+    let time = localNoon;
+    let disconnected = false;
+    const ui = await render(
+      async (controller) => {
+        await controller.openGroup(groupId);
+        await controller.back();
+        disconnected = true;
+        time += 31_000;
+        await controller.openExpense(groupId);
+      },
+      {
+        now: () => time,
+        readGroup: async () => {
+          if (disconnected) throw new Error('Offline');
+          return json({ status: 200, data: group });
+        },
+      },
+    );
+    expect(ui.controller.getSnapshot().offline.active).toBe(true);
+    expect(
+      ui
+        .root()
+        .findAll(
+          (node) =>
+            isHost(node, 'Pressable') &&
+            String(node.props.accessibilityLabel ?? '').endsWith('Change currency'),
+        ),
+    ).toHaveLength(0);
+  });
+
   it('offline, says adding a currency needs a connection (#722)', async () => {
     let time = localNoon;
     let disconnected = false;
