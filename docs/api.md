@@ -1315,6 +1315,16 @@ Clients collect events with the same batch reference and show **one payment** in
 Activity, including when a page boundary splits the batch. Events are committed to each row's recoverable outbox with the ledger and published only
 after the whole transaction commits. A retry cannot duplicate them.
 
+`groupSettlementBatches(events)` from `@splitbook/shared/settlement-batch-activity`
+is the shared, word-free projection for both clients. It takes events in feed
+order and returns `{ kind: 'event', event, complete: true }` for an event without
+a full batch reference or with `batchSize: 1`. A multi-row batch becomes
+`{ kind: 'batch', batchId, batchSize, events, complete }` at its first supplied
+event's position, with its events still in their supplied order. `complete` is
+true when all `batchSize` events are present; a page-split batch is incomplete.
+Call it again on the concatenated raw pages to join the batch. It does not mutate
+the events or keep state between calls, and supplies no display wording.
+
 The shared module `@splitbook/shared/settlement-batch` exports:
 
 ```ts
