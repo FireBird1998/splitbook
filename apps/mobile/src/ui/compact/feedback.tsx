@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
@@ -6,6 +6,13 @@ import { radius, touch } from './scale';
 import { CompactText } from './text';
 
 export type BannerTone = 'info' | 'warning' | 'error' | 'offline';
+
+/**
+ * The colour a text action inside a Banner takes: its tone's status colour, as on the web (#782,
+ * #807). Null outside a Banner, and in an offline one, whose neutral tone has none: there its
+ * actions keep the brand.
+ */
+export const BannerActionColor = createContext<string | null>(null);
 
 const bannerIcons: Record<BannerTone, IconName> = {
   info: 'information-circle-outline',
@@ -91,7 +98,9 @@ export function Banner({
           <View
             style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4, marginLeft: -4 }}
           >
-            {children}
+            <BannerActionColor.Provider value={tone === 'offline' ? null : colors[1]}>
+              {children}
+            </BannerActionColor.Provider>
           </View>
         ) : null}
       </View>
