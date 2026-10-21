@@ -179,10 +179,18 @@ export function failedRead(err: unknown, req: Request) {
  * Validation error response. A Zod error's problems travel as `[{ path, message }]`, the same
  * shape on every API (#538).
  */
-export function validationError(refusal: ZodError) {
+export function validationError(
+  refusal: ZodError,
+  response: { code?: string; message?: string } = {},
+) {
   const details = refusal.issues.map((issue) => ({ path: issue.path, message: issue.message }));
   return NextResponse.json(
-    { error: 'Validation error', code: 'VALIDATION_ERROR', details, status: 422 },
+    {
+      error: response.message ?? 'Validation error',
+      code: response.code ?? 'VALIDATION_ERROR',
+      details,
+      status: 422,
+    },
     { status: 422 },
   );
 }
