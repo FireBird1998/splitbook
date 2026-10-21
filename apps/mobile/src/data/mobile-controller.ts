@@ -244,12 +244,14 @@ const rejectionMessages: Record<string, string> = {
   INVALID_MEMBERS: 'Review the payer and participants: Group membership changed.',
   CURRENCY_MISMATCH: 'The Group currency changed. Review the currency before saving.',
   VALIDATION_ERROR: 'Check the amount, description, date, and participants before saving.',
+  INVALID_MONEY_PRECISION: 'Check the amount’s decimal places for this currency.',
 };
 
 function expenseRejectionMessage(error: unknown) {
-  return error instanceof RequestError && error.status === 422 && error.code
-    ? rejectionMessages[error.code]
-    : undefined;
+  if (!(error instanceof RequestError) || error.status !== 422 || !error.code) return undefined;
+  const fallback = rejectionMessages[error.code];
+  // This money refusal is member-facing copy; retain the server's currency-specific precision.
+  return error.code === 'INVALID_MONEY_PRECISION' ? error.serverMessage || fallback : fallback;
 }
 
 /**

@@ -28,6 +28,9 @@ use too (#538):
 }
 ```
 
+An Expense create refused only for the total amount’s precision uses
+`INVALID_MONEY_PRECISION` instead, retaining the same `details` shape (#748).
+
 Two routes refuse with a message of their own instead: an invite's email
 (`Invalid email address`) and an invitation's action (`Invalid action`), both
 **422** without `details`. Tag commands answer **400** `INVALID_TAG_COMMAND`.
@@ -748,10 +751,16 @@ Expense without a payer or a split row. The money module then refuses:
 | An amount with more decimals than the currency has      | `INVALID_MONEY_PRECISION`   | `["amount"]`, `["paidBy", <i>, "amount"]` or `["splitBetween", <i>, "amount"]` |
 | A percentage with more than 2 decimals                  | `INVALID_MONEY_PRECISION`   | `["splitBetween"]`                                                             |
 
-A create answers **422** `VALIDATION_ERROR` with each path and message in
-`details`, a refusal about the total at `["amount"]`. The codes above appear
-only on an edit, which answers **422** with the code and the path as `field`; a
-refusal about the total itself, such as its decimals, has no `field`.
+A create answers **422** with each path and message in `details`, a refusal about
+the total at `["amount"]`. When the sole issue is the total amount's precision,
+its code is `INVALID_MONEY_PRECISION`, and `error` carries the precision message,
+matching edit. This is identified by a Zod issue's `moneyCode` parameter and path,
+never by its wording. Mixed problems and precision refusals on other fields stay
+`VALIDATION_ERROR`. An edit answers **422** with the money code above and the path
+as `field`; a refusal about the total itself, such as its decimals, has no `field`.
+Android treats `INVALID_MONEY_PRECISION` on an initial create or edit as a definite
+refusal: the draft stays editable and shows the message, with no reconciliation or
+uncertain save. A retry still retains its earlier unconfirmed submission.
 
 Reads check stored Expenses too. When an Expense's stored allocations don't
 equal its amount (`assertStoredExpenseMoney`), or a Group's contributions don't
