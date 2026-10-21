@@ -34,9 +34,34 @@ function crossRate(from: string, to: string): string {
 
 export async function refreshRates(providers: RateProviders, now = new Date()) {
   await connectDB();
-  const entries: CachedRate[] = (await providers.primary.fetchTable())
-    .filter((row) => CURRENCY_CODES.includes(row.currency) && row.currency !== 'USD')
-    .map((row) => ({ ...row, source: providers.primary.source, fetchedAt: now.toISOString() }));
+  const previous = await RateTable.findById('daily').lean();
+  const fetch = async (provider: RateProviders['primary']) => {
+    try {
+      return (await provider.fetchTable()).map((row) => ({
+        ...row,
+        source: provider.source,
+        fetchedAt: now.toISOString(),
+      }));
+    } catch {
+      return [];
+    }
+  };
+  const primary = await fetch(providers.primary);
+  const codes = CURRENCY_CODES.filter((code) => code !== 'USD');
+  const find = (rows: CachedRate[], code: string) =>
+    rows
+      .filter((row) => row.currency === code && usable(row, now))
+      .sort((a, b) => b.asOf.localeCompare(a.asOf))[0];
+  const fallback = codes.some((code) => !find(primary, code))
+    ? await fetch(providers.fallback)
+    : [];
+  const entries = codes.flatMap((code) => {
+    const row =
+      find(primary, code) ??
+      find(fallback, code) ??
+      previous?.entries.find((row) => row.currency === code);
+    return row ? [row] : [];
+  });
   await RateTable.updateOne({ _id: 'daily' }, { $set: { entries } }, { upsert: true });
   return { refreshed: true };
 }
@@ -46,7 +71,7 @@ export async function readRateSuggestion(from: string, to: string, now = new Dat
   if (from === to) return { suggestion: null, reason: 'same_currency' };
   await connectDB();
   const table = await RateTable.findById('daily').lean();
-  if (!table) return { suggestion: null, reason: 'unavailable' };
+  if (!table || table.entries.length === 0) return { suggestion: null, reason: 'unavailable' };
   const a = table.entries.find((row) => row.currency === from);
   const b = table.entries.find((row) => row.currency === to);
   if ((from !== 'USD' && !a) || (to !== 'USD' && !b))
@@ -61,12 +86,20 @@ export async function readRateSuggestion(from: string, to: string, now = new Dat
       from,
       to,
       rate,
-      source: 'frankfurter',
+      source: rows.every((row) => row.source === rows[0].source) ? rows[0].source : 'mixed',
       asOf,
       fetchedAt: rows.map((row) => row.fetchedAt).sort()[0],
       ageDays: age(asOf, now),
-      attributionRequired: false,
-      attribution: null,
+      attributionRequired: rows.some((row) => row.source === 'exchange-rate-api'),
+      attribution: rows.some((row) => row.source === 'exchange-rate-api')
+        ? { text: 'Rates By Exchange Rate API', url: 'https://www.exchangerate-api.com' }
+        : null,
+      components: rows.map(({ currency, source, asOf, fetchedAt }) => ({
+        currency,
+        source,
+        asOf,
+        fetchedAt,
+      })),
     },
   };
 }
