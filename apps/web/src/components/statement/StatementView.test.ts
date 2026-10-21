@@ -160,3 +160,12 @@ it('renders every currency section for printing with both cross-currency payment
     'Alex Rivera paid Sam Chen ₹1,850.00 to clear €20.00 at ₹92.50 per €; no rate suggested',
   );
 });
+
+it('prints a settled empty currency as one line while retaining an outstanding balance outside the period', () => {
+  const statement = buildStatement({ ...TRIP, alternateCurrencies: ['JPY'] }, { from: '2027-01-01', to: '2027-01-31' });
+  const html = renderToStaticMarkup(createElement(ThemeProvider, { theme: createAppTheme('light') }, createElement(StatementView, { statement })));
+  const jpy = html.match(/<section[^>]*aria-label="JPY statement"[^>]*>([\s\S]*?)<\/section>/)?.[1] ?? '';
+  expect(text(jpy)).toBe('JPY: nothing in this period; everyone is settled up.');
+  expect(jpy).not.toContain('<table');
+  expect(html).toContain('aria-label="Current balances"');
+});

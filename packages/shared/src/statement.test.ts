@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildStatement } from './statement';
+import { buildStatement, isEmptyStatementCurrency } from './statement';
 import { buildStatementPreview } from './export-preview';
 import { tripSummary, type TripExpense } from './trip-summary';
 import { buildBackup, type BackupExpenseInput, type BackupGroupInput } from './export-backup';
@@ -361,4 +361,11 @@ it('normalises legacy extra currencies for the statement and preview while the b
     buildBackup([legacy], { exportedAt: '2026-10-21T12:00:00Z', include: [] }).groups[0]
       .alternateCurrencies,
   ).toEqual(alternateCurrencies);
+});
+
+it('collapses only currencies with no period records and no current outstanding balance', () => {
+  expect(isEmptyStatementCurrency({ expenseCount: 0, paymentCount: 0, people: [{ balanceMinor: 0 }] })).toBe(true);
+  expect(isEmptyStatementCurrency({ expenseCount: 1, paymentCount: 0, people: [{ balanceMinor: 0 }] })).toBe(false);
+  expect(isEmptyStatementCurrency({ expenseCount: 0, paymentCount: 1, people: [{ balanceMinor: 0 }] })).toBe(false);
+  expect(isEmptyStatementCurrency({ expenseCount: 0, paymentCount: 0, people: [{ balanceMinor: -50 }, { balanceMinor: 50 }] })).toBe(false);
 });
