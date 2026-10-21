@@ -207,3 +207,42 @@ it('refreshes loaded older pages too, so a page shift cannot hide a loaded event
     vi.useRealTimers();
   }
 });
+
+it('says nothing when a refresh fails and nothing older exists, and keeps the events', async () => {
+  vi.useFakeTimers();
+  try {
+    api.mockResolvedValueOnce(answer(1, [event(1)], 1));
+    await render();
+    api.mockResolvedValueOnce(Response.json({ error: 'Unavailable' }, { status: 500 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(api).toHaveBeenCalledTimes(2);
+    expect(headlines()).toEqual(['You added “Expense 1”']);
+    expect(alerts()).toHaveLength(0);
+    expect(renderer.root.findAllByType('button').map((node) => textOf(node).trim())).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/older activity/)]),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('keeps offering Load older activity, with no failure line, when only a refresh fails', async () => {
+  vi.useFakeTimers();
+  try {
+    api.mockResolvedValueOnce(answer(1, [event(1)]));
+    await render();
+    api.mockResolvedValueOnce(Response.json({ error: 'Unavailable' }, { status: 500 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(api).toHaveBeenCalledTimes(2);
+    expect(headlines()).toEqual(['You added “Expense 1”']);
+    expect(alerts()).toHaveLength(0);
+    expect(button('Load older activity')).toBeDefined();
+    expect(button('Try loading older activity')).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
