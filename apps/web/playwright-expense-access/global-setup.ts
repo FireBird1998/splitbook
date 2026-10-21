@@ -86,7 +86,13 @@ export async function startIsolatedApp(
   {
     recurringExpenses = false,
     persistentDrafts = false,
-  }: { recurringExpenses?: boolean; persistentDrafts?: boolean } = {},
+    onOutput,
+  }: {
+    recurringExpenses?: boolean;
+    persistentDrafts?: boolean;
+    /** A suite may assert that its tests never trigger first-request compilation. */
+    onOutput?: (output: string) => void;
+  } = {},
 ) {
   // Never accept a caller's Mongo URI or app URL. Match the integration suite's
   // splitbook-test-* convention, but use a unique, loopback-only DB per run.
@@ -199,6 +205,7 @@ export async function startIsolatedApp(
       },
     );
     const child = app;
+    child.stdout!.on('data', (chunk: Buffer) => onOutput?.(chunk.toString()));
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(
         () => reject(new Error('Isolated app startup timed out')),
