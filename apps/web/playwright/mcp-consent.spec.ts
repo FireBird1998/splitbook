@@ -63,6 +63,19 @@ for (const allowPreparation of [false, true]) {
     ])
       await expect(page.getByText(limit, { exact: true })).toBeVisible();
     await expect(page.getByText('identified by its published details')).toHaveCount(0);
+    // Who is approving, and a caution beside Allow naming the assistant (#614).
+    await expect(page.getByText('Signed in as', { exact: true })).toBeVisible();
+    await expect(page.getByText('Alex Rivera', { exact: true })).toBeVisible();
+    await expect(page.getByText('alex.demo@splitbook.local', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(
+        'Only allow this if you asked Fictional consent test assistant to connect just now.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByText('Splitbook checks your access on every request.', { exact: true }),
+    ).toBeVisible();
     const permission = page.getByRole('checkbox', {
       name: 'Also let it prepare Expenses for your To review',
       exact: true,

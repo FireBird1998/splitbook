@@ -5,9 +5,15 @@ import { describe, expect, it } from 'vitest';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
-import OAuthFlow, { ConsentPermissions } from './OAuthFlow';
+import OAuthFlow, { ConsentChoice, ConsentPermissions } from './OAuthFlow';
 
 /* The approval page's permissions, rendered to static markup with the details the server sends. */
+
+const account = {
+  id: 'a00000000000000000000001',
+  name: 'Alex Rivera',
+  email: 'alex.rivera@example.com',
+};
 
 const render = (element: ReactElement) =>
   text(
@@ -36,7 +42,7 @@ describe('the sign-in step before consent', () => {
       createElement(OAuthFlow, {
         query: '',
         consent: false,
-        accountId: 'a00000000000000000000001',
+        account,
       }),
     );
     expect(shown).toContain('Continue connecting to Splitbook');
@@ -57,7 +63,7 @@ describe('the consent screen', () => {
       createElement(OAuthFlow, {
         query: '',
         consent: true,
-        accountId: 'a00000000000000000000001',
+        account,
       }),
     );
     expect(shown).toContain('Prepared items don’t change Balances until you save them.');
@@ -91,6 +97,35 @@ describe('the consent screen', () => {
         expect(shown).toContain(limit);
     },
   );
+
+  it('shows who is signed in, by name and email, on every approval (#614)', () => {
+    const shown = render(createElement(OAuthFlow, { query: '', consent: true, account }));
+    expect(shown).toContain('Signed in as');
+    expect(shown).toContain('Alex Rivera');
+    expect(shown).toContain('alex.rivera@example.com');
+    expect(shown).not.toContain('Not you?');
+  });
+
+  it('says Splitbook checks the member’s access on every request (#614)', () => {
+    const shown = render(createElement(OAuthFlow, { query: '', consent: true, account }));
+    expect(shown).toContain('Splitbook checks your access on every request.');
+  });
+
+  it('asks the member to allow only an assistant they asked to connect just now, by its name (#614)', () => {
+    const shown = render(
+      createElement(ConsentChoice, {
+        name: 'Fictional Assistant',
+        disabled: false,
+        onAllow: () => {},
+        onDeny: () => {},
+      }),
+    );
+    expect(shown).toContain('Allow connection');
+    expect(shown).toContain('Deny');
+    expect(shown).toContain(
+      'Only allow this if you asked Fictional Assistant to connect just now.',
+    );
+  });
 
   it('says nothing about To review when the assistant asks only to read the ledger', () => {
     const shown = permissions(['ledger:read']);
