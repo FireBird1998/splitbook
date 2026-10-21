@@ -2,15 +2,18 @@
  * #820: an Expense in a currency Splitbook no longer supports, such as a legacy DEM row, against
  * a real, isolated MongoDB database (`splitbook-test-unsupported-currency`). Stored money
  * outlives today's currency list (#779, #810, #812): such an Expense is listed as stored, never
- * converted, has no position, and Spent carries it as its own line. So Export lists it, the
- * spending, Insights and Trip summary reads leave it out, and it can be deleted; every one of
- * them answered 500 before. It can't be changed: an edit is refused as the request's fault.
+ * converted, has no position, and Spent carries it as its own line. So Export lists it, and a
+ * payment in such a currency, the spending, Insights and Trip summary reads leave it out, and it
+ * can be deleted; every one of them answered 500 before. It can't be changed: an edit is refused
+ * as the request's fault, and so is a change to its money saved by any other way.
  */
 
+import { unzipSync } from 'fflate';
 import mongoose from 'mongoose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
+import Settlement from '@/lib/models/Settlement';
 import { exportService } from '@/lib/services/export.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
@@ -117,6 +120,22 @@ async function oldBerlinRent(groupId: string, at = new Date(2026, 8, 17, 12)): P
   return String(insertedId);
 }
 
+/** A payment in Deutsche Marks from before amounts were versioned: Bob paid Alice DM 10. */
+async function oldBerlinPayment(groupId: string, at = new Date(2026, 8, 18, 12)) {
+  await Settlement.collection.insertOne({
+    group: new mongoose.Types.ObjectId(groupId),
+    paidBy: new mongoose.Types.ObjectId(bob),
+    paidTo: new mongoose.Types.ObjectId(alice),
+    amount: 10,
+    currency: 'DEM',
+    note: 'Old Berlin rent, settled',
+    createdBy: new mongoose.Types.ObjectId(bob),
+    pendingActivity: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+}
+
 type Route = (request: Request, context: { params: Promise<{ id: string }> }) => Promise<Response>;
 
 /** A read's answer, as text: every route here answers JSON or a file. */
@@ -195,6 +214,25 @@ describe('an Expense in a currency Splitbook no longer supports (#820)', () => {
     expect(marks).toContain('40.00');
   });
 
+  it('Export’s CSV with payments lists it and the payment as stored, in the zip', async () => {
+    const groupId = await berlinTrip();
+    await oldBerlinRent(groupId);
+    await oldBerlinPayment(groupId);
+    const response = await (readExport as Route)(
+      new Request(
+        `http://localhost${exportPath(exportRequest(groupId, { include: ['shares', 'payments'] }))}`,
+      ),
+      { params: Promise.resolve({ id: '' }) },
+    );
+    expect(response.status).toBe(200);
+    const files = Object.entries(unzipSync(new Uint8Array(await response.arrayBuffer())));
+    const file = (suffix: string) =>
+      new TextDecoder().decode(files.find(([name]) => name.endsWith(suffix))![1]).split('\r\n');
+    expect(file('-expenses.csv').find((line) => line.includes('Old Berlin rent'))).toContain('DEM');
+    const payment = file('-payments.csv').find((line) => line.includes('Old Berlin rent, settled'));
+    expect(payment).toContain('10.00,DEM');
+  });
+
   it('Export’s backup keeps it as stored, and every other Expense as before', async () => {
     const groupId = await berlinTrip();
     const path = exportPath(exportRequest(groupId, { format: 'json' }));
@@ -234,6 +272,7 @@ describe('an Expense in a currency Splitbook no longer supports (#820)', () => {
     const request = exportRequest(groupId, { include: ['payments'] });
     const before = await exportService.statement(alice, request);
     await oldBerlinRent(groupId);
+    await oldBerlinPayment(groupId);
     const after = await exportService.statement(alice, request);
     const inr = (statement: typeof before) =>
       statement.currencies.find((bucket) => bucket.currency === 'INR');
@@ -241,9 +280,11 @@ describe('an Expense in a currency Splitbook no longer supports (#820)', () => {
     expect(after.currencies.find((bucket) => bucket.currency === 'DEM')).toMatchObject({
       spentMinor: 4000,
       expenseCount: 1,
+      paymentTotalMinor: 1000,
       people: [],
       suggestedPayments: [],
       expenses: [expect.objectContaining({ description: 'Old Berlin rent', amountMinor: 4000 })],
+      payments: [expect.objectContaining({ amountMinor: 1000, currency: 'DEM' })],
     });
   });
 
@@ -290,6 +331,18 @@ describe('an Expense in a currency Splitbook no longer supports (#820)', () => {
     );
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual(refusal);
+    expect(await storedRow(expenseId)).toEqual(before);
+  });
+
+  // Every edit is refused before a save; the save itself still refuses a change to its money.
+  it('a save that changes its money is refused, and nothing stored changes', async () => {
+    const groupId = await berlinTrip();
+    const expenseId = await oldBerlinRent(groupId);
+    const before = await storedRow(expenseId);
+    const expense = (await Expense.findById(expenseId))!;
+    expense.amount = 50;
+    expense.amountMinor = 5000;
+    await expect(expense.save()).rejects.toThrow('INVALID_CURRENCY');
     expect(await storedRow(expenseId)).toEqual(before);
   });
 
