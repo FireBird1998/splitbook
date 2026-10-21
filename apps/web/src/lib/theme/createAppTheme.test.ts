@@ -4,6 +4,7 @@ import { Alert, Paper, Tabs, Tab, ThemeProvider } from '@mui/material';
 import { createTheme, getContrastRatio, getLuminance, hexToRgb } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { createAppTheme } from './createAppTheme';
+import ErrorState from '@/components/common/ErrorState';
 
 /** A `#rrggbb` colour's hue, in degrees. */
 function hue(color: string): number {
@@ -165,4 +166,28 @@ it.each([
   expect(html).toContain(`background-color:var(--mui-palette-tint-${tone})`);
   expect(html).toContain('color:var(--mui-palette-text-primary)');
   expect(html).toContain(`color:var(--mui-palette-status-${tone})`);
+});
+
+it('leaves a banner’s own colours to it, as the error state sets them (#772)', () => {
+  const theme = createTheme({
+    ...createAppTheme('light'),
+    cssVariables: { colorSchemeSelector: '[data-theme="%s"]' },
+    colorSchemes: {
+      light: { palette: createAppTheme('light').palette },
+      dark: { palette: createAppTheme('dark').palette },
+    },
+  });
+  const html = renderToStaticMarkup(
+    createElement(ThemeProvider, { theme }, createElement(ErrorState, { message: 'Not loaded.' })),
+  );
+  // The banner's root rule: the last colour declared wins, and it is the error state's own.
+  const [, rootClass, root] = html.match(/(\.css-[\w-]+)\{([^}]*)\}/)!;
+  const colours = [...root.matchAll(/(?:^|;)color:([^;]+)/g)].map((found) => found[1]);
+  expect(colours.at(-1)).toBe('var(--mui-palette-status-negative)');
+  // No rule on the root with more classes outranks it.
+  const outranking = [...html.matchAll(/([^{}<>]+)\{([^}]*)\}/g)].filter(
+    ([, selector, body]) =>
+      selector.startsWith(`${rootClass}.`) && !/\s/.test(selector) && /(?:^|;)color:/.test(body),
+  );
+  expect(outranking).toEqual([]);
 });
