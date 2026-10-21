@@ -132,7 +132,7 @@ export default function ExpenseSelectionPanel({
   const [failure, setFailure] = useState<string | null>(null);
   const [exported, setExported] = useState<
     | { status: 'preparing' }
-    | { status: 'done'; fileName: string }
+    | { status: 'done'; fileName: string; count: number }
     | { status: 'failed'; message: string }
     | null
   >(null);
@@ -174,9 +174,11 @@ export default function ExpenseSelectionPanel({
 
   const exportThem = async () => {
     if (!onExport || exported?.status === 'preparing') return;
+    // How many went into the file, though the selection may change while it downloads.
+    const exporting = count;
     setExported({ status: 'preparing' });
     try {
-      setExported({ status: 'done', fileName: await onExport() });
+      setExported({ status: 'done', fileName: await onExport(), count: exporting });
     } catch (error) {
       setExported({
         status: 'failed',
@@ -270,7 +272,8 @@ export default function ExpenseSelectionPanel({
         </Stack>
       </Stack>
 
-      <Stack gap={1} sx={{ mt: 2 }}>
+      {/* Each action's choices and report sit right under its own button. */}
+      <Stack gap={1.25} sx={{ mt: 2 }}>
         <Button
           variant="outlined"
           fullWidth
@@ -281,6 +284,101 @@ export default function ExpenseSelectionPanel({
         >
           Change Tag
         </Button>
+
+        {step === 'choosing' && (
+          <Box>
+            <Typography
+              id="expense-selection-move"
+              variant="body2"
+              color="text.secondary"
+              sx={{ mb: 1 }}
+            >
+              Move {count} {noun(count)} to:
+            </Typography>
+            <Box
+              role="group"
+              aria-labelledby="expense-selection-move"
+              sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
+            >
+              {active.map((tag) => {
+                const current = tag._id === currentTagId;
+                return (
+                  <Button
+                    key={tag._id}
+                    size="small"
+                    variant="outlined"
+                    aria-label={`Move to ${tag.name}`}
+                    aria-current={current ? 'true' : undefined}
+                    startIcon={current ? <CheckIcon /> : undefined}
+                    onClick={() => void change(tag)}
+                    sx={{
+                      borderRadius: 999,
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      color: current ? 'primary.main' : 'text.primary',
+                      borderColor: current ? 'primary.main' : 'divider',
+                      bgcolor: current ? 'tint.brand' : 'surface.muted',
+                    }}
+                  >
+                    {tag.name}
+                  </Button>
+                );
+              })}
+              <Button size="small" onClick={() => setStep('idle')}>
+                Cancel
+              </Button>
+            </Box>
+          </Box>
+        )}
+
+        {step === 'sending' && (
+          <Typography role="status" variant="body2">
+            Moving {count} {noun(count)} to {sendingTo}…
+          </Typography>
+        )}
+
+        {failure && (
+          <Typography role="alert" variant="body2" color="error">
+            {failure}
+          </Typography>
+        )}
+
+        {outcome && (
+          <Box role="status">
+            <Typography variant="body2">
+              {outcome.summary}
+              {outcome.misses.length ? ` ${outcome.misses.length} didn’t change:` : ''}
+            </Typography>
+            {outcome.misses.length > 0 && (
+              <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1 }}>
+                {outcome.misses.map((miss) => (
+                  <Box
+                    component="li"
+                    key={miss.expenseId}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {miss.description}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {miss.reason}
+                      </Typography>
+                    </Box>
+                    <Button
+                      size="small"
+                      aria-label={`Open ${miss.description}`}
+                      onClick={() => onOpen(miss.expenseId)}
+                    >
+                      Open
+                    </Button>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+        )}
+
         {onExport && (
           <Button
             variant="outlined"
@@ -292,107 +390,34 @@ export default function ExpenseSelectionPanel({
             Export selected
           </Button>
         )}
-      </Stack>
-
-      {exported?.status === 'preparing' && (
-        <Typography role="status" variant="body2" sx={{ mt: 1.5 }}>
-          Preparing the export…
-        </Typography>
-      )}
-      {exported?.status === 'done' && (
-        <Typography role="status" variant="body2" sx={{ mt: 1.5, overflowWrap: 'anywhere' }}>
-          {exported.fileName} is downloading.
-        </Typography>
-      )}
-      {exported?.status === 'failed' && (
-        <Typography role="alert" variant="body2" color="error" sx={{ mt: 1.5 }}>
-          {exported.message}
-        </Typography>
-      )}
-
-      {step === 'choosing' && (
-        <Box
-          role="group"
-          aria-label={`Move ${count} ${noun(count)} to a Tag`}
-          sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}
-        >
-          {active.map((tag) => {
-            const current = tag._id === currentTagId;
-            return (
-              <Button
-                key={tag._id}
-                size="small"
-                variant="outlined"
-                aria-label={`Move to ${tag.name}`}
-                aria-current={current ? 'true' : undefined}
-                startIcon={current ? <CheckIcon /> : undefined}
-                onClick={() => void change(tag)}
-                sx={{
-                  borderRadius: 999,
-                  textTransform: 'none',
-                  fontWeight: 500,
-                  color: current ? 'primary.main' : 'text.primary',
-                  borderColor: current ? 'primary.main' : 'divider',
-                  bgcolor: current ? 'tint.brand' : 'surface.muted',
-                }}
-              >
-                {tag.name}
-              </Button>
-            );
-          })}
-          <Button size="small" onClick={() => setStep('idle')}>
-            Cancel
-          </Button>
-        </Box>
-      )}
-
-      {step === 'sending' && (
-        <Typography role="status" variant="body2" sx={{ mt: 1.5 }}>
-          Moving {count} {noun(count)} to {sendingTo}…
-        </Typography>
-      )}
-
-      {failure && (
-        <Typography role="alert" variant="body2" color="error" sx={{ mt: 1.5 }}>
-          {failure}
-        </Typography>
-      )}
-
-      {outcome && (
-        <Box role="status" sx={{ mt: 1.5 }}>
-          <Typography variant="body2">
-            {outcome.summary}
-            {outcome.misses.length ? ` ${outcome.misses.length} didn’t change:` : ''}
+        {exported?.status === 'preparing' && (
+          <Typography role="status" variant="body2">
+            Preparing the export…
           </Typography>
-          {outcome.misses.length > 0 && (
-            <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1 }}>
-              {outcome.misses.map((miss) => (
-                <Box
-                  component="li"
-                  key={miss.expenseId}
-                  sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}
-                >
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={600}>
-                      {miss.description}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {miss.reason}
-                    </Typography>
-                  </Box>
-                  <Button
-                    size="small"
-                    aria-label={`Open ${miss.description}`}
-                    onClick={() => onOpen(miss.expenseId)}
-                  >
-                    Open
-                  </Button>
-                </Box>
-              ))}
-            </Box>
-          )}
-        </Box>
-      )}
+        )}
+        {exported?.status === 'done' && (
+          <Box role="status" sx={{ minWidth: 0 }}>
+            <Typography variant="body2">
+              Downloading {exported.count} {noun(exported.count)} as CSV
+            </Typography>
+            {/* The name stays on one line; the whole of it is in the title. */}
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              noWrap
+              title={exported.fileName}
+              sx={{ display: 'block' }}
+            >
+              {exported.fileName}
+            </Typography>
+          </Box>
+        )}
+        {exported?.status === 'failed' && (
+          <Typography role="alert" variant="body2" color="error">
+            {exported.message}
+          </Typography>
+        )}
+      </Stack>
     </Box>
   );
 }

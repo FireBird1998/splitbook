@@ -295,6 +295,14 @@ describe('the selection panel (#610)', () => {
     expect(current()).toEqual([]);
   });
 
+  it('lists the Tags right under Change Tag, led by how many move, before Export selected', async () => {
+    panel([GROCERIES, WATER]);
+    await press('Change Tag');
+    expect(shown()).toContain(
+      'Change TagMove 2 Expenses to:GroceriesHouseholdCancelExport selected',
+    );
+  });
+
   it('moves them to the Tag, and lists what didn’t change, each with its reason and Open', async () => {
     const onOpen = vi.fn();
     const onChangeTag = vi.fn(async () => ({
@@ -349,7 +357,9 @@ describe('Export selected (#613)', () => {
     );
     await press('Export selected');
     expect(onExport).toHaveBeenCalledOnce();
-    expect(shown()).toContain('maple-house-2026-10-21-selected-expenses.csv is downloading.');
+    expect(shown()).toContain(
+      'Downloading 2 Expenses as CSVmaple-house-2026-10-21-selected-expenses.csv',
+    );
   });
 
   it('stops saying an earlier export is downloading once a Tag change starts', async () => {
@@ -374,7 +384,7 @@ describe('Export selected (#613)', () => {
     await press('Change Tag');
     await press('Move to Household');
     expect(shown()).toContain('Moved 2 Expenses to Household.');
-    expect(shown()).not.toContain('is downloading.');
+    expect(shown()).not.toContain('Downloading');
   });
 
   it('downloads just their CSV with each member’s share, named for the Group and the day', async () => {

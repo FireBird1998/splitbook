@@ -58,7 +58,9 @@ test('Sam selects two of three Expenses and downloads just those, with each memb
   expect(file.suggestedFilename()).toMatch(
     new RegExp(`^selected-export-[a-f0-9]{8}-${day}-selected-expenses\\.csv$`),
   );
-  await expect(panel.getByRole('status')).toHaveText(`${file.suggestedFilename()} is downloading.`);
+  const status = panel.getByRole('status');
+  await expect(status).toContainText('Downloading 2 Expenses as CSV');
+  await expect(status).toContainText(file.suggestedFilename());
   const text = await readFile((await file.path())!, 'utf8');
   const [header, ...rows] = text
     .replace(/^\uFEFF/, '')
