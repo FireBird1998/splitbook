@@ -128,6 +128,22 @@ const CurrencyChip = memo(function CurrencyChip({
     </Pressable>
   );
 });
+/**
+ * The currency's symbol beside the chip, as the board draws it; TalkBack already hears the
+ * currency. Memoized with the chip, so typing an amount never renders it again.
+ */
+const CurrencySymbol = memo(function CurrencySymbol({ currency }: { currency: string }) {
+  return (
+    <CompactText
+      tone="secondary"
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+      style={{ fontFamily: fonts.mono, fontSize: 24 }}
+    >
+      {getCurrency(currency)?.symbol ?? ''}
+    </CompactText>
+  );
+});
 export function AmountField({
   draft,
   locked,
@@ -177,15 +193,7 @@ export function AmountField({
                 locked={currencyLocked}
                 onPress={onCurrency}
               />
-              {/* The symbol, as the board draws it; TalkBack already hears the currency. */}
-              <CompactText
-                tone="secondary"
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-                style={{ fontFamily: fonts.mono, fontSize: 24 }}
-              >
-                {getCurrency(draft.currency)?.symbol ?? ''}
-              </CompactText>
+              <CurrencySymbol currency={draft.currency} />
             </>
           ) : (
             <CurrencyBadge currency={draft.currency} recorded={!!draft.original} />

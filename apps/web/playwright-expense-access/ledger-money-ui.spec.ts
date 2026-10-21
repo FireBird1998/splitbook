@@ -137,6 +137,8 @@ for (const scheme of ['light', 'dark'] as const) {
       /^INR\s*Indian Rupee\s*Main currency/,
       /^EUR\s*Euro/,
       /^JPY\s*Japanese Yen/,
+      // A member can add one from here (#722).
+      /^Add a currency…\s*Adds it to .+ for everyone$/,
     ]);
     await list.getByRole('option', { name: /JPY/ }).click();
     await expect(list).toBeHidden();

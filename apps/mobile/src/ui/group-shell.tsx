@@ -40,6 +40,8 @@ interface GroupShellProps {
   onManageTags?: () => void;
   /** Members see the Tags, and can check an earlier action after losing admin permission. */
   onViewTags?: () => void;
+  /** The Group's Currencies (#722), with its currencies, main first, as their row says them. */
+  currencies?: { codes: readonly string[]; onPress: () => void };
   onRefresh: () => void;
   pull: { refreshing: boolean; onRefresh: () => void };
   /** The destination's scroll view, so returning from an Expense can restore its offset. */
@@ -82,6 +84,7 @@ export function GroupShell({
   onMembers,
   onManageTags,
   onViewTags,
+  currencies,
   onRefresh,
   pull,
   scrollRef,
@@ -207,6 +210,20 @@ export function GroupShell({
                     onPress={() => {
                       close();
                       onViewTags();
+                    }}
+                  />
+                  <Divider inset={66} />
+                </>
+              )}
+              {currencies && (
+                <>
+                  <ListRow
+                    leading={<IconTile icon="cash-outline" />}
+                    title="Currencies"
+                    meta={currencies.codes.join(', ')}
+                    onPress={() => {
+                      close();
+                      currencies.onPress();
                     }}
                   />
                   <Divider inset={66} />

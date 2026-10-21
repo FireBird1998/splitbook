@@ -282,6 +282,10 @@ export const reactNative = {
   Share: { share: spies.share },
   StyleSheet: {
     create: <T>(styles: T) => styles,
+    flatten: function flatten(style: unknown): Record<string, unknown> {
+      if (Array.isArray(style)) return Object.assign({}, ...style.map(flatten));
+      return style && typeof style === 'object' ? (style as Record<string, unknown>) : {};
+    },
     absoluteFill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   },
   Text: 'Text',

@@ -1,4 +1,10 @@
-import { groupRatesPath, tagActionsPath, tagActionCheckPath } from '@splitbook/shared/api-paths';
+import {
+  groupCurrenciesPath,
+  groupRatesPath,
+  tagActionsPath,
+  tagActionCheckPath,
+} from '@splitbook/shared/api-paths';
+import { groupCurrencySettingsSchema } from '@splitbook/shared/group-currency-settings';
 import { emptyTagManager, tagManager } from './tag-manager';
 import { createAssistants, emptyAssistants } from './assistants';
 import { tagManagement, tagRead, unresolvedTagRecord, type TagRead } from './tag-management';
@@ -339,6 +345,15 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     sharedDraftCollection: emptySharedDraftCollection(),
     assistants: emptyAssistants(),
     tagManager: emptyTagManager(),
+    currencyAdd: { groupId: null, status: 'idle', message: null },
+    currenciesOpenFor: null,
+    groupCurrencies: {
+      groupId: null,
+      status: 'idle',
+      data: null,
+      message: null,
+      refreshedAt: null,
+    },
     tagsOpenFor: null,
     toReview: emptyToReview(),
     offline: { active: false, refreshedAt: null, message: null },
@@ -648,6 +663,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         next.detail.status === 'denied')
     )
       next = { ...next, tagsOpenFor: null };
+    // And its Currencies (#722).
+    if (
+      next.currenciesOpenFor &&
+      (next.screen !== 'group' ||
+        next.detail.id !== next.currenciesOpenFor ||
+        next.detail.status === 'denied')
+    )
+      next = { ...next, currenciesOpenFor: null };
     next = projectFreshness(next);
     snapshot = next;
     listeners.forEach((listener) => listener());
@@ -6802,6 +6825,182 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
+  /**
+   * A member adds a currency to the Group (#722), as any member may on the web: from the Expense
+   * form, whose Expense then takes it, or from the Group's Currencies. It needs a connection, and
+   * a refusal says why in the server's words. Adding one already listed is refused, so a reply
+   * that was lost is settled by reading the Group again.
+   */
+  /** The Group as it is now, as the Expense form takes it, or null when it can't be read. */
+  const contextNow = async (groupId: string, owner: number) => {
+    try {
+      const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
+      return context.group.id === groupId ? context : null;
+    } catch {
+      return null;
+    }
+  };
+  /**
+   * A currency the Group now lists, added here: the form being entered offers it at once, with
+   * the Group's currencies in `context`, and the Expense is in it.
+   */
+  const takeCurrency = async (
+    groupId: string,
+    currency: string,
+    context: ExpenseContext | null,
+  ) => {
+    const settled = { groupId, status: 'idle' as const, message: null };
+    const editor = snapshot.expense;
+    if (
+      snapshot.screen !== 'expense' ||
+      editor.groupId !== groupId ||
+      !editor.context ||
+      !context
+    ) {
+      publish({ ...snapshot, currencyAdd: settled });
+      return;
+    }
+    publish({ ...snapshot, currencyAdd: settled, expense: { ...editor, context } });
+    await updateExpenseDraft({ currency });
+  };
+  const addGroupCurrency = async (currency: string) => {
+    const groupId =
+      snapshot.screen === 'expense'
+        ? snapshot.expense.groupId
+        : snapshot.screen === 'group'
+          ? snapshot.detail.id
+          : null;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      !groupId ||
+      snapshot.offline.active ||
+      !getCurrency(currency) ||
+      snapshot.currencyAdd.status === 'adding'
+    )
+      return false;
+    const owner = generation;
+    publish({ ...snapshot, currencyAdd: { groupId, status: 'adding', message: null } });
+    try {
+      const value = await request(groupCurrenciesPath(groupId), owner, {
+        method: 'POST',
+        body: { currency },
+      }).finally(() => {
+        // Whatever was answered, the Group's own reads no longer list its currencies as they are.
+        if (current(owner)) invalidateReads(`group:${groupId}`);
+      });
+      const extras = groupCurrencySettingsSchema
+        .parse(Object(value).data)
+        .extraCurrencies.map(({ code }) => code);
+      assertCurrent(owner);
+      // The Group's Currencies, where they show, list it at once: the answer is their read.
+      if (snapshot.currenciesOpenFor === groupId) {
+        const verified = groupQueries.currenciesAnswered(groupId, value);
+        publish({
+          ...snapshot,
+          groupCurrencies: {
+            groupId,
+            status: 'ready',
+            data: groupQueries.currenciesOf(value),
+            message: null,
+            refreshedAt: verified.refreshedAt,
+            restored: false,
+          },
+        });
+      }
+      const editor = snapshot.expense;
+      await takeCurrency(
+        groupId,
+        currency,
+        editor.context && {
+          ...editor.context,
+          group: { ...editor.context.group, alternateCurrencies: extras },
+        },
+      );
+      return true;
+    } catch (error) {
+      if (!current(owner) || error instanceof Superseded) return false;
+      // Splitbook may have added it all the same, its reply lost on the way back, or another
+      // member may have added it first: the Group, read again, says so, and then it's added here
+      // too. Otherwise adding it again would only be refused as already listed.
+      const now = await contextNow(groupId, owner);
+      if (!current(owner)) return false;
+      if (now && groupCurrencies(now.group).includes(currency)) {
+        await takeCurrency(groupId, currency, now);
+        // The Group's Currencies, where they show, read it again.
+        if (snapshot.currenciesOpenFor === groupId) void openCurrencies(groupId);
+        return true;
+      }
+      publish({
+        ...snapshot,
+        currencyAdd: {
+          groupId,
+          status: 'error',
+          message:
+            error instanceof RequestError && error.status === 422 && error.serverMessage
+              ? error.serverMessage
+              : expenseFailureMessage(error, 'Couldn’t add the currency. Please try again.'),
+        },
+      });
+      return false;
+    }
+  };
+
+  /**
+   * A Group's Currencies (#722, board "Group currencies"), a screen over its view: opened from
+   * its options, read each time they open, and offline this phone's copy with its time.
+   */
+  const openCurrencies = async (groupId: string) => {
+    if (snapshot.screen !== 'group' || snapshot.detail.id !== groupId) return;
+    const owner = generation;
+    const kept = snapshot.groupCurrencies.groupId === groupId ? snapshot.groupCurrencies : null;
+    publish({
+      ...snapshot,
+      currenciesOpenFor: groupId,
+      groupCurrencies: {
+        groupId,
+        status: 'loading',
+        data: kept?.data ?? null,
+        message: null,
+        refreshedAt: kept?.refreshedAt ?? null,
+        restored: kept?.restored,
+      },
+    });
+    const showing = () => current(owner) && snapshot.currenciesOpenFor === groupId;
+    try {
+      const answer = (await queryClient.fetchQuery(
+        groupQueries.currenciesOptions(groupId),
+      )) as Envelope;
+      if (!showing()) return;
+      publish({
+        ...snapshot,
+        groupCurrencies: {
+          groupId,
+          status: 'ready',
+          data: groupQueries.currenciesOf(answer.value),
+          message: null,
+          refreshedAt: answer.refreshedAt,
+          restored: answer.source === 'saved',
+        },
+      });
+    } catch (error) {
+      if (!showing() || error instanceof Superseded) return;
+      const unsaved = error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
+      publish({
+        ...snapshot,
+        groupCurrencies: {
+          ...snapshot.groupCurrencies,
+          status: 'error',
+          message: unsaved
+            ? 'These currencies aren’t saved on this phone. Connect to load them.'
+            : expenseFailureMessage(error, 'Couldn’t load the currencies. Please try again.'),
+        },
+      });
+    }
+  };
+  const closeCurrencies = () => {
+    if (snapshot.currenciesOpenFor) publish({ ...snapshot, currenciesOpenFor: null });
+  };
+
   /** A Group's Tags, a screen over its view: opened from the Group's options. */
   const openTags = (groupId: string) => {
     if (snapshot.screen === 'group' && snapshot.detail.id === groupId)
@@ -7418,6 +7617,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     refreshToReview,
     openTags,
     closeTags,
+    addGroupCurrency,
+    openCurrencies,
+    closeCurrencies,
     manageTags,
     groupTags,
     keepExpenseAsSharedDraft,

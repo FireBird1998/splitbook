@@ -104,10 +104,14 @@ export const EXCHANGE_RATE_API_ATTRIBUTION = {
   url: 'https://www.exchangerate-api.com',
 } as const;
 
+/** Historical display follows formatCurrency's fallback; calculations still check the registry. */
+const displayPrecision = (currency: string) =>
+  getCurrency(currency) ? getCurrencyPrecision(currency) : 2;
+
 /** Nonnegative plain decimals: Intl supplies grouping and the currency’s symbol placement. */
 export function decimalMoney(decimal: string, currency: string): string {
   const [whole, fraction = ''] = decimal.split('.');
-  const digits = fraction.padEnd(getCurrencyPrecision(currency), '0');
+  const digits = fraction.padEnd(displayPrecision(currency), '0');
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
@@ -121,7 +125,7 @@ export function decimalMoney(decimal: string, currency: string): string {
 /** Format a positive safe integer minor amount without passing through floating point. */
 export function minorMoney(minor: number, currency: string): string {
   positiveMinor(minor);
-  const places = getCurrencyPrecision(currency);
+  const places = displayPrecision(currency);
   const scale = BigInt(10) ** BigInt(places);
   const units = BigInt(minor);
   return decimalMoney(

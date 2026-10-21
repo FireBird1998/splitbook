@@ -875,3 +875,59 @@ describe.each(['light', 'dark'] as const)(
     });
   },
 );
+
+// #770, from the Designer's #751 check: a credit cut beside a dot read "chat….evil". Once the
+// credit's line knows its width, the app cuts it, with no dot beside the "…"; at the largest
+// text it reads in full.
+describe.each(['light', 'dark'] as const)(
+  'an Activity credit cut by the app in %s (#770)',
+  (mode) => {
+    const host = 'chatgpt.com.secure-assistant-connector.evil.example.test';
+    const credited: ActivityEvent = {
+      ...event(1),
+      metadata: { ...event(1).metadata, preparedBy: { kind: 'assistant', name: host } },
+    };
+    const credit = () =>
+      screen!.root.find(
+        (node) =>
+          String(node.type) === 'Text' &&
+          [node.props.children].flat().join('').startsWith('prepared by'),
+      );
+    it.each([1.3, 2])('at %s× text, 360dp', (fontScale) => {
+      setWindow({ width: 360, height: 640, fontScale });
+      act(() => {
+        screen = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <GroupActivity
+              state={activity({ events: [credited] })}
+              currentUserId={you}
+              currency="INR"
+              offline={false}
+              now={now}
+              onRetry={vi.fn()}
+              onMore={vi.fn()}
+              onLoadNewer={vi.fn()}
+              onShift={vi.fn()}
+              onSelect={vi.fn()}
+              onClose={vi.fn()}
+            />
+          </ThemeContext.Provider>,
+        );
+      });
+      // The list lies in a Card 16dp in, inside its 1dp border; the row's 14dp padding, a 32dp
+      // avatar and a 12dp gap leave its line 254dp.
+      act(() => {
+        credit().props.onLayout?.({
+          nativeEvent: { layout: { x: 0, y: 0, width: 254, height: 16 } },
+        });
+      });
+      const shown = [credit().props.children].flat().join('').trimEnd();
+      if (fontScale < 1.5) {
+        expect(shown).toMatch(/^prepared by [^…]*[^.]…[^.][^…]*example\.test$/);
+      } else {
+        expect(credit().props.numberOfLines).toBe(0);
+        expect(shown).toBe(`prepared by ${host}`);
+      }
+    });
+  },
+);

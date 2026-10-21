@@ -1,3 +1,4 @@
+import { settlementBatchActivityShape } from './settlement-batch-activity';
 import { crossCurrencySettlementReadShape } from './validators/settlement';
 import { assistantAttributionSchema } from './draft-attribution';
 /**
@@ -17,6 +18,7 @@ export const USER_ACTIVITY_MAX_LIMIT = 50;
 const change = z.looseObject({ old: z.unknown().optional(), new: z.unknown().optional() });
 const metadata = z.looseObject({
   ...crossCurrencySettlementReadShape,
+  ...settlementBatchActivityShape,
   amountMinor: z.number().int().safe().optional(),
   preparedBy: assistantAttributionSchema.optional(),
   expenseId: identity.optional(),

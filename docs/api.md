@@ -1235,6 +1235,124 @@ archive is still confirmed.
 Settlements have `createdAt` but **no `date` field**, so they cannot be
 back-dated or attributed to a past month.
 
+### POST /api/groups/[id]/settlements/batch (#734)
+
+Record one payment that clears Debts in several currencies between the same two
+members. Requires a signed-in Group member who is the payer or recipient, and an
+`Idempotency-Key` (the same printable 8–128 character format as a single save).
+`paidBy` defaults to the signed-in member. `paidCurrency` is the common paying
+currency and must be the Group's main currency or a listed extra currency.
+
+```json
+{
+  "paidBy": "samId",
+  "paidTo": "alexId",
+  "paidCurrency": "INR",
+  "settlements": [
+    { "currency": "INR", "amount": 500 },
+    {
+      "currency": "EUR",
+      "amount": 20,
+      "amountPaidMinor": 185000,
+      "appliedRate": "92.5",
+      "rateKind": "custom",
+      "suggestedRate": "92.1",
+      "rateSource": "frankfurter",
+      "rateAsOf": "2026-10-20",
+      "rateFetchedAt": "2026-10-21T00:15:00.000Z"
+    }
+  ]
+}
+```
+
+`settlements` contains 1–32 rows, with each cleared `currency` appearing once.
+Each `amount` is the amount **cleared**, in major units of that row's currency;
+`note` is optional per row. Cross-currency rows carry the same paid amount and
+rate fields as a single Settlement, except that `paidCurrency` comes from the
+payment. A row in the paying currency omits all cross-currency fields. The
+single-Settlement precision, rate validation, historical cleared-currency,
+partial-payment and overpayment rules apply to each row.
+
+The payer must currently owe the recipient in each row's currency, either as a
+Debt before simplifying or as a Suggested payment. A missing or reversed Debt
+refuses the entire batch with **422** `NO_SETTLEMENT_DEBT`; reload the latest
+Debts before starting a new submission. Non-members get **403**; a recording
+member who is neither payer nor recipient gets **422** `FORBIDDEN_SETTLEMENT`.
+Invalid fields are **422** `VALIDATION_ERROR` with per-field details; an unlisted
+paying currency or unused historical cleared currency is **422** `CURRENCY_MISMATCH`.
+
+All currency and Debt checks and every Settlement insert run sequentially inside
+**one transaction under the Group mutation fence**. An Expense save, membership
+change, archive or deletion serializes against the whole payment. If any row
+fails, no Settlement or Activity event is committed. A database without
+transactions returns **503** `SETTLEMENT_TRANSACTIONS_REQUIRED`, without writes.
+
+**201 response:** `{ "status": 201, "data": { "paidCurrency": "INR",
+"totalPaidMinor": 235000, "settlements": [ ... ] } }`. The `settlements` array
+contains the normal populated Settlement records in request order, including
+`_id`, canonical `amountMinor`, immutable paid/rate fields, and
+`pairDebtBeforeMinor` / `pairDebtAfterMinor` on **every** row, including same-currency
+rows. Pair figures use the before-simplifying Debt in that row's cleared currency,
+from the payer's side, immediately before and after its write within the batch.
+The paid total adds the separately rounded paid amounts in **one currency only**;
+each ledger moves solely by its own row's cleared amount.
+
+One key identifies the **whole ordered request**. Concurrent or later retries
+return the same saved records and figures, even when the Debts have since cleared
+or the Group has been archived. A changed row, rate, payer, payee, paying currency
+or row order with the same key returns **409** `IDEMPOTENCY_CONFLICT`. Single saves
+and batches share the key namespace for this recording member and Group. Never
+retry individual rows from an unconfirmed batch with new keys. Nothing retries
+a write without the member's explicit action.
+
+Activity uses **one `settlement_recorded` event per Settlement**, with that row's
+cleared amount, paid amount, rate provenance and immutable pair figures. Each event
+also carries `metadata.batchId` (the first Settlement's id as a non-empty string)
+and `metadata.batchSize` (the number of Settlements, an integer of at least 1),
+including a one-row batch. The Group and user Activity reads retain both fields.
+A single `POST /settlements` event carries neither; older events remain valid.
+Clients collect events with the same batch reference and show **one payment** in
+Activity, including when a page boundary splits the batch. Events are committed to each row's recoverable outbox with the ledger and published only
+after the whole transaction commits. A retry cannot duplicate them.
+
+`groupSettlementBatches(events)` from `@splitbook/shared/settlement-batch-activity`
+is the shared, word-free projection for both clients. It takes events in feed
+order and returns `{ kind: 'event', event, complete: true }` for an event without
+a full batch reference or with `batchSize: 1`. A multi-row batch becomes
+`{ kind: 'batch', batchId, batchSize, events, complete }` at its first supplied
+event's position, with its events still in their supplied order. `complete` is
+true when all `batchSize` events are present; a page-split batch is incomplete.
+Call it again on the concatenated raw pages to join the batch. It does not mutate
+the events or keep state between calls, and supplies no display wording.
+
+The shared module `@splitbook/shared/settlement-batch` exports:
+
+```ts
+calculateSettlementBatch(input: SettlementBatchCalculation): SettlementBatchAmounts;
+```
+
+`SettlementBatchCalculation` is `{ debts: readonly { currency: string;
+amountMinor: number }[]; paidCurrency: string; rates: Readonly<Record<string,
+SettlementBatchRate | undefined>> }`. Debts belong to one directed pair. Rates are
+keyed by cleared currency; the paying currency itself needs none.
+`SettlementBatchRate` is one of:
+
+- `{ rateKind: 'entered'; rate: string }` when no suggestion is available;
+- `{ rateKind: 'suggested'; suggestedRate; rateSource; rateAsOf; rateFetchedAt }`;
+- `{ rateKind: 'custom'; rate: string; suggestedRate; rateSource; rateAsOf; rateFetchedAt }`.
+
+The provenance types and meanings match a single Cross-currency Settlement.
+The result has `paidCurrency`, `totalPaidMinor`, and `settlements` ready to combine
+with `paidBy` / `paidTo` for the request above. Each cross-currency row also includes
+its `paidCurrency`; the batch validator derives it from the top-level field.
+The helper calls `calculateCrossCurrencySettlement` for each cross-currency row,
+rounding half up to that paying currency's minor unit (whole JPY/KRW), then sums
+those rounded minor units exactly. Its `appliedRate` always comes from the two
+rounded amounts. A missing rate, duplicate currency, invalid amount/rate, zero
+rounded result or unsafe total is refused. No ledger conversion occurs.
+`createSettlementBatchSchema` and `CreateSettlementBatchInput` are exported from
+`@splitbook/shared/validators/settlement-batch` for both clients.
+
 ### Cross-currency Settlements (#727)
 
 `amount` (major units), canonical `amountMinor`, and `currency` always mean the

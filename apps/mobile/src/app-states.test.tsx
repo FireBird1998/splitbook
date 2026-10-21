@@ -240,6 +240,23 @@ function device() {
     )
       return json({}, 500);
     const extra = network.currencies && id === lisbon;
+    // The Group's currencies as its settings read them (#722): euros and yen, used by nothing.
+    if (path === `/api/groups/${id}/currencies`)
+      return json({
+        status: 200,
+        data: {
+          mainCurrency: { code: 'INR', locked: true },
+          extraCurrencies: (extra ? ['EUR', 'JPY'] : []).map((code) => ({
+            code,
+            use: {
+              expenses: { count: 0, items: [] },
+              settlements: 0,
+              toReview: { yours: 0, others: 0 },
+            },
+            added: { by: { _id: sam._id, name: sam.name }, at: iso },
+          })),
+        },
+      });
     if (path === `/api/groups/${id}`)
       return json({
         data: network.removed.includes(found._id)
@@ -2495,6 +2512,25 @@ describe('A Group says what is true, without jumps (#219)', () => {
   });
 
   // #725: Balances one currency at a time, through the real App and controller.
+  // #722: the Group's Currencies, from its options, through the real App and controller.
+  it('lists the Group’s currencies from its options, and sends removing one to the web (#722)', async () => {
+    const phone = device();
+    phone.network.currencies = true;
+    await signedIn(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[lisbon]);
+    await app.press('Group options');
+    await app.press('Currencies, INR, EUR, JPY');
+    expect(phone.sent).toContain(`GET /api/groups/${lisbon}/currencies`);
+    const shown = app.text();
+    expect(shown).toContain('INRIndian RupeeLocked: money is already recorded in INR');
+    expect(shown).toContain('EUREuroNothing uses it · added by Sam Chen');
+    expect(shown).toContain('Removing a currency is on the web for now.');
+    expect(app.button('Open on the web')).not.toBeNull();
+    expect(app.button('Add a currency')).not.toBeNull();
+  });
+
   it('shows Balances one currency at a time, and stays on the one a payment settles Alex in (#725)', async () => {
     const phone = device();
     phone.network.currencies = true;

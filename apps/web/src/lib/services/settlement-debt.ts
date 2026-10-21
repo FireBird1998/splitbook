@@ -1,6 +1,10 @@
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
-import type { BalanceSettlement } from '@splitbook/shared/debt-simplifier';
+import {
+  calculateNetBalancesMinor,
+  simplifyDebtsMinor,
+  type BalanceSettlement,
+} from '@splitbook/shared/debt-simplifier';
 import { calculateDebtsMinor } from '@splitbook/shared/debts-before-simplifying';
 import { assertStoredExpenseMoney, toMajorAmount } from '@splitbook/shared/exact-money';
 
@@ -11,6 +15,7 @@ export async function settlementDebtSnapshot(
   paidBy: string,
   paidTo: string,
   amountMinor: number,
+  options: { requireDebt?: boolean } = {},
 ) {
   // Keep queries sequential: a transaction session must not run parallel operations.
   const expenses = await Expense.find({ group: groupId, currency, isDeleted: false })
@@ -39,6 +44,16 @@ export async function settlementDebtSnapshot(
     return outgoing ? -outgoing.amountMinor : (incoming?.amountMinor ?? 0);
   };
   const pairDebtBeforeMinor = pair(settlementMoney);
+  if (options.requireDebt && pairDebtBeforeMinor >= 0) {
+    // Suggested payments may route through another member; either view can originate a payment.
+    const suggested = simplifyDebtsMinor(
+      calculateNetBalancesMinor(expenseMoney, settlementMoney, currency),
+    );
+    if (
+      !suggested.some((debt) => debt.from === paidBy && debt.to === paidTo && debt.amountMinor > 0)
+    )
+      throw new Error('NO_SETTLEMENT_DEBT');
+  }
   const next = {
     currency,
     paidBy,

@@ -12,7 +12,8 @@ import {
   type QueryFunctionContext,
   type QueryState,
 } from '@tanstack/query-core';
-import { tagActionsPath } from '@splitbook/shared/api-paths';
+import { groupCurrenciesPath, tagActionsPath } from '@splitbook/shared/api-paths';
+import { groupCurrencySettingsSchema } from '@splitbook/shared/group-currency-settings';
 import { currentMonthKey } from '@splitbook/shared/date';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
@@ -26,6 +27,7 @@ import {
   expensePageKey,
   groupBalancesKey,
   groupKey,
+  groupCurrenciesKey,
   queryKeyPath,
   tagActionsKey,
   tripSummaryKey,
@@ -189,7 +191,9 @@ const inRows = (path: string, groupId: string, scope: GroupRows) => {
     : path.startsWith(`${prefix}/expenses?`) ||
         path === `${prefix}/balances` ||
         // Its Trip summary in each currency (#730): a ledger change makes it obsolete too.
-        path.startsWith(`${prefix}/trip-summary?`);
+        path.startsWith(`${prefix}/trip-summary?`) ||
+        // What uses each of its currencies (#722) changes with its ledger too.
+        path === `${prefix}/currencies`;
 };
 /**
  * The paths of the persister's rows for this account: those it lists, so rows saved before this
@@ -416,6 +420,10 @@ export function createGroupQueries(session: GroupSession) {
     queryKeyPath(key).replace('/expenses?', `/expenses?page=${page}&`);
   const isList = (key: QueryKey) => queryKeyPath(key).includes('/expenses?');
   const isTrip = (key: QueryKey) => queryKeyPath(key).includes('/trip-summary?');
+  /** The Group's currencies, as its Currencies read them: one of its saved reads (#722). */
+  const isCurrencies = (key: QueryKey) =>
+    key[0] === 'ledger' && queryKeyPath(key) === groupCurrenciesPath(key[3] as string);
+  const currenciesOf = (value: unknown) => groupCurrencySettingsSchema.parse(Object(value).data);
   /** The Group's Tags, as the Tags screen reads them: one of the Group's own rows (#638). */
   const isTags = (key: QueryKey) =>
     key[0] === 'group' && queryKeyPath(key) === tagActionsPath(key[3] as string);
@@ -477,6 +485,7 @@ export function createGroupQueries(session: GroupSession) {
   const readable = (key: QueryKey, value: unknown) => {
     try {
       if (isTags(key)) return Boolean(tagsOf(value));
+      if (isCurrencies(key)) return Boolean(currenciesOf(value));
       if (key[0] === 'group') return lists(groupOf(value));
       if (key[0] === 'balances') return Boolean(balancesOf(value));
       if (isTrip(key)) return Boolean(tripOf(value));
@@ -688,6 +697,14 @@ export function createGroupQueries(session: GroupSession) {
       run: Run = { answered: false, reading: Promise.resolve() };
     track(key, run);
     run.reading = fetchOne(key, queryKeyPath(key), run, (value) => void tripOf(value));
+    return run.reading as Promise<Envelope>;
+  };
+  /** The Group's currencies for its Currencies (#722), checked by their decoder before they're kept. */
+  const readCurrencies = ({ queryKey }: QueryFunctionContext) => {
+    const key = queryKey as QueryKey,
+      run: Run = { answered: false, reading: Promise.resolve() };
+    track(key, run);
+    run.reading = fetchOne(key, queryKeyPath(key), run, (value) => void currenciesOf(value));
     return run.reading as Promise<Envelope>;
   };
   /**
@@ -1709,6 +1726,30 @@ export function createGroupQueries(session: GroupSession) {
      */
     groupOptions: (groupId: string) => groupOptions(groupId),
     /**
+     * The Group's currencies as its Currencies read them (#722): read as every view reads, saved
+     * as one of the Group's rows, and offline answered from that row with its own time. Each open
+     * reads them again.
+     */
+    currenciesOptions: (groupId: string) => ({
+      ...shared,
+      queryKey: groupCurrenciesKey(session.account(), groupId),
+      queryFn: readCurrencies,
+      staleTime: STALE,
+    }),
+    /**
+     * A currency added to the Group answered with its currencies (#722): they stand verified now,
+     * and are saved as the read's row.
+     */
+    currenciesAnswered(groupId: string, value: unknown) {
+      const key = groupCurrenciesKey(session.account(), groupId);
+      const verified: Envelope = { source: 'network', refreshedAt: Date.now(), value };
+      client.setQueryData(key, verified, { updatedAt: verified.refreshedAt });
+      saveRow(key, { owner: session.generation(), owns: queryOwner(client, key) }, verified);
+      return verified;
+    },
+    /** The Group's currencies in their read, as its Currencies show them. */
+    currenciesOf,
+    /**
      * The query function for the Group's Tags (#638): its answers are saved as the Group's
      * `tag-actions` row, retired with its other rows, and answer for it offline.
      */
@@ -1910,12 +1951,12 @@ export function createGroupQueries(session: GroupSession) {
           if (event.type !== 'updated' || event.action.type === 'invalidate') return;
           const { query } = event,
             key = query.queryKey as QueryKey;
-          // A Group's view owns its Group, its Balances, its Months' Expenses and a Trip's summary
-          // (#730), whoever reads them.
+          // A Group's view owns its Group, its Balances, its Months' Expenses, a Trip's summary
+          // (#730) and its Currencies (#722), whoever reads them.
           if (
             key[0] !== 'group' &&
             key[0] !== 'balances' &&
-            !(key[0] === 'ledger' && (isList(key) || isTrip(key)))
+            !(key[0] === 'ledger' && (isList(key) || isTrip(key) || isCurrencies(key)))
           )
             return;
           if (event.action.type === 'success' && !event.action.manual) {
