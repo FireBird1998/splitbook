@@ -671,7 +671,7 @@ describe('PATCH /api/groups/[id] keeps the same rules for the extra currencies (
 });
 
 describe('removing a currency while records arrive in it (#721)', () => {
-  /** Whether the Group still lists yen, and whether any live record is in yen. */
+  /** Whether the Group still lists yen, and whether any live record is in yen or paid in it. */
   async function yenState(groupId: string) {
     const stored = await Group.findById(groupId).lean();
     const listed = (stored!.alternateCurrencies ?? []).includes('JPY');
@@ -680,7 +680,11 @@ describe('removing a currency while records arrive in it (#721)', () => {
         group: groupId,
         currency: 'JPY',
         isDeleted: { $ne: true },
-      })) + (await Settlement.countDocuments({ group: groupId, currency: 'JPY' }));
+      })) +
+      (await Settlement.countDocuments({
+        group: groupId,
+        $or: [{ currency: 'JPY' }, { paidCurrency: 'JPY' }],
+      }));
     return { listed, used };
   }
   const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -719,6 +723,44 @@ describe('removing a currency while records arrive in it (#721)', () => {
       // Each side either went through or was refused for the other, and never both.
       expect([200, 409], label).toContain(removal.status);
       expect([201, 422], label).toContain(saved.status);
+      expect([201, 422], label).toContain(paid.status);
+      expect(listed || used === 0, label).toBe(true);
+      expect(listed, label).toBe(removal.status !== 200);
+    }
+  });
+
+  // The Tester found this race unpinned (#727): a Debt in euros paid in yen, while an admin
+  // removes yen. With the paying currency's check moved before the Settlement's own mutation,
+  // most rounds left a payment in a currency the Group no longer lists.
+  it('never leaves a payment made in a currency the Group no longer lists', async () => {
+    for (let round = 0; round < 12; round += 1) {
+      const groupId = await lisbonAndTokyo();
+      await addExpense(groupId, dinner(`Fado ${round}`, 40, 'EUR'));
+      const cookie = await signIn('sam');
+      const [removal, paid] = await Promise.all([
+        pause(round % 3).then(() => remove(groupId, 'JPY')),
+        pause((round + 1) % 3).then(() =>
+          callRoute(settlements.POST, {
+            method: 'POST',
+            path: `/api/groups/${groupId}/settlements`,
+            params: { id: groupId },
+            cookie,
+            body: {
+              paidTo: alex,
+              amount: 20,
+              currency: 'EUR',
+              amountPaidMinor: 3250,
+              paidCurrency: 'JPY',
+              appliedRate: '162.5',
+              rateKind: 'entered',
+            },
+          }),
+        ),
+      ]);
+
+      const { listed, used } = await yenState(groupId);
+      const label = `round ${round}: removal ${removal.status}, payment ${paid.status}`;
+      expect([200, 409], label).toContain(removal.status);
       expect([201, 422], label).toContain(paid.status);
       expect(listed || used === 0, label).toBe(true);
       expect(listed, label).toBe(removal.status !== 200);
