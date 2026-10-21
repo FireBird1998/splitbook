@@ -223,6 +223,10 @@ export function createAppTheme(mode: ThemeMode): Theme {
             outlineOffset: 2,
             boxShadow: `0 0 0 4px ${(theme.vars ?? theme).palette.focus.ring}`,
           },
+          // An outlined or filled field's focused border shows its focus; the ring would draw a
+          // second one around its input alone, inside that border (#823).
+          '.MuiOutlinedInput-input:focus-visible': { boxShadow: 'none' },
+          '.MuiFilledInput-input:focus-visible': { boxShadow: 'none' },
           '@media (prefers-reduced-motion: reduce)': {
             '*, *::before, *::after': {
               animationDuration: '0.01ms !important',
