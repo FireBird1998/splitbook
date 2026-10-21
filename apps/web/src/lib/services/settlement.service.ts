@@ -34,7 +34,7 @@ async function assertSettlementCurrencies(
 ) {
   if (
     !isGroupCurrency(group, data.currency) &&
-    !(await Expense.exists({ group: groupId, currency: data.currency })) &&
+    !(await Expense.exists({ group: groupId, currency: data.currency, isDeleted: false })) &&
     !(await Settlement.exists({ group: groupId, currency: data.currency }))
   ) {
     throw new Error('CURRENCY_MISMATCH');
