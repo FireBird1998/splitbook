@@ -82,7 +82,7 @@ afterEach(() => {
   for (const controller of controllers.splice(0)) controller.dispose();
   vi.unstubAllEnvs();
 });
-function fixture(options: { groups?: boolean } = {}) {
+function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
   let held: Promise<void> | undefined;
   let operation = 0;
   let creation: unknown = null;
@@ -92,6 +92,21 @@ function fixture(options: { groups?: boolean } = {}) {
   let draftsOff = false;
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
   let items: DraftReview[] = [];
+  /** The Group's extra currencies (#721): an item in one it doesn't list needs another (#732). */
+  let extras = options.extras ?? [];
+  let adding: 'ok' | 'lost' = 'ok';
+  const posted: string[] = [];
+  const listed = () => [group.defaultCurrency, ...extras];
+  /** Each item's problems as the server reviews it now, against the Group's currencies. */
+  const reviewed = (entry: DraftReview): DraftReview => {
+    const currency = entry.draft.values?.currency;
+    const rest = entry.problems.filter((problem) => problem !== 'CURRENCY_NOT_LISTED');
+    return {
+      ...entry,
+      problems: currency && !listed().includes(currency) ? ['CURRENCY_NOT_LISTED', ...rest] : rest,
+    };
+  };
+  const currentGroup = () => ({ ...group, alternateCurrencies: extras });
   let groups = options.groups === false ? [] : [group];
   let cookie: string | null = null;
   const fetch: MobileFetch = async (url, init) => {
@@ -106,7 +121,16 @@ function fixture(options: { groups?: boolean } = {}) {
         data: {
           total: items.length,
           groups: items.length
-            ? [{ groupId, groupName: group.name, count: items.length, items }]
+            ? [
+                {
+                  groupId,
+                  groupName: group.name,
+                  currency: group.defaultCurrency,
+                  alternateCurrencies: extras,
+                  count: items.length,
+                  items: items.map(reviewed),
+                },
+              ]
             : [],
         },
       };
@@ -127,10 +151,44 @@ function fixture(options: { groups?: boolean } = {}) {
     if (path === `/api/groups/${groupId}`)
       return denied
         ? json({ error: 'Forbidden', status: 403 }, 403)
-        : json({ status: 200, data: group });
+        : json({ status: 200, data: currentGroup() });
+    // Any member adds a currency to the Group (#721): the server's answer, or none (#722).
+    if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST') {
+      const { currency } = JSON.parse(String(init.body)) as { currency: string };
+      posted.push(currency);
+      if (listed().includes(currency))
+        return json(
+          {
+            error: `${currency} is already one of this Group’s currencies.`,
+            code: 'INVALID_GROUP_CURRENCIES',
+            status: 422,
+          },
+          422,
+        );
+      extras = [...extras, currency];
+      if (adding === 'lost') throw new TypeError('Network request failed');
+      return json(
+        {
+          status: 201,
+          data: {
+            mainCurrency: { code: group.defaultCurrency, locked: true },
+            extraCurrencies: extras.map((code) => ({
+              code,
+              use: {
+                expenses: { count: 0, items: [] },
+                settlements: 0,
+                toReview: { yours: 0, others: 0 },
+              },
+              added: { by: { _id: user.id, name: user.name }, at: iso },
+            })),
+          },
+        },
+        201,
+      );
+    }
     if (path.endsWith('/drafts/review')) {
       const ids: string[] = JSON.parse(String(init.body)).ids;
-      return json({ data: items.filter((entry) => ids.includes(entry.draft.id)) });
+      return json({ data: items.filter((entry) => ids.includes(entry.draft.id)).map(reviewed) });
     }
     if (path.endsWith('/drafts/save')) {
       const ids = (JSON.parse(String(init.body)).drafts as { id: string }[]).map(({ id }) => id);
@@ -257,6 +315,32 @@ function fixture(options: { groups?: boolean } = {}) {
     prepare: (count: number, complete = false) => {
       items = Array.from({ length: count }, (_, index) => item(index + 1, complete));
     },
+    /** Dinner in Zürich, CHF 86.00, prepared by Claude, complete but in a currency not listed. */
+    prepareInFrancs: () => {
+      const entry = item(1, true);
+      items = [
+        {
+          ...entry,
+          draft: {
+            ...entry.draft,
+            values: {
+              ...entry.draft.values,
+              description: 'Dinner in Zürich',
+              amount: 86,
+              currency: 'CHF',
+              paidBy: [{ user: user.id, amount: 86 }],
+            },
+          },
+        },
+      ];
+    },
+    /** The phone sent the add, and Splitbook added it, but the reply never came back. */
+    loseAddReply: () => {
+      adding = 'lost';
+    },
+    posted,
+    extras: () => extras,
+    draftValues: () => items.map((entry) => entry.draft.values),
     /** Saved or deleted on another screen or device. */
     removeElsewhere: (id: string) => {
       items = items.filter((entry) => entry.draft.id !== id);
@@ -530,5 +614,68 @@ describe("a Group's items in To review stay current (#436, #435)", () => {
     const [first] = ids();
     await items.discard(f.controller.getSnapshot().sharedDraftCollection.rows[0]);
     expect(ids()).not.toContain(first);
+  });
+});
+
+// #733, boards "To review: unlisted currency" and "change the currency": an item in a currency
+// its Group doesn't list needs details, with the web's two fixes (#732).
+describe('an item in a currency the Group doesn’t list (#733)', () => {
+  const closers: (() => void)[] = [];
+  afterEach(() => {
+    for (const close of closers.splice(0)) close();
+  });
+  /** Signed in, on Maple House's To review (INR, with EUR and JPY), Dinner in Zürich in francs. */
+  async function inFrancs() {
+    const f = fixture({ extras: ['EUR', 'JPY'] });
+    f.prepareInFrancs();
+    await f.controller.signIn('alex');
+    await settle();
+    await f.controller.openToReview(groupId);
+    const items = f.controller.draftCollection(groupId);
+    closers.push(items.open());
+    await settle();
+    const dinner = () => f.controller.toReviewModel(groupId).groups[0]?.items[0];
+    return { f, items, dinner };
+  }
+
+  it('needs a currency the Group lists, and keeps the item and its amount as prepared', async () => {
+    const { dinner } = await inFrancs();
+    expect(dinner()).toMatchObject({
+      state: 'needs-details',
+      needs: [{ field: 'currency', reason: 'currency-not-listed' }],
+      accountItem: { draft: { values: { amount: 86, currency: 'CHF' } } },
+    });
+  });
+
+  it('adds the currency to the Group, and the item is then ready to save', async () => {
+    const { f, dinner } = await inFrancs();
+    expect(await f.controller.addGroupCurrency('CHF')).toBe(true);
+    await settle();
+    expect(f.posted).toEqual(['CHF']);
+    expect(f.extras()).toEqual(['EUR', 'JPY', 'CHF']);
+    expect(dinner()?.state).toBe('ready');
+    expect(f.controller.getSnapshot().currencyAdd).toMatchObject({ status: 'idle', message: null });
+  });
+
+  it('when the add’s reply is lost, reads the Group again and To review with it', async () => {
+    const { f, dinner } = await inFrancs();
+    f.loseAddReply();
+    expect(await f.controller.addGroupCurrency('CHF')).toBe(true);
+    await settle();
+    expect(f.posted).toEqual(['CHF']);
+    expect(dinner()?.state).toBe('ready');
+  });
+
+  it('changes only the item’s currency to a listed one: the amount stays, nothing is converted', async () => {
+    const { f, items, dinner } = await inFrancs();
+    const draft = f.controller.getSnapshot().sharedDraftCollection.rows[0]!;
+    await items.changeCurrency(draft, 'EUR');
+    await settle();
+    expect(f.draftValues()[0]).toMatchObject({ amount: 86, currency: 'EUR' });
+    expect(f.posted).toEqual([]);
+    expect(dinner()).toMatchObject({
+      state: 'ready',
+      accountItem: { draft: { values: { amount: 86, currency: 'EUR' } } },
+    });
   });
 });

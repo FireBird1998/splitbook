@@ -128,6 +128,11 @@ function fixture(
     failPut?: number;
     /** Item updates for these ids answer 409 STALE_REVISION, as if changed elsewhere. */
     stale?: string[];
+    /**
+     * Dinner in Zürich, CHF 86.00, in Maple House, which lists INR with EUR and JPY (#733): the
+     * server reviews it as CURRENCY_NOT_LISTED until CHF is added or its currency changed.
+     */
+    francs?: boolean;
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -171,6 +176,24 @@ function fixture(
     ];
   if (options.laterReadyGroup)
     items = [review(incomplete), review({ ...first, groupId: otherGroupId })];
+  let extras: string[] = [];
+  if (options.francs) {
+    extras = ['EUR', 'JPY'];
+    const dinner = row(7, 'Dinner in Zürich', 86);
+    items = [review({ ...dinner, values: { ...dinner.values, currency: 'CHF' } })];
+  }
+  /** The server's review now, against the Group's currencies (#732). */
+  const reviewed = (item: DraftReview): DraftReview => {
+    const currency = item.draft.values?.currency;
+    const rest = item.problems.filter((problem) => problem !== 'CURRENCY_NOT_LISTED');
+    return {
+      ...item,
+      problems:
+        currency && !['INR', ...extras].includes(currency)
+          ? ['CURRENCY_NOT_LISTED', ...rest]
+          : rest,
+    };
+  };
   if (options.allocated)
     items = items.map((item) => {
       const amount = item.draft.values?.amount ?? 0;
@@ -219,8 +242,9 @@ function fixture(
                     groupId: id,
                     groupName: id === groupId ? group.name : 'Later trip',
                     currency: 'INR',
+                    alternateCurrencies: extras,
                     count: own.length,
-                    items: own,
+                    items: own.map(reviewed),
                   },
                 ]
               : [];
@@ -242,11 +266,34 @@ function fixture(
     if (path === `/api/groups/${groupId}`)
       return denied
         ? json({ error: 'Forbidden', status: 403 }, 403)
-        : json({ status: 200, data: group });
+        : json({ status: 200, data: { ...group, alternateCurrencies: extras } });
+    // Any member adds a currency to the Group (#721).
+    if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST') {
+      const { currency } = JSON.parse(String(init.body)) as { currency: string };
+      extras = [...extras, currency];
+      return json(
+        {
+          status: 201,
+          data: {
+            mainCurrency: { code: 'INR', locked: true },
+            extraCurrencies: extras.map((code) => ({
+              code,
+              use: {
+                expenses: { count: 0, items: [] },
+                settlements: 0,
+                toReview: { yours: 0, others: 0 },
+              },
+              added: { by: { _id: user.id, name: user.name }, at: iso },
+            })),
+          },
+        },
+        201,
+      );
+    }
     if (path.endsWith('/drafts/review')) {
       const ids: string[] = JSON.parse(String(init.body)).ids;
       reviews.push(ids);
-      return json({ data: items.filter((item) => ids.includes(item.draft.id)) });
+      return json({ data: items.filter((item) => ids.includes(item.draft.id)).map(reviewed) });
     }
     if (path.endsWith('/drafts/save')) {
       saves.push(String(init.body));
@@ -1276,5 +1323,105 @@ describe('To review quick fixes on Android (#439)', () => {
     } finally {
       group.tags.splice(1);
     }
+  });
+});
+
+// #733, boards "To review: unlisted currency" and "change the currency": through the real
+// controller, Dinner in Zürich is in CHF, which Maple House doesn't list; the web's two fixes.
+describe('an item in a currency the Group doesn’t list (#733)', () => {
+  const dialog = (tree: ReactTestRenderer, title: string) =>
+    tree.root
+      .findAll((node) => String(node.type) === 'Modal' && node.props.visible === true)
+      .find((modal) =>
+        modal
+          .findAll(
+            (node) => String(node.type) === 'Text' && node.props.accessibilityRole === 'header',
+          )
+          .some((header) => header.children.join('') === title),
+      ) ?? null;
+  const words = (node: ReturnType<typeof dialog>) =>
+    (node?.findAll((child) => String(child.type) === 'Text') ?? [])
+      .map((child) => child.children.filter((part) => typeof part === 'string').join(''))
+      .join('\n');
+  async function opened(mode: 'light' | 'dark' = 'light') {
+    const f = fixture({ francs: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.openToReview(groupId);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    return { f, list };
+  }
+
+  it('marks it, and opens a sheet that says what’s wrong with both fixes', async () => {
+    const { list } = await opened();
+    expect(text(list)).toContain('Needs details');
+    expect(text(list)).toContain('Currency not listed');
+    await tap(list, 'Review Dinner in Zürich');
+    const sheet = dialog(list, 'Dinner in Zürich');
+    expect(sheet).not.toBeNull();
+    const shown = words(sheet);
+    expect(shown).toContain('CHF isn’t one of Maple House’s currencies.');
+    expect(shown).toContain('Add it, or change this Expense’s currency.');
+    expect(shown).toContain('Adding lets everyone use CHF, the 3rd of 4 extra currencies.');
+    expect(shown).toContain(
+      'Changing keeps 86.00 and changes only the currency; nothing is converted.',
+    );
+    expect(button(list, 'Add CHF to Maple House')).toBeDefined();
+    expect(button(list, 'Change currency')).toBeDefined();
+  });
+
+  it('adds the currency to the Group, and the item is then ready to save', async () => {
+    const { f, list } = await opened();
+    await tap(list, 'Review Dinner in Zürich');
+    await tap(list, 'Add CHF to Maple House');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(f.calls).toContain(`POST /api/groups/${groupId}/currencies`);
+    expect(dialog(list, 'Dinner in Zürich')).toBeNull();
+    expect(text(list)).not.toContain('Currency not listed');
+    expect(button(list, 'Save Dinner in Zürich')).toBeDefined();
+  });
+
+  it('changes only the currency, saying nothing is converted, and the item is then ready', async () => {
+    const { f, list } = await opened();
+    await tap(list, 'Review Dinner in Zürich');
+    await tap(list, 'Change currency');
+    const sheet = dialog(list, 'Change currency');
+    expect(words(sheet)).toContain('Pick one of Maple House’s currencies for Dinner in Zürich.');
+    expect(button(list, 'INR, Indian Rupee, main currency')).toBeDefined();
+    expect(button(list, 'JPY, Japanese Yen, whole amounts only')).toBeDefined();
+    await tap(list, 'EUR, Euro');
+    expect(words(dialog(list, 'Change currency'))).toContain(
+      'The amount stays 86.00, so it becomes €86.00. Splitbook doesn’t convert it; check it against the receipt.',
+    );
+    await tap(list, 'Use EUR');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(f.puts.at(-1)?.values).toMatchObject({ amount: 86, currency: 'EUR' });
+    expect(f.calls).not.toContain(`POST /api/groups/${groupId}/currencies`);
+    expect(dialog(list, 'Change currency')).toBeNull();
+    expect(dialog(list, 'Dinner in Zürich')).toBeNull();
+    expect(button(list, 'Save Dinner in Zürich')).toBeDefined();
+  });
+
+  it('offline, adding says it needs a connection and sends nothing', async () => {
+    const { f, list } = await opened();
+    await tap(list, 'Review Dinner in Zürich');
+    f.goOffline();
+    await act(async () => {
+      await f.controller.refresh();
+    });
+    expect(f.controller.getSnapshot().offline.active).toBe(true);
+    const add = button(list, 'Add CHF to Maple House');
+    expect(add.props.disabled).toBe(true);
+    expect(add.props.accessibilityHint).toBe('Adding a currency needs a connection.');
+    expect(f.calls).not.toContain(`POST /api/groups/${groupId}/currencies`);
   });
 });
