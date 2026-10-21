@@ -369,9 +369,9 @@ export function createAppTheme(mode: ThemeMode): Theme {
         styleOverrides: {
           // A standard banner takes its status tint, its text the primary colour and its icon
           // the status colour, as the canvas's banner does: MUI's own tint is near black in dark
-          // mode (#772). Its text buttons and links take the status colour too, as the canvas and
-          // Android draw banner actions: each passes on its own tint, where brand blue on the dark
-          // info or success tint doesn't quite (#782). As variants, so a banner's own sx still wins.
+          // mode (#772). Its text buttons and links take the status colour too, as the canvas draws
+          // banner actions: each passes on its own tint, where brand blue on the dark info or
+          // success tint doesn't quite (#782). As variants, so a banner's own sx still wins.
           root: ({ theme }) => {
             const { palette } = theme.vars ?? theme;
             const tones = {

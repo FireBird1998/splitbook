@@ -179,9 +179,9 @@ it.each([
   expect(html).toContain(`color:var(--mui-palette-status-${tone})`);
 });
 
-// #782: a banner's text buttons and links take its status colour, as the canvas and Android
-// draw banner actions: brand blue on the dark info or success tint was just under 4.5:1, and each
-// status colour passes on its own tint (above).
+// #782: a banner's text buttons and links take its status colour, as the canvas draws banner
+// actions: brand blue on the dark info or success tint was just under 4.5:1, and each status
+// colour passes on its own tint (above).
 it.each([
   ['info', 'info'],
   ['warning', 'warning'],
