@@ -530,6 +530,12 @@ function TaskScreen() {
                 ? 'Create a Group'
                 : 'You’re invited'
         }
+        // Whose assistants they are, as the board has it (#622).
+        subtitle={
+          state.screen === 'assistants' && state.auth.user
+            ? `Account · ${state.auth.user.name}`
+            : undefined
+        }
         // Disabled while joining: the join finishes and opens its Group (#152).
         leading={{
           kind: 'back',
