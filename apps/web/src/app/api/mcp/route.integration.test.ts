@@ -4,6 +4,8 @@ import { createServer, type Server } from 'node:http';
 import mongoose from 'mongoose';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { parseToReviewResponse } from '@splitbook/shared/to-review-read';
+import { buildToReview } from '@splitbook/shared/to-review';
 import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
 import { groupService } from '@/lib/services/group.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
@@ -337,4 +339,155 @@ describe('Group currencies through MCP (#732)', () => {
       await client.close();
     }
   });
+});
+
+it('keeps listed assistant Drafts ready and unlisted Drafts needing details until either currency fix (#732)', async () => {
+  published.clientId = 'https://draft-currencies.example.test/client.json';
+  published.name = 'Fictional Receipt Helper';
+  const client = await connect(published.clientId, published.name);
+  try {
+    const group = await groupService.create(
+      {
+        name: 'Fictional receipts abroad',
+        category: 'trip',
+        defaultCurrency: 'INR',
+        alternateCurrencies: ['EUR', 'JPY'],
+      },
+      DEMO_PERSONA_IDS.alex,
+    );
+    const groupId = String(group._id);
+    const values = (currency: string, amount: number) => ({
+      description: `Dinner in ${currency}`,
+      currency,
+      amount,
+      date: '2026-10-21',
+      tag: 'Food',
+      paidBy: [{ user: DEMO_PERSONA_IDS.alex }],
+      splitMethod: 'equal',
+      splitBetween: [{ user: DEMO_PERSONA_IDS.alex }],
+    });
+    const created = resultData(
+      await client.callTool({
+        name: 'create_drafts',
+        arguments: {
+          groupId,
+          requestKey: 'currency-receipts-001',
+          drafts: [
+            values('EUR', 20),
+            values('JPY', 2500),
+            values('GBP', 30),
+            values('CHF', 40),
+            { currency: 'USD' },
+          ],
+        },
+      }),
+    );
+    const [euro, yen, pound, franc, incomplete] = created.drafts;
+    const readItems = async () => {
+      const response = await callRoute(toReview.GET, {
+        method: 'GET',
+        path: '/api/user/to-review',
+        cookie,
+      });
+      expect(response.status).toBe(200);
+      const read = parseToReviewResponse(response.body);
+      const own = read.groups.find((row) => row.groupId === groupId)!;
+      expect(own).toMatchObject({ currency: 'INR', alternateCurrencies: ['EUR', 'JPY'] });
+      return buildToReview({ total: own.count, groups: [own] }, [], new Date());
+    };
+    const model = await readItems();
+    const byId = (id: string) => model.items.find((row) => row.id === id)!;
+    for (const draft of [euro, yen]) expect(byId(draft.id).state).toBe('ready');
+    expect(model.ready.totals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ currency: 'EUR', amountMinor: 2000 }),
+        expect.objectContaining({ currency: 'JPY', amountMinor: 2500 }),
+      ]),
+    );
+    for (const draft of [pound, franc, incomplete]) {
+      expect(draft.missingFields).toContain('currency');
+      expect(byId(draft.id)).toMatchObject({
+        state: 'needs-details',
+        accountItem: { problems: expect.arrayContaining(['CURRENCY_NOT_LISTED']) },
+      });
+    }
+    const listed = resultData(
+      await client.callTool({ name: 'list_drafts', arguments: { groupId } }),
+    );
+    expect(listed.drafts.find((row: { id: string }) => row.id === pound.id)).toMatchObject({
+      values: { currency: 'GBP', amount: 30 },
+      missingFields: ['currency'],
+    });
+    const reviewRoute = await import('@/app/api/groups/[id]/drafts/review/route');
+    const saveRoute = await import('@/app/api/groups/[id]/drafts/save/route');
+    const checked = await callRoute(reviewRoute.POST, {
+      method: 'POST',
+      path: `/api/groups/${groupId}/drafts/review`,
+      params: { id: groupId },
+      cookie,
+      body: { ids: [pound.id] },
+    });
+    expect(checked.status).toBe(200);
+    expect(checked.body.data[0].problems).toEqual(['CURRENCY_NOT_LISTED']);
+    const refused = await callRoute(saveRoute.POST, {
+      method: 'POST',
+      path: `/api/groups/${groupId}/drafts/save`,
+      params: { id: groupId },
+      cookie,
+      body: {
+        drafts: [{ id: pound.id, revision: pound.revision, review: checked.body.data[0].review }],
+      },
+    });
+    expect(refused.body.data).toEqual([
+      { id: pound.id, status: 'failed', message: 'Invalid Draft: CURRENCY_NOT_LISTED' },
+    ]);
+    // Changing the Expense currency fixes one item without changing the Group list.
+    const replaced = resultData(
+      await client.callTool({
+        name: 'replace_draft',
+        arguments: {
+          groupId,
+          draftId: pound.id,
+          revision: pound.revision,
+          values: { ...values('EUR', 30), description: 'Later dinner' },
+        },
+      }),
+    );
+    expect(replaced).toMatchObject({
+      revision: 1,
+      values: { currency: 'EUR', amount: 30 },
+      missingFields: [],
+    });
+    expect((await readItems()).items.find((row) => row.id === pound.id)?.state).toBe('ready');
+    // Adding the other currency fixes its existing item, without rewriting its amount.
+    const groupRoute = await import('@/app/api/groups/[id]/route');
+    const added = await callRoute(groupRoute.PATCH, {
+      method: 'PATCH',
+      path: `/api/groups/${groupId}`,
+      params: { id: groupId },
+      cookie,
+      body: { alternateCurrencies: ['EUR', 'JPY', 'CHF'] },
+    });
+    expect(added.status).toBe(200);
+    const response = await callRoute(toReview.GET, {
+      method: 'GET',
+      path: '/api/user/to-review',
+      cookie,
+    });
+    const after = buildToReview(parseToReviewResponse(response.body), [], new Date());
+    expect(after.items.find((row) => row.id === franc.id)).toMatchObject({
+      state: 'ready',
+      accountItem: { draft: { revision: 0, values: { currency: 'CHF', amount: 40 } } },
+    });
+    const balances = resultData(
+      await client.callTool({ name: 'group_balances', arguments: { groupId } }),
+    );
+    expect(
+      balances.balances.byCurrency.every((bucket: { balances: { balance: number }[] }) =>
+        bucket.balances.every((row) => row.balance === 0),
+      ),
+    ).toBe(true);
+  } finally {
+    await client.close();
+  }
 });

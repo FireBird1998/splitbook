@@ -999,3 +999,23 @@ describe('the currency an item needs, named by its Group’s kind (#596)', () =>
     },
   );
 });
+
+it('keeps an unlisted currency readable on Android and names its needs-details reason (#732)', () => {
+  const entry = item(1, { problems: ['CURRENCY_NOT_LISTED'] });
+  const source = read([entry]);
+  source.groups[0].currency = 'INR';
+  source.groups[0].alternateCurrencies = ['EUR', 'JPY'];
+  const parsed = parseToReviewResponse({ status: 200, data: source });
+  expect(parsed.groups[0].alternateCurrencies).toEqual(['EUR', 'JPY']);
+  const model = buildToReview(parsed, [], now);
+  expect(model.items[0]).toMatchObject({
+    state: 'needs-details',
+    needs: [{ field: 'currency', reason: 'currency-not-listed' }],
+    unknownFacts: [],
+  });
+  expect(model.items[0].missingFacts).toEqual(['a currency listed by the Group']);
+  expect(model.ready.count).toBe(0);
+  expect(reviewProblem('CURRENCY_NOT_LISTED')).toBe(
+    'Add this currency to the Group or choose a listed currency.',
+  );
+});
