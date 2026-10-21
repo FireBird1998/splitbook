@@ -1,9 +1,20 @@
-import { useLayoutEffect, useRef, useState, type Ref } from 'react';
-import { Animated, Text, View, type StyleProp, type TextProps, type TextStyle } from 'react-native';
+import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type TextProps,
+  type TextStyle,
+} from 'react-native';
 import type { SemanticTokens } from '@splitbook/shared/design-tokens';
 import { fonts, useTheme } from '../theme';
 import { useStatusFade } from './motion';
-import { moneySizes, textVariants, type MoneySize, type TextVariant } from './scale';
+import { outfitSteps, outfitWidth } from './outfit-metrics';
+import { moneySizes, scaledSp, textVariants, type MoneySize, type TextVariant } from './scale';
 
 export type TextTone =
   | 'primary'
@@ -64,6 +75,77 @@ export const hairSpace = String.fromCodePoint(0x200a);
  */
 export const ellipsisRoom = String.fromCodePoint(0xa0).repeat(2);
 
+/**
+ * `text` cut in the middle to fit `room` dp in Outfit Regular at `size` dp, with its room for the
+ * ellipsis (`ellipsisRoom`) after it: as Android cuts it, the end that fits in half the line
+ * beside the "…" and the start that fits in the rest, but with no dot beside the "…", as
+ * "chat….evil" and "claude.ai.…west" read as a fourth dot (#770). The whole text when it fits;
+ * null when a character's width isn't known here (`outfitSteps`), for Android to cut it instead.
+ */
+function middleCut(text: string, room: number, size: number): string | null {
+  const steps = outfitSteps(text);
+  if (steps === null) return null;
+  // In ems, with a dp to spare, as Android rounds the line's box to whole pixels.
+  const line = (room - 1) / size - outfitWidth(ellipsisRoom)!;
+  if (steps.reduce((width, step) => width + step, 0) <= line) return text;
+  const beside = line - outfitWidth('…')!;
+  let end = steps.length;
+  let used = 0;
+  while (end > 0 && used + steps[end - 1]! <= beside / 2) used += steps[--end]!;
+  let start = 0;
+  while (start < end && used + steps[start]! <= beside) used += steps[start++]!;
+  const characters = [...text];
+  const first = characters.slice(0, start).join('').replace(/\.+$/, '');
+  const last = characters.slice(end).join('').replace(/^\.+/, '');
+  return `${first}…${last}`;
+}
+
+/**
+ * A line cut in the middle: by the app (`middleCut`) once it knows its line's width, so no dot sits
+ * beside the "…" (#770), and by Android until then, or when the app can't cut it. It takes its
+ * line's whole width, as a line of its own does. Its width is the one it had with the whole text
+ * in it, or a wider one: a line its cut made narrower never cuts itself again. A new text or window
+ * lays the whole text out again. It ends in its room (`ellipsisRoom`), and a screen reader hears
+ * the whole text.
+ */
+function CutLine({
+  text,
+  look,
+  onLayout,
+  ...props
+}: TextProps & { text: string; look: StyleProp<TextStyle> }) {
+  const window = useWindowDimensions();
+  const shape = `${text} ${window.width} ${window.fontScale}`;
+  const [line, setLine] = useState<{ shape: string; width: number } | null>(null);
+  const room = line?.shape === shape ? line.width : null;
+  const { fontFamily, fontSize, letterSpacing } = StyleSheet.flatten(look);
+  const size = scaledSp(Number(fontSize), window.fontScale);
+  // Only Outfit Regular's widths are known here.
+  const measurable = fontFamily === fonts.regular && !letterSpacing;
+  const cut = useMemo(
+    () => (room !== null && measurable ? middleCut(text, room, size) : null),
+    [room, measurable, text, size],
+  );
+  const layOut = (event: LayoutChangeEvent) => {
+    onLayout?.(event);
+    const { width } = event.nativeEvent.layout;
+    if (room === null || width > room) setLine({ shape, width });
+  };
+  return (
+    <Text
+      {...props}
+      accessibilityLabel={
+        props.accessibilityLabel ?? (cut !== null && cut !== text ? text : undefined)
+      }
+      style={[look, { alignSelf: 'stretch' }]}
+      onLayout={layOut}
+    >
+      {cut ?? text}
+      {ellipsisRoom}
+    </Text>
+  );
+}
+
 export function CompactText({
   variant = 'body',
   tone = 'primary',
@@ -96,6 +178,8 @@ export function CompactText({
     style,
   ];
   const cutInMiddle = props.numberOfLines === 1 && props.ellipsizeMode === 'middle';
+  if (cutInMiddle && !spare && typeof children === 'string')
+    return <CutLine {...props} look={look} text={children} />;
   return spare || cutInMiddle ? (
     <Text {...props} style={look}>
       {children}
