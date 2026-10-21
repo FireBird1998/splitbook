@@ -445,7 +445,7 @@ function currencyMarks(listed: readonly string[]): Marks {
     // Preserve a listed dollar currency's familiar shorthand, but never guess between extras.
     if (listed.includes(code) && symbol.endsWith('$')) add('$', code);
   }
-  if (listed.includes('INR')) for (const mark of ['rs', 'rs.', 'rupee', 'rupees']) add(mark, 'INR');
+  for (const mark of ['rs', 'rs.', 'rupee', 'rupees']) add(mark, 'INR');
   return { listed, symbols };
 }
 
