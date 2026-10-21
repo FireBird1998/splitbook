@@ -589,9 +589,10 @@ export function connectionTests(mongo = false) {
       expect(approvalShown).toMatchObject({ name: 'Synthetic MCP Client', address: null });
     });
 
-    it('starts a new approval from the Groups the connection leaves out, and from none after Disconnect (#617)', async () => {
+    /** Works as another registered assistant, so the main client's grant stays as it was. */
+    async function withAnotherClient(name: string, work: () => Promise<void>) {
       const registration = await post('/oauth2/register', {
-        client_name: 'Synthetic Second Client',
+        client_name: name,
         redirect_uris: ['https://mcp-client.example.test/callback'],
         token_endpoint_auth_method: 'none',
         grant_types: ['authorization_code', 'refresh_token'],
@@ -602,6 +603,20 @@ export function connectionTests(mongo = false) {
       const first = clientId;
       clientId = (await registration.json()).client_id;
       try {
+        await work();
+      } finally {
+        // Disconnect it, so later tests see only the main client's connection.
+        const listing = await fetch(`${origin}/api/auth/mcp/connections`, { headers: { cookie } });
+        const live = (
+          (await listing.json()).connections as Array<{ id: string; clientId: string }>
+        ).filter((row) => row.clientId === clientId);
+        for (const row of live) await post('/mcp/revoke', { id: row.id }, true);
+        clientId = first;
+      }
+    }
+
+    it('starts a new approval from the Groups the connection leaves out, and from none after Disconnect (#617)', () =>
+      withAnotherClient('Synthetic Second Client', async () => {
         const leftOut = 'c00000000000000000000617';
         await approvalRequest();
         expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
@@ -616,10 +631,56 @@ export function connectionTests(mongo = false) {
         // Connecting again after Disconnect starts with every Group ticked.
         await approvalRequest();
         expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
-      } finally {
-        clientId = first;
-      }
-    });
+      }));
+
+    it('keeps the choice in force when a signed consent then fails (#617)', () =>
+      withAnotherClient('Synthetic Failing Consent Client', async () => {
+        const leftOut = 'c00000000000000000000618';
+        await authorizeCode(false, false, false, [leftOut]);
+        const { oauthQuery } = await approvalRequest();
+        // Signed and accepted, but asking for a scope the client never requested.
+        const failed = await post(
+          '/oauth2/consent',
+          {
+            accept: true,
+            oauth_query: oauthQuery,
+            scope: `${MCP_LEDGER_SCOPE} openid`,
+            excluded_groups: [],
+          },
+          true,
+        );
+        expect(failed.status).toBe(400);
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+      }));
+
+    it('writes nothing for a Deny or a tampered request that carries left-out Groups (#617)', () =>
+      withAnotherClient('Synthetic Refused Client', async () => {
+        const leftOut = 'c00000000000000000000619';
+        await authorizeCode(false, false, false, [leftOut]);
+        const { oauthQuery } = await approvalRequest();
+        const scope = `${MCP_LEDGER_SCOPE} offline_access`;
+        const denied = await post(
+          '/oauth2/consent',
+          { accept: false, oauth_query: oauthQuery, scope, excluded_groups: [] },
+          true,
+        );
+        expect(denied.ok).toBe(true);
+        const tampered = new URLSearchParams(oauthQuery);
+        tampered.set('state', 'tampered-state');
+        const unsigned = new URLSearchParams(oauthQuery);
+        unsigned.delete('sig');
+        for (const query of [tampered, unsigned]) {
+          const refused = await post(
+            '/oauth2/consent',
+            { accept: true, oauth_query: query.toString(), scope, excluded_groups: [] },
+            true,
+          );
+          expect(refused.status, query.toString()).toBe(400);
+        }
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+      }));
 
     it('refuses an approval whose left-out Groups are not Group ids (#617)', async () => {
       for (const excluded of [['not-a-group'], 'a1b2c3d4e5f6a1b2c3d4e5f6', [42]]) {
