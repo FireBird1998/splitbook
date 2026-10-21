@@ -33,7 +33,7 @@ const tabsOf = (html: string) =>
 describe('the Balances currency switch (#724)', () => {
   it('shows each currency with the member’s own position in it, the main currency marked', () => {
     const html = render();
-    expect(html).toMatch(/role="tablist"[^>]*aria-label="Balances in"/);
+    expect(html).toMatch(/<div\b(?=[^>]*role="tablist")(?=[^>]*aria-label="Balances in")/);
     expect(text(html)).toContain(
       'INR · main You owe ₹1,480.00 EUR You owe €20.00 JPY You’re owed ¥8,400',
     );
