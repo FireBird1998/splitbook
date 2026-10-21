@@ -182,3 +182,19 @@ export function unlistedCurrencyFix(
       : 'Changing changes only the currency; nothing is converted.',
   };
 }
+
+/**
+ * The Leave Group dialog's note when this Group holds money involving the member in a currency
+ * Splitbook no longer supports (#812): it is in no Balance, so leaving is allowed and doesn't
+ * settle it. Null when there is none.
+ */
+export function unsupportedMoneyOnLeave(codes: readonly string[]): string | null {
+  if (codes.length === 0) return null;
+  const named =
+    codes.length === 1 ? codes[0] : `${codes.slice(0, -1).join(', ')} and ${codes.at(-1)}`;
+  const which =
+    codes.length === 1
+      ? 'a currency Splitbook no longer supports'
+      : 'currencies Splitbook no longer supports';
+  return `Some of this Group’s money is in ${named}, ${which}. It isn’t in Balances, so leaving doesn’t settle it.`;
+}

@@ -13,7 +13,12 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import LogoutIcon from '@mui/icons-material/Logout';
+import useSWR from 'swr';
+import { groupBalancesKey } from '@splitbook/shared/query-keys';
+import { unsupportedMoneyOnLeave } from '@splitbook/shared/group-currencies';
 import { apiFetch } from '@/lib/utils/api-fetch';
+import { fetchWebBalances } from '@/lib/web-read';
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { groupTabHref } from './group-tabs';
 
 interface LeaveGroupSectionProps {
@@ -42,6 +47,13 @@ export default function LeaveGroupSection({
   const [deleteIfLastMember, setDeleteIfLastMember] = useState(memberCount === 1);
   const [leaving, setLeaving] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
+  // Money in a currency Splitbook no longer supports is in no Balance, so it never stops
+  // leaving: the dialog names it instead, when it involves this member (#812).
+  const { data: balances } = useSWR<{ data?: { unsupportedCurrencies?: string[] } }>(
+    open ? groupBalancesKey(WEB_QUERY_ACCOUNT, groupId) : null,
+    fetchWebBalances,
+  );
+  const unsupportedNote = unsupportedMoneyOnLeave(balances?.data?.unsupportedCurrencies ?? []);
 
   const close = () => {
     if (leaving) return;
@@ -120,6 +132,11 @@ export default function LeaveGroupSection({
                 ? `Your ${waiting} ${waiting === 1 ? 'item' : 'items'} in To review will be permanently deleted with ${groupName}.`
                 : `You have ${waiting} ${waiting === 1 ? 'item' : 'items'} in To review for ${groupName}. They’re kept but hidden while you’re not a member.`}
             </Typography>
+          )}
+          {unsupportedNote && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              {unsupportedNote}
+            </Alert>
           )}
           {refusal && (
             <Alert
