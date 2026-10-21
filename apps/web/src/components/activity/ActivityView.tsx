@@ -20,7 +20,8 @@ import { useState } from 'react';
 import ButtonBase from '@mui/material/ButtonBase';
 import { readCrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
 import { groupSettlementBatches } from '@splitbook/shared/settlement-batch-activity';
-import { batchWords, type ActivityBatch } from './batch-words';
+import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
+import type { ActivityBatch } from './batch-words';
 import BatchPaymentCard from './BatchPaymentCard';
 import PaymentRecordCard from './PaymentRecordCard';
 
@@ -99,7 +100,7 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     !openBatch && opened?.type === 'settlement_recorded'
       ? readCrossCurrencyRecord(opened.metadata)
       : null;
-  const wordsOf = (batch: Batch) => batchWords(batch, viewerId);
+  const wordsOf = (batch: Batch) => settlementBatchWords(batch.events, batch.batchSize, viewerId);
 
   const list = (
     <Stack spacing={3}>

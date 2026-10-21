@@ -22,7 +22,8 @@ import {
   type UserActivityEventRead,
 } from '@splitbook/shared/user-activity-read';
 import { groupSettlementBatches } from '@splitbook/shared/settlement-batch-activity';
-import { batchWords, type ActivityBatch } from '@/components/activity/batch-words';
+import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
+import type { ActivityBatch } from '@/components/activity/batch-words';
 import { fetcher } from '@/lib/utils/fetcher';
 import { RADIUS } from '@/lib/theme/tokens';
 
@@ -184,7 +185,7 @@ function LatestChangeRow({
   batch?: ActivityBatch<UserActivityEventRead>;
   viewerId: string;
 }) {
-  const words = batch ? batchWords(batch, viewerId) : null;
+  const words = batch ? settlementBatchWords(batch.events, batch.batchSize, viewerId) : null;
   // "You paid Sam Chen to clear ₹1,480.00 and €20.00", and ₹3,322.00 where amounts go.
   const paidAt = words ? words.amounts.indexOf('to clear ') : -1;
   const { actor, action, subject } = words
