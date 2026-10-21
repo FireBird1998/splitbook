@@ -141,7 +141,10 @@ TEST_MONGODB_URI='mongodb://127.0.0.1:27740/?directConnection=true' \
 
 Run the command five consecutive times when changing seed setup (#740). Keep the container
 for those runs, then remove it and its volumes. The load configuration does not raise any
-suite's timeout.
+suite's timeout. The two seed suites themselves allow 60 seconds for real ledger resets
+and initial fixture capture. Other suites keep the default 20-second test limit. Initial
+fixtures are captured through the real services once per recurring mode, then restored as
+BSON into each test's empty database; reset/idempotency calls under test still run normally.
 
 ### Database isolation
 

@@ -16,19 +16,29 @@ import { buildDemoSeedPlan } from '@/lib/demo/seed-plan';
 import { DEMO_GROUP_ID, DEMO_PERSONA_IDS, DEMO_PERSONAS } from '@/lib/demo-personas';
 import { balanceService } from '@/lib/services/balance.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
+import { captureDemoSeed } from '@/lib/test-utils/demo-seed-fixture';
 
 const db = integrationTestDb('seed-lifecycle');
 const plan = buildDemoSeedPlan();
 
-beforeAll(db.connect);
+let restoreSeed: Awaited<ReturnType<typeof captureDemoSeed>>;
+// Capture one real service-level seed per file, then restore its BSON for each test.
+// Fixture construction also gets a local allowance for a contended integration database.
+beforeAll(async () => {
+  await db.connect();
+  await db.reset();
+  restoreSeed = await captureDemoSeed();
+}, 60_000);
 beforeEach(db.reset);
 afterAll(db.teardown);
 
 type LeanBalance = { user: { _id: string }; balance: number };
 
-describe('demo seed integration', () => {
+// Real reset/idempotency operations still traverse the ledger services under database load.
+// Keep their 60-second budget local to this seed suite; other integration tests stay at 20 s.
+describe('demo seed integration', { timeout: 60_000 }, () => {
   it('seeds personas, one trip, expenses, and a settlement from scratch', async () => {
-    const result = await seedDemoData();
+    const result = await restoreSeed();
 
     expect(result).toMatchObject({
       usersUpserted: 3,
@@ -53,7 +63,7 @@ describe('demo seed integration', () => {
   });
 
   it('is idempotent: a second run creates no duplicates', async () => {
-    await seedDemoData();
+    await restoreSeed();
 
     const expensesBefore = await Expense.countDocuments({ group: DEMO_GROUP_ID });
     const settlementsBefore = await Settlement.countDocuments({ group: DEMO_GROUP_ID });
@@ -76,7 +86,7 @@ describe('demo seed integration', () => {
   });
 
   it('reset wipes the trip and reseeds it fresh', async () => {
-    await seedDemoData();
+    await restoreSeed();
     const reset = await resetDemoData();
 
     expect(reset).toMatchObject({
@@ -93,7 +103,7 @@ describe('demo seed integration', () => {
   });
 
   it('produces the exact persona balances shown on the private-beta dashboard', async () => {
-    await seedDemoData();
+    await restoreSeed();
 
     const balances = await balanceService.getGroupBalances(DEMO_GROUP_ID);
     expect(balances).not.toBeNull();
@@ -130,7 +140,7 @@ describe('demo seed integration', () => {
   });
 
   it('keeps each persona’s dashboard in a single INR bucket', async () => {
-    await seedDemoData();
+    await restoreSeed();
 
     // The demo Groups (#302) add to each bucket, but Alex is still owed ₹6,160 only in Goa
     // and Priya still owes ₹4,680 only there: the figures the demo journeys check on Home.
