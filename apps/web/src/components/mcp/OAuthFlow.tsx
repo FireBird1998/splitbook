@@ -277,11 +277,14 @@ function SignedInAs({ account }: { account: SignedInAccount }) {
 export function ConsentChoice({
   name,
   disabled,
+  allowBlocked = false,
   onAllow,
   onDeny,
 }: {
   name: string | null;
   disabled: boolean;
+  /** Allow waits for a Group to be picked (#617); Deny never does. */
+  allowBlocked?: boolean;
   onAllow: () => void;
   onDeny: () => void;
 }) {
@@ -291,7 +294,7 @@ export function ConsentChoice({
         <Button variant="outlined" fullWidth disabled={disabled} onClick={onDeny}>
           Deny
         </Button>
-        <Button variant="contained" fullWidth disabled={disabled} onClick={onAllow}>
+        <Button variant="contained" fullWidth disabled={disabled || allowBlocked} onClick={onAllow}>
           Allow connection
         </Button>
       </Box>
@@ -420,7 +423,8 @@ export default function OAuthFlow({
               </Typography>
               <ConsentChoice
                 name={details?.name ?? null}
-                disabled={busy || !details || leavesOutEveryGroup(groups, excluded)}
+                disabled={busy || !details}
+                allowBlocked={leavesOutEveryGroup(groups, excluded)}
                 onAllow={() => void submit()}
                 onDeny={() => void submit(false)}
               />
