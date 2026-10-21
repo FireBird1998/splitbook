@@ -27,6 +27,22 @@ vi.mock('next/headers', async () => (await import('@/lib/test-utils/signed-in-ro
 vi.mock('next/server', async (original) =>
   (await import('@/lib/test-utils/signed-in-route')).nextServer(original),
 );
+/**
+ * How long a restore's currency check holds before its save goes on. The race test below sets it,
+ * so a removal starts while the check is open and must wait for the save's own mutation.
+ */
+const restoreCheckHold = vi.hoisted(() => ({ ms: 0 }));
+vi.mock('@/lib/ledger-currency', async (original) => {
+  const actual = await original<typeof import('@/lib/ledger-currency')>();
+  return {
+    ...actual,
+    lockRestoredCurrency: async (...args: Parameters<typeof actual.lockRestoredCurrency>) => {
+      await actual.lockRestoredCurrency(...args);
+      if (restoreCheckHold.ms)
+        await new Promise((resolve) => setTimeout(resolve, restoreCheckHold.ms));
+    },
+  };
+});
 
 const db = integrationTestDb('group-currency-settings');
 const { alex, sam } = DEMO_PERSONA_IDS;
@@ -133,6 +149,17 @@ async function addExpense(groupId: string, body: object) {
   expect(status, JSON.stringify(answer)).toBe(201);
   return answer.data as { _id: string; revision: number };
 }
+
+/** Alex brings back a deleted Expense. */
+const restore = async (groupId: string, expenseId: string, revision: number | undefined) =>
+  callRoute(expense.PATCH, {
+    method: 'PATCH',
+    path: `/api/groups/${groupId}/expenses/${expenseId}`,
+    params: { id: groupId, expenseId },
+    cookie: await signIn('alex'),
+    body: { isDeleted: false },
+    headers: { 'X-Splitbook-Revision': String(revision) },
+  });
 
 async function addDraft(groupId: string, persona: Persona, body: object, key: string) {
   const { status, body: answer } = await callRoute(drafts.POST, {
@@ -481,6 +508,52 @@ describe('an older Expense in a currency the Group doesn’t list (#721)', () =>
     expect(restored.body.data).toMatchObject({ isDeleted: false, currency: 'GBP' });
   });
 
+  it('can be restored while a Settlement still uses that currency', async () => {
+    const groupId = await lisbonAndTokyo();
+    const tea = await addExpense(groupId, dinner('Afternoon tea', 30, 'GBP'));
+    const paid = await callRoute(settlements.POST, {
+      method: 'POST',
+      path: `/api/groups/${groupId}/settlements`,
+      params: { id: groupId },
+      cookie: await signIn('sam'),
+      body: { paidTo: alex, amount: 15, currency: 'GBP' },
+    });
+    expect(paid.status, JSON.stringify(paid.body)).toBe(201);
+    const deleted = await expenseService.delete(
+      { actorId: alex, groupId, expenseId: tea._id },
+      tea.revision,
+    );
+    await Group.updateOne({ _id: groupId }, { $set: { alternateCurrencies: ['EUR'] } });
+
+    const restored = await restore(groupId, tea._id, deleted!.revision);
+
+    expect(restored.status, JSON.stringify(restored.body)).toBe(200);
+    expect(restored.body.data).toMatchObject({ isDeleted: false, currency: 'GBP' });
+  });
+
+  it('stays refused when only another deleted Expense uses that currency', async () => {
+    const groupId = await lisbonAndTokyo();
+    const tea = await addExpense(groupId, dinner('Afternoon tea', 30, 'GBP'));
+    const chips = await addExpense(groupId, dinner('Fish and chips', 24, 'GBP'));
+    const deleted = await expenseService.delete(
+      { actorId: alex, groupId, expenseId: tea._id },
+      tea.revision,
+    );
+    await expenseService.delete({ actorId: alex, groupId, expenseId: chips._id }, chips.revision);
+    await Group.updateOne({ _id: groupId }, { $set: { alternateCurrencies: ['EUR'] } });
+
+    const restored = await restore(groupId, tea._id, deleted!.revision);
+
+    // A deleted Expense is no use of pounds, so the restore asks for GBP to be listed first.
+    expect(restored).toMatchObject({
+      status: 422,
+      body: {
+        code: 'CURRENCY_MISMATCH',
+        error: 'Add GBP to the Group’s currencies to restore it.',
+      },
+    });
+  });
+
   it('can still be edited while it keeps its currency', async () => {
     const groupId = await lisbonAndTokyo();
     const tea = await addExpense(groupId, dinner('Afternoon tea', 30, 'GBP'));
@@ -618,6 +691,34 @@ describe('removing a currency while records arrive in it (#721)', () => {
       expect([201, 422], label).toContain(paid.status);
       expect(listed || used === 0, label).toBe(true);
       expect(listed, label).toBe(removal.status !== 200);
+    }
+  });
+
+  it('never restores an Expense into a currency removed while its check is open', async () => {
+    // The restore's check passes (yen is listed) and holds; the removal starts inside that hold.
+    restoreCheckHold.ms = 60;
+    try {
+      for (let round = 0; round < 3; round += 1) {
+        const groupId = await lisbonAndTokyo();
+        const sushi = await addExpense(groupId, dinner(`Sushi ${round}`, 3000, 'JPY'));
+        const deleted = await expenseService.delete(
+          { actorId: alex, groupId, expenseId: sushi._id },
+          sushi.revision,
+        );
+        const [restored, removal] = await Promise.all([
+          restore(groupId, sushi._id, deleted!.revision),
+          pause(20).then(() => remove(groupId, 'JPY')),
+        ]);
+
+        const { listed, used } = await yenState(groupId);
+        const label = `round ${round}: restore ${restored.status}, removal ${removal.status}`;
+        expect([200, 422], label).toContain(restored.status);
+        expect([200, 409], label).toContain(removal.status);
+        expect(listed || used === 0, label).toBe(true);
+        expect(listed, label).toBe(removal.status !== 200);
+      }
+    } finally {
+      restoreCheckHold.ms = 0;
     }
   });
 });
