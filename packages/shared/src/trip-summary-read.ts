@@ -69,6 +69,13 @@ const tripSummary = z.looseObject({
   ),
   /** Whether the Trip has any Expense at all, in any currency: false means "no Expenses yet". */
   hasExpenses: z.boolean(),
+  /**
+   * What the whole trip spent in each currency, main currency first, for the currency switch
+   * (#729). Older servers send none.
+   */
+  currencies: z
+    .array(z.looseObject({ currency: currencyCode, expenseCount: count, spentMinor: minor }))
+    .optional(),
 });
 
 export type TripSummaryRead = z.infer<typeof tripSummary>;

@@ -4,7 +4,12 @@ import Group from '@/lib/models/Group';
 import Settlement from '@/lib/models/Settlement';
 import User from '@/lib/models/User';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
-import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';
+import { assertStoredExpenseMoney, readStoredAmountMinor } from '@splitbook/shared/exact-money';
+import {
+  openingSpendingCurrency,
+  spendingCurrencies,
+  type CurrencySpending,
+} from '@splitbook/shared/spending-currencies';
 import { findReferencedTag } from '@splitbook/shared/tag-identity';
 import {
   hasTripSummary,
@@ -25,6 +30,8 @@ export interface TripSummaryResponse extends Omit<TripSummary, 'suggestedPayment
   suggestedPayments: (Omit<TripPayment, 'from' | 'to'> & { from: NamedPerson; to: NamedPerson })[];
   /** Whether the Trip has any Expense at all, in any currency. */
   hasExpenses: boolean;
+  /** What the whole trip spent in each currency, for the currency switch (#729). */
+  currencies: CurrencySpending[];
 }
 
 export type TripSummaryResult =
@@ -56,14 +63,18 @@ export type TripSummaryResult =
 export async function getTripSummary(
   groupId: string,
   userId: string,
-  { timeZone, now = new Date() }: { timeZone: string; now?: Date },
+  {
+    timeZone,
+    currency: requestedCurrency,
+    now = new Date(),
+  }: { timeZone: string; currency?: string; now?: Date },
 ): Promise<TripSummaryResult> {
   // Fails before any read when the zone is wrong.
   const zone = readTimeZone(timeZone);
   await connectDB();
 
   const group = await Group.findById(groupId)
-    .select('category defaultCurrency startDate endDate tags members')
+    .select('category defaultCurrency alternateCurrencies startDate endDate tags members')
     .populate('members.user', 'name')
     .lean();
   if (!group) return { kind: 'missing' };
@@ -105,10 +116,25 @@ export async function getTripSummary(
     amountMinor,
   });
 
+  // What the whole trip spent in each currency (#729): the switch lists them, and without a
+  // currency asked for, the read opens on the one with the most Expenses. Nothing is converted.
+  const spending = new Map<string, CurrencySpending>();
+  for (const expense of expenses) {
+    const row = spending.get(expense.currency) ?? {
+      currency: expense.currency,
+      expenseCount: 0,
+      spentMinor: 0,
+    };
+    row.expenseCount += 1;
+    row.spentMinor += readStoredAmountMinor(expense);
+    spending.set(expense.currency, row);
+  }
+  const currency = requestedCurrency ?? openingSpendingCurrency(group, [...spending.values()]);
+
   const summary = tripSummary({
     memberId: userId,
     timeZone: zone,
-    currency: group.defaultCurrency,
+    currency,
     startDate: group.startDate ?? null,
     endDate: group.endDate ?? null,
     expenses: expenses.map((expense) => {
@@ -166,6 +192,7 @@ export async function getTripSummary(
         amountMinor: payment.amountMinor,
       })),
       hasExpenses: expenses.length > 0,
+      currencies: spendingCurrencies(group, [...spending.values()]),
     },
   };
 }
