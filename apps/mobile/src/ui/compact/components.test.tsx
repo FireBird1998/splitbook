@@ -18,6 +18,7 @@ import {
   middleCutEnd,
   tailCutOverrun,
   unreadText,
+  wordsOf,
 } from '../../test-utils/layout';
 import { outfitRegularWidth } from '../../test-utils/app-font';
 import { outfitAdvance } from './outfit-metrics';
@@ -1128,10 +1129,21 @@ describe('a line cut at its tail draws its "…" inside its box (#785)', () => {
       expect(text.props.accessible).toBeUndefined();
       expect(text.props.accessibilityLabel).toBeUndefined();
     }
-    const words = (node: ReactTestRendererJSON | string): string =>
-      typeof node === 'string' ? node : (node.children ?? []).map(words).join('');
-    expect(words(line)).toBe(title);
+    expect(wordsOf(line)).toBe(title);
   });
+
+  // Android sizes text outside the words' span, an empty line or a new line at the end, with
+  // the line's own paint and none of the words' line height.
+  it.each(['', 'A last line ends here\n'])(
+    'leaves a line with nothing to cut as it is: %j',
+    (words) => {
+      setWindow({ width: 360, height: 640, fontScale: 2 });
+      render(<CompactText numberOfLines={1}>{words}</CompactText>);
+      const line = renderer!.toJSON() as ReactTestRendererJSON;
+      expect(findHosts(line, (_, type) => type === 'Text')).toHaveLength(1);
+      expect(flatten(line.props.style).fontSize).toBe(textVariants.body.fontSize);
+    },
+  );
 
   it.each([1, 1.15, 1.3, 1.45])('at %s× text, on a line of any width', (fontScale) => {
     setWindow({ width: 360, height: 640, fontScale });

@@ -3,7 +3,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { emptyAssistants, type AssistantsState } from '../data/assistants';
-import { findHosts, largeTextWindows, unreadText } from '../test-utils/layout';
+import { findHosts, largeTextWindows, unreadText, wordsOf } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { ConnectedAssistants } from './connected-assistants';
 import { SettingsScreen } from './settings-screen';
@@ -248,11 +248,11 @@ describe.each(['light', 'dark'] as const)('a long assistant name in %s (#770)', 
   ])('takes $lines lines at most at $fontScale× text, 360dp (0: all it needs)', (size) => {
     setWindow({ width: 360, height: 640, fontScale: size.fontScale });
     render(listed({ assistants: [companion] }), { mode });
-    const name = renderer!.root.find(
-      (node: ReactTestInstance) =>
-        String(node.type) === 'Text' && node.props.children === companion.name,
+    // The name's line, whose words may sit in a text nested in it (#785).
+    const [name] = renderer!.root.findAll(
+      (node: ReactTestInstance) => String(node.type) === 'Text' && wordsOf(node) === companion.name,
     );
-    expect(name.props.numberOfLines ?? 0).toBe(size.lines);
+    expect(name!.props.numberOfLines ?? 0).toBe(size.lines);
     expect(pressable(`Disconnect ${companion.name}, ${companion.host}`)).toBeDefined();
   });
 });

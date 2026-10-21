@@ -108,7 +108,7 @@ function middleCut(text: string, room: number, size: number): string | null {
  * lays the whole text out again. It ends in its room (`ellipsisRoom`), and a screen reader hears
  * the whole text.
  */
-function CutLine({
+function MiddleCutLine({
   text,
   look,
   onLayout,
@@ -146,6 +146,52 @@ function CutLine({
   );
 }
 
+/**
+ * The size of the text view's paint for a line cut at its tail: one and a half times the words'
+ * size at the phone's text size, in dp. React Native 0.86's text view works out where to cut with
+ * its own paint, which draws with the text's `fontSize` in dp, not scaled, in the phone's font
+ * (Roboto's "…" is 0.67em), then draws the words' own "…" (Outfit's is 0.75em) at the phone's text
+ * size: at 130% an Expense's title drew "and the .." past its box (#785). Measured at this size,
+ * the "…" fits however it is drawn, for any phone font whose "…" is at least half an em. The paint
+ * React Native measures a line with is scaled too, so it cuts a little sooner still; a cut line
+ * takes its whole width either way.
+ */
+const ellipsisPaintSize = (size: number, fontScale: number) =>
+  Math.ceil(scaledSp(size, fontScale) * 1.5);
+
+/**
+ * A line Android may cut at its tail: `look` on the line, with its paint sized for the "…"
+ * (`ellipsisPaintSize`) at the phone's text size, even where the words are capped below it (a
+ * larger paint only cuts a little sooner), and the words at their own size nested inside. Text
+ * outside any words' span takes the paint's size and none of their line height, so an empty
+ * line, or one ending in a new line, stays as it is.
+ */
+function TailCutLine({
+  look,
+  fontScale,
+  children,
+  ...props
+}: TextProps & { look: StyleProp<TextStyle>; fontScale: number }) {
+  const bare =
+    children === '' ||
+    children === null ||
+    children === undefined ||
+    children === false ||
+    (typeof children === 'string' && children.endsWith('\n'));
+  if (bare)
+    return (
+      <Text {...props} style={look}>
+        {children}
+      </Text>
+    );
+  const { fontSize } = StyleSheet.flatten(look);
+  return (
+    <Text {...props} style={[look, { fontSize: ellipsisPaintSize(Number(fontSize), fontScale) }]}>
+      <Text style={{ fontSize }}>{children}</Text>
+    </Text>
+  );
+}
+
 export function CompactText({
   variant = 'body',
   tone = 'primary',
@@ -168,6 +214,7 @@ export function CompactText({
   spare?: boolean;
 }) {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
   const look = [
     textVariants[variant],
     {
@@ -179,7 +226,21 @@ export function CompactText({
   ];
   const cutInMiddle = props.numberOfLines === 1 && props.ellipsizeMode === 'middle';
   if (cutInMiddle && !spare && typeof children === 'string')
-    return <CutLine {...props} look={look} text={children} />;
+    return <MiddleCutLine {...props} look={look} text={children} />;
+  const cutAtTail = (props.numberOfLines ?? 0) > 0 && (props.ellipsizeMode ?? 'tail') === 'tail';
+  if (cutAtTail)
+    return (
+      <TailCutLine {...props} look={look} fontScale={fontScale}>
+        {spare ? (
+          <>
+            {children}
+            {hairSpace}
+          </>
+        ) : (
+          children
+        )}
+      </TailCutLine>
+    );
   return spare || cutInMiddle ? (
     <Text {...props} style={look}>
       {children}
@@ -311,16 +372,30 @@ export function Money({
   ...props
 }: TextProps & { children: string; size?: MoneySize; tone?: TextTone }) {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const look = [
+    moneySizes[size],
+    {
+      fontFamily: fonts.mono,
+      fontVariant: ['tabular-nums' as const],
+      color: toneColor(theme, tone),
+    },
+    style,
+  ];
+  // Cut at its tail, IBM Plex Mono's "…" is drawn wider than the paint measures it (#785). A
+  // line that shrinks its words to fit is never cut.
+  if (
+    !props.adjustsFontSizeToFit &&
+    (props.numberOfLines ?? 1) > 0 &&
+    (props.ellipsizeMode ?? 'tail') === 'tail'
+  )
+    return (
+      <TailCutLine numberOfLines={1} {...props} look={look} fontScale={fontScale}>
+        {children}
+      </TailCutLine>
+    );
   return (
-    <Text
-      numberOfLines={1}
-      {...props}
-      style={[
-        moneySizes[size],
-        { fontFamily: fonts.mono, fontVariant: ['tabular-nums'], color: toneColor(theme, tone) },
-        style,
-      ]}
-    >
+    <Text numberOfLines={1} {...props} style={look}>
       {children}
     </Text>
   );

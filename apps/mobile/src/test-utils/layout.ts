@@ -324,6 +324,22 @@ export function tailCutOverrun(node: Node | null, fontScale: number, width: numb
   return overrun;
 }
 
+/** A rendered node's words, with those of the texts nested in it (#785). */
+export const wordsOf = (node: { children?: unknown } | string): string =>
+  typeof node === 'string'
+    ? node
+    : ((node.children ?? []) as ({ children?: unknown } | string)[]).map(wordsOf).join('');
+
+/**
+ * The texts under `node` that aren't nested in another text: one per line or label, its words
+ * perhaps in a text nested inside, as a line cut at its tail keeps them (#785).
+ */
+export function outerTexts(node: Node | string | null): Node[] {
+  if (node === null || typeof node === 'string') return [];
+  if (node.type === 'Text') return [node];
+  return (node.children ?? []).flatMap(outerTexts);
+}
+
 /** Every host node under `node`, depth first, whose props match. */
 export function findHosts(
   node: Node | Node[] | string | null,

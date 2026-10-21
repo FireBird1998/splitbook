@@ -15,7 +15,15 @@ import {
 } from '../data/expense-draft';
 import { parseExpenseRecord } from '../data/expense-record';
 import { parseExpensePage } from '../data/financial-dto';
-import { findHosts, flatten, layoutHeight, layoutWidth, unreadText } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  layoutHeight,
+  layoutWidth,
+  outerTexts,
+  unreadText,
+  wordsOf,
+} from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { Divider, TopBar } from './compact';
 import { ExpenseEditor } from './expense-editor';
@@ -564,9 +572,9 @@ describe('opening an Expense: what is already known shows at once (loading-state
       (child): child is ReactTestRendererJSON => typeof child !== 'string',
     );
     const titles = parts.find((part) => flatten(part.props.style).flex === 1)!;
-    const [title, subtitle] = findHosts(titles, (_, type) => type === 'Text');
-    expect(title!.children).toEqual(['Expense']);
-    expect(subtitle!.children).toEqual(['Maple House']);
+    const [title, subtitle] = outerTexts(titles);
+    expect(wordsOf(title!)).toBe('Expense');
+    expect(wordsOf(subtitle!)).toBe('Maple House');
     if (flatten(titles.props.style).flexWrap === 'wrap') {
       // At large text the title shares its line with the status only where it keeps its room,
       // and the status goes under it otherwise (#639): nothing in the bar is cut.
