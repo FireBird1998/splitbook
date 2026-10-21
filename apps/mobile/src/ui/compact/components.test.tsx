@@ -46,6 +46,7 @@ const {
   SummaryStats,
   TileGrid,
   TopBar,
+  ellipsisRoom,
   scaledSp,
 } = await import('./index');
 const { ThemeContext } = await import('../theme');
@@ -912,6 +913,9 @@ describe('a line the app cuts in the middle (#770)', () => {
   const credits = [
     'prepared by chatgpt.com.secure-assistant-connector.evil.example.test',
     'prepared by claude.ai.household-ledger-reconciliation-assistant-for-shared-expenses.connectorgateway.region-euwest.evil.example.test',
+    // Pairs that kern wider ("f, "t) beside letters with no kerning: measured without the
+    // widening pairs, this one overflows its line (the Tester's M8 on 0b575404).
+    'prepared by "f"t"f"t"f"t"f"t"f"t"f"t-a-c-d-e-g-o-q-a-c-d-e-g-o-q.example.test',
   ];
   const line = () => one(hosts(renderer!.root, (props) => props.numberOfLines === 1));
   const layOut = (width: number) =>
@@ -968,6 +972,68 @@ describe('a line the app cuts in the middle (#770)', () => {
     expect(shown().length).toBeGreaterThan(first.length);
     act(() => renderer!.update(cut(credits[1]!)));
     expect(shown().trimEnd()).toBe(credits[1]);
+  });
+
+  const cut = (text: string, weight?: 'semibold') => (
+    <CompactText
+      variant="caption"
+      tone="secondary"
+      numberOfLines={1}
+      ellipsizeMode="middle"
+      weight={weight}
+    >
+      {text}
+    </CompactText>
+  );
+
+  // The Tester's M1 on 0b575404: a cut kept for the old window left Android to cut it again.
+  it('lays the whole text out again, and cuts it shorter, in a narrower window', () => {
+    setWindow({ width: 400, height: 640, fontScale: 1.3 });
+    render(cut(credits[0]!));
+    layOut(290);
+    const wide = shown();
+    setWindow({ width: 320, height: 640, fontScale: 1.3 });
+    act(() => renderer!.update(cut(credits[0]!)));
+    expect(shown().trimEnd()).toBe(credits[0]);
+    layOut(210);
+    expect(shown().length).toBeLessThan(wide.length);
+    expect(outfitRegularWidth(shown()) * scaledSp(12, 1.3)).toBeLessThanOrEqual(209);
+  });
+
+  it('lays the whole text out again, and cuts it shorter, at a larger text size', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1 });
+    render(cut(credits[0]!));
+    layOut(250);
+    const small = shown();
+    setWindow({ width: 360, height: 640, fontScale: 1.45 });
+    act(() => renderer!.update(cut(credits[0]!)));
+    expect(shown().trimEnd()).toBe(credits[0]);
+    layOut(250);
+    expect(shown().length).toBeLessThan(small.length);
+    expect(outfitRegularWidth(shown()) * scaledSp(12, 1.45)).toBeLessThanOrEqual(249);
+  });
+
+  // The Tester's M6 and M5: the app only cuts what it can measure, Outfit Regular's own
+  // characters; anything else is left whole for Android to cut.
+  it.each([
+    'prepared by café-assistant.example.test.with.a.long.host.name',
+    'prepared by 助手.example.test.with.a.long.host.name.here',
+    `prepared by assistant${String.fromCodePoint(0x202f)}one.example.test.with.a.long.host.name`,
+    'prepared by assistant 🤖.example.test.with.a.long.host.name',
+  ])('leaves %s for Android to cut', (text) => {
+    setWindow({ width: 360, height: 640, fontScale: 1.3 });
+    render(cut(text));
+    layOut(150);
+    expect(shown()).toBe(`${text}${ellipsisRoom}`);
+    expect(line().props.ellipsizeMode).toBe('middle');
+    expect(line().props.accessibilityLabel).toBeUndefined();
+  });
+
+  it('leaves a semibold line for Android to cut', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1 });
+    render(cut(credits[0]!, 'semibold'));
+    layOut(150);
+    expect(shown()).toBe(`${credits[0]}${ellipsisRoom}`);
   });
 
   it('keeps a line that fits whole, and gives the screen reader the whole text', () => {
