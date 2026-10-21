@@ -312,9 +312,11 @@ describe('the consent screen', () => {
   it('says nothing about To review when the assistant asks only to read the ledger', () => {
     const shown = permissions(['ledger:read']);
     expect(shown).toContain(
-      'Read only: answer questions about your Groups, balances, Expenses, payments and recent changes.',
+      'Read only: answer questions about your Groups, balances and Expenses.',
     );
     expect(shown).not.toContain('Ledger permission');
+    // Only what the tools answer: no Activity, and payments only through balances.
+    expect(shown).not.toContain('recent changes');
     expect(shown).not.toContain('To review');
   });
 });
