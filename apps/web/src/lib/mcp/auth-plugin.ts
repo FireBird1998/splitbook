@@ -31,7 +31,7 @@ import {
   type McpConnection,
   type McpConsent,
 } from './grants';
-import { excludedGroupsSchema, recordExcludedGroups } from './excluded-groups';
+import { excludedGroupsSchema, liveExcludedGroups, recordExcludedGroups } from './excluded-groups';
 import { PRODUCT_NAME } from '@/lib/product';
 
 export function mcpAuthPlugins(env: AuthEnv) {
@@ -233,6 +233,12 @@ export function mcpAuthPlugins(env: AuthEnv) {
             clientId,
             scopes,
             ...(await assistantForApproval(ctx.context.adapter, clientId)),
+            // The choice in force, so approving the same assistant again keeps it (#617).
+            excludedGroupIds: await liveExcludedGroups(
+              ctx.context.adapter,
+              ctx.context.session.user.id,
+              clientId,
+            ),
           });
         },
       ),

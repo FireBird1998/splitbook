@@ -21,7 +21,11 @@ import type { AssistantGroup } from '@/lib/services/assistant-ledger.service';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 
 /** A connection request as the approval page shows it: the assistant, and what it asks for. */
-type ConsentDetails = AssistantDisplay & { scopes: string[] };
+type ConsentDetails = AssistantDisplay & {
+  scopes: string[];
+  /** The Groups the assistant's live connection leaves out, to start from (#617). */
+  excludedGroupIds?: string[];
+};
 
 /** The member signed in on this page, who approves or denies. */
 type SignedInAccount = { id: string; name: string; email: string };
@@ -37,14 +41,14 @@ export function ConsentPermissions({
   drafts,
   busy,
   onDraftsChange,
-  groups,
+  groupChoice,
 }: {
   details: ConsentDetails;
   drafts: boolean;
   busy: boolean;
   onDraftsChange: (drafts: boolean) => void;
   /** The Group checklist, between what the assistant can and can't do. */
-  groups?: ReactNode;
+  groupChoice?: ReactNode;
 }) {
   return (
     <>
@@ -87,7 +91,7 @@ export function ConsentPermissions({
           The assistant may stay connected while you are away, until you disconnect it.
         </Typography>
       )}
-      {groups}
+      {groupChoice}
       <Box>
         <Typography variant="subtitle2" component="h3" sx={{ overflowWrap: 'anywhere' }}>
           What <bdi>{details.name}</bdi> can’t do
@@ -111,6 +115,14 @@ function groupMeta(group: AssistantGroup) {
     .join(' · ');
 }
 
+/** Every one of the member's Groups unticked: the assistant would reach none of them now. */
+export function leavesOutEveryGroup(
+  groups: readonly AssistantGroup[],
+  excluded: readonly string[],
+) {
+  return groups.length > 0 && groups.every((group) => excluded.includes(group.id));
+}
+
 /**
  * Which Groups the assistant reaches (#617): every Group ticked to start. The ones the member
  * unticks become that connection's Excluded Groups, and Groups joined later are included.
@@ -128,7 +140,6 @@ export function ConsentGroups({
   disabled: boolean;
   onExcludedChange: (excluded: string[]) => void;
 }) {
-  const nonePicked = groups.length > 0 && groups.every((group) => excluded.includes(group.id));
   return (
     <Box component="fieldset" sx={{ border: 0, m: 0, p: 0, minWidth: 0 }}>
       <Typography component="legend" variant="subtitle2" sx={{ p: 0 }}>
@@ -171,11 +182,12 @@ export function ConsentGroups({
       )}
       {groups.length > 0 && (
         <Typography variant="body2">
-          Groups you untick are left out of {name}’s answers, so its totals won’t include them.
+          Groups you untick are left out of <bdi>{name}</bdi>’s answers, so its totals won’t include
+          them.
         </Typography>
       )}
-      {nonePicked && (
-        <Typography variant="body2" color="error" role="status">
+      {leavesOutEveryGroup(groups, excluded) && (
+        <Typography variant="body2" role="status" sx={{ color: 'status.negative' }}>
           Pick at least one Group.
         </Typography>
       )}
@@ -294,7 +306,6 @@ export default function OAuthFlow({
   const [details, setDetails] = useState<ConsentDetails | null>(null);
   const [drafts, setDrafts] = useState(false);
   const [excluded, setExcluded] = useState<string[]>([]);
-  const nonePicked = groups.length > 0 && groups.every((group) => excluded.includes(group.id));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -313,7 +324,9 @@ export default function OAuthFlow({
         return response.json();
       })
       .then((value) => {
-        if (!controller.signal.aborted) setDetails(value);
+        if (controller.signal.aborted) return;
+        setDetails(value);
+        setExcluded(value.excludedGroupIds ?? []);
       })
       .catch((reason) => {
         if (!controller.signal.aborted) setError(reason.message);
@@ -367,7 +380,7 @@ export default function OAuthFlow({
                   drafts={drafts}
                   busy={busy}
                   onDraftsChange={setDrafts}
-                  groups={
+                  groupChoice={
                     <ConsentGroups
                       name={details.name}
                       groups={groups}
@@ -390,7 +403,7 @@ export default function OAuthFlow({
               </Typography>
               <ConsentChoice
                 name={details?.name ?? null}
-                disabled={busy || !details || nonePicked}
+                disabled={busy || !details || leavesOutEveryGroup(groups, excluded)}
                 onAllow={() => void submit()}
                 onDeny={() => void submit(false)}
               />

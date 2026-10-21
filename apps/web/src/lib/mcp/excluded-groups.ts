@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AuthContext } from 'better-auth';
 import { z } from 'zod';
-import type { McpConnection } from './grants';
+import type { McpConnection, McpConsent } from './grants';
 
 type Adapter = Pick<AuthContext['adapter'], 'findOne' | 'create' | 'update'>;
 
@@ -56,6 +56,33 @@ export async function recordExcludedGroups(
     where: [{ field: 'id', value: connection.id }],
     update: { excludedGroupIds },
   });
+}
+
+/**
+ * The Groups a member's live connection to one assistant leaves out, for the approval page to
+ * start from, so asking for approval again never clears them. A disconnected connection starts
+ * again with every Group ticked.
+ */
+export async function liveExcludedGroups(
+  adapter: Pick<Adapter, 'findOne'>,
+  userId: string,
+  clientId: string,
+): Promise<string[]> {
+  const connection = await adapter.findOne<McpConnection & { excludedGroupIds?: string[] | null }>({
+    model: 'mcpConnection',
+    where: [{ field: 'key', value: JSON.stringify([userId, clientId]) }],
+  });
+  const consent =
+    connection &&
+    (await adapter.findOne<McpConsent>({
+      model: 'oauthConsent',
+      where: [
+        { field: 'userId', value: userId },
+        { field: 'clientId', value: clientId },
+        { field: 'referenceId', value: connection.generation },
+      ],
+    }));
+  return consent ? (connection.excludedGroupIds ?? []) : [];
 }
 
 /**
