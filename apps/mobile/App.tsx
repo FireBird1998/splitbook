@@ -1,4 +1,6 @@
 import { TagManager } from './src/ui/tag-manager';
+import { GroupCurrencies } from './src/ui/group-currencies';
+import { groupCurrencies } from '@splitbook/shared/group-currencies';
 import { ToReviewHomeCard, ToReviewGroupBanner, ToReviewOverlay } from './src/ui/to-review';
 import { NotAvailableOffline, OfflineNotice } from './src/ui/offline-notice';
 import {
@@ -961,6 +963,9 @@ function GroupScreen() {
       snackbar: snapshot.snackbar,
       pendingPayment: snapshot.pendingPayment,
       tagsOpenFor: snapshot.tagsOpenFor,
+      currenciesOpenFor: snapshot.currenciesOpenFor,
+      groupCurrencies: snapshot.groupCurrencies,
+      currencyAdd: snapshot.currencyAdd,
       home: snapshot.home,
       dayKey: currentDayKey(),
       feedback: refreshFeedback(snapshot),
@@ -1266,6 +1271,15 @@ function GroupScreen() {
           ? () => controller.openTags(known.id)
           : undefined
       }
+      // Its Currencies (#722), under Tags, as the boards have them.
+      currencies={
+        known
+          ? {
+              codes: groupCurrencies(known),
+              onPress: () => void controller.openCurrencies(known.id),
+            }
+          : undefined
+      }
       onMembers={() => controller.openMembers(origin())}
       onRefresh={() => void controller.refresh()}
       pull={{ refreshing: feedback.pull, onRefresh: () => void controller.refresh('pull') }}
@@ -1333,6 +1347,29 @@ function GroupScreen() {
             controller.closeTags();
             void controller.refresh();
           }}
+        />
+      )}
+      {group && state.currenciesOpenFor === group.id && (
+        <GroupCurrencies
+          groupName={group.name}
+          viewerId={userId}
+          state={state.groupCurrencies}
+          offline={state.offline.active}
+          adding={state.currencyAdd}
+          onAdd={(currency) => controller.addGroupCurrency(currency)}
+          // Removing one is on the web for now: the Group's settings there.
+          onOpenWeb={() => {
+            void Linking.openURL(
+              new URL(`/groups/${group.id}/settings`, environment.webOrigin).href,
+            ).catch(() => {
+              Alert.alert(
+                'Couldn’t open the Group’s settings',
+                'Check your browser and try again.',
+              );
+            });
+          }}
+          onRetry={() => void controller.openCurrencies(group.id)}
+          onClose={() => controller.closeCurrencies()}
         />
       )}
       {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && (

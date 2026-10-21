@@ -10,6 +10,7 @@ import type { PendingPayment, SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupValidation } from './group-draft';
 import type { GroupCategory } from '@splitbook/shared/types';
+import type { GroupCurrencySettings } from '@splitbook/shared/group-currency-settings';
 import type { TripSummaryRead } from '@splitbook/shared/trip-summary-read';
 
 /** A development persona the local backend seeds. */
@@ -420,11 +421,28 @@ export interface CurrencyAddState {
   message: string | null;
 }
 
+/**
+ * A Group's currencies as its Currencies show them (#722): the main currency and its lock, and
+ * each extra currency with what uses it and who added it. One of the Group's saved reads.
+ */
+export interface GroupCurrenciesState {
+  groupId: string | null;
+  status: LoadStatus;
+  data: GroupCurrencySettings | null;
+  message: string | null;
+  refreshedAt: number | null;
+  /** This phone's copy: "Saved", not "Updated" (#219). */
+  restored?: boolean;
+}
+
 export interface MobileSnapshot {
   /** Account → Connected assistants (#622): its list, Saved copy and Disconnect. */
   assistants: AssistantsState;
   tagManager: TagManagerState;
   currencyAdd: CurrencyAddState;
+  /** The Group whose Currencies show over its view (#722); they close with it. */
+  currenciesOpenFor: string | null;
+  groupCurrencies: GroupCurrenciesState;
   /**
    * The Group whose Tags screen is open over its view. Leaving that view closes it, and it stays
    * open when Android recreates the activity, which mounts the App again (#634).

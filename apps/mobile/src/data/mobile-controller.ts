@@ -330,6 +330,14 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     assistants: emptyAssistants(),
     tagManager: emptyTagManager(),
     currencyAdd: { groupId: null, status: 'idle', message: null },
+    currenciesOpenFor: null,
+    groupCurrencies: {
+      groupId: null,
+      status: 'idle',
+      data: null,
+      message: null,
+      refreshedAt: null,
+    },
     tagsOpenFor: null,
     toReview: emptyToReview(),
     offline: { active: false, refreshedAt: null, message: null },
@@ -637,6 +645,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         next.detail.status === 'denied')
     )
       next = { ...next, tagsOpenFor: null };
+    // And its Currencies (#722).
+    if (
+      next.currenciesOpenFor &&
+      (next.screen !== 'group' ||
+        next.detail.id !== next.currenciesOpenFor ||
+        next.detail.status === 'denied')
+    )
+      next = { ...next, currenciesOpenFor: null };
     next = projectFreshness(next);
     snapshot = next;
     listeners.forEach((listener) => listener());
@@ -6635,6 +6651,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         .parse(Object(value).data)
         .extraCurrencies.map(({ code }) => code);
       assertCurrent(owner);
+      // The Group's Currencies, where they show, list it at once: the answer is their read.
+      if (snapshot.currenciesOpenFor === groupId) {
+        const verified = groupQueries.currenciesAnswered(groupId, value);
+        publish({
+          ...snapshot,
+          groupCurrencies: {
+            groupId,
+            status: 'ready',
+            data: groupQueries.currenciesOf(value),
+            message: null,
+            refreshedAt: verified.refreshedAt,
+            restored: false,
+          },
+        });
+      }
       const editor = snapshot.expense;
       if (snapshot.screen !== 'expense' || editor.groupId !== groupId || !editor.context) {
         publish({ ...snapshot, currencyAdd: settled });
@@ -6669,6 +6700,62 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       return false;
     }
+  };
+
+  /**
+   * A Group's Currencies (#722, board "Group currencies"), a screen over its view: opened from
+   * its options, read each time they open, and offline this phone's copy with its time.
+   */
+  const openCurrencies = async (groupId: string) => {
+    if (snapshot.screen !== 'group' || snapshot.detail.id !== groupId) return;
+    const owner = generation;
+    const kept = snapshot.groupCurrencies.groupId === groupId ? snapshot.groupCurrencies : null;
+    publish({
+      ...snapshot,
+      currenciesOpenFor: groupId,
+      groupCurrencies: {
+        groupId,
+        status: 'loading',
+        data: kept?.data ?? null,
+        message: null,
+        refreshedAt: kept?.refreshedAt ?? null,
+        restored: kept?.restored,
+      },
+    });
+    const showing = () => current(owner) && snapshot.currenciesOpenFor === groupId;
+    try {
+      const answer = (await queryClient.fetchQuery(
+        groupQueries.currenciesOptions(groupId),
+      )) as Envelope;
+      if (!showing()) return;
+      publish({
+        ...snapshot,
+        groupCurrencies: {
+          groupId,
+          status: 'ready',
+          data: groupQueries.currenciesOf(answer.value),
+          message: null,
+          refreshedAt: answer.refreshedAt,
+          restored: answer.source === 'saved',
+        },
+      });
+    } catch (error) {
+      if (!showing() || error instanceof Superseded) return;
+      const unsaved = error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
+      publish({
+        ...snapshot,
+        groupCurrencies: {
+          ...snapshot.groupCurrencies,
+          status: 'error',
+          message: unsaved
+            ? 'These currencies aren’t saved on this phone. Connect to load them.'
+            : expenseFailureMessage(error, 'Couldn’t load the currencies. Please try again.'),
+        },
+      });
+    }
+  };
+  const closeCurrencies = () => {
+    if (snapshot.currenciesOpenFor) publish({ ...snapshot, currenciesOpenFor: null });
   };
 
   /** A Group's Tags, a screen over its view: opened from the Group's options. */
@@ -7288,6 +7375,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openTags,
     closeTags,
     addGroupCurrency,
+    openCurrencies,
+    closeCurrencies,
     manageTags,
     groupTags,
     keepExpenseAsSharedDraft,
