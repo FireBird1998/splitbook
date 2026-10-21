@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Container from '@mui/material/Container';
+import Alert from '@mui/material/Alert';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -107,6 +108,26 @@ export default function DesignSystemLab() {
                 onRetry={() => setRecovered(true)}
               />
             )}
+          </Stack>
+        </Paper>
+        <Paper
+          component="section"
+          aria-labelledby="banners-heading"
+          variant="outlined"
+          sx={{ p: { xs: 2, sm: 3 } }}
+        >
+          <Stack spacing={1.5}>
+            <Typography id="banners-heading" variant="h6" component="h2">
+              Banners
+            </Typography>
+            <Alert severity="info">
+              Prepared items wait in To review until someone saves them.
+            </Alert>
+            <Alert severity="warning">
+              No rate suggested right now. Enter the rate you paid at.
+            </Alert>
+            <Alert severity="error">This sample Expense couldn’t be saved. Nothing changed.</Alert>
+            <Alert severity="success">Sample payment recorded.</Alert>
           </Stack>
         </Paper>
         <Paper
