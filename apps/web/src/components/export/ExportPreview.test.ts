@@ -368,8 +368,31 @@ it('shows each currency and both stored payment amounts in the statement preview
 });
 
 it('collapses settled empty statement currencies to the same one-line preview', () => {
-  const statement = buildStatement({ id: 'g', name: 'Fictional empty trip', theme: 'trip', currency: 'INR', alternateCurrencies: ['JPY'], tags: [], names: { a: 'Alex' }, members: [{ id: 'a', name: 'Alex' }], expenses: [], settlements: [] });
-  const html = render({ status: 'ready', data: { format: 'statement', groupNames: [statement.name], generatedAt: '2026-10-21T12:00:00Z', from: null, to: null, timeZone: 'UTC', empty: true, statement: buildStatementPreview(statement) } });
+  const statement = buildStatement({
+    id: 'g',
+    name: 'Fictional empty trip',
+    theme: 'trip',
+    currency: 'INR',
+    alternateCurrencies: ['JPY'],
+    tags: [],
+    names: { a: 'Alex' },
+    members: [{ id: 'a', name: 'Alex' }],
+    expenses: [],
+    settlements: [],
+  });
+  const html = render({
+    status: 'ready',
+    data: {
+      format: 'statement',
+      groupNames: [statement.name],
+      generatedAt: '2026-10-21T12:00:00Z',
+      from: null,
+      to: null,
+      timeZone: 'UTC',
+      empty: true,
+      statement: buildStatementPreview(statement),
+    },
+  });
   expect(text(html)).toContain('JPY: nothing in this period; everyone is settled up.');
   expect(text(html)).toContain('INR: nothing in this period; everyone is settled up.');
   expect(html).not.toContain('<table');

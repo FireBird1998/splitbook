@@ -1,4 +1,5 @@
-'use client';
+import { isEmptyStatementCurrency } from '@splitbook/shared/statement';
+('use client');
 import ExportPaymentDescription from './ExportPaymentDescription';
 import { useState, type ReactNode } from 'react';
 import ToggleButton from '@mui/material/ToggleButton';
@@ -162,6 +163,20 @@ export default function ExportPreviewPanel({
             Generated {generatedTime(data.generatedAt, data.timeZone)} ({data.timeZone})
           </Typography>
           {data.statement.currencies.map((bucket) => {
+            if (isEmptyStatementCurrency(bucket)) {
+              return (
+                <Box
+                  component="section"
+                  aria-label={`${bucket.currency} statement preview`}
+                  key={bucket.currency}
+                  sx={{ mt: 2 }}
+                >
+                  <Typography>
+                    {bucket.currency}: nothing in this period; everyone is settled up.
+                  </Typography>
+                </Box>
+              );
+            }
             const name = (id: string) =>
               bucket.people.find((person) => person.id === id)?.name ?? 'Former member';
             return (

@@ -364,8 +364,20 @@ it('normalises legacy extra currencies for the statement and preview while the b
 });
 
 it('collapses only currencies with no period records and no current outstanding balance', () => {
-  expect(isEmptyStatementCurrency({ expenseCount: 0, paymentCount: 0, people: [{ balanceMinor: 0 }] })).toBe(true);
-  expect(isEmptyStatementCurrency({ expenseCount: 1, paymentCount: 0, people: [{ balanceMinor: 0 }] })).toBe(false);
-  expect(isEmptyStatementCurrency({ expenseCount: 0, paymentCount: 1, people: [{ balanceMinor: 0 }] })).toBe(false);
-  expect(isEmptyStatementCurrency({ expenseCount: 0, paymentCount: 0, people: [{ balanceMinor: -50 }, { balanceMinor: 50 }] })).toBe(false);
+  expect(
+    isEmptyStatementCurrency({ expenseCount: 0, paymentCount: 0, people: [{ balanceMinor: 0 }] }),
+  ).toBe(true);
+  expect(
+    isEmptyStatementCurrency({ expenseCount: 1, paymentCount: 0, people: [{ balanceMinor: 0 }] }),
+  ).toBe(false);
+  expect(
+    isEmptyStatementCurrency({ expenseCount: 0, paymentCount: 1, people: [{ balanceMinor: 0 }] }),
+  ).toBe(false);
+  expect(
+    isEmptyStatementCurrency({
+      expenseCount: 0,
+      paymentCount: 0,
+      people: [{ balanceMinor: -50 }, { balanceMinor: 50 }],
+    }),
+  ).toBe(false);
 });

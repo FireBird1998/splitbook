@@ -194,3 +194,16 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
   };
 }
 export type Statement = ReturnType<typeof buildStatement>;
+
+/** Spending and payments use the selected period; balances retain the current all-time position. */
+export function isEmptyStatementCurrency(bucket: {
+  expenseCount: number;
+  paymentCount: number;
+  people: readonly { balanceMinor: number }[];
+}): boolean {
+  return (
+    bucket.expenseCount === 0 &&
+    bucket.paymentCount === 0 &&
+    bucket.people.every((person) => person.balanceMinor === 0)
+  );
+}

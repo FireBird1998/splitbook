@@ -15,7 +15,11 @@ import { getSemanticTokens } from '@/lib/theme/tokens';
 import { zonedTimestamp } from '@splitbook/shared/export-csv';
 import { categoryLabel } from '@splitbook/shared/categories';
 import ExportPaymentDescription from '@/components/export/ExportPaymentDescription';
-import type { OutsideTrip, Statement } from '@splitbook/shared/statement';
+import {
+  isEmptyStatementCurrency,
+  type OutsideTrip,
+  type Statement,
+} from '@splitbook/shared/statement';
 
 const light = getSemanticTokens('light');
 /** A whole trip's Expenses and Payments outside the Trip's dates. */
@@ -122,6 +126,13 @@ function CurrencySection({
   statement: Statement;
 }) {
   const currency = bucket.currency;
+  if (isEmptyStatementCurrency({ ...bucket, paymentCount: bucket.payments.length })) {
+    return (
+      <Box component="section" aria-label={`${currency} statement`} sx={{ mt: 3 }}>
+        <Typography>{currency}: nothing in this period; everyone is settled up.</Typography>
+      </Box>
+    );
+  }
   const name = (id: string) => bucket.people.find((row) => row.id === id)?.name ?? 'Former member';
   const amount = (minor: number) => (
     <MoneyText amount={toMajorAmount(minor, currency)} currency={currency} tone="neutral" />
