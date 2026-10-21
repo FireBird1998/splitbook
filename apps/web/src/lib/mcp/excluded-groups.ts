@@ -1,9 +1,12 @@
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { AuthContext } from 'better-auth';
 import { z } from 'zod';
 import type { McpConnection, McpConsent } from './grants';
 
-type Adapter = Pick<AuthContext['adapter'], 'findOne' | 'create' | 'update'>;
+type Adapter = Pick<
+  AuthContext['adapter'],
+  'findOne' | 'create' | 'update' | 'delete' | 'deleteMany'
+>;
 
 /**
  * The Groups a member unticks on the approval page (#617): Group ids, each once. Exclusions
@@ -14,48 +17,80 @@ export const excludedGroupsSchema = z
   .max(1000)
   .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))]);
 
-/** A member's connection to one assistant, created on its first approval. */
-export async function findOrCreateMcpConnection(
+/**
+ * The authorization request a consent answers, from parameters that both the signed query the
+ * approval page sends and the provider's own copy of it carry, so the choice made on one page
+ * can only be applied to that request's grant.
+ */
+export function consentRequestKey(query: string): string {
+  const params = new URLSearchParams(query);
+  const request = ['client_id', 'redirect_uri', 'scope', 'state', 'code_challenge', 'resource'].map(
+    (name) => params.getAll(name),
+  );
+  return createHash('sha256').update(JSON.stringify(request)).digest('hex');
+}
+
+type HeldExclusion = {
+  id: string;
+  key: string;
+  userId: string;
+  clientId: string;
+  excludedGroupIds: string[];
+  createdAt: Date;
+};
+
+/** A held choice not committed within an hour belongs to a consent that never succeeded. */
+const HOLD_MS = 60 * 60 * 1000;
+
+/**
+ * Holds the Groups a member left out until the consent they belong to is granted (#617), so a
+ * consent the provider then refuses (a scope never requested, a login prompt) changes nothing.
+ */
+export async function holdExcludedGroups(
   adapter: Adapter,
-  userId: string,
-  clientId: string,
-): Promise<McpConnection> {
-  const key = JSON.stringify([userId, clientId]);
-  const find = () =>
-    adapter.findOne<McpConnection>({
-      model: 'mcpConnection',
-      where: [{ field: 'key', value: key }],
+  request: { key: string; userId: string; clientId: string },
+  excludedGroupIds: string[],
+) {
+  await adapter.deleteMany({
+    model: 'mcpPendingExclusion',
+    where: [{ field: 'createdAt', value: new Date(Date.now() - HOLD_MS), operator: 'lt' }],
+  });
+  const held = await adapter.findOne<HeldExclusion>({
+    model: 'mcpPendingExclusion',
+    where: [{ field: 'key', value: request.key }],
+  });
+  const record = { ...request, excludedGroupIds, createdAt: new Date() };
+  if (held)
+    await adapter.update({
+      model: 'mcpPendingExclusion',
+      where: [{ field: 'id', value: held.id }],
+      update: record,
     });
-  const row = await find();
-  if (row) return row;
-  try {
-    return await adapter.create<McpConnection>({
-      model: 'mcpConnection',
-      data: { key, userId, clientId, generation: randomUUID(), createdAt: new Date() },
-    });
-  } catch (error) {
-    const created = await find();
-    if (!created) throw error;
-    return created;
-  }
+  else await adapter.create({ model: 'mcpPendingExclusion', data: record });
 }
 
 /**
- * Records the Groups a member leaves out of one assistant's reach, replacing the choice made at
- * any earlier approval. Written before consent, so no grant is issued without it.
+ * Applies the choice held for this consent's request to the connection being granted. Called
+ * from consentReferenceId while the grant is made, so a failed write fails the consent: no grant
+ * is ever issued without the member's choice.
  */
-export async function recordExcludedGroups(
+export async function commitExcludedGroups(
   adapter: Adapter,
-  userId: string,
-  clientId: string,
-  excludedGroupIds: string[],
+  connection: McpConnection,
+  query: string | undefined,
 ) {
-  const connection = await findOrCreateMcpConnection(adapter, userId, clientId);
+  if (!query) return;
+  const held = await adapter.findOne<HeldExclusion>({
+    model: 'mcpPendingExclusion',
+    where: [{ field: 'key', value: consentRequestKey(query) }],
+  });
+  if (!held || held.userId !== connection.userId || held.clientId !== connection.clientId) return;
   await adapter.update({
     model: 'mcpConnection',
     where: [{ field: 'id', value: connection.id }],
-    update: { excludedGroupIds },
+    update: { excludedGroupIds: held.excludedGroupIds },
   });
+  await adapter.delete({ model: 'mcpPendingExclusion', where: [{ field: 'id', value: held.id }] });
 }
 
 /**

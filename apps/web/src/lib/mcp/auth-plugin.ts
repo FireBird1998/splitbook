@@ -31,7 +31,13 @@ import {
   type McpConnection,
   type McpConsent,
 } from './grants';
-import { excludedGroupsSchema, liveExcludedGroups, recordExcludedGroups } from './excluded-groups';
+import {
+  commitExcludedGroups,
+  consentRequestKey,
+  excludedGroupsSchema,
+  holdExcludedGroups,
+  liveExcludedGroups,
+} from './excluded-groups';
 import { PRODUCT_NAME } from '@/lib/product';
 
 export function mcpAuthPlugins(env: AuthEnv) {
@@ -83,7 +89,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
         {
           matcher: (ctx) => ctx.path === '/oauth2/consent',
           handler: createAuthMiddleware(async (ctx) => {
-            // The Groups the member unticked (#617), recorded before consent is given.
+            // The Groups the member unticked (#617), held for this request until its consent is
+            // granted, when consentReferenceId commits them with the grant.
             const body = ctx.body as
               | { accept?: unknown; oauth_query?: unknown; excluded_groups?: unknown }
               | undefined;
@@ -102,10 +109,9 @@ export function mcpAuthPlugins(env: AuthEnv) {
             const clientId = new URLSearchParams(body.oauth_query).get('client_id');
             if (!clientId) return;
             await requireMcpMember(ctx.context.adapter, session.user.id, env);
-            await recordExcludedGroups(
+            await holdExcludedGroups(
               ctx.context.adapter,
-              session.user.id,
-              clientId,
+              { key: consentRequestKey(body.oauth_query), userId: session.user.id, clientId },
               excluded.data,
             );
           }),
@@ -113,6 +119,21 @@ export function mcpAuthPlugins(env: AuthEnv) {
       ],
     },
     schema: {
+      // The Groups left out on an approval page, held until that request's consent is granted
+      // (#617). Keyed by the authorization request, so they apply to its grant and no other.
+      mcpPendingExclusion: {
+        fields: {
+          key: { type: 'string', required: true, unique: true },
+          userId: {
+            type: 'string',
+            required: true,
+            references: { model: 'user', field: 'id', onDelete: 'cascade' },
+          },
+          clientId: { type: 'string', required: true },
+          excludedGroupIds: { type: 'string[]', required: true },
+          createdAt: { type: 'date', required: true },
+        },
+      },
       mcpConnection: {
         fields: {
           key: { type: 'string', required: true, unique: true },
@@ -327,6 +348,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
               ],
               update: { name },
             });
+          // The member's choice of Groups commits with this grant, or the grant fails (#617).
+          await commitExcludedGroups(context.adapter, row, state?.query);
           return row.generation;
         },
       },

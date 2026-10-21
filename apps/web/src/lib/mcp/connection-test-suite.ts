@@ -36,6 +36,7 @@ export function connectionTests(mongo = false) {
     oauthResource: [],
     oauthClientResource: [],
     mcpConnection: [],
+    mcpPendingExclusion: [],
   };
   let server: Server;
   let origin: string;
@@ -650,6 +651,11 @@ export function connectionTests(mongo = false) {
           true,
         );
         expect(failed.status).toBe(400);
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+        // The choice the failed request held was its own: a later grant for another request
+        // that sends no choice leaves the Groups as they were.
+        await authorizeCode();
         await approvalRequest();
         expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
       }));
