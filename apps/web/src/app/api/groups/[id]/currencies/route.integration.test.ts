@@ -241,6 +241,9 @@ describe('POST /api/groups/[id]/currencies (#721)', () => {
         changes: {
           alternateCurrencies: { old: ['EUR', 'JPY', 'GBP'], new: ['EUR', 'JPY', 'GBP', 'CHF'] },
         },
+        // What the list became, kept as it was then, so a later change never rewrites it.
+        groupName: 'Lisbon & Tokyo',
+        currencies: ['INR', 'EUR', 'JPY', 'GBP', 'CHF'],
       },
     });
   });
@@ -311,6 +314,8 @@ describe('DELETE /api/groups/[id]/currencies/[code] (#721)', () => {
       actor: { _id: alex },
       metadata: {
         changes: { alternateCurrencies: { old: ['EUR', 'JPY', 'GBP'], new: ['EUR', 'JPY'] } },
+        groupName: 'Lisbon & Tokyo',
+        currencies: ['INR', 'EUR', 'JPY'],
       },
     });
   });

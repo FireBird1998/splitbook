@@ -198,13 +198,13 @@ describe("Home's latest changes (#309)", () => {
     [
       'group_updated',
       { changes: { alternateCurrencies: { old: ['EUR'], new: ['EUR', 'CHF'] } } },
-      'added the extra currency CHF',
+      'added CHF to the Group’s currencies',
       null,
     ],
     [
       'group_updated',
       { changes: { alternateCurrencies: { old: ['EUR', 'GBP'], new: ['EUR'] } } },
-      'removed the extra currency GBP',
+      'removed GBP from the Group’s currencies',
       null,
     ],
     ['something_new', {}, 'made a change', null],
@@ -310,16 +310,34 @@ describe('a change to the extra currencies in Activity (#721)', () => {
     type: 'group_updated',
     createdAt: '2026-10-21T09:00:00.000Z',
     actor: sam,
-    metadata: { changes: { alternateCurrencies: { old, new: next }, ...others } },
+    metadata: {
+      changes: { alternateCurrencies: { old, new: next }, ...others },
+      groupName: 'Lisbon & Tokyo',
+      currencies: ['INR', ...next],
+    },
   });
 
-  it('names who added or removed which currency', () => {
-    expect(formatActivityHeadline(change(['EUR'], ['EUR', 'CHF']))).toBe(
-      'Sam added the extra currency CHF',
+  it('names who added or removed which currency, as the board does', () => {
+    expect(formatActivityHeadline(change(['EUR'], ['EUR', 'JPY']))).toBe(
+      'Sam added JPY to the Group’s currencies',
     );
     expect(formatActivityHeadline(change(['EUR', 'GBP'], ['EUR']), sam._id)).toBe(
-      'You removed the extra currency GBP',
+      'You removed GBP from the Group’s currencies',
     );
+  });
+
+  it('says what the list became, from the list recorded with the change', () => {
+    expect(formatActivityDetail(change(['EUR'], ['EUR', 'JPY']))).toBe(
+      'Lisbon & Tokyo now uses INR, EUR and JPY',
+    );
+    expect(formatActivityDetail(change(['EUR', 'GBP'], ['EUR']))).toBe('Nothing used it');
+    const older = change(['EUR'], ['EUR', 'JPY']);
+    expect(
+      formatActivityDetail({ ...older, metadata: { changes: older.metadata.changes } }),
+    ).toBeNull();
+    expect(
+      formatActivityDetail(change(['EUR'], ['EUR', 'JPY'], { name: { old: 'a', new: 'b' } })),
+    ).toBeNull();
   });
 
   it('keeps the general words when the same save changed other settings', () => {

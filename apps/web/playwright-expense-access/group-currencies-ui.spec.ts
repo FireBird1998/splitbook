@@ -151,7 +151,8 @@ for (const scheme of ['light', 'dark'] as const) {
       (await dataOf(await ledger.sam.get(`/api/groups/${group}`))).alternateCurrencies,
     ).toEqual(['EUR', 'JPY']);
     await page.goto(appURL(`/groups/${group}/activity`));
-    await expect(page.getByText('You removed the extra currency GBP')).toBeVisible();
+    await expect(page.getByText('You removed GBP from the Group’s currencies')).toBeVisible();
+    await expect(page.getByText('Nothing used it', { exact: true })).toBeVisible();
   });
 
   test(`desktop ${scheme}: a member adds a currency they search for (#721)`, async ({

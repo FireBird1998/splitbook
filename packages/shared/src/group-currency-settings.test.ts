@@ -4,6 +4,7 @@ import {
   alreadyListedNote,
   currencyUseRows,
   extraCurrencyChange,
+  extraCurrencyChangeDetail,
   extraCurrencyChangeWords,
   extraCurrencyRow,
   groupCurrencySettingsSchema,
@@ -201,19 +202,43 @@ describe('a change to the extra currencies, as Activity names it (#721)', () => 
     expect(extraCurrencyChange(null)).toBeNull();
   });
 
-  it('says it in words', () => {
-    expect(extraCurrencyChangeWords({ added: ['CHF'], removed: [] })).toBe(
-      'added the extra currency CHF',
+  it('says it in words, as the board "Activity and a cross-currency Settlement" does', () => {
+    expect(extraCurrencyChangeWords({ added: ['JPY'], removed: [] })).toBe(
+      'added JPY to the Group’s currencies',
     );
     expect(extraCurrencyChangeWords({ added: ['JPY', 'SGD', 'THB'], removed: [] })).toBe(
-      'added the extra currencies JPY, SGD and THB',
+      'added JPY, SGD and THB to the Group’s currencies',
     );
     expect(extraCurrencyChangeWords({ added: [], removed: ['GBP'] })).toBe(
-      'removed the extra currency GBP',
+      'removed GBP from the Group’s currencies',
     );
     expect(extraCurrencyChangeWords({ added: ['JPY'], removed: ['EUR'] })).toBe(
-      'changed the extra currencies',
+      'changed the Group’s currencies',
     );
+  });
+
+  it('says what a removal left unused, and what an addition made the list, as recorded', () => {
+    const recorded = { groupName: 'Lisbon & Tokyo', currencies: ['INR', 'EUR', 'JPY'] };
+    expect(extraCurrencyChangeDetail({ added: [], removed: ['GBP'] }, recorded)).toBe(
+      'Nothing used it',
+    );
+    expect(extraCurrencyChangeDetail({ added: ['JPY'], removed: [] }, recorded)).toBe(
+      'Lisbon & Tokyo now uses INR, EUR and JPY',
+    );
+    expect(extraCurrencyChangeDetail({ added: ['JPY'], removed: ['GBP'] }, recorded)).toBe(
+      'Lisbon & Tokyo now uses INR, EUR and JPY',
+    );
+    // An entry recorded without its list, or with a list it can't read, says nothing more.
+    expect(extraCurrencyChangeDetail({ added: ['JPY'], removed: [] }, {})).toBeNull();
+    expect(
+      extraCurrencyChangeDetail(
+        { added: ['JPY'], removed: [] },
+        { ...recorded, currencies: 'INR' },
+      ),
+    ).toBeNull();
+    expect(
+      extraCurrencyChangeDetail({ added: ['JPY'], removed: [] }, { currencies: ['INR', 'JPY'] }),
+    ).toBeNull();
   });
 });
 

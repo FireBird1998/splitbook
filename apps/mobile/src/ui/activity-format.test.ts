@@ -268,12 +268,16 @@ describe('Group edits in plain language', () => {
       { id: priya, name: 'Priya Shah' },
     ],
   };
-  const edit = (changes: Record<string, { old?: unknown; new?: unknown }>, actor = you) =>
+  const edit = (
+    changes: Record<string, { old?: unknown; new?: unknown }>,
+    actor = you,
+    recorded: { groupName?: string; currencies?: string[] } = {},
+  ) =>
     describeActivity(
       event({
         type: 'group_updated',
         actor: { _id: actor, name: context.members.find((member) => member.id === actor)?.name },
-        metadata: { changes },
+        metadata: { changes, ...recorded },
       }),
       context,
     );
@@ -312,18 +316,40 @@ describe('Group edits in plain language', () => {
     expect(JSON.stringify(line)).not.toMatch(/[0-9a-f]{24}/);
   });
 
-  it('names the extra currency added or removed (#721)', () => {
+  it('names the currency added or removed, and what the list became, as recorded (#721)', () => {
+    const recorded = (currencies: string[]) => ({ groupName: 'Lisbon & Tokyo', currencies });
     expect(
-      read(edit({ alternateCurrencies: { old: ['EUR'], new: ['EUR', 'CHF'] } }, priya)),
+      read(
+        edit(
+          { alternateCurrencies: { old: ['EUR'], new: ['EUR', 'CHF'] } },
+          priya,
+          recorded(['INR', 'EUR', 'CHF']),
+        ),
+      ),
     ).toEqual({
-      headline: 'Priya Shah added the extra currency CHF, 11:05',
-      details: [],
+      headline:
+        'Priya Shah added CHF to the Group’s currencies, Lisbon & Tokyo now uses INR, EUR and CHF, 11:05',
+      details: ['Lisbon & Tokyo now uses INR, EUR and CHF'],
       changes: ['Extra currencies EUR → EUR, CHF'],
     });
-    expect(read(edit({ alternateCurrencies: { old: ['EUR', 'GBP'], new: ['EUR'] } }))).toEqual({
-      headline: 'You removed the extra currency GBP, 11:05',
-      details: [],
+    expect(
+      read(
+        edit(
+          { alternateCurrencies: { old: ['EUR', 'GBP'], new: ['EUR'] } },
+          you,
+          recorded(['INR', 'EUR']),
+        ),
+      ),
+    ).toEqual({
+      headline: 'You removed GBP from the Group’s currencies, Nothing used it, 11:05',
+      details: ['Nothing used it'],
       changes: ['Extra currencies EUR, GBP → EUR'],
+    });
+    // An older entry recorded without its list says nothing more.
+    expect(read(edit({ alternateCurrencies: { old: ['EUR'], new: ['EUR', 'CHF'] } }))).toEqual({
+      headline: 'You added CHF to the Group’s currencies, 11:05',
+      details: [],
+      changes: ['Extra currencies EUR → EUR, CHF'],
     });
   });
 
