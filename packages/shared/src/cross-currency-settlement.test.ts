@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateCrossCurrencySettlement,
+  decimalMoney,
+  minorMoney,
   formatCrossCurrencySettlement,
 } from './cross-currency-settlement';
 
@@ -197,5 +199,16 @@ describe('cross-currency Settlement wording (#727)', () => {
     expect(
       formatCrossCurrencySettlement({ ...record, amountPaidMinor: 9007199254740991 }),
     ).toContain('₹90,071,992,547,409.91');
+  });
+});
+
+describe('shared cross-currency money text', () => {
+  it('exports exact decimal and minor-unit formatting for the web sheet', () => {
+    expect(decimalMoney('92.5', 'INR')).toBe('₹92.50');
+    expect(decimalMoney('0.166666666666666667', 'INR')).toBe('₹0.166666666666666667');
+    expect(decimalMoney('0', 'EUR')).toBe('€0.00');
+    expect(minorMoney(185000, 'INR')).toBe('₹1,850.00');
+    expect(minorMoney(3150, 'JPY')).toBe('¥3,150');
+    expect(minorMoney(9007199254740991, 'INR')).toBe('₹90,071,992,547,409.91');
   });
 });
