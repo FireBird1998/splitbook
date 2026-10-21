@@ -159,7 +159,7 @@ export function unlistedCurrencyFix(
     add: full ? null : `Add ${currency} to ${group.name}`,
     choices,
     adding: full
-      ? `${group.name} already has ${MAX_EXTRA_CURRENCIES} extra currencies, the most a Group can have.`
+      ? `${group.name} already has ${MAX_EXTRA_CURRENCIES} extra currencies, the most a Group can have. An admin can remove one nothing uses in Group settings.`
       : `Adding lets everyone use ${currency}, the ${ORDINALS[extras]} of ${MAX_EXTRA_CURRENCIES} extra currencies.`,
     changing: kept
       ? `Changing keeps ${kept} and changes only the currency; nothing is converted.`

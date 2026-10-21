@@ -245,12 +245,14 @@ export function quickAddModel({
       tag.how === 'suggested'
         ? ` ${tag.name} is a suggestion: adding accepts it, or pick another Tag.`
         : '';
-    // A line in an extra currency says which, as the boards do; nothing is converted.
-    const lead = read.chosenInsteadOf
-      ? `Read as ${currency} instead of ${read.chosenInsteadOf}, one of ${group.name}’s currencies. Nothing is converted. Press Enter to add it.`
-      : currency === group.defaultCurrency
+    // A line in an extra currency says which, then what adding does; nothing is converted.
+    const readAs = read.chosenInsteadOf
+      ? `Read as ${currency} instead of ${read.chosenInsteadOf}, one of ${group.name}’s currencies. Nothing is converted.`
+      : `Read as ${currency}, one of ${group.name}’s currencies.`;
+    const lead =
+      currency === group.defaultCurrency && !read.chosenInsteadOf
         ? position
-        : `Read as ${currency}, one of ${group.name}’s currencies. Press Enter to add it.`;
+        : `${readAs} ${position} Press Enter to add it.`;
     message = { text: `${lead}${suggestion}`, tone: 'hint' };
   }
 
