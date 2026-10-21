@@ -30,8 +30,10 @@ describe('Draft attribution', () => {
     [' \t\u0000\u200b ', 'Assistant'],
     ['', 'Assistant'],
     ['A \u200b B', 'A B'],
-    ['a'.repeat(45), 'a'.repeat(40)],
-    ['🤖'.repeat(45), '🤖'.repeat(40)],
+    // A name cut at 40 characters says so (#614).
+    ['a'.repeat(45), `${'a'.repeat(39)}…`],
+    ['🤖'.repeat(45), `${'🤖'.repeat(39)}…`],
+    ['b'.repeat(40), 'b'.repeat(40)],
   ])('cleans client-controlled display names: %j', (input, expected) => {
     expect(cleanAssistantName(input)).toBe(expected);
     expect(cleanAssistantName(cleanAssistantName(input))).toBe(expected);
