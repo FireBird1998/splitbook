@@ -382,7 +382,7 @@ string is ignored — there is no archived filter.
 No balance is included — use `GET /api/user/balances` for that.
 
 Each Group also carries `latestExpenseCurrency`: the currency of the **viewer's**
-latest Expense in it (not one a recurring Expense added), or `null`. A new
+latest non-deleted Expense in it by creation time (not one a recurring Expense added), or `null`. A new
 Expense starts in it while the Group still lists it, else in the main currency
 (#719). It is read from the Expenses; nothing is stored for it. An older Group's
 `alternateCurrencies` is read as the rule allows: unsupported codes, repeats and
@@ -509,7 +509,7 @@ removing it is refused, saying what uses it in the read's `use` shape:
 The check and the removal are one Group mutation, as is each Expense and
 Settlement write's check that its currency is listed, so no Expense or
 Settlement in the currency arrives in between. A Draft may still arrive in it
-afterwards; To review then shows it as not one of the Group's currencies. A deleted Expense comes back in its currency while the Group lists it, or while another live
+afterwards; saving it as an Expense is refused while its currency is unlisted. A deleted Expense comes back in its currency while the Group lists it, or while another live
 Expense or a Settlement still uses it (an older Group's currency). Otherwise restoring it is 422
 `CURRENCY_MISMATCH`, "Add GBP to the Group’s currencies to restore it." Activity records the removal like an addition.
 
@@ -983,7 +983,7 @@ requests Android and the web made with answers recorded before #310):
   answer **422** `INVALID_MONEY_PRECISION`, a range the wrong way round **422**
   `INVALID_AMOUNT_RANGE`, and anything else that isn't a plain amount **422**
   `VALIDATION_ERROR`, as does an `involvesUser` that isn't an id. An Expense in
-  another currency (a legacy Group) is compared by its own amount.
+  another listed or historical currency is compared by its own amount, without conversion.
 - `limit` is capped at 100 (`EXPENSE_PAGE_MAX_LIMIT` in
   `@splitbook/shared/expense-page-read`), and `pagination.limit` says what was
   used. A zero, negative or unreadable `limit` is the default 20.
@@ -1589,8 +1589,9 @@ decoded by `@splitbook/shared/trip-summary-read` (path and query key in
   (`Only a Trip has a Trip summary.`), before anything is generated.
 - `currency` (optional, #729) picks the currency every figure is in; anything
   but a supported code is `400` `INVALID_CURRENCY`. Without it, the summary
-  opens on the currency with the most Expenses on the whole trip, a tie going to
-  the main currency (`@splitbook/shared/spending-currencies`). Nothing is
+  opens on the currency with the most Expenses on the whole trip. A tie goes to
+  the main currency if it is tied for most, otherwise the first in switch order
+  (`@splitbook/shared/spending-currencies`). Nothing is
   converted and no rate is used.
 - **Side effect:** due recurring templates are generated first, as the Group's
   other reads do, respecting the product-wide switch (#289) and the Theme; a
@@ -1611,7 +1612,7 @@ Amounts are exact minor units of the summary's `currency`. The response holds:
   matches) with `spentMinor`, `expenseCount`, `yourShareMinor` and `percent`
   of the Trip's Spent (whole percents that total 100, by largest remainder);
 - `suggestedPayments`: `{ from, to, amountMinor }`, people as `{ id, name }`,
-  exactly the payments Balances suggests in the Group's currency;
+  exactly the payments Balances suggests in the summary's selected `currency`;
 - `otherCurrencies` (every other currency spent in: listed, never converted)
   and `hasExpenses` (any Expense at all);
 - `currencies`, last: what the whole trip spent in each currency
