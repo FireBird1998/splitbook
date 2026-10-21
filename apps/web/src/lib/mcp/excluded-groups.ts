@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { AuthContext } from 'better-auth';
 import { z } from 'zod';
-import type { McpConnection, McpConsent } from './grants';
+import type { AuthEnv } from '@/lib/auth/create-auth';
+import { isMcpConnectionExpired, type McpConnection, type McpConsent } from './grants';
 
 type Adapter = Pick<
   AuthContext['adapter'],
@@ -99,15 +100,16 @@ export async function commitExcludedGroups(
 
 /**
  * The Groups a member's live connection to one assistant leaves out, for the approval page to
- * start from, so asking for approval again never clears them. A disconnected connection starts
- * again with every Group ticked.
+ * start from, so asking for approval again never clears them. A disconnected or expired (#618)
+ * connection starts again with every Group ticked.
  */
 export async function liveExcludedGroups(
   adapter: Pick<Adapter, 'findOne'>,
   userId: string,
   clientId: string,
+  env: AuthEnv,
 ): Promise<string[]> {
-  const connection = await adapter.findOne<McpConnection & { excludedGroupIds?: string[] | null }>({
+  const connection = await adapter.findOne<McpConnection>({
     model: 'mcpConnection',
     where: [{ field: 'key', value: JSON.stringify([userId, clientId]) }],
   });
@@ -121,7 +123,9 @@ export async function liveExcludedGroups(
         { field: 'referenceId', value: connection.generation },
       ],
     }));
-  return consent ? (connection.excludedGroupIds ?? []) : [];
+  return consent && !isMcpConnectionExpired(connection, consent, env)
+    ? (connection.excludedGroupIds ?? [])
+    : [];
 }
 
 /**
@@ -136,7 +140,7 @@ export async function connectionExcludedGroups(
 ): Promise<string[]> {
   const connection =
     typeof generation === 'string'
-      ? await adapter.findOne<{ excludedGroupIds?: string[] | null }>({
+      ? await adapter.findOne<Pick<McpConnection, 'excludedGroupIds'>>({
           model: 'mcpConnection',
           where: [
             { field: 'userId', value: userId },

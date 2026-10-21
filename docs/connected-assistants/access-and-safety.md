@@ -6,7 +6,7 @@ Updated 21 October 2026. The model below is chosen in [#603](https://github.com/
 
 Reachable Groups = current membership − the connection's Excluded Groups − Groups whose Assistant rule is Not allowed.
 
-- Approval starts with every Group ticked. Unticking one makes it an Excluded Group for that connection. Store exclusions rather than an allowed list so Groups joined later are included.
+- Approval starts with every Group ticked. Approving a live connection again starts from its Excluded Groups; reconnecting after Disconnect or expiry (#618) starts from every Group again. Unticking one makes it an Excluded Group for that connection. Store exclusions rather than an allowed list so Groups joined later are included.
 - The member changes Excluded Groups on the per-assistant page without reconnecting. The next call uses the new selection. Explain that answers leave unticked Groups out.
 - Only admins change the Group's Assistant rule: Allowed by default, or Not allowed. A change records an Activity event naming the admin and new rule.
 - All members see the rule. Only admins see the member, assistant name and last used for assistants that can reach the Group.

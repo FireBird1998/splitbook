@@ -263,6 +263,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
               ctx.context.adapter,
               ctx.context.session.user.id,
               clientId,
+              env,
             ),
           });
         },
@@ -330,7 +331,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
           });
           if (consent && isMcpConnectionExpired(row, consent, env)) {
             // Reconnection starts a fresh authorization. Never let old tokens adopt
-            // it, or rotate over activity that landed after the expiry read.
+            // it, or rotate over activity that landed after the expiry read. It starts from
+            // every Group too: only this approval's choice is committed below (#617).
             const renewed = await context.adapter.update<McpConnection>({
               model: 'mcpConnection',
               where: [
@@ -338,10 +340,21 @@ export function mcpAuthPlugins(env: AuthEnv) {
                 { field: 'generation', value: row.generation },
                 { field: 'lastUsedAt', value: row.lastUsedAt ?? null },
               ],
-              update: { generation: randomUUID(), lastUsedAt: null },
+              update: { generation: randomUUID(), lastUsedAt: null, excludedGroupIds: [] },
             });
             row = renewed ?? (await find());
             if (!row) throw new APIError('FORBIDDEN');
+          } else if (!consent && row.excludedGroupIds?.length) {
+            // Disconnected: this authorization starts from every Group too (#617).
+            row =
+              (await context.adapter.update<McpConnection>({
+                model: 'mcpConnection',
+                where: [
+                  { field: 'id', value: row.id },
+                  { field: 'generation', value: row.generation },
+                ],
+                update: { excludedGroupIds: [] },
+              })) ?? row;
           }
           if (row.name !== name)
             await context.adapter.update({
