@@ -36,6 +36,8 @@ function fixture() {
     offline: false,
     /** The server has assistants switched off: its connection list isn't there. */
     assistantsOff: false,
+    /** The optional Group-count read fails while connections still answer. */
+    failGroups: false,
     /** The next Disconnect fails on the server. */
     failRevoke: false,
     /** The next read of the connection list waits for this, answering with the list as it was asked. */
@@ -101,6 +103,7 @@ function fixture() {
       return json({ resource: 'http://localhost:4157/api/mcp', connections, nextOffset: null });
     }
     if (path === '/api/user/assistant-groups') {
+      if (server.failGroups) return json({ message: 'Something went wrong' }, 500);
       if (server.assistantsOff) return json({ error: 'Assistants not found', status: 404 }, 404);
       return json({
         status: 200,
@@ -304,6 +307,30 @@ describe('Connected assistants on Android (#622)', () => {
     restarted.openAssistants();
     expect(restarted.getSnapshot().screen).toBe('settings');
     restarted.dispose();
+  });
+
+  it('lists assistants without counts when the Groups read answers 500 (#775)', async () => {
+    const f = fixture();
+    f.server.failGroups = true;
+    const controller = f.create();
+    await controller.signIn('alex');
+    controller.openSettings();
+    await vi.waitFor(() => expect(controller.getSnapshot().assistants.status).not.toBe('loading'));
+    expect(controller.getSnapshot().assistants).toMatchObject({
+      available: true,
+      status: 'ready',
+      saved: false,
+      unsaved: false,
+      message: '',
+      assistants: [
+        { id: helper.id, name: helper.name, access: helper.access, groups: null },
+        { id: reader.id, name: reader.name, access: reader.access, groups: null },
+      ],
+    });
+    expect(f.requests).toContain('GET /api/user/assistant-groups');
+    controller.openAssistants();
+    expect(controller.getSnapshot().screen).toBe('assistants');
+    controller.dispose();
   });
 
   it('disconnects an assistant once the member confirms, and says so', async () => {
