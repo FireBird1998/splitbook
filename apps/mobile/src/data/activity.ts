@@ -25,6 +25,8 @@ const metadata = z.object({
   paidToName: z.string().optional(),
   recurring: z.boolean().optional(),
   action: z.string().optional(),
+  /** The Assistant rule an admin set (#621). */
+  rule: z.string().optional(),
   changes: z
     .record(z.string(), z.object({ old: z.unknown().optional(), new: z.unknown().optional() }))
     .optional(),

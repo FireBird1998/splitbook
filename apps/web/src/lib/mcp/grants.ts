@@ -39,6 +39,26 @@ export function isMcpConnectionExpired(
   return !Number.isFinite(since) || Date.now() - since >= mcpIdleSeconds(env) * 1000;
 }
 
+/**
+ * The consent that keeps a connection live: for its current generation, and not expired (#618).
+ * A disconnected or expired connection has none.
+ */
+export async function liveMcpConsent(
+  adapter: Adapter,
+  connection: McpConnection,
+  env: AuthEnv,
+): Promise<McpConsent | null> {
+  const consent = await adapter.findOne<McpConsent>({
+    model: 'oauthConsent',
+    where: [
+      { field: 'userId', value: connection.userId },
+      { field: 'clientId', value: connection.clientId },
+      { field: 'referenceId', value: connection.generation },
+    ],
+  });
+  return consent && !isMcpConnectionExpired(connection, consent, env) ? consent : null;
+}
+
 export async function requireMcpMember(adapter: Adapter, userId: string, env: AuthEnv) {
   const user = await adapter.findOne<{ id: string; email: string }>({
     model: 'user',

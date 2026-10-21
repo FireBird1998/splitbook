@@ -3,6 +3,9 @@
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { useCallback, useSyncExternalStore } from 'react';
 import useSWR from 'swr';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { CURRENCY_CODES } from '@splitbook/shared/currency';
+import { groupTabHref } from '@/components/groups/group-tabs';
 import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
 import { tripSummaryKey, queryKeyPath, type GroupQueryKey } from '@splitbook/shared/query-keys';
@@ -39,14 +42,26 @@ function useViewerToday(timeZone: string | null): string | null {
 
 /**
  * A Trip's Insights tab (#316): the Trip summary in the viewer's own time zone, which only the
- * browser knows, so the server render shows the tab loading.
+ * browser knows, so the server render shows the tab loading. A currency chosen on its switch is
+ * in the address (?currency=, #729), so reload, Back and a shared link keep it.
  */
 export default function TripSummaryTab() {
   const { groupId, userId } = useGroupPage();
   const timeZone = useViewerTimeZone();
   const today = useViewerToday(timeZone);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const asked = searchParams.get('currency');
+  const currency = asked && CURRENCY_CODES.includes(asked) ? asked : undefined;
+  const onCurrencyChange = useCallback(
+    (next: string) =>
+      router.replace(groupTabHref(groupId, 'insights', new URLSearchParams({ currency: next })), {
+        scroll: false,
+      }),
+    [groupId, router],
+  );
   const { data, error, mutate } = useSWR(
-    timeZone ? tripSummaryKey(WEB_QUERY_ACCOUNT, groupId, { timeZone }) : null,
+    timeZone ? tripSummaryKey(WEB_QUERY_ACCOUNT, groupId, { timeZone, currency }) : null,
     fetchTripSummary,
     // Sooner than the Group's own 30 s poll, so a refused read here is the first (#201).
     { refreshInterval: 20_000 },
@@ -69,6 +84,8 @@ export default function TripSummaryTab() {
       read={data}
       failed={!data && Boolean(error)}
       onRetry={() => void mutate()}
+      currency={currency}
+      onCurrencyChange={onCurrencyChange}
     />
   );
 }

@@ -49,6 +49,13 @@ describe('proxy rules', () => {
     expect(passesThrough(decide('/login?callbackUrl=%2Fdashboard', false))).toBe(true);
   });
 
+  it('lets anonymous visitors read the assistant picker, like the ChatGPT guide (#619)', () => {
+    expect(passesThrough(decide('/connect', false))).toBe(true);
+    expect(passesThrough(decide('/connect?assistant=claude-code', false))).toBe(true);
+    expect(passesThrough(decide('/connect/chatgpt', false))).toBe(true);
+    expect(passesThrough(decide('/connect/somewhere-else', false))).toBe(false);
+  });
+
   it('rejects anonymous API calls with 401 JSON instead of a redirect', async () => {
     const response = decide('/api/groups', false);
     expect(response.status).toBe(401);

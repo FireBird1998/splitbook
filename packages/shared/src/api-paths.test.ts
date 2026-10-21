@@ -196,6 +196,12 @@ describe("a Group's insights (#314)", () => {
     );
   });
 
+  it('sends the currency asked for, after the time zone (#729)', () => {
+    expect(groupInsightsPath(groupId, { month: '2026-09', timeZone: 'UTC', currency: 'JPY' })).toBe(
+      `/api/groups/${groupId}/insights?month=2026-09&tz=UTC&currency=JPY`,
+    );
+  });
+
   it('refuses a Group id that would change the route', () => {
     expect(() => groupInsightsPath('..', { timeZone: 'UTC' })).toThrow(RangeError);
     expect(groupInsightsPath('a/b', { timeZone: 'UTC' })).toBe('/api/groups/a%2Fb/insights?tz=UTC');
@@ -211,6 +217,12 @@ describe("a Trip's summary (#316)", () => {
     expect(queryOf(path)).toEqual([['tz', 'Asia/Kolkata']]);
     expect(tripSummaryPath(groupId, { timeZone: 'Etc/GMT+5' })).toBe(
       `/api/groups/${groupId}/trip-summary?tz=Etc%2FGMT%2B5`,
+    );
+  });
+
+  it('sends the currency asked for, after the time zone (#729)', () => {
+    expect(tripSummaryPath(groupId, { timeZone: 'UTC', currency: 'EUR' })).toBe(
+      `/api/groups/${groupId}/trip-summary?tz=UTC&currency=EUR`,
     );
   });
 

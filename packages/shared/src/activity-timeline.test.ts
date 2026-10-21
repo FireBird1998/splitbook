@@ -101,6 +101,21 @@ describe('activity timeline helpers', () => {
     ).toBe(expected);
   });
 
+  it.each([
+    ['not_allowed', 'Alex set connected assistants to Not allowed'],
+    ['allowed', 'Alex set connected assistants to Allowed'],
+  ])('names the admin and the Assistant rule they set (#621): %s', (rule, expected) => {
+    expect(
+      formatActivityHeadline({
+        _id: 'rule',
+        type: 'assistant_rule_changed',
+        createdAt: '2026-10-21T09:00:00.000Z',
+        actor: { name: 'Alex' },
+        metadata: { rule },
+      }),
+    ).toBe(expected);
+  });
+
   it('marks recurring-generated expenses in the headline', () => {
     expect(
       formatActivityHeadline({
@@ -207,6 +222,13 @@ describe("Home's latest changes (#309)", () => {
       'removed GBP from the Group’s currencies',
       null,
     ],
+    [
+      'assistant_rule_changed',
+      { rule: 'not_allowed' },
+      'set connected assistants to',
+      'Not allowed',
+    ],
+    ['assistant_rule_changed', { rule: 'allowed' }, 'set connected assistants to', 'Allowed'],
     ['something_new', {}, 'made a change', null],
   ])('says who did what: %s %j', (type, metadata, action, subject) => {
     expect(activityLineParts(event(type, metadata))).toEqual({

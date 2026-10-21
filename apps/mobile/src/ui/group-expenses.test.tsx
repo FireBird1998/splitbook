@@ -51,6 +51,8 @@ const group = (category: MobileGroup['category'] = 'home'): MobileGroup => ({
   description: '',
   category,
   defaultCurrency: 'INR',
+  alternateCurrencies: [],
+  latestExpenseCurrency: null,
   members: [you, sam, priya].map((id) => ({
     user: { ...person(id), email: `${id}@example.test` },
     role: 'member' as const,

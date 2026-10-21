@@ -211,14 +211,14 @@ export default function proxy(request: NextRequest) {
 
 The rules, in order:
 
-| Rule | Path                   | Anonymous                                    | With session cookie |
-| ---- | ---------------------- | -------------------------------------------- | ------------------- |
-| 1    | `/api/auth/*`          | allowed                                      | allowed             |
-| 2    | `GET /api/join/[code]` | allowed (invite preview)                     | allowed             |
-| 3    | `/login*`              | allowed                                      | allowed             |
-| 4    | `/`, `/join*`          | allowed                                      | allowed             |
-| 5    | other `/api/*`         | `401 { error: 'Unauthorized', status: 401 }` | allowed             |
-| 6    | everything else        | → `/login?callbackUrl=<pathname>`            | allowed             |
+| Rule | Path                                          | Anonymous                                    | With session cookie |
+| ---- | --------------------------------------------- | -------------------------------------------- | ------------------- |
+| 1    | `/api/auth/*`                                 | allowed                                      | allowed             |
+| 2    | `GET /api/join/[code]`                        | allowed (invite preview)                     | allowed             |
+| 3    | `/login*`                                     | allowed                                      | allowed             |
+| 4    | `/`, `/connect`, `/connect/chatgpt`, `/join*` | allowed                                      | allowed             |
+| 5    | other `/api/*`                                | `401 { error: 'Unauthorized', status: 401 }` | allowed             |
+| 6    | everything else                               | → `/login?callbackUrl=<pathname>`            | allowed             |
 
 The matcher excludes Next internals, static files and the design-system lab
 URL, so it runs on every page **and** every `/api/*` route.
@@ -231,7 +231,8 @@ accessible, avoiding a redirect loop with the authenticated layout.
 > exists; it never touches the database. An expired or revoked session passes
 > the proxy and is rejected where validation lives: `getAuthUser()` answers
 > 401 for API routes, and the authenticated layout redirects to `/login` for
-> pages. `/` is matched exactly; `/login` and `/join` use `startsWith`, so paths
+> pages. `/`, `/connect` (the assistant picker, with any `?assistant=`) and `/connect/chatgpt`
+> are matched exactly; `/login` and `/join` use `startsWith`, so paths
 > _beginning_ with either of those two strings pass the proxy.
 
 ---

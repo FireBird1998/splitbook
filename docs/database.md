@@ -68,6 +68,8 @@ Auth's adapter generates, declared on the Mongoose schema so both agree)
   isArchived: boolean,                // Default: false
   inviteCode: string | null,          // 8-char hex code for invite links
   inviteCodeExpiresAt: Date | null,   // Optional expiry
+  assistantRule: "allowed" | "not_allowed",   // Default: "allowed"; set by admins (#621)
+  assistantRuleSetBy: ObjectId (ref User) | null, // The admin who last set it
   createdAt: Date,
   updatedAt: Date
 }
@@ -339,7 +341,8 @@ boundaries — see [`v4/README.md`](v4/README.md) §3.
   type: "expense_added" | "expense_updated" | "expense_deleted"
       | "settlement_recorded"
       | "member_joined" | "member_left"
-      | "group_created" | "group_updated",
+      | "group_created" | "group_updated"
+      | "assistant_rule_changed",
   actor: ObjectId (ref User),         // Who performed the action
   metadata: {
     // Flexible based on type — what the code actually writes:
@@ -354,6 +357,7 @@ boundaries — see [`v4/README.md`](v4/README.md) §3.
     // member_left:      { userId, method }
     // group_created:    { groupName }
     // group_updated:    { changes: { field: { old, new } } }
+    // assistant_rule_changed: { rule: "allowed" | "not_allowed" }
   },
   createdAt: Date                     // updatedAt disabled
 }

@@ -1,4 +1,4 @@
-import { assistantDisplay, assistantForApproval } from './assistant-name';
+import { assistantForApproval, connectionName } from './assistant-name';
 import { randomUUID } from 'node:crypto';
 import type { AuthContext, BetterAuthPlugin } from 'better-auth';
 import {
@@ -27,6 +27,7 @@ import {
 import {
   currentMcpGrant,
   isMcpConnectionExpired,
+  liveMcpConsent,
   requireMcpMember,
   type McpConnection,
   type McpConsent,
@@ -46,6 +47,37 @@ export function mcpAuthPlugins(env: AuthEnv) {
   // Disable MCP plugins on a bad staging timeout; ordinary auth must still initialize.
   if (mcpUnavailable(env)) return [];
   let context: AuthContext;
+  /** A live connection as Settings and its own page read it (#615, #620). */
+  const connectionRead = async (
+    adapter: AuthContext['adapter'],
+    row: McpConnection,
+    consent: McpConsent,
+  ) => ({
+    id: row.id,
+    clientId: row.clientId,
+    name: await connectionName(adapter, row),
+    lastUsedAt: row.lastUsedAt ?? null,
+    access: consent.scopes.includes(MCP_DRAFT_SCOPE) ? 'Ledger + To review' : 'Ledger',
+    scopes: consent.scopes,
+    // The Groups the member left out (#617), for "N of M Groups" and the assistant's page.
+    excludedGroupIds: row.excludedGroupIds ?? [],
+  });
+  /**
+   * The member's own connection with this id, while it is live; otherwise none. A member who can
+   * no longer connect assistants is refused, as on every connection read.
+   */
+  const ownLive = async (adapter: AuthContext['adapter'], userId: string, id: string) => {
+    await requireMcpMember(adapter, userId, env);
+    const row = await adapter.findOne<McpConnection>({
+      model: 'mcpConnection',
+      where: [
+        { field: 'id', value: id },
+        { field: 'userId', value: userId },
+      ],
+    });
+    const consent = row && (await liveMcpConsent(adapter, row, env));
+    return row && consent ? { row, consent } : null;
+  };
   const management = {
     id: 'splitbook-mcp-connections',
     init(ctx) {
@@ -175,28 +207,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
           });
           const connections = [];
           for (const row of rows) {
-            const consent = await ctx.context.adapter.findOne<McpConsent>({
-              model: 'oauthConsent',
-              where: [
-                { field: 'userId', value: row.userId },
-                { field: 'clientId', value: row.clientId },
-                { field: 'referenceId', value: row.generation },
-              ],
-            });
-            if (consent && !isMcpConnectionExpired(row, consent, env))
-              connections.push({
-                id: row.id,
-                clientId: row.clientId,
-                // Named as the approval page names it (#615), the stored name read as the one
-                // published: a row stored earlier with a posing name, or none, gives the host.
-                name:
-                  row.name != null
-                    ? assistantDisplay(row.clientId, row.name).name
-                    : (await assistantForApproval(ctx.context.adapter, row.clientId)).name,
-                lastUsedAt: row.lastUsedAt ?? null,
-                access: consent.scopes.includes(MCP_DRAFT_SCOPE) ? 'Ledger + To review' : 'Ledger',
-                scopes: consent.scopes,
-              });
+            const consent = await liveMcpConsent(ctx.context.adapter, row, env);
+            if (consent) connections.push(await connectionRead(ctx.context.adapter, row, consent));
           }
           ctx.setHeader('Cache-Control', 'no-store');
           return ctx.json({
@@ -204,6 +216,54 @@ export function mcpAuthPlugins(env: AuthEnv) {
             connections,
             nextOffset: rows.length === 25 ? ctx.query.offset + 25 : null,
           });
+        },
+      ),
+      mcpConnection: createAuthEndpoint(
+        '/mcp/connection',
+        {
+          method: 'GET',
+          use: [sessionMiddleware],
+          query: z.object({ id: z.string().min(1).max(128) }),
+        },
+        async (ctx) => {
+          const live = await ownLive(
+            ctx.context.adapter,
+            ctx.context.session.user.id,
+            ctx.query.id,
+          );
+          if (!live) throw new APIError('NOT_FOUND');
+          ctx.setHeader('Cache-Control', 'no-store');
+          return ctx.json(await connectionRead(ctx.context.adapter, live.row, live.consent));
+        },
+      ),
+      // An assistant's page (#620): the Groups it leaves out, applied from its next call with no
+      // new consent. Only the member's own live connection changes.
+      setMcpConnectionGroups: createAuthEndpoint(
+        '/mcp/connection-groups',
+        {
+          method: 'POST',
+          use: [sessionMiddleware],
+          body: z.object({
+            id: z.string().min(1).max(128),
+            excludedGroupIds: excludedGroupsSchema,
+          }),
+        },
+        async (ctx) => {
+          const live = await ownLive(ctx.context.adapter, ctx.context.session.user.id, ctx.body.id);
+          // The generation holds the write to the connection that was read live.
+          const saved =
+            live &&
+            (await ctx.context.adapter.update<McpConnection>({
+              model: 'mcpConnection',
+              where: [
+                { field: 'id', value: live.row.id },
+                { field: 'generation', value: live.row.generation },
+              ],
+              update: { excludedGroupIds: ctx.body.excludedGroupIds },
+            }));
+          if (!saved) throw new APIError('NOT_FOUND');
+          ctx.setHeader('Cache-Control', 'no-store');
+          return ctx.json({ excludedGroupIds: ctx.body.excludedGroupIds });
         },
       ),
       revokeMcpConnection: createAuthEndpoint(

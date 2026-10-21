@@ -217,6 +217,31 @@ describe('Activity headlines', () => {
     ]);
   });
 
+  it('names the admin and the Assistant rule they set, as the server sends it (#621)', () => {
+    const [changed] = parseActivityPage(
+      {
+        status: 200,
+        data: {
+          activities: [
+            event({
+              type: 'assistant_rule_changed',
+              actor: { _id: 'a00000000000000000000003', name: 'Alex Rivera' },
+              metadata: { rule: 'not_allowed' } as ActivityEvent['metadata'],
+            }),
+          ],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        },
+      },
+      'b00000000000000000000001',
+      1,
+    ).events;
+    expect(describeActivity(changed, context)).toMatchObject({
+      actor: 'Alex Rivera',
+      verb: 'set connected assistants to',
+      subject: 'Not allowed',
+    });
+  });
+
   it('names the signed-in member "You" on either side of a payment, even beside a namesake (#434)', () => {
     const namesake = 'a00000000000000000000008';
     // As the server sends it: the payment's people by reference and by name.

@@ -19,6 +19,8 @@ const trip = (overrides: Partial<MobileGroup> = {}): MobileGroup => ({
   description: '',
   category: 'trip',
   defaultCurrency: 'INR',
+  alternateCurrencies: [],
+  latestExpenseCurrency: null,
   members: ['Alex Rivera', 'Sam Chen', 'Priya Shah'].map((name, index) => ({
     user: {
       id: `a0000000000000000000000${index + 1}`,

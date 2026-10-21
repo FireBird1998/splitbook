@@ -35,6 +35,7 @@ import {
   type InsightsAddress,
   type InsightsStats,
 } from './group-insights';
+import SpendingCurrencySwitch from '@/components/common/SpendingCurrencySwitch';
 
 /*
  * A Group's Insights tab (#314, design canvas "Web portal", Group insights): Month navigation
@@ -60,6 +61,8 @@ export interface GroupInsightsViewProps {
   failed: boolean;
   onRetry: () => void;
   onCompareChange: (compare: CompareChoice) => void;
+  /** A currency chosen on the switch (#729). */
+  onCurrencyChange?: (currency: string) => void;
   /** The monthly spending card's first view. */
   initialView?: MonthlyView;
 }
@@ -81,11 +84,18 @@ export default function GroupInsightsView({
   failed,
   onRetry,
   onCompareChange,
+  onCurrencyChange = () => {},
   initialView,
 }: GroupInsightsViewProps) {
-  // A read for another Month (one still in the cache) is never shown under this one's name.
+  // A read for another Month or currency (one still in the cache) is never shown under this
+  // one's name.
   const shown =
-    read && read.month === address.month && read.compare === address.compare ? read : undefined;
+    read &&
+    read.month === address.month &&
+    read.compare === address.compare &&
+    (!address.currency || read.currency === address.currency)
+      ? read
+      : undefined;
   const state: CardState = shown
     ? shown.hasExpenses
       ? 'ready'
@@ -94,7 +104,21 @@ export default function GroupInsightsView({
       ? 'failed'
       : 'loading';
   const monthLong = monthLabel(address.month, 'long');
-  const note = shown ? otherCurrenciesNote(shown) : null;
+  // One currency at a time (#729): the switch replaces the note on currencies left out. A
+  // currency chosen in another Month keeps its tab here, at zero, so the member can switch back.
+  const listed = shown?.currencies ?? [];
+  const tabs =
+    shown && listed.length && !listed.some((row) => row.currency === shown.currency)
+      ? [...listed, { currency: shown.currency, expenseCount: 0, spentMinor: 0 }]
+      : listed;
+  const currencies = tabs.length > 1 ? tabs : null;
+  const note = shown && !currencies ? otherCurrenciesNote(shown) : null;
+  const opened = currencies?.find((row) => row.currency === shown?.currency);
+  const switchNote = `${
+    !address.currency && opened
+      ? `Opened on ${opened.currency}, the currency with the most Expenses (${opened.expenseCount}). `
+      : ''
+  }Each currency is shown on its own; nothing is converted.`;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -105,6 +129,16 @@ export default function GroupInsightsView({
         firstMonth={shown?.firstMonth ?? null}
         onCompareChange={onCompareChange}
       />
+
+      {currencies && shown ? (
+        <SpendingCurrencySwitch
+          currencies={currencies}
+          mainCurrency={currencies[0].currency}
+          value={shown.currency}
+          onChange={onCurrencyChange}
+          note={switchNote}
+        />
+      ) : null}
 
       <Box
         component="section"

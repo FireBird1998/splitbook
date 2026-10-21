@@ -595,6 +595,71 @@ describe('a legacy Trip with Expenses in two currencies', () => {
   });
 });
 
+describe('a Trip with extra currencies (#729)', () => {
+  /** Rupees, with euros and dollars: 1 rupee, 3 euro and 2 dollar Expenses on the whole trip. */
+  async function travelling() {
+    const groupId = await createGroup('Lisbon and New York', [alice, bob]);
+    await mongoose.connection
+      .db!.collection('groups')
+      .updateOne({ _id: oid(groupId) }, { $set: { alternateCurrencies: ['EUR', 'USD'] } });
+    await insertExpense(groupId, '2026-09-17T12:00:00Z', { [alice]: 5000, [bob]: 5000 });
+    for (const [day, tag] of [
+      ['17', 'Food'],
+      ['18', 'Food'],
+      ['19', 'Transport'],
+    ])
+      await insertExpense(
+        groupId,
+        `2026-09-${day}T12:00:00Z`,
+        { [alice]: 1000, [bob]: 1000 },
+        { currency: 'EUR', tag },
+      );
+    for (const day of ['18', '20'])
+      await insertExpense(
+        groupId,
+        `2026-09-${day}T12:00:00Z`,
+        { [alice]: 2500, [bob]: 2500 },
+        { currency: 'USD' },
+      );
+    return groupId;
+  }
+
+  it('opens on the currency with the most Expenses on the whole trip, and lists each currency spent in', async () => {
+    const groupId = await travelling();
+    const { status, body } = await read(groupId, 'tz=UTC');
+    expect(status).toBe(200);
+    expect(body.data).toMatchObject({ currency: 'EUR', spentMinor: 6000, expenseCount: 3 });
+    expect(body.data.currencies).toEqual([
+      { currency: 'INR', expenseCount: 1, spentMinor: 10000 },
+      { currency: 'EUR', expenseCount: 3, spentMinor: 6000 },
+      { currency: 'USD', expenseCount: 2, spentMinor: 10000 },
+    ]);
+  });
+
+  it('reads the currency asked for on its own, its Tag shares totaling 100%, never converted', async () => {
+    const groupId = await travelling();
+    const euros = await read(groupId, 'tz=UTC&currency=EUR');
+    const percents = (euros.body.data.byTag as Array<{ percent: number }>).map(
+      (tag) => tag.percent,
+    );
+    expect(percents.reduce((sum, percent) => sum + percent, 0)).toBe(100);
+    const { status, body } = await read(groupId, 'tz=UTC&currency=USD');
+    expect(status).toBe(200);
+    expect(body.data).toMatchObject({ currency: 'USD', spentMinor: 10000, expenseCount: 2 });
+    expect(body.data.otherCurrencies).toEqual([
+      { currency: 'EUR', spentMinor: 6000, expenseCount: 3 },
+      { currency: 'INR', spentMinor: 10000, expenseCount: 1 },
+    ]);
+  });
+
+  it('refuses a currency it doesn’t know', async () => {
+    const groupId = await travelling();
+    const { status, body } = await read(groupId, 'tz=UTC&currency=EURO');
+    expect(status).toBe(400);
+    expect(body.code).toBe('INVALID_CURRENCY');
+  });
+});
+
 describe('recurring Expenses that have fallen due', () => {
   /** A Trip holding a template (a Trip's Theme adds none) and one Expense a template added. */
   async function tripWithTemplate() {

@@ -263,6 +263,8 @@ const context: MobileGroup = {
   description: '',
   category: 'home',
   defaultCurrency: 'INR',
+  alternateCurrencies: [],
+  latestExpenseCurrency: null,
   members: [
     { user: alex, role: 'admin', joinedAt: new Date(iso) },
     { user: sam, role: 'admin', joinedAt: new Date(iso) },

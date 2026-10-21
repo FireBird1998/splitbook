@@ -13,6 +13,7 @@ import { RADIUS } from '@/lib/theme/tokens';
 import TripDayChartCard, { type TripDayView } from './TripDayChartCard';
 import TripTagsCard from './TripTagsCard';
 import TripWrapUpCard from './TripWrapUpCard';
+import SpendingCurrencySwitch from '@/components/common/SpendingCurrencySwitch';
 import {
   otherCurrenciesNote,
   tripCardState,
@@ -27,7 +28,7 @@ import {
  * A Trip's Insights tab (#316, design canvas "Web portal", Trip Group): the whole trip in
  * figures, the day-by-day chart with the daily average, the wrap-up's suggested payments with
  * Record, and By Tag. One read feeds every card, and each card shows its own loading, empty and
- * failed state. The Trip keeps one currency: there is no second-currency row.
+ * failed state. With several currencies, the Spending in switch shows one at a time (#729).
  */
 
 export interface TripSummaryViewProps {
@@ -41,6 +42,9 @@ export interface TripSummaryViewProps {
   read: TripSummaryRead | undefined;
   failed: boolean;
   onRetry: () => void;
+  /** The currency chosen on the switch (#729); without it, the read opened on the most-spent. */
+  currency?: string;
+  onCurrencyChange?: (currency: string) => void;
   /** The day-by-day card's first view. */
   initialView?: TripDayView;
 }
@@ -57,15 +61,40 @@ export default function TripSummaryView({
   read,
   failed,
   onRetry,
+  currency,
+  onCurrencyChange = () => {},
   initialView,
 }: TripSummaryViewProps) {
-  const state = tripCardState(read, failed);
-  const ready = state === 'ready' && read ? read : null;
+  // A read in another currency (one still in the cache) is never shown under the chosen one.
+  const current = read && (!currency || read.currency === currency) ? read : undefined;
+  const state = tripCardState(current, failed);
+  const ready = state === 'ready' && current ? current : null;
   const thisYear = Number(today.slice(0, 4));
-  const note = ready ? otherCurrenciesNote(ready) : null;
+  // One currency at a time (#729): the switch replaces the note on currencies left out.
+  const currencies = ready?.currencies && ready.currencies.length > 1 ? ready.currencies : null;
+  const mainCurrency = ready?.currencies?.[0]?.currency ?? ready?.currency;
+  const note = ready && !currencies ? otherCurrenciesNote(ready) : null;
+  const opened = currencies?.find((row) => row.currency === ready?.currency);
+  const others = currencies
+    ?.filter((row) => row.currency !== ready?.currency)
+    .map((row) => row.currency);
+  const switchNote =
+    !currency && opened && others?.length
+      ? `Opened on ${opened.currency}, the currency with the most Expenses (${opened.expenseCount}). Switch to see ${others.length > 1 ? `${others.slice(0, -1).join(', ')} and ${others.at(-1)}` : others[0]} on their own.`
+      : 'Each currency is shown on its own; nothing is converted.';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {currencies && ready ? (
+        <SpendingCurrencySwitch
+          currencies={currencies}
+          mainCurrency={currencies[0].currency}
+          value={ready.currency}
+          onChange={onCurrencyChange}
+          note={switchNote}
+        />
+      ) : null}
+
       <WholeTrip figures={ready ? tripFigures(ready) : null} state={state} onRetry={onRetry} />
 
       {note ? (
@@ -85,7 +114,7 @@ export default function TripSummaryView({
           <Box sx={{ display: 'grid', gap: 2.5 }}>
             <TripWrapUpCard
               currency={ready?.currency ?? null}
-              model={ready ? wrapUp(ready, { groupId, userId, today }) : null}
+              model={ready ? wrapUp(ready, { groupId, userId, today, mainCurrency }) : null}
               state={state}
               onRetry={onRetry}
               shareHref={statementPath(groupId, { timeZone, wholeTrip: true })}

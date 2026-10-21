@@ -2,11 +2,7 @@ import 'server-only';
 import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
 import { isPossibleExpenseDuplicate } from '@splitbook/shared/expense-duplicate';
 import mongoose from 'mongoose';
-import {
-  cleanAssistantName,
-  draftAttributionSchema,
-  type DraftAttribution,
-} from '@splitbook/shared/draft-attribution';
+import { draftAttributionSchema, type DraftAttribution } from '@splitbook/shared/draft-attribution';
 import Group, { type IGroupDocument } from '@/lib/models/Group';
 import type { ToReviewRead } from '@splitbook/shared/to-review-read';
 import Expense from '@/lib/models/Expense';
@@ -18,6 +14,7 @@ import {
   type DraftSaveOutcome,
 } from '@splitbook/shared/validators/expense-draft';
 import { expenseService } from './expense.service';
+import { ASSISTANTS_ALLOWED } from './assistant-ledger.service';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
 import {
@@ -60,7 +57,10 @@ interface DraftRecord {
 export interface DraftActor {
   /** Trusted session/token subject, never taken from submitted tool or HTTP arguments. */
   id: string;
-  /** Set only by the MCP boundary from authenticated client metadata. */
+  /**
+   * Set only by the MCP boundary: the name the approval page shows, already cleaned. A host is kept
+   * whole, so a long one's real domain is never cut off (#745).
+   */
   assistant?: { name: string };
   /** Recheck a connected assistant at each write authorization. */
   authorize?: () => Promise<void>;
@@ -70,7 +70,7 @@ export interface DraftActor {
 
 function attribution(actor: DraftActor): DraftAttribution {
   return actor.assistant
-    ? { kind: 'assistant', name: cleanAssistantName(actor.assistant.name) }
+    ? { kind: 'assistant', name: actor.assistant.name.trim() || 'Assistant' }
     : { kind: 'member' };
 }
 
@@ -137,6 +137,8 @@ async function requireMembership(
       _id: reach ? { $eq: scope.group, $nin: reach.excluded } : scope.group,
       'members.user': scope.owner,
       deletionRequestedAt: null,
+      // Nor one whose admins don't allow assistants (#621).
+      ...(reach ? ASSISTANTS_ALLOWED : {}),
     },
     { session, projection: { _id: 1, defaultCurrency: 1, isArchived: 1 } },
   );

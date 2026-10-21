@@ -39,6 +39,8 @@ const group = (category: MobileGroup['category'] = 'home'): MobileGroup => ({
   description: '',
   category,
   defaultCurrency: 'INR',
+  alternateCurrencies: [],
+  latestExpenseCurrency: null,
   members: [
     [you, 'Alex Rivera'],
     [sam, 'Sam Chen'],

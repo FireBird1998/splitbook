@@ -42,9 +42,9 @@ beforeEach(async () => {
 afterAll(() => disconnectSignedIn(db));
 
 /** Alex's and Sam's trip, with nothing in its ledger yet. */
-async function coorgWeekend() {
+async function coorgWeekend(currency = 'INR') {
   const created = await groupService.create(
-    { name: 'Coorg Weekend', category: 'trip', defaultCurrency: 'INR', alternateCurrencies: [] },
+    { name: 'Coorg Weekend', category: 'trip', defaultCurrency: currency, alternateCurrencies: [] },
     alex,
   );
   const groupId = String(created._id);
@@ -118,5 +118,101 @@ describe('an Expense refused by its schema (#538)', () => {
 
     expect(refused).toEqual(unknownCategory);
     expect((await Expense.findById(expenseId).lean())?.category).toBe('food');
+  });
+});
+
+describe('whole-unit precision refusal (#748)', () => {
+  it.each(['JPY', 'KRW'])(
+    'answers INVALID_MONEY_PRECISION for fractional %s on create and edit, retaining create details',
+    async (currency) => {
+      const groupId = await coorgWeekend(currency);
+      const cookie = await signIn('alex');
+      const whole = { ...dinner, currency, amount: 2500, paidBy: [{ user: alex, amount: 2500 }] };
+      const fractional = { ...whole, amount: 2500.5, paidBy: [{ user: alex, amount: 2500.5 }] };
+      const refused = await callRoute(expenses.POST, {
+        method: 'POST',
+        path: `/api/groups/${groupId}/expenses`,
+        params: { id: groupId },
+        cookie,
+        body: fractional,
+      });
+      expect(refused).toEqual({
+        status: 422,
+        body: {
+          status: 422,
+          code: 'INVALID_MONEY_PRECISION',
+          error: 'Amount supports at most 0 decimal places',
+          details: [{ path: ['amount'], message: 'Amount supports at most 0 decimal places' }],
+        },
+      });
+      const listed = await callRoute(expenses.GET, {
+        method: 'GET',
+        path: `/api/groups/${groupId}/expenses`,
+        params: { id: groupId },
+        cookie,
+      });
+      expect(listed.body.data.pagination.total).toBe(0);
+      const saved = await callRoute(expenses.POST, {
+        method: 'POST',
+        path: `/api/groups/${groupId}/expenses`,
+        params: { id: groupId },
+        cookie,
+        body: whole,
+      });
+      expect(saved.status).toBe(201);
+      const expenseId = saved.body.data._id;
+      const edited = await callRoute(expense.PATCH, {
+        method: 'PATCH',
+        path: `/api/groups/${groupId}/expenses/${expenseId}`,
+        params: { id: groupId, expenseId },
+        cookie,
+        headers: { 'X-Splitbook-Revision': String(saved.body.data.revision) },
+        body: fractional,
+      });
+      expect(edited).toMatchObject({
+        status: 422,
+        body: {
+          status: 422,
+          code: 'INVALID_MONEY_PRECISION',
+          error: 'Amount supports at most 0 decimal places',
+        },
+      });
+      const unchanged = await callRoute(expense.GET, {
+        method: 'GET',
+        path: `/api/groups/${groupId}/expenses/${expenseId}`,
+        params: { id: groupId, expenseId },
+        cookie,
+      });
+      expect(unchanged.body.data).toMatchObject({
+        amount: 2500,
+        amountMinor: 2500,
+        revision: saved.body.data.revision,
+      });
+    },
+  );
+  it('keeps VALIDATION_ERROR and all field details for mixed problems or a payer precision refusal', async () => {
+    const groupId = await coorgWeekend('JPY');
+    const cookie = await signIn('alex');
+    for (const [body, paths] of [
+      [
+        { ...dinner, currency: 'JPY', description: '', amount: 2500.5 },
+        [['description'], ['amount']],
+      ],
+      [
+        { ...dinner, currency: 'JPY', paidBy: [{ user: alex, amount: 1000.5 }] },
+        [['paidBy', 0, 'amount']],
+      ],
+    ] as const) {
+      const refused = await callRoute(expenses.POST, {
+        method: 'POST',
+        path: `/api/groups/${groupId}/expenses`,
+        params: { id: groupId },
+        cookie,
+        body,
+      });
+      expect(refused.status).toBe(422);
+      expect(refused.body.code).toBe('VALIDATION_ERROR');
+      expect(refused.body.details.map((detail: { path: unknown[] }) => detail.path)).toEqual(paths);
+    }
   });
 });

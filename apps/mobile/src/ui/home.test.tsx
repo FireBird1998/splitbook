@@ -46,6 +46,8 @@ const group = (
   description: '',
   category,
   defaultCurrency: 'INR',
+  alternateCurrencies: [],
+  latestExpenseCurrency: null,
   members: Array.from({ length: members }, (_, index) => ({
     user: {
       id: `a0000000000000000000001${index}`,

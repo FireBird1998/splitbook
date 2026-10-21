@@ -28,6 +28,9 @@ use too (#538):
 }
 ```
 
+An Expense create refused only for the total amount’s precision uses
+`INVALID_MONEY_PRECISION` instead, retaining the same `details` shape (#748).
+
 Two routes refuse with a message of their own instead: an invite's email
 (`Invalid email address`) and an invitation's action (`Invalid action`), both
 **422** without `details`. Tag commands answer **400** `INVALID_TAG_COMMAND`.
@@ -175,11 +178,12 @@ The schedule is `0 18 * * *` UTC in `apps/web/vercel.json`. Production needs the
 
 ## User
 
-| Method | Path                 | Description                      |
-| ------ | -------------------- | -------------------------------- |
-| GET    | `/api/user/profile`  | Get current user                 |
-| PATCH  | `/api/user/profile`  | Update profile                   |
-| GET    | `/api/user/balances` | Cross-group balances by currency |
+| Method | Path                         | Description                                           |
+| ------ | ---------------------------- | ----------------------------------------------------- |
+| GET    | `/api/user/profile`          | Get current user                                      |
+| PATCH  | `/api/user/profile`          | Update profile                                        |
+| GET    | `/api/user/balances`         | Cross-group balances by currency                      |
+| GET    | `/api/user/assistant-groups` | The member's Groups as an assistant's page lists them |
 
 ### GET /api/user/profile
 
@@ -207,6 +211,35 @@ The schedule is `0 18 * * *` UTC in `apps/web/vercel.json`. Production needs the
   "preferredCurrency": "USD"
 }
 ```
+
+### GET /api/user/assistant-groups
+
+The member's Groups, as the approval page and an assistant's own page list them
+(#620), for the Group checklist and Settings' "N of M Groups":
+
+```json
+{
+  "data": {
+    "groups": [
+      {
+        "id": "…",
+        "name": "Maple House",
+        "currency": "INR",
+        "currencies": ["INR", "EUR"],
+        "theme": "home",
+        "archived": false,
+        "rule": "not_allowed",
+        "ruleSetBy": { "id": "…", "name": "Priya Shah" }
+      }
+    ]
+  }
+}
+```
+
+Archived Groups are listed, since assistants reach them too. `ruleSetBy` names the
+admin who set Not allowed while they are still an admin, else `null`. It answers
+**404** where assistants can't connect. The Groups an assistant leaves out come with
+its connection (`GET /api/auth/mcp/connections`, runbook `mcp-connections.md`).
 
 ### GET /api/user/balances
 
@@ -284,6 +317,8 @@ the balances decoder, so a malformed list fails Needs you only.
 | GET    | `/api/groups/[id]/currencies`        | The Group's currencies and what uses them |
 | POST   | `/api/groups/[id]/currencies`        | Add an extra currency (any member)        |
 | DELETE | `/api/groups/[id]/currencies/[code]` | Remove an extra currency (admins)         |
+| PUT    | `/api/groups/[id]/assistant-rule`    | Set the Assistant rule (admins)           |
+| GET    | `/api/groups/[id]/assistant-reach`   | Whose assistants reach it (admins)        |
 
 ### POST /api/groups
 
@@ -475,6 +510,39 @@ Settlement in the currency arrives in between. A Draft may still arrive in it
 afterwards; To review then shows it as not one of the Group's currencies. A deleted Expense comes back in its currency while the Group lists it, or while another live
 Expense or a Settlement still uses it (an older Group's currency). Otherwise restoring it is 422
 `CURRENCY_MISMATCH`, "Add GBP to the Group’s currencies to restore it." Activity records the removal like an addition.
+
+### PUT /api/groups/[id]/assistant-rule
+
+Sets whether members' Connected assistants may reach the Group (#621).
+
+**Body:** `{ "rule": "allowed" | "not_allowed" }`. Any other value answers **422**.
+
+**Authorization:** Only group admins; anyone else gets **403**. A change takes
+effect on every assistant's next call. It records one `assistant_rule_changed`
+Activity event (`metadata: { rule }`) in the same write. Setting the rule the
+Group already has records nothing. **Response:** `{ "data": { "rule": … } }`.
+
+### GET /api/groups/[id]/assistant-reach
+
+The members' Connected assistants that reach the Group, for its admins (#621):
+
+```json
+{
+  "reach": [
+    {
+      "member": { "id": "…", "name": "Sam Chen" },
+      "assistant": "Claude",
+      "lastUsedAt": "2026-10-20T09:30:00.000Z"
+    }
+  ]
+}
+```
+
+A connection appears while it is live (not disconnected or expired, #618) and its
+member hasn't left this Group out. The list is empty when the Group is Not allowed or assistants are off.
+**Authorization:** Only group admins; anyone else gets **403**.
+`apps/web/src/app/api/groups/[id]/assistant-rule/route.integration.test.ts`
+covers both routes.
 
 ---
 
@@ -844,10 +912,16 @@ Expense without a payer or a split row. The money module then refuses:
 | An amount with more decimals than the currency has      | `INVALID_MONEY_PRECISION`   | `["amount"]`, `["paidBy", <i>, "amount"]` or `["splitBetween", <i>, "amount"]` |
 | A percentage with more than 2 decimals                  | `INVALID_MONEY_PRECISION`   | `["splitBetween"]`                                                             |
 
-A create answers **422** `VALIDATION_ERROR` with each path and message in
-`details`, a refusal about the total at `["amount"]`. The codes above appear
-only on an edit, which answers **422** with the code and the path as `field`; a
-refusal about the total itself, such as its decimals, has no `field`.
+A create answers **422** with each path and message in `details`, a refusal about
+the total at `["amount"]`. When the sole issue is the total amount's precision,
+its code is `INVALID_MONEY_PRECISION`, and `error` carries the precision message,
+matching edit. This is identified by a Zod issue's `moneyCode` parameter and path,
+never by its wording. Mixed problems and precision refusals on other fields stay
+`VALIDATION_ERROR`. An edit answers **422** with the money code above and the path
+as `field`; a refusal about the total itself, such as its decimals, has no `field`.
+Android treats `INVALID_MONEY_PRECISION` on an initial create or edit as a definite
+refusal: the draft stays editable and shows the message, with no reconciliation or
+uncertain save. A retry still retains its earlier unconfirmed submission.
 
 Reads check stored Expenses too. When an Expense's stored allocations don't
 equal its amount (`assertStoredExpenseMoney`), or a Group's contributions don't
@@ -1382,6 +1456,7 @@ among them; amounts are never combined or converted across currencies.
 | Method | Path                                    | Description                                   |
 | ------ | --------------------------------------- | --------------------------------------------- |
 | GET    | `/api/groups/[id]/trip-summary?tz=IANA` | A Trip's whole-trip summary, its Insights tab |
+| GET    | `/api/groups/[id]/insights?tz=IANA`     | A Group's Month against the Months before it  |
 
 ### GET /api/groups/[id]/trip-summary
 
@@ -1396,11 +1471,16 @@ decoded by `@splitbook/shared/trip-summary-read` (path and query key in
   `INVALID_TIME_ZONE`.
 - **Only a Trip has one.** A Group of another Theme is `409` `NOT_A_TRIP`
   (`Only a Trip has a Trip summary.`), before anything is generated.
+- `currency` (optional, #729) picks the currency every figure is in; anything
+  but a supported code is `400` `INVALID_CURRENCY`. Without it, the summary
+  opens on the currency with the most Expenses on the whole trip, a tie going to
+  the main currency (`@splitbook/shared/spending-currencies`). Nothing is
+  converted and no rate is used.
 - **Side effect:** due recurring templates are generated first, as the Group's
   other reads do, respecting the product-wide switch (#289) and the Theme; a
   Trip's Theme has none, so on a Trip nothing is added either way.
 
-Amounts are exact minor units of the Group's currency. The response holds:
+Amounts are exact minor units of the summary's `currency`. The response holds:
 
 - `spentMinor`, `expenseCount`, `yourShareMinor`, `youPaidMinor`,
   `yourExpenseCount`, `peopleCount` (everyone with a share), and
@@ -1416,8 +1496,16 @@ Amounts are exact minor units of the Group's currency. The response holds:
   of the Trip's Spent (whole percents that total 100, by largest remainder);
 - `suggestedPayments`: `{ from, to, amountMinor }`, people as `{ id, name }`,
   exactly the payments Balances suggests in the Group's currency;
-- `otherCurrencies` (legacy Groups only: listed, never converted) and
-  `hasExpenses` (any Expense at all).
+- `otherCurrencies` (every other currency spent in: listed, never converted)
+  and `hasExpenses` (any Expense at all);
+- `currencies`, last: what the whole trip spent in each currency
+  (`currency`, `expenseCount`, `spentMinor`), the main currency first, then the
+  Group's extra currencies in order, then any other, for the currency switch.
+
+The Insights read (`GET /api/groups/[id]/insights?month=&compare=&tz=`) takes
+the same `currency`, opens on the currency with the most Expenses in the Month
+without it, and ends with the same `currencies` for that Month. The fields it
+sent before #315 are unchanged.
 
 **Expenses outside the Trip's dates** count in every whole-trip figure (Spent,
 shares, per person per day, By Tag), as the trip strip's total and the Expenses

@@ -1,0 +1,267 @@
+/**
+ * HTTP tests for a Group's Assistant rule (#621), against a real, isolated MongoDB database
+ * (`splitbook-test-group-assistant-rule-route`), with a real session (`signed-in-route.ts`).
+ *
+ * Only admins change the rule, each change records one Activity event naming the admin and the
+ * rule, and only admins read which members' Connected assistants reach the Group.
+ */
+
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import Activity from '@/lib/models/Activity';
+import Group from '@/lib/models/Group';
+import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
+import { groupService } from '@/lib/services/group.service';
+import { integrationTestDb } from '@/lib/test-utils/integration-db';
+import {
+  APP_URL,
+  callRoute,
+  connectSignedIn,
+  disconnectSignedIn,
+  insertDemoPersonas,
+  signIn,
+} from '@/lib/test-utils/signed-in-route';
+
+vi.mock('next/headers', async () => (await import('@/lib/test-utils/signed-in-route')).nextHeaders);
+// The reach list reads connections, which exist where assistants are switched on.
+vi.stubEnv('MCP_ENABLED', 'true');
+vi.stubEnv('NEXT_PUBLIC_APP_URL', APP_URL);
+
+const db = integrationTestDb('group-assistant-rule-route');
+const { alex, sam, priya } = DEMO_PERSONA_IDS;
+
+let rule: typeof import('./route');
+let reach: typeof import('../assistant-reach/route');
+let drafts: typeof import('../drafts/route');
+let draft: typeof import('../drafts/[draftId]/route');
+let adapter: Awaited<(typeof import('@/lib/auth'))['auth']['$context']>['adapter'];
+
+beforeAll(async () => {
+  await connectSignedIn(db);
+  rule = await import('./route');
+  reach = await import('../assistant-reach/route');
+  drafts = await import('../drafts/route');
+  draft = await import('../drafts/[draftId]/route');
+  adapter = (await (await import('@/lib/auth')).auth.$context).adapter;
+});
+beforeEach(async () => {
+  await db.reset();
+  await insertDemoPersonas();
+});
+afterAll(() => disconnectSignedIn(db));
+
+/** Alex's Household, with Alex as its admin and Sam and Priya as members. */
+async function mapleHouse() {
+  const created = await groupService.create(
+    { name: 'Maple House', category: 'home', defaultCurrency: 'INR', alternateCurrencies: [] },
+    alex,
+  );
+  const groupId = String(created._id);
+  await groupService.addMember(groupId, sam);
+  await groupService.addMember(groupId, priya);
+  return groupId;
+}
+
+const setRule = (groupId: string, cookie: string, value: unknown) =>
+  callRoute(rule.PUT, {
+    method: 'PUT',
+    path: `/api/groups/${groupId}/assistant-rule`,
+    params: { id: groupId },
+    cookie,
+    body: { rule: value },
+  });
+
+const readReach = (groupId: string, cookie: string) =>
+  callRoute(reach.GET, {
+    method: 'GET',
+    path: `/api/groups/${groupId}/assistant-reach`,
+    params: { id: groupId },
+    cookie,
+  });
+
+/** A member's connection to an assistant, live unless its consent is for another generation. */
+/** A moment some days ago, so connections age as the server sees them (#618 expiry). */
+const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000);
+
+async function connect(
+  userId: string,
+  clientId: string,
+  options: {
+    name: string;
+    lastUsedAt?: Date;
+    excludedGroupIds?: string[];
+    revoked?: boolean;
+    connectedAt?: Date;
+  },
+) {
+  await adapter.create({
+    model: 'mcpConnection',
+    data: {
+      key: JSON.stringify([userId, clientId]),
+      userId,
+      clientId,
+      generation: 'generation-now',
+      createdAt: options.connectedAt ?? daysAgo(20),
+      name: options.name,
+      lastUsedAt: options.lastUsedAt ?? null,
+      excludedGroupIds: options.excludedGroupIds ?? [],
+    },
+  });
+  await adapter.create({
+    model: 'oauthConsent',
+    data: {
+      userId,
+      clientId,
+      scopes: ['ledger:read'],
+      referenceId: options.revoked ? 'generation-before' : 'generation-now',
+      createdAt: options.connectedAt ?? daysAgo(20),
+      updatedAt: options.connectedAt ?? daysAgo(20),
+    },
+  });
+}
+
+describe('a Group’s Assistant rule', () => {
+  it('lets only admins change it (#621)', async () => {
+    const groupId = await mapleHouse();
+    expect((await setRule(groupId, await signIn('sam'), 'not_allowed')).status).toBe(403);
+    expect((await Group.findById(groupId).lean())?.assistantRule ?? 'allowed').toBe('allowed');
+    const changed = await setRule(groupId, await signIn('alex'), 'not_allowed');
+    expect(changed.status).toBe(200);
+    expect(changed.body.data).toEqual({ rule: 'not_allowed' });
+    const stored = await Group.findById(groupId).lean();
+    expect(stored?.assistantRule).toBe('not_allowed');
+    expect(String(stored?.assistantRuleSetBy)).toBe(alex);
+  });
+
+  it('refuses a rule it doesn’t know (#621)', async () => {
+    const groupId = await mapleHouse();
+    for (const value of ['read_only', '', null])
+      expect((await setRule(groupId, await signIn('alex'), value)).status, String(value)).toBe(422);
+  });
+
+  it('records one Activity event per change, naming the admin and the rule (#621)', async () => {
+    const groupId = await mapleHouse();
+    const cookie = await signIn('alex');
+    await setRule(groupId, cookie, 'not_allowed');
+    await setRule(groupId, cookie, 'not_allowed');
+    await setRule(groupId, cookie, 'allowed');
+    const events = await Activity.find({ group: groupId, type: 'assistant_rule_changed' })
+      .sort({ createdAt: 1, _id: 1 })
+      .lean();
+    expect(events.map((event) => [String(event.actor), event.metadata?.rule])).toEqual([
+      [alex, 'not_allowed'],
+      [alex, 'allowed'],
+    ]);
+  });
+
+  it('shows admins whose assistants reach the Group, and refuses the list to members (#621)', async () => {
+    const groupId = await mapleHouse();
+    const lastUsedAt = daysAgo(1);
+    await connect(sam, 'https://helper.example.test/client.json', {
+      name: 'Fictional Helper',
+      lastUsedAt,
+    });
+    // Out of reach: Priya left this Group out, and her other connection was disconnected.
+    await connect(priya, 'https://left-out.example.test/client.json', {
+      name: 'Left Out Helper',
+      excludedGroupIds: [groupId],
+    });
+    await connect(priya, 'https://gone.example.test/client.json', {
+      name: 'Disconnected Helper',
+      revoked: true,
+    });
+    // Unused for over 90 days, so expired (#618), and its never-used twin connected as long ago.
+    await connect(priya, 'https://idle.example.test/client.json', {
+      name: 'Idle Helper',
+      lastUsedAt: daysAgo(91),
+      connectedAt: daysAgo(120),
+    });
+    await connect(alex, 'https://unused.example.test/client.json', {
+      name: 'Unused Helper',
+      connectedAt: daysAgo(95),
+    });
+
+    expect((await readReach(groupId, await signIn('sam'))).status).toBe(403);
+    const admin = await signIn('alex');
+    const listed = await readReach(groupId, admin);
+    expect(listed.status).toBe(200);
+    expect(listed.body.data).toEqual({
+      reach: [
+        {
+          member: { id: sam, name: 'Sam Chen' },
+          assistant: 'Fictional Helper',
+          lastUsedAt: lastUsedAt.toISOString(),
+        },
+      ],
+    });
+
+    // The same list for the Group's id in capitals, which the route accepts.
+    expect((await readReach(groupId.toUpperCase(), admin)).body.data).toEqual(listed.body.data);
+
+    // Not allowed: no member's assistant reaches the Group.
+    await setRule(groupId, admin, 'not_allowed');
+    expect((await readReach(groupId, admin)).body.data).toEqual({ reach: [] });
+  });
+
+  it('names each assistant as Settings does, never by a name posing as another address (#621)', async () => {
+    const groupId = await mapleHouse();
+    await connect(sam, 'https://helper.example.test/client.json', { name: 'chatgpt.com' });
+    const listed = await readReach(groupId, await signIn('alex'));
+    expect(listed.body.data.reach.map((row: { assistant: string }) => row.assistant)).toEqual([
+      'helper.example.test',
+    ]);
+  });
+});
+
+describe('a member’s own Drafts once the Group is Not allowed (#621)', () => {
+  it('still lists and discards a Draft an assistant prepared, though the assistant loses the Group', async () => {
+    vi.stubEnv('PERSISTENT_DRAFTS_ENABLED', 'true');
+    const groupId = await mapleHouse();
+    const stored = await Group.findById(groupId).lean();
+    const tagId = String(stored!.tags[0]._id);
+    const { expenseDraftService } = await import('@/lib/services/expense-draft.service');
+    const assistant = { id: sam, assistant: { name: 'Fictional helper' } };
+    await expenseDraftService.create(
+      assistant,
+      groupId,
+      {
+        drafts: [
+          {
+            description: 'Groceries',
+            category: 'food',
+            amount: 600,
+            currency: 'INR',
+            date: '2026-10-10',
+            tagId,
+            paidBy: [{ user: sam, amount: 600 }],
+            splitMethod: 'equal',
+            splitBetween: [{ user: alex }, { user: sam }],
+          },
+        ],
+      },
+      'assistant-groceries-0001',
+    );
+    expect((await setRule(groupId, await signIn('alex'), 'not_allowed')).status).toBe(200);
+
+    // The assistant loses the Group at once…
+    await expect(expenseDraftService.list(assistant, groupId)).rejects.toThrow('GROUP_NOT_FOUND');
+    // …while Sam still reviews what it prepared, and can discard it.
+    const cookie = await signIn('sam');
+    const listed = await callRoute(drafts.GET, {
+      method: 'GET',
+      path: `/api/groups/${groupId}/drafts`,
+      params: { id: groupId },
+      cookie,
+    });
+    expect(listed.status, JSON.stringify(listed.body)).toBe(200);
+    expect(listed.body.data).toHaveLength(1);
+    const [kept] = listed.body.data as { id: string; revision: number }[];
+    const discarded = await callRoute(draft.DELETE, {
+      method: 'DELETE',
+      path: `/api/groups/${groupId}/drafts/${kept.id}`,
+      params: { id: groupId, draftId: kept.id },
+      cookie,
+      headers: { 'X-Splitbook-Revision': String(kept.revision) },
+    });
+    expect(discarded.status, JSON.stringify(discarded.body)).toBe(200);
+  });
+});

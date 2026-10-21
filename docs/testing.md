@@ -315,9 +315,10 @@ What each spec covers:
 - **Finish later** (`finish-later.spec.ts`, #407): a member's half-done Expense kept in To review,
   the close prompt, the 100-item limit, a failed Finish later keeping everything, and an
   assistant's provenance in the list, panel and Activity.
-- **Assistants** (`connect-chatgpt.spec.ts`, `mcp-consent.spec.ts`): the public ChatGPT guide,
-  its authorization states and account switches; the consent screen's optional preparation
-  permission, which runs only under its own config.
+- **Assistants** (`connect-chatgpt.spec.ts`, `mcp-consent.spec.ts`): the public assistant picker
+  (Claude, ChatGPT, Claude Code, Other) opened from Settings, and the ChatGPT guide; their
+  authorization states and account switches, for ChatGPT and Claude; the consent screen's optional
+  preparation permission, which runs only under its own config.
 
 ## CI
 

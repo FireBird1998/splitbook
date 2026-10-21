@@ -2,6 +2,7 @@ import { groupPageMetadata } from '@/lib/group-page-metadata';
 import { getAuthUser } from '@/lib/utils/api-response';
 import { redirect } from 'next/navigation';
 import GroupSettingsView from '@/components/groups/GroupSettingsView';
+import { whatsLive } from '@/lib/landing/whats-live';
 import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
 
 export default async function GroupSettingsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +16,7 @@ export default async function GroupSettingsPage({ params }: { params: Promise<{ 
       groupId={id}
       userId={user.id}
       recurringExpensesEnabled={recurringExpensesEnabled()}
+      assistantsAvailable={whatsLive().assistants.available}
     />
   );
 }

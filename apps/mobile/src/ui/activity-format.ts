@@ -1,3 +1,4 @@
+import { assistantRuleLabel } from '@splitbook/shared/assistant-rule';
 import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST } from '@splitbook/shared/group-themes';
 import {
@@ -364,6 +365,12 @@ export function describeActivity(
         complement: first.headline.complement,
         changes: changes.map((change) => changeDetail(change.line)),
       };
+    }
+    case 'assistant_rule_changed': {
+      const rule = assistantRuleLabel(meta.rule);
+      return rule
+        ? line('set connected assistants to', rule, [])
+        : line('changed connected assistants', null, []);
     }
     default:
       return line('changed the Group', null, []);

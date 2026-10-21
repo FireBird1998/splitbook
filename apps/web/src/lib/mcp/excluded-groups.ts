@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { AuthContext } from 'better-auth';
 import { z } from 'zod';
 import type { AuthEnv } from '@/lib/auth/create-auth';
-import { isMcpConnectionExpired, type McpConnection, type McpConsent } from './grants';
+import { liveMcpConsent, type McpConnection } from './grants';
 
 type Adapter = Pick<
   AuthContext['adapter'],
@@ -113,17 +113,7 @@ export async function liveExcludedGroups(
     model: 'mcpConnection',
     where: [{ field: 'key', value: JSON.stringify([userId, clientId]) }],
   });
-  const consent =
-    connection &&
-    (await adapter.findOne<McpConsent>({
-      model: 'oauthConsent',
-      where: [
-        { field: 'userId', value: userId },
-        { field: 'clientId', value: clientId },
-        { field: 'referenceId', value: connection.generation },
-      ],
-    }));
-  return consent && !isMcpConnectionExpired(connection, consent, env)
+  return connection && (await liveMcpConsent(adapter, connection, env))
     ? (connection.excludedGroupIds ?? [])
     : [];
 }

@@ -16,16 +16,17 @@ Every significant action in a group is logged as an activity. The activity feed 
 
 ## Activity Types
 
-| Type                  | Trigger                | Display Example                                                 |
-| --------------------- | ---------------------- | --------------------------------------------------------------- |
-| `expense_added`       | New expense created    | "**John** added **Dinner at restaurant** — €120.00"             |
-| `expense_updated`     | Expense edited         | "**John** updated **Dinner at restaurant** — amount: €120→€130" |
-| `expense_deleted`     | Expense soft deleted   | "**John** deleted **Dinner at restaurant**"                     |
-| `settlement_recorded` | Settlement recorded    | "**Jane** paid **John** €30.00"                                 |
-| `member_joined`       | New member joined      | "**Bob** joined the group via invite link"                      |
-| `member_left`         | Member left or removed | "**Bob** left the group"                                        |
-| `group_created`       | Group created          | "**John** created the group"                                    |
-| `group_updated`       | Group settings changed | "**John** updated group name to **Summer Trip**"                |
+| Type                     | Trigger                | Display Example                                                 |
+| ------------------------ | ---------------------- | --------------------------------------------------------------- |
+| `expense_added`          | New expense created    | "**John** added **Dinner at restaurant** — €120.00"             |
+| `expense_updated`        | Expense edited         | "**John** updated **Dinner at restaurant** — amount: €120→€130" |
+| `expense_deleted`        | Expense soft deleted   | "**John** deleted **Dinner at restaurant**"                     |
+| `settlement_recorded`    | Settlement recorded    | "**Jane** paid **John** €30.00"                                 |
+| `member_joined`          | New member joined      | "**Bob** joined the group via invite link"                      |
+| `member_left`            | Member left or removed | "**Bob** left the group"                                        |
+| `group_created`          | Group created          | "**John** created the group"                                    |
+| `group_updated`          | Group settings changed | "**John** updated group name to **Summer Trip**"                |
+| `assistant_rule_changed` | Assistant rule changed | "**Alex** set connected assistants to **Not allowed**"          |
 
 ---
 
@@ -87,6 +88,7 @@ const ACTIVITY_ICONS = {
   member_left: '👋',
   group_created: '🎉',
   group_updated: '⚙️',
+  assistant_rule_changed: '🤖',
 };
 ```
 

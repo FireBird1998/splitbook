@@ -215,7 +215,9 @@ describe('Amount focus ring', () => {
     const root = renderer!.root;
     const input = () =>
       root.find(
-        (node) => isHost(node, 'TextInput') && node.props.accessibilityLabel === 'Amount, required',
+        (node) =>
+          isHost(node, 'TextInput') &&
+          node.props.accessibilityLabel === 'Amount, Indian Rupee, required',
       );
     return {
       onLeave,

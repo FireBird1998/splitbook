@@ -68,6 +68,7 @@ import {
   expenseContextPending,
   expenseDraftChanged,
   expenseTagPending,
+  expenseCurrencyPending,
   expenseFields,
   parseCreatedExpenseId,
   parseExpenseContext,
@@ -100,6 +101,7 @@ import {
 import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { currentMonthKey, toDateParam } from '@splitbook/shared/date';
+import { startingExpenseCurrency } from '@splitbook/shared/group-currencies';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 
 import {
@@ -242,12 +244,14 @@ const rejectionMessages: Record<string, string> = {
   INVALID_MEMBERS: 'Review the payer and participants: Group membership changed.',
   CURRENCY_MISMATCH: 'The Group currency changed. Review the currency before saving.',
   VALIDATION_ERROR: 'Check the amount, description, date, and participants before saving.',
+  INVALID_MONEY_PRECISION: 'Check the amount’s decimal places for this currency.',
 };
 
 function expenseRejectionMessage(error: unknown) {
-  return error instanceof RequestError && error.status === 422 && error.code
-    ? rejectionMessages[error.code]
-    : undefined;
+  if (!(error instanceof RequestError) || error.status !== 422 || !error.code) return undefined;
+  const fallback = rejectionMessages[error.code];
+  // This money refusal is member-facing copy; retain the server's currency-specific precision.
+  return error.code === 'INVALID_MONEY_PRECISION' ? error.serverMessage || fallback : fallback;
 }
 
 /**
@@ -2572,7 +2576,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     month: string | null,
   ): ExpenseDraft => ({
     amount: '',
-    currency: context.group.defaultCurrency,
+    // Where the member's latest Expense here was, as on the web (#720).
+    currency: startingExpenseCurrency(context.group, context.group.latestExpenseCurrency),
     description: '',
     date:
       month && month < currentMonthKey(new Date(now()))
@@ -2671,8 +2676,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             ...editor.draft,
             payerId: blank.payerId,
             participantIds: blank.participantIds,
-            // A typed amount keeps its currency until the member explicitly reviews it.
-            currency: editor.draft.amount ? editor.draft.currency : blank.currency,
+            // A typed amount keeps its currency until the member explicitly reviews it, and a
+            // currency the member picked stays picked (#720).
+            currency:
+              editor.draft.amount || editor.draft.currency !== editor.blank?.currency
+                ? editor.draft.currency
+                : blank.currency,
           }
         : editor.draft;
     publish({
@@ -3122,16 +3131,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     // Offline, the Tag comes from the Group's saved Tags, a new Expense's too, unless a Tag
-    // change made here is unconfirmed (#638).
+    // change made here is unconfirmed (#638), and the currency from its saved currencies (#720).
     const tagged = !expenseTagPending(snapshot.expense, snapshot.offline.active);
+    const priced = !expenseCurrencyPending(snapshot.expense, snapshot.offline.active);
     if (expenseContextPending(snapshot.expense, snapshot.offline.active)) {
-      const { amount, description, date, notes, tagId } = patch;
+      const { amount, description, date, notes, tagId, currency } = patch;
       patch = {
         ...(amount !== undefined ? { amount } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(date !== undefined ? { date } : {}),
         ...(notes !== undefined ? { notes } : {}),
         ...(tagId !== undefined && tagged ? { tagId } : {}),
+        ...(currency !== undefined && priced ? { currency } : {}),
       };
     } else if (!tagged && patch.tagId !== undefined) {
       patch = { ...patch };

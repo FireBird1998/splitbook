@@ -209,8 +209,8 @@ async function rentTemplate(
   return String(template._id);
 }
 
-/** The fields #315 added, in the order they follow the fields #314 sent. */
-const ADDED = ['byTag', 'whoPaid', 'recurring'];
+/** The fields added since #314 (#315's, then #729's), in the order they follow #314's. */
+const ADDED = ['byTag', 'whoPaid', 'recurring', 'currencies'];
 
 /**
  * The answer as text without the fields #315 added, with every Expense id replaced by a label
@@ -362,6 +362,8 @@ describe('the fields #314 sent', () => {
         'byTag',
         'whoPaid',
         ...(recurringOn ? ['recurring'] : []),
+        // What was spent in each currency, for the currency switch (#729).
+        'currencies',
       ]);
     }
   });

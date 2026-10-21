@@ -158,6 +158,54 @@ const latestChanges = {
   ],
 };
 
+/**
+ * The Trip summary read the Trip strip shows its total from (#729), matching the Expenses summary
+ * above: one ₹2,500.00 dinner, in rupees only.
+ */
+const tripSummary = {
+  timeZone: 'Asia/Kolkata',
+  currency: 'INR',
+  tripDates: { start: '2026-09-01', end: '2026-09-10' },
+  window: { from: '2026-09-01', to: '2026-09-10' },
+  dayCount: 10,
+  tooManyDays: false,
+  spentMinor: 250_000,
+  expenseCount: 1,
+  yourShareMinor: 125_000,
+  youPaidMinor: 0,
+  yourExpenseCount: 1,
+  peopleCount: 2,
+  perPersonPerDayMinor: 12_500,
+  // Ten days, the Beach shack dinner on the fifth.
+  days: Array.from({ length: 10 }, (_, index) => {
+    const dinner = index === 4;
+    return {
+      day: `2026-09-${String(index + 1).padStart(2, '0')}`,
+      number: index + 1,
+      spentMinor: dinner ? 250_000 : 0,
+      expenseCount: dinner ? 1 : 0,
+      yourShareMinor: dinner ? 125_000 : 0,
+      biggest: dinner
+        ? [
+            {
+              id: 'c00000000000000000000001',
+              description: 'Beach shack dinner',
+              amountMinor: 250_000,
+            },
+          ]
+        : [],
+    };
+  }),
+  dailyAverageMinor: 25_000,
+  beforeTrip: null,
+  afterTrip: null,
+  byTag: [],
+  suggestedPayments: [],
+  otherCurrencies: [],
+  hasExpenses: true,
+  currencies: [{ currency: 'INR', expenseCount: 1, spentMinor: 250_000 }],
+};
+
 /** Fixture only public HTTP responses; real demo authentication stays in place. */
 export async function installPilotFixtures(page: Page, overrides: Record<string, unknown> = {}) {
   await page.clock.setFixedTime(new Date(FIXED_TIME));
@@ -169,6 +217,7 @@ export async function installPilotFixtures(page: Page, overrides: Record<string,
     '/api/invitations': [],
     [`/api/groups/${DEMO_GROUP_ID}`]: group,
     [`/api/groups/${DEMO_GROUP_ID}/balances`]: groupBalances,
+    [`/api/groups/${DEMO_GROUP_ID}/trip-summary`]: tripSummary,
     [`/api/groups/${DEMO_GROUP_ID}/settlements`]: [
       {
         _id: 'sample-settlement',

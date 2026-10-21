@@ -33,6 +33,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ShareIcon from '@mui/icons-material/Share';
+import AssistantRuleSection from '@/components/groups/AssistantRuleSection';
 import LeaveGroupSection from '@/components/groups/LeaveGroupSection';
 import TagManager from '@/components/groups/TagManager';
 import GroupCurrenciesSection from '@/components/groups/GroupCurrenciesSection';
@@ -51,6 +52,8 @@ interface GroupSettingsViewProps {
   userId: string;
   /** The server's recurring Expenses switch (#289): off hides the recurring section. */
   recurringExpensesEnabled: boolean;
+  /** Whether assistants can connect here (#621): off hides the Assistants section. */
+  assistantsAvailable: boolean;
 }
 
 /** The API's `{ error }` message for a rejected request, or `fallback` when it has none. */
@@ -68,6 +71,7 @@ function GroupSettingsContent({
   groupId,
   userId,
   recurringExpensesEnabled,
+  assistantsAvailable,
 }: GroupSettingsViewProps) {
   const { mutate: globalMutate } = useSWRConfig();
   const { data: group, isLoading, error, mutate } = useGroup(userId, groupId);
@@ -152,6 +156,17 @@ function GroupSettingsContent({
       message={snackbar.message}
     />
   );
+  const assistantSection = assistantsAvailable && (
+    <AssistantRuleSection
+      groupId={groupId}
+      groupName={group.name}
+      rule={group.assistantRule ?? 'allowed'}
+      members={members}
+      viewerId={userId}
+      onSaved={() => void mutate()}
+      onNotify={(message) => setSnackbar({ open: true, message })}
+    />
+  );
 
   if (!isAdmin) {
     return (
@@ -170,6 +185,7 @@ function GroupSettingsContent({
           </Box>
           {currenciesSection}
           <TagManager groupId={groupId} accountId={userId} />
+          {assistantSection}
           <LeaveGroupSection
             groupId={groupId}
             groupName={group.name}
@@ -517,6 +533,8 @@ function GroupSettingsContent({
             </MuiMenuItem>
           </Menu>
         </Paper>
+
+        {assistantSection}
 
         {/* ─── Invite Link ─────────────────────────── */}
         <Paper variant="outlined" sx={{ p: 3 }}>

@@ -156,7 +156,8 @@ export type ActivityType =
   | 'member_joined'
   | 'member_left'
   | 'group_created'
-  | 'group_updated';
+  | 'group_updated'
+  | 'assistant_rule_changed';
 
 export interface IActivity {
   _id: string;

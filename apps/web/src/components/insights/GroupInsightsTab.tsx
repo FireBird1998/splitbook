@@ -46,6 +46,7 @@ export default function GroupInsightsTab({
           month: address.month,
           compare: address.compare,
           timeZone,
+          currency: address.currency,
         })
       : null,
     fetchInsights,
@@ -57,6 +58,16 @@ export default function GroupInsightsTab({
     (compare: CompareChoice) => {
       if (!address || !currentMonth) return;
       router.replace(insightsHref(groupId, { ...address, compare }, currentMonth), {
+        scroll: false,
+      });
+    },
+    [address, currentMonth, groupId, router],
+  );
+
+  const onCurrencyChange = useCallback(
+    (currency: string) => {
+      if (!address || !currentMonth) return;
+      router.replace(insightsHref(groupId, { ...address, currency }, currentMonth), {
         scroll: false,
       });
     },
@@ -87,6 +98,7 @@ export default function GroupInsightsTab({
       failed={!data && Boolean(error)}
       onRetry={() => void mutate()}
       onCompareChange={onCompareChange}
+      onCurrencyChange={onCurrencyChange}
     />
   );
 }

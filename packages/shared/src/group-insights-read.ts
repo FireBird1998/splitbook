@@ -61,6 +61,13 @@ const groupInsights = z.looseObject({
   recurringExpenses: z.boolean(),
   /** Whether the Group has any Expense at all, in any Month: false means "no Expenses yet". */
   hasExpenses: z.boolean(),
+  /**
+   * What was spent in the Month in each currency, main currency first, for the currency switch
+   * (#729). Older servers send none.
+   */
+  currencies: z
+    .array(z.looseObject({ currency: currencyCode, expenseCount: count, spentMinor: minor }))
+    .optional(),
 });
 
 export type GroupInsightsRead = z.infer<typeof groupInsights>;

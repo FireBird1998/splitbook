@@ -1,6 +1,7 @@
 import mongoose, { Schema, Model } from 'mongoose';
 import { CreationRequestSchema, type ICreationRequest } from '@/lib/financial-write';
 import { MAX_EXTRA_CURRENCIES } from '@splitbook/shared/group-currencies';
+import { ASSISTANT_RULES, type AssistantRule } from '@splitbook/shared/assistant-rule';
 
 export interface IGroupMemberDocument {
   user: mongoose.Types.ObjectId;
@@ -32,6 +33,10 @@ export interface IGroupDocument {
   startDate?: Date | null;
   endDate?: Date | null;
   isArchived: boolean;
+  /** Whether members' Connected assistants may reach this Group (#621). Unset reads as allowed. */
+  assistantRule?: AssistantRule;
+  /** The admin who last set the Assistant rule. */
+  assistantRuleSetBy?: mongoose.Types.ObjectId | null;
   deletionRequestedAt?: Date;
   mutationSequence?: number;
   inviteCode?: string | null;
@@ -92,6 +97,8 @@ const GroupSchema = new Schema<IGroupDocument>(
     },
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
+    assistantRule: { type: String, enum: ASSISTANT_RULES, default: 'allowed' },
+    assistantRuleSetBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     isArchived: { type: Boolean, default: false },
     deletionRequestedAt: { type: Date, select: false },
     mutationSequence: { type: Number, select: false },
