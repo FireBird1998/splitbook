@@ -30,6 +30,8 @@ const textOf = (node: ReactTestInstance): string =>
   node.children.map((child) => (typeof child === 'string' ? child : textOf(child))).join(' ');
 const button = (label: string) =>
   renderer.root.findAllByType('button').find((node) => textOf(node).trim() === label);
+const alerts = () =>
+  renderer.root.findAll((node) => typeof node.type === 'string' && node.props.role === 'alert');
 const headlines = () =>
   renderer.root
     .findAllByType('span')
@@ -70,7 +72,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it('offers Load older, appends the next 50-event page in order, and ends at the last page', async () => {
+it('offers Load older activity, appends the next 50-event page in order, and ends at the last page', async () => {
   api.mockResolvedValueOnce(
     answer(
       1,
@@ -92,17 +94,17 @@ it('offers Load older, appends the next 50-event page in order, and ends at the 
   );
   await render();
   expect(headlines()).toHaveLength(50);
-  expect(button('Load older')).toBeDefined();
+  expect(button('Load older activity')).toBeDefined();
   await act(async () => {
-    button('Load older')!.props.onClick();
+    button('Load older activity')!.props.onClick();
   });
-  expect(button('Loading older…')?.props.disabled).toBe(true);
+  expect(button('Loading older activity…')?.props.disabled).toBe(true);
   expect(headlines()).toHaveLength(50);
   await act(async () => {
     finish(answer(2, [event(51)]));
   });
   expect(headlines()).toEqual(Array.from({ length: 51 }, (_, i) => `You added “Expense ${i + 1}”`));
-  expect(button('Load older')).toBeUndefined();
+  expect(button('Load older activity')).toBeUndefined();
   expect(api.mock.calls.map(([path]) => path)).toEqual([
     `/api/groups/${GROUP}/activity?page=1&limit=50`,
     `/api/groups/${GROUP}/activity?page=1&limit=50`,
@@ -110,7 +112,7 @@ it('offers Load older, appends the next 50-event page in order, and ends at the 
   ]);
 });
 
-it('keeps loaded events after an older-page failure and retries that same page', async () => {
+it('announces an older-page failure above retry, keeps events, and clears the alert on success', async () => {
   api.mockResolvedValueOnce(answer(1, [event(1)]));
   api.mockResolvedValueOnce(answer(1, [event(1)]));
   api.mockResolvedValueOnce(Response.json({ error: 'Unavailable' }, { status: 503 }));
@@ -118,16 +120,28 @@ it('keeps loaded events after an older-page failure and retries that same page',
   api.mockResolvedValueOnce(answer(2, [event(2)]));
   await render();
   await act(async () => {
-    button('Load older')!.props.onClick();
+    button('Load older activity')!.props.onClick();
   });
   expect(headlines()).toEqual(['You added “Expense 1”']);
-  expect(button('Try again')).toBeDefined();
+  expect(button('Try loading older activity')).toBeDefined();
+  expect(alerts()).toHaveLength(1);
+  expect(textOf(alerts()[0])).toBe(
+    'Couldn’t load older activity. The events shown are still here.',
+  );
+  const controls = renderer.root.findAll(
+    (node) =>
+      typeof node.type === 'string' && (node.props.role === 'alert' || node.type === 'button'),
+  );
+  expect(controls.indexOf(alerts()[0])).toBeLessThan(
+    controls.indexOf(button('Try loading older activity')!),
+  );
   await act(async () => {
-    button('Try again')!.props.onClick();
+    button('Try loading older activity')!.props.onClick();
   });
   expect(headlines()).toEqual(['You added “Expense 1”', 'You added “Expense 2”']);
-  expect(button('Try again')).toBeUndefined();
-  expect(button('Load older')).toBeUndefined();
+  expect(button('Try loading older activity')).toBeUndefined();
+  expect(alerts()).toHaveLength(0);
+  expect(button('Load older activity')).toBeUndefined();
   expect(api.mock.calls.at(-1)?.[0]).toBe(`/api/groups/${GROUP}/activity?page=2&limit=50`);
 });
 
@@ -142,7 +156,7 @@ it('keeps the first copy when a newer event shifts an event onto two pages', asy
   );
   await render();
   await act(async () => {
-    button('Load older')!.props.onClick();
+    button('Load older activity')!.props.onClick();
   });
   expect(headlines()).toEqual([
     'You added “Expense 1”',
@@ -176,7 +190,7 @@ it('refreshes loaded older pages too, so a page shift cannot hide a loaded event
     api.mockResolvedValueOnce(answer(2, [event(4)]));
     await render();
     await act(async () => {
-      button('Load older')!.props.onClick();
+      button('Load older activity')!.props.onClick();
     });
     api.mockResolvedValueOnce(answer(1, [event(1), event(2)]));
     api.mockResolvedValueOnce(answer(2, [event(3), event(4)]));

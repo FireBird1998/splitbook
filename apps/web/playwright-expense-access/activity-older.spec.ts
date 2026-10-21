@@ -2,7 +2,7 @@ import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { test, expect, dataOf } from './fixtures';
 
 for (const scheme of ['light', 'dark'] as const) {
-  test(`${scheme}: Load older opens a Group's history beyond 50 events (#800)`, async ({
+  test(`${scheme}: Load older activity opens a Group's history beyond 50 events (#800)`, async ({
     page,
     ledger,
   }) => {
@@ -34,10 +34,12 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(events.first()).toHaveText('You added “History item 51”');
     await expect(events.last()).toHaveText('You added “History item 2”');
     await expect(page.getByText('You added “History item 1”', { exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Load older', exact: true }).click();
+    await page.getByRole('button', { name: 'Load older activity', exact: true }).click();
     await expect(events).toHaveCount(51);
     await expect(events.last()).toHaveText('You added “History item 1”');
     await expect(page.getByText('You created the group', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Load older', exact: true })).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Load older activity', exact: true }),
+    ).toHaveCount(0);
   });
 }
