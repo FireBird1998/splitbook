@@ -16,9 +16,11 @@ import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import ProductSwitch from '@/lib/models/ProductSwitch';
 import RecurringExpense from '@/lib/models/RecurringExpense';
+import Settlement from '@/lib/models/Settlement';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { settlementService } from '@/lib/services/settlement.service';
+import { balanceService } from '@/lib/services/balance.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
@@ -30,6 +32,7 @@ import {
 import type { GroupCategory, UserBalancesResponse } from '@splitbook/shared/types';
 import { GET as readHome } from './route';
 import { GET as readGroupBalances } from '@/app/api/groups/[id]/balances/route';
+import { POST as leaveGroup } from '@/app/api/groups/[id]/leave/route';
 
 const session = vi.hoisted(() => ({ userId: null as string | null }));
 vi.mock('next/headers', () => ({ headers: vi.fn(async () => new Headers()) }));
@@ -289,6 +292,162 @@ describe('every suggested payment involving the member', () => {
     await addExpense(archived, bob, 100, [alice, bob]);
     await Group.updateOne({ _id: archived }, { $set: { isArchived: true } });
     expect((await home(alice)).suggestedPayments).toEqual([]);
+  });
+});
+
+// #812: stored money outlives today's currency list, as the Expenses read lists it since #810.
+// Balances are positions, which never include a currency Splitbook no longer supports: a Group's
+// Balances and Home answer as they did without it, and nothing is suggested or settled in it.
+describe('an Expense in a currency Splitbook no longer supports (#812)', () => {
+  /** A Group's Balances read, as `userId` sees it. */
+  async function groupBalances(groupId: string, userId: string) {
+    session.userId = userId;
+    const response = await readGroupBalances(
+      new Request(`http://localhost/api/groups/${groupId}/balances`),
+      { params: Promise.resolve({ id: groupId }) },
+    );
+    return { status: response.status, body: await response.json() };
+  }
+
+  it('leaves it out of the Group’s Balances, Home and what leaving checks, with no Suggested payment in it', async () => {
+    const goa = await createGroup('Goa Trip', 'trip', 'INR', [bob]);
+    // Bob paid ₹100 for both: Alice owes him ₹50.
+    await addExpense(goa, bob, 100, [alice, bob]);
+    const groupBefore = await groupBalances(goa, alice);
+    expect(groupBefore.status).toBe(200);
+    const homeBefore = await home(alice);
+    // What leaving the Group checks: Alice's open balances, per currency.
+    const openBefore = await balanceService.getMemberOpenBalances(goa, alice);
+    // A legacy row in Deutsche Marks: Alice paid DM 40 for both of them.
+    await Expense.collection.insertOne({
+      group: new mongoose.Types.ObjectId(goa),
+      description: 'Old Berlin rent',
+      amount: 40,
+      currency: 'DEM',
+      category: 'housing',
+      date: new Date(2026, 8, 15, 12),
+      paidBy: [{ user: new mongoose.Types.ObjectId(alice), amount: 40 }],
+      splitMethod: 'equal',
+      splitBetween: [
+        { user: new mongoose.Types.ObjectId(alice), amount: 20 },
+        { user: new mongoose.Types.ObjectId(bob), amount: 20 },
+      ],
+      tag: 'General',
+      createdBy: new mongoose.Types.ObjectId(alice),
+      isDeleted: false,
+      createdAt: new Date(2026, 8, 15, 12),
+      updatedAt: new Date(2026, 8, 15, 12),
+    });
+    expect((await groupBalances(goa, bob)).status).toBe(200);
+    const groupAfter = await groupBalances(goa, alice);
+    // No position in it: only the note for leaving names it to Alice, whom it involves.
+    const { unsupportedCurrencies, ...positions } = groupAfter.body.data;
+    expect(unsupportedCurrencies).toEqual(['DEM']);
+    expect({ ...groupAfter.body, data: positions }).toEqual(groupBefore.body);
+    expect(JSON.stringify(positions)).not.toContain('DEM');
+    const homeAfter = await home(alice);
+    expect(homeAfter).toEqual(homeBefore);
+    expect(JSON.stringify(homeAfter)).not.toContain('DEM');
+    expect(await balanceService.getMemberOpenBalances(goa, alice)).toEqual(openBefore);
+  });
+
+  /** A legacy row in a currency Splitbook no longer supports: `payer` paid 40, shared equally. */
+  async function legacyExpense(
+    groupId: string,
+    payer: string,
+    between: string[],
+    currency: string,
+  ) {
+    const share = 40 / between.length;
+    await Expense.collection.insertOne({
+      group: new mongoose.Types.ObjectId(groupId),
+      description: 'Old Berlin rent',
+      amount: 40,
+      currency,
+      category: 'housing',
+      date: new Date(2026, 8, 15, 12),
+      paidBy: [{ user: new mongoose.Types.ObjectId(payer), amount: 40 }],
+      splitMethod: 'equal',
+      splitBetween: between.map((user) => ({
+        user: new mongoose.Types.ObjectId(user),
+        amount: share,
+      })),
+      tag: 'General',
+      createdBy: new mongoose.Types.ObjectId(payer),
+      isDeleted: false,
+      createdAt: new Date(2026, 8, 15, 12),
+      updatedAt: new Date(2026, 8, 15, 12),
+    });
+  }
+
+  it('names the currencies to each member they involve, and to no one else', async () => {
+    const goa = await createGroup('Goa Trip', 'trip', 'INR', [bob, carol]);
+    await addExpense(goa, bob, 90, [alice, bob, carol]);
+    // Alice paid DM 40 for herself and Bob; Bob later paid Alice FRF 10.
+    await legacyExpense(goa, alice, [alice, bob], 'DEM');
+    await Settlement.collection.insertOne({
+      group: new mongoose.Types.ObjectId(goa),
+      paidBy: new mongoose.Types.ObjectId(bob),
+      paidTo: new mongoose.Types.ObjectId(alice),
+      amount: 10,
+      amountMinor: 1000,
+      moneyVersion: 1,
+      currency: 'FRF',
+      createdBy: new mongoose.Types.ObjectId(bob),
+      createdAt: new Date(2026, 8, 16, 12),
+      updatedAt: new Date(2026, 8, 16, 12),
+    });
+    expect((await groupBalances(goa, alice)).body.data.unsupportedCurrencies).toEqual([
+      'DEM',
+      'FRF',
+    ]);
+    expect((await groupBalances(goa, bob)).body.data.unsupportedCurrencies).toEqual(['DEM', 'FRF']);
+    // Carol shares only the rupee Expense: her read is as it always was.
+    expect((await groupBalances(goa, carol)).body.data).not.toHaveProperty('unsupportedCurrencies');
+  });
+
+  it('never stops a settled member leaving the Group', async () => {
+    const goa = await createGroup('Goa Trip', 'trip', 'INR', [bob]);
+    await legacyExpense(goa, bob, [alice, bob], 'DEM');
+    // Bob, a member Alice's Group holds Deutsche Marks with, is settled in rupees.
+    session.userId = bob;
+    const response = await leaveGroup(
+      new Request(`http://localhost/api/groups/${goa}/leave`, {
+        method: 'POST',
+      }),
+      { params: Promise.resolve({ id: goa }) },
+    );
+    expect(response.status).toBe(200);
+    expect(await groupService.isMember(goa, bob)).toBe(false);
+  });
+
+  it('leaves a Settlement in such a currency out too', async () => {
+    const goa = await createGroup('Goa Trip', 'trip', 'INR', [bob]);
+    await addExpense(goa, bob, 100, [alice, bob]);
+    const groupBefore = await groupBalances(goa, alice);
+    const homeBefore = await home(alice);
+    const openBefore = await balanceService.getMemberOpenBalances(goa, alice);
+    // A legacy payment in Deutsche Marks: Bob paid Alice DM 10.
+    await Settlement.collection.insertOne({
+      group: new mongoose.Types.ObjectId(goa),
+      paidBy: new mongoose.Types.ObjectId(bob),
+      paidTo: new mongoose.Types.ObjectId(alice),
+      amount: 10,
+      amountMinor: 1000,
+      moneyVersion: 1,
+      currency: 'DEM',
+      createdBy: new mongoose.Types.ObjectId(bob),
+      createdAt: new Date(2026, 8, 16, 12),
+      updatedAt: new Date(2026, 8, 16, 12),
+    });
+    const groupAfter = await groupBalances(goa, alice);
+    expect(groupAfter.status).toBe(200);
+    // Alice was paid in it: only Leave Group's note names it, never a position.
+    const { unsupportedCurrencies, ...positions } = groupAfter.body.data;
+    expect(unsupportedCurrencies).toEqual(['DEM']);
+    expect({ ...groupAfter.body, data: positions }).toEqual(groupBefore.body);
+    expect(await home(alice)).toEqual(homeBefore);
+    expect(await balanceService.getMemberOpenBalances(goa, alice)).toEqual(openBefore);
   });
 });
 

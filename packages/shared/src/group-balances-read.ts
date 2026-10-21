@@ -12,7 +12,14 @@ const currencyBalances = z.looseObject({
     .array(z.looseObject({ from: financialPerson, to: financialPerson, amount: amount.positive() }))
     .optional(),
 });
-const groupBalances = z.looseObject({ byCurrency: z.array(currencyBalances) });
+const groupBalances = z.looseObject({
+  byCurrency: z.array(currencyBalances),
+  /**
+   * Currencies Splitbook no longer supports that this Group holds money in involving the viewer,
+   * alphabetically; sent only when there are any (#812). That money is in no Balance.
+   */
+  unsupportedCurrencies: z.array(z.string()).optional(),
+});
 
 export type GroupBalancesRead = z.infer<typeof groupBalances>;
 export type GroupCurrencyBalancesRead = GroupBalancesRead['byCurrency'][number];

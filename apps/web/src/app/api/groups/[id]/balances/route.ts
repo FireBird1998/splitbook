@@ -26,7 +26,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // Balances agree with the Group and Expense reads a client starts beside it.
     await recurringExpenseService.generateDueExpenses(id);
 
-    const balances = await balanceService.getGroupBalances(id);
+    const balances = await balanceService.getGroupBalances(id, { viewerId: user.id! });
     if (!balances) return notFound('Group');
 
     return success(balances);

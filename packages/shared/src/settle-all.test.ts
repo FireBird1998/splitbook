@@ -263,3 +263,18 @@ describe('settleAllRates', () => {
     });
   });
 });
+
+describe('a currency Splitbook no longer supports (#812)', () => {
+  it('is never offered in Settle up, even if a read ever carried it', () => {
+    // A legacy Deutsche Mark Debt beside the rupee and euro ones. Balances leave it out; if a read
+    // ever sent it, Settle up still wouldn't offer to settle it.
+    const withMarks = [
+      ...buckets,
+      { currency: 'DEM', debts: [{ from: alex, to: sam, amount: 40 }] },
+    ];
+    expect(settleAllOffers(withMarks, ALEX, ORDER)).toEqual([
+      expect.objectContaining({ paidBy: ALEX, paidTo: SAM, debts: twoDebts }),
+    ]);
+    expect(settleAllDebtsBetween(withMarks, ALEX, SAM, ORDER)).toEqual(twoDebts);
+  });
+});

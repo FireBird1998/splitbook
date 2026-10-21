@@ -33,18 +33,65 @@ import type {
   HomeSuggestedPayment,
   UserBalancesResponse,
 } from '@splitbook/shared/types';
+import { getCurrency } from '@splitbook/shared/currency';
 import { recurringExpenseService } from './recurring-expense.service';
 import { PERSON_FIELDS } from './person-fields';
+
+/**
+ * Balances are positions, and no position includes a currency Splitbook no longer supports,
+ * such as a legacy DEM Expense: the Expenses read gives it its own Spent line (#810), but it has
+ * no Balance, Debt or Suggested payment here, so nothing is settled in it (#812).
+ */
+const inSupportedCurrencies = <T extends { currency: string }>(rows: T[]) =>
+  rows.filter((row) => !!getCurrency(row.currency));
+
+type Party = { user?: unknown } | null | undefined;
+const idOf = (value: unknown) =>
+  String(value && typeof value === 'object' && '_id' in value ? value._id : value);
+
+/**
+ * The currencies Splitbook no longer supports that a member has money in here, alphabetically:
+ * an Expense they paid or share, or a Settlement they paid or were paid. Balances leave that
+ * money out, so Leave Group names it instead (#812).
+ */
+function unsupportedCurrenciesOf(
+  expenses: Array<{ currency: string; paidBy?: Party[]; splitBetween?: Party[] }>,
+  settlements: Array<{ currency: string; paidBy?: unknown; paidTo?: unknown }>,
+  userId: string,
+) {
+  const codes = new Set<string>();
+  for (const expense of expenses)
+    if (
+      !getCurrency(expense.currency) &&
+      [...(expense.paidBy ?? []), ...(expense.splitBetween ?? [])].some(
+        (row) => idOf(row?.user) === userId,
+      )
+    )
+      codes.add(expense.currency);
+  for (const settlement of settlements)
+    if (
+      !getCurrency(settlement.currency) &&
+      [settlement.paidBy, settlement.paidTo].some((party) => idOf(party) === userId)
+    )
+      codes.add(settlement.currency);
+  return [...codes].sort();
+}
 
 export class BalanceService {
   /**
    * Calculate balances for a group.
    */
-  async getGroupBalances(groupId: string, { includeDebtsBeforeSimplifying = true } = {}) {
+  async getGroupBalances(
+    groupId: string,
+    {
+      includeDebtsBeforeSimplifying = true,
+      viewerId,
+    }: { includeDebtsBeforeSimplifying?: boolean; viewerId?: string } = {},
+  ) {
     await connectDB();
 
     // Get all non-deleted expenses and settlements
-    const [expenses, settlements, group] = await Promise.all([
+    const [storedExpenses, storedSettlements, group] = await Promise.all([
       Expense.find({ group: groupId, isDeleted: false })
         .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
         .lean(),
@@ -56,6 +103,8 @@ export class BalanceService {
 
     if (!group) return null;
 
+    const expenses = inSupportedCurrencies(storedExpenses);
+    const settlements = inSupportedCurrencies(storedSettlements);
     for (const expense of expenses) assertStoredExpenseMoney(expense);
     const present = [
       ...expenses.map((expense) => expense.currency),
@@ -153,10 +202,15 @@ export class BalanceService {
       },
     );
     const defaultBalances = byCurrency.find((bucket) => bucket.currency === group.defaultCurrency)!;
+    const unsupported = viewerId
+      ? unsupportedCurrenciesOf(storedExpenses, storedSettlements, viewerId)
+      : [];
     return {
       ...defaultBalances,
       byCurrency,
       hasMixedCurrencies: hasMixedCurrencies(present),
+      // Only when there are any, so every other read answers as it always did (#812).
+      ...(unsupported.length ? { unsupportedCurrencies: unsupported } : {}),
     };
   }
 
@@ -167,7 +221,7 @@ export class BalanceService {
   async getMemberOpenBalances(groupId: string, userId: string) {
     await connectDB();
 
-    const [expenses, settlements] = await Promise.all([
+    const [storedExpenses, storedSettlements] = await Promise.all([
       Expense.find({ group: groupId, isDeleted: false })
         .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
         .lean(),
@@ -176,6 +230,8 @@ export class BalanceService {
         .lean(),
     ]);
 
+    const expenses = inSupportedCurrencies(storedExpenses);
+    const settlements = inSupportedCurrencies(storedSettlements);
     for (const expense of expenses) assertStoredExpenseMoney(expense);
     const currencies = [
       ...new Set([
@@ -223,7 +279,7 @@ export class BalanceService {
     );
 
     const groupIds = groups.map((group) => group._id);
-    const [allExpenses, allSettlements] = await Promise.all([
+    const [storedExpenses, storedSettlements] = await Promise.all([
       Expense.find({ group: { $in: groupIds }, isDeleted: false })
         .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
         .lean(),
@@ -231,6 +287,8 @@ export class BalanceService {
         .select('group currency moneyVersion amount amountMinor paidBy paidTo')
         .lean(),
     ]);
+    const allExpenses = inSupportedCurrencies(storedExpenses);
+    const allSettlements = inSupportedCurrencies(storedSettlements);
 
     for (const expense of allExpenses) assertStoredExpenseMoney(expense);
     const expensesByGroup = new Map<string, typeof allExpenses>();
