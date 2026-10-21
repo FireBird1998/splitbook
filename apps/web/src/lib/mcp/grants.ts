@@ -12,6 +12,8 @@ export interface McpConnection {
   clientId: string;
   generation: string;
   createdAt: Date;
+  name?: string;
+  lastUsedAt?: Date | null;
 }
 export interface McpConsent {
   id: string;
@@ -36,12 +38,13 @@ export async function requireMcpMember(adapter: Adapter, userId: string, env: Au
 
 /** Also used by token issuance: an old refresh token can never adopt a new generation. */
 export async function currentMcpGrant(
-  adapter: Adapter,
+  adapter: Adapter & Pick<AuthContext['adapter'], 'update'>,
   env: AuthEnv,
   userId: string,
   clientId: string,
   generation: unknown,
   scopes: readonly string[],
+  recordUse = false,
 ): Promise<boolean> {
   if (typeof generation !== 'string') return false;
   try {
@@ -67,5 +70,28 @@ export async function currentMcpGrant(
       { field: 'referenceId', value: generation },
     ],
   });
-  return !!consent && scopes.every((scope) => consent.scopes.includes(scope));
+  if (!consent || !scopes.every((scope) => consent.scopes.includes(scope))) return false;
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 60_000);
+  if (recordUse && (!connection.lastUsedAt || connection.lastUsedAt <= cutoff)) {
+    // A database predicate, not a process-local timer: concurrent instances write at most
+    // once per minute, and an in-flight call cannot touch a newly revoked generation.
+    try {
+      await adapter.update({
+        model: 'mcpConnection',
+        where: [
+          { field: 'id', value: connection.id },
+          { field: 'generation', value: generation },
+          connection.lastUsedAt
+            ? { field: 'lastUsedAt', value: cutoff, operator: 'lte' }
+            : { field: 'lastUsedAt', value: null },
+        ],
+        update: { lastUsedAt: now },
+      });
+    } catch {
+      // Observability must not revoke access. The unchanged timestamp makes the next call retry.
+      console.warn('Could not record assistant last use; the next authorized call will retry.');
+    }
+  }
+  return true;
 }

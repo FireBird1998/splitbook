@@ -207,7 +207,15 @@ export function connectionTests(mongo = false) {
       auth,
       resource,
       async (subject, client, generation, scopes) =>
-        currentMcpGrant((await auth.$context).adapter, env, subject, client, generation, scopes),
+        currentMcpGrant(
+          (await auth.$context).adapter,
+          env,
+          subject,
+          client,
+          generation,
+          scopes,
+          true,
+        ),
       async (server, id, scopes, authorize, clientId) => {
         if (exposeTools)
           registerSplitbookTools(
@@ -268,6 +276,114 @@ export function connectionTests(mongo = false) {
   });
 
   describe('MCP connection authorization', () => {
+    const connectionList = async () => {
+      const response = await fetch(`${origin}/api/auth/mcp/connections`, { headers: { cookie } });
+      expect(response.status).toBe(200);
+      return (await response.json()).connections as Array<{
+        id: string;
+        name: string;
+        access: string;
+        lastUsedAt: string | null;
+      }>;
+    };
+
+    it('lists the assistant metadata name, access and Not used yet before an authorized call', async () => {
+      expect(await connectionList()).toMatchObject([
+        {
+          name: 'Synthetic MCP Client',
+          access: 'Ledger',
+          lastUsedAt: null,
+        },
+      ]);
+    });
+
+    it('records authorized SDK calls at most once a minute and does not count refused calls or Settings reads', async () => {
+      const now = new Date();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(now);
+      const client = new Client({ name: 'last-use-test', version: '1' });
+      try {
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(resource), {
+            requestInit: { headers: { Authorization: `Bearer ${token}` } },
+          }),
+        );
+        expect((await connectionList())[0].lastUsedAt).toBe(now.toISOString());
+        vi.setSystemTime(new Date(now.getTime() + 59_999));
+        await client.callTool({ name: 'connection_status', arguments: {} });
+        expect((await connectionList())[0].lastUsedAt).toBe(now.toISOString());
+        const later = new Date(now.getTime() + 60_000);
+        vi.setSystemTime(later);
+        await Promise.all([
+          client.listTools(),
+          client.callTool({ name: 'connection_status', arguments: {} }),
+        ]);
+        expect((await connectionList())[0].lastUsedAt).toBe(later.toISOString());
+        vi.setSystemTime(new Date(now.getTime() + 120_000));
+        expect(
+          (
+            await fetch(resource, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}broken` },
+            })
+          ).status,
+        ).toBe(401);
+        expect(
+          (
+            await fetch(resource, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, Origin: 'https://untrusted.example' },
+            })
+          ).status,
+        ).toBe(403);
+        expect((await connectionList())[0].lastUsedAt).toBe(later.toISOString());
+      } finally {
+        await client.close();
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps an authorized HTTP call working when last-use storage fails and retries next call', async () => {
+      const now = new Date(Date.now() + 180_000);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(now);
+      const client = new Client({ name: 'last-use-failure-test', version: '1' });
+      const adapter = (await auth.$context).adapter;
+      const originalUpdate = adapter.update.bind(adapter);
+      let failLastUse = false;
+      const update = vi.spyOn(adapter, 'update').mockImplementation(async (args) => {
+        if (args.model === 'mcpConnection' && failLastUse) {
+          failLastUse = false;
+          throw new Error('Synthetic last-use storage failure');
+        }
+        return originalUpdate(args);
+      });
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(resource), {
+            requestInit: { headers: { Authorization: `Bearer ${token}` } },
+          }),
+        );
+        const previous = (await connectionList())[0].lastUsedAt;
+        const later = new Date(now.getTime() + 60_000);
+        vi.setSystemTime(later);
+        failLastUse = true;
+        await expect(client.listTools()).resolves.toHaveProperty('tools');
+        expect((await connectionList())[0].lastUsedAt).toBe(previous);
+        expect(warning).toHaveBeenCalledWith(
+          'Could not record assistant last use; the next authorized call will retry.',
+        );
+        await client.listTools();
+        expect((await connectionList())[0].lastUsedAt).toBe(later.toISOString());
+      } finally {
+        update.mockRestore();
+        warning.mockRestore();
+        await client.close();
+        vi.useRealTimers();
+      }
+    });
+
     it('challenges anonymous callers with resource discovery and rejects browser cookies as MCP credentials', async () => {
       const response = await fetch(resource, { method: 'POST', headers: { cookie } });
       expect(response.status).toBe(401);
@@ -294,6 +410,7 @@ export function connectionTests(mongo = false) {
               client,
               generation,
               scopes,
+              true,
             ),
           (server, id, scopes, authorize) =>
             registerSplitbookTools(server, { id, authorize }, scopes, origin),
@@ -449,8 +566,10 @@ export function connectionTests(mongo = false) {
     it('preserves the signed login request and keeps Draft permission opt-in', async () => {
       const ledgerOnly = await authorizeClient(true, false, true);
       expect(ledgerOnly.scope.split(' ')).not.toContain(MCP_DRAFT_SCOPE);
+      expect((await connectionList())[0].access).toBe('Ledger');
       const withDrafts = await authorizeClient(true, true);
       expect(withDrafts.scope.split(' ')).toContain(MCP_DRAFT_SCOPE);
+      expect((await connectionList())[0].access).toBe('Ledger + To review');
       await authorizeClient(); // return to ledger-only consent for later assertions
     });
 

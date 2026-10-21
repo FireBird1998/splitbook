@@ -79,3 +79,23 @@ The cap is 100 active Drafts per member per Group; another member’s Drafts nev
 Account deletion invokes the Better Auth user-delete hook, fencing concurrent Draft writes and removing all owned Draft content/receipts. The hook supports the existing account lifecycle; this change does not introduce a new account-deletion UI. Administrative account removals must use that lifecycle rather than bypassing it with raw Mongo deletion.
 
 MCP requests are bounded to 128 KiB and 120 requests per member per minute across application instances. Private responses are no-store. Inputs and failures never log Draft content at the new boundary. Ledger tools read only already-recorded Expenses; they do not materialize recurring Expenses. Spending windows use explicitly reported inclusive UTC calendar days, with full-window totals separated by currency and paginated details.
+
+## Settings connection reads (#615)
+
+`GET /api/auth/mcp/connections` is session-authenticated and owner-scoped. Each connection
+includes `id`, `clientId`, `name`, `scopes`, `access` (`Ledger` or `Ledger + To review`) and
+`lastUsedAt` (an ISO instant, or `null` for Not used yet). Pagination and no-store behaviour
+are unchanged. Android can use this same reply. Group exclusions and reach counts belong
+to #617; this change does not introduce a second Group access model.
+
+The durable `mcpConnection` adds only optional `name` and `lastUsedAt` fields. New connections
+save the cleaned metadata name, and approval refreshes it if the metadata changed. Older
+records fall back to the existing metadata-name reader without a migration. Authorized MCP
+calls update last use with a generation-scoped database predicate, at most once a minute
+across instances. Settings reads, token issuance and rejected credentials do not count as
+assistant use. Disconnect clears last use while rotating the generation, so reconnecting
+starts at Not used yet. Existing Drafts and the immediate revocation boundary are unchanged.
+
+Settings asks for confirmation before `POST /api/auth/mcp/revoke`. Cancelling makes no
+revocation request; confirming explains that access stops at once and To review stays.
+The server remains responsible for ownership and live generation checks.

@@ -37,6 +37,7 @@ export async function POST(request: Request) {
         clientId,
         generation,
         scopes,
+        true,
       ),
     async (server, id, scopes, authorize, clientId) =>
       registerSplitbookTools(

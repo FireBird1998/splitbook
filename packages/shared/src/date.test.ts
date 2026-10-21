@@ -28,6 +28,12 @@ describe('day-first display dates', () => {
     }
   });
 
+  it('can omit the current year without omitting a different year', () => {
+    expect(formatDate(new Date(2026, 9, 19), { omitCurrentYear: true })).toBe('19 Oct');
+    expect(formatDate(new Date(2025, 9, 19), { omitCurrentYear: true })).toBe('19 Oct 2025');
+    expect(formatDate(new Date(2026, 9, 19))).toBe('19 Oct 2026');
+  });
+
   it('keeps Today and Yesterday with their local time', () => {
     expect(formatDate(new Date(2026, 9, 21, 0, 5))).toBe('Today');
     expect(formatDate(new Date(2026, 9, 20, 23, 59))).toBe('Yesterday');

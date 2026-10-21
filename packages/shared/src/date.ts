@@ -16,11 +16,19 @@ import {
  * Format an instant’s local day for display. Pass Expense calendar days through
  * expenseLocalDate first so the viewer’s zone cannot shift the day.
  */
-export function formatDate(date: Date | string): string {
+export function formatDate(
+  date: Date | string,
+  options: { omitCurrentYear?: boolean } = {},
+): string {
   const d = new Date(date);
   if (isToday(d)) return 'Today';
   if (isYesterday(d)) return 'Yesterday';
-  return format(d, 'd MMM yyyy');
+  return format(
+    d,
+    options.omitCurrentYear && d.getFullYear() === new Date().getFullYear()
+      ? 'd MMM'
+      : 'd MMM yyyy',
+  );
 }
 
 /**
