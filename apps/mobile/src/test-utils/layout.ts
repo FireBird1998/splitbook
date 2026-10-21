@@ -236,6 +236,32 @@ export function unreadText(
   return [...found];
 }
 
+/**
+ * How much of its end a one-line text cut in the middle (`ellipsizeMode="middle"`) still shows,
+ * as `layoutHeight` lays the tree out `width` wide at this text size: Android keeps as much of
+ * the end as fits in half its line beside the ellipsis. `said` picks the text by its words; null
+ * when no text says it. The widths are estimates (see `layoutWidth`), so check on a device too.
+ */
+export function middleCutEnd(node: Node | null, fontScale: number, width: number, said: string) {
+  let kept: string | null = null;
+  layoutHeight(node, fontScale, width, {
+    text: (text, room) => {
+      const words = runs(text, {})
+        .map(({ characters }) => characters)
+        .join('');
+      if (words !== said) return;
+      const measure = (characters: string) =>
+        textWidth({ ...text, children: [characters] }, fontScale);
+      const half = (room - measure('…')) / 2;
+      let end = measure(words) <= room ? words : '';
+      while (end.length < words.length && measure(words.slice(-end.length - 1)) <= half)
+        end = words.slice(-end.length - 1);
+      kept = end;
+    },
+  });
+  return kept;
+}
+
 /** Every host node under `node`, depth first, whose props match. */
 export function findHosts(
   node: Node | Node[] | string | null,

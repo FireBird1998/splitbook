@@ -24,6 +24,7 @@ import {
   hairSpace,
   labelRuns,
   largeTextWindows,
+  middleCutEnd,
   unreadText,
 } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
@@ -942,5 +943,19 @@ describe('an assistant’s credit on an Expense row (#751)', () => {
     setWindow({ fontScale: 2 });
     const { root } = preparedView();
     expect(credit(root).props.numberOfLines).toBe(0);
+  });
+
+  // On the emulator, beside the amount it read "prepared by …xample.test" on a 360dp phone.
+  it.each([1, 1.3])('keeps the domain readable on a 360dp phone at %s× text', (fontScale) => {
+    setWindow({ width: 360, height: 640, fontScale });
+    preparedView();
+    const [row] = findHosts(
+      screen!.toJSON(),
+      (props, type) => type === 'Pressable' && flatten(props.style).minHeight === 60,
+    );
+    // The row lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
+    expect(middleCutEnd(row!, fontScale, 360 - 34, `prepared by ${host}`)).toContain(
+      'evil.example.test',
+    );
   });
 });

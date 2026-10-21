@@ -8,7 +8,7 @@ import {
 } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyActivity, type ActivityEvent, type ActivityState } from '../data/activity';
-import { flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
+import { flatten, layoutHeight, layoutWidth, middleCutEnd } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { GroupActivity } from './group-activity';
@@ -545,5 +545,19 @@ describe('an assistant’s credit in an Activity row (#751)', () => {
     setWindow({ fontScale: 2 });
     const { root } = render({ state: activity({ events: [prepared] }) });
     expect(credit(root).props.numberOfLines).toBe(0);
+  });
+
+  it.each([1, 1.3])('keeps the domain readable on a 360dp phone at %s× text', (fontScale) => {
+    setWindow({ width: 360, height: 640, fontScale });
+    render({ state: activity({ events: [prepared] }) });
+    // The list lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
+    expect(
+      middleCutEnd(
+        screen!.toJSON() as ReactTestRendererJSON,
+        fontScale,
+        360 - 34,
+        `prepared by ${host}`,
+      ),
+    ).toContain('evil.example.test');
   });
 });
