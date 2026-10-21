@@ -13,7 +13,6 @@ import type { Theme } from '@mui/material/styles';
 import { getCurrency, getCurrencyPrecision, wholeUnit } from '@splitbook/shared/currency';
 import {
   rateBadge,
-  rateMoney,
   rateNote,
   rateText,
   type CrossCurrencyEntry,
@@ -22,7 +21,10 @@ import {
   type PaymentCurrencies,
   type RateSuggestion,
 } from '@splitbook/shared/cross-currency-payment';
-import type { CrossCurrencySettlementFields } from '@splitbook/shared/cross-currency-settlement';
+import {
+  decimalMoney,
+  type CrossCurrencySettlementFields,
+} from '@splitbook/shared/cross-currency-settlement';
 import type { RateSuggestionState } from '@/lib/hooks/use-rate-suggestion';
 import { money } from './record-payment';
 
@@ -267,7 +269,7 @@ export default function CrossCurrencyFields({
                   onClick={() => onUseSuggestion(rateText(note.useSuggestion!))}
                   sx={{ minHeight: 32, px: 1, fontSize: '0.75rem' }}
                 >
-                  Use {rateMoney(note.useSuggestion, paidCurrency)}
+                  Use {decimalMoney(rateText(note.useSuggestion), paidCurrency)}
                 </Button>
               )}
             </Box>

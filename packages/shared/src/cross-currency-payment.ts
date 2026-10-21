@@ -7,10 +7,11 @@
 import { format } from 'date-fns';
 import { z } from 'zod';
 import { readAmountEntry } from './amount-entry';
-import { formatCurrency, getCurrency, getCurrencyPrecision } from './currency';
+import { formatCurrency, getCurrencyPrecision } from './currency';
 import { toMajorAmount } from './exact-money';
 import {
   calculateCrossCurrencySettlement,
+  decimalMoney,
   rateFraction,
   type CrossCurrencyAmounts,
   type CrossCurrencySettlementFields,
@@ -259,13 +260,6 @@ export function rateBadge(
   return suggestion.ageDays > OLD_AFTER_DAYS ? `${suggestion.ageDays} days old` : 'Suggested';
 }
 
-/** "₹92.10": a rate in the paid currency, never rounded to the currency's minor unit. */
-export function rateMoney(rate: string, currency: string): string {
-  const [whole, fraction = ''] = rateText(rate).split('.');
-  const symbol = getCurrency(currency)?.symbol ?? `${currency} `;
-  return `${symbol}${Number(whole).toLocaleString('en-US')}.${fraction}`;
-}
-
 /** "20 Oct", from a provider's calendar date, read as that date wherever the viewer is. */
 function calendarDay(date: string): string {
   const [year, month, day] = date.split('-').map(Number);
@@ -312,7 +306,7 @@ export function rateNote(
   const ratesOf = `rates of ${calendarDay(suggestion.asOf)}`;
   if (kind === 'custom')
     return {
-      text: `Your rate. Suggested ${rateMoney(suggestion.rate, paidCurrency)}${name ? ` from ${name}` : ''}, ${ratesOf}.`,
+      text: `Your rate. Suggested ${decimalMoney(rateText(suggestion.rate), paidCurrency)}${name ? ` from ${name}` : ''}, ${ratesOf}.`,
       attribution,
       useSuggestion: suggestion.rate,
     };
