@@ -291,6 +291,55 @@ export function middleCutEnd(node: Node | null, fontScale: number, width: number
   return kept;
 }
 
+/**
+ * How far past its box a one-line text cut at its tail (the default `ellipsizeMode`) draws its
+ * "…", in dp, as `layoutHeight` lays the tree out `width` wide at this text size (#785). Android
+ * keeps the words that fit beside the ellipsis as the text view's paint measures it
+ * (`phoneEllipsis`, at the text's own `fontSize`, not its words'), then draws the words' own
+ * "…" after them. 0 or less when it draws inside its box, or isn't cut; null when no text says
+ * `said`, ignoring white space after it. The widths are estimates (see `layoutWidth`).
+ */
+export function tailCutOverrun(node: Node | null, fontScale: number, width: number, said: string) {
+  let overrun: number | null = null;
+  layoutHeight(node, fontScale, width, {
+    text: (text, room) => {
+      const parts = runs(text, {});
+      const words = parts.map(({ characters }) => characters).join('');
+      if (words.trimEnd() !== said) return;
+      // The words' own face and size, nested in the text or not.
+      const measure = (characters: string) => runWidth(characters, parts.at(-1)!.style, fontScale);
+      const cut =
+        Number(text.props.numberOfLines) === 1 && (text.props.ellipsizeMode ?? 'tail') === 'tail';
+      if (!cut || measure(words.trimEnd()) <= room) return void (overrun = 0);
+      const ellipsis = phoneEllipsis * number(flatten(text.props.style).fontSize);
+      let kept = '';
+      while (
+        kept.length < words.length &&
+        measure(words.slice(0, kept.length + 1)) + ellipsis <= room
+      )
+        kept = words.slice(0, kept.length + 1);
+      overrun = measure(`${kept}…`) - room;
+    },
+  });
+  return overrun;
+}
+
+/** A rendered node's words, with those of the texts nested in it (#785). */
+export const wordsOf = (node: { children?: unknown } | string): string =>
+  typeof node === 'string'
+    ? node
+    : ((node.children ?? []) as ({ children?: unknown } | string)[]).map(wordsOf).join('');
+
+/**
+ * The texts under `node` that aren't nested in another text: one per line or label, its words
+ * perhaps in a text nested inside, as a line cut at its tail keeps them (#785).
+ */
+export function outerTexts(node: Node | string | null): Node[] {
+  if (node === null || typeof node === 'string') return [];
+  if (node.type === 'Text') return [node];
+  return (node.children ?? []).flatMap(outerTexts);
+}
+
 /** Every host node under `node`, depth first, whose props match. */
 export function findHosts(
   node: Node | Node[] | string | null,

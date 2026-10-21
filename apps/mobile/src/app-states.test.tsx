@@ -12,7 +12,14 @@ import { createMobileController, type MobileController } from './data/mobile-con
 import type { FetchResponse } from './data/types';
 import { balanceWidth, HomeBalances } from './ui/home';
 import { refreshFeedback, refreshedLabel } from './ui/refresh-feedback';
-import { findHosts, flatten, layoutHeight, layoutWidth, unreadText } from './test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  layoutHeight,
+  layoutWidth,
+  unreadText,
+  wordsOf,
+} from './test-utils/layout';
 import { loop, setFileWindow, setReduceMotion, setWindow, timing } from './test-utils/native';
 import { progressHeight, sweepTrack } from './ui/compact';
 import { savedQueriesIn } from './test-utils/saved-queries';
@@ -773,10 +780,8 @@ async function start(phone: ReturnType<typeof device>) {
     tap: (label: string) => void button(label)!.props.onPress(),
     disabled: (label: string) => button(label)!.props.accessibilityState?.disabled === true,
     progress: () => hosts((p) => p.accessibilityRole === 'progressbar'),
-    headers: () =>
-      hosts((p) => p.accessibilityRole === 'header').map((node: ReactTestInstance) =>
-        node.children.filter((child) => typeof child === 'string').join(''),
-      ),
+    /** Each header's words, with those of the texts nested in it (#785). */
+    headers: () => hosts((p) => p.accessibilityRole === 'header').map(wordsOf),
     pull: () =>
       hosts((p) => !!p.refreshControl)[0].props.refreshControl.props as {
         refreshing: boolean;

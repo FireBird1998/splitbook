@@ -16,9 +16,12 @@ import {
   largeTextWindows,
   layoutHeight,
   middleCutEnd,
+  tailCutOverrun,
   unreadText,
+  wordsOf,
 } from '../../test-utils/layout';
 import { outfitRegularWidth } from '../../test-utils/app-font';
+import { outfitAdvance } from './outfit-metrics';
 import { activateWithScreenReader, setWindow, touchAlong } from '../../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -37,6 +40,7 @@ const {
   IconTile,
   LinearProgress,
   ListRow,
+  Money,
   RowAmount,
   SectionHeader,
   SegmentedControl,
@@ -47,7 +51,9 @@ const {
   TileGrid,
   TopBar,
   ellipsisRoom,
+  moneySizes,
   scaledSp,
+  textVariants,
 } = await import('./index');
 const { ThemeContext } = await import('../theme');
 
@@ -1048,5 +1054,115 @@ describe('a line the app cuts in the middle (#770)', () => {
     expect(line().props.accessibilityLabel).toBe(credits[0]);
     layOut(2000);
     expect(shown().trimEnd()).toBe(credits[0]);
+  });
+});
+
+// #785, seen on the emulator at 360dp: a line cut at its tail lost its "…"'s last dot, "and the .."
+// at 130% and "j..." at 115%. Android sizes that ellipsis with the text view's paint, in the
+// phone's font at the text's unscaled size, then draws Outfit's, wider, at the phone's text size.
+describe('a line cut at its tail draws its "…" inside its box (#785)', () => {
+  const title = 'Parasailing, jet ski and the banana boat ride at Calangute beach';
+  /** The line the text view draws, and the texts nested in it. */
+  const cutTitle = () => {
+    render(
+      <CompactText weight="semibold" numberOfLines={1}>
+        {title}
+      </CompactText>,
+    );
+    const line = renderer!.toJSON() as ReactTestRendererJSON;
+    return { line, texts: findHosts(line, (_, type) => type === 'Text') };
+  };
+
+  // The text view's paint takes the line's own fontSize, in dp, not scaled; the words are drawn
+  // at theirs, scaled. In a phone font whose "…" is half an em, the paint measures the ellipsis
+  // at least as wide as the words' face draws it: Outfit's is 0.75em, IBM Plex Mono's 0.6em.
+  const cuts = [
+    {
+      name: 'a title cut after one line',
+      element: (
+        <CompactText weight="semibold" numberOfLines={1}>
+          {title}
+        </CompactText>
+      ),
+      drawn: (fontScale: number) =>
+        outfitAdvance('…')! * scaledSp(textVariants.body.fontSize as number, fontScale),
+    },
+    {
+      name: 'a title cut after two lines',
+      element: (
+        <CompactText weight="semibold" numberOfLines={2}>
+          {title}
+        </CompactText>
+      ),
+      drawn: (fontScale: number) =>
+        outfitAdvance('…')! * scaledSp(textVariants.body.fontSize as number, fontScale),
+    },
+    {
+      name: 'an amount',
+      element: <Money>₹12,34,56,789.00</Money>,
+      drawn: (fontScale: number) => 0.6 * scaledSp(moneySizes.list.fontSize as number, fontScale),
+    },
+  ];
+  it.each(
+    cuts.flatMap((cut) => [1, 1.15, 1.3, 1.45, 2].map((fontScale) => ({ ...cut, fontScale }))),
+  )(
+    'measures the "…" of $name no narrower than it draws it, at $fontScale× text',
+    ({ element, drawn, fontScale }) => {
+      setWindow({ width: 360, height: 640, fontScale });
+      render(element);
+      const line = renderer!.toJSON() as ReactTestRendererJSON;
+      expect(0.5 * Number(flatten(line.props.style).fontSize)).toBeGreaterThanOrEqual(
+        drawn(fontScale),
+      );
+    },
+  );
+
+  it('keeps its line height and its words, and the screen reader hears them once', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1.3 });
+    const { line, texts } = cutTitle();
+    // The line is as tall as its variant's, whatever its paint's size.
+    expect(flatten(line.props.style).lineHeight).toBe(textVariants.body.lineHeight);
+    for (const text of texts.slice(1)) {
+      expect(flatten(text.props.style).lineHeight).toBeUndefined();
+      expect(flatten(text.props.style).fontSize).toBe(textVariants.body.fontSize);
+      // A nested text is part of the line's one text view, never a node of its own.
+      expect(text.props.accessible).toBeUndefined();
+      expect(text.props.accessibilityLabel).toBeUndefined();
+    }
+    expect(wordsOf(line)).toBe(title);
+  });
+
+  // Android sizes text outside the words' span, an empty line or a new line at the end, with
+  // the line's own paint and none of the words' line height.
+  it.each(['', 'A last line ends here\n'])(
+    'leaves a line with nothing to cut as it is: %j',
+    (words) => {
+      setWindow({ width: 360, height: 640, fontScale: 2 });
+      render(<CompactText numberOfLines={1}>{words}</CompactText>);
+      const line = renderer!.toJSON() as ReactTestRendererJSON;
+      expect(findHosts(line, (_, type) => type === 'Text')).toHaveLength(1);
+      expect(flatten(line.props.style).fontSize).toBe(textVariants.body.fontSize);
+    },
+  );
+
+  it.each([1, 1.15, 1.3, 1.45])('at %s× text, on a line of any width', (fontScale) => {
+    setWindow({ width: 360, height: 640, fontScale });
+    for (const look of [
+      { variant: 'body', weight: 'semibold' },
+      { variant: 'caption', weight: undefined },
+    ] as const) {
+      render(
+        <CompactText variant={look.variant} weight={look.weight} numberOfLines={1}>
+          {title}
+        </CompactText>,
+      );
+      const line = renderer!.toJSON() as ReactTestRendererJSON;
+      for (let width = 200; width <= 330; width++)
+        expect(
+          tailCutOverrun(line, fontScale, width, title),
+          `${look.variant} ${width}dp`,
+        ).toBeLessThanOrEqual(0);
+      act(() => renderer?.unmount());
+    }
   });
 });

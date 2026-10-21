@@ -16,7 +16,7 @@ import {
   recordWaitsForDetails,
 } from './group-balances';
 import type { PendingPayment } from '../data/settlement';
-import { findHosts, flatten, largeTextWindows, unreadText } from '../test-utils/layout';
+import { findHosts, flatten, largeTextWindows, outerTexts, unreadText } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { hairSpace } from './compact';
 import { ThemeContext, fonts } from './theme';
@@ -741,7 +741,7 @@ describe('Record payment’s amount at large text (#639)', () => {
       // One column, centred in the button: the words, then the amount.
       expect(parts).toHaveLength(1);
       expect(flatten(parts[0]!.props.style).alignItems).toBe('center');
-      expect(findHosts(parts[0]!, (_props, type) => type === 'Text')).toHaveLength(2);
+      expect(outerTexts(parts[0]!)).toHaveLength(2);
     }
   });
 });
