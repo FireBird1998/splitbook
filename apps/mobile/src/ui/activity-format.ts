@@ -1,5 +1,9 @@
 import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST } from '@splitbook/shared/group-themes';
+import {
+  extraCurrencyChange,
+  extraCurrencyChangeWords,
+} from '@splitbook/shared/group-currency-settings';
 import type { ActivityEvent } from '../data/activity';
 import {
   describeExpenseChanges,
@@ -157,7 +161,7 @@ const groupFields = new Map<
   ['defaultCurrency', { label: 'Currency', verb: 'changed the currency', value: currencies }],
   [
     'alternateCurrencies',
-    { label: 'Other currencies', verb: 'changed the other currencies', value: currencies },
+    { label: 'Extra currencies', verb: 'changed the extra currencies', value: currencies },
   ],
   ['startDate', { label: 'Start date', verb: 'changed the dates', value: calendarDay }],
   ['endDate', { label: 'End date', verb: 'changed the dates', value: calendarDay }],
@@ -222,9 +226,12 @@ function groupChange(
   if (!known) return null;
   const before = known.value(change.old);
   const after = known.value(change.new);
+  // An extra currency added or removed is named in the headline (#721).
+  const listChange = field === 'alternateCurrencies' && extraCurrencyChange({ [field]: change });
+  const named = listChange && (!listChange.added.length || !listChange.removed.length);
   return {
-    headline: { verb: known.verb, subject: null },
-    summary: `${before} → ${after}`,
+    headline: { verb: named ? extraCurrencyChangeWords(listChange) : known.verb, subject: null },
+    summary: named ? null : `${before} → ${after}`,
     line: { label: known.label, before, after },
   };
 }

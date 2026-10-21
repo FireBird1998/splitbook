@@ -70,5 +70,8 @@ export const updateGroupSchema = z
   .superRefine(tripDatesRefine)
   .superRefine(extraCurrenciesRefine);
 
+/** A member adding one extra currency (#721); the Group's currency rule checks the code. */
+export const addGroupCurrencySchema = z.object({ currency: z.string() });
+
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;

@@ -67,7 +67,6 @@ export class SettlementService {
     // A retry of a payment recorded before the archive is confirmed above; nothing new is (#578).
     if (group.isArchived) throw new Error('GROUP_ARCHIVED');
     assertGroupCurrency(group, data.currency);
-    await lockLedgerCurrency(groupId, data.currency);
 
     const settlementId = new Types.ObjectId();
     const names = await User.find({ _id: { $in: [paidBy, data.paidTo] } })
@@ -87,8 +86,10 @@ export class SettlementService {
     try {
       settlement = await withGroupMutation(
         groupId,
-        async () =>
-          Settlement.create({
+        async () => {
+          // In the insert's own mutation, so a removal of the currency can't come in between.
+          await lockLedgerCurrency(groupId, data.currency);
+          return Settlement.create({
             _id: settlementId,
             group: groupId,
             paidBy,
@@ -101,7 +102,8 @@ export class SettlementService {
             createdBy: userId,
             ...(requestKey ? { creationRequest: createRequestMetadata(requestKey, command) } : {}),
             pendingActivity: [event],
-          }),
+          });
+        },
         { ledger: true },
       );
     } catch (err) {
