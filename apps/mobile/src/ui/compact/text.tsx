@@ -53,6 +53,17 @@ export function toneColor(theme: SemanticTokens, tone: TextTone) {
  */
 export const hairSpace = String.fromCodePoint(0x200a);
 
+/**
+ * Room a line cut in the middle keeps for its ellipsis: two no-break spaces after its words.
+ * React Native 0.86's text view works out the cut with its own paint, which measures "…" in the
+ * phone's font at the text's unscaled size (Roboto's is 0.67em), then draws it in Outfit (0.75em)
+ * at the phone's text size. At 130% the line it drew was 3.7dp wider than the one it measured, and
+ * Android clipped its end: "…evil.example.tes" (#766). The spaces (0.42em) run past instead, at
+ * every size below the largest text, where such lines wrap (`LARGEST_TEXT_SCALE`), for any phone
+ * font whose "…" is at least half an em.
+ */
+export const ellipsisRoom = String.fromCodePoint(0xa0).repeat(2);
+
 export function CompactText({
   variant = 'body',
   tone = 'primary',
@@ -84,10 +95,11 @@ export function CompactText({
     weight && { fontFamily: fonts[weight] },
     style,
   ];
-  return spare ? (
+  const cutInMiddle = props.numberOfLines === 1 && props.ellipsizeMode === 'middle';
+  return spare || cutInMiddle ? (
     <Text {...props} style={look}>
       {children}
-      {hairSpace}
+      {spare ? hairSpace : ellipsisRoom}
     </Text>
   ) : (
     <Text {...props} style={look}>
