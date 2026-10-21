@@ -379,6 +379,8 @@ export interface GroupDraft {
   description: string;
   category: GroupCategory;
   defaultCurrency: string;
+  /** The extra currencies a new Trip starts with (#723). */
+  extraCurrencies: string[];
   startDate: string;
   endDate: string;
 }

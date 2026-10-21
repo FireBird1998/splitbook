@@ -3,6 +3,8 @@ import { Modal, Pressable, ScrollView, TextInput, View, type TextInputProps } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CURRENCIES, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
+import { MAX_EXTRA_CURRENCIES } from '@splitbook/shared/group-currencies';
+import { addableCurrencies } from '@splitbook/shared/group-currency-settings';
 import type { GroupField, GroupFieldErrors } from '../data/group-draft';
 import type { GroupDraft, InvitationPreview as InvitationPreviewModel } from '../data/types';
 import {
@@ -15,7 +17,9 @@ import {
   SectionHeader,
   TileGrid,
   TopBar,
+  denseHitSlop,
   radius,
+  touch,
   useTap,
 } from './compact';
 import { savingNeedsConnection } from './offline-notice';
@@ -173,7 +177,8 @@ export function GroupCreateForm({
   const descriptor = getGroupTheme(draft.category);
   const currency = getCurrency(draft.defaultCurrency);
   const nameStart = useStartWhileUnfocused(() => onLeaveField('name'));
-  const [choosingCurrency, setChoosingCurrency] = useState(false);
+  // The main currency, or a new Trip's extra currency (#723), chosen from the same list.
+  const [choosing, setChoosing] = useState<'main' | 'extra' | null>(null);
   // A drag that starts on the field or on a currency never presses it (#684): one for the form,
   // one for the list over it.
   const fieldTap = useTap();
@@ -183,9 +188,28 @@ export function GroupCreateForm({
   const creating = `Sending this Group. Keep this screen open until ${PRODUCT_NAME} confirms it.`;
   const noun = descriptor.nouns.singular;
   const capitalizedNoun = noun.charAt(0).toUpperCase() + noun.slice(1);
-  const matchingCurrencies = CURRENCIES.filter((item) =>
-    `${item.code} ${item.name}`.toLowerCase().includes(currencySearch.trim().toLowerCase()),
-  );
+  const extras = draft.extraCurrencies;
+  const full = extras.length >= MAX_EXTRA_CURRENCIES;
+  // The list adds an extra currency, the rest the Group doesn't list yet, or picks the main one.
+  const adding = choosing === 'extra';
+  const matchingCurrencies = adding
+    ? addableCurrencies([draft.defaultCurrency, ...extras], currencySearch)
+    : CURRENCIES.filter((item) =>
+        `${item.code} ${item.name}`.toLowerCase().includes(currencySearch.trim().toLowerCase()),
+      );
+  const chip = (pressed: boolean, added: boolean) => ({
+    minHeight: touch.dense,
+    opacity: locked || (!added && full) ? 0.5 : 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingLeft: added ? 14 : 12,
+    paddingRight: added ? 10 : 14,
+    borderRadius: radius.tile,
+    borderWidth: 1,
+    borderColor: added ? theme.brand.main : theme.borderStrong,
+    backgroundColor: added ? theme.brand.bg : pressed ? theme.surfaceMuted : theme.surface,
+  });
 
   return (
     <View style={{ gap: 12 }}>
@@ -276,16 +300,16 @@ export function GroupCreateForm({
       </View>
 
       <View style={{ gap: 7 }}>
-        <Copy style={{ fontFamily: fonts.medium, fontSize: 14 }}>Currency</Copy>
+        <Copy style={{ fontFamily: fonts.medium, fontSize: 14 }}>Main currency</Copy>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Currency, ${draft.defaultCurrency}${currency ? `, ${currency.name}` : ''}`}
-          accessibilityHint="Choose the currency for this Group"
+          accessibilityLabel={`Main currency, ${draft.defaultCurrency}${currency ? `, ${currency.name}` : ''}`}
+          accessibilityHint="Choose the main currency for this Group"
           accessibilityState={{ disabled: locked }}
           disabled={locked}
           {...fieldTap.on(() => {
             setCurrencySearch('');
-            setChoosingCurrency(true);
+            setChoosing('main');
           })}
           style={({ pressed }) => ({
             minHeight: 52,
@@ -307,9 +331,94 @@ export function GroupCreateForm({
           <Icon name="chevron-down-outline" size={18} />
         </Pressable>
         <CompactText variant="small" tone="secondary">
-          New expenses use this currency. Choose it before recording shared costs.
+          Locked once money is recorded. Pick the one most of you settle in.
         </CompactText>
       </View>
+
+      {descriptor.extraCurrenciesAtSetup && (
+        // A new Trip's extra currencies (#723), as the board "Android · New Trip offers extra
+        // currencies" shows them; a Household adds them later in settings.
+        <Card padded>
+          <View style={{ gap: 10 }}>
+            {/* At large text the tag and count go onto a line of their own. */}
+            <View
+              style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                columnGap: 8,
+                rowGap: 4,
+              }}
+            >
+              <CompactText variant="heading" accessibilityRole="header">
+                Spending abroad?
+              </CompactText>
+              <View
+                style={{
+                  paddingHorizontal: 8,
+                  borderRadius: 6,
+                  backgroundColor: theme.surfaceMuted,
+                }}
+              >
+                <CompactText variant="caption" tone="secondary">
+                  Optional
+                </CompactText>
+              </View>
+              <CompactText
+                variant="caption"
+                tone="secondary"
+                accessibilityLiveRegion="polite"
+                style={{ marginLeft: 'auto' }}
+              >
+                {`${extras.length} of ${MAX_EXTRA_CURRENCIES}`}
+              </CompactText>
+            </View>
+            <CompactText variant="small" tone="secondary">
+              Add each currency you’ll pay in. Expenses keep the amount on the receipt; nothing is
+              converted.
+            </CompactText>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {extras.map((code) => (
+                <Pressable
+                  key={code}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${code}, ${getCurrency(code)?.name ?? code}, added. Remove`}
+                  accessibilityState={{ disabled: locked }}
+                  disabled={locked}
+                  hitSlop={denseHitSlop}
+                  {...fieldTap.on(() =>
+                    onChange({ extraCurrencies: extras.filter((item) => item !== code) }),
+                  )}
+                  style={({ pressed }) => chip(pressed && !fieldTap.dragged, true)}
+                >
+                  <CompactText weight="semibold" tone="brand" style={{ fontFamily: fonts.mono }}>
+                    {code}
+                  </CompactText>
+                  <Icon name="close" size={16} color={theme.brand.main} />
+                </Pressable>
+              ))}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add a currency"
+                accessibilityState={{ disabled: locked || full }}
+                disabled={locked || full}
+                hitSlop={denseHitSlop}
+                {...fieldTap.on(() => {
+                  setCurrencySearch('');
+                  setChoosing('extra');
+                })}
+                style={({ pressed }) => chip(pressed && !fieldTap.dragged, false)}
+              >
+                <Icon name="add-outline" size={18} />
+                <CompactText weight="medium">Add a currency</CompactText>
+              </Pressable>
+            </View>
+            <CompactText variant="caption" tone="secondary">
+              Anyone in the Group can add more later.
+            </CompactText>
+          </View>
+        </Card>
+      )}
 
       {descriptor.dates === 'bounded' && (
         <Card padded>
@@ -377,7 +486,7 @@ export function GroupCreateForm({
         {!uncertain && (
           // Create stays available for incomplete input so it can explain what is missing.
           <CompactButton
-            label={`Create ${noun}`}
+            label={`Create ${capitalizedNoun}`}
             busy={busy ? 'Creating your Group…' : undefined}
             block
             icon="add-outline"
@@ -411,20 +520,15 @@ export function GroupCreateForm({
       </View>
 
       <Modal
-        visible={choosingCurrency}
+        visible={choosing !== null}
         animationType="slide"
-        onRequestClose={() => setChoosingCurrency(false)}
+        onRequestClose={() => setChoosing(null)}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
           <TopBar
-            title="Choose currency"
+            title={adding ? 'Add a currency' : 'Choose currency'}
             actions={
-              <CompactButton
-                label="Done"
-                variant="text"
-                dense
-                onPress={() => setChoosingCurrency(false)}
-              />
+              <CompactButton label="Done" variant="text" dense onPress={() => setChoosing(null)} />
             }
           />
           <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
@@ -448,12 +552,18 @@ export function GroupCreateForm({
                   <View key={item.code}>
                     {index > 0 ? <Divider /> : null}
                     <Pressable
-                      accessibilityRole="radio"
+                      accessibilityRole={adding ? 'button' : 'radio'}
                       accessibilityLabel={`${item.code}, ${item.name}`}
-                      accessibilityState={{ checked: item.code === draft.defaultCurrency }}
+                      accessibilityState={
+                        adding ? undefined : { checked: item.code === draft.defaultCurrency }
+                      }
                       {...currencyTap.on(() => {
-                        onChange({ defaultCurrency: item.code });
-                        setChoosingCurrency(false);
+                        onChange(
+                          adding
+                            ? { extraCurrencies: [...extras, item.code] }
+                            : { defaultCurrency: item.code },
+                        );
+                        setChoosing(null);
                       })}
                       style={({ pressed }) => ({
                         minHeight: 56,
@@ -468,7 +578,7 @@ export function GroupCreateForm({
                     >
                       <CompactText style={{ fontFamily: fonts.mono }}>{item.code}</CompactText>
                       <CompactText style={{ flex: 1 }}>{item.name}</CompactText>
-                      {item.code === draft.defaultCurrency && (
+                      {!adding && item.code === draft.defaultCurrency && (
                         <Icon name="checkmark" color={theme.brand.main} />
                       )}
                     </Pressable>

@@ -12,6 +12,7 @@ const group: GroupDraft = {
   description: '',
   category: 'home',
   defaultCurrency: 'INR',
+  extraCurrencies: [],
   startDate: '',
   endDate: '',
 };

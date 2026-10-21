@@ -118,7 +118,11 @@ import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getCurrency } from '@splitbook/shared/currency';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { currentMonthKey, toDateParam } from '@splitbook/shared/date';
-import { groupCurrencies, startingExpenseCurrency } from '@splitbook/shared/group-currencies';
+import {
+  groupCurrencies,
+  normaliseExtraCurrencies,
+  startingExpenseCurrency,
+} from '@splitbook/shared/group-currencies';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 
 import {
@@ -360,6 +364,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
         description: '',
         category: 'trip',
         defaultCurrency: 'INR',
+        extraCurrencies: [],
         startDate: '',
         endDate: '',
       },
@@ -6034,7 +6039,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     const { creation } = snapshot;
-    const draft = { ...creation.draft, ...patch };
+    const next = { ...creation.draft, ...patch };
+    // A new Trip's extra currencies never include its main currency, nor go past 4 (#723).
+    const draft = {
+      ...next,
+      extraCurrencies: normaliseExtraCurrencies(next.defaultCurrency, next.extraCurrencies),
+    };
     publish({
       ...snapshot,
       creation: {
@@ -6081,7 +6091,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = generation;
     const view = route;
     const draft = snapshot.creation.draft;
-    const bounded = getGroupTheme(draft.category).dates === 'bounded';
+    const theme = getGroupTheme(draft.category);
+    const bounded = theme.dates === 'bounded';
     // Every correction is explained beside its field before anything is sent.
     const errors = validateGroupDraft(draft, today());
     const rejected = rejectFields(groupFields, snapshot.creation.validation, errors);
@@ -6101,7 +6112,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...draft,
       name: draft.name.trim(),
       description: draft.description.trim(),
-      alternateCurrencies: [],
+      // A new Trip's, chosen while it was set up (#723); the rest add them later in settings.
+      alternateCurrencies: theme.extraCurrenciesAtSetup ? draft.extraCurrencies : [],
       startDate: bounded && draft.startDate.trim() ? draft.startDate.trim() : null,
       endDate: bounded && draft.endDate.trim() ? draft.endDate.trim() : null,
     });

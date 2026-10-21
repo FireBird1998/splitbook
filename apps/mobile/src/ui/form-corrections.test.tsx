@@ -326,9 +326,9 @@ describe('Group creation corrections, rendered', () => {
     const view = await render('create');
     const name = () => view.input('Trip name, required');
     expect(text(fieldOf(name()))).toContain('Trip name · Required');
-    expect(view.pressable('Create trip').props.disabled).toBe(false);
+    expect(view.pressable('Create Trip').props.disabled).toBe(false);
 
-    await view.press('Create trip');
+    await view.press('Create Trip');
     expect(view.writes).toEqual([]);
     expect(corrections(fieldOf(name()))).toEqual([
       'Add a name for this trip, such as Goa Weekend.',
@@ -339,7 +339,7 @@ describe('Group creation corrections, rendered', () => {
 
     await view.type('Trip name, required', 'Goa weekend');
     expect(corrections(fieldOf(name()))).toEqual([]);
-    await view.press('Create trip');
+    await view.press('Create Trip');
     expect(view.writes).toEqual(['POST /api/groups']);
   });
 
@@ -359,7 +359,7 @@ describe('Group creation corrections, rendered', () => {
     let release!: () => void;
     view.hold(new Promise<void>((resolve) => (release = resolve)));
     await view.type('Trip name, required', 'Goa weekend');
-    await view.press('Create trip');
+    await view.press('Create Trip');
     const button = view.pressable('Creating your Group…');
     expect(button.props.disabled).toBe(true);
     expect(button.props.accessibilityHint).toBe(
