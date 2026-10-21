@@ -534,6 +534,30 @@ describe('a Debt paid in another currency (#728)', () => {
     ]);
   });
 
+  // The Tester found this unpinned (M3): Record pressed while the suggestion is still being looked
+  // up must wait, never record a typed amount as paid with no suggestion when one is on its way.
+  it('waits while the suggestion is looked up, rather than recording it as entered', async () => {
+    let release = () => {};
+    const looked = new Promise<FetchResponse>((resolve) => {
+      release = () => resolve(rates(suggestions['EUR→INR']));
+    });
+    const { controller, payments } = await opened(({ pathname }) =>
+      pathname.endsWith('/rates') ? looked : undefined,
+    );
+    const choosing = controller.choosePaidCurrency('INR');
+    await until(controller, (now) => now.settlement.crossCurrency?.rate.status === 'loading');
+    controller.editCrossCurrency('paid', '1,850');
+    await controller.recordSettlement();
+
+    expect(payments).toEqual([]);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      message: 'Record is available once a suggested rate is looked up.',
+    });
+    release();
+    await choosing;
+  });
+
   it('starts afresh at the next currency’s suggestion, and back in euros pays the amount cleared', async () => {
     const { controller, payments, sent } = await opened();
     await controller.choosePaidCurrency('INR');
