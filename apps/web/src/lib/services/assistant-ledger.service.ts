@@ -85,9 +85,13 @@ function assistantExpense(expense: RecordedExpense, member: ReturnType<typeof as
   };
 }
 
+/** Groups whose Assistant rule lets assistants in (#621); a Group without a rule is Allowed. */
+export const ASSISTANTS_ALLOWED = { assistantRule: { $ne: 'not_allowed' } } as const;
+
 /**
- * A Group the reader belongs to and their connection reaches. One out of reach answers exactly
- * as a Group that doesn't exist (#617).
+ * A Group the reader belongs to and their connection reaches: not one they left out (#617), nor
+ * one whose admins don't allow assistants (#621). One out of reach answers exactly as a Group
+ * that doesn't exist.
  */
 export async function requireLedgerMembership(reader: LedgerReader, groupId: string) {
   await connectDB();
@@ -95,6 +99,7 @@ export async function requireLedgerMembership(reader: LedgerReader, groupId: str
     _id: { $eq: draftObjectId.parse(groupId), $nin: reader.excludedGroupIds ?? [] },
     'members.user': draftObjectId.parse(reader.id),
     deletionRequestedAt: null,
+    ...ASSISTANTS_ALLOWED,
   })
     .populate('members.user', 'name')
     .lean();
@@ -126,11 +131,12 @@ export const assistantLedgerService = {
     const groups = await Group.find({
       'members.user': draftObjectId.parse(reader.id),
       deletionRequestedAt: null,
-      // Left-out Groups are filtered in the query, so a page is never short of what it says.
+      // Groups out of reach are filtered in the query, so a page is never short of what it says.
       _id: {
         $nin: reader.excludedGroupIds ?? [],
         ...(after ? { $gt: draftObjectId.parse(after) } : {}),
       },
+      ...ASSISTANTS_ALLOWED,
     })
       .sort({ _id: 1 })
       .limit(51)
