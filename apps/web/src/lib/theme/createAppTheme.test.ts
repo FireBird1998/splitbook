@@ -35,6 +35,24 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
     expect(Object.keys(rules).filter((selector) => /button/i.test(selector))).toEqual([]);
   });
 
+  it('rings an errored field whole when focused, as its red border can’t change colour; a field without an error has no ring (#823)', () => {
+    const theme = createAppTheme(mode);
+    const baseline = theme.components?.MuiCssBaseline?.styleOverrides;
+    const rules = (typeof baseline === 'function' ? baseline(theme) : baseline) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    // The same ring everything else focused from the keyboard has.
+    const ring = rules[':focus-visible']!.boxShadow;
+    for (const root of ['.MuiOutlinedInput-root', '.MuiFilledInput-root'])
+      expect(rules[`${root}.Mui-error.Mui-focused`], root).toEqual({ boxShadow: ring });
+    const focusedWithoutError = Object.entries(rules).filter(
+      ([selector, rule]) =>
+        selector.includes('Mui-focused') && !selector.includes('Mui-error') && 'boxShadow' in rule,
+    );
+    expect(focusedWithoutError).toEqual([]);
+  });
+
   it('keeps small status text readable on its tint and ordinary surfaces', () => {
     const theme = createAppTheme(mode);
     for (const tone of ['positive', 'negative', 'warning', 'info'] as const) {

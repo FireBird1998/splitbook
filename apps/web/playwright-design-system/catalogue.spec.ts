@@ -104,7 +104,7 @@ test('catalogue demonstrates money, controls, empty and loading states in either
   );
 });
 
-test('a text field focused by click or Tab draws only its own border; an icon button keeps the ring (#823)', async ({
+test('a text field focused by click or Tab draws only its own border, an errored one a ring around it; an icon button keeps the ring (#823)', async ({
   page,
 }) => {
   await page.goto('/dev/design-system');
@@ -119,6 +119,19 @@ test('a text field focused by click or Tab draws only its own border; an icon bu
   await page.keyboard.press('Tab');
   await expect(field).toBeFocused();
   await expect(field).toHaveCSS('box-shadow', 'none');
+  // The field itself draws no ring either: its focused border shows focus.
+  const fieldRoot = field.locator(
+    'xpath=ancestor::div[contains(@class,"MuiOutlinedInput-root")][1]',
+  );
+  await expect(fieldRoot).toHaveCSS('box-shadow', 'none');
+  // An errored field's border is red already, so the ring goes around the whole field.
+  const errored = page.getByLabel('Amount with an error');
+  await page.keyboard.press('Tab');
+  await expect(errored).toBeFocused();
+  await expect(errored).toHaveCSS('box-shadow', 'none');
+  await expect(
+    errored.locator('xpath=ancestor::div[contains(@class,"MuiOutlinedInput-root")][1]'),
+  ).toHaveCSS('box-shadow', /4px/);
   // On to the icon button, which keeps the theme's ring.
   const iconButton = page.getByRole('button', { name: /^Switch to (light|dark) mode using icon$/ });
   for (let press = 0; press < 8; press++) {
