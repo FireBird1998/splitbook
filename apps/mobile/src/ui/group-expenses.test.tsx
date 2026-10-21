@@ -482,6 +482,28 @@ describe('A Trip’s spending, one currency at a time (#730)', () => {
     expect(labelled(root, 'Spent: ¥186,000')).toHaveLength(1);
   });
 
+  it('marks the Group’s own main currency, before its Expenses summary lands too', () => {
+    // A Trip in euros, with yen: its main currency is EUR, never the default INR.
+    const euros = { ...lisbon(), defaultCurrency: 'EUR', alternateCurrencies: ['JPY'] };
+    const summary = {
+      ...read('JPY'),
+      currencies: [
+        { currency: 'EUR', expenseCount: 11, spentMinor: 124_000 },
+        { currency: 'JPY', expenseCount: 24, spentMinor: 186_000 },
+      ],
+    };
+    const state = shown(trip({ data: summary }));
+    const { root } = view({
+      group: euros,
+      state: { ...state, expenses: { ...state.expenses, status: 'loading', summary: null } },
+      onChooseTripCurrency: vi.fn(),
+    });
+    expect(tabs(root)).toEqual([
+      ['EUR, main currency, €1,240.00 spent in 11 Expenses', false],
+      ['JPY, ¥186,000 spent in 24 Expenses', true],
+    ]);
+  });
+
   it('keeps the card as it was for a Trip in one currency', () => {
     const { root } = view({ group: group('trip'), state: financial({}, null) });
     expect(tabs(root)).toEqual([]);
