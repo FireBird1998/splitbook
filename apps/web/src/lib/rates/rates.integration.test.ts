@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
 import { groupService } from '@/lib/services/group.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
@@ -49,7 +49,6 @@ beforeEach(async () => {
 });
 afterAll(() => disconnectSignedIn(db));
 // Real timers continue to drive MongoDB and HTTP; only the date moves.
-import { afterEach } from 'vitest';
 afterEach(() => vi.useRealTimers());
 
 async function read(cookie: string, from = 'EUR', to = 'INR') {
@@ -85,5 +84,126 @@ describe('Group suggested rate read', () => {
     await refreshRates({ primary, fallback }, now);
     expect((await read('')).status).toBe(401);
     expect((await read(await signIn('sam'))).status).toBe(403);
+  });
+  const fallbackRates: RateProvider = {
+    source: 'exchange-rate-api',
+    fetchTable: async () => [
+      { currency: 'EUR', rate: '0.9', asOf: '2026-10-21' },
+      { currency: 'INR', rate: '90', asOf: '2026-10-21' },
+      { currency: 'JPY', rate: '180', asOf: '2026-10-21' },
+    ],
+  };
+  const down: RateProvider = {
+    source: 'frankfurter',
+    fetchTable: async () => {
+      throw new Error('Fictional outage');
+    },
+  };
+  it('uses the fallback during a primary outage and carries its required attribution', async () => {
+    await refreshRates({ primary: down, fallback: fallbackRates }, now);
+    expect((await read(await signIn('alex'))).body.data.suggestion).toMatchObject({
+      rate: '100',
+      source: 'exchange-rate-api',
+      asOf: '2026-10-21',
+      ageDays: 0,
+      attributionRequired: true,
+      attribution: { text: 'Rates By Exchange Rate API', url: 'https://www.exchangerate-api.com' },
+    });
+  });
+  it.each(['missing', 'stale'])(
+    'falls back only for a %s currency and marks a mixed cross rate',
+    async (problem) => {
+      const partial: RateProvider = {
+        source: 'frankfurter',
+        fetchTable: async () =>
+          (await primary.fetchTable()).flatMap((row) =>
+            row.currency !== 'INR'
+              ? [row]
+              : problem === 'missing'
+                ? []
+                : [{ ...row, asOf: '2026-10-17' }],
+          ),
+      };
+      await refreshRates({ primary: partial, fallback: fallbackRates }, now);
+      const cookie = await signIn('alex');
+      expect((await read(cookie)).body.data.suggestion).toMatchObject({
+        rate: '112.5',
+        source: 'mixed',
+        asOf: '2026-10-20',
+        attributionRequired: true,
+      });
+      expect((await read(cookie, 'EUR', 'JPY')).body.data.suggestion).toMatchObject({
+        rate: '200',
+        source: 'frankfurter',
+        attributionRequired: false,
+      });
+      expect((await read(cookie, 'USD', 'INR')).body.data.suggestion.source).toBe(
+        'exchange-rate-api',
+      );
+      expect((await read(cookie, 'INR', 'USD')).body.data.suggestion.rate).toBe('0.011111111111');
+    },
+  );
+  it('returns no suggestion when both providers fail, without failing the member read', async () => {
+    await refreshRates({ primary: down, fallback: { ...down, source: 'exchange-rate-api' } }, now);
+    expect((await read(await signIn('alex'))).body.data).toEqual({
+      suggestion: null,
+      reason: 'unavailable',
+    });
+  });
+  it('keeps three-day primary rates but refuses stale cached suggestions after the fourth day', async () => {
+    const dated = {
+      ...primary,
+      fetchTable: async () =>
+        (await primary.fetchTable()).map((row) => ({ ...row, asOf: '2026-10-18' })),
+    };
+    await refreshRates({ primary: dated, fallback: fallbackRates }, now);
+    const cookie = await signIn('alex');
+    expect((await read(cookie)).body.data.suggestion).toMatchObject({
+      source: 'frankfurter',
+      ageDays: 3,
+    });
+    vi.setSystemTime(new Date('2026-10-22T00:00:00Z'));
+    expect((await read(cookie)).body.data).toEqual({ suggestion: null, reason: 'stale' });
+  });
+  it('keeps an unexpired saved table through a total outage without inventing a new fetch date', async () => {
+    await refreshRates({ primary, fallback }, now);
+    const tomorrow = new Date('2026-10-22T18:00:00Z');
+    vi.setSystemTime(tomorrow);
+    await refreshRates(
+      { primary: down, fallback: { ...down, source: 'exchange-rate-api' } },
+      tomorrow,
+    );
+    expect((await read(await signIn('alex'))).body.data.suggestion).toMatchObject({
+      rate: '100',
+      fetchedAt: now.toISOString(),
+      ageDays: 2,
+    });
+  });
+  it('uses the fallback for invalid or future-dated primary entries', async () => {
+    const invalid = {
+      ...primary,
+      fetchTable: async () => [
+        { currency: 'EUR', rate: '-1', asOf: '2026-10-21' },
+        { currency: 'INR', rate: '80', asOf: '2026-10-22' },
+      ],
+    };
+    await refreshRates({ primary: invalid, fallback: fallbackRates }, now);
+    expect((await read(await signIn('alex'))).body.data.suggestion).toMatchObject({
+      rate: '100',
+      source: 'exchange-rate-api',
+    });
+  });
+  it('reports missing currencies and rejects unsupported codes', async () => {
+    await refreshRates({ primary, fallback }, now);
+    const cookie = await signIn('alex');
+    expect((await read(cookie, 'EUR', 'KRW')).body.data).toEqual({
+      suggestion: null,
+      reason: 'currency_unavailable',
+    });
+    expect((await read(cookie, 'EUR', 'ZZZ')).status).toBe(422);
+    expect((await read(cookie, 'EUR', 'EUR')).body.data).toEqual({
+      suggestion: null,
+      reason: 'same_currency',
+    });
   });
 });
