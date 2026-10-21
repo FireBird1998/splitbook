@@ -891,4 +891,13 @@ describe('a line cut in the middle keeps its end inside its box (#766)', () => {
     for (let width = 200; width <= 330; width++)
       expect(middleCutEnd(line, fontScale, width, credit), `${width}dp`).toMatch(/\.test\s*$/);
   });
+
+  it('keeps no room after a line that wraps in full instead', () => {
+    render(
+      <CompactText variant="caption" tone="secondary" numberOfLines={0} ellipsizeMode="middle">
+        {credit}
+      </CompactText>,
+    );
+    expect((renderer!.toJSON() as ReactTestRendererJSON).children).toEqual([credit]);
+  });
 });

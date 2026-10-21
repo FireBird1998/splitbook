@@ -618,8 +618,10 @@ describe('an assistant’s credit in an Activity row (#751)', () => {
     root.find(
       (node) =>
         isHost(node, 'Text') &&
-        node.children.filter((child) => typeof child === 'string').join('') ===
-          `prepared by ${host}`,
+        node.children
+          .filter((child) => typeof child === 'string')
+          .join('')
+          .trimEnd() === `prepared by ${host}`,
     );
 
   it('takes a line of its own, cut in the middle so the domain stays, with the whole name read aloud', () => {
@@ -639,12 +641,15 @@ describe('an assistant’s credit in an Activity row (#751)', () => {
     expect(credit(root).props.numberOfLines ?? 0).toBe(0);
   });
 
+  // Its end shows the domain to its last letter: "…evil.example.test" at 100% on the emulator and
+  // "…vil.example.test" at 130%, where the line keeps room for the ellipsis Android draws wider
+  // than it measured (#766).
   it.each([
-    [1, host],
-    [1.3, host],
-    [1, long],
-    [1.3, long],
-  ])('keeps the domain readable on a 360dp phone at %s× text: %s', (fontScale, name) => {
+    [1, host, /evil\.example\.test\s*$/],
+    [1.3, host, /example\.test\s*$/],
+    [1, long, /evil\.example\.test\s*$/],
+    [1.3, long, /example\.test\s*$/],
+  ])('keeps the domain readable on a 360dp phone at %s× text: %s', (fontScale, name, end) => {
     setWindow({ width: 360, height: 640, fontScale });
     render({ state: activity({ events: [preparedBy(name)] }) });
     // The list lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
@@ -655,6 +660,6 @@ describe('an assistant’s credit in an Activity row (#751)', () => {
         360 - 34,
         `prepared by ${name}`,
       ),
-    ).toContain('evil.example.test');
+    ).toMatch(end);
   });
 });
