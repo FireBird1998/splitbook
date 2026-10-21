@@ -307,14 +307,15 @@ export default function SettleAllDialog({
                   Pay in
                 </Typography>
                 <Box
-                  role="group"
+                  role="radiogroup"
                   aria-labelledby="settle-all-pay-in"
-                  sx={{ display: 'inline-flex', gap: 0.5, alignSelf: 'flex-start' }}
+                  sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
                 >
                   {payCurrencies.map((code) => (
                     <Button
                       key={code}
-                      aria-pressed={code === currency}
+                      role="radio"
+                      aria-checked={code === currency}
                       variant={code === currency ? 'contained' : 'outlined'}
                       disableElevation
                       onClick={() => {
