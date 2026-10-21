@@ -219,7 +219,11 @@ describe('cross-currency Settlement HTTP contract (#727)', () => {
       };
       const saved = await record(id, body);
       expect(saved.status).toBe(201);
-      expect(saved.body.data).toMatchObject(body);
+      expect(saved.body.data).toMatchObject({
+        ...body,
+        paidBy: { _id: sam },
+        paidTo: { _id: alex },
+      });
       const after = await ledgers(id);
       expect(after.filter((row) => row.currency !== 'EUR')).toEqual(
         before.filter((row) => row.currency !== 'EUR'),
@@ -233,7 +237,12 @@ describe('cross-currency Settlement HTTP contract (#727)', () => {
   );
   it('clears a legacy currency used only by an earlier Settlement', async () => {
     const group = await groupService.create(
-      { name: 'Fictional legacy payments', defaultCurrency: 'USD', alternateCurrencies: ['EUR'] },
+      {
+        name: 'Fictional legacy payments',
+        category: 'other',
+        defaultCurrency: 'USD',
+        alternateCurrencies: ['EUR'],
+      },
       alex,
     );
     const id = String(group._id);

@@ -1262,7 +1262,12 @@ For a Cross-currency Settlement, send these fields with the existing body:
 - `amountPaidMinor`: a positive safe integer, in the paying currency's minor units
   (JPY and KRW use whole units).
 - `paidCurrency`: a supported main or listed extra currency, different from
-  `currency`. An unlisted currency on either side is **422** `CURRENCY_MISMATCH`.
+  `currency`. An unlisted paid currency is **422** `CURRENCY_MISMATCH`.
+- The cleared `currency` may also be a historical currency already used by an
+  Expense or Settlement in this Group, so legacy Debts remain settleable. An
+  unlisted currency with no such record is **422** `CURRENCY_MISMATCH`. This applies
+  to both same-currency and cross-currency Settlements; only the cleared currency's
+  ledger moves.
 - `appliedRate`: a positive decimal string meaning **1 cleared = X paid** in major
   units. It must equal the rate derived from the two stored amounts, rounded half
   up to 18 decimal places. Trailing zeroes do not change its meaning.
@@ -1308,10 +1313,13 @@ not copied from the entered rate. Zero or unsafe results are refused. No floatin
 point multiplication or division is used. Callers retain the user's rate separately
 while editing and send the helper's `appliedRate` with the two resulting amounts.
 
-`formatCrossCurrencySettlement(record)` takes the stored cross-currency fields,
-`paidByName`, `amountMinor`, and `currency`. It formats both amounts and the stored
-rate, for example: “Sam paid ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested
-₹92.10 (21 Oct)”. With `entered`, it says “no rate suggested”. For
+`formatCrossCurrencySettlement(record, viewerId?: string): string` takes the stored
+cross-currency fields, `amountMinor`, `currency`, and optional `paidBy`, `paidByName`,
+`paidTo`, `paidToName` strings. It uses Activity's `memberLabel`: the viewer becomes
+“You” (or “you” as recipient), blank names are omitted, and a missing payer gives
+“Paid to {recipient}”. It formats both amounts and the stored rate, for example:
+“You paid Sam ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)”.
+The suggestion date is `rateAsOf`, never `rateFetchedAt`. With `entered`, it says “no rate suggested”. For
 `exchange-rate-api` or `mixed`, it appends “Rates By Exchange Rate API”; callers
 must link that text to `EXCHANGE_RATE_API_ATTRIBUTION.url` from the same module.
 It never recomputes or looks up the historical amounts or rate.

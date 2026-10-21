@@ -1,3 +1,4 @@
+import { memberLabel } from './activity-timeline';
 import { getCurrency, getCurrencyPrecision } from './currency';
 import { assertSafeMinorAmount, MoneyValidationError } from './exact-money';
 
@@ -132,14 +133,27 @@ function minorMoney(minor: number, currency: string): string {
  */
 export function formatCrossCurrencySettlement(
   record: CrossCurrencySettlementFields & {
-    paidByName: string;
+    paidBy?: string;
+    paidByName?: string;
+    paidTo?: string;
+    paidToName?: string;
     amountMinor: number;
     currency: string;
   },
+  viewerId?: string,
 ): string {
   rateFraction(record.appliedRate);
+  const paidBy = memberLabel(record.paidBy, record.paidByName, viewerId);
+  const paidTo = memberLabel(record.paidTo, record.paidToName, viewerId);
+  const recipient = viewerId && record.paidTo === viewerId ? 'you' : paidTo;
+  // As in Activity detail, a missing payer leaves a recipient-only description.
+  const people = paidBy
+    ? `${paidBy} paid${paidTo ? ` ${recipient}` : ''}`
+    : paidTo
+      ? `Paid to ${recipient}`
+      : 'Paid';
   const clearedSymbol = getCurrency(record.currency)?.symbol ?? record.currency;
-  let text = `${record.paidByName} paid ${minorMoney(record.amountPaidMinor, record.paidCurrency)} to clear ${minorMoney(record.amountMinor, record.currency)} at ${decimalMoney(record.appliedRate, record.paidCurrency)} per ${clearedSymbol}`;
+  let text = `${people} ${minorMoney(record.amountPaidMinor, record.paidCurrency)} to clear ${minorMoney(record.amountMinor, record.currency)} at ${decimalMoney(record.appliedRate, record.paidCurrency)} per ${clearedSymbol}`;
   if (record.suggestedRate && record.rateAsOf) {
     rateFraction(record.suggestedRate);
     const [, month, day] = record.rateAsOf.split('-');
