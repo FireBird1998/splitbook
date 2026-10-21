@@ -52,6 +52,11 @@ export interface QuickAddContext {
   currency: string;
   /** Extra currencies listed by the Group. */
   alternateCurrencies?: readonly string[];
+  /**
+   * A listed currency the member chose for a line that names an unlisted one (#732): while the
+   * line still names `said`, its amount is read in `code`, as typed and never converted.
+   */
+  currencyChoice?: { said: string; code: string } | null;
   /** Today in the viewer's own zone, `yyyy-MM-dd`, as the full form's date picker starts. */
   today: string;
   /** The member typing, whom "me" and "I" name. */
@@ -550,7 +555,11 @@ interface AmountRead {
   problem?: QuickAddProblem;
 }
 
-function readAmount(tokens: Token[], listed: readonly string[]): AmountRead {
+function readAmount(
+  tokens: Token[],
+  listed: readonly string[],
+  choice: QuickAddContext['currencyChoice'],
+): AmountRead {
   let currency = listed[0];
   let currencyRead: Pick<AmountRead, 'currency' | 'currencyCandidates' | 'currencyListed'> = {
     currency,
@@ -614,6 +623,8 @@ function readAmount(tokens: Token[], listed: readonly string[]): AmountRead {
       );
     }
     currency = chosen.mark[0];
+    if (choice?.said === currency && !listed.includes(currency) && listed.includes(choice.code))
+      currency = choice.code;
     currencyRead = { currency, currencyCandidates: [], currencyListed: listed.includes(currency) };
     if (!currencyRead.currencyListed)
       return invalid(
@@ -903,6 +914,7 @@ export function readQuickAdd(text: string, context: QuickAddContext): QuickAddRe
       defaultCurrency: context.currency,
       alternateCurrencies: context.alternateCurrencies,
     }),
+    context.currencyChoice,
   );
   const description = readDescription(tokens);
 
