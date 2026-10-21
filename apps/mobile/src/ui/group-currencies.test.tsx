@@ -34,7 +34,7 @@ const lisbon: GroupCurrencySettings = {
         settlements: 1,
         toReview: { yours: 0, others: 0 },
       },
-      added: { by: { _id: sam, name: 'Sam' }, at: '2026-10-01T09:00:00.000Z' },
+      added: { by: { _id: sam, name: 'Sam' }, at: new Date(2026, 9, 1, 12).toISOString() },
     },
     {
       code: 'JPY',
@@ -43,7 +43,7 @@ const lisbon: GroupCurrencySettings = {
         settlements: 0,
         toReview: { yours: 0, others: 0 },
       },
-      added: { by: { _id: sam, name: 'Sam' }, at: '2026-10-05T09:00:00.000Z' },
+      added: { by: { _id: sam, name: 'Sam' }, at: new Date(2026, 9, 5, 12).toISOString() },
     },
   ],
 };
