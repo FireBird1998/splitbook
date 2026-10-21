@@ -34,8 +34,13 @@ it('Group and Join metadata fall back to generic titles when Mongo reads fail', 
     { name: 'Private trip', category: 'trip', defaultCurrency: 'INR', alternateCurrencies: [] },
     DEMO_PERSONA_IDS.alex,
   );
-  // Only this file's Mongoose connection goes offline; auth keeps its own client.
-  await mongoose.disconnect();
+  // Only this file's reads fail: the app's one client shares its name with the database.
+  const admin = mongoose.connection.db!.admin();
+  await admin.command({
+    configureFailPoint: 'failCommand',
+    mode: 'alwaysOn',
+    data: { appName: db.dbName, failCommands: ['find', 'aggregate'], errorCode: 8 },
+  });
   try {
     await expect(
       groupPageMetadata(Promise.resolve({ id: String(group._id) }), 'Balances'),
@@ -44,6 +49,6 @@ it('Group and Join metadata fall back to generic titles when Mongo reads fail', 
       joinMetadata({ params: Promise.resolve({ code: 'unavailable' }) }),
     ).resolves.toEqual({ title: 'Join a Group' });
   } finally {
-    await mongoose.connect(db.uri);
+    await admin.command({ configureFailPoint: 'failCommand', mode: 'off' });
   }
 });
