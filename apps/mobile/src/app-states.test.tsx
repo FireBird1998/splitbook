@@ -12,7 +12,7 @@ import { createMobileController, type MobileController } from './data/mobile-con
 import type { FetchResponse } from './data/types';
 import { balanceWidth, HomeBalances } from './ui/home';
 import { refreshFeedback, refreshedLabel } from './ui/refresh-feedback';
-import { findHosts, flatten, layoutHeight, layoutWidth } from './test-utils/layout';
+import { findHosts, flatten, layoutHeight, layoutWidth, unreadText } from './test-utils/layout';
 import { loop, setFileWindow, setReduceMotion, setWindow, timing } from './test-utils/native';
 import { progressHeight, sweepTrack } from './ui/compact';
 import { savedQueriesIn } from './test-utils/saved-queries';
@@ -155,6 +155,8 @@ function device() {
      * them, and answers its Trip summary in each.
      */
     trip: false,
+    /** Alex has recorded the €20.00 owed to Sam in Lisbon Offsite (#728). */
+    eurosPaid: false,
   };
   /**
    * The saved copies can't be removed, as on a full or read-only disk; or the drafts can't be
@@ -171,6 +173,8 @@ function device() {
   const holds: { prefix: string; arrive: () => void; response: Promise<void> }[] = [];
   /** Every request this phone sent, as `METHOD /path?query`. */
   const sent: string[] = [];
+  /** Each payment this phone sent, as its body. */
+  const paymentBodies: Record<string, unknown>[] = [];
   /** Storage calls to hold, in order: a slow device's next reads, writes or removals. */
   const slow: { arrive: () => void; response: Promise<void> }[] = [];
   /** A call to this phone's saved copies or drafts: it waits while a storage hold is set. */
@@ -180,7 +184,7 @@ function device() {
     held.arrive();
     await held.response;
   };
-  const respond = (path: string, method: string): FetchResponse => {
+  const respond = (path: string, method: string, body?: unknown): FetchResponse => {
     if (path.endsWith('/sign-out')) return json({ success: true });
     if (path.endsWith('/sign-in'))
       return new Response(JSON.stringify({ user: alex }), {
@@ -305,6 +309,56 @@ function device() {
           },
         },
       });
+    // Frankfurter's rates of 20 Oct: ₹92.10 for each euro (#726).
+    if (path === `/api/groups/${id}/rates?from=EUR&to=INR`)
+      return json({
+        status: 200,
+        data: {
+          suggestion: {
+            rate: '92.1',
+            source: 'frankfurter',
+            asOf: '2026-10-20',
+            fetchedAt: iso,
+            ageDays: 1,
+            attributionRequired: false,
+            attribution: null,
+          },
+        },
+      });
+    const payment = typeof body === 'string' ? JSON.parse(body) : null;
+    // Alex pays Sam's euro Debt, in whatever it was paid in (#728).
+    if (
+      path === `/api/groups/${id}/settlements` &&
+      method === 'POST' &&
+      payment?.currency === 'EUR'
+    ) {
+      network.eurosPaid = true;
+      return json(
+        {
+          status: 201,
+          data: {
+            ...payment,
+            _id: 'f00000000000000000000002',
+            group: id,
+            paidBy: { _id: alex.id, name: alex.name, image: null },
+            paidTo: { _id: sam._id, name: sam.name, image: null },
+            createdBy: { _id: alex.id, name: alex.name, image: null },
+            amountMinor: Math.round(payment.amount * 100),
+            moneyVersion: 1,
+            // The Debt between them before simplifying, from Alex's side: −€20.00 before.
+            ...(payment.paidCurrency
+              ? {
+                  pairDebtBeforeMinor: -2000,
+                  pairDebtAfterMinor: Math.round(payment.amount * 100) - 2000,
+                }
+              : {}),
+            createdAt: iso,
+            updatedAt: iso,
+          },
+        },
+        201,
+      );
+    }
     if (path === `/api/groups/${id}/settlements` && method === 'POST') {
       network.paid = true;
       return json(
@@ -339,10 +393,12 @@ function device() {
                   {
                     currency: 'EUR',
                     balances: [
-                      { user: { ...alex, _id: alex.id }, balance: -20 },
-                      { user: sam, balance: 20 },
+                      { user: { ...alex, _id: alex.id }, balance: network.eurosPaid ? 0 : -20 },
+                      { user: sam, balance: network.eurosPaid ? 0 : 20 },
                     ],
-                    debts: [{ from: { ...alex, _id: alex.id }, to: sam, amount: 20 }],
+                    debts: network.eurosPaid
+                      ? []
+                      : [{ from: { ...alex, _id: alex.id }, to: sam, amount: 20 }],
                   },
                 ]
               : []),
@@ -483,6 +539,8 @@ function device() {
         fetch: async (url, init) => {
           const path = new URL(url).pathname + new URL(url).search;
           sent.push(`${init.method ?? 'GET'} ${path}`);
+          if (path.endsWith('/settlements') && init.method === 'POST')
+            paymentBodies.push(JSON.parse(String(init.body)));
           if (!network.online) throw new Error('Offline');
           const index = holds.findIndex((item) => path.startsWith(item.prefix));
           if (index >= 0) {
@@ -492,7 +550,7 @@ function device() {
             // The connection may have dropped while it waited.
             if (!network.online) throw new Error('Offline');
           }
-          return respond(path, init.method ?? 'GET');
+          return respond(path, init.method ?? 'GET', init.body);
         },
       },
     );
@@ -500,6 +558,7 @@ function device() {
     clock,
     network,
     sent,
+    paymentBodies,
     storage,
     controller,
     /** The saved copy of `path` on this phone, as stored. */
@@ -3067,6 +3126,58 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     // The same check: the Balances, over the Group its view verified within 30 s (#333).
     expect(phone.sent.slice(before)).toEqual([`GET /api/groups/${maple}/balances`]);
     expect(posts(phone)).toEqual([]);
+  });
+  // #728: a Debt paid in another currency, through the real App and controller.
+  it('pays Lisbon’s euro Debt in rupees at the suggested rate, shown and spoken at 130% (#728)', async () => {
+    setWindow({ fontScale: 1.3 });
+    const phone = device();
+    phone.network.currencies = true;
+    const first = phone.controller();
+    await first.signIn('alex');
+    first.dispose();
+    const app = await start(phone);
+    await settle();
+    await app.press('Open Lisbon Offsite, Work · 2 members');
+    await app.press('Balances');
+    await app.press('EUR, you owe €20.00');
+    await app.press('Record your payment to Sam Chen');
+    expect(shown()).toContain('EUR is the Debt’s own currency; INR is the main currency.');
+    const radio = (code: string) =>
+      inSheet(code).find((node) => node.props.accessibilityRole === 'radio')!;
+    expect(radio('EUR').props.accessibilityState?.checked).toBe(true);
+    await settle(Promise.resolve(radio('INR').props.onPress()));
+    expect(phone.sent).toContain(`GET /api/groups/${lisbon}/rates?from=EUR&to=INR`);
+    expect(radio('INR').props.accessibilityState?.checked).toBe(true);
+    // What it shows, and what a screen reader says of each field.
+    expect(shown()).toContain('Change any one; the other two follow.');
+    expect(shown()).toContain('Frankfurter · rates of 20 Oct');
+    expect(shown()).toContain('Clears your €20.00 Debt to Sam. Sam gets ₹1,842.00.');
+    expect(inSheet('Amount cleared, EUR')[0]!.props.value).toBe('20.00');
+    expect(inSheet('Rate, INR for each EUR')[0]!.props.value).toBe('92.10');
+    expect(inSheet('Amount paid, INR')[0]!.props.value).toBe('1842.00');
+    // At 130% on this 360dp phone, every word reads in full.
+    expect(unreadText(sheet(), 1.3, 360)).toEqual([]);
+
+    await settle(Promise.resolve(button('Record payment')!.props.onPress()));
+    expect(phone.paymentBodies).toEqual([
+      {
+        paidBy: alex.id,
+        paidTo: sam._id,
+        amount: 20,
+        currency: 'EUR',
+        note: '',
+        amountPaidMinor: 184200,
+        paidCurrency: 'INR',
+        appliedRate: '92.1',
+        rateKind: 'suggested',
+        suggestedRate: '92.1',
+        rateSource: 'frankfurter',
+        rateAsOf: '2026-10-20',
+        rateFetchedAt: iso,
+      },
+    ]);
+    expect(app.text()).toContain('Payment recorded');
+    expect(sheet()).toBeNull();
   });
 });
 
