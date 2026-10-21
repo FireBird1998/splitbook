@@ -4618,6 +4618,8 @@ describe('an Expense in one of the Group’s currencies (#720)', () => {
           return Promise.resolve(
             json({ data: { ...travelling, alternateCurrencies: state.extras }, status: 200 }),
           );
+        if (path === `/api/groups/${groupId}/currencies` && (init.method ?? 'GET') === 'GET')
+          return Promise.resolve(json({ status: 200, data: settings(state.extras) }));
         if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST') {
           const sent = JSON.parse(String(init.body)) as { currency: string };
           if (answer) return Promise.resolve(json(answer.body, answer.status));
@@ -4660,6 +4662,62 @@ describe('an Expense in one of the Group’s currencies (#720)', () => {
         message: 'A Group can have at most 4 extra currencies.',
       });
       expect(controller.getSnapshot().expense.draft?.currency).toBe('JPY');
+    });
+
+    // The Group's Currencies (board "Group currencies"), from its options, as on the web.
+    it('reads the Group’s Currencies, and shows one added there at once', async () => {
+      const { state, intercept } = currencies();
+      const { controller } = setup(intercept);
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      await controller.openCurrencies(groupId);
+      expect(controller.getSnapshot()).toMatchObject({
+        currenciesOpenFor: groupId,
+        groupCurrencies: {
+          groupId,
+          status: 'ready',
+          restored: false,
+          data: { mainCurrency: { code: 'INR', locked: true } },
+        },
+      });
+      const codes = () =>
+        controller.getSnapshot().groupCurrencies.data?.extraCurrencies.map(({ code }) => code);
+      expect(codes()).toEqual(['EUR', 'JPY']);
+      expect(await controller.addGroupCurrency('CHF')).toBe(true);
+      expect(state.added).toEqual([{ currency: 'CHF' }]);
+      expect(codes()).toEqual(['EUR', 'JPY', 'CHF']);
+      controller.closeCurrencies();
+      expect(controller.getSnapshot().currenciesOpenFor).toBeNull();
+    });
+
+    it('offline, shows this phone’s copy of them with its time, and adding needs a connection', async () => {
+      const copies = new Map<string, unknown>();
+      const { state, intercept } = currencies();
+      const { controller, create } = setup(intercept, { savedQueries: savedQueriesIn(copies) });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      await controller.openCurrencies(groupId);
+      const readAt = controller.getSnapshot().groupCurrencies.refreshedAt;
+      await vi.waitFor(() =>
+        expect(copies.has(memberIds[0] + `/api/groups/${groupId}/currencies`)).toBe(true),
+      );
+      controller.dispose();
+      state.offline = true;
+      const restarted = create();
+      try {
+        await restarted.restore();
+        await restarted.openGroup(groupId);
+        await restarted.openCurrencies(groupId);
+        expect(restarted.getSnapshot().groupCurrencies).toMatchObject({
+          status: 'ready',
+          restored: true,
+          refreshedAt: readAt,
+        });
+        expect(await restarted.addGroupCurrency('CHF')).toBe(false);
+        expect(state.added).toEqual([]);
+      } finally {
+        restarted.dispose();
+      }
     });
 
     it('needs a connection: offline it sends nothing', async () => {
