@@ -1,3 +1,5 @@
+import type { AssistantRule } from './assistant-rule';
+
 /**
  * A Connected assistant as Settings reads it from `GET /api/auth/mcp/connections`, on the web
  * and on Android (#622). The server decides its access; clients only word it.
@@ -34,13 +36,20 @@ export function connectedAssistantAccessLabel(access: string): string {
   return ACCESS_LABELS[access] ?? access;
 }
 
+/** One of the member's Groups as far as an assistant's reach goes: its id and Assistant rule. */
+export interface AssistantGroupRef {
+  id: string;
+  /** Absent on a Group stored before the rule (#621), which is Allowed. */
+  rule?: AssistantRule;
+}
+
 /**
  * How many of the member's Groups an assistant reaches (#620), for "N of M Groups": those it
  * isn't left out of and whose admins allow assistants (#621). A Group left out that the member
  * has since left counts for nothing.
  */
 export function assistantGroupCount(
-  groups: readonly { id: string; rule?: string }[],
+  groups: readonly AssistantGroupRef[],
   excludedGroupIds: readonly string[] = [],
 ): { reached: number; of: number } {
   const excluded = new Set(excludedGroupIds);

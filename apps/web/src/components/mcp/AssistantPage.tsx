@@ -22,9 +22,14 @@ import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import { assistantAddress } from '@/lib/mcp/assistant-name';
 import type { ApprovalGroup } from '@/lib/services/assistant-ledger.service';
 import { apiFetch } from '@/lib/utils/api-fetch';
-import { DisconnectDialog } from './ConnectionsSetting';
+import { AssistantGroupChecklist, leavesOutEveryGroup } from './AssistantGroupChecklist';
+import {
+  DISCONNECT_FAILED,
+  readAssistantGroups,
+  revokeAssistant,
+} from './connected-assistants-client';
+import DisconnectDialog from './DisconnectDialog';
 import { lastUsedLabel } from './last-used';
-import { ConsentGroups, leavesOutEveryGroup } from './OAuthFlow';
 
 const sameGroups = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((id) => b.includes(id));
@@ -58,19 +63,19 @@ export default function AssistantPage({ id, accountId }: { id: string; accountId
       });
     Promise.all([
       read(`/api/auth/mcp/connection?${new URLSearchParams({ id })}`),
-      read('/api/user/assistant-groups'),
+      readAssistantGroups(accountId, controller.signal),
     ])
       .then(async ([connection, listed]) => {
         if (connection.status === 404)
           throw new Error(
             'This assistant isn’t connected any more. It may have been disconnected or expired.',
           );
-        if (!connection.ok || !listed.ok) throw new Error('This assistant could not be loaded.');
-        const [read, { data }] = await Promise.all([connection.json(), listed.json()]);
+        if (!connection.ok || !listed) throw new Error('This assistant could not be loaded.');
+        const read: ConnectedAssistant = await connection.json();
         if (controller.signal.aborted) return;
         setAssistant(read);
         setExcluded(read.excludedGroupIds ?? []);
-        setGroups(data.groups);
+        setGroups(listed);
       })
       .catch((reason: Error) => {
         if (!controller.signal.aborted) setLoadError(reason.message);
@@ -108,18 +113,12 @@ export default function AssistantPage({ id, accountId }: { id: string; accountId
   async function disconnect() {
     setDisconnecting(true);
     setDisconnectError('');
-    try {
-      const response = await apiFetch('/api/auth/mcp/revoke', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', [EXPECTED_ACCOUNT_HEADER]: accountId },
-        body: JSON.stringify({ id }),
-      });
-      if (!response.ok) throw new Error();
+    if (await revokeAssistant(id, accountId)) {
       router.replace('/settings#connected-assistants');
-    } catch {
-      setDisconnectError('Could not confirm disconnection. Reload and try again.');
-      setDisconnecting(false);
+      return;
     }
+    setDisconnectError(DISCONNECT_FAILED);
+    setDisconnecting(false);
   }
 
   const address = assistant && assistantAddress(assistant.clientId);
@@ -187,7 +186,7 @@ export default function AssistantPage({ id, accountId }: { id: string; accountId
             </Box>
             <Paper variant="outlined" sx={{ p: 3 }}>
               <Stack spacing={2}>
-                <ConsentGroups
+                <AssistantGroupChecklist
                   name={assistant.name}
                   viewerId={accountId}
                   groups={groups}

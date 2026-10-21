@@ -48,7 +48,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
   if (mcpUnavailable(env)) return [];
   let context: AuthContext;
   /** A live connection as Settings and its own page read it (#615, #620). */
-  const listed = async (
+  const connectionRead = async (
     adapter: AuthContext['adapter'],
     row: McpConnection,
     consent: McpConsent,
@@ -62,8 +62,12 @@ export function mcpAuthPlugins(env: AuthEnv) {
     // The Groups the member left out (#617), for "N of M Groups" and the assistant's page.
     excludedGroupIds: row.excludedGroupIds ?? [],
   });
-  /** The member's own connection with this id, while it is live; otherwise none. */
+  /**
+   * The member's own connection with this id, while it is live; otherwise none. A member who can
+   * no longer connect assistants is refused, as on every connection read.
+   */
   const ownLive = async (adapter: AuthContext['adapter'], userId: string, id: string) => {
+    await requireMcpMember(adapter, userId, env);
     const row = await adapter.findOne<McpConnection>({
       model: 'mcpConnection',
       where: [
@@ -204,7 +208,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
           const connections = [];
           for (const row of rows) {
             const consent = await liveMcpConsent(ctx.context.adapter, row, env);
-            if (consent) connections.push(await listed(ctx.context.adapter, row, consent));
+            if (consent) connections.push(await connectionRead(ctx.context.adapter, row, consent));
           }
           ctx.setHeader('Cache-Control', 'no-store');
           return ctx.json({
@@ -222,7 +226,6 @@ export function mcpAuthPlugins(env: AuthEnv) {
           query: z.object({ id: z.string().min(1).max(128) }),
         },
         async (ctx) => {
-          await requireMcpMember(ctx.context.adapter, ctx.context.session.user.id, env);
           const live = await ownLive(
             ctx.context.adapter,
             ctx.context.session.user.id,
@@ -230,7 +233,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
           );
           if (!live) throw new APIError('NOT_FOUND');
           ctx.setHeader('Cache-Control', 'no-store');
-          return ctx.json(await listed(ctx.context.adapter, live.row, live.consent));
+          return ctx.json(await connectionRead(ctx.context.adapter, live.row, live.consent));
         },
       ),
       // An assistant's page (#620): the Groups it leaves out, applied from its next call with no
@@ -246,7 +249,6 @@ export function mcpAuthPlugins(env: AuthEnv) {
           }),
         },
         async (ctx) => {
-          await requireMcpMember(ctx.context.adapter, ctx.context.session.user.id, env);
           const live = await ownLive(ctx.context.adapter, ctx.context.session.user.id, ctx.body.id);
           // The generation holds the write to the connection that was read live.
           const saved =

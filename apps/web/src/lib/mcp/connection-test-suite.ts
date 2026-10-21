@@ -1975,7 +1975,7 @@ export function connectionTests(mongo = false) {
       fetch(`${origin}/api/auth/mcp/connection?${new URLSearchParams({ id })}`, {
         headers: { cookie },
       });
-    const listedFor = async (client: string) =>
+    const connectionOf = async (client: string) =>
       ((await connectionList()) as Array<{ id: string; clientId?: string }>).find(
         (row) => row.clientId === client,
       )!;
@@ -1984,7 +1984,7 @@ export function connectionTests(mongo = false) {
       withAnotherClient('Synthetic Page Client', async () => {
         const leftOut = 'c00000000000000000000625';
         await authorizeCode(false, false, false, [leftOut]);
-        const listed = await listedFor(clientId);
+        const listed = await connectionOf(clientId);
         expect(listed).toMatchObject({ excludedGroupIds: [leftOut] });
         const read = await readAssistant(listed.id);
         expect(read.status).toBe(200);
@@ -1994,7 +1994,7 @@ export function connectionTests(mongo = false) {
     it('changes only the member’s own live assistant, and only with Group ids (#620)', () =>
       withAnotherClient('Synthetic Guarded Client', async () => {
         await authorizeCode();
-        const own = await listedFor(clientId);
+        const own = await connectionOf(clientId);
         for (const excluded of [['not-a-group'], 'c00000000000000000000626', [42]])
           expect((await setAssistantGroups(own.id, excluded)).status, String(excluded)).toBe(400);
         const saved = await setAssistantGroups(own.id, ['c00000000000000000000626']);
@@ -2055,7 +2055,7 @@ export function connectionTests(mongo = false) {
             exclusionGroup(toggled, 'Page Toggled Club', user!._id),
           ]);
         const grant = await authorizeClient();
-        const { id } = await listedFor(clientId);
+        const { id } = await connectionOf(clientId);
         await withExcludedGroupClient(grant.access_token, async (reply) => {
           expect((await reply('list_groups', {})).text).toContain('Page Toggled Club');
           expect((await setAssistantGroups(id, [String(toggled)])).status).toBe(200);

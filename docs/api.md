@@ -178,11 +178,12 @@ The schedule is `0 18 * * *` UTC in `apps/web/vercel.json`. Production needs the
 
 ## User
 
-| Method | Path                 | Description                      |
-| ------ | -------------------- | -------------------------------- |
-| GET    | `/api/user/profile`  | Get current user                 |
-| PATCH  | `/api/user/profile`  | Update profile                   |
-| GET    | `/api/user/balances` | Cross-group balances by currency |
+| Method | Path                         | Description                                           |
+| ------ | ---------------------------- | ----------------------------------------------------- |
+| GET    | `/api/user/profile`          | Get current user                                      |
+| PATCH  | `/api/user/profile`          | Update profile                                        |
+| GET    | `/api/user/balances`         | Cross-group balances by currency                      |
+| GET    | `/api/user/assistant-groups` | The member's Groups as an assistant's page lists them |
 
 ### GET /api/user/profile
 
@@ -210,6 +211,35 @@ The schedule is `0 18 * * *` UTC in `apps/web/vercel.json`. Production needs the
   "preferredCurrency": "USD"
 }
 ```
+
+### GET /api/user/assistant-groups
+
+The member's Groups, as the approval page and an assistant's own page list them
+(#620), for the Group checklist and Settings' "N of M Groups":
+
+```json
+{
+  "data": {
+    "groups": [
+      {
+        "id": "…",
+        "name": "Maple House",
+        "currency": "INR",
+        "currencies": ["INR", "EUR"],
+        "theme": "home",
+        "archived": false,
+        "rule": "not_allowed",
+        "ruleSetBy": { "id": "…", "name": "Priya Shah" }
+      }
+    ]
+  }
+}
+```
+
+Archived Groups are listed, since assistants reach them too. `ruleSetBy` names the
+admin who set Not allowed while they are still an admin, else `null`. It answers
+**404** where assistants can't connect. The Groups an assistant leaves out come with
+its connection (`GET /api/auth/mcp/connections`, runbook `mcp-connections.md`).
 
 ### GET /api/user/balances
 

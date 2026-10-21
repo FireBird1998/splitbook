@@ -4,11 +4,6 @@ import { apiFetch } from '@/lib/utils/api-fetch';
 import { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -20,74 +15,26 @@ import { PRODUCT_NAME } from '@/lib/product';
 import { assistantAddress } from '@/lib/mcp/assistant-name';
 import {
   assistantGroupCount,
+  type AssistantGroupRef,
   connectedAssistantAccessLabel,
   type ConnectedAssistant,
   type ConnectedAssistantsPage,
 } from '@splitbook/shared/connected-assistant';
+import {
+  DISCONNECT_FAILED,
+  readAssistantGroups,
+  revokeAssistant,
+} from './connected-assistants-client';
+import DisconnectDialog from './DisconnectDialog';
 import { lastUsedLabel } from './last-used';
 
 /** "2 of 3 Groups": the member's Groups an assistant reaches (#620). */
 function groupCountLabel(
-  groups: readonly { id: string; rule?: string }[],
+  groups: readonly AssistantGroupRef[],
   excludedGroupIds?: readonly string[],
 ) {
   const { reached, of } = assistantGroupCount(groups, excludedGroupIds);
   return `${reached} of ${of} ${of === 1 ? 'Group' : 'Groups'}`;
-}
-
-/**
- * Settings' confirmation before Disconnect (#615), which an assistant's own page asks too (#620).
- */
-export function DisconnectDialog({
-  name,
-  open,
-  busy,
-  error,
-  onCancel,
-  onConfirm,
-  onExited,
-}: {
-  name: string | null;
-  open: boolean;
-  busy: boolean;
-  error: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-  onExited?: () => void;
-}) {
-  return (
-    <Dialog
-      open={open}
-      slotProps={{ transition: { onExited } }}
-      onClose={() => {
-        if (!busy) onCancel();
-      }}
-      aria-labelledby="disconnect-assistant-title"
-      aria-describedby="disconnect-assistant-description"
-    >
-      <DialogTitle id="disconnect-assistant-title">Disconnect {name}?</DialogTitle>
-      <DialogContent>
-        <DialogContentText id="disconnect-assistant-description">
-          The assistant stops at once. Items already prepared stay in your To review. Previously
-          shared information may remain in your assistant.
-        </DialogContentText>
-        {error && <Alert severity="error">{error}</Alert>}
-      </DialogContent>
-      <DialogActions>
-        <Button disabled={busy} onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          color="error"
-          sx={{ color: 'status.negative' }}
-          disabled={busy || !name}
-          onClick={onConfirm}
-        >
-          Disconnect
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
 }
 
 /**
@@ -103,7 +50,7 @@ export function ConnectionsList({
 }: {
   data: ConnectedAssistantsPage;
   /** The member's Groups, for "N of M Groups" (#620); none is shown before they load. */
-  groups?: readonly { id: string; rule?: string }[];
+  groups?: readonly AssistantGroupRef[];
   busy: string | null;
   onRevoke: (id: string) => void;
   onLoadMore: () => void;
@@ -220,7 +167,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
   const [attempt, setAttempt] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pending, setPending] = useState<ConnectedAssistant | null>(null);
-  const [groups, setGroups] = useState<readonly { id: string; rule?: string }[]>();
+  const [groups, setGroups] = useState<readonly AssistantGroupRef[]>();
   useEffect(() => {
     if (!accountId) return;
     const controller = new AbortController();
@@ -246,15 +193,9 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
   useEffect(() => {
     if (!accountId) return;
     const controller = new AbortController();
-    apiFetch('/api/user/assistant-groups', {
-      signal: controller.signal,
-      headers: { [EXPECTED_ACCOUNT_HEADER]: accountId },
-      cache: 'no-store',
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((value) => {
-        const listed = value?.data?.groups;
-        if (!controller.signal.aborted && Array.isArray(listed)) setGroups(listed);
+    readAssistantGroups(accountId, controller.signal)
+      .then((listed) => {
+        if (!controller.signal.aborted && listed) setGroups(listed);
       })
       .catch(() => {});
     return () => controller.abort();
@@ -263,12 +204,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
     setBusy(id);
     setError('');
     try {
-      const response = await apiFetch('/api/auth/mcp/revoke', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', [EXPECTED_ACCOUNT_HEADER]: accountId ?? '' },
-        body: JSON.stringify({ id }),
-      });
-      if (!response.ok) throw new Error();
+      if (!(await revokeAssistant(id, accountId ?? ''))) throw new Error();
       setDialogOpen(false);
       setData(
         (current) =>
@@ -278,7 +214,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
           },
       );
     } catch {
-      setError('Could not confirm disconnection. Reload and try again.');
+      setError(DISCONNECT_FAILED);
     } finally {
       setBusy(null);
     }
