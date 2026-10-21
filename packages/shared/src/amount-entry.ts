@@ -81,3 +81,26 @@ export function readAmountEntry(text: string, currency: string): AmountReading {
   }
   return { status: 'valid', amountMinor };
 }
+
+/** Remove only correctly placed thousands separators; malformed input remains a refusal. */
+export function ungroupAmountEntry(text: string): string {
+  return /^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/.test(text.trim())
+    ? text.trim().replaceAll(',', '')
+    : text;
+}
+
+/** Display on blur only. Invalid input stays visible, and no amount is rounded or repaired. */
+export function formatAmountEntry(text: string, currency: string): string {
+  const plain = ungroupAmountEntry(text).trim();
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(plain)) return text;
+  try {
+    const minor = BigInt(parseAmountMinor(plain, currency));
+    const precision = getCurrencyPrecision(currency);
+    const digits = minor.toString().padStart(precision + 1, '0');
+    const whole = precision ? digits.slice(0, -precision) : digits;
+    const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return precision ? `${grouped}.${digits.slice(-precision)}` : grouped;
+  } catch {
+    return text;
+  }
+}
