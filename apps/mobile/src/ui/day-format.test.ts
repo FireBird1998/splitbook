@@ -132,6 +132,8 @@ describe('times and days in characters the app’s font draws (#766)', () => {
     androidClock();
     for (const hour of [0, 9, 11, 12, 13, 23]) {
       const at = new Date(2026, 9, 19, hour, 2);
+      // One line, as U+202F keeps it: no space a line can break at.
+      expect(spellTime(at)).not.toContain(' ');
       for (const text of [
         spellTime(at),
         spellMoment(at),

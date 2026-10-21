@@ -104,9 +104,15 @@ export function spellDay(
   return format.format(date);
 }
 
-/** "1:44 PM", or "13:44", as the device's clock reads. */
+/**
+ * "1:44 PM", or "13:44", as the device's clock reads. Android's clock puts U+202F before AM and
+ * PM, which the app's font lacks, so it is a no-break space here (#766): Android draws a missing
+ * character from a wider fallback font than it measured the line in, and the time spilled out.
+ */
 export const spellTime = (date: Date) =>
-  gregorianDateFormat({ hour: 'numeric', minute: '2-digit' }).format(date);
+  gregorianDateFormat({ hour: 'numeric', minute: '2-digit' })
+    .format(date)
+    .replace(/\u202f/g, '\u00a0');
 
 /** A moment, its day first: "19 Oct, 1:44 PM", or as `spelling` spells the day. */
 export const spellMoment = (date: Date, spelling: DaySpelling = {}) =>
