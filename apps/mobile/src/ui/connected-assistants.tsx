@@ -20,6 +20,7 @@ import {
   Divider,
   SectionHeader,
   Snackbar,
+  useLargestText,
   useTextColumn,
 } from './compact';
 import { nearDay, spellDay, spellTime } from './day-format';
@@ -58,6 +59,8 @@ function AssistantRow({
   // At large text Disconnect goes onto a line of its own, at the row's end, where it would
   // leave the name less than `largeTextColumn`, as a list row's trailing value does.
   const column = useTextColumn();
+  // A long name ends at two lines, so the rows stay even, except at the largest text (#770).
+  const whole = useLargestText();
   const disconnect = (
     <CompactButton
       label="Disconnect"
@@ -85,7 +88,9 @@ function AssistantRow({
     >
       <CompactAvatar name={assistant.name} />
       <View style={{ flex: 1, minWidth: column ?? 0, gap: 2 }}>
-        <CompactText weight="semibold">{assistant.name}</CompactText>
+        <CompactText weight="semibold" numberOfLines={whole ? 0 : 2}>
+          {assistant.name}
+        </CompactText>
         <CompactText variant="caption" tone="secondary">
           {reach(assistant)}
         </CompactText>

@@ -213,11 +213,14 @@ function BalanceCurrencySwitch({
       label="Balances in"
       tabs={tabs.map((tab) => {
         const tone = getMoneyTone(tab.balance);
+        // Settled up in words, as on the web, rather than a zero amount (#770).
+        const settled = tone === 'neutral';
         return {
           currency: tab.currency,
           main: tab.main,
-          figure: formatSignedCurrency(tab.balance, tab.currency),
-          figureTone: tone === 'neutral' ? 'secondary' : tone,
+          figure: settled ? 'Settled up' : formatSignedCurrency(tab.balance, tab.currency),
+          inWords: settled,
+          figureTone: settled ? 'primary' : tone,
           name: tabName(tab),
         };
       })}
