@@ -17,7 +17,12 @@ type MoneyEntryProps = {
 function useMoneyEntry({ value, currency, onValueChange }: MoneyEntryProps) {
   const [editing, setEditing] = useState<string | null>(null);
   return {
-    value: editing ?? formatAmountEntry(value, currency),
+    value:
+      editing === null
+        ? formatAmountEntry(value, currency)
+        : ungroupAmountEntry(editing) === value
+          ? editing
+          : ungroupAmountEntry(value),
     onFocus: () => setEditing(ungroupAmountEntry(value)),
     onBlur: () => setEditing(null),
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
