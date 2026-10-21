@@ -13,6 +13,7 @@ const sam = { id: 'a00000000000000000000002', name: 'Sam', email: 'sam@example.t
 const lisbonId = 'b00000000000000000000001';
 const goaId = 'b00000000000000000000002';
 const mapleId = 'b00000000000000000000003';
+const baliId = 'b00000000000000000000004';
 const tagId = 'c00000000000000000000001';
 const iso = '2026-10-02T06:30:00.000Z';
 const person = (user: typeof alex) => ({ _id: user.id, name: user.name, image: null });
@@ -40,7 +41,9 @@ const lisbon = groupOf(lisbonId, 'Lisbon & Tokyo', 'trip', ['EUR', 'JPY']);
 /** Rupees only. */
 const goa = groupOf(goaId, 'Goa Weekend', 'trip', []);
 const maple = groupOf(mapleId, 'Maple House', 'home', ['EUR']);
-const groups = [lisbon, goa, maple];
+/** An older Trip: no extra currencies listed, but Expenses in rupees and euros (T10). */
+const bali = groupOf(baliId, 'Bali Getaway', 'trip', []);
+const groups = [lisbon, goa, maple, bali];
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const tripPath = `/api/groups/${lisbonId}/trip-summary`;
 
@@ -88,7 +91,8 @@ const tripSummary = (currency: string | null, timeZone: string) => {
 };
 
 function fixture() {
-  const server = { offline: false, created: 0 };
+  /** `offlineAfterPost`: the connection drops as soon as a save's POST is answered. */
+  const server = { offline: false, created: 0, offlineAfterPost: false };
   let cookie: string | null = null,
     owner: string | null = null,
     cleanup = false;
@@ -174,7 +178,12 @@ function fixture() {
                     currency,
                     totalAmount: row.spent / (currency === 'JPY' ? 1 : 100),
                   }))
-                : [{ currency: 'INR', totalAmount: 0 }],
+                : id === baliId
+                  ? [
+                      { currency: 'INR', totalAmount: 1200 },
+                      { currency: 'EUR', totalAmount: 40 },
+                    ]
+                  : [{ currency: 'INR', totalAmount: 0 }],
             userOwes: 0,
             userGetsBack: 0,
             byMember: [],
@@ -183,6 +192,8 @@ function fixture() {
       });
     if (path === `/api/groups/${id}/expenses` && method === 'POST') {
       server.created += 1;
+      // The reply arrives; every request after it can't reach the server.
+      if (server.offlineAfterPost) server.offline = true;
       return json(
         { status: 201, data: { _id: `e${String(server.created).padStart(23, '0')}`, group: id } },
         201,
@@ -387,6 +398,43 @@ describe('a Trip in several currencies reads its Trip summary (#730)', () => {
     await controller.updateExpenseDraft({ amount: '4200', description: 'Ramen', tagId });
     await controller.saveExpense();
     await vi.waitFor(() => expect(made.tripReads().length).toBe(before + 1));
+    expect(controller.getSnapshot().financial.trip).toMatchObject({ status: 'ready' });
+  });
+
+  // The Tester's mutant T4 drops the Trip summary rows from the ledger rows a change removes.
+  it('leaves no copy from before a change, even when the read after it fails offline', async () => {
+    const made = fixture();
+    const first = started(made);
+    await first.signIn('alex');
+    await first.openGroup(lisbonId);
+    await vi.waitFor(() => expect(made.savedTrips()).toHaveLength(1));
+    await first.openExpense(lisbonId);
+    await first.updateExpenseDraft({ amount: '4200', description: 'Ramen', tagId });
+    // Saved, and the connection drops before the Trip summary is read again after it.
+    made.server.offlineAfterPost = true;
+    await first.saveExpense();
+    await vi.waitFor(() => expect(made.server.created).toBe(1));
+    first.dispose();
+    const restarted = started(made);
+    await restarted.restore();
+    await restarted.openGroup(lisbonId);
+    const trip = restarted.getSnapshot().financial.trip;
+    // Nothing from before the change: never the pre-change ¥186,000.
+    expect(trip?.data).toBeNull();
+    expect(trip).toMatchObject({ status: 'error' });
+    expect(trip?.message).toContain('not saved on this device');
+    expect(made.savedTrips()).toEqual([]);
+  });
+
+  // T10: an older Trip lists no extra currency, but its Expenses are in more than one.
+  it('reads the summary of an older Trip whose Expenses are in several currencies', async () => {
+    const made = fixture();
+    const controller = started(made);
+    await controller.signIn('alex');
+    await controller.openGroup(baliId);
+    expect(made.calls.map(({ path }) => path)).toContain(
+      `/api/groups/${baliId}/trip-summary?tz=UTC`,
+    );
     expect(controller.getSnapshot().financial.trip).toMatchObject({ status: 'ready' });
   });
 
