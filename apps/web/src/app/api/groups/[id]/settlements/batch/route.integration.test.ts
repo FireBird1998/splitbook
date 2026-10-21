@@ -57,7 +57,7 @@ const payment = {
   paidCurrency: 'INR',
   settlements: [{ currency: 'INR', amount: 20 }, eur],
 };
-async function trip() {
+async function trip(expenseAmount = 40) {
   const group = await groupService.create(
     {
       name: 'Fictional batch trip',
@@ -74,12 +74,12 @@ async function trip() {
       id,
       {
         description: 'Fictional dinner',
-        amount: 40,
+        amount: expenseAmount,
         currency,
         category: 'food',
         tag: 'Food',
         date: new Date('2026-10-21T12:00:00Z'),
-        paidBy: [{ user: alex, amount: 40 }],
+        paidBy: [{ user: alex, amount: expenseAmount }],
         splitMethod: 'equal',
         splitBetween: [{ user: alex }, { user: sam }],
       },
@@ -305,6 +305,22 @@ describe('Settlement batch HTTP contract (#734)', () => {
     expect((await record(id, { ...payment, paidBy: priya })).body.code).toBe('NO_SETTLEMENT_DEBT');
     expect((await record(id, { ...payment, paidBy: alex, paidTo: sam })).status).toBe(422);
     expect((await read(id)).body.data).toEqual([]);
+  });
+  it('refuses duplicate cleared currencies before two partial payments can record anything', async () => {
+    const id = await trip(80); // Sam owes Alex €40; both €10 rows would otherwise be valid.
+    const before = await ledgers(id);
+    expect(before.find((row) => row.currency === 'EUR')?.balances).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ user: expect.objectContaining({ _id: sam }), balance: -40 }),
+      ]),
+    );
+    const partial = { ...eur, amount: 10, amountPaidMinor: 92500 };
+    const refused = await record(id, { ...payment, settlements: [partial, partial] });
+    expect(refused.status).toBe(422);
+    expect(refused.body.code).toBe('VALIDATION_ERROR');
+    expect((await read(id)).body.data).toEqual([]);
+    expect(await events(id)).toEqual([]);
+    expect(await ledgers(id)).toEqual(before);
   });
   it('requires one retry key and one row per currency, with a listed paying currency', async () => {
     const id = await trip();
