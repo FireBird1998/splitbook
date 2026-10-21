@@ -65,3 +65,13 @@ it('fetches once for concurrent daily cron calls and never returns the rate tabl
   expect((await tomorrow(request('Bearer synthetic-cron-fixture'))).status).toBe(200);
   expect(calls).toBe(2);
 });
+
+it('does not let a delayed earlier-day invocation replace the newer daily table', async () => {
+  await handler(request('Bearer synthetic-cron-fixture'));
+  const yesterday = createRefreshHandler(
+    { primary, fallback },
+    () => new Date('2026-10-20T18:00:00Z'),
+  );
+  await yesterday(request('Bearer synthetic-cron-fixture'));
+  expect(calls).toBe(1);
+});

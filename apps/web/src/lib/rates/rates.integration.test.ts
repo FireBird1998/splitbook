@@ -9,6 +9,9 @@ import {
   insertDemoPersonas,
   signIn,
 } from '@/lib/test-utils/signed-in-route';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
+import { registerSplitbookTools } from '@/lib/mcp/tools';
 import { refreshRates } from './service';
 import type { RateProvider } from './providers';
 
@@ -28,6 +31,9 @@ const primary: RateProvider = {
 const fallback: RateProvider = { source: 'exchange-rate-api', fetchTable: async () => [] };
 
 beforeAll(async () => {
+  vi.stubGlobal('fetch', () => {
+    throw new Error('External network is forbidden in rate tests');
+  });
   await connectSignedIn(db);
   route = await import('@/app/api/groups/[id]/rates/route');
 });
@@ -47,7 +53,10 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(now);
 });
-afterAll(() => disconnectSignedIn(db));
+afterAll(async () => {
+  vi.unstubAllGlobals();
+  await disconnectSignedIn(db);
+});
 // Real timers continue to drive MongoDB and HTTP; only the date moves.
 afterEach(() => vi.useRealTimers());
 
@@ -205,5 +214,52 @@ describe('Group suggested rate read', () => {
       suggestion: null,
       reason: 'same_currency',
     });
+  });
+  it('never exposes fallback rates through the assistant tools', async () => {
+    await refreshRates({ primary: down, fallback: fallbackRates }, now);
+    expect((await read(await signIn('alex'))).body.data.suggestion.attributionRequired).toBe(true);
+    const handler = createMcpHandler(
+      async () => {
+        const server = new McpServer({ name: 'fictional-rate-boundary', version: '1' });
+        registerSplitbookTools(
+          server,
+          { id: DEMO_PERSONA_IDS.alex },
+          ['ledger:read'],
+          'http://localhost:3000',
+        );
+        return server;
+      },
+      { legacy: 'stateless' },
+    );
+    const client = new Client({ name: 'fictional-rate-client', version: '1' });
+    try {
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL('http://localhost/api/mcp'), {
+          fetch: async (input, init) => handler.fetch(new Request(input, init)),
+        }),
+      );
+      const names = (await client.listTools()).tools.map((tool) => tool.name);
+      expect(names).toEqual(['list_groups', 'group_context', 'group_balances', 'group_spending']);
+      for (const name of names) {
+        const result = await client.callTool({
+          name,
+          arguments:
+            name === 'list_groups'
+              ? {}
+              : name === 'group_spending'
+                ? { groupId, from: '2026-10-01', to: '2026-10-21' }
+                : { groupId },
+        });
+        expect(result.isError).not.toBe(true);
+        expect(JSON.stringify(result)).not.toMatch(
+          /exchange-rate-api|Rates By Exchange Rate API|"rate"|"suggestion"/,
+        );
+      }
+      await expect(
+        client.callTool({ name: 'exchange_rates', arguments: { groupId, from: 'EUR', to: 'INR' } }),
+      ).rejects.toThrow();
+    } finally {
+      await client.close();
+    }
   });
 });
