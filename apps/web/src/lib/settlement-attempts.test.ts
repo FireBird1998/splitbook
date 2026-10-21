@@ -7,6 +7,7 @@ import {
   recordSettlement,
   removeSettlementAttempt,
   settlementBody,
+  settlementPath,
   subscribeSettlementAttempts,
   type AttemptStorage,
   type NamedSettlementPayment,
@@ -206,6 +207,85 @@ describe('recordSettlement', () => {
       'currency',
       'note',
     ]);
+  });
+
+  it('stores and resends a payment that settles several Debts at once, to the batch route (#734)', async () => {
+    const storage = new MemoryStorage();
+    // Sam pays Priya ₹3,322.00 at once: ₹1,480.00 for the rupee Debt, ₹1,842.00 for €20.00.
+    const both = {
+      ...samPaysPriya,
+      amount: 3322,
+      currency: 'INR',
+      note: '',
+      batch: [
+        { amount: 1480, currency: 'INR' },
+        {
+          amount: 20,
+          currency: 'EUR',
+          paidCurrency: 'INR',
+          amountPaidMinor: 184200,
+          appliedRate: '92.1',
+          rateKind: 'suggested' as const,
+          suggestedRate: '92.1',
+          rateSource: 'frankfurter' as const,
+          rateAsOf: '2026-10-20',
+          rateFetchedAt: '2026-10-21T00:30:00.000Z',
+        },
+      ],
+    };
+    const server = fakeServer((send, commit) => {
+      if (send === 1) {
+        commit();
+        return 'lost';
+      }
+    });
+
+    expect(await save(storage, server.post, { payment: both })).toMatchObject({
+      status: 'unconfirmed',
+    });
+    // The route's body: the people and paying currency once, then one row for each Debt.
+    expect(JSON.parse(server.sent[0].body)).toEqual({
+      paidBy: SAM,
+      paidTo: PRIYA,
+      paidCurrency: 'INR',
+      settlements: [
+        { amount: 1480, currency: 'INR' },
+        {
+          amount: 20,
+          currency: 'EUR',
+          amountPaidMinor: 184200,
+          appliedRate: '92.1',
+          rateKind: 'suggested',
+          suggestedRate: '92.1',
+          rateSource: 'frankfurter',
+          rateAsOf: '2026-10-20',
+          rateFetchedAt: '2026-10-21T00:30:00.000Z',
+        },
+      ],
+    });
+    expect(settlementPath(GROUP, server.sent[0].body)).toBe(
+      `/api/groups/${GROUP}/settlements/batch`,
+    );
+    expect(settlementPath(GROUP, settlementBody(samPaysPriya))).toBe(
+      `/api/groups/${GROUP}/settlements`,
+    );
+
+    // Read back from storage, it still says what it paid in all and each Debt it clears.
+    const [attempt] = stored(storage);
+    expect(attempt).toMatchObject({
+      paidBy: SAM,
+      paidTo: PRIYA,
+      amount: 3322,
+      currency: 'INR',
+      batch: [
+        { amount: 1480, currency: 'INR' },
+        { amount: 20, currency: 'EUR', amountPaidMinor: 184200 },
+      ],
+    });
+    expect(await save(storage, server.post, { resend: attempt })).toEqual({ status: 'recorded' });
+    expect(server.sent[1]).toEqual(server.sent[0]);
+    expect(server.recorded.size).toBe(1);
+    expect(stored(storage)).toEqual([]);
   });
 
   it('a different payment between the same two members, either way round, waits for the stored one', async () => {
