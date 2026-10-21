@@ -73,6 +73,34 @@ describe('calculateSettlementBatch', () => {
       { ...provenance, amountPaidMinor: 2, appliedRate: '200', rateKind: 'custom' },
     ]);
   });
+  it('uses the custom rate for paid amounts while retaining the different suggestion', () => {
+    const result = calculateSettlementBatch({
+      debts: [{ currency: 'EUR', amountMinor: 2000 }],
+      paidCurrency: 'INR',
+      rates: {
+        EUR: {
+          rateKind: 'custom',
+          rate: '92.5',
+          suggestedRate: '92.1',
+          rateSource: 'frankfurter',
+          rateAsOf: '2026-10-20',
+          rateFetchedAt: '2026-10-21T00:15:00.000Z',
+        },
+      },
+    });
+    expect(result.settlements).toMatchObject([
+      {
+        currency: 'EUR',
+        amount: 20,
+        paidCurrency: 'INR',
+        amountPaidMinor: 185000,
+        appliedRate: '92.5',
+        suggestedRate: '92.1',
+        rateKind: 'custom',
+      },
+    ]);
+    expect(result.totalPaidMinor).toBe(185000);
+  });
   it('refuses a missing rate, repeated currency, nonpositive Debt and unsafe total', () => {
     const calculate = (debts: { currency: string; amountMinor: number }[], rates = {}) =>
       calculateSettlementBatch({ debts, rates, paidCurrency: 'INR' });
