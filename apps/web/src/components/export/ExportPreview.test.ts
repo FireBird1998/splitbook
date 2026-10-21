@@ -397,3 +397,11 @@ it('collapses settled empty statement currencies to the same one-line preview', 
   expect(text(html)).toContain('INR: nothing in this period; everyone is settled up.');
   expect(html).not.toContain('<table');
 });
+
+it('places the cross-currency column note beneath the payments preview table only', () => {
+  const note = 'Cross-currency payments add Amount paid, Paid currency and Rate';
+  const html = render({ status: 'ready', data: { ...csv, files: [{ ...csv.files[0], kind: 'payments', name: 'payments.csv' }] } });
+  expect(text(html)).toContain(note);
+  expect(html.indexOf(note)).toBeGreaterThan(html.indexOf('</table>'));
+  expect(text(render({ status: 'ready', data: csv }))).not.toContain(note);
+});
