@@ -42,7 +42,7 @@ import { groupCurrencies } from '@splitbook/shared/group-currencies';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import { fetchWebBalances, fetchWebRead } from '@/lib/web-read';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
-import type { SettlementAttempt } from '@/lib/settlement-attempts';
+import { samePair, type SettlementAttempt } from '@/lib/settlement-attempts';
 import { PersonAvatar } from './TabCard';
 import BalanceCurrencySwitch, { BALANCES_PANEL_ID, balanceTabId } from './BalanceCurrencySwitch';
 import PaymentsTable, { type PaymentRead, type PaymentsState } from './PaymentsTable';
@@ -302,11 +302,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
       ) ?? null)
     : null;
   const settlingStored = settling
-    ? (attempts.find(
-        (attempt) =>
-          [attempt.paidBy, attempt.paidTo].sort().join() ===
-          [settling.paidBy, settling.paidTo].sort().join(),
-      ) ?? null)
+    ? (attempts.find((attempt) => samePair(attempt, settling.paidBy, settling.paidTo)) ?? null)
     : null;
   const names = Object.fromEntries(group.members.map(({ user }) => [user._id, user.name]));
 

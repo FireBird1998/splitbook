@@ -40,6 +40,7 @@ import {
   browserPairLock,
   discardSettlementAttempt,
   recordSettlement,
+  samePair,
   type NamedSettlementPayment,
   type SettlementAttempt,
 } from '@/lib/settlement-attempts';
@@ -114,9 +115,6 @@ export interface RecordPaymentFormProps {
   /** The pair the form shows, so Settle up can mark its row. */
   onPairChange?: (pair: { from: string; to: string }) => void;
 }
-
-const samePair = (attempt: SettlementAttempt, a: string, b: string) =>
-  [attempt.paidBy, attempt.paidTo].sort().join() === [a, b].sort().join();
 
 /** "You paid Priya Shah ₹250.25.", "Sam Chen paid you ₹100.00.", from the viewer's side. */
 function recordedMessage(payment: NamedSettlementPayment, viewerId: string) {

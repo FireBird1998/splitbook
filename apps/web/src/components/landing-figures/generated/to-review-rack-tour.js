@@ -9,24 +9,38 @@ var UNIT = Math.sqrt(1.6);
 function cameraOf({ scale, azimuth = AZIMUTH, elevation = ELEVATION }) {
   const a = azimuth * RADIANS;
   const e = elevation * RADIANS;
-  return { sinA: Math.sin(a), cosA: Math.cos(a), sinE: Math.sin(e), cosE: Math.cos(e), k: scale * UNIT };
+  return {
+    sinA: Math.sin(a),
+    cosA: Math.cos(a),
+    sinE: Math.sin(e),
+    cosE: Math.cos(e),
+    k: scale * UNIT,
+  };
 }
 function iso([x, y, z], projection) {
   const { origin } = projection;
   const { sinA, cosA, sinE, cosE, k } = cameraOf(projection);
-  return [origin[0] + (x * sinA - y * cosA) * k, origin[1] + ((x * cosA + y * sinA) * sinE - z * cosE) * k];
+  return [
+    origin[0] + (x * sinA - y * cosA) * k,
+    origin[1] + ((x * cosA + y * sinA) * sinE - z * cosE) * k,
+  ];
 }
 var tenth = (value) => {
-  const text = (Math.round(value * 10) / 10).toFixed(1).replace(/\.0$/, "");
-  return text === "-0" ? "0" : text;
+  const text = (Math.round(value * 10) / 10).toFixed(1).replace(/\.0$/, '');
+  return text === '-0' ? '0' : text;
 };
 function pathOf(points, closed = false) {
-  if (!points.length)
-    return "";
-  return points.map(([x, y], at) => `${at ? "L" : "M"}${tenth(x)} ${tenth(y)}`).join("") + (closed ? "Z" : "");
+  if (!points.length) return '';
+  return (
+    points.map(([x, y], at) => `${at ? 'L' : 'M'}${tenth(x)} ${tenth(y)}`).join('') +
+    (closed ? 'Z' : '')
+  );
 }
 function onTop(points, z, projection, closed = false) {
-  return pathOf(points.map(([x, y]) => iso([x, y, z], projection)), closed);
+  return pathOf(
+    points.map(([x, y]) => iso([x, y, z], projection)),
+    closed,
+  );
 }
 var lineOnTop = (from, to, z, projection) => onTop([from, to], z, projection);
 function axisVector(projection, [dx, dy, dz]) {
@@ -39,28 +53,41 @@ function translateAlong(projection, by) {
   const [x, y] = axisVector(projection, by);
   return `translate(${fine(x)} ${fine(y)})`;
 }
-var escape = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-var attrs = (pairs) => Object.entries(pairs).filter(([, value]) => value !== void 0 && value !== false).map(([key, value]) => ` ${key}="${escape(String(value))}"`).join("");
-function solidSvg(paths, { tone = "hi", crease = "faint", halo = false, lit = false, flat = false, className, inner = "" } = {}) {
+var escape = (text) =>
+  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+var attrs = (pairs) =>
+  Object.entries(pairs)
+    .filter(([, value]) => value !== void 0 && value !== false)
+    .map(([key, value]) => ` ${key}="${escape(String(value))}"`)
+    .join('');
+function solidSvg(
+  paths,
+  {
+    tone = 'hi',
+    crease = 'faint',
+    halo = false,
+    lit = false,
+    flat = false,
+    className,
+    inner = '',
+  } = {},
+) {
   const parts = [];
-  if (halo)
-    parts.push(`<path class="iso-halo" d="${paths.fill}"/>`);
+  if (halo) parts.push(`<path class="iso-halo" d="${paths.fill}"/>`);
   parts.push(`<path class="iso-fill" d="${paths.fill}"/>`);
   if (!flat) {
     paths.shades.forEach((d, shade) => {
-      if (d)
-        parts.push(`<path class="iso-shade" data-shade="${shade}" d="${d}"/>`);
+      if (d) parts.push(`<path class="iso-shade" data-shade="${shade}" d="${d}"/>`);
     });
     parts.push(`<path class="iso-top" d="${paths.top}"/>`);
   }
-  if (crease !== "none" && paths.crease)
+  if (crease !== 'none' && paths.crease)
     parts.push(`<path class="iso-line iso-crease" data-tone="${crease}" d="${paths.crease}"/>`);
-  if (crease !== "none" && paths.bevel)
+  if (crease !== 'none' && paths.bevel)
     parts.push(`<path class="iso-line iso-bevel" data-tone="${crease}" d="${paths.bevel}"/>`);
-  if (inner)
-    parts.push(inner);
+  if (inner) parts.push(inner);
   parts.push(`<path class="iso-line iso-edge" data-tone="${tone}" d="${paths.outline}"/>`);
-  return `<g${attrs({ class: className ? `iso-solid ${className}` : "iso-solid", "data-lit": lit ? "" : void 0, "data-seamless": paths.seamless ? "" : void 0 })}>${parts.join("")}</g>`;
+  return `<g${attrs({ class: className ? `iso-solid ${className}` : 'iso-solid', 'data-lit': lit ? '' : void 0, 'data-seamless': paths.seamless ? '' : void 0 })}>${parts.join('')}</g>`;
 }
 
 // vendor/anatomy/kit/lathe.mjs
@@ -76,7 +103,11 @@ var unit3 = (a) => {
   const length = len3(a) || 1;
   return [a[0] / length, a[1] / length, a[2] / length];
 };
-var cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+var cross3 = (a, b) => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
 function viewOf(P) {
   const { sinA, cosA, sinE, cosE } = cameraOf(P);
   return [cosA * cosE, sinA * cosE, sinE];
@@ -104,23 +135,32 @@ function pointOf(F, s, r, angle) {
   return [
     F.o[0] + F.a[0] * s + r * (c * F.u[0] + n * F.v[0]),
     F.o[1] + F.a[1] * s + r * (c * F.u[1] + n * F.v[1]),
-    F.o[2] + F.a[2] * s + r * (c * F.u[2] + n * F.v[2])
+    F.o[2] + F.a[2] * s + r * (c * F.u[2] + n * F.v[2]),
   ];
 }
 var angleToward = (F, direction) => Math.atan2(dot3(direction, F.v), dot3(direction, F.u));
 function hullTagged(points) {
   const sorted = [...points].sort((a, b) => a.p[0] - b.p[0] || a.p[1] - b.p[1]);
   if (sorted.length < 3) return sorted;
-  const cross = (o, a, b) => (a.p[0] - o.p[0]) * (b.p[1] - o.p[1]) - (a.p[1] - o.p[1]) * (b.p[0] - o.p[0]);
+  const cross = (o, a, b) =>
+    (a.p[0] - o.p[0]) * (b.p[1] - o.p[1]) - (a.p[1] - o.p[1]) * (b.p[0] - o.p[0]);
   const lower = [];
   for (const point of sorted) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 1e-9) lower.pop();
+    while (
+      lower.length >= 2 &&
+      cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 1e-9
+    )
+      lower.pop();
     lower.push(point);
   }
   const upper = [];
   for (let index = sorted.length - 1; index >= 0; index--) {
     const point = sorted[index];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 1e-9) upper.pop();
+    while (
+      upper.length >= 2 &&
+      cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 1e-9
+    )
+      upper.pop();
     upper.push(point);
   }
   return [...lower.slice(0, -1), ...upper.slice(0, -1)];
@@ -131,7 +171,11 @@ function groupsOf(keys) {
   const out = [];
   const start = keys.findIndex((key, index) => key !== keys[(index + count - 1) % count]);
   if (start < 0) {
-    if (keys[0] !== null) out.push({ key: keys[0], run: Array.from({ length: count + 1 }, (_, index) => index % count) });
+    if (keys[0] !== null)
+      out.push({
+        key: keys[0],
+        run: Array.from({ length: count + 1 }, (_, index) => index % count),
+      });
     return out;
   }
   let current = null;
@@ -148,7 +192,14 @@ function groupsOf(keys) {
   if (current && current.key !== null) out.push(current);
   return out;
 }
-var stepsFor = (radius, least = 16, most = 112, scale = 0) => Math.max(least, Math.min(most, scale ? Math.ceil(TAU * radius * scale / 3) : Math.round(radius * 1.3 / 4) * 4));
+var stepsFor = (radius, least = 16, most = 112, scale = 0) =>
+  Math.max(
+    least,
+    Math.min(
+      most,
+      scale ? Math.ceil((TAU * radius * scale) / 3) : Math.round((radius * 1.3) / 4) * 4,
+    ),
+  );
 function chains(edges) {
   const out = [];
   let current = null;
@@ -186,8 +237,10 @@ function labelledArcs(nr, na, view, light, gr = nr, ga = na) {
       }
     }
   }
-  const wrap = (angle) => (angle % TAU + TAU) % TAU;
-  const sorted = [...new Set(cuts.map((angle) => Math.round(wrap(angle) * 1e9) / 1e9))].sort((a, b) => a - b);
+  const wrap = (angle) => ((angle % TAU) + TAU) % TAU;
+  const sorted = [...new Set(cuts.map((angle) => Math.round(wrap(angle) * 1e9) / 1e9))].sort(
+    (a, b) => a - b,
+  );
   const label = (angle) => {
     const facing = gr * view.flat * Math.cos(angle - view.phi) + ga * view.a;
     if (facing <= 1e-9) return -1;
@@ -207,7 +260,11 @@ function labelledArcs(nr, na, view, light, gr = nr, ga = na) {
     if (last && last.tone === arc.tone && Math.abs(last.to - arc.from) < 1e-9) last.to = arc.to;
     else merged.push({ ...arc });
   }
-  if (merged.length > 1 && merged[0].tone === merged[merged.length - 1].tone && Math.abs(merged[merged.length - 1].to - TAU - merged[0].from) < 1e-9) {
+  if (
+    merged.length > 1 &&
+    merged[0].tone === merged[merged.length - 1].tone &&
+    Math.abs(merged[merged.length - 1].to - TAU - merged[0].from) < 1e-9
+  ) {
     const last = merged.pop();
     merged[0].from = last.from - TAU;
   }
@@ -243,7 +300,13 @@ function curveRuns(meridian) {
   let start = 0;
   while (start < m - 1) {
     let end = start + 1;
-    while (end < m - 1 && meridian[end][2] && Math.abs(meridian[end + 1][0] - meridian[end][0]) > 1e-9 && Math.abs(meridian[end][0] - meridian[end - 1][0]) > 1e-9) end++;
+    while (
+      end < m - 1 &&
+      meridian[end][2] &&
+      Math.abs(meridian[end + 1][0] - meridian[end][0]) > 1e-9 &&
+      Math.abs(meridian[end][0] - meridian[end - 1][0]) > 1e-9
+    )
+      end++;
     const run = meridian.slice(start, end + 1);
     const n = run.length - 1;
     if (n >= 2 && run.every((point, j) => j === 0 || Math.abs(point[0] - run[j - 1][0]) > 1e-9)) {
@@ -256,11 +319,20 @@ function curveRuns(meridian) {
         const d1 = d[j + 1];
         const radius = (s) => {
           const t = (s - s0) / hj;
-          return (2 * t ** 3 - 3 * t ** 2 + 1) * r0 + (t ** 3 - 2 * t ** 2 + t) * hj * d0 + (-2 * t ** 3 + 3 * t ** 2) * r1 + (t ** 3 - t ** 2) * hj * d1;
+          return (
+            (2 * t ** 3 - 3 * t ** 2 + 1) * r0 +
+            (t ** 3 - 2 * t ** 2 + t) * hj * d0 +
+            (-2 * t ** 3 + 3 * t ** 2) * r1 +
+            (t ** 3 - t ** 2) * hj * d1
+          );
         };
         const slope = (s) => {
           const t = (s - s0) / hj;
-          return ((6 * t ** 2 - 6 * t) * r0 + (6 * t - 6 * t ** 2) * r1) / hj + (3 * t ** 2 - 4 * t + 1) * d0 + (3 * t ** 2 - 2 * t) * d1;
+          return (
+            ((6 * t ** 2 - 6 * t) * r0 + (6 * t - 6 * t ** 2) * r1) / hj +
+            (3 * t ** 2 - 4 * t + 1) * d0 +
+            (3 * t ** 2 - 2 * t) * d1
+          );
         };
         segments[start + j] = { radius, slope };
       }
@@ -292,11 +364,32 @@ function curved(meridian, P, segments, { error = 0.2, depth = 6 } = {}) {
   }
   return out;
 }
-function smoothRows(meridian, F, P, { rows = 6, slope = null, radius = null, steps = 48, error = 0.35, depth: deepest = 8, fineness = 0.1 } = {}) {
+function smoothRows(
+  meridian,
+  F,
+  P,
+  {
+    rows = 6,
+    slope = null,
+    radius = null,
+    steps = 48,
+    error = 0.35,
+    depth: deepest = 8,
+    fineness = 0.1,
+  } = {},
+) {
   const V = viewOf(P);
   const L = lightOf(P);
-  const view = { a: dot3(F.a, V), flat: Math.hypot(dot3(F.u, V), dot3(F.v, V)), phi: Math.atan2(dot3(F.v, V), dot3(F.u, V)) };
-  const light = { a: dot3(F.a, L), flat: Math.hypot(dot3(F.u, L), dot3(F.v, L)), phi: Math.atan2(dot3(F.v, L), dot3(F.u, L)) };
+  const view = {
+    a: dot3(F.a, V),
+    flat: Math.hypot(dot3(F.u, V), dot3(F.v, V)),
+    phi: Math.atan2(dot3(F.v, V), dot3(F.u, V)),
+  };
+  const light = {
+    a: dot3(F.a, L),
+    flat: Math.hypot(dot3(F.u, L), dot3(F.v, L)),
+    phi: Math.atan2(dot3(F.v, L), dot3(F.u, L)),
+  };
   const m = meridian.length;
   const faces = [];
   for (let i = 0; i < m - 1; i++) {
@@ -323,7 +416,7 @@ function smoothRows(meridian, F, P, { rows = 6, slope = null, radius = null, ste
     const g = slope ? slope(s) : splines[i] ? splines[i].slope(s) : null;
     if (g !== null) {
       const length2 = Math.hypot(1, g);
-      return [sign / length2, -sign * g / length2];
+      return [sign / length2, (-sign * g) / length2];
     }
     const a = vertexNormal(i, faces[i]);
     const b = vertexNormal(i + 1, faces[i]);
@@ -336,17 +429,27 @@ function smoothRows(meridian, F, P, { rows = 6, slope = null, radius = null, ste
     const [s0, r0] = meridian[i];
     const [s1, r1] = meridian[i + 1];
     const s = s0 + (s1 - s0) * u;
-    return iso(pointOf(F, s, radius ? radius(s) : splines && splines[i] ? splines[i].radius(s) : r0 + (r1 - r0) * u, angle), P);
+    return iso(
+      pointOf(
+        F,
+        s,
+        radius ? radius(s) : splines && splines[i] ? splines[i].radius(s) : r0 + (r1 - r0) * u,
+        angle,
+      ),
+      P,
+    );
   };
   const buckets = [[], [], [], [], []];
   const fine2 = TAU / Math.max(24, Math.min(192, steps * 1.5));
   const arcPoints = (i, u, from, to) => {
     const count = Math.max(1, Math.ceil((to - from) / fine2));
-    return Array.from({ length: count + 1 }, (_, index) => pointAt(i, u, from + (to - from) * index / count));
+    return Array.from({ length: count + 1 }, (_, index) =>
+      pointAt(i, u, from + ((to - from) * index) / count),
+    );
   };
   const centreOf = (arc, reference) => {
     let mid = (arc.from + arc.to) / 2 - reference;
-    mid = (mid % TAU + TAU) % TAU;
+    mid = ((mid % TAU) + TAU) % TAU;
     return mid;
   };
   const levelOf = (i, u) => {
@@ -356,12 +459,14 @@ function smoothRows(meridian, F, P, { rows = 6, slope = null, radius = null, ste
       if (!groups.has(arc.tone)) groups.set(arc.tone, []);
       groups.get(arc.tone).push(arc);
     }
-    for (const list of groups.values()) list.sort((x, y) => centreOf(x, light.phi) - centreOf(y, light.phi));
+    for (const list of groups.values())
+      list.sort((x, y) => centreOf(x, light.phi) - centreOf(y, light.phi));
     return { i, u, groups };
   };
   const same = (x, y) => {
     if (x.groups.size !== y.groups.size) return false;
-    for (const [tone, list] of x.groups) if ((y.groups.get(tone) ?? []).length !== list.length) return false;
+    for (const [tone, list] of x.groups)
+      if ((y.groups.get(tone) ?? []).length !== list.length) return false;
     return true;
   };
   const align = (reference, arc) => {
@@ -383,11 +488,14 @@ function smoothRows(meridian, F, P, { rows = 6, slope = null, radius = null, ste
       list.forEach((arc, index) => {
         const lo = align(arc, a.groups.get(tone)[index]);
         const hi = align(arc, b.groups.get(tone)[index]);
-        for (const key of ["from", "to"]) {
+        for (const key of ['from', 'to']) {
           const p = pointAt(i, mid.u, arc[key]);
           const p0 = pointAt(i, a.u, lo[key]);
           const p1 = pointAt(i, b.u, hi[key]);
-          worst = Math.max(worst, Math.hypot(p[0] - (p0[0] + p1[0]) / 2, p[1] - (p0[1] + p1[1]) / 2));
+          worst = Math.max(
+            worst,
+            Math.hypot(p[0] - (p0[0] + p1[0]) / 2, p[1] - (p0[1] + p1[1]) / 2),
+          );
         }
       });
     }
@@ -396,12 +504,17 @@ function smoothRows(meridian, F, P, { rows = 6, slope = null, radius = null, ste
   const sheet = (tone, levels) => {
     levels[0].groups.get(tone).forEach((arc, index) => {
       const chain = [arc];
-      for (let k2 = 1; k2 < levels.length; k2++) chain.push(align(chain[k2 - 1], levels[k2].groups.get(tone)[index]));
+      for (let k2 = 1; k2 < levels.length; k2++)
+        chain.push(align(chain[k2 - 1], levels[k2].groups.get(tone)[index]));
       const last = levels.length - 1;
       const points = [...arcPoints(levels[0].i, levels[0].u, chain[0].from, chain[0].to)];
-      for (let k2 = 1; k2 < last; k2++) points.push(pointAt(levels[k2].i, levels[k2].u, chain[k2].to));
-      points.push(...arcPoints(levels[last].i, levels[last].u, chain[last].from, chain[last].to).reverse());
-      for (let k2 = last - 1; k2 >= 1; k2--) points.push(pointAt(levels[k2].i, levels[k2].u, chain[k2].from));
+      for (let k2 = 1; k2 < last; k2++)
+        points.push(pointAt(levels[k2].i, levels[k2].u, chain[k2].to));
+      points.push(
+        ...arcPoints(levels[last].i, levels[last].u, chain[last].from, chain[last].to).reverse(),
+      );
+      for (let k2 = last - 1; k2 >= 1; k2--)
+        points.push(pointAt(levels[k2].i, levels[k2].u, chain[k2].from));
       buckets[tone].push(pathOf(oriented(points), true));
     });
   };
@@ -410,7 +523,10 @@ function smoothRows(meridian, F, P, { rows = 6, slope = null, radius = null, ste
     const below = a.groups.get(tone) ?? [];
     const above = (b.groups.get(tone) ?? []).map((arc) => ({ arc, used: false }));
     const quad = (lo, hi) => {
-      const points = [...arcPoints(a.i, a.u, lo.from, lo.to), ...arcPoints(b.i, b.u, hi.from, hi.to).reverse()];
+      const points = [
+        ...arcPoints(a.i, a.u, lo.from, lo.to),
+        ...arcPoints(b.i, b.u, hi.from, hi.to).reverse(),
+      ];
       buckets[tone].push(pathOf(oriented(points), true));
     };
     for (const arc of below) {
@@ -420,7 +536,7 @@ function smoothRows(meridian, F, P, { rows = 6, slope = null, radius = null, ste
         if (entry.used) continue;
         const aligned = align(arc, entry.arc);
         const value = overlap(arc, aligned);
-        if (value > score) score = value, best = entry;
+        if (value > score) ((score = value), (best = entry));
       }
       if (best && score > -0.05) {
         best.used = true;
@@ -439,7 +555,9 @@ function smoothRows(meridian, F, P, { rows = 6, slope = null, radius = null, ste
   const k = scaleOf(P);
   let run = [];
   const flush = () => {
-    const tones = [...new Set(run.flatMap((level) => [...level.groups.keys()]))].sort((x, y) => x - y);
+    const tones = [...new Set(run.flatMap((level) => [...level.groups.keys()]))].sort(
+      (x, y) => x - y,
+    );
     for (const tone of tones) {
       const countOf = (level) => (level.groups.get(tone) ?? []).length;
       let start = 0;
@@ -459,13 +577,18 @@ function smoothRows(meridian, F, P, { rows = 6, slope = null, radius = null, ste
       continue;
     }
     const count = Math.max(1, rows);
-    const reach = Math.hypot(ds, meridian[i + 1][1] - meridian[i][1]) * k / count;
-    const limit = Math.max(1, Math.min(deepest, Math.ceil(Math.log2(Math.max(2, reach / fineness)))));
+    const reach = (Math.hypot(ds, meridian[i + 1][1] - meridian[i][1]) * k) / count;
+    const limit = Math.max(
+      1,
+      Math.min(deepest, Math.ceil(Math.log2(Math.max(2, reach / fineness)))),
+    );
     const coarse = Array.from({ length: count + 1 }, (_, index) => levelOf(i, index / count));
     run.push(coarse[0]);
     const refine = (a, b, depth) => {
       const mid = levelOf(i, (a.u + b.u) / 2);
-      const split = depth < limit && (!same(a, b) || !same(a, mid) || depth < 6 && strayOf(i, a, mid, b) > error);
+      const split =
+        depth < limit &&
+        (!same(a, b) || !same(a, mid) || (depth < 6 && strayOf(i, a, mid, b) > error));
       if (!split) {
         run.push(b);
         return;
@@ -485,7 +608,8 @@ function sideOf(meridian) {
   if (meridian[0][1] <= 1e-9) first = 1;
   if (meridian[m - 1][1] <= 1e-9) last = m - 2;
   const side = meridian.slice(first, last + 1);
-  for (let index = 1; index < side.length; index++) if (side[index][0] - side[index - 1][0] <= 1e-9) return null;
+  for (let index = 1; index < side.length; index++)
+    if (side[index][0] - side[index - 1][0] <= 1e-9) return null;
   return side.length >= 3 ? side : null;
 }
 function surfaceOf(side, F, P, rims, { samples = 96, slope = null } = {}) {
@@ -496,13 +620,20 @@ function surfaceOf(side, F, P, rims, { samples = 96, slope = null } = {}) {
   if (left.length <= samples || right.length <= samples) return null;
   const s0 = side[0][0];
   const s1 = side[side.length - 1][0];
-  const angleOf = (point) => angleToward(F, sub3(point, add3(F.o, mul3(F.a, dot3(sub3(point, F.o), F.a)))));
-  const wrap = (angle) => (angle % TAU + TAU) % TAU;
+  const angleOf = (point) =>
+    angleToward(F, sub3(point, add3(F.o, mul3(F.a, dot3(sub3(point, F.o), F.a)))));
+  const wrap = (angle) => ((angle % TAU) + TAU) % TAU;
   const arc = (s, r, from, to, through) => {
     let sweep = wrap(to - from);
     if (wrap(through - from) > sweep) sweep -= TAU;
-    const count = Math.max(4, Math.ceil(Math.abs(sweep) / (TAU / 96)), Math.ceil(Math.abs(sweep) * r * scaleOf(P) / 1.5));
-    return Array.from({ length: count + 1 }, (_, index) => iso(pointOf(F, s, r, from + sweep * index / count), P));
+    const count = Math.max(
+      4,
+      Math.ceil(Math.abs(sweep) / (TAU / 96)),
+      Math.ceil((Math.abs(sweep) * r * scaleOf(P)) / 1.5),
+    );
+    return Array.from({ length: count + 1 }, (_, index) =>
+      iso(pointOf(F, s, r, from + (sweep * index) / count), P),
+    );
   };
   const r0 = side[0][1];
   const r1 = side[side.length - 1][1];
@@ -512,11 +643,21 @@ function surfaceOf(side, F, P, rims, { samples = 96, slope = null } = {}) {
   const R = right.map((point) => iso(point, P));
   const topArc = arc(s1, r1, angleOf(left[left.length - 1]), angleOf(right[right.length - 1]), top);
   const bottomArc = arc(s0, r0, angleOf(right[0]), angleOf(left[0]), bottom);
-  const keepFirst = rims === "all" || rims === "first" || rims === "ends";
-  const keepLast = rims === "all" || rims === "last" || rims === "ends";
+  const keepFirst = rims === 'all' || rims === 'first' || rims === 'ends';
+  const keepLast = rims === 'all' || rims === 'last' || rims === 'ends';
   const fill = pathOf([...L, ...topArc, ...[...R].reverse(), ...bottomArc], true);
-  const outline = [pathOf(L), pathOf(R), keepLast ? pathOf(topArc) : "", keepFirst ? pathOf(bottomArc) : ""].join("");
-  const hull = hullOf([...arc(s0, r0, 0, TAU - 1e-6, Math.PI), ...arc(s1, r1, 0, TAU - 1e-6, Math.PI), ...L, ...R]);
+  const outline = [
+    pathOf(L),
+    pathOf(R),
+    keepLast ? pathOf(topArc) : '',
+    keepFirst ? pathOf(bottomArc) : '',
+  ].join('');
+  const hull = hullOf([
+    ...arc(s0, r0, 0, TAU - 1e-6, Math.PI),
+    ...arc(s1, r1, 0, TAU - 1e-6, Math.PI),
+    ...L,
+    ...R,
+  ]);
   let gap = 0;
   for (const p of [...L, ...R]) {
     let best = Infinity;
@@ -525,7 +666,10 @@ function surfaceOf(side, F, P, rims, { samples = 96, slope = null } = {}) {
       const b = hull[(index + 1) % hull.length];
       const dx = b[0] - a[0];
       const dy = b[1] - a[1];
-      const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+      const t = Math.max(
+        0,
+        Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)),
+      );
       best = Math.min(best, Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t));
     }
     gap = Math.max(gap, best);
@@ -533,8 +677,21 @@ function surfaceOf(side, F, P, rims, { samples = 96, slope = null } = {}) {
   return { fill, outline, gap };
 }
 var softOf = (meridian) => meridian.some((point) => Boolean(point[2]));
-function lathe(meridian, F, P, { steps = stepsFor(Math.max(...meridian.map(([, r]) => r)), 32, 160, scaleOf(P)), fill = "auto", hole = null, bevel = 0, rims = "all", smooth: asked = "auto", waist = 0.5 } = {}) {
-  const smooth = asked === "auto" ? softOf(meridian) : asked;
+function lathe(
+  meridian,
+  F,
+  P,
+  {
+    steps = stepsFor(Math.max(...meridian.map(([, r]) => r)), 32, 160, scaleOf(P)),
+    fill = 'auto',
+    hole = null,
+    bevel = 0,
+    rims = 'all',
+    smooth: asked = 'auto',
+    waist = 0.5,
+  } = {},
+) {
+  const smooth = asked === 'auto' ? softOf(meridian) : asked;
   const V = viewOf(P);
   const L = lightOf(P);
   const aV = dot3(F.a, V);
@@ -545,11 +702,13 @@ function lathe(meridian, F, P, { steps = stepsFor(Math.max(...meridian.map(([, r
   const vL = dot3(F.v, L);
   const n = steps;
   const m = meridian.length;
-  const rings = meridian.map(([s, r]) => Array.from({ length: n }, (_, j) => iso(pointOf(F, s, r, j / n * TAU), P)));
+  const rings = meridian.map(([s, r]) =>
+    Array.from({ length: n }, (_, j) => iso(pointOf(F, s, r, (j / n) * TAU), P)),
+  );
   const midC = [];
   const midS = [];
   for (let j = 0; j < n; j++) {
-    const t = (j + 0.5) / n * TAU;
+    const t = ((j + 0.5) / n) * TAU;
     midC.push(Math.cos(t));
     midS.push(Math.sin(t));
   }
@@ -577,11 +736,14 @@ function lathe(meridian, F, P, { steps = stepsFor(Math.max(...meridian.map(([, r
   }
   const buckets = [[], [], [], [], []];
   const all = [];
-  const smoothed = smooth ? smoothRows(meridian, F, P, { steps, ...smooth === true ? {} : smooth }) : null;
-  if (smoothed) smoothed.forEach((list, tone) => list.forEach((d) => (buckets[tone].push(d), all.push(d))));
+  const smoothed = smooth
+    ? smoothRows(meridian, F, P, { steps, ...(smooth === true ? {} : smooth) })
+    : null;
+  if (smoothed)
+    smoothed.forEach((list, tone) => list.forEach((d) => (buckets[tone].push(d), all.push(d))));
   for (let i = 0; i < m - 1; i++) {
     if (smoothed && Math.abs(meridian[i + 1][0] - meridian[i][0]) > 1e-9) continue;
-    const keys = seen[i].map((visible, j) => visible ? tones[i][j] : null);
+    const keys = seen[i].map((visible, j) => (visible ? tones[i][j] : null));
     for (const { key, run } of groupsOf(keys)) {
       const a = run.map((j) => rings[i][j]);
       const b = run.map((j) => rings[i + 1][j]).reverse();
@@ -597,7 +759,7 @@ function lathe(meridian, F, P, { steps = stepsFor(Math.max(...meridian.map(([, r
     const dr = meridian[i + 1][1] - meridian[i][1];
     if (Math.hypot(ds, dr) < 1e-9) return null;
     if (Math.abs(ds) < 1e-9 || flatV < 1e-9) return -dr * aV > 1e-9 ? [-1, 1] : null;
-    const c = dr * aV / (ds * flatV);
+    const c = (dr * aV) / (ds * flatV);
     return ds > 0 ? [Math.max(-1, c), 1] : [-1, Math.min(1, c)];
   };
   const arcsOf = (ranges) => {
@@ -610,18 +772,24 @@ function lathe(meridian, F, P, { steps = stepsFor(Math.max(...meridian.map(([, r
     if (hi >= 1 && lo <= -1) return [[phi, phi + TAU]];
     if (hi >= 1) return [[phi - far, phi + far]];
     if (lo <= -1) return [[phi + near, phi + TAU - near]];
-    return [[phi + near, phi + far], [phi - far, phi - near]];
+    return [
+      [phi + near, phi + far],
+      [phi - far, phi - near],
+    ];
   };
   const along = (s, r, [from, to]) => {
-    const count = Math.max(2, Math.ceil((to - from) * Math.max(r, 1e-6) * scaleOf(P) / 1.5));
-    return Array.from({ length: count + 1 }, (_, j) => iso(pointOf(F, s, r, from + (to - from) * j / count), P));
+    const count = Math.max(2, Math.ceil(((to - from) * Math.max(r, 1e-6) * scaleOf(P)) / 1.5));
+    return Array.from({ length: count + 1 }, (_, j) =>
+      iso(pointOf(F, s, r, from + ((to - from) * j) / count), P),
+    );
   };
   const creases = [];
   for (let i = 1; i < m - 1; i++) {
     if (meridian[i][2] || meridian[i][1] <= 1e-9) continue;
-    for (const arc of arcsOf([rangeOf(i - 1), rangeOf(i)])) creases.push(pathOf(along(meridian[i][0], meridian[i][1], arc)));
+    for (const arc of arcsOf([rangeOf(i - 1), rangeOf(i)]))
+      creases.push(pathOf(along(meridian[i][0], meridian[i][1], arc)));
   }
-  let bevelPath = "";
+  let bevelPath = '';
   if (bevel > 0 && m > 2) {
     const ends = [];
     if (meridian[0][1] <= 1e-9) ends.push([0, 1, 1]);
@@ -635,76 +803,134 @@ function lathe(meridian, F, P, { steps = stepsFor(Math.max(...meridian.map(([, r
       }
     }
   }
-  const { fill: fillPath, outline } = outlineOf(meridian, F, P, { steps: n, fill, hole, rims, smooth, waist, all });
+  const { fill: fillPath, outline } = outlineOf(meridian, F, P, {
+    steps: n,
+    fill,
+    hole,
+    rims,
+    smooth,
+    waist,
+    all,
+  });
   return {
     fill: fillPath,
     outline,
-    crease: creases.join(""),
-    top: buckets[4].join(""),
-    shades: buckets.slice(0, 4).map((list) => list.join("")),
+    crease: creases.join(''),
+    top: buckets[4].join(''),
+    shades: buckets.slice(0, 4).map((list) => list.join('')),
     bevel: bevelPath || void 0,
-    seamless: Boolean(smoothed)
+    seamless: Boolean(smoothed),
   };
 }
 function shapeOf(meridian, P, smooth) {
   if (smooth && smooth.radius) {
-    const segments = meridian.slice(0, -1).map(([s0], index) => Math.abs(meridian[index + 1][0] - s0) > 1e-9 ? { radius: smooth.radius, slope: smooth.slope } : null);
+    const segments = meridian
+      .slice(0, -1)
+      .map(([s0], index) =>
+        Math.abs(meridian[index + 1][0] - s0) > 1e-9
+          ? { radius: smooth.radius, slope: smooth.slope }
+          : null,
+      );
     return curved(meridian, P, segments);
   }
   const curves = smooth && !smooth.slope ? curveRuns(meridian) : null;
   return curves && curves.some(Boolean) ? curved(meridian, P, curves) : meridian;
 }
-function outlineOf(meridian, F, P, { steps = stepsFor(Math.max(...meridian.map(([, r]) => r)), 32, 160, scaleOf(P)), fill = "auto", hole = null, rims = "all", smooth: asked = "auto", waist = 0.5, all = null } = {}) {
-  const smooth = asked === "auto" ? softOf(meridian) : asked;
+function outlineOf(
+  meridian,
+  F,
+  P,
+  {
+    steps = stepsFor(Math.max(...meridian.map(([, r]) => r)), 32, 160, scaleOf(P)),
+    fill = 'auto',
+    hole = null,
+    rims = 'all',
+    smooth: asked = 'auto',
+    waist = 0.5,
+    all = null,
+  } = {},
+) {
+  const smooth = asked === 'auto' ? softOf(meridian) : asked;
   const n = steps;
   let fillPath;
   let outline;
   const shape = shapeOf(meridian, P, smooth);
-  const side = fill === "auto" || fill === "surface" ? sideOf(shape) : null;
-  const surface = side && !hole ? surfaceOf(side, F, P, rims, { slope: smooth && smooth.slope ? smooth.slope : null }) : null;
-  if (surface && (fill === "surface" || surface.gap > waist)) {
+  const side = fill === 'auto' || fill === 'surface' ? sideOf(shape) : null;
+  const surface =
+    side && !hole
+      ? surfaceOf(side, F, P, rims, { slope: smooth && smooth.slope ? smooth.slope : null })
+      : null;
+  if (surface && (fill === 'surface' || surface.gap > waist)) {
     fillPath = surface.fill;
     outline = surface.outline;
-  } else if (fill === "hull" || fill === "auto" || fill === "surface") {
+  } else if (fill === 'hull' || fill === 'auto' || fill === 'surface') {
     const most = Math.max(...shape.map(([, r]) => r));
-    const around = Math.min(320, Math.max(n, Math.ceil(TAU * most * scaleOf(P) / 1.5)));
+    const around = Math.min(320, Math.max(n, Math.ceil((TAU * most * scaleOf(P)) / 1.5)));
     const tagged = [];
     shape.forEach(([s, r], index) => {
-      for (let j = 0; j < around; j++) tagged.push({ p: iso(pointOf(F, s, r, j / around * TAU), P), ring: index });
+      for (let j = 0; j < around; j++)
+        tagged.push({ p: iso(pointOf(F, s, r, (j / around) * TAU), P), ring: index });
     });
     const hull = hullTagged(tagged);
-    const holePath = hole ? pathOf(Array.from({ length: around }, (_, j) => iso(pointOf(F, hole[0], hole[1], j / around * TAU), P)), true) : "";
-    fillPath = pathOf(hull.map(({ p }) => p), true) + holePath;
-    if (rims === "all") {
-      outline = pathOf(hull.map(({ p }) => p), true) + holePath;
+    const holePath = hole
+      ? pathOf(
+          Array.from({ length: around }, (_, j) =>
+            iso(pointOf(F, hole[0], hole[1], (j / around) * TAU), P),
+          ),
+          true,
+        )
+      : '';
+    fillPath =
+      pathOf(
+        hull.map(({ p }) => p),
+        true,
+      ) + holePath;
+    if (rims === 'all') {
+      outline =
+        pathOf(
+          hull.map(({ p }) => p),
+          true,
+        ) + holePath;
     } else {
-      const keepFirst = rims === "first" || rims === "ends";
-      const keepLast = rims === "last" || rims === "ends";
+      const keepFirst = rims === 'first' || rims === 'ends';
+      const keepLast = rims === 'last' || rims === 'ends';
       const edges = hull.map((a, index) => {
         const b = hull[(index + 1) % hull.length];
         const same = a.ring === b.ring;
-        const keep = !same || a.ring !== 0 && a.ring !== shape.length - 1 || keepFirst && a.ring === 0 || keepLast && a.ring === shape.length - 1;
+        const keep =
+          !same ||
+          (a.ring !== 0 && a.ring !== shape.length - 1) ||
+          (keepFirst && a.ring === 0) ||
+          (keepLast && a.ring === shape.length - 1);
         return [a.p, b.p, keep];
       });
-      outline = chains(edges).map((points) => pathOf(points)).join("") + holePath;
+      outline =
+        chains(edges)
+          .map((points) => pathOf(points))
+          .join('') + holePath;
     }
   } else {
-    fillPath = all ? all.join("") : (({ shades, top }) => [...shades, top].join(""))(lathe(meridian, F, P, { steps: n, fill: "auto", hole, rims, smooth, waist }));
-    outline = "";
+    fillPath = all
+      ? all.join('')
+      : (({ shades, top }) => [...shades, top].join(''))(
+          lathe(meridian, F, P, { steps: n, fill: 'auto', hole, rims, smooth, waist }),
+        );
+    outline = '';
   }
   return { fill: fillPath, outline };
 }
-var signedArea = (points) => points.reduce((sum, [x, y], index) => {
-  const [nx, ny] = points[(index + 1) % points.length];
-  return sum + x * ny - nx * y;
-}, 0);
-var oriented = (points) => signedArea(points) < 0 ? [...points].reverse() : points;
+var signedArea = (points) =>
+  points.reduce((sum, [x, y], index) => {
+    const [nx, ny] = points[(index + 1) % points.length];
+    return sum + x * ny - nx * y;
+  }, 0);
+var oriented = (points) => (signedArea(points) < 0 ? [...points].reverse() : points);
 function sphereOf(centre, r, P, { steps = 48 } = {}) {
   const V = viewOf(P);
   const L = lightOf(P);
   const F = frameAlong(centre, V);
   const flat = (p) => iso(p, P);
-  const rim = Array.from({ length: steps }, (_, index) => pointOf(F, 0, r, index / steps * TAU));
+  const rim = Array.from({ length: steps }, (_, index) => pointOf(F, 0, r, (index / steps) * TAU));
   const outline = pathOf(rim.map(flat), true);
   const capOf = (threshold) => {
     const points = rim.filter((p) => dot3(sub3(p, centre), L) / r >= threshold).map(flat);
@@ -712,27 +938,33 @@ function sphereOf(centre, r, P, { steps = 48 } = {}) {
     const LF = frameAlong(add3(centre, mul3(L, r * threshold)), L);
     const radius = r * Math.sqrt(Math.max(0, 1 - threshold * threshold));
     for (let index = 0; index < steps; index++) {
-      const p = pointOf(LF, 0, radius, index / steps * TAU);
+      const p = pointOf(LF, 0, radius, (index / steps) * TAU);
       if (dot3(sub3(p, centre), V) >= -1e-9) points.push(flat(p));
     }
     if (c > threshold) points.push(flat(add3(centre, mul3(V, r))));
-    return points.length > 2 ? pathOf(hullOf(points), true) : "";
+    return points.length > 2 ? pathOf(hullOf(points), true) : '';
   };
   const shades = [outline, capOf(BANDS[1]), capOf(BANDS[2]), capOf(BANDS[3])];
-  return { fill: outline, outline, crease: "", top: "", shades, seamless: true };
+  return { fill: outline, outline, crease: '', top: '', shades, seamless: true };
 }
-var disc = (s0, s1, r, F, P, options = {}) => lathe(
-  [
-    [s0, 0],
-    [s0, r],
-    [s1, r],
-    [s1, 0]
-  ],
+var disc = (s0, s1, r, F, P, options = {}) =>
+  lathe(
+    [
+      [s0, 0],
+      [s0, r],
+      [s1, r],
+      [s1, 0],
+    ],
+    F,
+    P,
+    { steps: stepsFor(r, 32, 160, scaleOf(P)), ...options },
+  );
+function silhouettePoints(
+  profile,
   F,
   P,
-  { steps: stepsFor(r, 32, 160, scaleOf(P)), ...options }
-);
-function silhouettePoints(profile, F, P, { samples = 72, slope: given = null, radius = null } = {}) {
+  { samples = 72, slope: given = null, radius = null } = {},
+) {
   const V = viewOf(P);
   const aV = dot3(F.a, V);
   const uV = dot3(F.u, V);
@@ -741,20 +973,25 @@ function silhouettePoints(profile, F, P, { samples = 72, slope: given = null, ra
   const flat = Math.hypot(uV, vV) || 1e-9;
   const s0 = profile[0][0];
   const s1 = profile[profile.length - 1][0];
-  const radiusAt = radius ?? ((s) => {
-    let index = 1;
-    while (index < profile.length - 1 && profile[index][0] < s) index++;
-    const [sa, ra] = profile[index - 1];
-    const [sb, rb] = profile[index];
-    return ra + (rb - ra) * (s - sa) / (sb - sa || 1);
-  });
+  const radiusAt =
+    radius ??
+    ((s) => {
+      let index = 1;
+      while (index < profile.length - 1 && profile[index][0] < s) index++;
+      const [sa, ra] = profile[index - 1];
+      const [sb, rb] = profile[index];
+      return ra + ((rb - ra) * (s - sa)) / (sb - sa || 1);
+    });
   const side = (sign) => {
     const points = [];
     for (let step = 0; step <= samples; step++) {
-      const s = s0 + (s1 - s0) * step / samples;
+      const s = s0 + ((s1 - s0) * step) / samples;
       const h = (s1 - s0) / samples / 2 || 0.01;
-      const slope = given ? given(s) : (radiusAt(Math.min(s1, s + h)) - radiusAt(Math.max(s0, s - h))) / (Math.min(s1, s + h) - Math.max(s0, s - h) || 1);
-      const c = slope * aV / flat;
+      const slope = given
+        ? given(s)
+        : (radiusAt(Math.min(s1, s + h)) - radiusAt(Math.max(s0, s - h))) /
+          (Math.min(s1, s + h) - Math.max(s0, s - h) || 1);
+      const c = (slope * aV) / flat;
       if (Math.abs(c) > 1) continue;
       points.push(pointOf(F, s, radiusAt(s), facing + sign * Math.acos(c)));
     }
@@ -764,12 +1001,12 @@ function silhouettePoints(profile, F, P, { samples = 72, slope: given = null, ra
 }
 
 // src/figures/tour.js
-var KEYS = "Click, or press → or Space, for the next step; Home starts over.";
+var KEYS = 'Click, or press → or Space, for the next step; Home starts over.';
 function runTour(root, makeScene) {
-  const stage = root.querySelector("[data-stage]");
-  const readout = root.querySelector("[data-readout]");
-  const status = stage.querySelector("[data-status]");
-  const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const stage = root.querySelector('[data-stage]');
+  const readout = root.querySelector('[data-readout]');
+  const status = stage.querySelector('[data-status]');
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)');
   let paused = false;
   const held = () => still.matches || paused;
   const say = (text) => {
@@ -779,14 +1016,14 @@ function runTour(root, makeScene) {
     if (status) status.textContent = text;
   };
   const scene = makeScene({
-    svg: stage.querySelector("svg"),
+    svg: stage.querySelector('svg'),
     held,
     say,
     announce,
     tell(text) {
       say(text);
       announce(text);
-    }
+    },
   });
   let frame = 0;
   let last = 0;
@@ -809,8 +1046,8 @@ function runTour(root, makeScene) {
     run();
   }
   function onKey(event) {
-    if (event.key === "ArrowRight" || event.key === " " || event.key === "Enter") next();
-    else if (event.key === "Home") {
+    if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') next();
+    else if (event.key === 'Home') {
       scene.restart();
       run();
     } else return;
@@ -821,24 +1058,24 @@ function runTour(root, makeScene) {
       visible = entries[entries.length - 1].isIntersecting;
       if (visible) run();
     },
-    { rootMargin: "120px 0px" }
+    { rootMargin: '120px 0px' },
   );
   observer.observe(stage);
-  stage.addEventListener("click", next);
-  stage.addEventListener("keydown", onKey);
-  const pause = root.querySelector("[data-pause]");
+  stage.addEventListener('click', next);
+  stage.addEventListener('keydown', onKey);
+  const pause = root.querySelector('[data-pause]');
   function togglePause() {
     paused = !paused;
-    pause.textContent = paused ? "Play" : "Pause";
+    pause.textContent = paused ? 'Play' : 'Pause';
     run();
   }
   if (pause && !still.matches) {
     pause.hidden = false;
-    pause.addEventListener("click", togglePause);
+    pause.addEventListener('click', togglePause);
   }
   stage.tabIndex = 0;
-  stage.setAttribute("role", "group");
-  stage.setAttribute("aria-label", `Live tour. ${KEYS}`);
+  stage.setAttribute('role', 'group');
+  stage.setAttribute('aria-label', `Live tour. ${KEYS}`);
   if (still.matches) {
     scene.poseStill();
     scene.update(0, true);
@@ -848,22 +1085,22 @@ function runTour(root, makeScene) {
     cancelAnimationFrame(frame);
     frame = 0;
     observer.disconnect();
-    stage.removeEventListener("click", next);
-    stage.removeEventListener("keydown", onKey);
+    stage.removeEventListener('click', next);
+    stage.removeEventListener('keydown', onKey);
     if (pause) {
-      pause.removeEventListener("click", togglePause);
+      pause.removeEventListener('click', togglePause);
       pause.hidden = true;
-      pause.textContent = "Pause";
+      pause.textContent = 'Pause';
     }
-    stage.removeAttribute("tabindex");
-    stage.removeAttribute("role");
-    stage.removeAttribute("aria-label");
+    stage.removeAttribute('tabindex');
+    stage.removeAttribute('role');
+    stage.removeAttribute('aria-label');
   };
 }
-var ease = (t) => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+var ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 var lerp = (a, b, t) => a + (b - a) * t;
-var inr = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
-var rupees = (minor) => "₹" + inr.format(Math.abs(minor / 100));
+var inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+var rupees = (minor) => '₹' + inr.format(Math.abs(minor / 100));
 
 // src/figures/to-review-rack.tour.js
 function leverSvg(P, lever, angle) {
@@ -871,12 +1108,15 @@ function leverSvg(P, lever, angle) {
   const dir = [0, Math.sin(angle), Math.cos(angle)];
   const F = frameAlong(base, dir);
   const tip = add3(base, mul3(dir, lever.length));
-  return solidSvg(disc(0, lever.length, lever.r, F, P, { steps: 16 }), { tone: "mid" }) + solidSvg(sphereOf(tip, lever.knob, P, { steps: 32 }), { tone: "hi", lit: true });
+  return (
+    solidSvg(disc(0, lever.length, lever.r, F, P, { steps: 16 }), { tone: 'mid' }) +
+    solidSvg(sphereOf(tip, lever.knob, P, { steps: 32 }), { tone: 'hi', lit: true })
+  );
 }
 function beltMarksSvg(P, belt, travel) {
   const pitch = 12;
-  let d = "";
-  for (let x = belt.x0 + 3 + travel % pitch; x < belt.x1 - 2; x += pitch)
+  let d = '';
+  for (let x = belt.x0 + 3 + (travel % pitch); x < belt.x1 - 2; x += pitch)
     d += lineOnTop([x, belt.y0], [x, belt.y1], belt.top, P);
   return `<path class="iso-line" data-tone="faint" d="${d}"/>`;
 }
@@ -899,33 +1139,37 @@ function toReviewRack({ svg, say, tell }, D) {
   const marks = q('[data-part="belt-marks"]');
   const term = [0, 1, 2].map((i) => q(`.rv-desk [data-line="${i}"]:not([data-hood])`));
   const hood = [0, 1].map((i) => q(`[data-hood="${i}"]`));
-  const set = (els, lines) => els.forEach((el, i) => {
-    if (el.textContent !== (lines[i] ?? "")) el.textContent = lines[i] ?? "";
-  });
+  const set = (els, lines) =>
+    els.forEach((el, i) => {
+      if (el.textContent !== (lines[i] ?? '')) el.textContent = lines[i] ?? '';
+    });
   const named = (item) => `${item.title} ${rupees(item.amountMinor)}`;
-  const split = (item) => item.chips.every((c) => c === item.chips[0]) ? `${item.chips.length} × ${rupees(item.chips[0])}` : `${item.chips.length} chips`;
-  let phase = "idle";
+  const split = (item) =>
+    item.chips.every((c) => c === item.chips[0])
+      ? `${item.chips.length} × ${rupees(item.chips[0])}`
+      : `${item.chips.length} chips`;
+  let phase = 'idle';
   let clock = 0;
   let waiting = 0;
   let beltTravel = 0;
   const pose = { lever: D.lever.rest, gate: 0 };
-  const bar = D.items.map(() => ({ x: 0, slot: 0, z: 0, fall: 0, where: "store" }));
+  const bar = D.items.map(() => ({ x: 0, slot: 0, z: 0, fall: 0, where: 'store' }));
   function restart() {
-    phase = "idle";
+    phase = 'idle';
     clock = 0;
     waiting = 0;
     beltTravel = 0;
     pose.lever = D.lever.rest;
     pose.gate = 0;
     bar.forEach((b, i) => {
-      Object.assign(b, { x: 0, slot: 0, z: 0, fall: 0, where: "store" });
-      barEls[i].style.display = "none";
+      Object.assign(b, { x: 0, slot: 0, z: 0, fall: 0, where: 'store' });
+      barEls[i].style.display = 'none';
       store.appendChild(barEls[i]);
     });
     set(term, D.screens.termIdle);
     set(hood, D.screens.hoodIdle);
-    lamp.setAttribute("data-on", "");
-    tell("Claude connected · To review empty");
+    lamp.setAttribute('data-on', '');
+    tell('Claude connected · To review empty');
   }
   function send(i) {
     phase = `send${i}`;
@@ -935,56 +1179,58 @@ function toReviewRack({ svg, say, tell }, D) {
     tell(`Claude prepares ${named(item)} · ${split(item)}`);
   }
   function release() {
-    phase = "release";
+    phase = 'release';
     clock = 0;
     tell(`You pull the lever · ${named(D.items[0])} is saved`);
   }
   function hold() {
-    phase = "hold";
+    phase = 'hold';
     clock = 0;
     set(term, D.screens.termHold);
     tell(D.stillWords);
   }
   function update(dt, calm) {
     clock += dt;
-    if (phase === "idle") {
+    if (phase === 'idle') {
       if (clock > 1.8) send(0);
-    } else if (phase === "send0" || phase === "send1") {
-      const i = phase === "send0" ? 0 : 1;
+    } else if (phase === 'send0' || phase === 'send1') {
+      const i = phase === 'send0' ? 0 : 1;
       const b = bar[i];
-      if (b.where === "store" && (calm || clock > 0.9)) {
-        b.where = "falling";
+      if (b.where === 'store' && (calm || clock > 0.9)) {
+        b.where = 'falling';
         b.slot = i;
         b.z = D.rack.top - 4 - D.rack.z0;
         b.fall = 0;
         b.x = 0;
         inRack.appendChild(barEls[i]);
-        barEls[i].style.display = "";
+        barEls[i].style.display = '';
       }
-      if (b.where === "falling") {
+      if (b.where === 'falling') {
         b.fall += dt;
         const floor = b.slot * D.chipH;
-        b.z = calm ? floor : Math.max(floor, D.rack.top - 4 - D.rack.z0 - 0.5 * GRAVITY * b.fall * b.fall);
+        b.z = calm
+          ? floor
+          : Math.max(floor, D.rack.top - 4 - D.rack.z0 - 0.5 * GRAVITY * b.fall * b.fall);
         if (b.z <= floor) {
-          b.where = "rack";
+          b.where = 'rack';
           waiting += 1;
           say(`${named(D.items[i])} is in To review · waiting for you`);
         }
       }
-      if (b.where === "rack" && clock > 2.4) {
+      if (b.where === 'rack' && clock > 2.4) {
         if (i === 0) send(1);
         else release();
       }
-    } else if (phase === "release") {
+    } else if (phase === 'release') {
       const b = bar[0];
       const upper = bar[1];
       const len = D.items[0].chips.length * D.cw;
       pose.lever = lerp(D.lever.rest, D.lever.pulled, calm ? 1 : ease(clock / 0.45));
-      if (b.where === "rack") {
+      if (b.where === 'rack') {
         pose.gate = calm ? 7 : 7 * ease((clock - 0.3) / 0.3);
-        if (calm || clock > 0.65) b.where = "sliding";
+        if (calm || clock > 0.65) b.where = 'sliding';
       }
-      if (b.where === "sliding") {
+      if (b.where === 'sliding') {
         const step = calm ? 999 : 115 * dt;
         b.x += step;
         if (b.x - len / 2 > D.rack.x1 - D.rack.x && barEls[0].parentNode !== onBelt)
@@ -992,56 +1238,61 @@ function toReviewRack({ svg, say, tell }, D) {
         if (barEls[0].parentNode === onBelt && !calm) beltTravel += step;
         if (b.x - len / 2 > D.rack.x1 + 5 - D.rack.x) {
           pose.gate = Math.max(0, pose.gate - dt * 30);
-          if (upper.where === "rack" && upper.slot === 1) {
-            upper.where = "settling";
+          if (upper.where === 'rack' && upper.slot === 1) {
+            upper.where = 'settling';
             upper.fall = 0;
           }
         }
         if (b.x >= D.hood.x + len / 2 + 2 - D.rack.x) {
-          b.where = "saved";
-          barEls[0].style.display = "none";
+          b.where = 'saved';
+          barEls[0].style.display = 'none';
           waiting -= 1;
           set(hood, D.screens.hoodSaved);
         }
       }
-      if (upper.where === "settling") {
+      if (upper.where === 'settling') {
         upper.fall += dt;
         upper.z = calm ? 0 : Math.max(0, D.chipH - 0.5 * GRAVITY * upper.fall * upper.fall);
         if (upper.z <= 0) {
-          upper.where = "rack";
+          upper.where = 'rack';
           upper.slot = 0;
         }
       }
-      if (b.where === "saved") {
+      if (b.where === 'saved') {
         pose.lever = lerp(D.lever.pulled, D.lever.rest, calm ? 1 : ease((clock - 1.6) / 0.5));
         pose.gate = 0;
         if (calm || clock > 2.4) hold();
       }
-    } else if (phase === "hold") {
+    } else if (phase === 'hold') {
       if (clock > 3.6) restart();
     }
   }
   function draw() {
     bar.forEach((b, i) => {
-      if (b.where === "store" || b.where === "saved") return;
-      const z = b.where === "rack" ? b.slot * D.chipH : b.where === "falling" || b.where === "settling" ? b.z : 0;
-      barEls[i].setAttribute("transform", T(D.rack.x + b.x, 0, D.rack.z0 + z));
+      if (b.where === 'store' || b.where === 'saved') return;
+      const z =
+        b.where === 'rack'
+          ? b.slot * D.chipH
+          : b.where === 'falling' || b.where === 'settling'
+            ? b.z
+            : 0;
+      barEls[i].setAttribute('transform', T(D.rack.x + b.x, 0, D.rack.z0 + z));
     });
-    gate.setAttribute("transform", T(0, 0, pose.gate));
+    gate.setAttribute('transform', T(0, 0, pose.gate));
     lever.innerHTML = leverSvg(P, D.lever, pose.lever);
     const v = String(Math.max(0, waiting));
     if (count.textContent !== v) count.textContent = v;
     marks.innerHTML = beltMarksSvg(P, D.belt, beltTravel);
   }
   function next() {
-    if (phase === "idle") send(0);
-    else if (phase === "send0") {
-      if (bar[0].where !== "rack") update(0, true);
+    if (phase === 'idle') send(0);
+    else if (phase === 'send0') {
+      if (bar[0].where !== 'rack') update(0, true);
       send(1);
-    } else if (phase === "send1") {
-      if (bar[1].where !== "rack") update(0, true);
+    } else if (phase === 'send1') {
+      if (bar[1].where !== 'rack') update(0, true);
       release();
-    } else if (phase === "release") poseStill();
+    } else if (phase === 'release') poseStill();
     else restart();
   }
   function poseStill() {
@@ -1053,16 +1304,44 @@ function toReviewRack({ svg, say, tell }, D) {
     release();
     update(0, true);
   }
-  const settled = () => phase !== "release" && bar.every((b) => b.where !== "falling" && b.where !== "settling");
+  const settled = () =>
+    phase !== 'release' && bar.every((b) => b.where !== 'falling' && b.where !== 'settling');
   return { restart, next, update, draw, poseStill, settled };
 }
 
 // src/figures/to-review-rack.tour-entry.js
-var DATA = { "P": { "origin": [404.8594434079833, 275.2246157224376], "scale": 1.2311159028123368, "azimuth": 58, "elevation": 30 }, "items": [{ "title": "Dinner at Thalassa", "amountMinor": 24e4, "chips": [8e4, 8e4, 8e4] }, { "title": "Cab to the airport", "amountMinor": 6e4, "chips": [3e4, 3e4] }], "rack": { "x": -40, "y": -20, "z0": 10, "top": 58, "x1": -18 }, "belt": { "x0": -14, "x1": 112, "y0": -27, "y1": -13, "top": 10 }, "hood": { "x": 112, "y": -36, "w": 46, "d": 34, "r": 2.5, "h": 34 }, "cw": 12, "chipH": 3, "screens": { "termIdle": ["CLAUDE", "connected", "read · prepare"], "termSend": [["CLAUDE", "Dinner ₹2,400", "→ To review"], ["CLAUDE", "Cab ₹600", "→ To review"]], "termHold": ["CLAUDE", "waiting on you", "1 in To review"], "hoodIdle": ["TO THE LINE", ""], "hoodSaved": ["SAVED", "Dinner ₹2,400"] }, "stillWords": "Cab to the airport ₹600 waits in To review · nothing moves until you save it", "lever": { "x": -60, "y": -4.4, "z": 5, "length": 16, "r": 0.9, "knob": 2.6, "rest": -0.15, "pulled": 0.75 } };
+var DATA = {
+  P: {
+    origin: [404.8594434079833, 275.2246157224376],
+    scale: 1.2311159028123368,
+    azimuth: 58,
+    elevation: 30,
+  },
+  items: [
+    { title: 'Dinner at Thalassa', amountMinor: 24e4, chips: [8e4, 8e4, 8e4] },
+    { title: 'Cab to the airport', amountMinor: 6e4, chips: [3e4, 3e4] },
+  ],
+  rack: { x: -40, y: -20, z0: 10, top: 58, x1: -18 },
+  belt: { x0: -14, x1: 112, y0: -27, y1: -13, top: 10 },
+  hood: { x: 112, y: -36, w: 46, d: 34, r: 2.5, h: 34 },
+  cw: 12,
+  chipH: 3,
+  screens: {
+    termIdle: ['CLAUDE', 'connected', 'read · prepare'],
+    termSend: [
+      ['CLAUDE', 'Dinner ₹2,400', '→ To review'],
+      ['CLAUDE', 'Cab ₹600', '→ To review'],
+    ],
+    termHold: ['CLAUDE', 'waiting on you', '1 in To review'],
+    hoodIdle: ['TO THE LINE', ''],
+    hoodSaved: ['SAVED', 'Dinner ₹2,400'],
+  },
+  stillWords: 'Cab to the airport ₹600 waits in To review · nothing moves until you save it',
+  lever: { x: -60, y: -4.4, z: 5, length: 16, r: 0.9, knob: 2.6, rest: -0.15, pulled: 0.75 },
+};
 function play(root) {
   return playTour(root, DATA);
 }
-play.license = 'Anatomy kit (https://github.com/wheresryan22/anatomy)\n\nMIT License\n\nCopyright (c) 2026 Ryan\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the "Software"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.';
-export {
-  play
-};
+play.license =
+  'Anatomy kit (https://github.com/wheresryan22/anatomy)\n\nMIT License\n\nCopyright (c) 2026 Ryan\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the "Software"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.';
+export { play };

@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
 import { memberLabel } from '@splitbook/shared/activity-timeline';
+import { RADIUS } from '@/lib/theme/tokens';
 import type { SettlementBatchWords } from '@splitbook/shared/settlement-batch-words';
 
 interface BatchPaymentCardProps {
@@ -41,7 +42,12 @@ export default function BatchPaymentCard({
     <Box
       component="section"
       aria-labelledby="payment-record-heading"
-      sx={{ border: 1, borderColor: 'divider', borderRadius: '16px', bgcolor: 'background.paper' }}
+      sx={{
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: `${RADIUS.lg}px`,
+        bgcolor: 'background.paper',
+      }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, px: 2.5, pt: 2, pb: 1 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>

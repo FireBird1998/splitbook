@@ -158,18 +158,17 @@ export function LatestChangesView({ state, viewerId, onRetry }: LatestChangesVie
       ) : (
         <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
           {/* A payment that settled several Debts at once is one change (#734). */}
-          {groupSettlementBatches(state.activities).map((item) =>
-            item.kind === 'event' ? (
-              <LatestChangeRow key={item.event._id} event={item.event} viewerId={viewerId} />
-            ) : (
+          {groupSettlementBatches(state.activities).map((item) => {
+            const event = item.kind === 'event' ? item.event : newestEvent(item, state.activities);
+            return (
               <LatestChangeRow
-                key={newestEvent(item, state.activities)._id}
-                event={newestEvent(item, state.activities)}
-                batch={item}
+                key={event._id}
+                event={event}
+                batch={item.kind === 'batch' ? item : undefined}
                 viewerId={viewerId}
               />
-            ),
-          )}
+            );
+          })}
         </Box>
       )}
     </Box>

@@ -210,6 +210,10 @@ export function findSettlementAttempt(
   return parseEntry(key, storage.getItem(key));
 }
 
+/** Whether a stored payment is between these two members, whichever of them pays. */
+export const samePair = (attempt: SettlementPayment, a: string, b: string) =>
+  [attempt.paidBy, attempt.paidTo].sort().join() === [a, b].sort().join();
+
 const sameAttempt = (left: SettlementAttempt | null, right: SettlementAttempt) =>
   left !== null && left.key === right.key && left.body === right.body;
 
