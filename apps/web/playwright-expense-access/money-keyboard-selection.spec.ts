@@ -1,0 +1,125 @@
+import { randomUUID } from 'node:crypto';
+import type { Locator, Page } from '@playwright/test';
+import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
+import { test, expect, dataOf, joinGroup, openAddExpense, type Ledger } from './fixtures';
+
+async function euroGroup(ledger: Ledger) {
+  const group = (
+    await dataOf(
+      await ledger.alex.post('/api/groups', {
+        data: {
+          name: `Keyboard amounts ${randomUUID()}`,
+          category: 'trip',
+          defaultCurrency: 'EUR',
+          alternateCurrencies: ['INR'],
+        },
+      }),
+      201,
+    )
+  )._id as string;
+  await joinGroup(ledger.alex, ledger.sam, group);
+  return group;
+}
+
+/** Real Tab selection, never fill() or selectText() for the replacement. */
+async function tabAndReplace(page: Page, field: Locator, initial: string, replacement: string) {
+  await field.fill(initial);
+  await field.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(field).toBeFocused();
+  await page.keyboard.type(replacement);
+  await expect(field).toHaveValue(replacement);
+}
+
+for (const [initial, replacement, minor] of [
+  ['500', '300', 30000],
+  ['1842.50', '2000', 200000],
+] as const) {
+  test(`Tab replaces Expense and payer ${initial} with ${replacement}, including the POST (#773)`, async ({
+    page,
+    ledger,
+  }) => {
+    const group = await euroGroup(ledger);
+    await page.context().addCookies((await ledger.alex.storageState()).cookies);
+    await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${group}`);
+    const dialog = await openAddExpense(page);
+    await dialog.getByLabel('What was it for?').fill('Keyboard dinner');
+    await tabAndReplace(
+      page,
+      dialog.getByRole('textbox', { name: /^Amount,/ }),
+      initial,
+      replacement,
+    );
+    await dialog.getByRole('button', { name: 'Advanced split options' }).click();
+    await dialog.getByText('Split payment between multiple people', { exact: true }).click();
+    await tabAndReplace(
+      page,
+      dialog.getByRole('textbox', { name: 'Paid by You', exact: true }),
+      initial,
+      replacement,
+    );
+    const request = page.waitForRequest(
+      (r) => r.method() === 'POST' && r.url().endsWith(`/api/groups/${group}/expenses`),
+    );
+    await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+    expect((await request).postDataJSON()).toMatchObject({
+      amountMinor: minor,
+      paidBy: [{ user: DEMO_PERSONA_IDS.alex, amountMinor: minor }],
+    });
+    await expect(dialog).toBeHidden();
+  });
+}
+
+for (const crossCurrency of [false, true]) {
+  test(`Tab replaces ${crossCurrency ? 'cross-currency amount paid' : 'Record payment amount'}, including the POST (#773)`, async ({
+    page,
+    ledger,
+  }) => {
+    const group = await euroGroup(ledger);
+    await dataOf(
+      await ledger.sam.post(`/api/groups/${group}/expenses`, {
+        data: {
+          description: 'Train tickets',
+          amount: 1000,
+          currency: 'EUR',
+          category: 'travel',
+          tag: 'Travel',
+          date: new Date().toISOString(),
+          paidBy: [{ user: DEMO_PERSONA_IDS.sam, amount: 1000 }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: DEMO_PERSONA_IDS.alex }],
+        },
+      }),
+      201,
+    );
+    await page.route('**/api/groups/*/rates?**', (route) =>
+      route.fulfill({ json: { data: { suggestion: null, reason: 'unavailable' }, status: 200 } }),
+    );
+    await page.context().addCookies((await ledger.alex.storageState()).cookies);
+    await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${group}?tab=balances`);
+    await page.getByRole('button', { name: 'Record your payment to Sam Chen' }).click();
+    const sheet = page.getByRole('region', { name: 'Record payment', exact: true });
+    if (crossCurrency) {
+      await sheet.getByRole('radio', { name: 'INR' }).click();
+      await sheet.getByRole('textbox', { name: 'Amount cleared, EUR' }).fill('20');
+      await tabAndReplace(
+        page,
+        sheet.getByRole('textbox', { name: 'Amount paid, INR' }),
+        '1842.50',
+        '2000',
+      );
+    } else {
+      await tabAndReplace(page, sheet.getByRole('textbox').first(), '500', '300');
+    }
+    const request = page.waitForRequest(
+      (r) => r.method() === 'POST' && r.url().endsWith(`/api/groups/${group}/settlements`),
+    );
+    await sheet.getByRole('button', { name: 'Record payment', exact: true }).click();
+    expect((await request).postDataJSON()).toMatchObject(
+      crossCurrency
+        ? { amountMinor: 2000, amountPaidMinor: 200000, paidCurrency: 'INR' }
+        : { amountMinor: 30000 },
+    );
+    await expect(page.getByText('Payment recorded.', { exact: false })).toBeVisible();
+  });
+}
