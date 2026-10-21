@@ -3,7 +3,6 @@ import type { SettlementLedger } from '@splitbook/shared/settlement-preview';
 import {
   amountInputText,
   checkNewPayment,
-  crossCurrencySummary,
   overpaymentMessage,
   partyProblem,
   recordPaymentHref,
@@ -215,56 +214,5 @@ describe('a link that opens Record payment for one pair', () => {
   it('leaves the rest of the address once the form has taken the pair', () => {
     expect(withoutRecordPaymentLink(`paidTo=${SAM}`)).toBe('');
     expect(withoutRecordPaymentLink(`month=2026-09&paidBy=${SAM}`)).toBe('?month=2026-09');
-  });
-});
-
-describe('what a Debt paid in another currency clears, as the sheet says it (#727)', () => {
-  // Alex owes Sam €20.00 and pays it in rupees.
-  const you = { isViewer: true, name: 'Alex Rivera' };
-  const sam = { isViewer: false, name: 'Sam Chen' };
-  const sheet = (clearedMinor: number, paidMinor: number | null, viewerPays = true) =>
-    crossCurrencySummary({
-      clearedMinor,
-      debtMinor: 2000,
-      paidMinor,
-      currency: 'EUR',
-      paidCurrency: 'INR',
-      payer: viewerPays ? you : { isViewer: false, name: 'Alex Rivera' },
-      payee: viewerPays ? sam : { isViewer: true, name: 'Sam Chen' },
-    });
-
-  it('says what the payee gets for the whole Debt, part of it, or more', () => {
-    expect(sheet(2000, 184200)).toEqual({
-      overpaid: null,
-      clears: 'Clears your €20.00 Debt to Sam. Sam gets ₹1,842.00.',
-    });
-    expect(sheet(1000, 92100)).toEqual({
-      overpaid: null,
-      clears: 'Clears €10.00 of your €20.00 Debt to Sam. €10.00 stays to pay.',
-    });
-    expect(sheet(2500, 230250)).toEqual({
-      overpaid: 'That’s €5.00 more than you owe Sam in EUR, so Sam would owe you €5.00.',
-      clears: 'Clears your €20.00 Debt to Sam and €5.00 more. Sam gets ₹2,302.50.',
-    });
-  });
-
-  it('waits for the rate or the amount paid', () => {
-    expect(sheet(2000, null)).toEqual({
-      overpaid: null,
-      clears: 'Clears your €20.00 Debt to Sam once you enter the rate or the amount paid.',
-    });
-  });
-
-  it('speaks from the payee’s side when the payee records it', () => {
-    expect(sheet(2000, 184200, false).clears).toBe(
-      'Clears Alex’s €20.00 Debt to you. You get ₹1,842.00.',
-    );
-    expect(sheet(1000, 92100, false).clears).toBe(
-      'Clears €10.00 of Alex’s €20.00 Debt to you. €10.00 stays to pay.',
-    );
-    expect(sheet(2500, 230250, false)).toEqual({
-      overpaid: 'That’s €5.00 more than Alex owes you in EUR, so you would owe Alex €5.00.',
-      clears: 'Clears Alex’s €20.00 Debt to you and €5.00 more. You get ₹2,302.50.',
-    });
   });
 });

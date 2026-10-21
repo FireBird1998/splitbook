@@ -15,6 +15,7 @@ import {
   labelRuns,
   largeTextWindows,
   layoutHeight,
+  middleCutEnd,
   unreadText,
 } from '../../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../../test-utils/native';
@@ -871,5 +872,32 @@ describe('a button with an icon at 200% text (#639)', () => {
     expect(layoutHeight(button, 2, room)).toBe(
       Math.max(style.minHeight as number, layoutHeight(words!, 2, beside)),
     );
+  });
+});
+
+// #766 device check: at 130% text an assistant's credit, cut in the middle, drew
+// "…evil.example.tes", its last letter past its box. Android sizes the cut's "…" with the text
+// view's paint, in the phone's font at the text's unscaled size, but draws it in the app's font
+// at the phone's text size, so the line it draws is wider than the one it measured.
+describe('a line cut in the middle keeps its end inside its box (#766)', () => {
+  const credit = 'prepared by chatgpt.com.secure-assistant-connector.evil.example.test';
+  it.each([1, 1.15, 1.3, 1.45])('at %s× text, on a line of any width', (fontScale) => {
+    render(
+      <CompactText variant="caption" tone="secondary" numberOfLines={1} ellipsizeMode="middle">
+        {credit}
+      </CompactText>,
+    );
+    const line = renderer!.toJSON() as ReactTestRendererJSON;
+    for (let width = 200; width <= 330; width++)
+      expect(middleCutEnd(line, fontScale, width, credit), `${width}dp`).toMatch(/\.test\s*$/);
+  });
+
+  it('keeps no room after a line that wraps in full instead', () => {
+    render(
+      <CompactText variant="caption" tone="secondary" numberOfLines={0} ellipsizeMode="middle">
+        {credit}
+      </CompactText>,
+    );
+    expect((renderer!.toJSON() as ReactTestRendererJSON).children).toEqual([credit]);
   });
 });

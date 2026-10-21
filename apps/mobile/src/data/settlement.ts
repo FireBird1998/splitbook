@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
-import { createSettlementSchema } from '@splitbook/shared/validators/settlement';
+import {
+  createSettlementSchema,
+  crossCurrencySettlementReadShape,
+  crossCurrencySettlementShape,
+} from '@splitbook/shared/validators/settlement';
+import type { CrossCurrencyEntry, RateSuggestion } from '@splitbook/shared/cross-currency-payment';
+import type { CrossCurrencySettlementFields } from '@splitbook/shared/cross-currency-settlement';
 import {
   parseAmountMinor,
   readStoredAmountMinor,
@@ -18,9 +24,47 @@ import type { GroupCurrencyBalance, MobileGroup } from './types';
 export interface SettlementDraft {
   paidBy: string;
   paidTo: string;
+  /** The Debt's currency: `amount` is the amount cleared, in it. */
   currency: string;
   amount: string;
   note: string;
+  /**
+   * Paid in another currency (#728): what was paid, and at what rate, as Record sends it. An
+   * unconfirmed payment keeps it, and Retry sends it unchanged; while the member enters it, the
+   * sheet's `crossCurrency` holds it.
+   */
+  paid?: CrossCurrencySettlementFields;
+}
+/** Record's reason, and the Balances', while the phone has no connection. */
+export const recordNeedsConnection = 'Recording a payment needs a connection.';
+/** Record's reason while the sheet looks up a suggested rate (#728). */
+export const recordWaitsForRate = 'Record is available once a suggested rate is looked up.';
+/** Record's reason while a payment in another currency has a field left to enter (#728). */
+export const enterRateOrPaid = 'Enter the rate or the amount paid to record it.';
+/** What the sheet knows of a suggested rate between the Debt's currency and another (#728). */
+export type RateState =
+  | { status: 'loading' }
+  | { status: 'ready'; suggestion: RateSuggestion }
+  /** The rate service has no suggestion, `reason` saying why; null when its read failed. */
+  | { status: 'none'; reason: string | null }
+  /** The phone couldn't reach Splitbook: the rate, and recording, wait for a connection. */
+  | { status: 'unreachable' };
+/** A Debt the member is paying in another of the Group's currencies (#728). */
+export interface CrossCurrencyPayment {
+  paidCurrency: string;
+  /** The amount cleared, the rate and the amount paid, as typed or worked out. */
+  entry: CrossCurrencyEntry;
+  rate: RateState;
+}
+const paidSideFields = Object.keys(
+  crossCurrencySettlementShape,
+) as (keyof typeof crossCurrencySettlementShape)[];
+/** A payment's paid side and rate, when it was paid in another currency. */
+function paidSideOf(value: Partial<CrossCurrencySettlementFields>) {
+  if (value.amountPaidMinor === undefined) return undefined;
+  return Object.fromEntries(
+    paidSideFields.flatMap((field) => (value[field] === undefined ? [] : [[field, value[field]]])),
+  ) as unknown as CrossCurrencySettlementFields;
 }
 export const settlementFields = ['amount', 'note'] as const;
 export type SettlementField = (typeof settlementFields)[number];
@@ -71,6 +115,7 @@ const record = z.object({
   currency: z.string(),
   note: z.string().default(''),
   createdAt: z.iso.datetime({ offset: true }),
+  ...crossCurrencySettlementReadShape,
 });
 export type SettlementRecord = z.infer<typeof record>;
 /**
@@ -105,6 +150,8 @@ export interface SettlementState {
   attempt: SettlementAttempt | null;
   /** The payment chosen on Balances; null when the sheet opened for an unconfirmed payment. */
   chosen: SettlementChoice | null;
+  /** The Debt paid in another of the Group's currencies; null in its own (#728). */
+  crossCurrency: CrossCurrencyPayment | null;
   /**
    * The Group's people by id, as this phone knew them when the sheet opened: its members, and
    * anyone its Balances named. They name payer and recipient until the check reads the Group,
@@ -124,6 +171,7 @@ export const emptySettlement = (): SettlementState => ({
   draft: null,
   attempt: null,
   chosen: null,
+  crossCurrency: null,
   known: {},
   suggested: null,
   acknowledged: false,
@@ -138,12 +186,13 @@ export function parseSettlementHistory(value: unknown, groupId: string) {
   }
   return records;
 }
-export function settlementBody(draft: SettlementDraft) {
+/** The payment's body: the amount cleared, and a payment in another currency's paid side. */
+export function settlementBody({ paid, ...draft }: SettlementDraft) {
   const amount = toMajorAmount(parseAmountMinor(draft.amount, draft.currency), draft.currency);
   return JSON.stringify(
     createSettlementSchema
       .safeExtend({ paidBy: objectId, paidTo: objectId })
-      .parse({ ...draft, amount, note: draft.note.trim() }),
+      .parse({ ...draft, amount, note: draft.note.trim(), ...paid }),
   );
 }
 export function parseSettlementAttempt(value: unknown, accountId: string, groupId: string) {
@@ -161,9 +210,17 @@ export function parseSettlementAttempt(value: unknown, accountId: string, groupI
     .parse(JSON.parse(stored.body));
   if (!canRecordSettlement(accountId, payload.paidBy, payload.paidTo))
     throw new Error('Unexpected Settlement account');
+  const paid = paidSideOf(payload);
   return {
     attempt: { key: stored.key, body: stored.body },
-    draft: { ...payload, amount: String(payload.amount), note: payload.note ?? '' },
+    draft: {
+      paidBy: payload.paidBy,
+      paidTo: payload.paidTo,
+      currency: payload.currency,
+      amount: String(payload.amount),
+      note: payload.note ?? '',
+      ...(paid ? { paid } : {}),
+    },
   };
 }
 export function settlementSuggestion(balances: GroupCurrencyBalance[], draft: SettlementDraft) {
@@ -183,7 +240,9 @@ export function parseRecordedSettlement(value: unknown, groupId: string, body: s
     saved.paidTo.id !== expected.paidTo ||
     saved.currency !== expected.currency ||
     readStoredAmountMinor(saved) !== parseAmountMinor(expected.amount, expected.currency) ||
-    saved.note !== (expected.note ?? '')
+    saved.note !== (expected.note ?? '') ||
+    // A payment in another currency is recorded with the paid side and rate it was sent with.
+    paidSideFields.some((field) => saved[field] !== expected[field])
   )
     throw new Error('Unexpected recorded payment');
   return saved;

@@ -868,8 +868,9 @@ describe('Balances, one currency at a time (#725)', () => {
     );
   });
 
-  it('shows another currency on its own, its payments listed and recorded in the main currency', () => {
-    const root = render(element(buckets()));
+  it('shows another currency on its own, its payments recorded in it (#728)', () => {
+    const onRecord = vi.fn();
+    const root = render(element(buckets(), onRecord));
     choose(root, 'JPY, you’re owed ¥8,400');
     expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe('JPY, you’re owed ¥8,400');
     const shown = text(root);
@@ -878,10 +879,11 @@ describe('Balances, one currency at a time (#725)', () => {
     expect(labelled(root, 'You get back ¥8,400')).toHaveLength(1);
     expect(shown).toContain('Suggested payments · JPY');
     expect(labelled(root, 'Sam Chen pays you, ¥8,400')).toHaveLength(1);
-    // Payments are recorded in the main currency until #727.
-    expect(labelled(root, 'Record Sam Chen’s payment to you')).toHaveLength(0);
-    expect(shown).toContain('Payments are recorded in INR, the main currency.');
-    expect(shown).not.toContain('Record one once it’s paid');
+    // A Debt is recorded on its own currency's tab, in its currency (#728).
+    expect(shown).toContain('Record one once it’s paid');
+    expect(shown).not.toContain('the main currency');
+    act(() => labelled(root, 'Record Sam Chen’s payment to you')[0]!.props.onPress());
+    expect(onRecord).toHaveBeenCalledWith(sam, you, 'JPY');
     expect(shown).toContain('Everyone · JPY');
     expect(labelled(root, 'Sam Chen owes ¥8,400')).toHaveLength(1);
     expect(shown).not.toContain('All-time balance · INR');

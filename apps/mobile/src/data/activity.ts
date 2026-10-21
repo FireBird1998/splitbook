@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { parseActivityPageResponse } from '@splitbook/shared/activity-page-read';
 import { getCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
+import { crossCurrencySettlementReadShape } from '@splitbook/shared/validators/settlement';
 import { objectId } from './dto';
 import type { LoadStatus, ScrollAnchor } from './types';
 
@@ -23,6 +24,12 @@ const metadata = z.object({
   paidTo: objectId.optional(),
   paidByName: z.string().optional(),
   paidToName: z.string().optional(),
+  /**
+   * A Debt paid in another currency: the amount cleared in minor units, what was paid and at what
+   * rate, and the Debt between the two before and after, as recorded (#727, #728).
+   */
+  amountMinor: z.number().int().safe().optional(),
+  ...crossCurrencySettlementReadShape,
   recurring: z.boolean().optional(),
   action: z.string().optional(),
   /** The Assistant rule an admin set (#621). */
