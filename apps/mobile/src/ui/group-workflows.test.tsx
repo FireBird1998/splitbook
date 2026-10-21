@@ -86,6 +86,7 @@ describe('A long Group name (#554)', () => {
             description: '',
             category: 'home',
             defaultCurrency: 'INR',
+            extraCurrencies: [],
             startDate: '',
             endDate: '',
           }}
@@ -128,6 +129,7 @@ describe('choosing a new Group’s currency (#684)', () => {
             description: '',
             category: 'home',
             defaultCurrency: 'INR',
+            extraCurrencies: [],
             startDate: '',
             endDate: '',
           }}
@@ -154,9 +156,9 @@ describe('choosing a new Group’s currency (#684)', () => {
     const drag = [landed, { pageX: 180, pageY: 300 }, { pageX: 181, pageY: 150 }] as const;
     const tap = [landed, { pageX: 182, pageY: 403 }] as const;
 
-    act(() => touchAlong(pressable('Currency, INR'), [...drag]));
+    act(() => touchAlong(pressable('Main currency, INR'), [...drag]));
     expect(choosing()).toBe(false);
-    act(() => touchAlong(pressable('Currency, INR'), [...tap]));
+    act(() => touchAlong(pressable('Main currency, INR'), [...tap]));
     expect(choosing()).toBe(true);
 
     act(() => touchAlong(pressable('USD, '), [...drag]));
@@ -166,10 +168,106 @@ describe('choosing a new Group’s currency (#684)', () => {
     expect(onChange).toHaveBeenCalledExactlyOnceWith({ defaultCurrency: 'USD' });
     expect(choosing()).toBe(false);
 
-    act(() => activateWithScreenReader(pressable('Currency, INR')));
+    act(() => activateWithScreenReader(pressable('Main currency, INR')));
     expect(choosing()).toBe(true);
     act(() => activateWithScreenReader(pressable('EUR, ')));
     expect(onChange).toHaveBeenLastCalledWith({ defaultCurrency: 'EUR' });
     expect(choosing()).toBe(false);
+  });
+});
+
+// #723: a new Trip offers its extra currencies while it is set up, as the board "Android · New
+// Trip offers extra currencies" shows them; a Household adds them later in settings.
+describe('a new Trip’s extra currencies (#723)', () => {
+  const lisbonAndTokyo = {
+    name: 'Lisbon & Tokyo',
+    description: '',
+    category: 'trip' as const,
+    defaultCurrency: 'INR',
+    extraCurrencies: ['EUR', 'JPY'],
+    startDate: '',
+    endDate: '',
+  };
+  const form = (draft: typeof lisbonAndTokyo | Record<string, unknown>, onChange = vi.fn()) => {
+    act(() => {
+      renderer = create(
+        <GroupCreateForm
+          draft={{ ...lisbonAndTokyo, ...draft }}
+          onChange={onChange}
+          onSubmit={vi.fn()}
+          busy={false}
+          message={null}
+          uncertain={false}
+          onCheckGroups={vi.fn()}
+          onDiscard={vi.fn()}
+        />,
+      );
+    });
+    return onChange;
+  };
+  const text = () =>
+    renderer!.root
+      .findAll((node: ReactTestInstance) => (node.type as unknown) === 'Text')
+      .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+      .join(' ');
+  const pressables = (label: string) =>
+    renderer!.root.findAll(
+      (node: ReactTestInstance) =>
+        (node.type as unknown) === 'Pressable' &&
+        String(node.props.accessibilityLabel).startsWith(label),
+    );
+  const choosing = () =>
+    renderer!.root.find((node: ReactTestInstance) => (node.type as unknown) === 'Modal').props
+      .visible;
+
+  it('names each one added, with how many more there’s room for', () => {
+    form(lisbonAndTokyo);
+    for (const words of [
+      'Spending abroad?',
+      'Optional',
+      '2 of 4',
+      'Add each currency you’ll pay in. Expenses keep the amount on the receipt; nothing is converted.',
+      'Anyone in the Group can add more later.',
+    ])
+      expect(text()).toContain(words);
+    expect(pressables('EUR, Euro, added. Remove')).toHaveLength(1);
+    expect(pressables('JPY, Japanese Yen, added. Remove')).toHaveLength(1);
+  });
+
+  it('removes one with a tap on it', () => {
+    const onChange = form(lisbonAndTokyo);
+    act(() => activateWithScreenReader(pressables('EUR, Euro, added. Remove')[0]));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ extraCurrencies: ['JPY'] });
+  });
+
+  it('adds one from the currencies, never the main currency or one already added', () => {
+    const onChange = form(lisbonAndTokyo);
+    act(() => activateWithScreenReader(pressables('Add a currency')[0]));
+    expect(choosing()).toBe(true);
+    expect(pressables('INR, ')).toHaveLength(0);
+    expect(pressables('EUR, ')).toHaveLength(0);
+    act(() => activateWithScreenReader(pressables('USD, ')[0]));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ extraCurrencies: ['EUR', 'JPY', 'USD'] });
+    expect(choosing()).toBe(false);
+  });
+
+  it('offers no more once there are 4', () => {
+    form({ ...lisbonAndTokyo, extraCurrencies: ['EUR', 'JPY', 'USD', 'GBP'] });
+    expect(text()).toContain('4 of 4');
+    expect(pressables('Add a currency')[0].props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+  });
+
+  it('isn’t offered for a Household, which adds them later in settings', () => {
+    form({ ...lisbonAndTokyo, category: 'home', name: 'Maple House' });
+    expect(text()).not.toContain('Spending abroad?');
+  });
+
+  it('sits under the main currency, named as the boards do', () => {
+    form(lisbonAndTokyo);
+    expect(text()).toContain('Main currency');
+    expect(text()).toContain('Locked once money is recorded. Pick the one most of you settle in.');
+    expect(pressables('Create Trip')).toHaveLength(1);
   });
 });

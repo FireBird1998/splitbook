@@ -342,6 +342,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
         description: '',
         category: 'trip',
         defaultCurrency: 'INR',
+        extraCurrencies: [],
         startDate: '',
         endDate: '',
       },

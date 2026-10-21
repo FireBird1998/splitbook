@@ -57,6 +57,8 @@ export function parseGroupCreation(value: unknown, accountId: string) {
         description: z.string(),
         category: z.enum(['trip', 'home', 'couple', 'work', 'other']),
         defaultCurrency: z.string(),
+        // A submission stored before a new Trip offered extra currencies (#723) chose none.
+        extraCurrencies: z.array(z.string()).default([]),
         startDate: z.string(),
         endDate: z.string(),
       }),

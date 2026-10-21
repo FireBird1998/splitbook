@@ -85,6 +85,28 @@ describe('POST and GET /api/groups', () => {
     expect(await listedNames(alexCookie)).toEqual(['Coorg Weekend']);
   });
 
+  // #723: a new Trip's extra currencies, chosen while it is set up, kept on a retried creation.
+  it('keeps a new Trip’s extra currencies, and a retry returns the same Trip', async () => {
+    const alexCookie = await signIn('alex');
+    const lisbonAndTokyo = {
+      ...coorgWeekend,
+      name: 'Lisbon & Tokyo',
+      alternateCurrencies: ['EUR', 'JPY'],
+    };
+    const post = () =>
+      createGroup(alexCookie, lisbonAndTokyo, { 'Idempotency-Key': 'group-lisbon-0001' });
+
+    const first = await post();
+    const retried = await post();
+
+    expect([first.status, retried.status]).toEqual([201, 201]);
+    expect(first.body.data.alternateCurrencies).toEqual(['EUR', 'JPY']);
+    expect(retried.body.data).toMatchObject({
+      _id: first.body.data._id,
+      alternateCurrencies: ['EUR', 'JPY'],
+    });
+  });
+
   it('refuses a Group without a session', async () => {
     const refused = await createGroup('', coorgWeekend);
 

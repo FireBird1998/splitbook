@@ -1454,6 +1454,75 @@ describe('native session and Group boundary', () => {
     });
   });
 
+  // #723: a new Trip offers its extra currencies while it is set up; Lisbon & Tokyo starts with
+  // euros and yen beside its rupees.
+  describe('a new Trip’s extra currencies (#723)', () => {
+    const lisbonAndTokyo = {
+      ...group(alex, otherGroupId),
+      name: 'Lisbon & Tokyo',
+      category: 'trip',
+      defaultCurrency: 'INR',
+      alternateCurrencies: ['EUR', 'JPY'],
+    };
+    /** Alex at the new-Group form, with the server keeping what each creation sends. */
+    const creating = async () => {
+      const sent: Array<Record<string, unknown>> = [];
+      const { controller } = setup({
+        intercept: (path, init) => {
+          if (path === '/api/groups' && init.method === 'POST') {
+            sent.push(JSON.parse(String(init.body)));
+            return json({ data: lisbonAndTokyo, status: 201 }, 201);
+          }
+          if (path === `/api/groups/${otherGroupId}`)
+            return json({ data: lisbonAndTokyo, status: 200 });
+        },
+      });
+      await controller.signIn('alex');
+      controller.startCreate();
+      return { controller, sent };
+    };
+
+    it('sends the ones chosen, and the new Trip’s Expense form offers them at once', async () => {
+      const { controller, sent } = await creating();
+      controller.updateCreation({
+        name: 'Lisbon & Tokyo',
+        category: 'trip',
+        extraCurrencies: ['EUR', 'JPY'],
+      });
+      await controller.createGroup();
+      expect(sent).toMatchObject([
+        { category: 'trip', defaultCurrency: 'INR', alternateCurrencies: ['EUR', 'JPY'] },
+      ]);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        detail: { data: { id: otherGroupId, alternateCurrencies: ['EUR', 'JPY'] } },
+      });
+      await controller.openExpense(otherGroupId);
+      expect(controller.getSnapshot().expense.context?.group).toMatchObject({
+        defaultCurrency: 'INR',
+        alternateCurrencies: ['EUR', 'JPY'],
+      });
+    });
+
+    it('sends none for a Household, even ones chosen while it was a Trip', async () => {
+      const { controller, sent } = await creating();
+      controller.updateCreation({ name: 'Maple House', extraCurrencies: ['EUR'] });
+      controller.updateCreation({ category: 'home' });
+      await controller.createGroup();
+      expect(sent).toMatchObject([{ category: 'home', alternateCurrencies: [] }]);
+    });
+
+    it('drops one that becomes the main currency', async () => {
+      const { controller } = await creating();
+      controller.updateCreation({ extraCurrencies: ['EUR', 'JPY'] });
+      controller.updateCreation({ defaultCurrency: 'EUR' });
+      expect(controller.getSnapshot().creation.draft).toMatchObject({
+        defaultCurrency: 'EUR',
+        extraCurrencies: ['JPY'],
+      });
+    });
+  });
+
   it('signs in through a signed cookie, verifies the session, and normalizes real Group JSON', async () => {
     const { controller, fetch, store } = setup();
     await controller.signIn('alex');

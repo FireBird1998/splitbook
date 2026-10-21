@@ -29,6 +29,12 @@ describe('getGroupTheme', () => {
     }
   });
 
+  it('offers extra currencies while a Trip is set up; the rest add them later (#723)', () => {
+    expect(getGroupTheme('trip').extraCurrenciesAtSetup).toBe(true);
+    for (const category of ALL_CATEGORIES.filter((c) => c !== 'trip'))
+      expect(getGroupTheme(category).extraCurrenciesAtSetup).toBe(false);
+  });
+
   it('gives Household the month-cycle signature', () => {
     expect(getGroupTheme('home').signature).toBe('monthCycle');
   });
