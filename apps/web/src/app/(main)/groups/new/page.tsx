@@ -281,8 +281,9 @@ export default function NewGroupPage() {
             value={defaultCurrency}
             onChange={(e) => {
               setSelectedCurrency(e.target.value);
-              // An extra currency that becomes the main currency leaves the list.
-              setExtraCurrencies((list) => list.filter((code) => code !== e.target.value));
+              // The list as shown, so one the main currency took never comes back, without the
+              // one that becomes the main currency.
+              setExtraCurrencies(extras.filter((code) => code !== e.target.value));
             }}
             fullWidth
             required

@@ -35,7 +35,8 @@ export default function ExtraCurrenciesStep({
       aria-labelledby="extra-currencies-title"
       sx={{ p: 2, borderRadius: 3, bgcolor: 'action.hover' }}
     >
-      <Stack direction="row" alignItems="center" spacing={1}>
+      {/* A gap, not margins, so the count keeps to the end of the line. */}
+      <Stack direction="row" alignItems="center" spacing={1} useFlexGap>
         <Typography id="extra-currencies-title" variant="body2" fontWeight={600}>
           Spending abroad?
         </Typography>

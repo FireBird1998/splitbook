@@ -303,7 +303,7 @@ for (const invalidPreference of [false, true]) {
     await enter(page, ledger, '/groups/new');
     await page.getByLabel('Trip name').fill('Fallback currency Group');
     await expect(page.getByRole('button', { name: 'Create Trip', exact: true })).toBeEnabled();
-    await expect(page.getByRole('combobox', { name: /^Currency/ })).toContainText('INR');
+    await expect(page.getByRole('combobox', { name: 'Main currency' })).toHaveValue('INR');
     await expect(page.getByText('Loading saved currency…')).toHaveCount(0);
   });
 }
