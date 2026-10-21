@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildStatement } from './statement';
+import { buildStatement, isEmptyStatementCurrency } from './statement';
+import { buildStatementPreview } from './export-preview';
 import { tripSummary, type TripExpense } from './trip-summary';
-import type { BackupExpenseInput, BackupGroupInput } from './export-backup';
+import { buildBackup, type BackupExpenseInput, type BackupGroupInput } from './export-backup';
 import { dayKeyInZone } from './zoned-calendar';
 const group: BackupGroupInput = {
   id: 'g',
@@ -302,4 +303,81 @@ describe('a whole trip, by #316’s rule for Expenses outside the Trip’s dates
     expect([bucket.beforeTrip, bucket.afterTrip]).toEqual([null, null]);
     expect(Object.values(places(statement))).toEqual([null, null, null, null, null]);
   });
+});
+
+it('keeps both payment amounts in the cleared-currency statement and its preview without converting totals', () => {
+  const cross = {
+    ...group.settlements[0],
+    currency: 'EUR',
+    amountMinor: 2000,
+    amountPaidMinor: 185000,
+    paidCurrency: 'INR',
+    appliedRate: '92.5',
+    rateKind: 'custom' as const,
+    suggestedRate: '92.1',
+    rateSource: 'frankfurter' as const,
+    rateAsOf: '2026-10-20',
+    rateFetchedAt: '2026-10-21T12:00:00Z',
+  };
+  const statement = buildStatement({
+    ...group,
+    alternateCurrencies: ['EUR', 'JPY'],
+    settlements: [cross],
+  });
+  expect(statement.currencies.map((row) => row.currency)).toEqual(['EUR', 'INR', 'JPY']);
+  const eur = statement.currencies.find((row) => row.currency === 'EUR')!;
+  expect(eur.paymentTotalMinor).toBe(2000);
+  expect(statement.currencies.find((row) => row.currency === 'INR')?.paymentTotalMinor).toBe(0);
+  expect(eur.payments[0]).toMatchObject({
+    description:
+      'Bob paid Alice ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
+    amountPaidMinor: 185000,
+    paidCurrency: 'INR',
+    appliedRate: '92.5',
+  });
+  expect(
+    buildStatementPreview(statement).currencies.find((row) => row.currency === 'EUR'),
+  ).toMatchObject({
+    payments: [
+      expect.objectContaining({
+        description:
+          'Bob paid Alice ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
+      }),
+    ],
+  });
+});
+
+it('normalises legacy extra currencies for the statement and preview while the backup stays raw', () => {
+  const alternateCurrencies = ['EUR', 'eur', 'XXX', 'JPY', 'EUR', 'INR'];
+  const legacy = { ...group, alternateCurrencies };
+  const statement = buildStatement(legacy);
+  expect(statement.currencies.map((row) => row.currency)).toEqual(['EUR', 'INR', 'JPY']);
+  expect(buildStatementPreview(statement).currencies.map((row) => row.currency)).toEqual([
+    'EUR',
+    'INR',
+    'JPY',
+  ]);
+  expect(
+    buildBackup([legacy], { exportedAt: '2026-10-21T12:00:00Z', include: [] }).groups[0]
+      .alternateCurrencies,
+  ).toEqual(alternateCurrencies);
+});
+
+it('collapses only currencies with no period records and no current outstanding balance', () => {
+  expect(
+    isEmptyStatementCurrency({ expenseCount: 0, paymentCount: 0, people: [{ balanceMinor: 0 }] }),
+  ).toBe(true);
+  expect(
+    isEmptyStatementCurrency({ expenseCount: 1, paymentCount: 0, people: [{ balanceMinor: 0 }] }),
+  ).toBe(false);
+  expect(
+    isEmptyStatementCurrency({ expenseCount: 0, paymentCount: 1, people: [{ balanceMinor: 0 }] }),
+  ).toBe(false);
+  expect(
+    isEmptyStatementCurrency({
+      expenseCount: 0,
+      paymentCount: 0,
+      people: [{ balanceMinor: -50 }, { balanceMinor: 50 }],
+    }),
+  ).toBe(false);
 });

@@ -1172,3 +1172,121 @@ describe('Export selected Expenses (#613)', () => {
     expect(json(answer)).toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });
+
+describe('multi-currency exports (#731)', () => {
+  async function crossCurrencyGroup() {
+    const group = await groupService.create(
+      {
+        name: 'Fictional Europe trip',
+        category: 'trip',
+        defaultCurrency: 'INR',
+        alternateCurrencies: ['EUR', 'JPY'],
+      },
+      alice,
+    );
+    const id = String(group._id);
+    await groupService.addMember(id, bob);
+    await expenseService.create(
+      id,
+      { ...command('Fictional tickets', 40, alice, [alice, bob]), currency: 'EUR' },
+      alice,
+    );
+    await settlementService.create(
+      id,
+      {
+        paidTo: alice,
+        amount: 20,
+        currency: 'EUR',
+        amountPaidMinor: 185000,
+        paidCurrency: 'INR',
+        appliedRate: '92.5',
+        suggestedRate: '92.1',
+        rateKind: 'custom',
+        rateSource: 'frankfurter',
+        rateAsOf: '2026-10-20',
+        rateFetchedAt: '2026-10-21T12:00:00Z',
+      },
+      bob,
+    );
+    return id;
+  }
+
+  it('downloads both payment amounts and the rate, with an identical CSV preview', async () => {
+    const id = await crossCurrencyGroup();
+    const path = exportOf([id], { include: ['payments'] });
+    const { files } = await zip(alice, path);
+    const file = Object.keys(files).find((key) => key.endsWith('-payments.csv'))!;
+    const downloaded = table(files[file]);
+    expect(downloaded.records[0]).toMatchObject({
+      Amount: '20.00',
+      Currency: 'EUR',
+      'Amount paid': '1850.00',
+      'Paid currency': 'INR',
+      'Rate (paid per cleared)': '92.5',
+    });
+    const preview = exportPreviewSchema.parse(json(await request(alice, path + '&preview=1')));
+    expect(preview.format).toBe('csv');
+    if (preview.format !== 'csv') throw new Error('Expected CSV preview');
+    const shown = preview.files.find((row) => row.kind === 'payments')!;
+    expect(shown.header).toEqual(downloaded.header);
+    expect(shown.rows[0]).toEqual(Object.values(downloaded.records[0]));
+    expect(shown.text).toBe(files[file]);
+  });
+  it('backs up listed currencies and stored rate provenance, and describes them in the preview', async () => {
+    const id = await crossCurrencyGroup();
+    const path = `/api/export?groups=${id}&format=json&include=payments`;
+    const answer = await request(alice, path);
+    expect(answer.status).toBe(200);
+    const backup = backupSchema.parse(json(answer));
+    expect(backup.groups[0]).toMatchObject({
+      currency: 'INR',
+      alternateCurrencies: ['EUR', 'JPY'],
+    });
+    expect(backup.groups[0].settlements[0]).toMatchObject({
+      amountMinor: 2000,
+      currency: 'EUR',
+      amountPaidMinor: 185000,
+      paidCurrency: 'INR',
+      appliedRate: '92.5',
+      rateKind: 'custom',
+      suggestedRate: '92.1',
+      rateSource: 'frankfurter',
+      rateAsOf: '2026-10-20',
+      rateFetchedAt: '2026-10-21T12:00:00Z',
+      pairDebtBeforeMinor: -2000,
+      pairDebtAfterMinor: 0,
+    });
+    const preview = exportPreviewSchema.parse(json(await request(alice, path + '&preview=1')));
+    expect(preview).toMatchObject({
+      currencyGroups: [
+        { name: 'Fictional Europe trip', currency: 'INR', alternateCurrencies: ['EUR', 'JPY'] },
+      ],
+    });
+  });
+  it('previews both stored payment amounts in separate statement currency sections', async () => {
+    const id = await crossCurrencyGroup();
+    const answer = await request(alice, `/api/export?groups=${id}&format=statement&preview=1`);
+    expect(answer.status).toBe(200);
+    const preview = exportPreviewSchema.parse(json(answer));
+    expect(preview.format).toBe('statement');
+    if (preview.format !== 'statement') throw new Error('Expected statement');
+    expect(preview.statement.currencies.map((row) => row.currency)).toEqual(['EUR', 'INR', 'JPY']);
+    expect(preview.statement.currencies.find((row) => row.currency === 'EUR')).toMatchObject({
+      paymentTotalMinor: 2000,
+      payments: [
+        {
+          amountMinor: 2000,
+          amountPaidMinor: 185000,
+          paidCurrency: 'INR',
+          appliedRate: '92.5',
+          description:
+            'Bob Tester paid Alice Tester ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
+        },
+      ],
+    });
+    expect(preview.statement.currencies.find((row) => row.currency === 'INR')).toMatchObject({
+      spentMinor: 0,
+      paymentTotalMinor: 0,
+    });
+  });
+});

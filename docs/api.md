@@ -1872,7 +1872,8 @@ JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
 - JSON carries `fileName`, approximate `sizeBytes`, `earliestMonth`,
   `historyIncluded`, `paymentsIncluded`, `deletedExpensesIncluded` and exported
   `counts` (`members`, active `expenses`, `payments`, `deletedExpenses`,
-  `editHistoryEntries`). Counts come from the built backup object in one pass;
+  `editHistoryEntries`). `currencyGroups` names each Group with its main `currency` and
+  `alternateCurrencies`, projected from the same backup. Counts come from the built backup object in one pass;
   its bytes are serialized once for the download and size. Members are unique
   account ids across selected Groups. `earliestMonth` is the first active
   Expense Month, or null. Include flags control which lines the preview shows.
@@ -1884,7 +1885,8 @@ JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
   its header and currency buckets: `spentMinor`, `expenseCount`,
   `paymentTotalMinor`, `paymentCount`, named `people` (Paid, Share, Net in
   minor units for the period, plus current all-time `balanceMinor`),
-  `suggestedPayments`, and up to five first `expenses` including `paidBy` and
+  `suggestedPayments`, up to five first `payments` with stored cross-currency fields
+  and the shared payment `description`, and up to five first `expenses` including `paidBy` and
   `splitBetween` allocations. Currency buckets remain separate; current all-time
   balances and Suggested payments are not period contributions.
   The existing printable page still supplies print/save as PDF.
@@ -1983,24 +1985,33 @@ nothing else changed).
 
 **Payments CSV columns.** Newest first.
 
-| #   | Column        | Value                            |
-| --- | ------------- | -------------------------------- |
-| 1   | `Date`        | The day it was recorded, in `tz` |
-| 2   | `Recorded at` | When it was recorded, in `tz`    |
-| 3   | `From`        | Who paid                         |
-| 4   | `To`          | Who was paid                     |
-| 5   | `Amount`      | Exact decimal                    |
-| 6   | `Currency`    | ISO code                         |
-| 7   | `Note`        |                                  |
-| 8   | `Recorded by` | Who recorded it                  |
-| 9   | `Payment ID`  | The Settlement's id              |
+| #   | Column                    | Value                                                      |
+| --- | ------------------------- | ---------------------------------------------------------- |
+| 1   | `Date`                    | The day it was recorded, in `tz`                           |
+| 2   | `Recorded at`             | When it was recorded, in `tz`                              |
+| 3   | `From`                    | Who paid                                                   |
+| 4   | `To`                      | Who was paid                                               |
+| 5   | `Amount`                  | Exact decimal                                              |
+| 6   | `Currency`                | ISO code                                                   |
+| 7   | `Note`                    |                                                            |
+| 8   | `Recorded by`             | Who recorded it                                            |
+| 9   | `Payment ID`              | The Settlement's id                                        |
+| 10  | `Amount paid`             | Exact paid-side decimal for a cross-currency Settlement    |
+| 11  | `Paid currency`           | Paid-side ISO code                                         |
+| 12  | `Rate (paid per cleared)` | Stored `appliedRate`: 1 cleared = X paid                   |
+| 13  | `Rate attribution`        | Required fallback provider credit and URL, otherwise blank |
+
+`Amount` and `Currency` always describe the amount cleared. The added paid-side
+and rate cells are blank for same-currency records; old columns retain their positions.
+Each amount is immediately followed by its currency. Neither side is converted or
+recalculated during export.
 
 The zip is made with [`fflate`](https://github.com/101arrowz/fflate) (MIT).
 
 **JSON backup.** With `format=json`, the download is one
 `splitbook-<n>-groups-backup.json` in the versioned `splitbook-backup/1`
 format: exact minor units, stable ids and names, never an email (an address
-typed into a description, note or name reads `[redacted]`). Payers and shares
+typed into a description, note or name reads `[redacted]`). Payers, shares and Group `alternateCurrencies`
 are always in it; `payments`, `deleted` and `history` work as for CSV, and
 `shares` changes nothing. The schema, `backupSchema` in
 `@splitbook/shared/export-backup`, is described in

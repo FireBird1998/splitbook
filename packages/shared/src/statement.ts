@@ -1,4 +1,6 @@
 /** Statement figures: window spending, dated payments, and current all-time ledger positions. */
+import { normaliseExtraCurrencies } from './group-currencies';
+import { formatCrossCurrencySettlement } from './cross-currency-settlement';
 import type { BackupGroupInput } from './export-backup';
 import { calculateNetBalancesMinor, simplifyDebtsMinor } from './debt-simplifier';
 import { sumMinorAmounts, toMajorAmount } from './exact-money';
@@ -59,6 +61,7 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
   const currencies = [
     ...new Set([
       group.currency,
+      ...normaliseExtraCurrencies(group.currency, group.alternateCurrencies),
       ...active.map((row) => row.currency),
       ...group.settlements.map((row) => row.currency),
     ]),
@@ -169,6 +172,20 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
         })),
         payments: payments.map((row) => ({
           ...row,
+          description:
+            row.amountPaidMinor !== undefined && row.paidCurrency && row.appliedRate && row.rateKind
+              ? formatCrossCurrencySettlement({
+                  ...row,
+                  amountPaidMinor: row.amountPaidMinor,
+                  paidCurrency: row.paidCurrency,
+                  appliedRate: row.appliedRate,
+                  rateKind: row.rateKind,
+                  paidBy: row.fromId,
+                  paidByName: name(row.fromId),
+                  paidTo: row.toId,
+                  paidToName: name(row.toId),
+                })
+              : null,
           at: new Date(row.at).toISOString(),
           outsideTrip: outsideTrip(dayKeyInZone(row.at, timeZone)),
         })),
@@ -177,3 +194,16 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
   };
 }
 export type Statement = ReturnType<typeof buildStatement>;
+
+/** Spending and payments use the selected period; balances retain the current all-time position. */
+export function isEmptyStatementCurrency(bucket: {
+  expenseCount: number;
+  paymentCount: number;
+  people: readonly { balanceMinor: number }[];
+}): boolean {
+  return (
+    bucket.expenseCount === 0 &&
+    bucket.paymentCount === 0 &&
+    bucket.people.every((person) => person.balanceMinor === 0)
+  );
+}

@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
 import { exportPreviewSchema, type ExportPreview } from '@splitbook/shared/export-preview';
+import { buildStatement } from '@splitbook/shared/statement';
+import { buildStatementPreview } from '@splitbook/shared/export-preview';
 import ExportPreviewPanel, { type PreviewState } from './ExportPreview';
 
 const csv: ExportPreview = {
@@ -303,7 +305,7 @@ it('names each currency’s balances and Suggested payments for screen readers (
       },
     },
   });
-  const headings = [...html.matchAll(/<h4[^>]*>([^<]*)<\/h4>/g)].map(([, heading]) => heading);
+  const headings = [...html.matchAll(/<h5[^>]*>([^<]*)<\/h5>/g)].map(([, heading]) => heading);
   expect(headings).toEqual([
     'Current balances (INR)',
     'Suggested payments (INR)',
@@ -314,3 +316,132 @@ it('names each currency’s balances and Suggested payments for screen readers (
   expect(html).toMatch(/<ul[^>]*aria-label="USD suggested payments"/);
   expect(text(html)).toContain('Bob pays Alice Tester');
 });
+
+it('shows each currency and both stored payment amounts in the statement preview', () => {
+  const statement = buildStatement({
+    id: 'g',
+    name: 'Fictional Europe trip',
+    theme: 'trip',
+    currency: 'INR',
+    alternateCurrencies: ['EUR'],
+    tags: [],
+    names: { a: 'Alex', s: 'Sam' },
+    members: [
+      { id: 'a', name: 'Alex' },
+      { id: 's', name: 'Sam' },
+    ],
+    expenses: [],
+    settlements: [
+      {
+        id: 'p',
+        at: '2026-10-21T12:00:00Z',
+        fromId: 's',
+        toId: 'a',
+        recordedById: 's',
+        currency: 'EUR',
+        amountMinor: 2000,
+        amountPaidMinor: 185000,
+        paidCurrency: 'INR',
+        appliedRate: '92.5',
+        rateKind: 'entered',
+      },
+    ],
+  });
+  const html = render({
+    status: 'ready',
+    data: {
+      format: 'statement',
+      groupNames: [statement.name],
+      generatedAt: '2026-10-21T12:00:00Z',
+      from: null,
+      to: null,
+      timeZone: 'UTC',
+      empty: false,
+      statement: buildStatementPreview(statement),
+    },
+  });
+  expect(html).toContain('aria-label="EUR statement preview"');
+  expect(html).toContain('aria-label="INR statement preview"');
+  expect(text(html)).toContain(
+    'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per €; no rate suggested',
+  );
+});
+
+it('collapses settled empty statement currencies to the same one-line preview', () => {
+  const statement = buildStatement({
+    id: 'g',
+    name: 'Fictional empty trip',
+    theme: 'trip',
+    currency: 'INR',
+    alternateCurrencies: ['JPY'],
+    tags: [],
+    names: { a: 'Alex' },
+    members: [{ id: 'a', name: 'Alex' }],
+    expenses: [],
+    settlements: [],
+  });
+  const html = render({
+    status: 'ready',
+    data: {
+      format: 'statement',
+      groupNames: [statement.name],
+      generatedAt: '2026-10-21T12:00:00Z',
+      from: null,
+      to: null,
+      timeZone: 'UTC',
+      empty: true,
+      statement: buildStatementPreview(statement),
+    },
+  });
+  expect(text(html)).toContain('JPY: nothing in this period; everyone is settled up.');
+  expect(text(html)).toContain('INR: nothing in this period; everyone is settled up.');
+  expect(html).not.toContain('<table');
+});
+
+it('places the cross-currency column note beneath the payments preview table only', () => {
+  const note = 'Cross-currency payments add Amount paid, Paid currency and Rate';
+  const html = render({
+    status: 'ready',
+    data: { ...csv, files: [{ ...csv.files[0], kind: 'payments', name: 'payments.csv' }] },
+  });
+  expect(text(html)).toContain(note);
+  expect(html.indexOf(note)).toBeGreaterThan(html.indexOf('</table>'));
+  expect(text(render({ status: 'ready', data: csv }))).not.toContain(note);
+});
+
+it.each([0, 1, 2])(
+  'uses the correct Expense and Payment plurals for %s in the backup preview',
+  (count) => {
+    const html = render({
+      status: 'ready',
+      data: {
+        format: 'json',
+        groupNames: ['Fictional trip'],
+        generatedAt: '2026-10-21T12:00:00Z',
+        from: null,
+        to: null,
+        timeZone: 'UTC',
+        empty: false,
+        fileName: 'backup.json',
+        sizeBytes: 1000,
+        earliestMonth: null,
+        historyIncluded: true,
+        paymentsIncluded: true,
+        deletedExpensesIncluded: false,
+        counts: {
+          members: 2,
+          expenses: count,
+          payments: count,
+          deletedExpenses: 0,
+          editHistoryEntries: 0,
+        },
+      },
+    });
+    expect(text(html)).toContain(
+      `${count} ${count === 1 ? 'Expense' : 'Expenses'}, each with its edit history`,
+    );
+    expect(text(html)).toContain(
+      `${count} ${count === 1 ? 'Payment' : 'Payments'}, including both amounts, currencies and stored rates`,
+    );
+  },
+);

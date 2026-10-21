@@ -1,5 +1,6 @@
 /** Export previews: bounded table samples and CSV text from the download builders. */
 import { z } from 'zod';
+import { crossCurrencySettlementReadShape } from './validators/settlement';
 import type { Statement } from './statement';
 import { serializeCsv, spreadsheetCellText, type CsvTable } from './export-csv';
 import { isCalendarDay, isTimeZone } from './export-request';
@@ -42,6 +43,15 @@ const count = z.number().int().nonnegative();
 export const backupPreviewSchema = z.object({
   ...common,
   format: z.literal('json'),
+  currencyGroups: z
+    .array(
+      z.object({
+        name: z.string(),
+        currency: z.string(),
+        alternateCurrencies: z.array(z.string()),
+      }),
+    )
+    .optional(),
   fileName: z.string(),
   sizeBytes: count,
   earliestMonth: z
@@ -91,6 +101,23 @@ export const statementPreviewSchema = z.object({
         suggestedPayments: z.array(
           z.object({ from: z.string(), to: z.string(), amountMinor: minor }),
         ),
+        payments: z
+          .array(
+            z.object({
+              ...crossCurrencySettlementReadShape,
+              id: z.string(),
+              at: z.iso.datetime(),
+              fromId: z.string(),
+              toId: z.string(),
+              amountMinor: minor,
+              currency: z.string(),
+              recordedById: z.string(),
+              note: z.string().nullable().optional(),
+              description: z.string().nullable(),
+            }),
+          )
+          .max(EXPORT_PREVIEW_ROWS)
+          .optional(),
         expenses: z
           .array(
             z.object({
@@ -122,6 +149,7 @@ export function buildStatementPreview(statement: Statement) {
     currencies: statement.currencies.map((bucket) => ({
       ...bucket,
       paymentCount: bucket.payments.length,
+      payments: bucket.payments.slice(0, EXPORT_PREVIEW_ROWS),
       expenses: bucket.expenses.slice(0, EXPORT_PREVIEW_ROWS),
     })),
   });

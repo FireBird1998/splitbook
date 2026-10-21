@@ -1,5 +1,6 @@
 /** Versioned, framework-free backup contract. See docs/export-backup.md. */
 import { z } from 'zod';
+import { crossCurrencySettlementReadShape } from './validators/settlement';
 import type { ExportExpense, ExportPayment, ExportPerson } from './export-csv';
 import type { ExportInclude } from './export-request';
 
@@ -48,6 +49,7 @@ export const backupSchema = z.strictObject({
       name: z.string(),
       theme: z.enum(['trip', 'home', 'couple', 'work', 'other']),
       currency: z.string(),
+      alternateCurrencies: z.array(z.string()).default([]),
       startDate: instant.nullable(),
       endDate: instant.nullable(),
       members: z.array(z.strictObject({ id: z.string(), name: z.string(), former: z.boolean() })),
@@ -86,6 +88,7 @@ export const backupSchema = z.strictObject({
       settlements: z.array(
         z.strictObject({
           id: z.string(),
+          ...crossCurrencySettlementReadShape,
           from: z.string(),
           to: z.string(),
           amountMinor: minor,
@@ -114,6 +117,7 @@ export interface BackupGroupInput {
   name: string;
   theme: Backup['groups'][number]['theme'];
   currency: string;
+  alternateCurrencies?: readonly string[];
   startDate?: Date | string | null;
   endDate?: Date | string | null;
   members: readonly ExportPerson[];
@@ -184,6 +188,7 @@ export function buildBackup(
           name: group.name,
           theme: group.theme,
           currency: group.currency,
+          alternateCurrencies: [...(group.alternateCurrencies ?? [])],
           startDate: optionalDate(group.startDate),
           endDate: optionalDate(group.endDate),
           members: [...ids].sort().map((id) => ({
@@ -233,6 +238,7 @@ export function buildBackup(
               : {}),
           })),
           settlements: settlements.sort(byId).map((row) => ({
+            ...z.object(crossCurrencySettlementReadShape).parse(row),
             id: row.id,
             from: row.fromId,
             to: row.toId,

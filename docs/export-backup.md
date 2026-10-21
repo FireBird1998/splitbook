@@ -15,7 +15,7 @@ or database dependencies. Parsing a generated file through the schema validates 
 
 - `format`: exactly `splitbook-backup/1`; `exportedAt`: ISO UTC timestamp.
 - `groups`: ordered by stable id. Each has `id`, `name`, `theme` (stored Theme key),
-  `currency`, `startDate` and `endDate` (ISO timestamps, or null).
+  `currency`, `alternateCurrencies` (the listed extra currency codes), `startDate` and `endDate` (ISO timestamps, or null).
 - `members`: stable `id`, `name` and `former`. Current members and people referenced by
   exported records or requested history are included, ordered by id. An unavailable account
   is named `Former member`. No email, image or account metadata is exported.
@@ -34,7 +34,12 @@ or database dependencies. Parsing a generated file through the schema validates 
   Edits are ordered by time then editor. Populated participant objects become their stable id.
 - `settlements`: only populated with `payments`, otherwise an empty array. Each has `id`,
   `from`, `to`, exact `amountMinor`, `currency`, stored recording `date` as ISO UTC,
-  `note` and `createdBy`. Ordered by id.
+  `note` and `createdBy`. Cross-currency records also retain `amountPaidMinor`,
+  `paidCurrency`, `appliedRate`, `rateKind`, and the stored suggestion provenance
+  (`suggestedRate`, `rateSource`, `rateAsOf`, `rateFetchedAt`) when present, plus
+  immutable `pairDebtBeforeMinor` and `pairDebtAfterMinor` when recorded. Nothing
+  is converted, looked up or recomputed. Old records omit these fields. Ordered by id.
+  Older backups without `alternateCurrencies` parse as an empty list.
 
 Backups always cover **all time**. The form disables the period selector and sends no bounds.
 The server **rejects** `from` or `to` with JSON format (`422 VALIDATION_ERROR`), rather than
@@ -69,7 +74,14 @@ Spent, Expense count, Paid, Share and Net cover the selected period. Paid and Sh
 to Spent; Nets sum to zero. **Current all-time balances and suggested payments** include all
 recorded payments and match Balances, with that distinction stated on the page. Periods never
 reset debts. Payments are listed oldest first by instant, with recorder names and no Month totals.
-Legacy currencies have a selector and are never combined or converted.
+The main, listed extra and historical ledger currencies each have their own section,
+all rendered on screen and in print; they are never combined or converted. A payment
+belongs only to its cleared currency's totals. Cross-currency payment rows name both
+stored amounts and the stored rate via `formatCrossCurrencySettlement`, including
+its suggested as-of date (not fetch date) and linked fallback attribution. The preview
+uses the same builder and payment description, sampling at most five payment rows
+per currency with the remaining count. CSV preview Table and Text use the same
+payment columns as the download.
 
 `scope=trip` denotes a whole-trip statement. It is refused for non-Trip Groups. Stored Trip
 dates supply the caption; fabricated query bounds cannot relabel a whole trip. It follows the

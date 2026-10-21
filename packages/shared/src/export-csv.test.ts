@@ -495,6 +495,10 @@ describe('the payments CSV', () => {
       'Note',
       'Recorded by',
       'Payment ID',
+      'Amount paid',
+      'Paid currency',
+      'Rate (paid per cleared)',
+      'Rate attribution',
     ]);
   });
 
@@ -536,6 +540,10 @@ describe('the payments CSV', () => {
         'Rent, August',
         'Sam Chen',
         'd00000000000000000000001',
+        '',
+        '',
+        '',
+        '',
       ],
       [
         '2026-09-02',
@@ -547,7 +555,101 @@ describe('the payments CSV', () => {
         '',
         'Priya Shah',
         'd00000000000000000000002',
+        '',
+        '',
+        '',
+        '',
       ],
     ]);
+  });
+});
+
+it('exports both stored payment amounts beside their currencies and the exact applied rate', () => {
+  const payment = {
+    id: 'cross',
+    at: '2026-10-21T12:00:00Z',
+    fromId: ALEX,
+    toId: SAM,
+    amountMinor: 2000,
+    currency: 'EUR',
+    recordedById: ALEX,
+    amountPaidMinor: 185000,
+    paidCurrency: 'INR',
+    appliedRate: '92.5',
+    rateKind: 'entered' as const,
+  };
+  const csv = buildPaymentCsv({ payments: [payment], names: NAMES, timeZone: 'UTC' });
+  const row = Object.fromEntries(csv.header.map((key, index) => [key, csv.rows[0][index]]));
+  expect(row).toMatchObject({
+    Amount: '20.00',
+    Currency: 'EUR',
+    'Amount paid': '1850.00',
+    'Paid currency': 'INR',
+    'Rate (paid per cleared)': '92.5',
+  });
+  expect(csv.header.indexOf('Paid currency')).toBe(csv.header.indexOf('Amount paid') + 1);
+});
+
+it('keeps fallback rate attribution in the downloadable CSV', () => {
+  const csv = buildPaymentCsv({
+    payments: [
+      {
+        id: 'p',
+        at: '2026-10-21T12:00:00Z',
+        fromId: ALEX,
+        toId: SAM,
+        recordedById: ALEX,
+        amountMinor: 2000,
+        currency: 'EUR',
+        amountPaidMinor: 3200,
+        paidCurrency: 'JPY',
+        appliedRate: '160',
+        rateKind: 'suggested',
+        suggestedRate: '160',
+        rateSource: 'exchange-rate-api',
+        rateAsOf: '2026-10-20',
+        rateFetchedAt: '2026-10-21T12:00:00Z',
+      },
+    ],
+    names: NAMES,
+    timeZone: 'UTC',
+  });
+  const row = Object.fromEntries(csv.header.map((key, index) => [key, csv.rows[0][index]]));
+  expect(row).toMatchObject({
+    'Amount paid': '3200',
+    'Paid currency': 'JPY',
+    'Rate attribution': 'Rates By Exchange Rate API (https://www.exchangerate-api.com)',
+  });
+});
+
+it('leaves Rate attribution empty for a Frankfurter payment', () => {
+  const csv = buildPaymentCsv({
+    payments: [
+      {
+        id: 'p',
+        at: '2026-10-21T12:00:00Z',
+        fromId: ALEX,
+        toId: SAM,
+        recordedById: ALEX,
+        amountMinor: 2000,
+        currency: 'EUR',
+        amountPaidMinor: 3200,
+        paidCurrency: 'JPY',
+        appliedRate: '160',
+        rateKind: 'suggested',
+        suggestedRate: '160',
+        rateSource: 'frankfurter',
+        rateAsOf: '2026-10-20',
+        rateFetchedAt: '2026-10-21T12:00:00Z',
+      },
+    ],
+    names: NAMES,
+    timeZone: 'UTC',
+  });
+  const row = Object.fromEntries(csv.header.map((key, index) => [key, csv.rows[0][index]]));
+  expect(row).toMatchObject({
+    'Amount paid': '3200',
+    'Paid currency': 'JPY',
+    'Rate attribution': '',
   });
 });

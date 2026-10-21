@@ -1,6 +1,9 @@
 import { buildBackup, type BackupGroupInput } from '@splitbook/shared/export-backup';
 import { buildStatement } from '@splitbook/shared/statement';
 import { Types } from 'mongoose';
+import { z } from 'zod';
+import { crossCurrencySettlementReadShape } from '@splitbook/shared/validators/settlement';
+import type { CrossCurrencySettlementFields } from '@splitbook/shared/cross-currency-settlement';
 import { zipSync } from 'fflate';
 import connectDB from '@/lib/db';
 import Expense, { type IExpenseDocument } from '@/lib/models/Expense';
@@ -237,6 +240,11 @@ export class ExportService {
       counts.members = members.size;
       return {
         format: 'json',
+        currencyGroups: backup.groups.map(({ name, currency, alternateCurrencies }) => ({
+          name,
+          currency,
+          alternateCurrencies,
+        })),
         groupNames: backup.groups.map((group) => group.name),
         generatedAt: backup.exportedAt,
         from: null,
@@ -278,7 +286,7 @@ export class ExportService {
     const include = new Set(request.include);
 
     const found = await Group.find({ _id: { $in: request.groupIds }, 'members.user': userId })
-      .select('name category defaultCurrency startDate endDate members tags')
+      .select('name category defaultCurrency alternateCurrencies startDate endDate members tags')
       .lean();
     const groups = request.groupIds.map((id) => found.find((group) => String(group._id) === id));
     if (groups.some((group) => !group)) throw new Error('FORBIDDEN');
@@ -374,6 +382,7 @@ export class ExportService {
         name: group.name,
         theme: group.category,
         currency: group.defaultCurrency,
+        alternateCurrencies: group.alternateCurrencies,
         startDate: group.startDate,
         endDate: group.endDate,
         members: group.members.map((member) => ({
@@ -489,9 +498,11 @@ export class ExportService {
       | 'currency'
       | 'note'
       | 'createdBy'
-    >,
+    > &
+      Partial<CrossCurrencySettlementFields>,
   ): ExportPayment {
     return {
+      ...z.object(crossCurrencySettlementReadShape).parse(payment),
       id: String(payment._id),
       at: payment.createdAt,
       fromId: String(payment.paidBy),

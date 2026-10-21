@@ -15,6 +15,10 @@ import { getCurrencyPrecision } from './currency';
 import { expenseDay } from './expense-day';
 import { assertSafeMinorAmount, moneyParticipantId, readLegacyAmountMinor } from './exact-money';
 import type { SplitMethod } from './types';
+import {
+  EXCHANGE_RATE_API_ATTRIBUTION,
+  type CrossCurrencySettlementFields,
+} from './cross-currency-settlement';
 
 // ─── Text ───────────────────────────────────────────────
 
@@ -174,7 +178,7 @@ export interface ExportExpense {
   edits?: ExportEdit[];
 }
 
-export interface ExportPayment {
+export interface ExportPayment extends Partial<CrossCurrencySettlementFields> {
   id: string;
   /** When it was recorded. */
   at: Date | string;
@@ -509,6 +513,10 @@ export const PAYMENT_COLUMNS = [
   'Note',
   'Recorded by',
   'Payment ID',
+  'Amount paid',
+  'Paid currency',
+  'Rate (paid per cleared)',
+  'Rate attribution',
 ] as const;
 
 export interface PaymentCsvInput {
@@ -534,6 +542,14 @@ export function buildPaymentCsv({ payments, names, timeZone }: PaymentCsvInput):
       payment.note ?? '',
       name(payment.recordedById),
       payment.id,
+      payment.amountPaidMinor !== undefined && payment.paidCurrency
+        ? formatMinorAmount(payment.amountPaidMinor, payment.paidCurrency)
+        : '',
+      payment.paidCurrency ?? '',
+      payment.appliedRate ?? '',
+      payment.rateSource === 'exchange-rate-api' || payment.rateSource === 'mixed'
+        ? `${EXCHANGE_RATE_API_ATTRIBUTION.text} (${EXCHANGE_RATE_API_ATTRIBUTION.url})`
+        : '',
     ]),
   };
 }
