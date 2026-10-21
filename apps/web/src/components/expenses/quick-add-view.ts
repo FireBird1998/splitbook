@@ -4,7 +4,7 @@
  */
 import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import { calculateSplitAmountsMinor, toMajorAmount } from '@splitbook/shared/exact-money';
-import { unlistedCurrencyFix } from '@splitbook/shared/group-currencies';
+import { unlistedCurrencyFix, type UnlistedCurrencyFix } from '@splitbook/shared/group-currencies';
 import {
   quickAddSplitMembers,
   type QuickAddMember,
@@ -42,17 +42,6 @@ export interface QuickAddGroup {
   alternateCurrencies?: readonly string[];
 }
 
-/** A line in a currency the Group doesn't list, and what the member can do about it (#732). */
-export interface QuickAddUnlisted {
-  currency: string;
-  /** "Add CHF to Lisbon & Tokyo", or null once the Group has 4 extra currencies. */
-  add: string | null;
-  /** Why it can't be added, when it can't. */
-  full: string | null;
-  /** The Group's currencies to read the line in instead, main currency first. */
-  choices: string[];
-}
-
 export interface QuickAddModelInput {
   read: QuickAddRead;
   /** Today in the viewer's zone, `yyyy-MM-dd`. */
@@ -73,8 +62,8 @@ export interface QuickAddModel {
   message: { text: string; tone: 'hint' | 'needed' | 'invalid' };
   /** Whether Enter adds it. */
   ready: boolean;
-  /** Set while the line names a currency the Group doesn't list. */
-  unlisted: QuickAddUnlisted | null;
+  /** Set while the line names a currency the Group doesn't list, with what to do about it (#732). */
+  unlisted: UnlistedCurrencyFix | null;
   /** Whether something typed is refused, so the field is marked invalid. */
   invalid: boolean;
   /** One sentence for screen readers once typing pauses. */
@@ -150,18 +139,9 @@ export function quickAddModel({
   // The line's own currency when it names a listed one; nothing is converted.
   const currency = read.currency ?? group.defaultCurrency;
   const money = (minor: number) => formatCurrency(toMajorAmount(minor, currency), currency);
-  const fix =
+  const unlisted =
     read.currency && !read.currencyListed && read.amountText !== null
       ? unlistedCurrencyFix(group, read.currency, Number(read.amountText))
-      : null;
-  const unlisted: QuickAddUnlisted | null =
-    fix && read.currency
-      ? {
-          currency: read.currency,
-          add: fix.add,
-          full: fix.add ? null : fix.adding,
-          choices: fix.choices,
-        }
       : null;
 
   const selected = quickAddSplitMembers(read, payerId, members);
@@ -250,8 +230,8 @@ export function quickAddModel({
   });
 
   let message: QuickAddModel['message'];
-  if (fix && problems[0]?.field === 'amount') {
-    message = { text: fix.notListed, tone: 'needed' };
+  if (unlisted && problems[0]?.field === 'amount') {
+    message = { text: unlisted.notListed, tone: 'needed' };
   } else if (problems.length) {
     message = {
       text: problems[0].message,
@@ -266,8 +246,9 @@ export function quickAddModel({
         ? ` ${tag.name} is a suggestion: adding accepts it, or pick another Tag.`
         : '';
     // A line in an extra currency says which, as the boards do; nothing is converted.
-    const lead =
-      currency === group.defaultCurrency
+    const lead = read.chosenInsteadOf
+      ? `Read as ${currency} instead of ${read.chosenInsteadOf}, one of ${group.name}’s currencies. Nothing is converted. Press Enter to add it.`
+      : currency === group.defaultCurrency
         ? position
         : `Read as ${currency}, one of ${group.name}’s currencies. Press Enter to add it.`;
     message = { text: `${lead}${suggestion}`, tone: 'hint' };

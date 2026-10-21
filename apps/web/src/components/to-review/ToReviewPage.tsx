@@ -207,10 +207,7 @@ export default function ToReviewPage({
     const values = item.accountItem?.draft.values;
     if (!group || !values?.currency) return null;
     if (!item.needs.some((need) => need.reason === 'currency-not-listed')) return null;
-    return {
-      currency: values.currency,
-      ...unlistedCurrencyFix(group, values.currency, values.amount),
-    };
+    return unlistedCurrencyFix(group, values.currency, values.amount);
   };
   /** Adds the item's currency to the Group; every item in it then reviews again. */
   async function addCurrency(item: ReviewItemModel, code: string) {
@@ -746,10 +743,7 @@ export default function ToReviewPage({
                             onSave={() => void saveOne(item.accountItem!.draft, false, [])}
                             onDelete={() => setDeleting(item)}
                             currencyFix={currencyFixFor(item)}
-                            onAddCurrency={() => {
-                              const code = item.accountItem?.draft.values?.currency;
-                              if (code) void addCurrency(item, code);
-                            }}
+                            onAddCurrency={(code) => void addCurrency(item, code)}
                             onChangeCurrency={(code) => void changeCurrency(item, code)}
                           />
                         ))}

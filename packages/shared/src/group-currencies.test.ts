@@ -131,6 +131,7 @@ describe('unlistedCurrencyFix: an Expense in a currency the Group doesn’t list
 
   it('says what is wrong and offers both fixes, in the boards’ words', () => {
     expect(unlistedCurrencyFix(lisbon, 'CHF', 86)).toEqual({
+      currency: 'CHF',
       notListed: 'CHF isn’t one of Lisbon & Tokyo’s currencies.',
       ask: 'Add it, or change this Expense’s currency.',
       add: 'Add CHF to Lisbon & Tokyo',

@@ -197,7 +197,7 @@ describe('a row in a currency its Group doesn’t list (#732)', () => {
 
   it('explains the currency once and offers both fixes, as the board does', () => {
     const shown = row(dinner, [], ['CURRENCY_NOT_LISTED'], 'trip', {
-      currencyFix: { currency: 'CHF', ...unlistedCurrencyFix(lisbon, 'CHF', 86) },
+      currencyFix: unlistedCurrencyFix(lisbon, 'CHF', 86),
       onAddCurrency: vi.fn(),
       onChangeCurrency: vi.fn(),
     });
@@ -220,7 +220,7 @@ describe('a row in a currency its Group doesn’t list (#732)', () => {
   it('offers only a change once the Group has 4 extra currencies', () => {
     const full = { ...lisbon, alternateCurrencies: ['EUR', 'JPY', 'USD', 'GBP'] };
     const shown = row(dinner, [], ['CURRENCY_NOT_LISTED'], 'trip', {
-      currencyFix: { currency: 'CHF', ...unlistedCurrencyFix(full, 'CHF', 86) },
+      currencyFix: unlistedCurrencyFix(full, 'CHF', 86),
       onAddCurrency: vi.fn(),
       onChangeCurrency: vi.fn(),
     });

@@ -36,11 +36,12 @@ import {
   quickAddDraftValues,
   readQuickAdd,
   suggestQuickAddTag,
+  type QuickAddContext,
   type QuickAddHistoryItem,
 } from '@splitbook/shared/quick-add';
 import { findReferencedTag } from '@splitbook/shared/tag-identity';
 import { visuallyHidden } from '@/components/common/visually-hidden';
-import { FONT_MONO } from '@/lib/theme/tokens';
+import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { fetchWebExpensePage } from '@/lib/web-read';
 import ExpenseFormDialog from './ExpenseFormDialog';
 import { quickAddModel, type QuickAddChip, type QuickAddModel } from './quick-add-view';
@@ -112,7 +113,7 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
   const [formDraft, setFormDraft] = useState<ExpenseDraft | null>(null);
   const [announcement, setAnnouncement] = useState({ id: 0, text: '' });
   // A listed currency the member chose for the line's unlisted one, while the line names it.
-  const [currencyChoice, setCurrencyChoice] = useState<{ said: string; code: string } | null>(null);
+  const [currencyChoice, setCurrencyChoice] = useState<QuickAddContext['currencyChoice']>(null);
   const [addingCurrency, setAddingCurrency] = useState(false);
   const [currencyError, setCurrencyError] = useState<{ text: string; message: string } | null>(
     null,
@@ -584,7 +585,7 @@ export function QuickAddView({
                   }
                   sx={{
                     minHeight: 44,
-                    borderRadius: '12px',
+                    borderRadius: `${RADIUS.sm}px`,
                     textTransform: 'none',
                     bgcolor: 'tint.brand',
                     color: 'primary.main',
@@ -595,7 +596,7 @@ export function QuickAddView({
                 </Button>
               ) : (
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  {model.unlisted.full}
+                  {model.unlisted.adding}
                 </Typography>
               )}
               <CurrencyChoice
@@ -787,7 +788,7 @@ function CurrencyChoice({
         aria-controls={anchor ? menuId : undefined}
         disabled={disabled}
         onClick={(event) => setAnchor(event.currentTarget)}
-        sx={{ minHeight: 44, borderRadius: '12px', textTransform: 'none' }}
+        sx={{ minHeight: 44, borderRadius: `${RADIUS.sm}px`, textTransform: 'none' }}
       >
         Use another currency
       </Button>

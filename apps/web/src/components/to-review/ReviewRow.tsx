@@ -88,8 +88,8 @@ export default function ReviewRow({
   onSave: () => void;
   onDelete: () => void;
   /** Set when the item's currency isn't one of its Group's (#732). */
-  currencyFix?: (UnlistedCurrencyFix & { currency: string }) | null;
-  onAddCurrency?: () => void;
+  currencyFix?: UnlistedCurrencyFix | null;
+  onAddCurrency?: (code: string) => void;
   onChangeCurrency?: (code: string) => void;
 }) {
   const [menu, setMenu] = useState<HTMLElement | null>(null);
@@ -99,11 +99,15 @@ export default function ReviewRow({
   const meta = [values.date && reviewDate(values.date), reviewSource(item.accountItem!)]
     .filter(Boolean)
     .join(' · ');
-  // The currency fix says what's wrong itself, so the Needs line leaves it out.
-  const currencyWords = reviewNeedWords({ field: 'currency', reason: 'currency-not-listed' });
-  const stillNeeds = currencyFix
-    ? quick.stillNeeds.filter((words) => words !== currencyWords)
-    : quick.stillNeeds;
+  // The currency fix says what's wrong itself, so the Needs line leaves its need out.
+  const currencyNeeds = new Set(
+    currencyFix
+      ? item.needs
+          .filter((need) => need.reason === 'currency-not-listed')
+          .map((need) => reviewNeedWords(need, item.theme))
+      : [],
+  );
+  const stillNeeds = quick.stillNeeds.filter((words) => !currencyNeeds.has(words));
   const groups = quick.fixes.map((fix) => ({
     fix,
     options: showAll.has(fix.fact) ? fix.options : fix.visible,
@@ -298,7 +302,7 @@ export default function ReviewRow({
               <Button
                 disabled={disabled}
                 startIcon={<AddIcon aria-hidden />}
-                onClick={onAddCurrency}
+                onClick={() => onAddCurrency?.(currencyFix.currency)}
                 sx={{
                   minHeight: { xs: 44, md: 36 },
                   textTransform: 'none',

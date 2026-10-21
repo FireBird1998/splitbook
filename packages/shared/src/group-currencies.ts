@@ -3,7 +3,7 @@
  * An Expense, a Settlement's currency, a recurring Expense or a Draft may use any of them, and
  * amounts are never converted. Framework-free, so the server and both clients share one rule.
  */
-import { CURRENCY_CODES, formatCurrencyAsEntered, getCurrency } from './currency';
+import { CURRENCY_CODES, formatAmountAsEntered, getCurrency } from './currency';
 
 /** The most extra currencies a Group can have, so the Expense form's choice stays short. */
 export const MAX_EXTRA_CURRENCIES = 4;
@@ -123,6 +123,8 @@ const ORDINALS = ['1st', '2nd', '3rd', '4th'];
 
 /** What a member can do about an Expense in a currency the Group doesn't list (#732). */
 export interface UnlistedCurrencyFix {
+  /** The currency the Group doesn't list. */
+  currency: string;
   /** "CHF isn’t one of Lisbon & Tokyo’s currencies." */
   notListed: string;
   /** What to do about it: add it or change the currency, or only change it once the list is full. */
@@ -149,9 +151,9 @@ export function unlistedCurrencyFix(
   const choices = groupCurrencies(group);
   const extras = choices.length - 1;
   const full = extras >= MAX_EXTRA_CURRENCIES;
-  const kept =
-    amount === undefined ? null : formatCurrencyAsEntered(amount, currency).replace(/^[^\d]+/u, '');
+  const kept = amount === undefined ? null : formatAmountAsEntered(amount, currency);
   return {
+    currency,
     notListed: `${currency} isn’t one of ${group.name}’s currencies.`,
     ask: full ? 'Change this Expense’s currency.' : 'Add it, or change this Expense’s currency.',
     add: full ? null : `Add ${currency} to ${group.name}`,

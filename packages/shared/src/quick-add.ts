@@ -118,6 +118,11 @@ export interface QuickAddRead {
   currencyCandidates: string[];
   /** False when the member must add the currency or choose a listed one. */
   currencyListed: boolean;
+  /**
+   * The unlisted currency the line names, when the member chose to read it in `currency` instead
+   * (#732). The amount is as typed; nothing is converted.
+   */
+  chosenInsteadOf?: string;
   /** What it was for: the words no rule took, or '' when there are none. */
   description: string;
   /** The amount in exact minor units, or null while it is missing or refused. */
@@ -550,6 +555,7 @@ interface AmountRead {
   currency: string | null;
   currencyCandidates: string[];
   currencyListed: boolean;
+  chosenInsteadOf?: string;
   amountMinor: number | null;
   amountText: string | null;
   problem?: QuickAddProblem;
@@ -561,7 +567,10 @@ function readAmount(
   choice: QuickAddContext['currencyChoice'],
 ): AmountRead {
   let currency = listed[0];
-  let currencyRead: Pick<AmountRead, 'currency' | 'currencyCandidates' | 'currencyListed'> = {
+  let currencyRead: Pick<
+    AmountRead,
+    'currency' | 'currencyCandidates' | 'currencyListed' | 'chosenInsteadOf'
+  > = {
     currency,
     currencyCandidates: [],
     currencyListed: true,
@@ -623,9 +632,17 @@ function readAmount(
       );
     }
     currency = chosen.mark[0];
-    if (choice?.said === currency && !listed.includes(currency) && listed.includes(choice.code))
-      currency = choice.code;
-    currencyRead = { currency, currencyCandidates: [], currencyListed: listed.includes(currency) };
+    const applied =
+      choice?.said === currency && !listed.includes(currency) && listed.includes(choice.code)
+        ? choice
+        : null;
+    if (applied) currency = applied.code;
+    currencyRead = {
+      currency,
+      currencyCandidates: [],
+      currencyListed: listed.includes(currency),
+      ...(applied ? { chosenInsteadOf: applied.said } : {}),
+    };
     if (!currencyRead.currencyListed)
       return invalid(
         'amount-currency',
@@ -947,6 +964,7 @@ export function readQuickAdd(text: string, context: QuickAddContext): QuickAddRe
     currency: amount.currency,
     currencyCandidates: amount.currencyCandidates,
     currencyListed: amount.currencyListed,
+    ...(amount.chosenInsteadOf ? { chosenInsteadOf: amount.chosenInsteadOf } : {}),
     amountMinor: amount.amountMinor,
     amountText: amount.amountText,
     payer: payer.payer,
