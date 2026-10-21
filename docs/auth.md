@@ -445,3 +445,24 @@ deployment.
   only proves a cookie exists.
 - The `users` collection stores only public Google profile info (name, email,
   image) plus app fields; `accounts` stores the Google subject and tokens.
+
+## Switching accounts during assistant approval
+
+“Not you?” beside **Signed in as** on `/mcp/consent` ends only that browser session
+and opens the active sign-in method (Google or demo). It returns to the same approval
+page after sign-in. Neither account grants access along the way; the new member still
+has to choose **Allow connection**. Optional To review permission starts unticked again.
+
+`POST /api/auth/mcp/switch-account` accepts only `{ oauth_query }`, the provider's
+signed pending request. The server verifies its signature and expiry before ending the
+session, checks the same trusted origin and expected-account header as other connection
+controls, and confirms session deletion before clearing cookies. Failure keeps the
+member on the page to retry. Other sessions stay signed in.
+
+The server constructs a fixed `/login` destination whose validated local `callbackUrl`
+is `/mcp/consent` with that unchanged query. Callers cannot supply another return address.
+The client, scopes, state, PKCE challenge and signature are preserved; the flow never
+restarts authorization or refreshes the request's expiry. Consent details and final
+approval revalidate it after sign-in. An expired or invalid request asks the member to
+restart from the assistant, and cannot issue a stale grant. Google sign-in retains its
+existing account chooser and private-beta allowlist.

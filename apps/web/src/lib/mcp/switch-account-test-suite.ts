@@ -5,6 +5,7 @@ import { memoryAdapter } from 'better-auth/adapters/memory';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { MongoClient } from 'mongodb';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
+import { signTestIdToken } from '@/lib/auth/test-id-token';
 import { buildAuthOptions } from '@/lib/auth/create-auth';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 
@@ -44,9 +45,18 @@ export function switchAccountTests(mongo = false) {
     return value!.split(';')[0];
   }
   async function login(email: string) {
-    const response = await request('/sign-in/email', '', {
-      email,
-      password: 'fictional-password-only',
+    const response = await request('/sign-in/social', '', {
+      provider: 'google',
+      idToken: {
+        token: signTestIdToken(
+          {
+            sub: email,
+            email,
+            name: email === 'first@example.test' ? 'First Member' : 'Second Member',
+          },
+          'fictional-switch-google-verifier',
+        ),
+      },
     });
     expect(response.status).toBe(200);
     return sessionCookie(response);
@@ -103,23 +113,14 @@ export function switchAccountTests(mongo = false) {
           AUTH_SECRET: 'fictional-switch-account-test-secret-only',
           AUTH_RATE_LIMIT_ENABLED: 'false',
           AUTH_ALLOWED_EMAILS: 'first@example.test,second@example.test',
+          AUTH_GOOGLE_ID: 'fictional-client',
+          AUTH_GOOGLE_SECRET: 'fictional-client-secret',
+          AUTH_TEST_ID_TOKEN_SECRET: 'fictional-switch-google-verifier',
           MCP_ENABLED: 'true',
           MCP_ALLOW_DCR: 'true',
         },
       }),
-      emailAndPassword: { enabled: true },
     });
-    for (const [email, name] of [
-      ['first@example.test', 'First Member'],
-      ['second@example.test', 'Second Member'],
-    ]) {
-      const response = await request('/sign-up/email', '', {
-        email,
-        name,
-        password: 'fictional-password-only',
-      });
-      expect(response.status).toBe(200);
-    }
     firstCookie = await login('first@example.test');
     otherSession = await login('first@example.test');
     const registration = await request('/oauth2/register', '', {

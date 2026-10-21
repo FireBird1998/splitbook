@@ -309,13 +309,14 @@ test('Not you returns a different account to the same signed approval without gr
   const original = new URL(page.url());
   await expect(page.getByText('Alex Rivera', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Not you?', exact: true }).click();
-  await expect(page).toHaveURL(/\/login\?/);
+  // Wait for the new document to load before choosing a persona, not just its URL.
+  await page.waitForURL(/\/login\?/);
   expect(new URL(page.url()).searchParams.get('callbackUrl')).toBe(
     `/mcp/consent${original.search}`,
   );
   const anonymous = await page.request.get('/api/auth/get-session');
   expect(await anonymous.json()).toBeNull();
-  await page.getByRole('button', { name: 'Continue as Sam Chen' }).click();
+  await page.getByRole('button', { name: /Enter as Sam Chen/ }).click();
   await expect(page).toHaveURL(original.href);
   await expect(page.getByText('Sam Chen', { exact: true })).toBeVisible();
   await expect(
