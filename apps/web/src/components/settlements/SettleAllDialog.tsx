@@ -32,14 +32,21 @@ import { apiFetch, pinExpectedAccount, reloadForAccountChange } from '@/lib/util
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { DISCARDED, GONE, NOT_DISCARDED, NOT_STORED, STALE, UNCONFIRMED } from './record-payment';
 import {
+  rateKey,
   readSettleAll,
+  settleAllRates,
   settleAllWords,
   type SettleAllDebt,
   type SettleAllLine,
   type SettleAllOffer,
-  type SettleAllRate,
   type SettleAllRateState,
 } from '@splitbook/shared/settle-all';
+
+/** A Debt gone from the Balances since the sheet opened ends the payment, as on Android. */
+const SUGGESTION_CHANGED =
+  'This suggested payment has changed. Close this to see the latest balances.';
+/** A Debt's amount changed since the sheet opened: shown again, recorded only when asked. */
+const DEBTS_CHANGED = 'The Debts changed. Check the payment, then record again.';
 
 export interface SettleAllDialogProps {
   open: boolean;
@@ -54,6 +61,11 @@ export interface SettleAllDialogProps {
   payCurrencies: string[];
   /** The payment stored for the two, if any: one that may already be recorded. */
   stored: SettlementAttempt | null;
+  /**
+   * The Debts between the two as the Balances read them now, checked just before a first send:
+   * a payment never clears a Debt that has changed or gone since the sheet opened (#734).
+   */
+  recheck: () => Promise<SettleAllDebt[]>;
   onClose: () => void;
   /** It was recorded, or its copy discarded: what to say about it. */
   onDone: (outcome: string) => void;
@@ -84,7 +96,7 @@ function RateReader({
   const reason = state.status === 'none' ? state.reason : null;
   useEffect(() => {
     onRead(
-      pairKey(currency, paidCurrency),
+      rateKey(currency, paidCurrency),
       suggestion
         ? { status: 'ready', suggestion }
         : state.status === 'none'
@@ -103,9 +115,6 @@ function RateReader({
   ]);
   return null;
 }
-
-/** A rate belongs to its Debt's currency and the currency it is paid in, never one of them alone. */
-const pairKey = (currency: string, paidCurrency: string) => `${currency}>${paidCurrency}`;
 
 /** The rows of a stored settle-up, as it was sent: never changed, only checked. */
 function storedLines(stored: SettlementAttempt): SettleAllLine[] {
@@ -137,6 +146,7 @@ export default function SettleAllDialog({
   names,
   payCurrencies,
   stored,
+  recheck,
   onClose,
   onDone,
   onRefresh,
@@ -150,6 +160,11 @@ export default function SettleAllDialog({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  /** The Debts as Record last found them, when they had changed since the sheet opened. */
+  const [checked, setChecked] = useState<SettleAllDebt[] | null>(null);
+  const [notice, setNotice] = useState('');
+  /** A Debt went: this payment is over. */
+  const [ended, setEnded] = useState(false);
   const onRead = useCallback(
     (pair: string, state: RateSuggestionState) => setRead((all) => ({ ...all, [pair]: state })),
     [],
@@ -163,7 +178,7 @@ export default function SettleAllDialog({
         currency,
         amountMinor: debtMinor,
       }))
-    : (offer?.debts ?? []);
+    : (checked ?? offer?.debts ?? []);
   const shownOffer: SettleAllOffer | null =
     offer ??
     (storedBatch
@@ -176,15 +191,7 @@ export default function SettleAllDialog({
         }
       : null);
   const currency = storedBatch?.currency ?? paidCurrency;
-  const rates: Record<string, SettleAllRate> = Object.fromEntries(
-    debts.map(({ currency: code }) => [
-      code,
-      {
-        state: read[pairKey(code, currency)] ?? { status: 'loading' },
-        custom: custom[code] ?? null,
-      },
-    ]),
-  );
+  const rates = settleAllRates(debts, currency, read, custom);
   const reading = storedBatch
     ? {
         lines: storedLines(storedBatch),
@@ -210,7 +217,26 @@ export default function SettleAllDialog({
     if (!storedBatch && !reading.amounts) return;
     setSending(true);
     setError('');
+    setNotice('');
     try {
+      // A first send checks each Debt against the Balances now, as Android does; a stored
+      // payment is sent again as it was, with nothing read again.
+      if (!storedBatch) {
+        const latest = await recheck();
+        const found = debts.map(({ currency: code }) =>
+          latest.find((debt) => debt.currency === code),
+        );
+        if (found.some((debt) => !debt)) {
+          setEnded(true);
+          setNotice(SUGGESTION_CHANGED);
+          return;
+        }
+        if (found.some((debt, index) => debt!.amountMinor !== debts[index].amountMinor)) {
+          setChecked(found as SettleAllDebt[]);
+          setNotice(DEBTS_CHANGED);
+          return;
+        }
+      }
       const result = await recordSettlement({
         storage: browserAttemptStorage(),
         accountId,
@@ -454,6 +480,11 @@ export default function SettleAllDialog({
                 Payments before recording it again.
               </Alert>
             )}
+            {notice && (
+              <Alert severity="warning" role="status">
+                {notice}
+              </Alert>
+            )}
             {error && (
               <Alert severity="error" role="alert">
                 {error}
@@ -474,7 +505,7 @@ export default function SettleAllDialog({
             </Button>
           ))}
         <Button onClick={onClose}>Cancel</Button>
-        {words && !earlier && (
+        {words && !earlier && !ended && (
           <Button
             variant="contained"
             disableElevation

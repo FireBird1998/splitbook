@@ -66,32 +66,52 @@ export function settleAllOffers(
   currencies: readonly string[],
 ): SettleAllOffer[] {
   const offers = new Map<string, SettleAllOffer>();
-  const ordered = [...buckets].sort(
-    (a, b) => rank(currencies, a.currency) - rank(currencies, b.currency),
-  );
-  for (const { currency, debts } of ordered)
-    for (const debt of debts) {
-      if (!canRecordSettlement(viewerId, debt.from._id, debt.to._id)) continue;
-      let amountMinor: number;
-      try {
-        amountMinor = readLegacyAmountMinor(debt.amount, currency);
-      } catch {
-        continue;
-      }
-      if (amountMinor <= 0) continue;
-      const key = `${debt.from._id}:${debt.to._id}`;
-      const youPay = debt.from._id === viewerId;
-      const offer = offers.get(key) ?? {
-        paidBy: debt.from._id,
-        paidTo: debt.to._id,
-        other: youPay ? debt.to.name : debt.from.name,
-        youPay,
-        debts: [],
-      };
-      offer.debts.push({ currency, amountMinor });
-      offers.set(key, offer);
-    }
+  for (const { currency, debt, amountMinor } of suggested(buckets, currencies)) {
+    if (!canRecordSettlement(viewerId, debt.from._id, debt.to._id)) continue;
+    const key = `${debt.from._id}:${debt.to._id}`;
+    const youPay = debt.from._id === viewerId;
+    const offer = offers.get(key) ?? {
+      paidBy: debt.from._id,
+      paidTo: debt.to._id,
+      other: youPay ? debt.to.name : debt.from.name,
+      youPay,
+      debts: [],
+    };
+    offer.debts.push({ currency, amountMinor });
+    offers.set(key, offer);
+  }
   return [...offers.values()].filter((offer) => offer.debts.length > 1);
+}
+
+/**
+ * Every Debt one person owes another as the Suggested payments say, in `currencies`' order: what
+ * Record checks a settle-up against just before it sends it (#734).
+ */
+export function settleAllDebtsBetween(
+  buckets: readonly SuggestedPayments[],
+  paidBy: string,
+  paidTo: string,
+  currencies: readonly string[],
+): SettleAllDebt[] {
+  return suggested(buckets, currencies)
+    .filter(({ debt }) => debt.from._id === paidBy && debt.to._id === paidTo)
+    .map(({ currency, amountMinor }) => ({ currency, amountMinor }));
+}
+
+/** Each Suggested payment with an exact amount above zero, its currency in `currencies`' order. */
+function suggested(buckets: readonly SuggestedPayments[], currencies: readonly string[]) {
+  return [...buckets]
+    .sort((a, b) => rank(currencies, a.currency) - rank(currencies, b.currency))
+    .flatMap(({ currency, debts }) =>
+      debts.flatMap((debt) => {
+        try {
+          const amountMinor = readLegacyAmountMinor(debt.amount, currency);
+          return amountMinor > 0 ? [{ currency, debt, amountMinor }] : [];
+        } catch {
+          return [];
+        }
+      }),
+    );
 }
 
 /** Its place in the Group's currencies; one the Group no longer lists comes after them. */
@@ -142,6 +162,30 @@ export interface SettleAllLine {
   rate: string | null;
   kind: 'same' | 'suggested' | 'custom' | 'entered' | null;
   suggestion: RateSuggestion | null;
+}
+
+/** A rate is known for a Debt's currency paid in another, never for either one alone. */
+export const rateKey = (currency: string, paidCurrency: string) => `${currency}>${paidCurrency}`;
+
+/**
+ * Each Debt's rate for a payment in `paidCurrency`: the one known for that pair, or still to be
+ * read, beside the member's own. Switching the paying currency never keeps another pair's rate.
+ */
+export function settleAllRates(
+  debts: readonly SettleAllDebt[],
+  paidCurrency: string,
+  known: Readonly<Record<string, SettleAllRateState | undefined>>,
+  custom: Readonly<Record<string, string | null | undefined>>,
+): Record<string, SettleAllRate> {
+  return Object.fromEntries(
+    debts.map(({ currency }) => [
+      currency,
+      {
+        state: known[rateKey(currency, paidCurrency)] ?? { status: 'loading' },
+        custom: custom[currency] ?? null,
+      },
+    ]),
+  );
 }
 
 /** Record's reason while a Debt has no rate yet. */

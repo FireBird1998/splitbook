@@ -51,7 +51,7 @@ import type { EveryonePerson } from './everyone-chart';
 import SettleUpViews, { type Debt } from './SettleUpViews';
 import SettleAllOffers from './SettleAllOffers';
 import SettleAllDialog from '@/components/settlements/SettleAllDialog';
-import { settleAllOffers } from '@splitbook/shared/settle-all';
+import { settleAllDebtsBetween, settleAllOffers } from '@splitbook/shared/settle-all';
 
 interface BalancesViewProps {
   groupId: string;
@@ -751,6 +751,17 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
             .map(({ currency: code }) => code)
             .filter((code) => listed.includes(code))}
           stored={settlingStored}
+          recheck={async () => {
+            // The Balances read again, live: Record pays only the Debts as they are now.
+            const fresh = await mutate();
+            if (!fresh?.data) throw new Error('Couldn’t check the latest balances. Try again.');
+            return settleAllDebtsBetween(
+              fresh.data.byCurrency ?? [],
+              settling.paidBy,
+              settling.paidTo,
+              currencies,
+            );
+          }}
           onClose={() => setSettling(null)}
           onDone={(outcome) => {
             setSettling(null);
