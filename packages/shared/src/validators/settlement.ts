@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '../currency';
+import { currencyCode } from '../wire-fields';
 import { MAX_EXPENSE_AMOUNT, parseAmountMinor } from '../exact-money';
 import { calculateCrossCurrencySettlement, rateFraction } from '../cross-currency-settlement';
 
@@ -27,6 +28,8 @@ export const crossCurrencySettlementShape = {
 /** Server-computed historical fields never belong to the create input. */
 export const crossCurrencySettlementReadShape = {
   ...crossCurrencySettlementShape,
+  // Stored money outlives today's supported list; new writes still use the enum above.
+  paidCurrency: currencyCode.optional(),
   pairDebtBeforeMinor: z
     .number()
     .int()
