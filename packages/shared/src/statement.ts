@@ -1,4 +1,5 @@
 /** Statement figures: window spending, dated payments, and current all-time ledger positions. */
+import { formatCrossCurrencySettlement } from './cross-currency-settlement';
 import type { BackupGroupInput } from './export-backup';
 import { calculateNetBalancesMinor, simplifyDebtsMinor } from './debt-simplifier';
 import { sumMinorAmounts, toMajorAmount } from './exact-money';
@@ -59,6 +60,7 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
   const currencies = [
     ...new Set([
       group.currency,
+      ...(group.alternateCurrencies ?? []),
       ...active.map((row) => row.currency),
       ...group.settlements.map((row) => row.currency),
     ]),
@@ -169,6 +171,20 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
         })),
         payments: payments.map((row) => ({
           ...row,
+          description:
+            row.amountPaidMinor !== undefined && row.paidCurrency && row.appliedRate && row.rateKind
+              ? formatCrossCurrencySettlement({
+                  ...row,
+                  amountPaidMinor: row.amountPaidMinor,
+                  paidCurrency: row.paidCurrency,
+                  appliedRate: row.appliedRate,
+                  rateKind: row.rateKind,
+                  paidBy: row.fromId,
+                  paidByName: name(row.fromId),
+                  paidTo: row.toId,
+                  paidToName: name(row.toId),
+                })
+              : null,
           at: new Date(row.at).toISOString(),
           outsideTrip: outsideTrip(dayKeyInZone(row.at, timeZone)),
         })),

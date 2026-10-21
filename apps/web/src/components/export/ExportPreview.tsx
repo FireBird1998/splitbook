@@ -1,4 +1,5 @@
 'use client';
+import ExportPaymentDescription from './ExportPaymentDescription';
 import { useState, type ReactNode } from 'react';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
@@ -164,7 +165,15 @@ export default function ExportPreviewPanel({
             const name = (id: string) =>
               bucket.people.find((person) => person.id === id)?.name ?? 'Former member';
             return (
-              <Box key={bucket.currency} sx={{ mt: 2 }}>
+              <Box
+                component="section"
+                aria-label={`${bucket.currency} statement preview`}
+                key={bucket.currency}
+                sx={{ mt: 2 }}
+              >
+                <Typography component="h4" variant="subtitle1">
+                  {bucket.currency}
+                </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 2 }}>
                   <Box>
                     <Typography variant="body2">Spent</Typography>
@@ -210,7 +219,7 @@ export default function ExportPreviewPanel({
                   ))}
                 </PreviewTable>
                 <Box sx={{ mt: 2 }}>
-                  <Typography component="h4" variant="subtitle1">
+                  <Typography component="h5" variant="subtitle1">
                     Current balances ({bucket.currency})
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -236,7 +245,7 @@ export default function ExportPreviewPanel({
                       </TableRow>
                     ))}
                   </PreviewTable>
-                  <Typography component="h4" variant="subtitle1" sx={{ mt: 2 }}>
+                  <Typography component="h5" variant="subtitle1" sx={{ mt: 2 }}>
                     Suggested payments ({bucket.currency})
                   </Typography>
                   {bucket.suggestedPayments.length ? (
@@ -256,6 +265,50 @@ export default function ExportPreviewPanel({
                     <Typography>Settled up.</Typography>
                   )}
                 </Box>
+                {!!bucket.payments?.length && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography component="h5" variant="subtitle1">
+                      Payments ({bucket.currency})
+                    </Typography>
+                    <PreviewTable
+                      label={`${bucket.currency} first payments`}
+                      headers={['Date', 'Payment', 'Note', 'Recorded by']}
+                    >
+                      {bucket.payments.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                            {generatedTime(payment.at, data.timeZone)}
+                          </TableCell>
+                          <TableCell>
+                            {payment.description ? (
+                              <ExportPaymentDescription
+                                description={payment.description}
+                                currency={payment.currency}
+                                paidCurrency={payment.paidCurrency}
+                              />
+                            ) : (
+                              <>
+                                {name(payment.fromId)} paid {name(payment.toId)}{' '}
+                                <MoneyText
+                                  amount={toMajorAmount(payment.amountMinor, bucket.currency)}
+                                  currency={bucket.currency}
+                                  tone="neutral"
+                                />
+                              </>
+                            )}
+                          </TableCell>
+                          <TableCell>{payment.note}</TableCell>
+                          <TableCell>{name(payment.recordedById)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </PreviewTable>
+                    {bucket.paymentCount > bucket.payments.length && (
+                      <Typography color="text.secondary">
+                        …and {bucket.paymentCount - bucket.payments.length} more payments
+                      </Typography>
+                    )}
+                  </Box>
+                )}
                 {bucket.expenses.length > 0 && (
                   <Box sx={{ mt: 2 }}>
                     <PreviewTable
@@ -329,8 +382,8 @@ export default function ExportPreviewPanel({
             {data.sizeBytes >= 1_000_000 ? 'MB' : 'KB'}
           </Typography>
           <Box component="ul" sx={{ pl: 2.5 }}>
-            {data.currencyGroups?.map((group) => (
-              <li key={group.name}>
+            {data.currencyGroups?.map((group, index) => (
+              <li key={index}>
                 {group.name}: {[group.currency, ...group.alternateCurrencies].join(', ')}
               </li>
             ))}

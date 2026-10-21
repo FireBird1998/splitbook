@@ -1,10 +1,9 @@
 'use client';
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import GlobalStyles from '@mui/material/GlobalStyles';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import TextField from '@mui/material/TextField';
 import Table from '@mui/material/Table';
 import TableHead from '@mui/material/TableHead';
 import TableBody from '@mui/material/TableBody';
@@ -15,6 +14,7 @@ import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { getSemanticTokens } from '@/lib/theme/tokens';
 import { zonedTimestamp } from '@splitbook/shared/export-csv';
 import { categoryLabel } from '@splitbook/shared/categories';
+import ExportPaymentDescription from '@/components/export/ExportPaymentDescription';
 import type { OutsideTrip, Statement } from '@splitbook/shared/statement';
 
 const light = getSemanticTokens('light');
@@ -62,7 +62,7 @@ function StatementTable({
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Box component="section" aria-label={title} sx={{ mt: 3 }}>
-      <Typography component="h2" variant="h6" sx={{ mb: 1 }}>
+      <Typography component="h3" variant="h6" sx={{ mb: 1 }}>
         {title}
       </Typography>
       {children}
@@ -70,12 +70,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 export default function StatementView({ statement }: { statement: Statement }) {
-  const [currency, setCurrency] = useState(statement.defaultCurrency);
-  const bucket = statement.currencies.find((row) => row.currency === currency)!;
-  const name = (id: string) => bucket.people.find((row) => row.id === id)?.name ?? 'Former member';
-  const amount = (minor: number) => (
-    <MoneyText amount={toMajorAmount(minor, currency)} currency={currency} tone="neutral" />
-  );
   return (
     <Box
       className="statement-paper"
@@ -103,7 +97,7 @@ export default function StatementView({ statement }: { statement: Statement }) {
       </Typography>
       <Typography color="text.secondary">
         {statement.from && statement.to ? `${statement.from} – ${statement.to}` : 'All time'} ·{' '}
-        {currency} · {statement.timeZone}
+        {statement.currencies.map((row) => row.currency).join(', ')} · {statement.timeZone}
       </Typography>
       {statement.wholeTrip ? (
         <Typography>Whole trip, including Expenses before and after the Trip’s dates.</Typography>
@@ -112,20 +106,34 @@ export default function StatementView({ statement }: { statement: Statement }) {
         <Button variant="contained" onClick={() => window.print()}>
           Print or save as PDF
         </Button>
-        {statement.currencies.length > 1 ? (
-          <TextField
-            select
-            label="Currency"
-            value={currency}
-            onChange={(event) => setCurrency(event.target.value)}
-            slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
-          >
-            {statement.currencies.map((row) => (
-              <option key={row.currency}>{row.currency}</option>
-            ))}
-          </TextField>
-        ) : null}
       </Box>
+      {statement.currencies.map((bucket) => (
+        <CurrencySection key={bucket.currency} bucket={bucket} statement={statement} />
+      ))}
+    </Box>
+  );
+}
+
+function CurrencySection({
+  bucket,
+  statement,
+}: {
+  bucket: Statement['currencies'][number];
+  statement: Statement;
+}) {
+  const currency = bucket.currency;
+  const name = (id: string) => bucket.people.find((row) => row.id === id)?.name ?? 'Former member';
+  const amount = (minor: number) => (
+    <MoneyText amount={toMajorAmount(minor, currency)} currency={currency} tone="neutral" />
+  );
+  return (
+    <Box component="section" aria-label={`${currency} statement`} sx={{ mt: 3 }}>
+      <Typography component="h2" variant="h5">
+        {currency}
+      </Typography>
+      <Typography color="text.secondary">
+        Amounts stay in their own currencies; never converted.
+      </Typography>
       <Section title="Summary">
         <Typography>Spent: {amount(bucket.spentMinor)}</Typography>
         <Typography>Expenses: {bucket.expenseCount}</Typography>
@@ -253,7 +261,17 @@ export default function StatementView({ statement }: { statement: Statement }) {
                 </TableCell>
                 <TableCell>{name(row.fromId)}</TableCell>
                 <TableCell>{name(row.toId)}</TableCell>
-                <TableCell>{amount(row.amountMinor)}</TableCell>
+                <TableCell>
+                  {row.description ? (
+                    <ExportPaymentDescription
+                      description={row.description}
+                      currency={row.currency}
+                      paidCurrency={row.paidCurrency}
+                    />
+                  ) : (
+                    amount(row.amountMinor)
+                  )}
+                </TableCell>
                 <TableCell>{row.note}</TableCell>
                 <TableCell>{name(row.recordedById)}</TableCell>
               </TableRow>

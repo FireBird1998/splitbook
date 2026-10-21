@@ -305,7 +305,7 @@ it('names each currency’s balances and Suggested payments for screen readers (
       },
     },
   });
-  const headings = [...html.matchAll(/<h4[^>]*>([^<]*)<\/h4>/g)].map(([, heading]) => heading);
+  const headings = [...html.matchAll(/<h5[^>]*>([^<]*)<\/h5>/g)].map(([, heading]) => heading);
   expect(headings).toEqual([
     'Current balances (INR)',
     'Suggested payments (INR)',
