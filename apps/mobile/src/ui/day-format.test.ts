@@ -1,4 +1,5 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { missingFromAppFont } from '../test-utils/app-font';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { inTimeZone } from '../test-utils/time-zone';
 import { nearDay, recentDay, spellDay, spellMoment, spellTime } from './day-format';
@@ -100,5 +101,43 @@ describe('Android’s one day order (#640)', () => {
     expect(nearDay(new Date(2026, 9, 17), now)).toBeNull();
     expect(recentDay(new Date(2026, 9, 18), now)).toBe('Yesterday');
     expect(recentDay(new Date(2026, 9, 17), now)).toBe('17 Oct 2026');
+  });
+});
+
+// #766: "Last used 11:02 AM" drew without its time at 130% on a 360dp phone. The device's clock
+// put U+202F (narrow no-break space) before "AM", which the app's font lacks: Android measured
+// the line in the app font and drew that space from a wider fallback, so it wrapped unseen.
+describe('times and days in characters the app’s font draws (#766)', () => {
+  /**
+   * The phone's clock as Android's ICU spells it, with U+202F before AM and PM, as on the
+   * emulator. Node's newer ICU has a plain space there.
+   */
+  function androidClock() {
+    const { prototype } = Intl.DateTimeFormat;
+    const format = Object.getOwnPropertyDescriptor(prototype, 'format')!;
+    Object.defineProperty(prototype, 'format', {
+      ...format,
+      get(this: Intl.DateTimeFormat) {
+        const spell = format.get!.call(this) as Intl.DateTimeFormat['format'];
+        return (date?: Date | number) => spell(date).replace(/ (?=[ap]m\b)/gi, '\u202f');
+      },
+    });
+    onTestFinished(() => {
+      Object.defineProperty(prototype, 'format', format);
+    });
+  }
+
+  it.each(['en-US', 'en-IN', 'en-GB', 'de-DE', 'es-ES', 'fr-FR'])('on a %s phone', (locale) => {
+    mockDeviceLocale(locale);
+    androidClock();
+    for (const hour of [0, 9, 11, 12, 13, 23]) {
+      const at = new Date(2026, 9, 19, hour, 2);
+      for (const text of [
+        spellTime(at),
+        spellMoment(at),
+        spellMoment(at, { weekday: 'long', month: 'long', year: true }),
+      ])
+        expect(missingFromAppFont(text), text).toEqual([]);
+    }
   });
 });
