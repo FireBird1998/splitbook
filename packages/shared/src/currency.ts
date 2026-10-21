@@ -103,3 +103,30 @@ export function getSortedCurrencies(
   const otherCurrencies = CURRENCIES.filter((c) => !groupCurrencyCodes.includes(c.code));
   return [...groupCurrencies, ...otherCurrencies];
 }
+
+/** The whole unit of a currency with no smaller one ("yen", "won"), else null (#719). */
+export function wholeUnit(currency: string): string | null {
+  if (!CURRENCY_CODES.includes(currency) || getCurrencyPrecision(currency) !== 0) return null;
+  return ({ JPY: 'yen', KRW: 'won' } as Record<string, string>)[currency] ?? currency;
+}
+
+/**
+ * An amount as a screen reader should say it, with its currency: "2,500 Japanese yen", or just
+ * "Japanese yen" before one is typed (#719). The digits are the ones typed, grouped and padded
+ * to the currency's decimal places but never computed with, so a refused amount is read as typed.
+ */
+export function amountReadAloud(typed: string, currency: string): string {
+  const places = CURRENCY_CODES.includes(currency) ? getCurrencyPrecision(currency) : 2;
+  // The currency's name as it follows an amount: "Japanese yen", "euros", "Indian rupees".
+  const name =
+    new Intl.NumberFormat('en', { style: 'currency', currency, currencyDisplay: 'name' })
+      .formatToParts(2)
+      .find((part) => part.type === 'currency')?.value ?? currency;
+  const plain = typed.trim().replaceAll(',', '');
+  if (!plain) return name;
+  const digits = /^(\d*)(?:\.(\d*))?$/.exec(plain);
+  if (!digits || !(digits[1] || digits[2])) return `${typed.trim()} ${name}`;
+  const whole = (digits[1] || '0').replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const fraction = (digits[2] ?? '').padEnd(places, '0');
+  return `${whole}${fraction ? `.${fraction}` : ''} ${name}`;
+}

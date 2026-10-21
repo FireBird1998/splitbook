@@ -150,6 +150,7 @@ function group(category: GroupRead['category']): GroupRead {
     defaultCurrency: 'INR',
     currencyLocked: true,
     alternateCurrencies: [],
+    latestExpenseCurrency: null,
     category,
     startDate: null,
     endDate: null,

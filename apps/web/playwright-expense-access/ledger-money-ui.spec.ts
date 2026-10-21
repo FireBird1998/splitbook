@@ -68,7 +68,9 @@ for (const layout of [
     await amount.fill('100.5');
     // The field says why it won't take the amount, and Save waits for one it can read (#528).
     await expect(
-      dialog.getByText('JPY amounts have no decimal places.', { exact: true }),
+      dialog.getByText('Yen has no smaller unit. Enter a whole amount, like ¥2,500.', {
+        exact: true,
+      }),
     ).toBeVisible();
     await expect(amount).toHaveAttribute('aria-invalid', 'true');
     await expect(save).toBeDisabled();
@@ -99,6 +101,96 @@ for (const layout of [
     expect(
       stored.splitBetween.map((person: { amountMinor: number }) => person.amountMinor),
     ).toEqual([33, 33, 34]);
+  });
+}
+
+for (const scheme of ['light', 'dark'] as const) {
+  test(`desktop ${scheme}: an Expense in an extra currency, picked beside the amount (#719)`, async ({
+    page,
+    ledger,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.emulateMedia({ colorScheme: scheme });
+    // Lisbon & Tokyo, a fictional Trip: rupees, with euros and yen as extra currencies.
+    const group = (
+      await dataOf(
+        await ledger.priya.post('/api/groups', {
+          data: {
+            name: `Lisbon & Tokyo ${randomUUID()}`,
+            category: 'trip',
+            defaultCurrency: 'INR',
+            alternateCurrencies: ['EUR', 'JPY'],
+          },
+        }),
+        201,
+      )
+    )._id as string;
+    await joinGroup(ledger.priya, ledger.sam, group);
+    await enter(page, ledger.priya, `/groups/${group}`);
+    let dialog = await openAddExpense(page);
+    // With no Expense of Priya's here yet, it starts in the main currency.
+    const currency = (code: string, name: string) =>
+      dialog.getByRole('button', { name: `Currency, ${code}, ${name}. Change currency` });
+    await currency('INR', 'Indian Rupee').click();
+    const list = page.getByRole('listbox', { name: 'Currency' });
+    await expect(list.getByRole('option')).toHaveText([
+      /^INR\s*Indian Rupee\s*Main currency/,
+      /^EUR\s*Euro/,
+      /^JPY\s*Japanese Yen/,
+    ]);
+    await list.getByRole('option', { name: /JPY/ }).click();
+    await expect(list).toBeHidden();
+    await dialog.getByLabel('What was it for?').fill('Ramen at Ichiran');
+    const amount = dialog.getByRole('spinbutton', { name: /^Amount,/ });
+    await amount.fill('2500.50');
+    await expect(
+      dialog.getByText('Yen has no smaller unit. Enter a whole amount, like ¥2,500.', {
+        exact: true,
+      }),
+    ).toBeVisible();
+    // Said once, at the field, as the board has it.
+    await expect(dialog.getByText(/supports at most 0 decimal places/)).toHaveCount(0);
+    await page.screenshot({
+      path: testInfo.outputPath(`719-yen-whole-amounts-${scheme}.png`),
+      animations: 'disabled',
+    });
+    await amount.fill('2500');
+    // Screen readers hear the amount with its currency.
+    await expect(amount).toHaveAccessibleName('Amount, 2,500 Japanese yen');
+    await expect(dialog.getByText('whole yen', { exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(expenseInList(page, 'Ramen at Ichiran')).toContainText('¥2,500');
+    const stored = (await dataOf(await ledger.priya.get(`/api/groups/${group}/expenses`))).expenses;
+    expect(stored).toMatchObject([
+      { description: 'Ramen at Ichiran', amount: 2500, currency: 'JPY' },
+    ]);
+
+    // The next Expense starts in yen, the currency of Priya's latest Expense here, and says so.
+    dialog = await openAddExpense(page);
+    await expect(currency('JPY', 'Japanese Yen')).toBeVisible();
+    await expect(
+      dialog.getByText('Started in JPY, the currency of your latest Expense here.', {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await currency('JPY', 'Japanese Yen').click();
+    await expect(
+      page.getByRole('listbox', { name: 'Currency' }).getByRole('option', { selected: true }),
+    ).toHaveText(/^JPY\s*Japanese Yen\s*Your latest Expense here/);
+    await page.screenshot({
+      path: testInfo.outputPath(`719-pick-currency-${scheme}.png`),
+      animations: 'disabled',
+    });
+    await page.keyboard.press('Escape');
+    await dialog.getByRole('button', { name: 'Close expense form', exact: true }).click();
+    await expect(dialog).toBeHidden();
+
+    // An edit keeps the Expense's currency.
+    await expenseAction(page, 'Ramen at Ichiran', 'Edit');
+    const edit = page.getByRole('dialog');
+    await expect(edit.getByRole('button', { name: /^Currency, JPY, Japanese Yen/ })).toBeVisible();
+    await expect(edit.getByRole('spinbutton', { name: /^Amount,/ })).toHaveValue('2500');
   });
 }
 
@@ -287,7 +379,7 @@ test('legacy currencies are individually visible and never combined into one bal
   await expect(expenseInList(page, 'Historical euro allocation')).toContainText('€60.00');
   await expenseAction(page, 'Historical euro allocation', 'Edit');
   const edit = page.getByRole('dialog');
-  await expect(edit.getByRole('combobox', { name: /Currency/ })).toContainText('EUR');
+  await expect(edit.getByRole('button', { name: /^Currency, EUR, Euro/ })).toBeVisible();
   await edit.getByLabel('What was it for?').fill('Historical euro corrected');
   await edit.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(edit).toBeHidden();

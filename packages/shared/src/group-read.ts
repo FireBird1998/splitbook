@@ -37,6 +37,11 @@ const group = z.looseObject({
   currencyLocked: z.boolean().optional().default(false),
   // Historical read values are not constrained by today's write currency list or limit.
   alternateCurrencies: z.array(z.string()).optional().default([]),
+  /** The currency of the viewer's latest Expense here, where their next one starts (#719). */
+  latestExpenseCurrency: z
+    .string()
+    .nullish()
+    .transform((value) => value ?? null),
   category: z.enum(['trip', 'home', 'couple', 'work', 'other']).optional().default('other'),
   startDate: timestamp.nullish().transform((value) => value ?? null),
   endDate: timestamp.nullish().transform((value) => value ?? null),

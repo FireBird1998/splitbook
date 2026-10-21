@@ -1,4 +1,5 @@
 import { canRecordSettlement } from './settlement-authorization';
+import { isGroupCurrency, type GroupCurrencyList } from './group-currencies';
 
 type Participant = {
   user: unknown;
@@ -56,8 +57,9 @@ export function assertSettlementAuthorization(
   }
 }
 
-export function assertGroupCurrency(defaultCurrency: string, currency: string): void {
-  if (currency !== defaultCurrency) {
+/** A record's currency must be one of the Group's: its main currency or an extra one (#719). */
+export function assertGroupCurrency(group: GroupCurrencyList, currency: string): void {
+  if (!isGroupCurrency(group, currency)) {
     throw new Error('CURRENCY_MISMATCH');
   }
 }
