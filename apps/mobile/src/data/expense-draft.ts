@@ -14,6 +14,7 @@ import {
   assertExpenseParticipants,
   assertGroupCurrency,
 } from '@splitbook/shared/expense-validation';
+import { isGroupCurrency } from '@splitbook/shared/group-currencies';
 import { resolveTagReference } from '@splitbook/shared/tag-identity';
 import { z } from 'zod';
 import {
@@ -222,6 +223,16 @@ export function expenseTagPending(editor: ExpenseEditor, offline: boolean) {
   const check = editor.contextCheck;
   return !!check && (!!check.tagChange || !(offline && check.status !== 'checking'));
 }
+/**
+ * Whether choosing the currency waits for the Group's live check. Offline, once that check has
+ * answered from what this phone knows or failed, the member picks from the Group's saved
+ * currencies, on a new Expense too (#720): like a Tag, it is the member's own choice, and Save
+ * still checks it live. Reconnecting waits for the live check.
+ */
+export function expenseCurrencyPending(editor: ExpenseEditor, offline: boolean) {
+  const check = editor.contextCheck;
+  return !!check && !(offline && check.status !== 'checking');
+}
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;
 export type ExpenseField = (typeof expenseFields)[number];
 export type ExpenseFieldErrors = Partial<Record<ExpenseField, string>>;
@@ -364,8 +375,12 @@ export function previewExpense(draft: ExpenseDraft): ExpenseEditor['preview'] {
 const moneyCode = (error: unknown) => (error instanceof MoneyValidationError ? error.code : '');
 function amountError(draft: ExpenseDraft, context: ExpenseContext | null) {
   const { currency } = draft;
-  if (!draft.original && context && currency !== context.group.defaultCurrency)
-    return `This draft uses ${currency}, but the Group now uses ${context.group.defaultCurrency}. Choose Use ${context.group.defaultCurrency}, then review the amount.`;
+  const { group } = context ?? {};
+  if (!draft.original && group && !isGroupCurrency(group, currency))
+    // A Group with extra currencies offers them; one with only its main currency offers that.
+    return group.alternateCurrencies.length
+      ? `${group.name} doesn’t use ${currency}. Choose one of its currencies, then review the amount.`
+      : `This draft uses ${currency}, but the Group now uses ${group.defaultCurrency}. Choose Use ${group.defaultCurrency}, then review the amount.`;
   return moneyAmountError(draft.amount, currency);
 }
 function memberName(draft: ExpenseDraft, id: string) {

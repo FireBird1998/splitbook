@@ -37,6 +37,8 @@ const household: MobileGroup = {
   description: 'Rent, bills and groceries for the flat',
   category: 'home',
   defaultCurrency: 'INR',
+  alternateCurrencies: [],
+  latestExpenseCurrency: null,
   members: [
     member(you, 'Alex Rivera', 'admin'),
     member('a00000000000000000000002', 'Priya Shah', 'admin'),

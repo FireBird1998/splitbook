@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getCurrencyPrecision } from '@splitbook/shared/currency';
+import { formatCurrency, getCurrencyPrecision, wholeUnit } from '@splitbook/shared/currency';
 import {
   MAX_EXPENSE_AMOUNT,
   MoneyValidationError,
@@ -118,12 +118,17 @@ export function amountError(amount: string, currency: string): string | undefine
   } catch (error) {
     const code = error instanceof MoneyValidationError ? error.code : '';
     const digits = getCurrencyPrecision(currency);
-    if (code === 'INVALID_MONEY_PRECISION')
+    if (code === 'INVALID_MONEY_PRECISION') {
+      // Yen and won, in the web's words (#720): "Yen has no smaller unit. Enter a whole amount…"
+      const unit = wholeUnit(currency);
+      if (unit)
+        return `${unit.charAt(0).toUpperCase()}${unit.slice(1)} has no smaller unit. Enter a whole amount, like ${formatCurrency(2500, currency)}.`;
       return `${currency} amounts ${
         digits
           ? `can have at most ${digits} decimal ${digits === 1 ? 'place' : 'places'}`
           : 'can’t include decimal places'
       }. Nothing is rounded for you.`;
+    }
     if (code === 'INVALID_MONEY_RANGE' || code === 'UNSAFE_MONEY') {
       let positive = !amount.trim().startsWith('-');
       try {

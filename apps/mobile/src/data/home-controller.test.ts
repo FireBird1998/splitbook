@@ -205,6 +205,8 @@ const mobileGroup = (id: string, currency: string): MobileGroup => ({
   description: '',
   category: 'trip',
   defaultCurrency: currency,
+  alternateCurrencies: [],
+  latestExpenseCurrency: null,
   members: [{ user: alex, role: 'admin', joinedAt: new Date(iso) }],
   startDate: null,
   endDate: null,

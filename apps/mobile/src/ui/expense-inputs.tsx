@@ -1,5 +1,6 @@
 import { memo, useState, type Ref } from 'react';
-import { TextInput, View } from 'react-native';
+import { Pressable, TextInput, View } from 'react-native';
+import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import type { ExpenseDraft, ExpenseField } from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
 import { Field, FieldError } from './group-workflows';
@@ -18,6 +19,10 @@ export type ExpenseInputProps = {
   onChange: (patch: Partial<ExpenseDraft>) => void;
   onLeave: (field: ExpenseField) => void;
   onAmountDone?: () => void;
+  /** Opens the Currency sheet, when the Group has more than one currency (#720). */
+  onCurrency?: () => void;
+  /** The currency waits for the Group's check, as other financial choices do. */
+  currencyLocked?: boolean;
 };
 export function NotesField({
   notes,
@@ -81,6 +86,48 @@ export const CurrencyBadge = memo(function CurrencyBadge({
     </View>
   );
 });
+/**
+ * The currency beside the amount, as a chip that opens the Currency sheet (#720, board "Pick the
+ * currency"): "Currency, JPY, Japanese Yen. Change currency".
+ */
+const CurrencyChip = memo(function CurrencyChip({
+  currency,
+  locked,
+  onPress,
+}: {
+  currency: string;
+  locked: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Currency, ${currency}, ${getCurrency(currency)?.name ?? currency}. Change currency`}
+      accessibilityState={{ disabled: locked }}
+      disabled={locked}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        minHeight: 44,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingLeft: 12,
+        paddingRight: 10,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: theme.borderStrong,
+        backgroundColor: pressed ? theme.surface : theme.surfaceMuted,
+        opacity: locked ? 0.65 : 1,
+      })}
+    >
+      <CompactText weight="semibold" style={{ fontFamily: fonts.mono, fontSize: 15 }}>
+        {currency}
+      </CompactText>
+      <Icon name="chevron-down-outline" size={16} color={theme.textSecondary} />
+    </Pressable>
+  );
+});
 export function AmountField({
   draft,
   locked,
@@ -91,8 +138,12 @@ export function AmountField({
   onChange,
   onLeave,
   onAmountDone,
+  onCurrency,
+  currencyLocked = locked,
 }: ExpenseInputProps) {
   const theme = useTheme();
+  // Yen and won are whole (#720): the number keypad, and no decimal places to show.
+  const places = getCurrencyPrecision(draft.currency);
   const [amountFocused, setAmountFocused] = useState(false);
   const input = {
     color: theme.text,
@@ -119,19 +170,39 @@ export function AmountField({
             borderColor: amountFocused && !locked ? theme.focus : 'transparent',
           }}
         >
-          <CurrencyBadge currency={draft.currency} recorded={!!draft.original} />
+          {onCurrency ? (
+            <>
+              <CurrencyChip
+                currency={draft.currency}
+                locked={currencyLocked}
+                onPress={onCurrency}
+              />
+              {/* The symbol, as the board draws it; TalkBack already hears the currency. */}
+              <CompactText
+                tone="secondary"
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+                style={{ fontFamily: fonts.mono, fontSize: 24 }}
+              >
+                {getCurrency(draft.currency)?.symbol ?? ''}
+              </CompactText>
+            </>
+          ) : (
+            <CurrencyBadge currency={draft.currency} recorded={!!draft.original} />
+          )}
           <TextInput
             ref={amountRef}
             value={draft.amount}
             maxLength={40}
-            keyboardType="decimal-pad"
+            keyboardType={places === 0 ? 'number-pad' : 'decimal-pad'}
             returnKeyType="next"
             submitBehavior="submit"
             editable={!locked}
-            placeholder="0.00"
+            placeholder={places === 0 ? '0' : `0.${'0'.repeat(places)}`}
             placeholderTextColor={theme.textMuted}
             selectionColor={theme.brand.main}
-            accessibilityLabel="Amount, required"
+            // TalkBack reads the currency with the amount (#720).
+            accessibilityLabel={`Amount, ${getCurrency(draft.currency)?.name ?? draft.currency}, required`}
             accessibilityHint={errors.amount}
             onChangeText={(amount) => {
               // A refused edit leaves the field showing the draft's amount.

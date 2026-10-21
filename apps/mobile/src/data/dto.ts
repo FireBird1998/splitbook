@@ -4,6 +4,7 @@ import {
   parseCreatedGroupResponse,
   type GroupRead,
 } from '@splitbook/shared/group-read';
+import { normaliseExtraCurrencies } from '@splitbook/shared/group-currencies';
 import { z } from 'zod';
 import type { MobileGroup, SessionUser } from './types';
 
@@ -38,6 +39,8 @@ export function toMobileGroup(value: GroupRead): MobileGroup {
     description: value.description,
     category: value.category,
     defaultCurrency: value.defaultCurrency,
+    alternateCurrencies: normaliseExtraCurrencies(value.defaultCurrency, value.alternateCurrencies),
+    latestExpenseCurrency: value.latestExpenseCurrency ?? null,
     ...(value.isArchived ? { isArchived: true as const } : {}),
     members: value.members.map(({ user, role, joinedAt }) => ({
       user: { id: user._id, name: user.name, email: user.email ?? null, image: user.image ?? null },

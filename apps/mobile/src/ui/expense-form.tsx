@@ -83,7 +83,10 @@ export function expenseDateLabel(value: string, now = Date.now()) {
 export const splitSummary = (draft: ExpenseDraft) =>
   `${splitSummaries[draft.splitMethod]} · ${draft.participantIds.length}`;
 
-/** Amount with its read-only currency, then Description: the two typed values. */
+/**
+ * Amount with its currency, then Description: the two typed values. The currency opens the
+ * Currency sheet when the Group has more than one (#720); otherwise it is read-only.
+ */
 export const AmountDescriptionCard = memo(function AmountDescriptionCard({
   draft,
   locked,
@@ -95,6 +98,8 @@ export const AmountDescriptionCard = memo(function AmountDescriptionCard({
   onChange,
   onLeave,
   onAmountDone,
+  onCurrency,
+  currencyLocked,
   children,
   controller,
 }: {
@@ -111,6 +116,9 @@ export const AmountDescriptionCard = memo(function AmountDescriptionCard({
   onLeave: (field: ExpenseField) => void;
   /** The keyboard's next key on Amount: moves on to Description. */
   onAmountDone: () => void;
+  /** Opens the Currency sheet; absent while the Group has only its main currency. */
+  onCurrency?: () => void;
+  currencyLocked?: boolean;
   /** Notes about the amount, such as a changed Group currency. */
   children?: ReactNode;
 }) {
@@ -125,6 +133,8 @@ export const AmountDescriptionCard = memo(function AmountDescriptionCard({
     onChange,
     onLeave,
     onAmountDone,
+    onCurrency,
+    currencyLocked,
   };
   return (
     <Card
@@ -229,7 +239,14 @@ export const ExpenseTiles = memo(function ExpenseTiles({
 /** Under an equal split whose shares differ by the smallest unit. */
 export const sharesDifferNote = 'Shares differ by the smallest unit so the whole amount is shared.';
 
-const AllocationHeading = memo(function AllocationHeading({ savedLabel }: { savedLabel?: string }) {
+const AllocationHeading = memo(function AllocationHeading({
+  savedLabel,
+  currency,
+}: {
+  savedLabel?: string;
+  /** The form's Expense currency, beside the heading (#720): every share is in it. */
+  currency?: string;
+}) {
   return (
     <View
       style={{
@@ -242,7 +259,7 @@ const AllocationHeading = memo(function AllocationHeading({ savedLabel }: { save
       }}
     >
       <CompactText variant="overline" accessibilityRole="header">
-        Who owes what
+        {currency ? `Who owes what · ${currency}` : 'Who owes what'}
       </CompactText>
       {savedLabel ? (
         <CompactText variant="caption" tone="secondary">
@@ -357,7 +374,10 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
     );
   return (
     <Card>
-      <AllocationHeading savedLabel={saved ? splitSummary(draft) : undefined} />
+      <AllocationHeading
+        savedLabel={saved ? splitSummary(draft) : undefined}
+        currency={draft.currency}
+      />
       {stacked ? <View style={{ height: 6 }} /> : <AllocationColumns />}
       {shown.map((id) => {
         const paidMinor = paid.get(id);
