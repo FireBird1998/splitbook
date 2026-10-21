@@ -15,6 +15,12 @@ import {
 import { tagActionsPath } from '@splitbook/shared/api-paths';
 import { currentMonthKey } from '@splitbook/shared/date';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
+import { groupCurrencies } from '@splitbook/shared/group-currencies';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import {
+  parseTripSummaryResponse,
+  type TripSummaryRead,
+} from '@splitbook/shared/trip-summary-read';
 import { tagSnapshotSchema } from '@splitbook/shared/tag-management';
 import {
   expensePageKey,
@@ -22,6 +28,7 @@ import {
   groupKey,
   queryKeyPath,
   tagActionsKey,
+  tripSummaryKey,
   type QueryAccount,
   type QueryKey,
 } from '@splitbook/shared/query-keys';
@@ -39,6 +46,7 @@ import type {
   MobileGroup,
   MobileSnapshot,
   Route,
+  TripSummaryState,
 } from './types';
 
 /**
@@ -72,6 +80,15 @@ export const sharePages = (old: unknown, next: unknown): unknown => {
 };
 type Expenses = GroupFinancialState['expenses'];
 type Balances = GroupFinancialState['balances'];
+/** Before a Trip's summary is first read (#730). */
+const noTrip: TripSummaryState = {
+  status: 'idle',
+  data: null,
+  message: null,
+  refreshedAt: null,
+  stale: false,
+  chosen: null,
+};
 
 /** A page holds 20 Expenses; a list keeps at most 5 pages, 100 rows, and slides past them (M1-3). */
 const PAGE_SIZE = 20;
@@ -88,6 +105,7 @@ const notKept = {
   group: (name: string) => `Couldn’t refresh ${name}, and this phone no longer keeps a copy of it.`,
   expenses: 'Couldn’t refresh these expenses, and this phone no longer keeps a copy of them.',
   balances: 'Couldn’t refresh these balances, and this phone no longer keeps a copy of them.',
+  trip: 'Couldn’t refresh this trip’s figures, and this phone no longer keeps a copy of them.',
 };
 const balancesNotUpdated = 'Could not update balances. Please try again.';
 
@@ -118,6 +136,14 @@ const balancesOf = (value: unknown) => {
   const balances = parseGroupBalances(value);
   parsedBalances.set(value as object, balances);
   return balances;
+};
+const parsedTrips = new WeakMap<object, TripSummaryRead>();
+const tripOf = (value: unknown) => {
+  const known = parsedTrips.get(value as object);
+  if (known) return known;
+  const trip = parseTripSummaryResponse(value);
+  parsedTrips.set(value as object, trip);
+  return trip;
 };
 
 /** `shown` again when nothing in `next` differs from it, so an unchanged read publishes nothing. */
@@ -160,7 +186,10 @@ const inRows = (path: string, groupId: string, scope: GroupRows) => {
   const prefix = groupPrefix(groupId);
   return scope === 'group'
     ? path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`)
-    : path.startsWith(`${prefix}/expenses?`) || path === `${prefix}/balances`;
+    : path.startsWith(`${prefix}/expenses?`) ||
+        path === `${prefix}/balances` ||
+        // Its Trip summary in each currency (#730): a ledger change makes it obsolete too.
+        path.startsWith(`${prefix}/trip-summary?`);
 };
 /**
  * The paths of the persister's rows for this account: those it lists, so rows saved before this
@@ -223,6 +252,8 @@ export interface GroupSession {
   savable(key: QueryKey): boolean;
   /** How long a verified read is reused without reading it again. */
   freshness: number;
+  /** The phone's time zone, such as `Asia/Kolkata`: a Trip summary's days are its days (#730). */
+  timeZone(): string;
   /** The session is offline: nothing read before is reused. */
   offline(): boolean;
   /** Sends the read, checking the session first while offline; `signal` cancels it. */
@@ -286,8 +317,11 @@ interface Start {
   change: number;
   open: number;
 }
-/** Where a read of a Group's view starts: its Group, its Month's Expenses, or its Balances. */
-export type Step = 'group' | 'expenses' | 'balances';
+/**
+ * Where a read of a Group's view starts: its Group, its Month's Expenses, its Balances, or a
+ * Trip's summary in the currency chosen (#730).
+ */
+export type Step = 'group' | 'expenses' | 'balances' | 'trip';
 /**
  * The Group's details show this phone's copy, as an offline read leaves them: that copy keeps the
  * offline banner until the Group is read again (#682). A failure Splitbook answered shows as an
@@ -298,10 +332,12 @@ export const savedGroupShown = (detail: MobileSnapshot['detail']) =>
 
 /**
  * A Group's own view on declarative queries (ADR 0006, M1-1; #219): the Group, its Expenses for
- * the chosen Month as one query of up to 5 pages, and its Balances. While the Group's view shows,
+ * the chosen Month as one query of up to 5 pages, and its Balances, with a Trip's summary in more
+ * than one currency (#730) where its All time card shows. While the Group's view shows,
  * their observers keep them active: a query they lack is read, including one a change or a
  * denial removed, so Balances read again after every read of the Group or its Expenses (M1-5).
- * Reads keep today's order, Group then Expenses then Balances, and the snapshot's `detail` and
+ * Reads keep today's order, Group then Expenses then Balances (then a Trip's summary), and the
+ * snapshot's `detail` and
  * `financial` are projected from them in today's shape. Their saved copies are the persister's
  * rows, one per query, in the wire JSON (M3-1), written on a saved-copy queue (M3-2) and
  * restored with their own time, never fresh (AMEND-2).
@@ -336,6 +372,7 @@ export function createGroupQueries(session: GroupSession) {
     group?: QueryObserver<Envelope, Error, Envelope, Envelope, QueryKey>;
     list?: InfiniteQueryObserver<PageEnvelope, Error, Pages, QueryKey, number>;
     balances?: QueryObserver<Envelope, Error, Envelope, Envelope, QueryKey>;
+    trip?: QueryObserver<Envelope, Error, Envelope, Envelope, QueryKey>;
   } = {};
   let pending = false;
   /** The observers are taking the queries a change removed: their reads replace cancelled ones. */
@@ -378,6 +415,7 @@ export function createGroupQueries(session: GroupSession) {
   const pagePath = (key: QueryKey, page: number) =>
     queryKeyPath(key).replace('/expenses?', `/expenses?page=${page}&`);
   const isList = (key: QueryKey) => queryKeyPath(key).includes('/expenses?');
+  const isTrip = (key: QueryKey) => queryKeyPath(key).includes('/trip-summary?');
   /** The Group's Tags, as the Tags screen reads them: one of the Group's own rows (#638). */
   const isTags = (key: QueryKey) =>
     key[0] === 'group' && queryKeyPath(key) === tagActionsPath(key[3] as string);
@@ -401,6 +439,30 @@ export function createGroupQueries(session: GroupSession) {
       ? listKey(view.groupId, view.household, financial.month)
       : null;
   };
+  /**
+   * The Trip summary the All time card shows (#730), in the currency chosen or, before one is,
+   * the one the read opens on: only for a Trip in more than one currency, by its own list or
+   * the Expenses it was spent in (an older Group's). Null for any other Group.
+   */
+  const shownTrip = (financial = session.snapshot().financial) => {
+    if (!view || financial.groupId !== view.groupId) return null;
+    const { detail, groups } = session.snapshot();
+    const group =
+      (detail.id === view.groupId ? detail.data : null) ??
+      groups.data.find(({ id }) => id === view!.groupId);
+    if (!group || getGroupTheme(group.category).header !== 'strip') return null;
+    const several =
+      groupCurrencies(group).length > 1 ||
+      !!financial.expenses.summary?.totalsByCurrency.some(
+        (row) => row.currency !== group.defaultCurrency && row.totalAmount > 0,
+      );
+    if (!several) return null;
+    const chosen = financial.trip?.chosen;
+    return tripSummaryKey(session.account(), view.groupId, {
+      timeZone: session.timeZone(),
+      ...(chosen ? { currency: chosen } : {}),
+    });
+  };
   /** The Group's currency, which an Expense page's summary is read in. */
   const currencyOf = (groupId: string) => {
     const { detail, groups } = session.snapshot();
@@ -417,6 +479,7 @@ export function createGroupQueries(session: GroupSession) {
       if (isTags(key)) return Boolean(tagsOf(value));
       if (key[0] === 'group') return lists(groupOf(value));
       if (key[0] === 'balances') return Boolean(balancesOf(value));
+      if (isTrip(key)) return Boolean(tripOf(value));
       return Boolean(pageOf(value, key[3] as string, currencyOf(key[3] as string)));
     } catch {
       return false;
@@ -619,6 +682,14 @@ export function createGroupQueries(session: GroupSession) {
     run.reading = fetchOne(key, queryKeyPath(key), run, (value) => void balancesOf(value));
     return run.reading as Promise<Envelope>;
   };
+  /** A Trip's summary in one currency (#730), checked by its decoder before it is kept. */
+  const readTrip = ({ queryKey }: QueryFunctionContext) => {
+    const key = queryKey as QueryKey,
+      run: Run = { answered: false, reading: Promise.resolve() };
+    track(key, run);
+    run.reading = fetchOne(key, queryKeyPath(key), run, (value) => void tripOf(value));
+    return run.reading as Promise<Envelope>;
+  };
   /**
    * The Group's Tags, read by the Tags screen with its own request (`send`), which tells a
    * refusal of the Tag role apart from one of the Group (#638). Answered as the Group's other
@@ -710,6 +781,12 @@ export function createGroupQueries(session: GroupSession) {
     queryKey: balancesKey(groupId),
     queryFn: readBalances,
     enabled,
+    ...(fresh ? { staleTime: STALE } : {}),
+  });
+  const tripOptions = (key: QueryKey, fresh = false) => ({
+    ...shared,
+    queryKey: key,
+    queryFn: readTrip,
     ...(fresh ? { staleTime: STALE } : {}),
   });
   /** A return's pages of this list, until a read has shown them again (from the route). */
@@ -821,11 +898,29 @@ export function createGroupQueries(session: GroupSession) {
       observers.balances?.destroy();
       observers.balances = undefined;
     }
+    // A Trip's summary, where its All time card shows, follows the same Expense reads (#730).
+    const trip = after && shown.destination === 'expenses' ? shownTrip() : null;
+    if (trip && !view.reading && listSettled(list)) {
+      const next = tripOptions(trip);
+      if (observers.trip) observers.trip.setOptions(next);
+      else {
+        const observer = new QueryObserver<Envelope, Error, Envelope, Envelope, QueryKey>(
+          client,
+          next,
+        );
+        observers.trip = observer;
+        observer.subscribe(() => undefined);
+      }
+    } else {
+      observers.trip?.destroy();
+      observers.trip = undefined;
+    }
   };
   const unbind = () => {
     observers.group?.destroy();
     observers.list?.destroy();
     observers.balances?.destroy();
+    observers.trip?.destroy();
     observers = {};
   };
   const bindLater = () => {
@@ -907,8 +1002,14 @@ export function createGroupQueries(session: GroupSession) {
       await Promise.resolve();
       const shown = onScreen();
       if (!session.current(owner) || !view || !shown) return;
-      const list = shownList();
-      const busy = [group ? groupQueryKey(view.groupId) : null, list, balancesKey(view.groupId)]
+      const list = shownList(),
+        trip = shown.destination === 'expenses' ? shownTrip() : null;
+      const busy = [
+        group ? groupQueryKey(view.groupId) : null,
+        list,
+        balancesKey(view.groupId),
+        trip,
+      ]
         .map((key) => key && held(key))
         .find((query) => query?.state.fetchStatus === 'fetching');
       if (busy) {
@@ -928,6 +1029,19 @@ export function createGroupQueries(session: GroupSession) {
       ) {
         bind();
         if (held(balancesKey(view.groupId))?.state.fetchStatus === 'fetching') continue;
+      }
+      // So does a Trip's summary (#730).
+      const tripState = stateOf(trip);
+      if (
+        trip &&
+        !shown.sheet &&
+        view.checked &&
+        !view.lost &&
+        listSettled(list) &&
+        (!tripState || tripState.status === 'pending')
+      ) {
+        bind();
+        if (held(trip)?.state.fetchStatus === 'fetching') continue;
       }
       return;
     }
@@ -951,10 +1065,12 @@ export function createGroupQueries(session: GroupSession) {
     if (!group || !lists(group) || view !== opened || !session.current(owner)) return;
     decide(group);
     const list = shownList(),
-      balances = balancesKey(opened.groupId);
+      balances = balancesKey(opened.groupId),
+      trip = onScreen()?.destination === 'expenses' ? shownTrip() : null;
     await Promise.all([
       list && held(list)?.state.data === undefined ? restore(list, owner) : null,
       held(balances)?.state.data === undefined ? restore(balances, owner) : null,
+      trip && held(trip)?.state.data === undefined ? restore(trip, owner) : null,
     ]);
   };
   /**
@@ -1020,8 +1136,26 @@ export function createGroupQueries(session: GroupSession) {
           if (refused(error) || error instanceof Superseded) throw error;
         },
       );
+      await followTrip();
       return true;
     };
+    /**
+     * A Trip's summary in the currency shown on its All time card, where that card shows (#730),
+     * once the Expense reads of the Month shown have settled: it follows them, as Balances do.
+     */
+    const followTrip = async () => {
+      const trip = onScreen()?.destination === 'expenses' ? shownTrip() : null;
+      if (!trip || !opened.checked || !listSettled(shownList())) return;
+      // A currency chosen meanwhile reads its own.
+      const same = () => still() && hashKey(shownTrip() ?? []) === hashKey(trip);
+      await readNow(tripOptions(trip, fresh), owner, same).catch((error: unknown) => {
+        if (refused(error) || error instanceof Superseded) throw error;
+      });
+    };
+    if (from === 'trip') {
+      await followTrip();
+      return still();
+    }
     if (from === 'group') {
       const reading = readNow<Envelope>(
         groupOptions(opened.groupId, fresh),
@@ -1328,6 +1462,66 @@ export function createGroupQueries(session: GroupSession) {
       next = { ...next, answeredThisOpen: answered };
     return next;
   };
+  /**
+   * A Trip's summary in the currency shown, from its query (#730), as Balances are projected:
+   * kept while it is read again, with its time, and this device's copy says so. Unset for any
+   * Group whose All time card has no switch.
+   */
+  const projectTrip = (
+    shown: TripSummaryState | undefined,
+    opened: View,
+    financial: GroupFinancialState,
+  ): TripSummaryState | undefined => {
+    const key = shownTrip(financial);
+    if (!key) return undefined;
+    const base = shown ?? noTrip;
+    const state = stateOf<Envelope>(key);
+    if (!state)
+      // Not read yet in this currency, or removed by a change: read once the Expenses settle.
+      return same(base, {
+        ...base,
+        status: opened.checked ? 'loading' : base.status,
+        message: null,
+        stale: base.data !== null,
+      });
+    let figures: TripSummaryRead | null = null;
+    try {
+      figures = state.data ? tripOf(state.data.value) : null;
+    } catch {
+      figures = null;
+    }
+    const restored = state.data?.source === 'saved';
+    const kept = figures ? { data: figures, refreshedAt: state.data!.refreshedAt, restored } : {};
+    if (state.fetchStatus === 'fetching' || !opened.checked || previews.has(state.data as object))
+      return same(base, {
+        ...base,
+        ...kept,
+        status: state.fetchStatus === 'fetching' || opened.reading ? 'loading' : 'idle',
+        message: null,
+        stale: !figures && base.data !== null,
+      });
+    const error = failure(state);
+    if (state.status === 'error' && !error) return base;
+    if (error)
+      return same(base, {
+        ...base,
+        ...kept,
+        status: 'error',
+        message:
+          unreachable(error) && (figures ?? base.data) !== null
+            ? notKept.trip
+            : messageOf(error, 'Could not load this trip’s figures. Please try again.'),
+      });
+    return same(base, {
+      ...base,
+      status: 'ready',
+      data: figures,
+      message: null,
+      refreshedAt: state.data!.refreshedAt,
+      stale: false,
+      restored,
+    });
+  };
   /** The Group as its query holds it, in the snapshot's shape. */
   const projectDetail = (shown: MobileSnapshot['detail'], opened: View) => {
     const state = stateOf<Envelope>(groupQueryKey(opened.groupId));
@@ -1386,8 +1580,16 @@ export function createGroupQueries(session: GroupSession) {
     ) {
       const expenses = projectExpenses(financial.expenses, opened, financial);
       const balances = projectBalances(financial.balances, opened, financial);
-      if (expenses !== financial.expenses || balances !== financial.balances)
+      const trip = projectTrip(financial.trip, opened, { ...financial, expenses });
+      if (
+        expenses !== financial.expenses ||
+        balances !== financial.balances ||
+        trip !== financial.trip
+      ) {
         financial = { ...financial, expenses, balances };
+        if (trip) financial.trip = trip;
+        else delete financial.trip;
+      }
     }
     return detail === next.detail && financial === next.financial
       ? next
@@ -1430,6 +1632,11 @@ export function createGroupQueries(session: GroupSession) {
         keys.push(balancesKey(view.groupId));
         const list = shownList(next.financial);
         if (list) keys.push(list);
+        const trip =
+          next.screen === 'group' && next.destination === 'expenses'
+            ? shownTrip(next.financial)
+            : null;
+        if (trip) keys.push(trip);
       }
       return keys;
     },
@@ -1703,8 +1910,13 @@ export function createGroupQueries(session: GroupSession) {
           if (event.type !== 'updated' || event.action.type === 'invalidate') return;
           const { query } = event,
             key = query.queryKey as QueryKey;
-          // A Group's view owns its Group, its Balances and its Months' Expenses, whoever reads them.
-          if (key[0] !== 'group' && key[0] !== 'balances' && !(key[0] === 'ledger' && isList(key)))
+          // A Group's view owns its Group, its Balances, its Months' Expenses and a Trip's summary
+          // (#730), whoever reads them.
+          if (
+            key[0] !== 'group' &&
+            key[0] !== 'balances' &&
+            !(key[0] === 'ledger' && (isList(key) || isTrip(key)))
+          )
             return;
           if (event.action.type === 'success' && !event.action.manual) {
             saveAnswer(query);

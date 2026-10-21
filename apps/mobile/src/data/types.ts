@@ -10,6 +10,7 @@ import type { PendingPayment, SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupValidation } from './group-draft';
 import type { GroupCategory } from '@splitbook/shared/types';
+import type { TripSummaryRead } from '@splitbook/shared/trip-summary-read';
 
 /** A development persona the local backend seeds. */
 export type PersonaId = 'alex' | 'sam' | 'priya';
@@ -207,7 +208,24 @@ export interface GroupFinancialState {
      */
     answeredThisOpen?: boolean;
   };
+  /**
+   * A Trip's summary (#730), read for a Trip in more than one currency: its All time card shows
+   * one currency at a time, with what was spent in each. Unset for any other Group.
+   */
+  trip?: TripSummaryState;
 }
+
+/** A Trip's whole-trip figures in one currency, as the Trip summary read answers them (#729). */
+export type TripSummaryState = ReadFreshness & {
+  status: LoadStatus;
+  /** The latest answer, in its own currency: never shown under another (`chosen`). */
+  data: TripSummaryRead | null;
+  message: string | null;
+  /** The figures shown are this device's saved copy: "Saved", not "Updated" (#219). */
+  restored?: boolean;
+  /** The currency the member chose on the switch; null: the one the read opened on. */
+  chosen: string | null;
+};
 
 /** The three Group-scoped places the bottom navigation switches between. */
 export type GroupDestination = 'expenses' | 'balances' | 'activity';

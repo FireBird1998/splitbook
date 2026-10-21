@@ -101,6 +101,7 @@ import {
   type GroupField,
 } from './group-draft';
 import { createGroupSchema } from '@splitbook/shared/validators/group';
+import { getCurrency } from '@splitbook/shared/currency';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { currentMonthKey, toDateParam } from '@splitbook/shared/date';
 import { startingExpenseCurrency } from '@splitbook/shared/group-currencies';
@@ -1162,6 +1163,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     route: () => route,
     savable: (key) => savable(key),
     freshness,
+    // The phone's zone as it is now: one changed meanwhile reads its own days.
+    timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     offline: () => offlineSession || snapshot.offline.active,
     lose: (groupId, owner) => forgetGroup(groupId, 403, owner),
     expensesRead: (groupId) => {
@@ -2327,6 +2330,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   /** Retry always reads again. */
   const refreshBalances = () => readFinancial('balances', true);
+  /**
+   * The All time card's currency switch on a Trip (#730), as on the web's Trip summary: its
+   * figures in `currency`, read on their own, never converted. The currency stays chosen until
+   * the Group opens again.
+   */
+  const chooseTripCurrency = async (currency: string) => {
+    const { financial } = snapshot;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      route.screen !== 'group' ||
+      route.destination !== 'expenses' ||
+      !financial.trip ||
+      !getCurrency(currency) ||
+      financial.trip.chosen === currency
+    )
+      return;
+    publish({
+      ...snapshot,
+      financial: { ...financial, trip: { ...financial.trip, chosen: currency } },
+    });
+    await readFinancial('trip');
+  };
 
   const selectMonth = async (month: string | null) => {
     const at = route;
@@ -7263,6 +7288,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     refreshExpenses,
     refreshBalances,
     selectMonth,
+    chooseTripCurrency,
     loadMoreExpenses,
     loadNewerExpenses,
     signOut,
