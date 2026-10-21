@@ -7,7 +7,7 @@ import { canRecordSettlement } from '@splitbook/shared/settlement-authorization'
 import { recordNeedsConnection, type PendingPayment } from '../data/settlement';
 import type {
   GroupCurrencyBalance,
-  GroupDebt,
+  OwedAmount,
   GroupFinancialState,
   MobileGroup,
 } from '../data/types';
@@ -52,6 +52,12 @@ const recordWaitsShort = 'Record once updated';
 /** A Group whose details couldn't be read (owner decision 2A): the sheet needs them (#219). */
 export const recordWaitsForDetails = (name: string) =>
   `Record is available once ${name}’s details load.`;
+
+/** A currency in one Group: the one Balances shows, or where Before simplifying was chosen. */
+interface GroupCurrency {
+  groupId: string;
+  currency: string;
+}
 
 /** Settle up's two views (#612): the member's Suggested payments, or every Debt before simplifying. */
 type SettleUpView = 'suggested' | 'before';
@@ -425,7 +431,7 @@ function MemberBalanceCard({
 }
 
 /** "You owe Sam Chen", "Priya Shah owes you" or "Sam Chen owes Priya Shah". */
-const debtTitle = ({ from, to }: GroupDebt, currentUserId: string) =>
+const debtTitle = ({ from, to }: OwedAmount, currentUserId: string) =>
   from.id === currentUserId
     ? `You owe ${to.name}`
     : `${from.name} owes ${to.id === currentUserId ? 'you' : to.name}`;
@@ -439,7 +445,7 @@ function SettleUp({
   currency,
   payments,
   debts,
-  suggested,
+  suggestedCount,
   view,
   onView,
   currentUserId,
@@ -452,9 +458,9 @@ function SettleUp({
   currency: string;
   payments: ReturnType<typeof recordablePayments>;
   /** The currency's Debts before simplifying; undefined in an older reply or Saved copy. */
-  debts: GroupDebt[] | undefined;
+  debts: OwedAmount[] | undefined;
   /** How many Suggested payments the currency has, the member's or not. */
-  suggested: number;
+  suggestedCount: number;
   view: SettleUpView;
   onView: (view: SettleUpView) => void;
   currentUserId: string;
@@ -471,32 +477,41 @@ function SettleUp({
   const { fontScale } = useWindowDimensions();
   const column = useTextColumn();
   const whole = useLargestText();
-  const before = debts !== undefined && view === 'before';
+  const showingBefore = debts !== undefined && view === 'before';
+  const align = whole ? 'left' : 'right';
   return (
     <View style={{ gap: 6 }}>
       <SectionHeader
         title={title}
+        // From 150% text the caption has a line of its own under the title, from its start, as
+        // the boards have it (#612): beside "Settle up", shorter than "Suggested payments" was,
+        // it would be a narrow column of several lines.
+        below={whole && !showingBefore}
         trailing={
           // Only Suggested has payments to record.
-          before ? undefined : (
+          showingBefore ? undefined : (
             // The caption takes the room the title leaves, wrapping there rather than running
             // past the screen's edge at large text. While a change keeps Record waiting, its
             // reason takes the caption's place at once, in a box the caption holds, so nothing
-            // moves (#219); the full reason is Record's hint. At large text it keeps room for its
-            // longest word, "Record", four of its em: with less beside the title, as at 200%, it
-            // goes on a line of its own under it, where it was a column a letter wide (#639).
+            // moves (#219); the full reason is Record's hint. At 130% text it keeps room for its
+            // longest word, "Record", four of its em: with less beside the title it goes on a
+            // line of its own under it, where it was a column a letter wide (#639).
             <View
-              style={{
-                flex: 1,
-                minWidth: column
-                  ? 4 * scaledSp(textVariants.caption.fontSize as number, fontScale)
-                  : 0,
-              }}
+              style={
+                whole
+                  ? undefined
+                  : {
+                      flex: 1,
+                      minWidth: column
+                        ? 4 * scaledSp(textVariants.caption.fontSize as number, fontScale)
+                        : 0,
+                    }
+              }
             >
               {inPlace({
                 holds:
                   locked && !offline ? (
-                    <CompactText variant="caption" tone="muted" style={{ textAlign: 'right' }}>
+                    <CompactText variant="caption" tone="muted" style={{ textAlign: align }}>
                       {recordCaption}
                     </CompactText>
                   ) : null,
@@ -505,7 +520,7 @@ function SettleUp({
                     variant="caption"
                     tone="muted"
                     instant={locked && !offline}
-                    style={{ textAlign: 'right' }}
+                    style={{ textAlign: align }}
                   >
                     {locked && !offline ? recordWaitsShort : recordCaption}
                   </StatusText>
@@ -527,7 +542,7 @@ function SettleUp({
           stacked={whole}
         />
       ) : null}
-      {before ? (
+      {showingBefore ? (
         <Card>
           <View accessibilityRole="list" accessibilityLabel="Debts before simplifying">
             {debts.map((debt, index) => (
@@ -542,7 +557,7 @@ function SettleUp({
               </View>
             ))}
           </View>
-          {suggested < debts.length ? (
+          {suggestedCount < debts.length ? (
             <>
               <Divider />
               <CompactText
@@ -550,7 +565,7 @@ function SettleUp({
                 tone="secondary"
                 style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12 }}
               >
-                {fewerPayments(suggested, debts.length)}
+                {fewerPayments(suggestedCount, debts.length)}
               </CompactText>
             </>
           ) : null}
@@ -825,7 +840,7 @@ export function GroupBalancesView({
    * the balances first answer, so a payment that settles the member in the currency shown
    * doesn't move Balances to another one.
    */
-  const [chosen, setChosen] = useState(() =>
+  const [chosen, setChosen] = useState<GroupCurrency | null>(() =>
     balances.data
       ? {
           groupId: group.id,
@@ -833,8 +848,8 @@ export function GroupBalancesView({
         }
       : null,
   );
-  /** Where the member chose Before simplifying, if they did (#612). */
-  const [before, setBefore] = useState<{ groupId: string; currency: string } | null>(null);
+  /** The Group and currency where the member chose Before simplifying, if they did (#612). */
+  const [beforeChosen, setBeforeChosen] = useState<GroupCurrency | null>(null);
   const notice =
     pending?.groupId === group.id ? (
       <PendingPaymentNotice
@@ -927,9 +942,13 @@ export function GroupBalancesView({
     debts: [],
   };
   const payments = recordablePayments(balances.data, group, currentUserId, currency);
-  // Settle up opens on Suggested, and goes back to it in another currency or Group (#612).
+  // Settle up opens on Suggested, and goes back to it in another currency or Group, or once the
+  // member has no payment left to show it with (#612).
+  if (beforeChosen && !payments.length) setBeforeChosen(null);
   const view: SettleUpView =
-    before?.groupId === group.id && before.currency === currency ? 'before' : 'suggested';
+    beforeChosen?.groupId === group.id && beforeChosen.currency === currency
+      ? 'before'
+      : 'suggested';
   const inCurrency = (heading: string) => (several ? `${heading} · ${currency}` : heading);
   return (
     <View style={{ gap: 14 }}>
@@ -953,7 +972,7 @@ export function GroupBalancesView({
           value={currency}
           onChange={(code) => {
             setChosen({ groupId: group.id, currency: code });
-            setBefore(null);
+            setBeforeChosen(null);
           }}
         />
       ) : null}
@@ -995,9 +1014,11 @@ export function GroupBalancesView({
           currency={currency}
           payments={payments}
           debts={shown.debtsBeforeSimplifying}
-          suggested={shown.debts.length}
+          suggestedCount={shown.debts.length}
           view={view}
-          onView={(next) => setBefore(next === 'before' ? { groupId: group.id, currency } : null)}
+          onView={(next) =>
+            setBeforeChosen(next === 'before' ? { groupId: group.id, currency } : null)
+          }
           currentUserId={currentUserId}
           offline={offline}
           locked={balances.changed === true}

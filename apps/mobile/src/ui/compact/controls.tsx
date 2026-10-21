@@ -333,6 +333,7 @@ export function SegmentedControl<T extends string>({
               // changes from transparent to a colour.
               key={selected ? 'selected' : 'idle'}
               style={{
+                // Stacked, each option is as tall as a list row with one line (the boards' 52).
                 minHeight: stacked ? 52 : touch.dense,
                 borderRadius: 10,
                 alignItems: 'center',

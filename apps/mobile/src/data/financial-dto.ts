@@ -54,7 +54,7 @@ export function parseGroupBalances(value: unknown): GroupCurrencyBalance[] {
     GroupBalancesReadError,
   );
   return body.byCurrency.map((row) => {
-    const debts = (list: typeof row.debts) =>
+    const owedAmounts = (list: typeof row.debts) =>
       list.map((item) => ({
         from: personData(item.from),
         to: personData(item.to),
@@ -66,10 +66,10 @@ export function parseGroupBalances(value: unknown): GroupCurrencyBalance[] {
         user: personData(item.user),
         balance: exact(item.balance, row.currency),
       })),
-      debts: debts(row.debts),
+      debts: owedAmounts(row.debts),
       // Missing in an older reply or Saved copy, which is not the same as none (#612).
       ...(row.debtsBeforeSimplifying
-        ? { debtsBeforeSimplifying: debts(row.debtsBeforeSimplifying) }
+        ? { debtsBeforeSimplifying: owedAmounts(row.debtsBeforeSimplifying) }
         : {}),
     };
   });
