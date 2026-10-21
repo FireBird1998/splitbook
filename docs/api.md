@@ -1287,7 +1287,7 @@ change, archive or deletion serializes against the whole payment. If any row
 fails, no Settlement or Activity event is committed. A database without
 transactions returns **503** `SETTLEMENT_TRANSACTIONS_REQUIRED`, without writes.
 
-**201 response:** `{ "success": true, "data": { "paidCurrency": "INR",
+**201 response:** `{ "status": 201, "data": { "paidCurrency": "INR",
 "totalPaidMinor": 235000, "settlements": [ ... ] } }`. The `settlements` array
 contains the normal populated Settlement records in request order, including
 `_id`, canonical `amountMinor`, immutable paid/rate fields, and

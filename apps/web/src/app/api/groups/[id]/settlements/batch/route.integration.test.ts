@@ -183,6 +183,87 @@ describe('Settlement batch HTTP contract (#734)', () => {
       ]),
     );
   });
+  it('records three currencies with per-row rates and preserves partial pair figures after later writes', async () => {
+    const id = await trip();
+    const request = {
+      ...payment,
+      settlements: [
+        { currency: 'INR', amount: 5 },
+        { ...eur, amount: 5, amountPaidMinor: 46250 },
+        {
+          currency: 'JPY',
+          amount: 20,
+          amountPaidMinor: 1200,
+          appliedRate: '0.6',
+          rateKind: 'entered',
+        },
+      ],
+    };
+    const saved = await record(id, request);
+    expect(saved.status).toBe(201);
+    expect(saved.body.data).toMatchObject({
+      totalPaidMinor: 47950,
+      settlements: [
+        { currency: 'INR', pairDebtBeforeMinor: -2000, pairDebtAfterMinor: -1500 },
+        {
+          currency: 'EUR',
+          pairDebtBeforeMinor: -2000,
+          pairDebtAfterMinor: -1500,
+          amountPaidMinor: 46250,
+          rateKind: 'custom',
+          rateAsOf: '2026-10-20',
+        },
+        {
+          currency: 'JPY',
+          pairDebtBeforeMinor: -20,
+          pairDebtAfterMinor: 0,
+          amountPaidMinor: 1200,
+          rateKind: 'entered',
+        },
+      ],
+    });
+    expect(
+      (
+        await record(
+          id,
+          { ...payment, settlements: [{ currency: 'INR', amount: 15 }] },
+          'later-payment-0002',
+        )
+      ).status,
+    ).toBe(201);
+    expect((await record(id, request)).body).toEqual(saved.body);
+    expect((await read(id)).body.data).toHaveLength(4);
+  });
+  it('accepts a recipient recording a routed Suggested payment while keeping the raw pair figures', async () => {
+    const id = await trip();
+    await groupService.addMember(id, priya);
+    for (const currency of ['EUR', 'INR']) {
+      await expenseService.create(
+        id,
+        {
+          description: 'Fictional ticket for Alex',
+          amount: 20,
+          currency,
+          category: 'food',
+          tag: 'Food',
+          date: new Date('2026-10-21T12:00:00Z'),
+          paidBy: [{ user: priya, amount: 20 }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: alex }],
+        },
+        priya,
+      );
+    }
+    cookie = await signIn('priya');
+    const saved = await record(id, { ...payment, paidTo: priya });
+    expect(saved.status).toBe(201);
+    expect(saved.body.data.settlements).toMatchObject([
+      { currency: 'INR', pairDebtBeforeMinor: 0, pairDebtAfterMinor: 2000 },
+      { currency: 'EUR', pairDebtBeforeMinor: 0, pairDebtAfterMinor: 2000 },
+    ]);
+    for (const currency of ['EUR', 'INR'])
+      expect((await ledgers(id)).find((row) => row.currency === currency)?.debts).toEqual([]);
+  });
   it('replays the whole response once, including concurrent retries, and refuses a changed key payload', async () => {
     const id = await trip();
     const [first, concurrent] = await Promise.all([record(id), record(id)]);

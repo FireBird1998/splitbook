@@ -87,10 +87,13 @@ describe('calculateSettlementBatch', () => {
     expect(() =>
       calculate(
         [
-          { currency: 'INR', amountMinor: Number.MAX_SAFE_INTEGER },
+          { currency: 'USD', amountMinor: 100 },
           { currency: 'EUR', amountMinor: 100 },
         ],
-        { EUR: { rate: '1', rateKind: 'entered' } },
+        {
+          EUR: { rate: '90000000000000', rateKind: 'entered' },
+          USD: { rate: '90000000000000', rateKind: 'entered' },
+        },
       ),
     ).toThrow();
   });
