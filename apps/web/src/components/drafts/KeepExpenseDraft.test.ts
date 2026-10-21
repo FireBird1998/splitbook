@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, useLayoutEffect } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { SWRConfig } from 'swr';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -32,12 +32,15 @@ it('Finish later shows the amount refusal without sending or retaining an uncert
   let state: ReturnType<typeof useKeepExpenseDraft>;
   const onKept = vi.fn();
   function Form() {
-    state = useKeepExpenseDraft({
+    const current = useKeepExpenseDraft({
       draft,
       groupId: 'group',
       accountId: 'you',
       onKept,
       enabled: true,
+    });
+    useLayoutEffect(() => {
+      state = current;
     });
     return null;
   }
