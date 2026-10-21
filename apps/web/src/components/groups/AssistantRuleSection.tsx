@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { z } from 'zod';
-import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -21,6 +20,7 @@ import {
   type AssistantRule,
 } from '@splitbook/shared/assistant-rule';
 import type { GroupReadMember } from '@splitbook/shared/group-read';
+import { PersonAvatar } from '@/components/balances/TabCard';
 import { lastUsedLabel } from '@/components/mcp/last-used';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { fetcher } from '@/lib/utils/fetcher';
@@ -118,12 +118,7 @@ function WhoIsConnected({
         const assistants = reach.filter((row) => row.member.id === member.user._id);
         return (
           <Stack key={member.user._id} component="li" direction="row" spacing={1.5}>
-            <Avatar
-              src={member.user.image ?? undefined}
-              sx={{ width: 32, height: 32, fontSize: 13 }}
-            >
-              {member.user.name?.[0]}
-            </Avatar>
+            <PersonAvatar name={member.user.name} />
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="body2" fontWeight={500} color="text.primary">
                 {member.user._id === viewerId ? 'You' : member.user.name}{' '}
