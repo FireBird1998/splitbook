@@ -95,6 +95,7 @@ function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
   /** The Group's extra currencies (#721): an item in one it doesn't list needs another (#732). */
   let extras = options.extras ?? [];
   let adding: 'ok' | 'lost' = 'ok';
+  let groupReadsFail = false;
   const posted: string[] = [];
   const listed = () => [group.defaultCurrency, ...extras];
   /** Each item's problems as the server reviews it now, against the Group's currencies. */
@@ -148,10 +149,12 @@ function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
       return json({ status: 201, data: group }, 201);
     }
     if (path === '/api/groups') return json({ status: 200, data: groups });
-    if (path === `/api/groups/${groupId}`)
+    if (path === `/api/groups/${groupId}`) {
+      if (groupReadsFail) throw new TypeError('Network request failed');
       return denied
         ? json({ error: 'Forbidden', status: 403 }, 403)
         : json({ status: 200, data: currentGroup() });
+    }
     // Any member adds a currency to the Group (#721): the server's answer, or none (#722).
     if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST') {
       const { currency } = JSON.parse(String(init.body)) as { currency: string };
@@ -337,6 +340,14 @@ function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
     /** The phone sent the add, and Splitbook added it, but the reply never came back. */
     loseAddReply: () => {
       adding = 'lost';
+    },
+    /** Another member added it, before this phone read the Group again. */
+    addElsewhere: (currency: string) => {
+      extras = [...extras, currency];
+    },
+    /** Reading the Group fails from now on, as the connection does. */
+    failGroupReads: () => {
+      groupReadsFail = true;
     },
     posted,
     extras: () => extras,
@@ -657,13 +668,50 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     expect(f.controller.getSnapshot().currencyAdd).toMatchObject({ status: 'idle', message: null });
   });
 
-  it('when the add’s reply is lost, reads the Group again and To review with it', async () => {
+  // The Tester's lost-reply case on #732's web half, on Android: #722's addGroupCurrency reads
+  // the Group again after any failure, and To review reads the item again after that.
+  it('when the add’s reply is lost, the item is ready, with the currency listed', async () => {
     const { f, dinner } = await inFrancs();
     f.loseAddReply();
     expect(await f.controller.addGroupCurrency('CHF')).toBe(true);
     await settle();
     expect(f.posted).toEqual(['CHF']);
     expect(dinner()?.state).toBe('ready');
+    expect(f.controller.getSnapshot().toReview.read.groups[0]?.alternateCurrencies).toContain(
+      'CHF',
+    );
+    expect(f.controller.getSnapshot().currencyAdd).toMatchObject({ status: 'idle', message: null });
+  });
+
+  it('when the Group already lists it, as another member added it, the item is ready the same way', async () => {
+    const { f, dinner } = await inFrancs();
+    f.addElsewhere('CHF');
+    expect(await f.controller.addGroupCurrency('CHF')).toBe(true);
+    await settle();
+    expect(f.posted).toEqual(['CHF']);
+    expect(dinner()?.state).toBe('ready');
+    expect(f.controller.getSnapshot().toReview.read.groups[0]?.alternateCurrencies).toContain(
+      'CHF',
+    );
+    expect(f.controller.getSnapshot().currencyAdd).toMatchObject({ status: 'idle', message: null });
+  });
+
+  it('when reading the Group again fails too, the add’s own failure shows, and the item still needs a listed one', async () => {
+    const { f, dinner } = await inFrancs();
+    f.loseAddReply();
+    f.failGroupReads();
+    expect(await f.controller.addGroupCurrency('CHF')).toBe(false);
+    await settle();
+    expect(f.controller.getSnapshot().currencyAdd).toMatchObject({
+      status: 'error',
+      message: 'Could not reach Splitbook. Check your connection and try again.',
+    });
+    // The phone is offline now, so To review shows no account items; as last read, the item
+    // still needs a listed currency.
+    expect(f.controller.getSnapshot().toReview.read.groups[0]?.items[0]?.problems).toContain(
+      'CURRENCY_NOT_LISTED',
+    );
+    expect(dinner()).toBeUndefined();
   });
 
   it('changes only the item’s currency to a listed one: the amount stays, nothing is converted', async () => {
