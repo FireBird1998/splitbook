@@ -361,11 +361,12 @@ describe('parseActivityPage', () => {
     ['another page', 2, undefined, () => undefined],
     ['another Group', 1, undefined, (body: ActivityResponse) => (first(body).group = otherGroup)],
     ['another Expense', 1, 'c00000000000000000000009', () => undefined],
+    // A historical currency reads (#779; activity-format.test.ts); a currency that isn't a code doesn't.
     [
-      'a historical currency',
+      'a currency that is not a code',
       1,
       undefined,
-      (body: ActivityResponse) => (first(body).metadata!.currency = 'DEM'),
+      (body: ActivityResponse) => ((first(body).metadata as Record<string, unknown>).currency = 42),
     ],
     [
       'an inexact amount',

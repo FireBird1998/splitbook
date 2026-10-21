@@ -4,6 +4,7 @@ import { parseActivityPageResponse } from '@splitbook/shared/activity-page-read'
 import { getCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import { crossCurrencySettlementReadShape } from '@splitbook/shared/validators/settlement';
+import { currencyCode } from '@splitbook/shared/wire-fields';
 import { objectId } from './dto';
 import type { LoadStatus, ScrollAnchor } from './types';
 
@@ -15,10 +16,8 @@ const metadata = z.object({
   settlementId: objectId.optional(),
   description: z.string().optional(),
   amount: z.number().finite().optional(),
-  currency: z
-    .string()
-    .refine((value) => !!getCurrency(value))
-    .optional(),
+  // Stored money outlives today's supported list (#779), as the shared Activity reads allow.
+  currency: currencyCode.optional(),
   /** A payment's people, so the signed-in member reads as "You" (#434). */
   paidBy: objectId.optional(),
   paidTo: objectId.optional(),
@@ -164,7 +163,9 @@ export function parseActivityPage(
     throw new Error('Unexpected Activity scope');
   for (const event of activities) {
     const { amount, currency } = event.metadata;
-    if (amount !== undefined && currency !== undefined) parseAmountMinor(amount, currency);
+    // A supported currency's amount keeps its exact precision; a historical one shows as recorded.
+    if (amount !== undefined && currency !== undefined && getCurrency(currency))
+      parseAmountMinor(amount, currency);
   }
   return {
     events: [...new Map(activities.map((event) => [event._id, event])).values()],
