@@ -242,7 +242,7 @@ const recoveryStorageUnreadable =
 const rejectionMessages: Record<string, string> = {
   INVALID_TAG: 'Choose an active Tag in this Group. Your entries are kept.',
   INVALID_MEMBERS: 'Review the payer and participants: Group membership changed.',
-  CURRENCY_MISMATCH: 'The Group currency changed. Review the currency before saving.',
+  CURRENCY_MISMATCH: 'This Group’s currencies changed. Review the currency before saving.',
   VALIDATION_ERROR: 'Check the amount, description, date, and participants before saving.',
   INVALID_MONEY_PRECISION: 'Check the amount’s decimal places for this currency.',
 };
@@ -2478,6 +2478,30 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     return true;
   };
+  /**
+   * After the server refused the draft's currency (422 CURRENCY_MISMATCH), the Group's currencies
+   * as they are now (#755): its sheet offers only those, and the amount says at once why its own
+   * is gone. Unread, the refusal's message stands and the next Save checks the Group live.
+   */
+  const recheckExpenseCurrencies = async (groupId: string, owner: number, view: Route) => {
+    try {
+      const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
+      const editor = snapshot.expense;
+      if (
+        !current(owner) ||
+        view !== route ||
+        snapshot.screen !== 'expense' ||
+        editor.groupId !== groupId ||
+        context.group.id !== groupId ||
+        !editor.draft
+      )
+        return;
+      if (!rejectInvalidExpense(editor, editor.draft, context))
+        publish({ ...snapshot, expense: { ...editor, context } });
+    } catch {
+      /* The refusal's message stands. */
+    }
+  };
   const touchExpenseField = (field: ExpenseField) => {
     const editor = snapshot.expense;
     if (
@@ -4330,6 +4354,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               message: rejection,
             },
           });
+          if (error instanceof RequestError && error.code === 'CURRENCY_MISMATCH')
+            await recheckExpenseCurrencies(groupId, owner, view);
           return;
         } catch {
           /* Preserve the immutable attempt until local cleanup succeeds. */

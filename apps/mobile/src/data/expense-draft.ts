@@ -32,6 +32,7 @@ import {
   type ExpenseMoneyField,
 } from '@splitbook/shared/expense-review';
 import { amountError as moneyAmountError, calendarDateError } from './field-feedback';
+import { inAmountWords } from '@splitbook/shared/amount-entry';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
 import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import { objectId, toMobileGroup } from './dto';
@@ -328,11 +329,16 @@ export function parseStoredExpenseDraft(value: unknown, accountId: string, group
 }
 /** Adapt text entry to the same exact-money command used by the web ledger. */
 export function expenseMoney(draft: ExpenseDraft) {
-  const input = expenseMoneyInput(draft);
-  if (!draft.original) return normalizeExpenseMoney(input);
-  const stored = storedExpenseMoney(draft.original);
-  const kept = draft.multiPayer ? keepSavedPayers(stored, input) : null;
-  return decideExpenseMoneyEdit(stored, kept ?? input).money;
+  try {
+    const input = expenseMoneyInput(draft);
+    if (!draft.original) return normalizeExpenseMoney(input);
+    const stored = storedExpenseMoney(draft.original);
+    const kept = draft.multiPayer ? keepSavedPayers(stored, input) : null;
+    return decideExpenseMoneyEdit(stored, kept ?? input).money;
+  } catch (error) {
+    // Part of a yen paid or shared: the amount field's words, as on the web (#755).
+    throw inAmountWords(error, draft.currency);
+  }
 }
 function expenseMoneyInput(draft: ExpenseDraft) {
   return {

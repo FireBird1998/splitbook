@@ -4463,6 +4463,134 @@ describe('an Expense in one of the Group’s currencies (#720)', () => {
     expect(state.posted).toEqual([]);
   });
 
+  // #755 item 1: a currency removed between Save's live check and its POST.
+  it('reads the Group again when the server refuses the currency, so the notice shows and the sheet offers only its currencies (#755)', async () => {
+    let current: object = travelling;
+    let reads = 0;
+    const { controller, records } = setup((path, init) => {
+      if (path === `/api/groups/${groupId}`) {
+        reads += 1;
+        return Promise.resolve(json({ data: current, status: 200 }));
+      }
+      if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST') {
+        // An admin removed euros after Save's live check.
+        current = { ...travelling, alternateCurrencies: ['JPY'] };
+        return Promise.resolve(
+          json({ status: 422, error: 'CURRENCY_MISMATCH', code: 'CURRENCY_MISMATCH' }, 422),
+        );
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      currency: 'EUR',
+      amount: '40',
+      description: 'Pastéis',
+      tagId,
+    });
+    const before = reads;
+    await controller.saveExpense();
+    const { expense } = controller.getSnapshot();
+    // Save's live check, then the read after the refusal.
+    expect(reads).toBe(before + 2);
+    expect(expense.context?.group.alternateCurrencies).toEqual(['JPY']);
+    expect(expense.validation.errors.amount).toBe(
+      'This Group no longer uses EUR. Pick one of its currencies.',
+    );
+    expect(expense.status).toBe('editing');
+    expect(expense.attempt).toBeNull();
+    expect(expense.draft).toMatchObject({ currency: 'EUR', amount: '40', description: 'Pastéis' });
+    // The draft is kept on this phone, with no attempt left to resend.
+    const [kept] = [...records.values()] as Array<{ draft: object; attempt?: unknown }>;
+    expect(kept.draft).toMatchObject({ currency: 'EUR', amount: '40' });
+    expect(kept.attempt).toBeUndefined();
+  });
+
+  // The Tester found the refusal's own words untested: when the Group can't be read again, the
+  // form keeps the message, the Group as it was read, the draft, and sends nothing again (#755).
+  it('keeps the refusal’s words and the draft when the Group can’t be read again after it (#755)', async () => {
+    let posts = 0;
+    let refused = false;
+    const { controller } = setup((path, init) => {
+      if (path === `/api/groups/${groupId}`)
+        return refused
+          ? Promise.resolve(json({ status: 500, error: 'Unavailable' }, 500))
+          : Promise.resolve(json({ data: travelling, status: 200 }));
+      if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST') {
+        posts += 1;
+        refused = true;
+        return Promise.resolve(
+          json({ status: 422, error: 'CURRENCY_MISMATCH', code: 'CURRENCY_MISMATCH' }, 422),
+        );
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      currency: 'EUR',
+      amount: '40',
+      description: 'Pastéis',
+      tagId,
+    });
+    await controller.saveExpense();
+    const { expense } = controller.getSnapshot();
+    expect(expense.message).toBe(
+      'This Group’s currencies changed. Review the currency before saving.',
+    );
+    expect(expense.status).toBe('editing');
+    expect(expense.attempt).toBeNull();
+    expect(expense.context?.group.alternateCurrencies).toEqual(
+      (travelling as { alternateCurrencies: string[] }).alternateCurrencies,
+    );
+    expect(expense.draft).toMatchObject({ currency: 'EUR', amount: '40', description: 'Pastéis' });
+    expect(posts).toBe(1);
+  });
+
+  // #755 item 3: the Tester's mutant, which drops the picked-currency clause, passed every suite.
+  it('keeps a currency picked offline when the live check answers before an amount is typed (#755)', async () => {
+    const copies = new Map<string, unknown>();
+    const { state, intercept } = server(travelling);
+    const { controller, create } = setup(intercept, { savedQueries: savedQueriesIn(copies) });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await vi.waitFor(() => expect(copies.has(memberIds[0] + `/api/groups/${groupId}`)).toBe(true));
+    controller.dispose();
+    state.offline = true;
+    const restarted = create();
+    try {
+      await restarted.restore();
+      await restarted.openExpense(groupId);
+      expect(restarted.getSnapshot().expense.draft).toMatchObject({ currency: 'JPY', amount: '' });
+      await restarted.updateExpenseDraft({ currency: 'EUR' });
+      state.offline = false;
+      await restarted.refresh();
+      expect(restarted.getSnapshot().expense.contextCheck).toBeUndefined();
+      expect(restarted.getSnapshot().expense.draft).toMatchObject({ currency: 'EUR', amount: '' });
+    } finally {
+      restarted.dispose();
+    }
+  });
+
+  // #755 item 2: a payer's part of a yen got the raw "Amount supports at most 0 decimal places".
+  it('refuses part of a yen paid by a payer in the amount field’s words (#755)', async () => {
+    const { controller, state } = await opened(travelling);
+    await controller.updateExpenseDraft({
+      amount: '2500',
+      description: 'Ramen',
+      tagId,
+      multiPayer: true,
+      payers: [
+        { user: memberIds[0], amount: '1250.5' },
+        { user: memberIds[1], amount: '1249.5' },
+      ],
+    });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({
+      payers: 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.',
+    });
+    expect(state.posted).toEqual([]);
+  });
+
   it('offline, picks from the currencies saved on this phone and keeps the Expense there', async () => {
     const copies = new Map<string, unknown>();
     const { state, intercept } = server(travelling);

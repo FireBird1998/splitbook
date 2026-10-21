@@ -2016,6 +2016,46 @@ describe('the currency beside the amount (#720)', () => {
     expect(ui.writes).toEqual([]);
   });
 
+  // #755 item 2: a payer's part of a yen read "Amount supports at most 0 decimal places".
+  it('refuses part of a yen paid by a payer in the amount field’s words, on Paid by (#755)', async () => {
+    const sam = { id: 'a00000000000000000000002', name: 'Sam', email: 'sam@example.test' };
+    const ui = await render(
+      async (controller) => {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({
+          amount: '2500',
+          description: 'Ramen',
+          tagId,
+          multiPayer: true,
+          payers: [
+            { user: memberId, amount: '1250.5' },
+            { user: sam.id, amount: '1249.5' },
+          ],
+          participantIds: [memberId, sam.id],
+        });
+      },
+      {
+        readGroup: async () =>
+          json({
+            status: 200,
+            data: {
+              ...travelling,
+              members: [
+                ...travelling.members,
+                { user: { ...sam, _id: sam.id, image: null }, role: 'member', joinedAt: iso },
+              ],
+            },
+          }),
+      },
+    );
+    await ui.press('Save expense');
+    expect(text(ui.root())).toContain(
+      'Yen has no smaller unit. Enter a whole amount, like ¥2,500.',
+    );
+    expect(text(ui.root())).not.toContain('Amount supports at most');
+    expect(ui.writes).toEqual([]);
+  });
+
   it('offline, picks from the currencies saved on this phone', async () => {
     let time = localNoon;
     let disconnected = false;

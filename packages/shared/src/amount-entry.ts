@@ -14,6 +14,30 @@ export type AmountReading =
 /** "1,060.00", or "1,060" for a currency without decimal places. */
 const example = (currency: string) => (getCurrencyPrecision(currency) === 0 ? '1,060' : '1,060.00');
 
+/**
+ * "Yen has no smaller unit. Enter a whole amount, like ¥2,500.": part of a whole-unit currency's
+ * unit, in the words every amount says it (#719), a payer's and a share's too (#755). Undefined
+ * for a currency with decimal places.
+ */
+export function wholeAmountWords(currency: string): string | undefined {
+  const unit = wholeUnit(currency);
+  return unit
+    ? `${unit.charAt(0).toUpperCase()}${unit.slice(1)} has no smaller unit. Enter a whole amount, like ${formatCurrency(2500, currency)}.`
+    : undefined;
+}
+
+/**
+ * A money rule's refusal of part of a whole-unit currency's unit, such as a payer's ¥1,250.5, in
+ * those words (#755) rather than "Amount supports at most 0 decimal places"; any other error as
+ * it is. Its code and field stay.
+ */
+export function inAmountWords(error: unknown, currency: string): unknown {
+  if (!(error instanceof MoneyValidationError) || error.code !== 'INVALID_MONEY_PRECISION')
+    return error;
+  const words = wholeAmountWords(currency);
+  return words ? new MoneyValidationError(error.code, words, error.field) : error;
+}
+
 /** "Enter an amount above ₹0.00.": zero's words, for zero and anything below it. */
 const aboveZero = (currency: string) => `Enter an amount above ${formatCurrency(0, currency)}.`;
 
@@ -39,14 +63,11 @@ export function readAmountEntry(text: string, currency: string): AmountReading {
     amountMinor = parseAmountMinor(plain, currency);
   } catch (error) {
     if (error instanceof MoneyValidationError && error.code === 'INVALID_MONEY_PRECISION') {
-      const places = getCurrencyPrecision(currency);
-      const unit = wholeUnit(currency);
       return {
         status: 'invalid',
-        // "Yen has no smaller unit. Enter a whole amount, like ¥2,500." (#719)
-        message: unit
-          ? `${unit.charAt(0).toUpperCase()}${unit.slice(1)} has no smaller unit. Enter a whole amount, like ${formatCurrency(2500, currency)}.`
-          : `Use at most ${places} decimal places.`,
+        message:
+          wholeAmountWords(currency) ??
+          `Use at most ${getCurrencyPrecision(currency)} decimal places.`,
       };
     }
     return { status: 'invalid', message: like };

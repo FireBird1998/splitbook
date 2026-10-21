@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { formatCurrency, getCurrencyPrecision, wholeUnit } from '@splitbook/shared/currency';
+import { wholeAmountWords } from '@splitbook/shared/amount-entry';
+import { getCurrencyPrecision } from '@splitbook/shared/currency';
 import {
   MAX_EXPENSE_AMOUNT,
   MoneyValidationError,
@@ -120,9 +121,8 @@ export function amountError(amount: string, currency: string): string | undefine
     const digits = getCurrencyPrecision(currency);
     if (code === 'INVALID_MONEY_PRECISION') {
       // Yen and won, in the web's words (#720): "Yen has no smaller unit. Enter a whole amount…"
-      const unit = wholeUnit(currency);
-      if (unit)
-        return `${unit.charAt(0).toUpperCase()}${unit.slice(1)} has no smaller unit. Enter a whole amount, like ${formatCurrency(2500, currency)}.`;
+      const whole = wholeAmountWords(currency);
+      if (whole) return whole;
       return `${currency} amounts ${
         digits
           ? `can have at most ${digits} decimal ${digits === 1 ? 'place' : 'places'}`
