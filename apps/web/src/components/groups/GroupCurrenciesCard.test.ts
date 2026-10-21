@@ -13,7 +13,12 @@ import { listItems, text } from '@/lib/test-utils/markup';
 const ALEX = 'a00000000000000000000001';
 const SAM = 'a00000000000000000000002';
 const PRIYA = 'a00000000000000000000003';
-const now = new Date('2026-10-21T12:00:00.000Z');
+// Local noon, so the day each row shows holds in every time zone the suite runs in.
+const localNoon = (day: string) => {
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(year, month - 1, date, 12).toISOString();
+};
+const now = new Date(localNoon('2026-10-21'));
 
 const unused = {
   expenses: { count: 0, items: [] },
@@ -28,17 +33,17 @@ const lisbonAndTokyo: GroupCurrencySettings = {
     {
       code: 'EUR',
       use: { ...unused, expenses: { count: 11, items: [] }, settlements: 1 },
-      added: { by: { _id: SAM, name: 'Sam' }, at: '2026-10-01T12:00:00.000Z' },
+      added: { by: { _id: SAM, name: 'Sam' }, at: localNoon('2026-10-01') },
     },
     {
       code: 'JPY',
       use: { ...unused, expenses: { count: 24, items: [] } },
-      added: { by: { _id: SAM, name: 'Sam' }, at: '2026-10-05T12:00:00.000Z' },
+      added: { by: { _id: SAM, name: 'Sam' }, at: localNoon('2026-10-05') },
     },
     {
       code: 'GBP',
       use: unused,
-      added: { by: { _id: PRIYA, name: 'Priya' }, at: '2026-10-02T12:00:00.000Z' },
+      added: { by: { _id: PRIYA, name: 'Priya' }, at: localNoon('2026-10-02') },
     },
   ],
 };
