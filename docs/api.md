@@ -463,6 +463,8 @@ it. Members only (403 otherwise).
 
 - `use.expenses` counts the Expenses in the currency, deleted ones aside, and
   lists up to 100 of them, latest first by date.
+- `use.settlements` counts the Settlements that clear a Debt in the currency or
+  were paid in it (#727).
 - `use.toReview` counts the active To review items (Drafts) in the currency:
   the viewer's own, and other members', which are only counted, never shown.
 - `added` is the latest recorded change that added the currency. One no
