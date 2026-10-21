@@ -75,10 +75,19 @@ const readReach = (groupId: string, cookie: string) =>
   });
 
 /** A member's connection to an assistant, live unless its consent is for another generation. */
+/** A moment some days ago, so connections age as the server sees them (#618 expiry). */
+const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000);
+
 async function connect(
   userId: string,
   clientId: string,
-  options: { name: string; lastUsedAt?: Date; excludedGroupIds?: string[]; revoked?: boolean },
+  options: {
+    name: string;
+    lastUsedAt?: Date;
+    excludedGroupIds?: string[];
+    revoked?: boolean;
+    connectedAt?: Date;
+  },
 ) {
   await adapter.create({
     model: 'mcpConnection',
@@ -87,7 +96,7 @@ async function connect(
       userId,
       clientId,
       generation: 'generation-now',
-      createdAt: new Date('2026-10-01T00:00:00.000Z'),
+      createdAt: options.connectedAt ?? daysAgo(20),
       name: options.name,
       lastUsedAt: options.lastUsedAt ?? null,
       excludedGroupIds: options.excludedGroupIds ?? [],
@@ -100,8 +109,8 @@ async function connect(
       clientId,
       scopes: ['ledger:read'],
       referenceId: options.revoked ? 'generation-before' : 'generation-now',
-      createdAt: new Date('2026-10-01T00:00:00.000Z'),
-      updatedAt: new Date('2026-10-01T00:00:00.000Z'),
+      createdAt: options.connectedAt ?? daysAgo(20),
+      updatedAt: options.connectedAt ?? daysAgo(20),
     },
   });
 }
@@ -142,7 +151,7 @@ describe('a Group’s Assistant rule', () => {
 
   it('shows admins whose assistants reach the Group, and refuses the list to members (#621)', async () => {
     const groupId = await mapleHouse();
-    const lastUsedAt = new Date('2026-10-20T09:30:00.000Z');
+    const lastUsedAt = daysAgo(1);
     await connect(sam, 'https://helper.example.test/client.json', {
       name: 'Fictional Helper',
       lastUsedAt,
@@ -155,6 +164,16 @@ describe('a Group’s Assistant rule', () => {
     await connect(priya, 'https://gone.example.test/client.json', {
       name: 'Disconnected Helper',
       revoked: true,
+    });
+    // Unused for over 90 days, so expired (#618), and its never-used twin connected as long ago.
+    await connect(priya, 'https://idle.example.test/client.json', {
+      name: 'Idle Helper',
+      lastUsedAt: daysAgo(91),
+      connectedAt: daysAgo(120),
+    });
+    await connect(alex, 'https://unused.example.test/client.json', {
+      name: 'Unused Helper',
+      connectedAt: daysAgo(95),
     });
 
     expect((await readReach(groupId, await signIn('sam'))).status).toBe(403);
