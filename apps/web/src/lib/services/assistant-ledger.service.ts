@@ -115,7 +115,6 @@ function assistantGroup(group: {
   _id: unknown;
   name: string;
   defaultCurrency: string;
-  alternateCurrencies?: readonly unknown[];
   category: GroupCategory;
   isArchived: boolean;
 }) {
@@ -160,7 +159,13 @@ export const assistantLedgerService = {
       .select('name defaultCurrency alternateCurrencies category isArchived')
       .lean();
     return {
-      groups: groups.slice(0, 50).map(assistantGroup),
+      groups: groups.slice(0, 50).map((group) => ({
+        ...assistantGroup(group),
+        alternateCurrencies: normaliseExtraCurrencies(
+          group.defaultCurrency,
+          group.alternateCurrencies,
+        ),
+      })),
       next: groups.length > 50 ? String(groups[49]._id) : null,
     };
   },

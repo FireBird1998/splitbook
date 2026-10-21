@@ -107,7 +107,7 @@ export function registerSplitbookTools(
   if (!scopes.includes(MCP_DRAFT_SCOPE) || process.env.PERSISTENT_DRAFTS_ENABLED !== 'true') return;
   const reviewDescription = `These are items in the member's To review in Splitbook, where only the member can save them as Expenses; never call them drafts. Limit: ${ACTIVE_DRAFTS_PER_MEMBER} per member per Group.`;
   const preparationGuidance =
-    "For one payer, give who paid; they paid the whole amount. For several payers, give each amount. Choose a Category only when the member's words make it clear; otherwise omit it, and it's saved as Other. Set the Group Tag that clearly matches the member's words (for example a meal and Food); if none clearly fits, ask the member.";
+    "Use group_context to read the main and extra currencies. Any listed currency can be saved. Keep an explicitly given unlisted currency: the item will need details in To review until the member adds it to the Group or changes its currency. Never convert amounts. For one payer, give who paid; they paid the whole amount. For several payers, give each amount. Choose a Category only when the member's words make it clear; otherwise omit it, and it's saved as Other. Set the Group Tag that clearly matches the member's words (for example a meal and Food); if none clearly fits, ask the member.";
   const link = (groupId: string) => new URL(`/groups/${groupId}/review`, appUrl).href;
   server.registerTool(
     'list_drafts',

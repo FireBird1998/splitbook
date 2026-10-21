@@ -1,4 +1,9 @@
 import 'server-only';
+import {
+  isGroupCurrency,
+  normaliseExtraCurrencies,
+  type GroupCurrencyList,
+} from '@splitbook/shared/group-currencies';
 import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
 import { isPossibleExpenseDuplicate } from '@splitbook/shared/expense-duplicate';
 import mongoose from 'mongoose';
@@ -17,10 +22,7 @@ import { expenseService } from './expense.service';
 import { assistantGroupFilter } from '@splitbook/shared/assistant-reach';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
-import {
-  assertExpenseParticipants,
-  assertGroupCurrency,
-} from '@splitbook/shared/expense-validation';
+import { assertExpenseParticipants } from '@splitbook/shared/expense-validation';
 import { resolveTagReference } from '@splitbook/shared/tag-identity';
 import {
   ACTIVE_DRAFTS_PER_MEMBER,
@@ -143,19 +145,22 @@ async function requireMembership(
       filter
         ? { ...filter, _id: { ...filter._id, $eq: scope.group } }
         : { _id: scope.group, 'members.user': scope.owner, deletionRequestedAt: null },
-      { session, projection: { _id: 1, defaultCurrency: 1, isArchived: 1 } },
+      { session, projection: { _id: 1, defaultCurrency: 1, alternateCurrencies: 1, isArchived: 1 } },
     );
   if (!group) throw new Error(reach ? 'GROUP_NOT_FOUND' : 'FORBIDDEN');
   if (refuseArchived && group.isArchived) throw new Error('GROUP_ARCHIVED');
-  return group.defaultCurrency as string | undefined;
+  return {
+    defaultCurrency: group.defaultCurrency as string,
+    alternateCurrencies: normaliseExtraCurrencies(group.defaultCurrency, group.alternateCurrencies),
+  };
 }
 
 /**
  * Schema refinements may wait for valid fields; identify every absent fact independently. A
  * Draft without a currency takes its Group's, so the currency is never asked for (#512).
  */
-function draftValidation(stored: ExpenseDraftValues = {}, groupCurrency?: string) {
-  const values = withGroupCurrency(stored, groupCurrency);
+function draftValidation(stored: ExpenseDraftValues = {}, group?: GroupCurrencyList) {
+  const values = withGroupCurrency(stored, group?.defaultCurrency);
   const parsed = completeExpenseDraftSchema.safeParse(values);
   const required = [
     ['description', values.description, 'Enter a description.'],
@@ -183,16 +188,23 @@ function draftValidation(stored: ExpenseDraftValues = {}, groupCurrency?: string
       }`,
     );
   }
+  // A known unlisted currency needs attention even while other Expense facts are absent.
+  const unlisted = !!(group && values.currency && !isGroupCurrency(group, values.currency));
+  if (unlisted) problems.push('CURRENCY_NOT_LISTED');
   return {
     parsed,
     problems,
     missingFields: [
-      ...new Set([...missingKeys, ...issues.map((issue) => String(issue.path[0] ?? 'expense'))]),
+      ...new Set([
+        ...missingKeys,
+        ...issues.map((issue) => String(issue.path[0] ?? 'expense')),
+        ...(unlisted ? ['currency'] : []),
+      ]),
     ],
   };
 }
 
-function present(record: DraftRecord, groupCurrency?: string): PersistedExpenseDraft {
+function present(record: DraftRecord, group?: GroupCurrencyList): PersistedExpenseDraft {
   return {
     id: String(record._id),
     groupId: String(record.group),
@@ -204,7 +216,7 @@ function present(record: DraftRecord, groupCurrency?: string): PersistedExpenseD
     ...(record.state === 'active'
       ? {
           values: record.values,
-          missingFields: draftValidation(record.values, groupCurrency).missingFields,
+          missingFields: draftValidation(record.values, group).missingFields,
         }
       : {}),
     createdAt: record.createdAt.toISOString(),
@@ -220,7 +232,7 @@ async function mutate<T>(
     drafts: Awaited<ReturnType<typeof collection>>,
     scope: ReturnType<typeof access>,
     session: mongoose.ClientSession,
-    groupCurrency: string | undefined,
+    groupCurrencies: GroupCurrencyList,
   ) => Promise<T>,
   refuseArchived = false,
 ) {
@@ -242,13 +254,13 @@ async function mutate<T>(
       );
     if (!account.matchedCount) throw new Error('FORBIDDEN');
     // Checked again inside the transaction, so an archive that commits first stops the write.
-    const groupCurrency = await requireMembership(
+    const groupCurrencies = await requireMembership(
       scope,
       session,
       refuseArchived,
       assistantReach(actor),
     );
-    return write(drafts, scope, session, groupCurrency);
+    return write(drafts, scope, session, groupCurrencies);
   });
 }
 
@@ -258,7 +270,7 @@ function prepare<T>(actor: DraftActor, groupId: string, write: Parameters<typeof
 }
 
 function reviewValues(record: DraftRecord, group: IGroupDocument) {
-  const { parsed, problems } = draftValidation(record.values, group.defaultCurrency);
+  const { parsed, problems } = draftValidation(record.values, group);
   let allocation: DraftReview['allocation'];
   if (parsed.success) {
     try {
@@ -276,7 +288,6 @@ function reviewValues(record: DraftRecord, group: IGroupDocument) {
         parsed.data.paidBy,
         parsed.data.splitBetween,
       );
-      assertGroupCurrency(group, parsed.data.currency);
       resolveTagReference(group.tags, parsed.data);
     } catch (error) {
       problems.push(error instanceof Error ? error.message : 'Invalid Expense');
@@ -356,10 +367,11 @@ async function reviewDraft(
     members: group.members,
     tags: group.tags,
     currency: group.defaultCurrency,
+    alternateCurrencies: normaliseExtraCurrencies(group.defaultCurrency, group.alternateCurrencies),
     warnings: warningVersions,
   });
   return {
-    draft: present(record, group.defaultCurrency),
+    draft: present(record, group),
     review,
     problems,
     duplicates,
@@ -437,7 +449,7 @@ export const expenseDraftService = {
             });
         }
         return {
-          draft: present(record, group.defaultCurrency),
+          draft: present(record, group),
           problems: reviewValues(record, group).problems,
           duplicates,
         };
@@ -446,6 +458,10 @@ export const expenseDraftService = {
         groupId: String(group._id),
         groupName: group.name,
         currency: group.defaultCurrency,
+        alternateCurrencies: normaliseExtraCurrencies(
+          group.defaultCurrency,
+          group.alternateCurrencies,
+        ),
         category: group.category ?? 'other',
         count: items.length,
         items,
@@ -476,52 +492,58 @@ export const expenseDraftService = {
     const outcomes: DraftSaveOutcome[] = [];
     for (const item of command.drafts) {
       try {
-        const expenseId = await mutate(actor, groupId, async (drafts, scope, session, currency) => {
-          const record = await drafts.findOne(
-            { ...scope, _id: new mongoose.Types.ObjectId(item.id) },
-            { session },
-          );
-          if (!record) throw new Error('DRAFT_NOT_FOUND');
-          if (record.state === 'saved') {
-            if (record.revision !== item.revision + 1 || record.savedReview !== item.review)
-              throw new Error('STALE_REVISION');
-            return record.expenseId!;
-          }
-          if (record.state !== 'active') throw new Error('DRAFT_NOT_FOUND');
-          assertExpectedRevision(record.revision, item.revision);
-          const current = await reviewDraft(actor, groupId, item.id, session);
-          if (current.review !== item.review)
-            throw new Error('Review changed. Reload this Draft and review it again.');
-          if (current.problems.length)
-            throw new Error('Invalid Draft: ' + current.problems.join('; '));
-          if (current.duplicates.length && !item.acknowledgeDuplicates)
-            throw new Error('Review and acknowledge the possible duplicates before saving.');
-          const preparedBy = draftAttributionSchema.parse(record.preparedBy);
-          const expense = await expenseService.create(
-            groupId,
-            completeExpenseDraftSchema.parse(withGroupCurrency(record.values, currency)),
-            actor.id,
-            `draft:${item.id}`,
-            preparedBy.kind === 'assistant' ? { preparedBy } : undefined,
-          );
-          const expenseId = String(expense._id);
-          await drafts.updateOne(
-            { ...scope, _id: record._id },
-            {
-              $unset: { values: '' },
-              $set: {
-                state: 'saved',
-                expenseId,
-                savedReview: item.review,
-                updatedAt: new Date(),
-                changedBy: attribution(actor),
+        const expenseId = await mutate(
+          actor,
+          groupId,
+          async (drafts, scope, session, currencies) => {
+            const record = await drafts.findOne(
+              { ...scope, _id: new mongoose.Types.ObjectId(item.id) },
+              { session },
+            );
+            if (!record) throw new Error('DRAFT_NOT_FOUND');
+            if (record.state === 'saved') {
+              if (record.revision !== item.revision + 1 || record.savedReview !== item.review)
+                throw new Error('STALE_REVISION');
+              return record.expenseId!;
+            }
+            if (record.state !== 'active') throw new Error('DRAFT_NOT_FOUND');
+            assertExpectedRevision(record.revision, item.revision);
+            const current = await reviewDraft(actor, groupId, item.id, session);
+            if (current.review !== item.review)
+              throw new Error('Review changed. Reload this Draft and review it again.');
+            if (current.problems.length)
+              throw new Error('Invalid Draft: ' + current.problems.join('; '));
+            if (current.duplicates.length && !item.acknowledgeDuplicates)
+              throw new Error('Review and acknowledge the possible duplicates before saving.');
+            const preparedBy = draftAttributionSchema.parse(record.preparedBy);
+            const expense = await expenseService.create(
+              groupId,
+              completeExpenseDraftSchema.parse(
+                withGroupCurrency(record.values, currencies.defaultCurrency),
+              ),
+              actor.id,
+              `draft:${item.id}`,
+              preparedBy.kind === 'assistant' ? { preparedBy } : undefined,
+            );
+            const expenseId = String(expense._id);
+            await drafts.updateOne(
+              { ...scope, _id: record._id },
+              {
+                $unset: { values: '' },
+                $set: {
+                  state: 'saved',
+                  expenseId,
+                  savedReview: item.review,
+                  updatedAt: new Date(),
+                  changedBy: attribution(actor),
+                },
+                $inc: { revision: 1 },
               },
-              $inc: { revision: 1 },
-            },
-            { session },
-          );
-          return expenseId;
-        });
+              { session },
+            );
+            return expenseId;
+          },
+        );
         outcomes.push({ id: item.id, status: 'saved', expenseId });
       } catch (error) {
         // Infrastructure errors can include an unknown commit result. Never call them a confirmed failure.
@@ -554,7 +576,7 @@ export const expenseDraftService = {
   async list(actor: DraftActor, groupId: string) {
     const scope = access(actor, groupId);
     const drafts = await collection();
-    const currency = await requireMembership(scope, undefined, false, assistantReach(actor));
+    const currencies = await requireMembership(scope, undefined, false, assistantReach(actor));
     // Each owner's active Drafts in this Group are bounded by the per-member limit.
     return (
       await drafts
@@ -562,14 +584,14 @@ export const expenseDraftService = {
         .sort({ createdAt: 1, _id: 1 })
         .limit(ACTIVE_DRAFTS_PER_MEMBER)
         .toArray()
-    ).map((record) => present(record, currency));
+    ).map((record) => present(record, currencies));
   },
 
   async create(actor: DraftActor, groupId: string, input: unknown, key: string) {
     const command = createExpenseDraftsSchema.parse(input);
     const requestKey = draftRequestKey.parse(key);
     const requestFingerprint = fingerprintCreateCommand(command);
-    return prepare(actor, groupId, async (drafts, scope, session, currency) => {
+    return prepare(actor, groupId, async (drafts, scope, session, currencies) => {
       const replay = await drafts
         .find({ ...scope, requestKey }, { session })
         .sort({ itemIndex: 1 })
@@ -581,7 +603,7 @@ export const expenseDraftService = {
         )
           throw new Error('IDEMPOTENCY_CONFLICT');
         // A discarded item's content is gone; its minimal receipt prevents resurrection.
-        return replay.map((record) => present(record, currency));
+        return replay.map((record) => present(record, currencies));
       }
       const count = await drafts.countDocuments({ ...scope, state: 'active' }, { session });
       if (count + command.drafts.length > ACTIVE_DRAFTS_PER_MEMBER)
@@ -602,7 +624,7 @@ export const expenseDraftService = {
         updatedAt: now,
       }));
       await drafts.insertMany(records, { session });
-      return records.map((record) => present(record, currency));
+      return records.map((record) => present(record, currencies));
     });
   },
 
@@ -615,7 +637,7 @@ export const expenseDraftService = {
   ) {
     const values = expenseDraftValuesSchema.parse(input);
     const _id = new mongoose.Types.ObjectId(draftObjectId.parse(draftId));
-    return prepare(actor, groupId, async (drafts, scope, session, currency) => {
+    return prepare(actor, groupId, async (drafts, scope, session, currencies) => {
       const record = await drafts.findOne({ ...scope, _id, state: 'active' }, { session });
       if (!record) throw new Error('DRAFT_NOT_FOUND');
       assertExpectedRevision(record.revision, revision);
@@ -631,7 +653,10 @@ export const expenseDraftService = {
         },
         { session },
       );
-      return present({ ...record, values, updatedAt, changedBy, revision: revision + 1 }, currency);
+      return present(
+        { ...record, values, updatedAt, changedBy, revision: revision + 1 },
+        currencies,
+      );
     });
   },
 

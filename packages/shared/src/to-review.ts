@@ -55,6 +55,7 @@ export interface ReviewNeed {
     | 'payer-total'
     | 'percentage-total'
     | 'group-currency'
+    | 'currency-not-listed'
     | 'unknown';
   index?: number;
   part?: string;
@@ -87,6 +88,7 @@ export function reviewNeedWords(need: ReviewNeed, category?: GroupCategory): str
   if (need.reason === 'split-total') return 'the split to add up to the total';
   if (need.reason === 'payer-total') return 'the amounts paid to add up to the total';
   if (need.reason === 'percentage-total') return 'the percentages to add up to 100%';
+  if (need.reason === 'currency-not-listed') return 'a currency listed by the Group';
   if (need.reason === 'group-currency') return groupCurrencyNeed(category);
   if (need.reason === 'decimals') {
     const places = need.precision === 0 ? undefined : `at most ${need.precision} decimal places`;
@@ -155,6 +157,8 @@ function accountModel(
       .filter((issue) => !missing.includes(String(issue.path[0] ?? 'expense')))
       .map((issue) => validationNeed(issue.message, issue.path)),
   );
+  if (item.problems.includes('CURRENCY_NOT_LISTED'))
+    needs.push({ field: 'currency', reason: 'currency-not-listed' });
   if (item.problems.includes('CURRENCY_MISMATCH'))
     needs.push({ field: 'currency', reason: 'group-currency' });
   // Only a problem nothing can name falls back to the expense details.
@@ -447,6 +451,7 @@ const problemCodes = {
   INVALID_MEMBERS: 'Choose current Group members for who paid and who shared it.',
   INVALID_TAG: 'Choose an available Tag.',
   CURRENCY_MISMATCH: 'Choose the Group currency.',
+  CURRENCY_NOT_LISTED: 'Add this currency to the Group or choose a listed currency.',
   STALE_REVISION: 'This item changed. Check the latest version before saving.',
   'Each person can appear only once': 'Choose each member only once.',
 };
@@ -498,6 +503,8 @@ function readReviewProblem(message: string): {
   if (Object.hasOwn(problemCodes, reason)) {
     if (message === 'CURRENCY_MISMATCH')
       coveredBy.push({ field: 'currency', reason: 'group-currency' });
+    if (message === 'CURRENCY_NOT_LISTED')
+      coveredBy.push({ field: 'currency', reason: 'currency-not-listed' });
     return { explanation: { kind: 'code', code: reason as keyof typeof problemCodes }, coveredBy };
   }
   if (path) {

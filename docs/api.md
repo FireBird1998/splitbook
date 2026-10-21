@@ -351,6 +351,35 @@ currency; a recurring Expense stays in the main currency for now. `startDate` / 
 
 Creating a group seeds theme-appropriate default tags.
 
+### Quick add and assistant Draft currencies (#732)
+
+Quick add's shared `readQuickAdd(text, context)` accepts the main currency as
+`context.currency` and the extra list as `context.alternateCurrencies`. Its read
+returns `currency`, `currencyListed` and `currencyCandidates` alongside exact
+`amountMinor` and the original `amountText`. A bare number uses the main currency.
+A listed code or symbol uses that currency's minor units (JPY/KRW are whole units).
+An unlisted currency produces `amount-currency`, keeps its code and amount text,
+and leaves `amountMinor` null; it is never reinterpreted as the main currency.
+An ambiguous symbol returns `currency: null` and the candidate codes, asking for a
+code. `quickAddDraftValues` carries the read currency into the full Expense form.
+
+The MCP `list_groups` and `group_context` replies keep `currency` as the main
+currency and add `alternateCurrencies`, the normalised extra list. `create_drafts`
+and `replace_draft` retain any supported explicit currency without conversion.
+Listed currencies can be ready to save; an unlisted one is stored for correction,
+with `currency` in `missingFields`, even when other facts are still missing.
+
+`GET /api/user/to-review` includes each Group's main `currency` and
+`alternateCurrencies`. Both it and `POST /api/groups/[id]/drafts/review` report
+`CURRENCY_NOT_LISTED` in the item's `problems` when its currency is unlisted.
+The shared `parseToReviewResponse` / `buildToReview` path used by web and Android
+keeps the item readable, sets `state: "needs-details"` and gives the need
+`{ field: "currency", reason: "currency-not-listed" }`; it is excluded from Ready
+counts and totals. The save route refuses it on the server as well. Adding that
+currency to the Group or changing the Draft to a listed currency removes the
+problem on the next read. A changed currency list requires a fresh review before
+saving. Preparing or correcting a Draft never changes Balances (ADR 0008).
+
 ### GET /api/groups
 
 **No query params.** The handler takes no `Request` argument, so any query
