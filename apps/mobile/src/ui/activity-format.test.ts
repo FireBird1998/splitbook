@@ -572,4 +572,75 @@ describe('a Debt paid in another currency (#728)', () => {
     expect(line).toMatchObject({ actor: 'You', verb: 'recorded a payment', subject: null });
     expect(line.details.map((detail) => detail.text)).toEqual(['You → Sam Chen', '€20.00']);
   });
+
+  // Stored money outlives today's supported list (#779): one such event must not fail the page.
+  describe('in a currency Splitbook no longer supports (#779)', () => {
+    const noSuggestion = {
+      suggestedRate: undefined,
+      rateSource: undefined,
+      rateAsOf: undefined,
+      rateFetchedAt: undefined,
+    };
+
+    it('reads a Debt in it paid in a supported currency', () => {
+      const line = describeActivity(
+        paid({
+          amount: 40,
+          amountMinor: 4000,
+          currency: 'DEM',
+          amountPaidMinor: 2000,
+          paidCurrency: 'EUR',
+          appliedRate: '0.5',
+          rateKind: 'entered',
+          ...noSuggestion,
+        }),
+        { currentUserId: alex, currency: 'INR' },
+      );
+      expect(line).toMatchObject({ actor: 'You', verb: 'paid', subject: 'Sam Chen' });
+      expect(line.complement).toMatch(/^€20\.00 to clear DEM\s40\.00$/);
+    });
+
+    it('reads a payment in its own currency', () => {
+      const line = describeActivity(
+        paid({
+          amount: 40,
+          amountMinor: 4000,
+          currency: 'DEM',
+          amountPaidMinor: undefined,
+          paidCurrency: undefined,
+          appliedRate: undefined,
+          rateKind: undefined,
+          ...noSuggestion,
+          pairDebtBeforeMinor: undefined,
+          pairDebtAfterMinor: undefined,
+        }),
+        { currentUserId: alex, currency: 'INR' },
+      );
+      expect(line).toMatchObject({ actor: 'You', verb: 'recorded a payment' });
+      const [people, amount] = line.details.map((detail) => detail.text);
+      expect(people).toBe('You → Sam Chen');
+      expect(amount).toMatch(/^DEM\s40\.00$/);
+    });
+
+    it('reads an Expense in it', () => {
+      const [added] = parseActivityPage(
+        {
+          status: 200,
+          data: {
+            activities: [
+              event({ metadata: { description: 'Old dinner', amount: 40, currency: 'DEM' } }),
+            ],
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          },
+        },
+        'b00000000000000000000001',
+        1,
+      ).events;
+      const line = describeActivity(added!, { currentUserId: alex, currency: 'INR' });
+      expect(line).toMatchObject({ verb: 'added', subject: 'Old dinner' });
+      expect(line.details.map((detail) => detail.text)).toEqual([
+        expect.stringMatching(/^DEM\s40\.00$/),
+      ]);
+    });
+  });
 });
