@@ -439,11 +439,12 @@ function currencyMarks(listed: readonly string[]): Marks {
     symbols.set(fold(mark), codes);
   };
   for (const { code, symbol } of CURRENCIES) {
-    add(symbol, code);
+    // Letter symbols ("kr", "R", "RM") are words too often to refuse an unlisted currency over.
+    if (listed.includes(code) || /[^\p{L}]/u.test(symbol)) add(symbol, code);
     // Preserve a listed dollar currency's familiar shorthand, but never guess between extras.
     if (listed.includes(code) && symbol.endsWith('$')) add('$', code);
   }
-  for (const mark of ['rs', 'rs.', 'rupee', 'rupees']) add(mark, 'INR');
+  if (listed.includes('INR')) for (const mark of ['rs', 'rs.', 'rupee', 'rupees']) add(mark, 'INR');
   return { listed, symbols };
 }
 
@@ -452,27 +453,15 @@ type Mark = 'none' | string[];
 function markOf(text: string, marks: Marks): Mark | null {
   if (!text) return 'none';
   const value = fold(text);
-  // Recognise codes without changing case; ambiguous words “rub” and “try” require capitals.
+  // Listed codes are case-insensitive; an unlisted code needs capitals to distinguish words.
   const code =
     marks.listed.find((code) => code.toLowerCase() === value) ??
-    CURRENCIES.find(
-      (currency) =>
-        currency.code === text ||
-        (!['rub', 'try'].includes(value) && currency.code.toLowerCase() === value),
-    )?.code;
+    CURRENCIES.find((currency) => currency.code === text)?.code;
   if (code) return [code];
   const matches = marks.symbols.get(value);
   if (!matches) return null;
   const listed = matches.filter((code) => marks.listed.includes(code));
   if (listed.includes(marks.listed[0])) return [marks.listed[0]];
-  // Unlisted letter symbols are recognised only in their printed case.
-  if (
-    !listed.length &&
-    !/[^\p{L}]/u.test(text) &&
-    !['rs', 'rupee', 'rupees'].includes(value) &&
-    !CURRENCIES.some((currency) => currency.symbol === text)
-  )
-    return null;
   return listed.length ? listed : matches;
 }
 
