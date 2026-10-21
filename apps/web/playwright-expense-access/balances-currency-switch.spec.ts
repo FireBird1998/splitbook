@@ -78,9 +78,12 @@ test('Balances shows one currency at a time, opening on the first Sam isn’t se
     await expect(figures).not.toContainText('₹');
     await expect(figures).not.toContainText('¥');
   }
-  // Payments are recorded in the main currency; its tab has the form.
-  const recordInMain = panel.getByRole('region', { name: 'Record payment', exact: true });
-  await expect(recordInMain).toContainText('Payments are recorded in INR, the main currency.');
+  // Record payment clears the Debt in the currency shown, paid in any of the Group's (#727).
+  const recordEuros = panel.getByRole('region', { name: 'Record payment', exact: true });
+  await expect(recordEuros).toContainText(/· Debt in EUR/);
+  await expect(
+    recordEuros.getByRole('radiogroup', { name: 'Pay in' }).getByRole('radio'),
+  ).toHaveText(['EUR', 'INR', 'JPY']);
   await expect(page.getByRole('region', { name: 'Record payment', exact: true })).toHaveCount(1);
 
   await tabs.nth(2).click();
@@ -91,10 +94,10 @@ test('Balances shows one currency at a time, opening on the first Sam isn’t se
   );
   await expect(yen.getByRole('region', { name: 'Settle up', exact: true })).not.toContainText('€');
 
-  await yen
-    .getByRole('region', { name: 'Record payment', exact: true })
-    .getByRole('button', { name: 'Show INR' })
-    .click();
+  await expect(yen.getByRole('region', { name: 'Record payment', exact: true })).toContainText(
+    /· Debt in JPY/,
+  );
+  await tabs.nth(0).click();
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
   // Nothing is in rupees: settled up in INR, while euros and yen are still owed.
   await expect(

@@ -4,6 +4,7 @@ import {
   crossCurrencyRateKind,
   editCrossCurrencyEntry,
   parseRateSuggestionResponse,
+  paymentRecord,
   rateBadge,
   rateNote,
   readCrossCurrencyEntry,
@@ -307,5 +308,91 @@ describe('the Group’s rate read, as the sheet reads it (#726, #727)', () => {
       { data: { suggestion: { ...frankfurter, attributionRequired: true, attribution: null } } },
     ])
       expect(() => parseRateSuggestionResponse(payload), JSON.stringify(payload)).toThrow();
+  });
+});
+
+describe('a payment’s record, as its card shows it (#727)', () => {
+  const alex = 'a00000000000000000000001';
+  const sam = 'a00000000000000000000002';
+  const record = {
+    paidBy: alex,
+    paidByName: 'Alex Rivera',
+    paidTo: sam,
+    paidToName: 'Sam Chen',
+    amountMinor: 2000,
+    currency: 'EUR',
+    amountPaidMinor: 185000,
+    paidCurrency: 'INR',
+    appliedRate: '92.5',
+    rateKind: 'custom' as const,
+    suggestedRate: '92.1',
+    rateSource: 'frankfurter' as const,
+    rateAsOf: '2026-10-20',
+    rateFetchedAt: local(21, 6).toISOString(),
+    pairDebtBeforeMinor: -2000,
+    pairDebtAfterMinor: 0,
+  };
+
+  it('shows both amounts, the rate used and the suggestion, and what moved', () => {
+    expect(paymentRecord(record, alex)).toEqual({
+      payer: 'You',
+      payee: 'Sam Chen',
+      paid: '₹1,850.00',
+      clears: 'to clear €20.00, a Debt in EUR',
+      rateUsed: '₹92.50 per €',
+      badge: 'Your rate',
+      suggested: {
+        rate: '₹92.10 per €',
+        source: 'Frankfurter · rates of 20 Oct · fetched 21 Oct 06:00',
+        attribution: null,
+      },
+      cleared: '€20.00',
+      paidAmount: '₹1,850.00',
+      pair: { label: 'You and Sam in EUR:', before: '−€20.00', after: '€0.00' },
+      unchanged: 'INR balances didn’t change. Only the Debt’s own currency moves.',
+      kept: 'The rate is kept as recorded. It never changes, even when rates move later.',
+    });
+  });
+
+  it('names the second source, an entered rate, and leaves out what an older record didn’t keep', () => {
+    const fallback = paymentRecord(
+      { ...record, rateKind: 'suggested', suggestedRate: '92.5', rateSource: 'exchange-rate-api' },
+      sam,
+    );
+    expect(fallback).toMatchObject({
+      payer: 'Alex Rivera',
+      payee: 'You',
+      badge: 'Suggested',
+      suggested: {
+        source: 'Rates of 20 Oct · fetched 21 Oct 06:00',
+        attribution: EXCHANGE_RATE_API_ATTRIBUTION,
+      },
+      pair: { label: 'Alex and you in EUR:' },
+    });
+    const entered = paymentRecord(
+      {
+        ...record,
+        rateKind: 'entered',
+        suggestedRate: undefined,
+        rateSource: undefined,
+        rateAsOf: undefined,
+        rateFetchedAt: undefined,
+        pairDebtBeforeMinor: undefined,
+        pairDebtAfterMinor: undefined,
+      },
+      'a00000000000000000000003',
+    );
+    expect(entered).toMatchObject({
+      payer: 'Alex Rivera',
+      payee: 'Sam Chen',
+      badge: 'No suggestion',
+      suggested: null,
+      pair: null,
+    });
+    expect(paymentRecord({ ...record, pairDebtAfterMinor: 500 }, alex).pair).toEqual({
+      label: 'You and Sam in EUR:',
+      before: '−€20.00',
+      after: '+€5.00',
+    });
   });
 });
