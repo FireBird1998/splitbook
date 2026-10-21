@@ -958,4 +958,23 @@ describe('an assistant’s credit on an Expense row (#751)', () => {
       'evil.example.test',
     );
   });
+
+  // The rest of the row reads in full, as every Expense row does (#639). The host is one word as
+  // wide as a line or more, cut in the middle or broken as it wraps.
+  it.each(largeTextWindows)(
+    'leaves the rest of its row in full, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      preparedView();
+      const [row] = findHosts(
+        screen!.toJSON(),
+        (props, type) => type === 'Pressable' && flatten(props.style).minHeight === 60,
+      );
+      expect(
+        unreadText(row!, size.fontScale, size.width - 34, { cutOnce: size.fontScale < 1.5 }).filter(
+          (finding) => !finding.startsWith('"prepared by '),
+        ),
+      ).toEqual([]);
+    },
+  );
 });
