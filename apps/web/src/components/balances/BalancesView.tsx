@@ -641,7 +641,12 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           >
             <EmptyState
               title="All settled up"
-              description={`No one owes anyone in this ${theme.nouns.singular} right now.`}
+              description={
+                // With several currencies, others may still be owed: say which one is settled.
+                currencySwitch
+                  ? `No one owes anyone in ${currency} right now.`
+                  : `No one owes anyone in this ${theme.nouns.singular} right now.`
+              }
             />
           </Box>,
           null,
