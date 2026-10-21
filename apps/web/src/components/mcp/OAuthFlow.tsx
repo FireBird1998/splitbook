@@ -31,10 +31,31 @@ type ConsentDetails = AssistantDisplay & {
 type SignedInAccount = { id: string; name: string; email: string };
 
 /**
- * The permissions a connection request asks for, as the approval page lists them: the assistant
- * by name, with its address in small text when it has one (#614), ledger access, and, when it
- * asks for them, preparing items for To review and staying connected; then which Groups it
- * reaches (#617) and what it can't do, on every approval.
+ * The approval page's heading (#614, #617): the assistant by name, which members check against
+ * look-alikes, with its address just under it and the generic title as a label above.
+ */
+export function ApprovalHeading({ details }: { details: AssistantDisplay }) {
+  return (
+    <Box>
+      <Typography variant="overline" component="p" color="text.secondary">
+        Connect an assistant
+      </Typography>
+      <Typography variant="h5" component="h1" sx={{ overflowWrap: 'anywhere' }}>
+        <bdi>{details.name}</bdi> wants to use your {PRODUCT_NAME}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+        {details.address
+          ? `${details.address} · identified by its published details`
+          : 'Registered by the assistant itself. Its address isn’t published.'}
+      </Typography>
+    </Box>
+  );
+}
+
+/**
+ * The permissions a connection request asks for, as the approval page lists them: reading the
+ * ledger, and, when it asks for them, preparing items for To review and staying connected; then
+ * which Groups it reaches (#617) and what it can't do, on every approval.
  */
 export function ConsentPermissions({
   details,
@@ -53,20 +74,13 @@ export function ConsentPermissions({
   return (
     <>
       <Box>
-        <Typography variant="h6" component="h2" sx={{ overflowWrap: 'anywhere' }}>
-          <bdi>{details.name}</bdi> wants to use your {PRODUCT_NAME}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-          {details.address
-            ? `${details.address} · identified by its published details`
-            : 'Registered by the assistant itself. Its address isn’t published.'}
-        </Typography>
-      </Box>
-      <Box>
         <Typography variant="subtitle2" component="h3" sx={{ overflowWrap: 'anywhere' }}>
           What <bdi>{details.name}</bdi> can do
         </Typography>
-        <Typography>Ledger permission: read Group details, Balances and spending.</Typography>
+        <Typography>
+          Read only: answer questions about your Groups, balances, Expenses, payments and recent
+          changes.
+        </Typography>
       </Box>
       {details.scopes.includes(MCP_DRAFT_SCOPE) && (
         <FormControlLabel
@@ -274,14 +288,14 @@ export function ConsentChoice({
 }) {
   return (
     <Stack spacing={1}>
-      <Stack direction="row" spacing={2}>
-        <Button variant="contained" disabled={disabled} onClick={onAllow}>
-          Allow connection
-        </Button>
-        <Button disabled={disabled} onClick={onDeny}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+        <Button variant="outlined" fullWidth disabled={disabled} onClick={onDeny}>
           Deny
         </Button>
-      </Stack>
+        <Button variant="contained" fullWidth disabled={disabled} onClick={onAllow}>
+          Allow connection
+        </Button>
+      </Box>
       {name && (
         <Typography variant="body2" color="text.secondary">
           Only allow this if you asked <bdi>{name}</bdi> to connect just now.
@@ -367,9 +381,13 @@ export default function OAuthFlow({
     <Box sx={{ maxWidth: 560, mx: 'auto', p: 3, py: 6 }}>
       <Paper variant="outlined" sx={{ p: 3 }}>
         <Stack spacing={2}>
-          <Typography variant="h5" component="h1">
-            {consent ? 'Connect an assistant' : `Continue connecting to ${PRODUCT_NAME}`}
-          </Typography>
+          {consent && details ? (
+            <ApprovalHeading details={details} />
+          ) : (
+            <Typography variant="h5" component="h1">
+              {consent ? 'Connect an assistant' : `Continue connecting to ${PRODUCT_NAME}`}
+            </Typography>
+          )}
           {error && <Alert severity="error">{error}</Alert>}
           {consent ? (
             <>
