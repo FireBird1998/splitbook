@@ -581,8 +581,11 @@ function RateCell({
       <Box component="span" sx={{ fontFamily: FONT_MONO }}>
         {perUnit(line.rate, paidCurrency, line.currency)}
       </Box>
+      {/* The suggestion's source on one line; it's the suggested rate until Change. */}
+      <Box component="span" data-rate-part="source" sx={small}>
+        {note.text}
+      </Box>
       <Box component="span" sx={small}>
-        {rateBadge(line.kind ?? 'suggested', suggestion)} · {note.text} ·{' '}
         <Button
           variant="text"
           size="small"

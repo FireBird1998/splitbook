@@ -1,9 +1,11 @@
 'use client';
 
+import { Fragment } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import { minorMoney } from '@splitbook/shared/cross-currency-settlement';
 import { RADIUS } from '@/lib/theme/tokens';
 import { settleAllWords, type SettleAllOffer } from '@splitbook/shared/settle-all';
 
@@ -64,9 +66,14 @@ export default function SettleAllOffers({
               <Box component="span" sx={{ fontWeight: 600 }}>
                 {words.lead}
               </Box>{' '}
-              <Box component="span" sx={(theme) => ({ ...theme.typography.money })}>
-                {words.amounts}
-              </Box>
+              {offer.debts.map(({ currency, amountMinor }, index) => (
+                <Fragment key={currency}>
+                  {index === 0 ? '' : index === offer.debts.length - 1 ? ' and ' : ', '}
+                  <Box component="span" sx={(theme) => ({ ...theme.typography.money })}>
+                    {minorMoney(amountMinor, currency)}
+                  </Box>
+                </Fragment>
+              ))}
               . {words.offer}
             </Typography>
             <Button
