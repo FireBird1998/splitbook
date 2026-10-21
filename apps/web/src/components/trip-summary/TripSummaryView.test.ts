@@ -338,3 +338,50 @@ describe('the tab’s states', () => {
     expect(html).not.toContain('<table');
   });
 });
+
+describe('the currency switch (#729)', () => {
+  /** The trip in rupees, euros and dollars: the read opened on euros, the most Expenses. */
+  const travelling: TripSummaryRead = {
+    ...READ,
+    currency: 'EUR',
+    otherCurrencies: [{ currency: 'INR', spentMinor: 1000000, expenseCount: 2 }],
+    currencies: [
+      { currency: 'INR', expenseCount: 2, spentMinor: 1000000 },
+      { currency: 'EUR', expenseCount: 4, spentMinor: 64000 },
+      { currency: 'USD', expenseCount: 1, spentMinor: 5000 },
+    ],
+  };
+  const selectedTab = (html: string) =>
+    /<button\b(?=[^>]*role="tab")(?=[^>]*aria-selected="true")[^>]*aria-label="([^"]*)"/.exec(
+      html,
+    )?.[1];
+
+  it('opens on the currency the read chose, says why, and replaces the left-out note', () => {
+    const html = render({ read: travelling });
+    expect(html).toMatch(/<div\b(?=[^>]*role="tablist")(?=[^>]*aria-label="Spending in")/);
+    expect(selectedTab(html)).toBe('EUR, €640.00 spent in 4 Expenses');
+    expect(text(html)).toContain(
+      'Opened on EUR, the currency with the most Expenses (4). Switch to see INR and USD on their own.',
+    );
+    expect(text(html)).not.toMatch(/left out|Kept apart/);
+  });
+
+  it('says only that each currency is shown on its own once one is chosen', () => {
+    const html = render({ read: { ...travelling, currency: 'USD' }, currency: 'USD' });
+    expect(selectedTab(html)).toBe('USD, $50.00 spent in 1 Expense');
+    expect(text(html)).toContain('Each currency is shown on its own; nothing is converted.');
+  });
+
+  it('shows a read in another currency as loading, never under the chosen one', () => {
+    const html = render({ read: travelling, currency: 'USD' });
+    expect(html).toContain('aria-busy="true"');
+    expect(selectedTab(html)).toBeUndefined();
+  });
+
+  it('shows no switch while one currency is spent in', () => {
+    const html = render({
+      read: { ...READ, currencies: [{ currency: 'INR', expenseCount: 4, spentMinor: 1 }] },
+    });
+    expect(html).not.toContain('aria-label="Spending in"');
+  });
+});
