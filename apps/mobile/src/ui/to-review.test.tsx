@@ -139,6 +139,8 @@ function fixture(
      * server reviews it as CURRENCY_NOT_LISTED until CHF is added or its currency changed.
      */
     francs?: boolean;
+    /** Dinner in Zürich's amount in francs, when it isn't 86.00. */
+    francAmount?: number;
     /** With Maple House's list full: 4 extra currencies, the most a Group can have. */
     fullList?: boolean;
   } = {},
@@ -187,7 +189,7 @@ function fixture(
   let extras: string[] = [];
   if (options.francs) {
     extras = options.fullList ? ['EUR', 'JPY', 'GBP', 'USD'] : ['EUR', 'JPY'];
-    const dinner = row(7, 'Dinner in Zürich', 86);
+    const dinner = row(7, 'Dinner in Zürich', options.francAmount ?? 86);
     items = [review({ ...dinner, values: { ...dinner.values, currency: 'CHF' } })];
   }
   /** The server's review now, against the Group's currencies (#732). */
@@ -1351,8 +1353,8 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     (node?.findAll((child) => String(child.type) === 'Text') ?? [])
       .map((child) => child.children.filter((part) => typeof part === 'string').join(''))
       .join('\n');
-  async function opened(mode: 'light' | 'dark' = 'light', fullList = false) {
-    const f = fixture({ francs: true, fullList });
+  async function opened(mode: 'light' | 'dark' = 'light', fullList = false, francAmount?: number) {
+    const f = fixture({ francs: true, fullList, francAmount });
     await signIn(f);
     await act(async () => {
       await f.controller.openToReview(groupId);
@@ -1456,5 +1458,63 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     expect(add.props.disabled).toBe(true);
     expect(add.props.accessibilityHint).toBe('Adding a currency needs a connection.');
     expect(f.calls).not.toContain(`POST /api/groups/${groupId}/currencies`);
+  });
+
+  it('offline, says once at the top that both fixes need a connection', async () => {
+    const { f, list } = await opened();
+    await tap(list, 'Review Dinner in Zürich');
+    f.goOffline();
+    await act(async () => {
+      await f.controller.refresh();
+    });
+    const shown = words(dialog(list, 'Dinner in Zürich'));
+    const offline = 'You’re offline. Adding or changing a currency needs a connection.';
+    expect(shown.split(offline)).toHaveLength(2);
+    expect(shown.indexOf(offline)).toBeLessThan(shown.indexOf('86.00'));
+    expect(shown.indexOf(offline)).toBeLessThan(
+      shown.indexOf('CHF isn’t one of Maple House’s currencies.'),
+    );
+    // The captions under each fix stay as they are.
+    expect(shown).toContain('Adding a currency needs a connection.\n');
+    expect(shown).toContain(
+      'Changing keeps 86.00 and changes only the currency; nothing is converted.',
+    );
+    expect(button(list, 'Change currency').props.disabled).toBe(true);
+    setWindow({ width: 360, height: 780, fontScale: 2 });
+    expect(unreadText(list.toJSON() as ReactTestRendererJSON, 2, 360)).toEqual([]);
+  });
+
+  it('says a yen amount without decimals: 86.00 becomes ¥86', async () => {
+    const { list } = await opened();
+    await tap(list, 'Review Dinner in Zürich');
+    await tap(list, 'Change currency');
+    await tap(list, 'JPY, Japanese Yen, whole amounts only');
+    expect(words(dialog(list, 'Change currency'))).toContain(
+      'The amount stays 86.00, so it becomes ¥86. Splitbook doesn’t convert it; check it against the receipt.',
+    );
+    expect(button(list, 'Use JPY')).toBeDefined();
+  });
+
+  it('doesn’t offer yen for 86.50, which has no smaller unit to keep the 50 in', async () => {
+    const { f, list } = await opened('light', false, 86.5);
+    await tap(list, 'Review Dinner in Zürich');
+    await tap(list, 'Change currency');
+    const yen = button(list, 'JPY, Japanese Yen, whole amounts only, can’t keep 86.50');
+    expect(yen.props.accessibilityState).toMatchObject({ disabled: true, checked: false });
+    expect(words(dialog(list, 'Change currency'))).toContain(
+      'Whole amounts only · Can’t keep 86.50',
+    );
+    await tap(list, 'JPY, Japanese Yen, whole amounts only, can’t keep 86.50');
+    expect(button(list, 'Use JPY')).toBeUndefined();
+    expect(button(list, 'Choose a currency')).toBeDefined();
+    await tap(list, 'EUR, Euro');
+    expect(words(dialog(list, 'Change currency'))).toContain(
+      'The amount stays 86.50, so it becomes €86.50.',
+    );
+    await tap(list, 'Use EUR');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(f.puts.at(-1)?.values).toMatchObject({ amount: 86.5, currency: 'EUR' });
   });
 });
