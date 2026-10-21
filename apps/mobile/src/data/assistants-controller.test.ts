@@ -38,6 +38,10 @@ function fixture() {
     assistantsOff: false,
     /** The next Disconnect fails on the server. */
     failRevoke: false,
+    /** The next read of the connection list waits for this, answering with the list as it was asked. */
+    holdNextRead: null as Promise<void> | null,
+    /** Splitbook can't be reached once a Disconnect is answered. */
+    offlineAfterRevoke: false,
     connections: [helper, reader],
   };
   let cookie: string | null = null,
@@ -77,11 +81,11 @@ function fixture() {
       return json({ status: 200, data: { buckets: [], groups: [] } });
     if (path === connectionsPath) {
       if (server.assistantsOff) return json({ message: 'Not found' }, 404);
-      return json({
-        resource: 'http://localhost:4157/api/mcp',
-        connections: server.connections,
-        nextOffset: null,
-      });
+      const connections = server.connections,
+        hold = server.holdNextRead;
+      server.holdNextRead = null;
+      await hold;
+      return json({ resource: 'http://localhost:4157/api/mcp', connections, nextOffset: null });
     }
     if (path === '/api/user/assistant-groups') {
       if (server.assistantsOff) return json({ error: 'Assistants not found', status: 404 }, 404);
@@ -100,6 +104,7 @@ function fixture() {
       bodies.push({ id });
       if (server.failRevoke) return json({ message: 'Something went wrong' }, 500);
       server.connections = server.connections.filter((connection) => connection.id !== id);
+      if (server.offlineAfterRevoke) server.offline = true;
       return json({ disconnected: true });
     }
     throw new Error(`Unexpected fixture request ${method} ${path}`);
@@ -338,6 +343,39 @@ describe('Connected assistants on Android (#622)', () => {
     // Not known to be switched on: Settings doesn't offer it.
     expect(restarted.getSnapshot().assistants.available).toBeNull();
     restarted.dispose();
+  });
+
+  it('never brings back an assistant from a read that started before its Disconnect', async () => {
+    const f = fixture();
+    const { controller, state } = await readOnline(f);
+    let release!: () => void;
+    f.server.holdNextRead = new Promise((resolve) => (release = resolve));
+    // A pull reads the list as it is now, with Fictional Helper, and its answer is held.
+    const pulling = controller.refresh('pull');
+    await vi.waitFor(() => expect(f.server.holdNextRead).toBeNull());
+    controller.askDisconnectAssistant('c1');
+    await controller.disconnectAssistant();
+    // The read after the Disconnect has answered; only then does the pull's answer land.
+    release();
+    await pulling;
+    await vi.waitFor(() => expect(state().status).toBe('ready'));
+    expect(state().assistants?.map((assistant) => assistant.name)).toEqual(['Fictional Reader']);
+    await vi.waitFor(() => expect(f.savedAssistants()).toEqual(['Fictional Reader']));
+    controller.dispose();
+  });
+
+  it('never shows a disconnected assistant from the Saved copy, even when it can’t read again', async () => {
+    const f = fixture();
+    const { controller, state } = await readOnline(f);
+    f.server.offlineAfterRevoke = true;
+    controller.askDisconnectAssistant('c1');
+    await controller.disconnectAssistant();
+    await vi.waitFor(() => expect(state().status).not.toBe('loading'));
+    expect(state().assistants?.map((assistant) => assistant.name) ?? []).not.toContain(
+      'Fictional Helper',
+    );
+    expect(f.savedAssistants() ?? []).not.toContain('Fictional Helper');
+    controller.dispose();
   });
 
   it('forgets its Saved copy at sign-out', async () => {

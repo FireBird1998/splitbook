@@ -108,9 +108,9 @@ describe('Connected assistants (#622)', () => {
     ])
       expect(shown).toContain(line);
     expect(shown).toMatch(/Last used \d/);
-    act(() => pressable('Disconnect Fictional Reader').props.onPress());
+    act(() => pressable('Disconnect Fictional Reader, Not used yet').props.onPress());
     expect(actions.onAsk).toHaveBeenCalledWith('c2');
-    expect(pressable('Disconnect Fictional Helper')).toBeTruthy();
+    expect(pressable('Disconnect Fictional Helper, helper.example.test')).toBeTruthy();
   });
 
   it('says connecting and changing Groups happen on the web', () => {
@@ -156,8 +156,11 @@ describe('Connected assistants (#622)', () => {
     render(listed({ saved: true, confirming: 'c1' }), { offline: true });
     expect(screenText()).toMatch(/Saved \d/);
     // Read only: no row's Disconnect can be pressed, and the screen says why.
-    for (const name of ['Fictional Helper', 'Fictional Reader'])
-      expect(pressable(`Disconnect ${name}`).props.disabled, name).toBe(true);
+    for (const label of [
+      'Disconnect Fictional Helper, helper.example.test',
+      'Disconnect Fictional Reader, Not used yet',
+    ])
+      expect(pressable(label).props.disabled, label).toBe(true);
     expect(screenText().split('Disconnecting needs a connection.').length).toBeGreaterThan(2);
     expect(pressable('Disconnect').props.disabled).toBe(true);
     expect(sheet()).toContain('Disconnecting needs a connection.');
@@ -252,8 +255,7 @@ describe('Settings → Account (#622)', () => {
           }}
           onOpenWeb={vi.fn()}
           onSignOut={vi.fn()}
-          assistantsAvailable={assistantsAvailable}
-          onOpenAssistants={onOpenAssistants}
+          onOpenAssistants={assistantsAvailable ? onOpenAssistants : undefined}
         />,
       );
     });
