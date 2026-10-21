@@ -375,8 +375,9 @@ export function connectionTests(mongo = false) {
       const originalUpdate = adapter.update.bind(adapter);
       let failLastUse = false;
       const update = vi.spyOn(adapter, 'update').mockImplementation(async (args) => {
+        // Every last-use write fails while the flag is up: the transport's background stream can
+        // reach its grant check after the clock moves, and must not use up a one-shot failure.
         if (args.model === 'mcpConnection' && failLastUse) {
-          failLastUse = false;
           throw new Error('Synthetic last-use storage failure');
         }
         return originalUpdate(args);
@@ -397,6 +398,7 @@ export function connectionTests(mongo = false) {
         expect(warning).toHaveBeenCalledWith(
           'Could not record assistant last use; the next authorized call will retry.',
         );
+        failLastUse = false;
         await client.listTools();
         expect((await connectionList())[0].lastUsedAt).toBe(later.toISOString());
       } finally {
