@@ -18,7 +18,7 @@ const event = (number: number) => ({
   createdAt: new Date(Date.UTC(2026, 9, 21, 12, 0, -number)).toISOString(),
   metadata: { description: `Expense ${number}`, amount: 10, currency: 'INR' },
 });
-const answer = (page: number, events: ReturnType<typeof event>[], total = 51) =>
+const answer = (page: number, events: readonly unknown[], total = 51) =>
   Response.json({
     status: 200,
     data: {
@@ -280,3 +280,78 @@ it('reads its pages again when a save refreshes the Group’s reads and its time
   });
   expect(headlines()).toEqual(['You added “Expense 1”', 'You added “Expense 2”']);
 });
+
+it.each([false, true])(
+  'joins a batch across the 50-event boundary after Load older activity (shifted page: %s)',
+  async (shifted) => {
+    const batchId = 'f00000000000000000000001';
+    const payment = (number: number, metadata: Record<string, unknown>) => ({
+      ...event(number),
+      type: 'settlement_recorded',
+      metadata: {
+        paidBy: VIEWER,
+        paidByName: 'Alex Rivera',
+        paidTo: 'a00000000000000000000002',
+        paidToName: 'Sam Chen',
+        batchId,
+        batchSize: 2,
+        ...metadata,
+      },
+    });
+    const euros = payment(50, {
+      settlementId: 'f00000000000000000000002',
+      currency: 'EUR',
+      amount: 20,
+      amountMinor: 2000,
+      paidCurrency: 'INR',
+      amountPaidMinor: 184200,
+      appliedRate: '92.1',
+      rateKind: 'custom',
+    });
+    const rupees = payment(51, {
+      settlementId: batchId,
+      currency: 'INR',
+      amount: 1480,
+      amountMinor: 148000,
+    });
+    const first = [...Array.from({ length: 49 }, (_, i) => event(i + 1)), euros];
+    api.mockResolvedValueOnce(answer(1, first, 52));
+    api.mockResolvedValueOnce(answer(1, first, shifted ? 53 : 52));
+    // A new event between the two reads shifts the last event onto page 2 again.
+    api.mockResolvedValueOnce(
+      answer(2, [...(shifted ? [euros] : []), rupees, event(52)], shifted ? 53 : 52),
+    );
+    const paymentRows = () =>
+      renderer.root
+        .findAllByType('button')
+        .filter((node) => textOf(node).includes('You paid Sam Chen'));
+    await render();
+    expect(headlines()).toHaveLength(49);
+    expect(paymentRows()).toHaveLength(1);
+    expect(textOf(paymentRows()[0])).toContain('to clear €20.00 and 1 more Debt');
+    expect(textOf(paymentRows()[0])).toContain('The rest of this payment is in older Activity.');
+
+    // Keep the card open too: the same payment gains the missing Debt instead of disappearing.
+    await act(async () => paymentRows()[0].props.onClick());
+    await act(async () => button('Load older activity')!.props.onClick());
+    expect(paymentRows()).toHaveLength(1);
+    expect(textOf(paymentRows()[0])).toContain(
+      'You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00',
+    );
+    expect(textOf(paymentRows()[0])).toContain('₹1,480.00, same currency, no rate');
+    expect(textOf(paymentRows()[0])).toContain('€20.00 at ₹92.10 per €; no rate suggested');
+    expect(paymentRows()[0].props['aria-expanded']).toBe(true);
+    expect(textOf(renderer.root)).not.toContain('1 more Debt');
+    expect(textOf(renderer.root)).not.toContain('The rest of this payment is in older Activity.');
+    expect(headlines()).toHaveLength(50);
+    expect(headlines().at(-1)).toBe('You added “Expense 52”');
+    const words = textOf(renderer.root);
+    expect(words.indexOf('You added “Expense 49”')).toBeLessThan(
+      words.indexOf('You paid Sam Chen'),
+    );
+    expect(words.indexOf('You paid Sam Chen')).toBeLessThan(
+      words.indexOf('You added “Expense 52”'),
+    );
+    expect(button('Load older activity')).toBeUndefined();
+  },
+);
