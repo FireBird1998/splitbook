@@ -182,6 +182,23 @@ describe('To review quick fixes', () => {
     expect(toReviewQuickFixes(pair, context).summary).toBe('2 people paid · Split equally · Food');
   });
 
+  // #793: a needs-details item whose payer and split are known says what saving it records.
+  it('sums up an item that needs something else once its payer and split are known', () => {
+    const unlisted = (values: ExpenseDraftValues, missing: string[] = []) => ({
+      ...item(values, missing),
+      problems: ['CURRENCY_NOT_LISTED'],
+    });
+    const [francs, unpaid, unsplit] = model(
+      unlisted({ ...full, currency: 'CHF' }),
+      unlisted({ ...full, currency: 'CHF', paidBy: undefined }, ['paidBy']),
+      unlisted({ ...full, currency: 'CHF', splitBetween: undefined }, ['splitBetween']),
+    );
+    expect(francs.state).toBe('needs-details');
+    expect(toReviewQuickFixes(francs, context).summary).toBe('You paid · Split equally · Food');
+    expect(toReviewQuickFixes(unpaid, context).summary).toBeNull();
+    expect(toReviewQuickFixes(unsplit, context).summary).toBeNull();
+  });
+
   it('keeps a lone payer without an amount, and sets the Tag identity over its name', () => {
     const values: ExpenseDraftValues = { ...full, paidBy: undefined, tag: 'Old name' };
     expect(applyQuickFix(values, 'paidBy', sam)).toEqual({
