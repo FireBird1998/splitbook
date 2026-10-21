@@ -195,6 +195,18 @@ describe("Home's latest changes (#309)", () => {
     ['member_left', { method: 'removed' }, 'removed a member', null],
     ['group_created', { groupName: 'Maple House' }, 'created the Group', null],
     ['group_updated', { changes: { name: {} } }, 'updated the Group', null],
+    [
+      'group_updated',
+      { changes: { alternateCurrencies: { old: ['EUR'], new: ['EUR', 'CHF'] } } },
+      'added the extra currency CHF',
+      null,
+    ],
+    [
+      'group_updated',
+      { changes: { alternateCurrencies: { old: ['EUR', 'GBP'], new: ['EUR'] } } },
+      'removed the extra currency GBP',
+      null,
+    ],
     ['something_new', {}, 'made a change', null],
   ])('says who did what: %s %j', (type, metadata, action, subject) => {
     expect(activityLineParts(event(type, metadata))).toEqual({
@@ -288,5 +300,34 @@ describe("Home's latest changes (#309)", () => {
         'INR',
       ),
     ).toBeNull();
+  });
+});
+
+describe('a change to the extra currencies in Activity (#721)', () => {
+  const sam = { _id: 'a00000000000000000000002', name: 'Sam' };
+  const change = (old: string[], next: string[], others: Record<string, unknown> = {}) => ({
+    _id: 'e1',
+    type: 'group_updated',
+    createdAt: '2026-10-21T09:00:00.000Z',
+    actor: sam,
+    metadata: { changes: { alternateCurrencies: { old, new: next }, ...others } },
+  });
+
+  it('names who added or removed which currency', () => {
+    expect(formatActivityHeadline(change(['EUR'], ['EUR', 'CHF']))).toBe(
+      'Sam added the extra currency CHF',
+    );
+    expect(formatActivityHeadline(change(['EUR', 'GBP'], ['EUR']), sam._id)).toBe(
+      'You removed the extra currency GBP',
+    );
+  });
+
+  it('keeps the general words when the same save changed other settings', () => {
+    expect(
+      formatActivityHeadline(change(['EUR'], ['EUR', 'CHF'], { name: { old: 'a', new: 'b' } })),
+    ).toBe('Sam updated group settings');
+    expect(
+      activityLineParts(change(['EUR'], ['EUR', 'CHF'], { name: { old: 'a', new: 'b' } })).action,
+    ).toBe('updated the Group');
   });
 });

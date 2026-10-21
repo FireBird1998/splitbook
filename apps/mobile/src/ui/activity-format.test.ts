@@ -312,6 +312,21 @@ describe('Group edits in plain language', () => {
     expect(JSON.stringify(line)).not.toMatch(/[0-9a-f]{24}/);
   });
 
+  it('names the extra currency added or removed (#721)', () => {
+    expect(
+      read(edit({ alternateCurrencies: { old: ['EUR'], new: ['EUR', 'CHF'] } }, priya)),
+    ).toEqual({
+      headline: 'Priya Shah added the extra currency CHF, 11:05',
+      details: [],
+      changes: ['Extra currencies EUR → EUR, CHF'],
+    });
+    expect(read(edit({ alternateCurrencies: { old: ['EUR', 'GBP'], new: ['EUR'] } }))).toEqual({
+      headline: 'You removed the extra currency GBP, 11:05',
+      details: [],
+      changes: ['Extra currencies EUR, GBP → EUR'],
+    });
+  });
+
   it('shows a rename, a currency change and archiving plainly', () => {
     expect(read(edit({ name: { old: 'Maple House', new: 'Maple Flat' } }))).toEqual({
       headline: 'You renamed the Group, “Maple House” → “Maple Flat”, 11:05',
