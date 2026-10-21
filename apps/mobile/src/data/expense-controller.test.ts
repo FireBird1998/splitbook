@@ -4591,6 +4591,101 @@ describe('an Expense in one of the Group’s currencies (#720)', () => {
     expect(state.posted).toEqual([]);
   });
 
+  // #722: a member abroad adds a currency to the Group straight from the Expense form.
+  describe('adding a currency from the form (#722)', () => {
+    const settings = (extras: string[]) => ({
+      mainCurrency: { code: 'INR', locked: true },
+      extraCurrencies: extras.map((code) => ({
+        code,
+        use: {
+          expenses: { count: 0, items: [] },
+          settlements: 0,
+          toReview: { yours: 0, others: 0 },
+        },
+        added: { by: { _id: memberIds[0], name: 'Alex' }, at: iso },
+      })),
+    });
+    /** The Group's server: its currencies grow with each one added, as the server's do. */
+    const currencies = (answer?: { status: number; body: unknown }) => {
+      const state = { offline: false, extras: ['EUR', 'JPY'], added: [] as unknown[] };
+      const intercept = (path: string, init: RequestInit) => {
+        // Every add the phone sends, even one that can't reach the server.
+        if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST')
+          state.added.push(JSON.parse(String(init.body)));
+        if (state.offline && path.startsWith(`/api/groups/${groupId}`))
+          return Promise.reject(new Error('Offline'));
+        if (path === `/api/groups/${groupId}`)
+          return Promise.resolve(
+            json({ data: { ...travelling, alternateCurrencies: state.extras }, status: 200 }),
+          );
+        if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST') {
+          const sent = JSON.parse(String(init.body)) as { currency: string };
+          if (answer) return Promise.resolve(json(answer.body, answer.status));
+          state.extras = [...state.extras, sent.currency];
+          return Promise.resolve(json({ status: 201, data: settings(state.extras) }, 201));
+        }
+      };
+      return { state, intercept };
+    };
+
+    it('adds it to the Group, and the Expense being entered is then in it', async () => {
+      const { state, intercept } = currencies();
+      const { controller } = setup(intercept);
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ amount: '18', description: 'Fondue', tagId });
+      expect(await controller.addGroupCurrency('CHF')).toBe(true);
+      expect(state.added).toEqual([{ currency: 'CHF' }]);
+      const { expense, currencyAdd } = controller.getSnapshot();
+      expect(expense.context?.group.alternateCurrencies).toEqual(['EUR', 'JPY', 'CHF']);
+      expect(expense.draft).toMatchObject({ currency: 'CHF', amount: '18' });
+      expect(currencyAdd).toMatchObject({ status: 'idle', message: null });
+    });
+
+    it('says why the Group refused it, and the Expense keeps its currency', async () => {
+      const { intercept } = currencies({
+        status: 422,
+        body: {
+          error: 'A Group can have at most 4 extra currencies.',
+          code: 'INVALID_GROUP_CURRENCIES',
+          status: 422,
+        },
+      });
+      const { controller } = setup(intercept);
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      expect(await controller.addGroupCurrency('CHF')).toBe(false);
+      expect(controller.getSnapshot().currencyAdd).toMatchObject({
+        status: 'error',
+        message: 'A Group can have at most 4 extra currencies.',
+      });
+      expect(controller.getSnapshot().expense.draft?.currency).toBe('JPY');
+    });
+
+    it('needs a connection: offline it sends nothing', async () => {
+      const copies = new Map<string, unknown>();
+      const { state, intercept } = currencies();
+      const { controller, create } = setup(intercept, { savedQueries: savedQueriesIn(copies) });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      await vi.waitFor(() =>
+        expect(copies.has(memberIds[0] + `/api/groups/${groupId}`)).toBe(true),
+      );
+      controller.dispose();
+      state.offline = true;
+      const restarted = create();
+      try {
+        await restarted.restore();
+        await restarted.openExpense(groupId);
+        expect(restarted.getSnapshot().offline.active).toBe(true);
+        expect(await restarted.addGroupCurrency('CHF')).toBe(false);
+        expect(state.added).toEqual([]);
+      } finally {
+        restarted.dispose();
+      }
+    });
+  });
+
   it('offline, picks from the currencies saved on this phone and keeps the Expense there', async () => {
     const copies = new Map<string, unknown>();
     const { state, intercept } = server(travelling);

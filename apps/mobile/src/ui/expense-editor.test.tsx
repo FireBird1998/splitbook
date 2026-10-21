@@ -87,6 +87,7 @@ function backend({
   refuseRetries = false,
   holdCreate,
   readGroup,
+  addCurrency,
   now = () => localNoon,
 }: {
   record?: Record<string, unknown>;
@@ -101,6 +102,8 @@ function backend({
   /** Creates wait for this before they're answered, so a save stays in flight. */
   holdCreate?: Promise<void>;
   readGroup?: () => Promise<FetchResponse>;
+  /** Answers a currency added to the Group (#722). */
+  addCurrency?: (sent: { currency: string }) => Promise<FetchResponse>;
   now?: () => number;
 } = {}) {
   const writes: string[] = [];
@@ -130,6 +133,8 @@ function backend({
       return json({ user: alex, session: { userId: memberId, expiresAt: '2030-01-01T00:00:00Z' } });
     if (path === `/api/groups/${groupId}`)
       return readGroup ? readGroup() : json({ data: group, status: 200 });
+    if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST' && addCurrency)
+      return addCurrency(JSON.parse(String(init.body)));
     if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
       if (init.method === 'PATCH') {
         edits.push(String(init.body));
@@ -2053,6 +2058,90 @@ describe('the currency beside the amount (#720)', () => {
       'Yen has no smaller unit. Enter a whole amount, like ¥2,500.',
     );
     expect(text(ui.root())).not.toContain('Amount supports at most');
+    expect(ui.writes).toEqual([]);
+  });
+
+  // #722, boards "Pick the currency" and "Add a currency": a member abroad adds one to the Group
+  // from the Currency sheet, and the Expense is then in it.
+  it('offers Add a currency in the Currency sheet, and adds one found by a search (#722)', async () => {
+    let extras = ['EUR', 'JPY'];
+    const ui = await render((controller) => controller.openExpense(groupId), {
+      readGroup: async () =>
+        json({ status: 200, data: { ...travelling, alternateCurrencies: extras } }),
+      addCurrency: async ({ currency }) => {
+        extras = [...extras, currency];
+        return json(
+          {
+            status: 201,
+            data: {
+              mainCurrency: { code: 'INR', locked: true },
+              extraCurrencies: extras.map((code) => ({
+                code,
+                use: {
+                  expenses: { count: 0, items: [] },
+                  settlements: 0,
+                  toReview: { yours: 0, others: 0 },
+                },
+                added: null,
+              })),
+            },
+          },
+          201,
+        );
+      },
+    });
+    await ui.type('Amount, Japanese Yen, required', '18');
+    await ui.press('Currency, JPY, Japanese Yen. Change currency');
+    const add = ui.pressable('Add a currency. Adds it to Lisbon and Tokyo for everyone');
+    expect(add.props.accessibilityRole).toBe('button');
+    await ui.press('Add a currency. Adds it to Lisbon and Tokyo for everyone');
+    const sheet = visibleSheet(ui.root(), 'Add a currency')!;
+    expect(text(sheet)).toContain('Lisbon and Tokyo · 2 of 4 extra currencies');
+    expect(text(sheet)).toContain(
+      'INR, EUR and JPY are already on the list, so they aren’t shown.',
+    );
+    expect(radios(sheet).map(({ label }) => label)).not.toContain('EUR, Euro');
+    await ui.type('Search currencies', 'swiss');
+    expect(radios(visibleSheet(ui.root(), 'Add a currency')!)).toEqual([
+      { label: 'CHF, Swiss Franc', checked: false, disabled: false },
+    ]);
+    await ui.press('CHF, Swiss Franc');
+    expect(text(visibleSheet(ui.root(), 'Add a currency')!)).toContain(
+      'Everyone in Lisbon and Tokyo can then use CHF.',
+    );
+    await ui.press('Add CHF');
+    expect(ui.writes).toEqual([`POST /api/groups/${groupId}/currencies`]);
+    expect(visibleSheet(ui.root(), 'Add a currency')).toBeUndefined();
+    expect(ui.controller.getSnapshot().expense.draft).toMatchObject({
+      currency: 'CHF',
+      amount: '18',
+    });
+    expect(ui.pressable('Currency, CHF, Swiss Franc. Change currency')).toBeDefined();
+  });
+
+  it('offline, says adding a currency needs a connection (#722)', async () => {
+    let time = localNoon;
+    let disconnected = false;
+    const ui = await render(
+      async (controller) => {
+        await controller.openGroup(groupId);
+        await controller.back();
+        disconnected = true;
+        time += 31_000;
+        await controller.openExpense(groupId);
+      },
+      {
+        now: () => time,
+        readGroup: async () => {
+          if (disconnected) throw new Error('Offline');
+          return json({ status: 200, data: travelling });
+        },
+      },
+    );
+    await ui.press('Currency, JPY, Japanese Yen. Change currency');
+    const add = ui.pressable('Add a currency. Needs a connection');
+    expect(add.props.accessibilityState).toMatchObject({ disabled: true });
+    expect(text(visibleSheet(ui.root(), 'Currency')!)).toContain('Needs a connection');
     expect(ui.writes).toEqual([]);
   });
 
