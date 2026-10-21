@@ -223,6 +223,26 @@ describe('paying a euro Debt in rupees (#727)', () => {
     expect(fields()).toEqual(['20.00', '92.50', '1850']);
   });
 
+  // The Tester found this unpinned: keeping the rupee entry across a switch to yen recorded
+  // ¥1,850 for a €20.00 Debt, at the rupee rate, as the payer's own (#727).
+  it('starts afresh at the new currency’s suggestion when the paying currency changes', async () => {
+    await open({ status: 'ready', suggestion: frankfurter });
+    await type('record-payment-paid', '1850');
+    expect(fields()).toEqual(['20.00', '92.50', '1850']);
+
+    rate.state = { status: 'ready', suggestion: { ...frankfurter, rate: '160' } };
+    await press(radio('JPY'));
+
+    expect(fields()).toEqual(['20.00', '160.00', '3200']);
+    await submit();
+    expect(saved.payments[0]).toMatchObject({
+      paidCurrency: 'JPY',
+      amountPaidMinor: 3200,
+      appliedRate: '160',
+      rateKind: 'suggested',
+    });
+  });
+
   it('clears part of the Debt, and says what stays to pay', async () => {
     await open({ status: 'ready', suggestion: frankfurter });
 
