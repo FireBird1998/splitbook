@@ -26,6 +26,7 @@ const ACTIVITY_ICONS: Record<string, string> = {
   member_left: '👋',
   group_created: '🎉',
   group_updated: '⚙️',
+  assistant_rule_changed: '🤖',
 };
 
 interface ActivityViewProps {

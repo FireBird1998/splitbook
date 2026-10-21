@@ -1,5 +1,12 @@
+import { assistantRuleLabel } from '@splitbook/shared/assistant-rule';
 import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST } from '@splitbook/shared/group-themes';
+import {
+  extraCurrencyChange,
+  extraCurrencyChangeDetail,
+  extraCurrencyChangeWords,
+  type ExtraCurrencyChangeRecord,
+} from '@splitbook/shared/group-currency-settings';
 import type { ActivityEvent } from '../data/activity';
 import {
   describeExpenseChanges,
@@ -162,7 +169,7 @@ const groupFields = new Map<
   ['defaultCurrency', { label: 'Currency', verb: 'changed the currency', value: currencies }],
   [
     'alternateCurrencies',
-    { label: 'Other currencies', verb: 'changed the other currencies', value: currencies },
+    { label: 'Extra currencies', verb: 'changed the extra currencies', value: currencies },
   ],
   ['startDate', { label: 'Start date', verb: 'changed the dates', value: calendarDay }],
   ['endDate', { label: 'End date', verb: 'changed the dates', value: calendarDay }],
@@ -182,7 +189,13 @@ function groupChange(
     names,
     currentUserId,
     actorId,
-  }: { names: Map<string, string>; currentUserId: string; actorId?: string },
+    record,
+  }: {
+    names: Map<string, string>;
+    currentUserId: string;
+    actorId?: string;
+    record: ExtraCurrencyChangeRecord;
+  },
 ): GroupChange | null {
   if (field === 'memberRole') {
     const was = fields(change.old);
@@ -227,9 +240,14 @@ function groupChange(
   if (!known) return null;
   const before = known.value(change.old);
   const after = known.value(change.new);
+  // A change to the Group's currencies reads as the web's Activity does (#721).
+  const listChange = field === 'alternateCurrencies' && extraCurrencyChange({ [field]: change });
   return {
-    headline: { verb: known.verb, subject: null },
-    summary: `${before} → ${after}`,
+    headline: {
+      verb: listChange ? extraCurrencyChangeWords(listChange) : known.verb,
+      subject: null,
+    },
+    summary: listChange ? extraCurrencyChangeDetail(listChange, record) : `${before} → ${after}`,
     line: { label: known.label, before, after },
   };
 }
@@ -243,7 +261,12 @@ function describeGroupChanges(
   {
     members,
     ...context
-  }: { members: { id: string; name: string }[]; currentUserId: string; actorId?: string },
+  }: {
+    members: { id: string; name: string }[];
+    currentUserId: string;
+    actorId?: string;
+    record: ExtraCurrencyChangeRecord;
+  },
 ): GroupChange[] {
   const names = new Map(members.map((member) => [member.id, member.name]));
   const described = Object.entries(changes).map(([field, change]) =>
@@ -339,6 +362,7 @@ export function describeActivity(
         members,
         currentUserId,
         actorId: event.actor?._id,
+        record: meta,
       });
       const [first] = changes;
       if (!first) return line('updated the Group details', null, []);
@@ -350,6 +374,12 @@ export function describeActivity(
         complement: first.headline.complement,
         changes: changes.map((change) => changeDetail(change.line)),
       };
+    }
+    case 'assistant_rule_changed': {
+      const rule = assistantRuleLabel(meta.rule);
+      return rule
+        ? line('set connected assistants to', rule, [])
+        : line('changed connected assistants', null, []);
     }
     default:
       return line('changed the Group', null, []);

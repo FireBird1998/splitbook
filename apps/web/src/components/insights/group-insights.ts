@@ -7,7 +7,7 @@
  * names one (`?month=2026-09`), and `?compare=` says how many Months before it to compare it
  * with (1, 6 or 12). The average never includes the Month itself.
  */
-import { formatCurrency } from '@splitbook/shared/currency';
+import { CURRENCY_CODES, formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import type { GroupInsightsRead } from '@splitbook/shared/group-insights-read';
 import { COMPARE_MONTHS, type ChangeDirection } from '@splitbook/shared/insights';
@@ -19,10 +19,12 @@ export type CompareChoice = (typeof COMPARE_MONTHS.choices)[number];
 export const COMPARE_CHOICES: readonly CompareChoice[] = COMPARE_MONTHS.choices;
 export const DEFAULT_COMPARE: CompareChoice = COMPARE_MONTHS.default;
 
-/** The Month and the earlier-Month count the tab shows. */
+/** The Month and the earlier-Month count the tab shows, and the currency once one is chosen. */
 export interface InsightsAddress {
   month: string;
   compare: CompareChoice;
+  /** Chosen on the currency switch (#729); without it, the read opens on the most-spent. */
+  currency?: string;
 }
 
 interface SearchParamsLike {
@@ -42,9 +44,11 @@ export function readInsightsAddress(
 ): InsightsAddress {
   const month = params.get('month');
   const compare = Number(params.get('compare'));
+  const currency = params.get('currency');
   return {
     month: isMonthKey(month) && month <= currentMonth ? month : currentMonth,
     compare: isCompareChoice(compare) ? compare : DEFAULT_COMPARE,
+    ...(currency && CURRENCY_CODES.includes(currency) ? { currency } : {}),
   };
 }
 
@@ -54,12 +58,13 @@ export function readInsightsAddress(
  */
 export function insightsHref(
   groupId: string,
-  { month, compare }: InsightsAddress,
+  { month, compare, currency }: InsightsAddress,
   currentMonth: string,
 ): string {
   const query = new URLSearchParams();
   if (month !== currentMonth) query.set('month', month);
   if (compare !== DEFAULT_COMPARE) query.set('compare', String(compare));
+  if (currency) query.set('currency', currency);
   return groupTabHref(groupId, 'insights', query);
 }
 

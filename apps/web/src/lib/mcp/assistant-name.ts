@@ -83,6 +83,20 @@ export function assistantDisplay(
   return { name: trusted ?? url?.host ?? 'Assistant', address: assistantAddress(clientId) };
 }
 
+/**
+ * A connection's name, as Settings, an assistant's page and Group settings show it (#615, #747):
+ * its stored name read as the one published, or the published one when none is stored. Either
+ * way, a name posing as another address gives the assistant's own host.
+ */
+export async function connectionName(
+  adapter: ClientAdapter,
+  connection: { clientId: string; name?: string | null },
+): Promise<string> {
+  return connection.name != null
+    ? assistantDisplay(connection.clientId, connection.name).name
+    : (await assistantForApproval(adapter, connection.clientId)).name;
+}
+
 /** The assistant a connection request comes from, as the approval page shows it (#614). */
 export async function assistantForApproval(adapter: ClientAdapter, clientId: string) {
   return assistantDisplay(clientId, await publishedName(adapter, clientId));

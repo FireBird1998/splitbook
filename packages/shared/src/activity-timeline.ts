@@ -1,6 +1,12 @@
+import { assistantRuleLabel } from './assistant-rule';
 import { formatCurrency } from './currency';
 import { formatDate, formatDateTime } from './date';
 import { toMajorAmount } from './exact-money';
+import {
+  extraCurrencyChange,
+  extraCurrencyChangeDetail,
+  extraCurrencyChangeWords,
+} from './group-currency-settings';
 
 export interface ActivityLike {
   _id: string;
@@ -51,6 +57,16 @@ export function memberLabel(id: unknown, name: unknown, viewerId?: string): stri
   return viewerId && id === viewerId ? 'You' : words(name);
 }
 
+/** A Group edit that changed only its extra currencies (#721): what it added and removed. */
+function currencyListChange(changes: unknown) {
+  const only =
+    typeof changes === 'object' &&
+    changes !== null &&
+    Object.keys(changes).length === 1 &&
+    'alternateCurrencies' in changes;
+  return only ? extraCurrencyChange(changes) : null;
+}
+
 /** An event's headline, with the viewer as "You". */
 export function formatActivityHeadline(activity: ActivityLike, viewerId?: string): string {
   const actorName = memberLabel(activity.actor?._id, activity.actor?.name, viewerId) ?? 'Someone';
@@ -81,8 +97,18 @@ export function formatActivityHeadline(activity: ActivityLike, viewerId?: string
         : `${actorName} left the group`;
     case 'group_created':
       return `${actorName} created the group`;
-    case 'group_updated':
-      return `${actorName} updated group settings`;
+    case 'group_updated': {
+      const currencies = currencyListChange(meta.changes);
+      return currencies
+        ? `${actorName} ${extraCurrencyChangeWords(currencies)}`
+        : `${actorName} updated group settings`;
+    }
+    case 'assistant_rule_changed': {
+      const rule = assistantRuleLabel(meta.rule);
+      return rule
+        ? `${actorName} set connected assistants to ${rule}`
+        : `${actorName} changed connected assistants`;
+    }
     default:
       return `${actorName} performed an action`;
   }
@@ -101,6 +127,11 @@ export function formatActivityDetail(activity: ActivityLike, viewerId?: string):
       return formatCurrency(meta.amount, meta.currency);
     }
     return null;
+  }
+
+  if (activity.type === 'group_updated') {
+    const currencies = currencyListChange(meta.changes);
+    return currencies ? extraCurrencyChangeDetail(currencies, meta) : null;
   }
 
   if (activity.type === 'settlement_recorded') {
@@ -129,7 +160,7 @@ export function formatActivityTimestamp(activity: ActivityLike): string {
 export interface ActivityLineParts {
   actor: string;
   action: string;
-  /** The Expense the event is about, by its description; null for any other event. */
+  /** The Expense the event is about, by its description, or the Assistant rule set; else null. */
   subject: string | null;
 }
 
@@ -157,8 +188,16 @@ export function activityLineParts(activity: ActivityLike, viewerId?: string): Ac
       return line(meta.method === 'removed' ? 'removed a member' : 'left the Group');
     case 'group_created':
       return line('created the Group');
-    case 'group_updated':
-      return line('updated the Group');
+    case 'group_updated': {
+      const currencies = currencyListChange(meta.changes);
+      return line(currencies ? extraCurrencyChangeWords(currencies) : 'updated the Group');
+    }
+    case 'assistant_rule_changed': {
+      const rule = assistantRuleLabel(meta.rule);
+      return rule
+        ? line('set connected assistants to', rule)
+        : line('changed connected assistants');
+    }
     default:
       return line('made a change');
   }

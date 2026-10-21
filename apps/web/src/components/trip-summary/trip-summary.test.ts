@@ -311,6 +311,17 @@ describe('the wrap-up', () => {
     expect(model.otherCurrencies).toBeNull();
   });
 
+  it('offers no Record in a currency other than the main one, and says where payments go (#729)', () => {
+    const model = wrapUp(
+      { ...read(), currency: 'EUR' },
+      { groupId: GROUP, userId: ALEX.id, today: '2026-09-25', mainCurrency: 'INR' },
+    );
+    expect(model.rows.map((row) => row.record)).toEqual([null, null]);
+    expect(model.otherCurrencies).toBe(
+      'These are the EUR payments. Payments are recorded in INR, the main currency.',
+    );
+  });
+
   it('links the payer’s own payments with the person they pay, never naming the viewer', () => {
     const model = wrapUp(read(), {
       groupId: GROUP,

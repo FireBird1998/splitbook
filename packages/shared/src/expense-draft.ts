@@ -1,3 +1,4 @@
+import { inAmountWords } from './amount-entry';
 import { moneyParticipantId, normalizeExpenseMoney } from './exact-money';
 import {
   decideExpenseMoneyEdit,
@@ -256,9 +257,14 @@ export class ExpenseDraft {
               : {}),
       })),
     };
-    return this.base
-      ? decideExpenseMoneyEdit(this.base, input).money
-      : normalizeExpenseMoney(input);
+    try {
+      return this.base
+        ? decideExpenseMoneyEdit(this.base, input).money
+        : normalizeExpenseMoney(input);
+    } catch (error) {
+      // Part of a yen paid or shared: the amount field's words, not the money rule's (#755).
+      throw inAmountWords(error, v.currency);
+    }
   }
 
   preview() {

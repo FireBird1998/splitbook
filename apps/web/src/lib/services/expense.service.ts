@@ -37,7 +37,7 @@ import {
   makePendingActivity,
   requestTagForReplay,
 } from '@/lib/financial-write';
-import { lockLedgerCurrency } from '@/lib/ledger-currency';
+import { lockLedgerCurrency, lockRestoredCurrency } from '@/lib/ledger-currency';
 import { assertExpectedRevision } from '@/lib/ledger-revision';
 import mongoose from 'mongoose';
 import {
@@ -159,7 +159,6 @@ export class ExpenseService {
     const memberIds = new Set(group.members.map((member) => String(member.user)));
     assertExpenseParticipants(memberIds, data.paidBy, data.splitBetween);
     assertGroupCurrency(group, data.currency);
-    await lockLedgerCurrency(groupId, data.currency);
     const id = new mongoose.Types.ObjectId();
     const event = makePendingActivity(groupId, 'expense_added', userId, {
       ...(options?.preparedBy ? { preparedBy: options.preparedBy } : {}),
@@ -172,8 +171,10 @@ export class ExpenseService {
     try {
       expense = await withGroupMutation(
         groupId,
-        async () =>
-          Expense.create({
+        async () => {
+          // In the insert's own mutation, so a removal of the currency can't come in between.
+          await lockLedgerCurrency(groupId, data.currency);
+          return Expense.create({
             ...command,
             preparedBy: options?.preparedBy,
             _id: id,
@@ -183,7 +184,8 @@ export class ExpenseService {
             ...(requestKey
               ? { creationRequest: createRequestMetadata(requestKey, command, data.tag) }
               : {}),
-          }),
+          });
+        },
         { ledger: true },
       );
     } catch (error) {
@@ -508,7 +510,20 @@ export class ExpenseService {
         }),
       );
     }
-    await withGroupMutation(access.groupId, async () => expense.save(), { ledger: true });
+    // An edit that keeps an older Expense's currency stays allowed, as the check above says.
+    const currencyMoved = data.currency !== undefined && data.currency !== original.currency;
+    await withGroupMutation(
+      access.groupId,
+      async () => {
+        // A restored Expense, or one moved to another currency, needs its currency still the
+        // Group's (#721), checked in the save's own mutation so a removal can't come in between.
+        if (restoring)
+          await lockRestoredCurrency(access.groupId, expense.currency, access.expenseId);
+        else if (currencyMoved) await lockLedgerCurrency(access.groupId, expense.currency);
+        return expense.save();
+      },
+      { ledger: true },
+    );
     await activityService.publishPending('expenses', expense._id, expense.pendingActivity);
     return expense.populate([
       { path: 'paidBy.user', select: PERSON_FIELDS },

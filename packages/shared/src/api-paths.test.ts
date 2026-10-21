@@ -12,6 +12,7 @@ import {
   homeBalancesPath,
   invitationsPath,
   recurringExpensesPath,
+  groupCurrenciesPath,
   searchPath,
   settlementsPath,
   tripSummaryPath,
@@ -118,10 +119,11 @@ describe("the paths Android's controller builds today", () => {
 });
 
 describe('the reads only the web makes', () => {
-  it('invitations, Settlements and recurring Expenses', () => {
+  it('invitations, Settlements, recurring Expenses and a Group’s currencies', () => {
     expect(invitationsPath()).toBe('/api/invitations');
     expect(settlementsPath(groupId)).toBe(`/api/groups/${groupId}/settlements`);
     expect(recurringExpensesPath(groupId)).toBe(`/api/groups/${groupId}/recurring`);
+    expect(groupCurrenciesPath(groupId)).toBe(`/api/groups/${groupId}/currencies`);
   });
 
   it('a search, with the query as it is searched', () => {
@@ -194,6 +196,12 @@ describe("a Group's insights (#314)", () => {
     );
   });
 
+  it('sends the currency asked for, after the time zone (#729)', () => {
+    expect(groupInsightsPath(groupId, { month: '2026-09', timeZone: 'UTC', currency: 'JPY' })).toBe(
+      `/api/groups/${groupId}/insights?month=2026-09&tz=UTC&currency=JPY`,
+    );
+  });
+
   it('refuses a Group id that would change the route', () => {
     expect(() => groupInsightsPath('..', { timeZone: 'UTC' })).toThrow(RangeError);
     expect(groupInsightsPath('a/b', { timeZone: 'UTC' })).toBe('/api/groups/a%2Fb/insights?tz=UTC');
@@ -209,6 +217,12 @@ describe("a Trip's summary (#316)", () => {
     expect(queryOf(path)).toEqual([['tz', 'Asia/Kolkata']]);
     expect(tripSummaryPath(groupId, { timeZone: 'Etc/GMT+5' })).toBe(
       `/api/groups/${groupId}/trip-summary?tz=Etc%2FGMT%2B5`,
+    );
+  });
+
+  it('sends the currency asked for, after the time zone (#729)', () => {
+    expect(tripSummaryPath(groupId, { timeZone: 'UTC', currency: 'EUR' })).toBe(
+      `/api/groups/${groupId}/trip-summary?tz=UTC&currency=EUR`,
     );
   });
 
@@ -366,6 +380,7 @@ describe('encoding', () => {
       expect(segments(groupBalancesPath(id))).toEqual(['', 'api', 'groups', id, 'balances']);
       expect(segments(settlementsPath(id))).toEqual(['', 'api', 'groups', id, 'settlements']);
       expect(segments(recurringExpensesPath(id))).toEqual(['', 'api', 'groups', id, 'recurring']);
+      expect(segments(groupCurrenciesPath(id))).toEqual(['', 'api', 'groups', id, 'currencies']);
       expect(segments(expenseRecordPath(id, id))).toEqual([
         '',
         'api',

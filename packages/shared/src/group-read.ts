@@ -1,6 +1,7 @@
 /** The Group HTTP read contract. Persistence documents and write validation stay separate. */
 import { z } from 'zod';
 import { getCurrency } from './currency';
+import { ASSISTANT_RULES } from './assistant-rule';
 
 const identity = z.string().regex(/^[a-f\d]{24}$/i);
 const timestamp = z.iso.datetime({ offset: true });
@@ -46,6 +47,9 @@ const group = z.looseObject({
   startDate: timestamp.nullish().transform((value) => value ?? null),
   endDate: timestamp.nullish().transform((value) => value ?? null),
   isArchived: z.boolean().optional().default(false),
+  // Absent on Groups stored before the Assistant rule (#621), which are Allowed.
+  assistantRule: z.enum(ASSISTANT_RULES).optional(),
+  assistantRuleSetBy: identity.nullish(),
   inviteCode: z.string().nullish(),
   inviteCodeExpiresAt: timestamp.nullish(),
   createdAt: timestamp,

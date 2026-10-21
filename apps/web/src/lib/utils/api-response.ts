@@ -10,6 +10,11 @@ import {
   EXPECTED_ACCOUNT_HEADER,
 } from '@/lib/expected-account';
 import { RECURRING_EXPENSES_OFF } from '@/lib/recurring-expenses-switch';
+import {
+  CurrencyInUseError,
+  CurrencyIsMainError,
+  CurrencyNotListedError,
+} from '@/lib/group-currency-refusals';
 
 export interface AuthUser {
   /** 24-hex user id, byte-for-byte the stored ObjectId string. */
@@ -117,6 +122,14 @@ export function serverError(err?: unknown) {
       { status: 422 },
     );
   }
+  // A Group currency removal's refusal says what still uses the currency (#721).
+  if (err instanceof CurrencyInUseError)
+    return NextResponse.json(
+      { error: err.message, status: 409, code: err.code, use: err.use },
+      { status: 409 },
+    );
+  if (err instanceof CurrencyNotListedError) return error(err.message, 404, err.code);
+  if (err instanceof CurrencyIsMainError) return error(err.message, 409, err.code);
   if (err instanceof Error) {
     const messages: Record<string, [string, number]> = {
       FORBIDDEN: ['Forbidden', 403],
@@ -179,10 +192,18 @@ export function failedRead(err: unknown, req: Request) {
  * Validation error response. A Zod error's problems travel as `[{ path, message }]`, the same
  * shape on every API (#538).
  */
-export function validationError(refusal: ZodError) {
+export function validationError(
+  refusal: ZodError,
+  response: { code?: string; message?: string } = {},
+) {
   const details = refusal.issues.map((issue) => ({ path: issue.path, message: issue.message }));
   return NextResponse.json(
-    { error: 'Validation error', code: 'VALIDATION_ERROR', details, status: 422 },
+    {
+      error: response.message ?? 'Validation error',
+      code: response.code ?? 'VALIDATION_ERROR',
+      details,
+      status: 422,
+    },
     { status: 422 },
   );
 }

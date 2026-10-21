@@ -1,7 +1,17 @@
 'use client';
 
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
-import { expensePageKey, groupBalancesKey } from '@splitbook/shared/query-keys';
+import {
+  expensePageKey,
+  groupBalancesKey,
+  queryKeyPath,
+  tripSummaryKey,
+  type GroupQueryKey,
+} from '@splitbook/shared/query-keys';
+import { parseTripSummaryResponse } from '@splitbook/shared/trip-summary-read';
+import { fetcher } from '@/lib/utils/fetcher';
+import { useViewerTimeZone } from '@/lib/hooks/use-viewer-time-zone';
+import { tripStripFigures } from '@/components/trip/trip-strip-figures';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -143,6 +153,16 @@ function GroupDetailContent({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // A Trip's strip shows one currency, the one its Trip summary opened on or the one chosen on
+  // its switch (#729): the same read as the Trip summary, which the Insights tab shares.
+  const timeZone = useViewerTimeZone();
+  const { data: tripSummaryData } = useSWR(
+    getGroupTheme(group.category).header === 'strip' && timeZone
+      ? tripSummaryKey(WEB_QUERY_ACCOUNT, groupId, { timeZone })
+      : null,
+    async (key: GroupQueryKey) => parseTripSummaryResponse(await fetcher(queryKeyPath(key))),
+    { refreshInterval: 30_000 },
+  );
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
@@ -186,10 +206,13 @@ function GroupDetailContent({
   const endDate = group.endDate;
   const dateLabel = groupDatesLabel(theme, startDate, endDate, { tracking: true });
   const currency = group.defaultCurrency;
-  const userBalance = (balancesData?.data?.balances || []).find(
-    (balance) => balance.user._id === userId,
-  );
-  const tripTotal = expensesData?.data?.summary?.totalAmount as number | undefined;
+  const strip = tripStripFigures({
+    group,
+    userId,
+    summary: tripSummaryData,
+    balances: balancesData?.data,
+    chosen: searchParams.get('currency') ?? undefined,
+  });
   const showChecklist = shouldShowTripChecklist(checklist);
 
   // Amendment B: opening the form from a past-month view defaults the expense date to that
@@ -234,7 +257,8 @@ function GroupDetailContent({
         <Box sx={{ animation: 'panel-in 280ms ease-out both' }}>
           <TripStrip
             name={group.name}
-            currency={currency}
+            currency={strip.currency}
+            currencies={strip.currencies}
             variant="full"
             dateLabel={dateLabel}
             memberCount={members.length}
@@ -242,9 +266,13 @@ function GroupDetailContent({
               member.user._id === userId ? 'You' : member.user.name.split(' ')[0],
             )}
             inviteCode={group.inviteCode ?? null}
-            balance={userBalance ? { amount: userBalance.balance, currency } : null}
+            balance={
+              strip.balance === null ? null : { amount: strip.balance, currency: strip.currency }
+            }
             balanceUnavailable={!balancesData}
-            tripTotal={typeof tripTotal === 'number' ? { amount: tripTotal, currency } : null}
+            tripTotal={
+              strip.total === null ? null : { amount: strip.total, currency: strip.currency }
+            }
           />
         </Box>
       )}

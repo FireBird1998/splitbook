@@ -7,7 +7,6 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import FormGroup from '@mui/material/FormGroup';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -17,8 +16,8 @@ import { ASSISTANT_CANNOT } from '@/lib/mcp/assistant-limits';
 import type { AssistantDisplay } from '@/lib/mcp/assistant-name';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { PRODUCT_NAME } from '@/lib/product';
-import type { AssistantGroup } from '@/lib/services/assistant-ledger.service';
-import { getGroupTheme } from '@splitbook/shared/group-themes';
+import type { ApprovalGroup } from '@/lib/services/assistant-ledger.service';
+import { AssistantGroupChecklist, leavesOutEveryGroup } from './AssistantGroupChecklist';
 
 /** A connection request as the approval page shows it: the assistant, and what it asks for. */
 type ConsentDetails = AssistantDisplay & {
@@ -82,16 +81,19 @@ export function ConsentPermissions({
         </Typography>
       </Box>
       {details.scopes.includes(MCP_DRAFT_SCOPE) && (
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={drafts}
-              onChange={(event) => onDraftsChange(event.target.checked)}
-              disabled={busy}
-            />
-          }
-          label="Also let it prepare Expenses for your To review"
-        />
+        // In a Box, the label keeps its own offset, so the box lines up with the Groups' (#621).
+        <Box>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={drafts}
+                onChange={(event) => onDraftsChange(event.target.checked)}
+                disabled={busy}
+              />
+            }
+            label="Also let it prepare Expenses for your To review"
+          />
+        </Box>
       )}
       {details.scopes.includes(MCP_DRAFT_SCOPE) && (
         <Typography variant="body2">
@@ -118,93 +120,6 @@ export function ConsentPermissions({
         </Box>
       </Box>
     </>
-  );
-}
-
-/** "Trip · INR", or "Work · EUR · Archived": what a Group is, beside its name. */
-function groupMeta(group: AssistantGroup) {
-  return [getGroupTheme(group.theme ?? 'other').label, group.currency]
-    .concat(group.archived ? ['Archived'] : [])
-    .join(' · ');
-}
-
-/** Every one of the member's Groups unticked: the assistant would reach none of them now. */
-export function leavesOutEveryGroup(
-  groups: readonly AssistantGroup[],
-  excluded: readonly string[],
-) {
-  return groups.length > 0 && groups.every((group) => excluded.includes(group.id));
-}
-
-/**
- * Which Groups the assistant reaches (#617): every Group ticked to start. The ones the member
- * unticks become that connection's Excluded Groups, and Groups joined later are included.
- */
-export function ConsentGroups({
-  name,
-  groups,
-  excluded,
-  disabled,
-  onExcludedChange,
-}: {
-  name: string;
-  groups: readonly AssistantGroup[];
-  excluded: readonly string[];
-  disabled: boolean;
-  onExcludedChange: (excluded: string[]) => void;
-}) {
-  return (
-    <Box component="fieldset" sx={{ border: 0, m: 0, p: 0, minWidth: 0 }}>
-      <Typography component="legend" variant="subtitle2" sx={{ p: 0 }}>
-        Which Groups
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
-        Groups you join later are included.
-      </Typography>
-      {groups.length > 0 && (
-        <FormGroup>
-          {groups.map((group) => (
-            <FormControlLabel
-              key={group.id}
-              control={
-                <Checkbox
-                  checked={!excluded.includes(group.id)}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    onExcludedChange(
-                      event.target.checked
-                        ? excluded.filter((id) => id !== group.id)
-                        : [...excluded, group.id],
-                    )
-                  }
-                />
-              }
-              label={
-                <Box sx={{ py: 0.5 }}>
-                  <Typography variant="body2" fontWeight={500}>
-                    {group.name}
-                  </Typography>
-                  <Typography variant="caption" component="p" color="text.secondary">
-                    {groupMeta(group)}
-                  </Typography>
-                </Box>
-              }
-            />
-          ))}
-        </FormGroup>
-      )}
-      {groups.length > 0 && (
-        <Typography variant="body2">
-          Groups you untick are left out of <bdi>{name}</bdi>’s answers, so its totals won’t include
-          them.
-        </Typography>
-      )}
-      {leavesOutEveryGroup(groups, excluded) && (
-        <Typography variant="body2" role="status" sx={{ color: 'status.negative' }}>
-          Pick at least one Group.
-        </Typography>
-      )}
-    </Box>
   );
 }
 
@@ -317,7 +232,7 @@ export default function OAuthFlow({
   consent: boolean;
   account: SignedInAccount;
   /** The member's Groups, for the approval page to tick or leave out (#617). */
-  groups?: readonly AssistantGroup[];
+  groups?: readonly ApprovalGroup[];
 }) {
   const [details, setDetails] = useState<ConsentDetails | null>(null);
   const [drafts, setDrafts] = useState(false);
@@ -401,8 +316,9 @@ export default function OAuthFlow({
                   busy={busy}
                   onDraftsChange={setDrafts}
                   groupChoice={
-                    <ConsentGroups
+                    <AssistantGroupChecklist
                       name={details.name}
+                      viewerId={account.id}
                       groups={groups}
                       excluded={excluded}
                       disabled={busy}

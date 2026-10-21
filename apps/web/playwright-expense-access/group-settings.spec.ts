@@ -115,19 +115,53 @@ test('a refused member action shows the server’s reason', async ({ page, ledge
   });
 });
 
-test('a locked Group currency explains why the change was not saved', async ({ page, ledger }) => {
-  await enter(page, ledger.alex, `/groups/${ledger.groupA}/settings`);
-  await page.getByRole('combobox', { name: 'Default Currency' }).click();
-  await page.getByRole('option', { name: / USD —/ }).click();
-  await page.getByRole('button', { name: 'Save Currency' }).click();
+test('a main currency locked meanwhile explains why the change was not saved', async ({
+  page,
+  ledger,
+}) => {
+  // Nothing is recorded in this Group yet, so its admin may still change the main currency.
+  const group = (
+    await dataOf(
+      await ledger.alex.post('/api/groups', {
+        data: { name: 'Synthetic new flat', category: 'home', defaultCurrency: 'INR' },
+      }),
+      201,
+    )
+  )._id as string;
+  await enter(page, ledger.alex, `/groups/${group}/settings`);
+  await expect(
+    page.getByText('Nothing is recorded yet, so the main currency can still change.'),
+  ).toBeVisible();
+  // Money is recorded while the page is open, which locks the main currency.
+  await dataOf(
+    await ledger.alex.post(`/api/groups/${group}/expenses`, {
+      data: {
+        description: 'Groceries',
+        amount: 300,
+        currency: 'INR',
+        category: 'food',
+        tag: 'Groceries',
+        date: new Date().toISOString(),
+        paidBy: [{ user: DEMO_PERSONA_IDS.alex, amount: 300 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: DEMO_PERSONA_IDS.alex }],
+      },
+    }),
+    201,
+  );
+  await page.getByRole('combobox', { name: 'Main currency' }).click();
+  await page.getByRole('option', { name: /^USD/ }).click();
+  await page.getByRole('button', { name: 'Change main currency', exact: true }).click();
 
   await expect(
     page
       .getByRole('alert')
       .filter({ hasText: 'Currency cannot change after this Group has financial records.' }),
   ).toBeVisible();
-  await expect(page.getByText('Currency settings updated')).toHaveCount(0);
-  expect(await dataOf(await ledger.alex.get(`/api/groups/${ledger.groupA}`))).toMatchObject({
+  await expect(
+    page.getByText('Money is already recorded in INR, so the main currency can’t change.'),
+  ).toBeVisible();
+  expect(await dataOf(await ledger.alex.get(`/api/groups/${group}`))).toMatchObject({
     defaultCurrency: 'INR',
   });
 });

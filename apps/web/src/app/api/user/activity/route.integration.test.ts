@@ -261,6 +261,18 @@ describe('GET /api/user/activity', () => {
     });
   });
 
+  it('carries the Assistant rule an admin set, for its line in the latest changes (#621)', async () => {
+    const ferry = await createGroup('Ferry Trip', alice, bob);
+    await groupService.setAssistantRule(ferry, 'not_allowed', alice);
+
+    const [changed] = (await latest(bob)).activities;
+    expect(changed).toMatchObject({
+      type: 'assistant_rule_changed',
+      actor: { name: 'Alice Tester' },
+    });
+    expect(changed.metadata).toEqual({ rule: 'not_allowed' });
+  });
+
   it('carries an Expense edit’s amount before and after, in the Expense’s currency', async () => {
     const ferry = await createGroup('Ferry Trip', alice, bob);
     const tickets = await expenseService.create(

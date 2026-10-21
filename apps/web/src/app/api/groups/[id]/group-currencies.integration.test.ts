@@ -11,6 +11,9 @@ import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
 import Group from '@/lib/models/Group';
 import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
+import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
+import Expense from '@/lib/models/Expense';
+import { toPeriod } from '@splitbook/shared/recurring-due-periods';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import {
   callRoute,
@@ -390,6 +393,63 @@ describe("the currency a member's next Expense starts in (#719)", () => {
       listed.body.data.find((entry: { _id: string }) => entry._id === groupId)
         .latestExpenseCurrency,
     ).toBe('JPY');
+  });
+});
+
+describe("the currency a member's next Expense starts in, beside recurring Expenses (#719)", () => {
+  it('ignores one a recurring Expense posted for them', async () => {
+    vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'true');
+    // Lakeview Flat, a Household: rupees, with euros for a trip abroad.
+    const created = await groupService.create(
+      {
+        name: 'Lakeview Flat',
+        category: 'home',
+        defaultCurrency: 'INR',
+        alternateCurrencies: ['EUR'],
+      },
+      alex,
+    );
+    const groupId = String(created._id);
+    await groupService.addMember(groupId, sam);
+    const cookie = await signIn('alex');
+    const groceries = await addExpense(groupId, {
+      ...dinner(42.5, 'EUR', 'Groceries in Lisbon'),
+      tag: 'Groceries',
+    });
+    expect(groceries.status, JSON.stringify(groceries.body)).toBe(201);
+    const rent = await callRoute(recurring.POST, {
+      method: 'POST',
+      path: `/api/groups/${groupId}/recurring`,
+      params: { id: groupId },
+      cookie,
+      body: {
+        description: 'Rent',
+        amount: 30000,
+        currency: 'INR',
+        category: 'housing',
+        tag: 'Rent',
+        paidBy: [{ user: alex, amount: 30000 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }],
+        dayOfMonth: 1,
+        startsOn: `${toPeriod(new Date())}-01`,
+      },
+    });
+    expect(rent.status, JSON.stringify(rent.body)).toBe(201);
+    await recurringExpenseService.generateDueExpenses(groupId);
+    // The rent Alex's recurring Expense posted is Alex's latest Expense in the Group.
+    expect(await Expense.countDocuments({ group: groupId, recurringExpense: { $ne: null } })).toBe(
+      1,
+    );
+
+    const { body } = await callRoute(group.GET, {
+      method: 'GET',
+      path: `/api/groups/${groupId}`,
+      params: { id: groupId },
+      cookie,
+    });
+
+    expect(body.data.latestExpenseCurrency).toBe('EUR');
   });
 });
 

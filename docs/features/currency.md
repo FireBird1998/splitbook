@@ -40,18 +40,29 @@ any form of FX conversion.
 
 ### In Group Settings
 
+The Currencies section (#721) shows the main currency, locked once money is
+recorded, and up to 4 extra currencies, each with what uses it and who added it.
+Any member adds one from a search of the supported currencies; only an admin
+removes one, and only while no Expense, Settlement or To review item uses it.
+
 ```
-┌──────────────────────────────────────┐
-│ Currency Settings                    │
-├──────────────────────────────────────┤
-│ Default Currency:                    │
-│ [🇪🇺 EUR - Euro                 ▾] │
-│                                      │
-│ Alternate Currencies (max 2):        │
-│ [🇺🇸 USD - US Dollar            ▾] │
-│ [🇮🇳 INR - Indian Rupee         ▾] │
-│ [+ Add alternate currency]          │
-└──────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ Currencies                                       │
+├──────────────────────────────────────────────────┤
+│ Main currency                                    │
+│ INR  Indian Rupee  [Locked]                      │
+│ Money is already recorded in INR, so the main    │
+│ currency can’t change.                           │
+│                                                  │
+│ Extra currencies                          3 of 4 │
+│ EUR Euro [In use]                       Remove │
+│   11 Expenses · 1 Settlement · added by Sam, 1 Oct │
+│ JPY Japanese Yen [In use]               Remove │
+│   24 Expenses · whole amounts only · added by Sam  │
+│ GBP British Pound                       Remove │
+│   Nothing uses it · added by Priya, 2 Oct        │
+│ [Choose a currency]  [Add]   1 more can be added │
+└──────────────────────────────────────────────────┘
 ```
 
 ### In Expense Form — Currency Dropdown

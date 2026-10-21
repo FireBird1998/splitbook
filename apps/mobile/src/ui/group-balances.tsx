@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
-import { View, useWindowDimensions } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Pressable, View, useWindowDimensions } from 'react-native';
+import { balanceCurrencies, openingBalanceCurrency } from '@splitbook/shared/balance-currencies';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
@@ -18,6 +19,7 @@ import {
   SkeletonOf,
   SkeletonText,
   StatusText,
+  hairSpace,
   scaledSp,
   textVariants,
   useLargestText,
@@ -27,7 +29,7 @@ import {
 import { inPlace, ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
-import { useTheme } from './theme';
+import { fonts, useTheme } from './theme';
 
 export const recordNeedsConnection = 'Recording a payment needs a connection.';
 /** Balances not yet read again after a change: their payments wait for the read (#219). */
@@ -47,18 +49,24 @@ export const recordWaitsForDetails = (name: string) =>
 export const settledIn = (balances: { balance: number }[] | undefined) =>
   balances !== undefined && balances.every(({ balance }) => getMoneyTone(balance) === 'neutral');
 
+/** Where payments in a currency other than the main one go, until #727 records them. */
+export const recordedInMain = (main: string) =>
+  `Payments are recorded in ${main}, the main currency.`;
+
 /**
- * Suggested payments the member can record: they pay or receive it, both are still members,
- * and it is in the Group's currency (the existing Settlement rules).
+ * Suggested payments the member can record in `currency`, the Group's own by default: they pay or
+ * receive it, and both are still members (the existing Settlement rules). Record is offered on
+ * those in the Group's currency.
  */
 export function recordablePayments(
   balances: GroupCurrencyBalance[],
   group: MobileGroup,
   currentUserId: string,
+  currency = group.defaultCurrency,
 ) {
   const member = (id: string | null) => group.members.some(({ user }) => user.id === id);
   return balances
-    .filter((bucket) => bucket.currency === group.defaultCurrency)
+    .filter((bucket) => bucket.currency === currency)
     .flatMap((bucket) =>
       bucket.debts
         .filter(
@@ -144,6 +152,132 @@ function PendingPaymentNotice({
   );
 }
 
+/** One currency Balances can show, with the member's own balance in it. */
+interface CurrencyTab {
+  currency: string;
+  /** The Group's main currency. */
+  main: boolean;
+  /** Positive: the member is owed; negative: they owe; 0: settled up. */
+  balance: number;
+}
+
+/**
+ * The currencies Balances switches between (#725), each with the member's own position, and the
+ * one it opens on: the first the member isn't settled up in, as on the web (#724).
+ */
+function currencyPositions(
+  group: MobileGroup,
+  data: GroupCurrencyBalance[],
+  currentUserId: string,
+) {
+  const currencies = balanceCurrencies(
+    group,
+    data.map((bucket) => bucket.currency),
+  );
+  const positions: Record<string, number> = Object.fromEntries(
+    data.map((bucket) => [
+      bucket.currency,
+      bucket.balances.find(({ user }) => user.id === currentUserId)?.balance ?? 0,
+    ]),
+  );
+  return { currencies, positions, opening: openingBalanceCurrency(currencies, positions) };
+}
+
+/** "INR, main currency, you owe ₹1,480.00", as a screen reader names the tab (as on the web). */
+function tabName({ currency, main, balance }: CurrencyTab) {
+  const tone = getMoneyTone(balance);
+  const amount = formatCurrency(Math.abs(balance), currency);
+  return [
+    currency,
+    ...(main ? ['main currency'] : []),
+    tone === 'negative'
+      ? `you owe ${amount}`
+      : tone === 'positive'
+        ? `you’re owed ${amount}`
+        : 'you’re settled up',
+  ].join(', ');
+}
+
+/**
+ * Balances in one currency at a time (#725, boards "Balances" and its 130% version), as on the
+ * web (#724): a tab per currency with the member's own position in it. The tabs wrap onto more
+ * lines when they don't fit on one, as at large text, rather than clip.
+ */
+function BalanceCurrencySwitch({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: readonly CurrencyTab[];
+  value: string;
+  onChange: (currency: string) => void;
+}) {
+  const theme = useTheme();
+  // A drag that starts on a tab never chooses it (#693).
+  const tap = useTap();
+  return (
+    <View
+      accessibilityRole="tablist"
+      accessibilityLabel="Balances in"
+      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}
+    >
+      {tabs.map((tab) => {
+        const selected = tab.currency === value;
+        const tone = getMoneyTone(tab.balance);
+        return (
+          <Pressable
+            key={tab.currency}
+            accessibilityRole="tab"
+            accessibilityLabel={tabName(tab)}
+            accessibilityState={{ selected }}
+            {...tap.on(() => onChange(tab.currency))}
+            style={{ maxWidth: '100%' }}
+          >
+            <View
+              // Remounted on selection: Android keeps corners square when a background changes.
+              key={selected ? 'selected' : 'idle'}
+              style={{
+                minHeight: 56,
+                justifyContent: 'center',
+                gap: 1,
+                // The chosen tab's border is twice as wide, inside the same size.
+                paddingVertical: selected ? 7 : 8,
+                paddingHorizontal: selected ? 13 : 14,
+                borderRadius: 12,
+                borderWidth: selected ? 2 : 1,
+                borderColor: selected ? theme.brand.main : theme.borderStrong,
+                backgroundColor: selected ? theme.brand.bg : theme.surface,
+              }}
+            >
+              <CompactText
+                variant="caption"
+                tone={selected ? 'brand' : 'secondary'}
+                spare
+                style={{ fontFamily: fonts.mono }}
+              >
+                {tab.currency}
+                {tab.main ? (
+                  <CompactText
+                    variant="caption"
+                    tone={selected ? 'brand' : 'secondary'}
+                    weight="medium"
+                  >
+                    {' · main'}
+                  </CompactText>
+                ) : null}
+              </CompactText>
+              <Money
+                size="table"
+                tone={tone === 'neutral' ? 'secondary' : tone}
+              >{`${formatSignedCurrency(tab.balance, tab.currency)}${hairSpace}`}</Money>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 /**
  * The balance card's title beside its time: it takes the line's room, and at large text keeps
  * `largeTextColumn` of it, so where the time leaves it less, the time goes under it. At 200% on
@@ -225,13 +359,16 @@ function MemberBalanceCard({
 }
 
 function SuggestedPayments({
+  title,
   payments,
   currentUserId,
   offline,
   locked,
   unavailable,
+  recordedIn,
   onRecord,
 }: {
+  title: string;
   payments: ReturnType<typeof recordablePayments>;
   currentUserId: string;
   offline: boolean;
@@ -239,9 +376,18 @@ function SuggestedPayments({
   locked: boolean;
   /** Why Record can't be used here, said under the payments too; null when it can. */
   unavailable: string | null;
+  /**
+   * The main currency, for payments in another one: they're listed without Record, which waits
+   * for #727, and say where payments go. Null in the main currency.
+   */
+  recordedIn: string | null;
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
 }) {
-  const reason = offline ? recordNeedsConnection : unavailable;
+  const reason = recordedIn
+    ? recordedInMain(recordedIn)
+    : offline
+      ? recordNeedsConnection
+      : unavailable;
   const theme = useTheme();
   // A drag that starts on Record never opens Record payment (#684).
   const recordTap = useTap();
@@ -251,41 +397,43 @@ function SuggestedPayments({
   return (
     <View style={{ gap: 6 }}>
       <SectionHeader
-        title="Suggested payments"
+        title={title}
         trailing={
-          // The caption takes the room the title leaves, wrapping there rather than running past
-          // the screen's edge at large text. While a change keeps Record waiting, its reason
-          // takes the caption's place at once, in a box the caption holds, so nothing moves
-          // (#219); the full reason is Record's hint. At large text it keeps room for its
-          // longest word, "Record", four of its em: with less beside the title, as at 200%, it
-          // goes on a line of its own under it, where it was a column a letter wide (#639).
-          <View
-            style={{
-              flex: 1,
-              minWidth: column
-                ? 4 * scaledSp(textVariants.caption.fontSize as number, fontScale)
-                : 0,
-            }}
-          >
-            {inPlace({
-              holds:
-                locked && !offline ? (
-                  <CompactText variant="caption" tone="muted" style={{ textAlign: 'right' }}>
-                    {recordCaption}
-                  </CompactText>
-                ) : null,
-              children: (
-                <StatusText
-                  variant="caption"
-                  tone="muted"
-                  instant={locked && !offline}
-                  style={{ textAlign: 'right' }}
-                >
-                  {locked && !offline ? recordWaitsShort : recordCaption}
-                </StatusText>
-              ),
-            })}
-          </View>
+          recordedIn ? undefined : (
+            // The caption takes the room the title leaves, wrapping there rather than running past
+            // the screen's edge at large text. While a change keeps Record waiting, its reason
+            // takes the caption's place at once, in a box the caption holds, so nothing moves
+            // (#219); the full reason is Record's hint. At large text it keeps room for its
+            // longest word, "Record", four of its em: with less beside the title, as at 200%, it
+            // goes on a line of its own under it, where it was a column a letter wide (#639).
+            <View
+              style={{
+                flex: 1,
+                minWidth: column
+                  ? 4 * scaledSp(textVariants.caption.fontSize as number, fontScale)
+                  : 0,
+              }}
+            >
+              {inPlace({
+                holds:
+                  locked && !offline ? (
+                    <CompactText variant="caption" tone="muted" style={{ textAlign: 'right' }}>
+                      {recordCaption}
+                    </CompactText>
+                  ) : null,
+                children: (
+                  <StatusText
+                    variant="caption"
+                    tone="muted"
+                    instant={locked && !offline}
+                    style={{ textAlign: 'right' }}
+                  >
+                    {locked && !offline ? recordWaitsShort : recordCaption}
+                  </StatusText>
+                ),
+              })}
+            </View>
+          )
         }
       />
       <Card>
@@ -329,28 +477,30 @@ function SuggestedPayments({
                   </CompactText>
                   <Money>{amount}</Money>
                 </View>
-                <Trailing column={column}>
-                  <CompactButton
-                    label="Record"
-                    variant="tonal"
-                    dense
-                    disabled={offline || locked || unavailable !== null}
-                    hint={
-                      offline
-                        ? recordNeedsConnection
-                        : locked
-                          ? recordWaitsForBalances
-                          : (unavailable ?? undefined)
-                    }
-                    accessibilityLabel={
-                      youPay
-                        ? `Record your payment to ${payment.recipient}`
-                        : `Record ${payment.payer}’s payment to you`
-                    }
-                    onPress={() => onRecord(payment.paidBy, payment.paidTo, payment.currency)}
-                    tap={recordTap}
-                  />
-                </Trailing>
+                {recordedIn ? null : (
+                  <Trailing column={column}>
+                    <CompactButton
+                      label="Record"
+                      variant="tonal"
+                      dense
+                      disabled={offline || locked || unavailable !== null}
+                      hint={
+                        offline
+                          ? recordNeedsConnection
+                          : locked
+                            ? recordWaitsForBalances
+                            : (unavailable ?? undefined)
+                      }
+                      accessibilityLabel={
+                        youPay
+                          ? `Record your payment to ${payment.recipient}`
+                          : `Record ${payment.payer}’s payment to you`
+                      }
+                      onPress={() => onRecord(payment.paidBy, payment.paidTo, payment.currency)}
+                      tap={recordTap}
+                    />
+                  </Trailing>
+                )}
               </View>
             </View>
           );
@@ -504,6 +654,19 @@ export function GroupBalancesView({
 }) {
   const { balances } = state;
   const title = useBalanceTitle();
+  /**
+   * The currency the member chose, or the one Balances opened on in this Group (#725): fixed once
+   * the balances first answer, so a payment that settles the member in the currency shown
+   * doesn't move Balances to another one.
+   */
+  const [chosen, setChosen] = useState(() =>
+    balances.data
+      ? {
+          groupId: group.id,
+          currency: currencyPositions(group, balances.data, currentUserId).opening,
+        }
+      : null,
+  );
   const notice =
     pending?.groupId === group.id ? (
       <PendingPaymentNotice
@@ -581,8 +744,22 @@ export function GroupBalancesView({
       </View>
     );
   }
-  const payments = recordablePayments(balances.data, group, currentUserId);
-  const several = balances.data.length > 1;
+  // One currency at a time (#725): the main currency, then each other currency money is in.
+  const { currencies, positions, opening } = currencyPositions(group, balances.data, currentUserId);
+  // Balances that answer after they opened, or another Group's.
+  if (chosen?.groupId !== group.id) setChosen({ groupId: group.id, currency: opening });
+  const currency =
+    chosen?.groupId === group.id && currencies.includes(chosen.currency)
+      ? chosen.currency
+      : opening;
+  const several = currencies.length > 1;
+  const shown = balances.data.find((bucket) => bucket.currency === currency) ?? {
+    currency,
+    balances: [],
+    debts: [],
+  };
+  const payments = recordablePayments(balances.data, group, currentUserId, currency);
+  const inCurrency = (heading: string) => (several ? `${heading} · ${currency}` : heading);
   return (
     <View style={{ gap: 14 }}>
       <RetainedNotice
@@ -595,6 +772,17 @@ export function GroupBalancesView({
         onRetry={onRefreshBalances}
       />
       {notice}
+      {several ? (
+        <BalanceCurrencySwitch
+          tabs={currencies.map((code) => ({
+            currency: code,
+            main: code === group.defaultCurrency,
+            balance: positions[code] ?? 0,
+          }))}
+          value={currency}
+          onChange={(code) => setChosen({ groupId: group.id, currency: code })}
+        />
+      ) : null}
       {balances.data.length === 0 ? (
         <Card padded>
           <CompactText weight="semibold" tone="secondary">
@@ -602,40 +790,39 @@ export function GroupBalancesView({
           </CompactText>
         </Card>
       ) : (
-        balances.data.map((bucket) => (
-          <MemberBalanceCard
-            key={bucket.currency}
-            bucket={bucket}
-            currentUserId={currentUserId}
-            refreshedAt={balances.refreshedAt}
-            restored={balances.restored === true}
-            // The figures shown are from before a change written here: they say so from the
-            // publish that says the change was made, before their reads start, until the read
-            // after it lands or fails (#219).
-            updating={balances.changed === true && balances.status !== 'error'}
-            offline={offline}
-            monthLens={group.category === 'home'}
-          />
-        ))
+        <MemberBalanceCard
+          bucket={shown}
+          currentUserId={currentUserId}
+          refreshedAt={balances.refreshedAt}
+          restored={balances.restored === true}
+          // The figures shown are from before a change written here: they say so from the
+          // publish that says the change was made, before their reads start, until the read
+          // after it lands or fails (#219).
+          updating={balances.changed === true && balances.status !== 'error'}
+          offline={offline}
+          monthLens={group.category === 'home'}
+        />
       )}
       {payments.length ? (
         <SuggestedPayments
+          title={inCurrency('Suggested payments')}
           payments={payments}
           currentUserId={currentUserId}
           offline={offline}
           locked={balances.changed === true}
           unavailable={recordUnavailable}
+          recordedIn={currency === group.defaultCurrency ? null : group.defaultCurrency}
           onRecord={onRecord}
         />
       ) : null}
-      {balances.data.map((bucket) => (
-        <Everyone
-          key={bucket.currency}
-          bucket={bucket}
-          currentUserId={currentUserId}
-          title={several ? `Everyone · ${bucket.currency}` : 'Everyone'}
-        />
-      ))}
+      {balances.data.length === 0 ? null : (
+        <Everyone bucket={shown} currentUserId={currentUserId} title={inCurrency('Everyone')} />
+      )}
+      {several ? (
+        <CompactText variant="caption" tone="secondary" style={{ paddingHorizontal: 2 }}>
+          Each currency keeps its own balances. Nothing is converted.
+        </CompactText>
+      ) : null}
     </View>
   );
 }

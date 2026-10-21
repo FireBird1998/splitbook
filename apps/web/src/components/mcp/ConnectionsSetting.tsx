@@ -4,33 +4,37 @@ import { apiFetch } from '@/lib/utils/api-fetch';
 import { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogActions from '@mui/material/DialogActions';
-import { format, isToday, isYesterday } from 'date-fns';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
-import Link from 'next/link';
-import { formatDate } from '@splitbook/shared/date';
+import NextLink from 'next/link';
+import Link from '@mui/material/Link';
 import { PRODUCT_NAME } from '@/lib/product';
 import { assistantAddress } from '@/lib/mcp/assistant-name';
 import {
+  assistantGroupCount,
+  type AssistantGroupRef,
   connectedAssistantAccessLabel,
   type ConnectedAssistant,
   type ConnectedAssistantsPage,
 } from '@splitbook/shared/connected-assistant';
+import {
+  DISCONNECT_FAILED,
+  readAssistantGroups,
+  revokeAssistant,
+} from './connected-assistants-client';
+import DisconnectDialog from './DisconnectDialog';
+import { lastUsedLabel } from './last-used';
 
-function lastUsedLabel(value: string | null): string {
-  if (!value) return 'Not used yet';
-  const date = new Date(value);
-  if (isToday(date)) return `Last used ${format(date, 'HH:mm')}`;
-  if (isYesterday(date)) return 'Last used yesterday';
-  return `Last used ${formatDate(date, { omitCurrentYear: true })}`;
+/** "2 of 3 Groups": the member's Groups an assistant reaches (#620). */
+function groupCountLabel(
+  groups: readonly AssistantGroupRef[],
+  excludedGroupIds?: readonly string[],
+) {
+  const { reached, of } = assistantGroupCount(groups, excludedGroupIds);
+  return `${reached} of ${of} ${of === 1 ? 'Group' : 'Groups'}`;
 }
 
 /**
@@ -39,11 +43,14 @@ function lastUsedLabel(value: string | null): string {
  */
 export function ConnectionsList({
   data,
+  groups,
   busy,
   onRevoke,
   onLoadMore,
 }: {
   data: ConnectedAssistantsPage;
+  /** The member's Groups, for "N of M Groups" (#620); none is shown before they load. */
+  groups?: readonly AssistantGroupRef[];
   busy: string | null;
   onRevoke: (id: string) => void;
   onLoadMore: () => void;
@@ -106,7 +113,21 @@ export function ConnectionsList({
                   <Typography variant="body2" color="text.secondary">
                     {lastUsedLabel(connection.lastUsedAt)}
                   </Typography>
+                  {groups && (
+                    <Typography variant="body2" color="text.secondary">
+                      {groupCountLabel(groups, connection.excludedGroupIds)}
+                    </Typography>
+                  )}
                 </Box>
+                <Link
+                  component={NextLink}
+                  href={`/settings/assistants/${connection.id}`}
+                  variant="body2"
+                  underline="hover"
+                  aria-label={`Manage ${connection.name}, ${address ?? lastUsedLabel(connection.lastUsedAt)}`}
+                >
+                  Manage
+                </Link>
                 {/* Compact and red, as Sign Out is. */}
                 <Button
                   variant="outlined"
@@ -146,6 +167,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
   const [attempt, setAttempt] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pending, setPending] = useState<ConnectedAssistant | null>(null);
+  const [groups, setGroups] = useState<readonly AssistantGroupRef[]>();
   useEffect(() => {
     if (!accountId) return;
     const controller = new AbortController();
@@ -167,16 +189,22 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
       });
     return () => controller.abort();
   }, [attempt, accountId]);
+  // The member's Groups, for each assistant's "N of M Groups" (#620). Without them, no count shows.
+  useEffect(() => {
+    if (!accountId) return;
+    const controller = new AbortController();
+    readAssistantGroups(accountId, controller.signal)
+      .then((listed) => {
+        if (!controller.signal.aborted && listed) setGroups(listed);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [attempt, accountId]);
   async function revoke(id: string) {
     setBusy(id);
     setError('');
     try {
-      const response = await apiFetch('/api/auth/mcp/revoke', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', [EXPECTED_ACCOUNT_HEADER]: accountId ?? '' },
-        body: JSON.stringify({ id }),
-      });
-      if (!response.ok) throw new Error();
+      if (!(await revokeAssistant(id, accountId ?? ''))) throw new Error();
       setDialogOpen(false);
       setData(
         (current) =>
@@ -186,7 +214,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
           },
       );
     } catch {
-      setError('Could not confirm disconnection. Reload and try again.');
+      setError(DISCONNECT_FAILED);
     } finally {
       setBusy(null);
     }
@@ -218,7 +246,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
         <Typography variant="subtitle1" component="h2" fontWeight={600}>
           Connected assistants
         </Typography>
-        <Button component={Link} href="/connect" sx={{ alignSelf: 'flex-start' }}>
+        <Button component={NextLink} href="/connect" sx={{ alignSelf: 'flex-start' }}>
           Connect an assistant
         </Button>
         {error && (
@@ -241,6 +269,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
         {data && (
           <ConnectionsList
             data={data}
+            groups={groups}
             busy={busy}
             onRevoke={(id) => {
               setPending(data.connections.find((item) => item.id === id) ?? null);
@@ -249,39 +278,17 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
             onLoadMore={() => void loadMore()}
           />
         )}
-        <Dialog
+        <DisconnectDialog
+          name={pending?.name ?? null}
           open={dialogOpen}
-          slotProps={{ transition: { onExited: () => setPending(null) } }}
-          onClose={() => {
-            if (!busy) setDialogOpen(false);
+          busy={busy !== null}
+          error={error}
+          onCancel={() => setDialogOpen(false)}
+          onConfirm={() => {
+            if (pending) void revoke(pending.id);
           }}
-          aria-labelledby="disconnect-assistant-title"
-          aria-describedby="disconnect-assistant-description"
-        >
-          <DialogTitle id="disconnect-assistant-title">Disconnect {pending?.name}?</DialogTitle>
-          <DialogContent>
-            <DialogContentText id="disconnect-assistant-description">
-              The assistant stops at once. Items already prepared stay in your To review. Previously
-              shared information may remain in your assistant.
-            </DialogContentText>
-            {error && <Alert severity="error">{error}</Alert>}
-          </DialogContent>
-          <DialogActions>
-            <Button disabled={busy !== null} onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              color="error"
-              sx={{ color: 'status.negative' }}
-              disabled={busy !== null || !pending}
-              onClick={() => {
-                if (pending) void revoke(pending.id);
-              }}
-            >
-              Disconnect
-            </Button>
-          </DialogActions>
-        </Dialog>
+          onExited={() => setPending(null)}
+        />
       </Stack>
     </Paper>
   );

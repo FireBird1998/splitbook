@@ -150,31 +150,41 @@ export interface GroupInsightsQuery {
   compare?: number;
   /** The viewer's named IANA time zone, such as `Asia/Kolkata`: it decides each Month. */
   timeZone: string;
+  /** The currency the figures are in (#729); the server's default is the most-spent one. */
+  currency?: string;
 }
 
 /** A Group's Month against the Months before it: the Insights tab (#314). */
 export const groupInsightsPath = (
   groupId: string,
-  { month, compare, timeZone }: GroupInsightsQuery,
+  { month, compare, timeZone, currency }: GroupInsightsQuery,
 ) =>
   `${group(groupId)}/insights${query([
     ['month', month],
     ['compare', compare],
     ['tz', timeZone],
+    ['currency', currency],
   ])}`;
 
 export interface TripSummaryQuery {
   /** The viewer's named IANA time zone, such as `Asia/Kolkata`: it decides each day. */
   timeZone: string;
+  /** The currency the figures are in (#729); the server's default is the most-spent one. */
+  currency?: string;
 }
 
 /** A Trip's whole-trip summary: a Trip's Insights tab (#316). */
-export const tripSummaryPath = (groupId: string, { timeZone }: TripSummaryQuery) =>
-  `${group(groupId)}/trip-summary${query([['tz', timeZone]])}`;
+export const tripSummaryPath = (groupId: string, { timeZone, currency }: TripSummaryQuery) =>
+  `${group(groupId)}/trip-summary${query([
+    ['tz', timeZone],
+    ['currency', currency],
+  ])}`;
 
 export const invitationsPath = () => '/api/invitations';
 export const settlementsPath = (groupId: string) => `${group(groupId)}/settlements`;
 export const recurringExpensesPath = (groupId: string) => `${group(groupId)}/recurring`;
+/** A Group's currencies and what uses each one, for its settings (#721). */
+export const groupCurrenciesPath = (groupId: string) => `${group(groupId)}/currencies`;
 /**
  * Search across the member's Groups (#321), for the query as it is searched: trimmed, its
  * whitespace collapsed, so the same search always has one path.

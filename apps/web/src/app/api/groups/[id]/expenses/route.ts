@@ -43,7 +43,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const body = await readJson(req);
     const parsed = createExpenseSchema.safeParse(body);
-    if (!parsed.success) return validationError(parsed.error);
+    if (!parsed.success) {
+      const [issue] = parsed.error.issues;
+      // Only an amount-only precision refusal shares the service's money error code (#748).
+      // Field paths and machine parameters survive copy changes; never classify by message.
+      const amountPrecision =
+        parsed.error.issues.length === 1 &&
+        issue.code === 'custom' &&
+        issue.params?.moneyCode === 'INVALID_MONEY_PRECISION' &&
+        issue.path.length === 1 &&
+        issue.path[0] === 'amount';
+      return validationError(
+        parsed.error,
+        amountPrecision ? { code: 'INVALID_MONEY_PRECISION', message: issue.message } : undefined,
+      );
+    }
 
     const expense = await expenseService.create(
       id,

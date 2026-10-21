@@ -1,9 +1,7 @@
 'use client';
 
 import Box from '@mui/material/Box';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import Typography from '@mui/material/Typography';
+import CurrencySwitch from '@/components/common/CurrencySwitch';
 import MoneyText from '@/components/common/MoneyText';
 import { formatCurrency } from '@splitbook/shared/currency';
 
@@ -55,108 +53,34 @@ export default function BalanceCurrencySwitch({
   onChange: (currency: string) => void;
 }) {
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 1.5,
-      }}
-    >
-      <Tabs
-        value={value}
-        onChange={(_event, currency: string) => onChange(currency)}
-        aria-label="Balances in"
-        sx={{
-          // Cards on the page, not the theme's segmented track.
-          minHeight: 0,
-          p: 0,
-          borderRadius: 0,
-          bgcolor: 'transparent',
-          '& .MuiTabs-indicator': { display: 'none' },
-          '& .MuiTabs-flexContainer': { flexWrap: 'wrap', gap: 1 },
-        }}
-      >
-        {tabs.map((tab) => (
-          <Tab
-            key={tab.currency}
-            value={tab.currency}
-            id={balanceTabId(tab.currency)}
-            aria-controls={BALANCES_PANEL_ID}
-            aria-label={tabName(tab)}
-            disableRipple
-            label={
-              <>
-                <Box
-                  component="span"
-                  sx={(theme) => ({
-                    ...theme.typography.money,
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    color: tab.currency === value ? 'primary.main' : 'text.secondary',
-                  })}
-                >
-                  {tab.currency}
-                  {tab.main && (
-                    <Box
-                      component="span"
-                      sx={{
-                        fontFamily: (theme) => theme.typography.fontFamily,
-                        fontWeight: 500,
-                        ml: 0.75,
-                      }}
-                    >
-                      · main
-                    </Box>
-                  )}
-                </Box>
-                <Box component="span" sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
-                  <Box component="span" sx={{ fontSize: '0.8125rem', fontWeight: 500 }}>
-                    {position(tab)}
-                  </Box>
-                  {tab.balance !== 0 && (
-                    <MoneyText
-                      amount={Math.abs(tab.balance)}
-                      currency={tab.currency}
-                      tone={tab.balance < 0 ? 'negative' : 'positive'}
-                      sx={{ fontSize: '0.9375rem', fontWeight: 500 }}
-                    />
-                  )}
-                </Box>
-              </>
-            }
-            sx={{
-              minWidth: 150,
-              minHeight: 0,
-              px: 2,
-              py: 1.25,
-              gap: '1px',
-              alignItems: 'flex-start',
-              textAlign: 'left',
-              textTransform: 'none',
-              color: 'text.primary',
-              opacity: 1,
-              border: 1,
-              borderColor: 'border.strong',
-              borderRadius: '12px',
-              bgcolor: 'background.paper',
-              '&.Mui-selected': {
-                color: 'text.primary',
-                borderColor: 'primary.main',
-                bgcolor: 'tint.brand',
-                boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.primary.main}`,
-              },
-            }}
-          />
-        ))}
-      </Tabs>
-      <Typography
-        component="p"
-        sx={{ m: 0, maxWidth: 300, fontSize: '0.75rem', color: 'text.secondary' }}
-      >
-        Each currency keeps its own balances, Debts and payments. Nothing is converted.
-      </Typography>
-    </Box>
+    <CurrencySwitch
+      tabs={tabs.map((tab) => ({
+        currency: tab.currency,
+        main: tab.main,
+        id: balanceTabId(tab.currency),
+        accessibleName: tabName(tab),
+        figure: (
+          <Box component="span" sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
+            <Box component="span" sx={{ fontSize: '0.8125rem', fontWeight: 500 }}>
+              {position(tab)}
+            </Box>
+            {tab.balance !== 0 && (
+              <MoneyText
+                amount={Math.abs(tab.balance)}
+                currency={tab.currency}
+                tone={tab.balance < 0 ? 'negative' : 'positive'}
+                sx={{ fontSize: '0.9375rem', fontWeight: 500 }}
+              />
+            )}
+          </Box>
+        ),
+      }))}
+      value={value}
+      onChange={onChange}
+      label="Balances in"
+      panelId={BALANCES_PANEL_ID}
+      note="Each currency keeps its own balances, Debts and payments. Nothing is converted."
+      noteMaxWidth={300}
+    />
   );
 }

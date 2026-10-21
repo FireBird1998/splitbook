@@ -89,9 +89,9 @@ MCP requests are bounded to 128 KiB and 120 requests per member per minute acros
 
 `GET /api/auth/mcp/connections` is session-authenticated and owner-scoped. Each connection
 includes `id`, `clientId`, `name`, `scopes`, `access` (`Ledger` or `Ledger + To review`) and
-`lastUsedAt` (an ISO instant, or `null` for Not used yet). Pagination and no-store behaviour
-are unchanged. Android can use this same reply. Group exclusions and reach counts belong
-to #617; this change does not introduce a second Group access model.
+`lastUsedAt` (an ISO instant, or `null` for Not used yet), and `excludedGroupIds`: the Groups the
+member left out (#617, #620). Pagination and no-store behaviour are unchanged. Android can use
+this same reply.
 
 The durable `mcpConnection` adds only optional `name` and `lastUsedAt` fields. New connections
 save the cleaned metadata name, and approval refreshes it if the metadata changed. Older
@@ -104,6 +104,15 @@ starts at Not used yet. Existing Drafts and the immediate revocation boundary ar
 Settings asks for confirmation before `POST /api/auth/mcp/revoke`. Cancelling makes no
 revocation request; confirming explains that access stops at once and To review stays.
 The server remains responsible for ownership and live generation checks.
+
+## An assistant's Groups (#620)
+
+`GET /api/auth/mcp/connection?id=` reads one connection in the list's shape, and
+`POST /api/auth/mcp/connection-groups` (`{ id, excludedGroupIds }`) replaces the Groups it
+leaves out. Both are session-authenticated and act only on the member's own live connection:
+another account's, a disconnected or an expired one answers 404, and ids that aren't Group ids
+answer 400. The save is held to the generation that was read live. It needs no new consent, and
+the assistant's next MCP request reads the new Excluded Groups.
 
 ## Inactive connections (#618)
 

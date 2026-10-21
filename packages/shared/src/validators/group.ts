@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { ASSISTANT_RULES } from '../assistant-rule';
 import { CURRENCY_CODES } from '../currency';
 import { extraCurrenciesProblem } from '../group-currencies';
 import { validateTripDates } from '../trip-setup';
@@ -69,6 +70,12 @@ export const updateGroupSchema = z
   })
   .superRefine(tripDatesRefine)
   .superRefine(extraCurrenciesRefine);
+
+/** A member adding one extra currency (#721); the Group's currency rule checks the code. */
+export const addGroupCurrencySchema = z.object({ currency: z.string() });
+
+/** An admin's change to the Group's Assistant rule (#621). */
+export const assistantRuleChangeSchema = z.object({ rule: z.enum(ASSISTANT_RULES) });
 
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;

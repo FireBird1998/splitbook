@@ -25,9 +25,14 @@ const metadata = z.object({
   paidToName: z.string().optional(),
   recurring: z.boolean().optional(),
   action: z.string().optional(),
+  /** The Assistant rule an admin set (#621). */
+  rule: z.string().optional(),
   changes: z
     .record(z.string(), z.object({ old: z.unknown().optional(), new: z.unknown().optional() }))
     .optional(),
+  /** A change to the Group's currencies: its name and what they became, as recorded (#721). */
+  groupName: z.string().optional(),
+  currencies: z.array(z.string()).optional(),
 });
 const eventSchema = z.object({
   _id: objectId,
