@@ -318,9 +318,16 @@ const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 export function wrapUp(
   read: TripSummaryRead,
-  { groupId, userId, today }: { groupId: string; userId: string; today: string },
+  {
+    groupId,
+    userId,
+    today,
+    mainCurrency = read.currency,
+  }: { groupId: string; userId: string; today: string; mainCurrency?: string },
 ): WrapUp {
   const { currency } = read;
+  // Payments are recorded in the main currency until #727: another currency's offer no Record.
+  const recordable = currency === mainCurrency;
   const end = read.tripDates.end;
   const thisYear = Number(today.slice(0, 4));
   const subtitle =
@@ -345,7 +352,7 @@ export function wrapUp(
       title,
       amountText,
       record:
-        pays || paid
+        recordable && (pays || paid)
           ? {
               href: recordPaymentHref(groupId, {
                 direction: pays ? 'pay' : 'receive',
@@ -363,8 +370,9 @@ export function wrapUp(
   return {
     subtitle,
     rows,
-    otherCurrencies:
-      read.otherCurrencies.length > 0
+    otherCurrencies: !recordable
+      ? `These are the ${currency} payments. Payments are recorded in ${mainCurrency}, the main currency.`
+      : read.otherCurrencies.length > 0
         ? `These are the ${currency} payments. Balances in other currencies settle on the Balances tab.`
         : null,
   };

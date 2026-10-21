@@ -804,8 +804,12 @@ function ExpenseSummary({
   filtered: boolean;
 }) {
   const others = summary.totalsByCurrency.filter((total) => total.currency !== currency);
-  const groupTotal =
-    summary.totalsByCurrency.find((total) => total.currency === currency)?.totalAmount ?? 0;
+  // The main currency's total, unless nothing was spent in it but something was in another
+  // (#729): a trip spent in yen reads "¥2,500", not "₹0.00 / ¥2,500".
+  const groupTotal = summary.totalsByCurrency.find(
+    (total) => total.currency === currency,
+  )?.totalAmount;
+  const shownTotal = groupTotal === undefined && others.length ? null : (groupTotal ?? 0);
   const money = (amount: number, code: string, tone: 'neutral' | 'negative' | 'positive') => (
     <MoneyText
       amount={amount}
@@ -834,7 +838,7 @@ function ExpenseSummary({
             term: 'Spent',
             value: (
               <>
-                {money(groupTotal, currency, 'neutral')}
+                {shownTotal === null ? null : money(shownTotal, currency, 'neutral')}
                 {others.map((total) => (
                   <Box key={total.currency}>
                     {money(total.totalAmount, total.currency, 'neutral')}

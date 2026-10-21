@@ -29,6 +29,8 @@ interface TripStripProps {
   balanceUnavailable?: boolean;
   /** Trip-wide spend total shown on the full variant stub. */
   tripTotal?: TripStripAmount | null;
+  /** The Group's currencies, main first: the full strip lists them when there are several (#729). */
+  currencies?: readonly string[];
   /** Square off the bottom corners when content sits directly below (trip cards). */
   joinedBottom?: boolean;
 }
@@ -102,6 +104,7 @@ export default function TripStrip({
   balance,
   balanceUnavailable = false,
   tripTotal,
+  currencies,
   joinedBottom = false,
 }: TripStripProps) {
   const { from, to } = deriveTripCodes(name);
@@ -266,6 +269,9 @@ export default function TripStrip({
             <MetaItem label="Members" value={memberNames.join(' · ')} />
           )}
           {!isFull && <MetaItem label="Currency" value={currency} />}
+          {isFull && currencies && currencies.length > 1 && (
+            <MetaItem label="Currencies" value={currencies.join(' · ')} mono />
+          )}
           {isFull && inviteCode && <MetaItem label="Invite" value={inviteCode} mono />}
         </Box>
       </Box>
