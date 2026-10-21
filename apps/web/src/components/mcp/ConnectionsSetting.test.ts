@@ -46,13 +46,17 @@ const SYNTHETIC: Listed = {
   access: 'Ledger',
 };
 
-const markup = (connections: Listed[] = [CHATGPT, SYNTHETIC]) =>
+const markup = (
+  connections: Listed[] = [CHATGPT, SYNTHETIC],
+  groups?: Parameters<typeof ConnectionsList>[0]['groups'],
+) =>
   renderToStaticMarkup(
     createElement(
       ThemeProvider,
       { theme: createAppTheme('light') },
       createElement(ConnectionsList, {
         data: { resource: 'https://splitbook.example/mcp', connections, nextOffset: null },
+        groups,
         busy: null,
         onRevoke: () => {},
         onLoadMore: () => {},
@@ -125,6 +129,25 @@ describe('Settings → Connected assistants', () => {
       expect(disconnect).toContain('MuiButton-sizeSmall');
       expect(disconnect).not.toContain('MuiButton-fullWidth');
     }
+  });
+
+  it('shows how many of the member’s Groups each assistant reaches, and links to its page (#620)', () => {
+    const groups = [
+      { id: 'b00000000000000000000001', rule: 'allowed' },
+      { id: 'b00000000000000000000002', rule: 'allowed' },
+      { id: 'b00000000000000000000003', rule: 'not_allowed' },
+    ] as const;
+    const html = markup(
+      [{ ...CHATGPT, excludedGroupIds: ['b00000000000000000000002'] }, SYNTHETIC],
+      groups,
+    );
+    const rows = listItems(html, 'Connected assistants').map((row) => row.html);
+    expect(text(rows[0])).toContain('1 of 3 Groups');
+    expect(text(rows[1])).toContain('2 of 3 Groups');
+    expect(rows[0]).toMatch(/<a[^>]*href="\/settings\/assistants\/c1"[^>]*>Manage<\/a>/);
+    expect(rows[1]).toMatch(/<a[^>]*href="\/settings\/assistants\/c2"[^>]*>Manage<\/a>/);
+    // Before the member's Groups load, no count is guessed.
+    expect(render()).not.toMatch(/of \d+ Groups/);
   });
 
   it('names each Disconnect apart, even for two assistants with one name', () => {
