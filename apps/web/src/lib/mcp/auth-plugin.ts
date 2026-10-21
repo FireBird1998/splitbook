@@ -111,7 +111,11 @@ export function mcpAuthPlugins(env: AuthEnv) {
             await requireMcpMember(ctx.context.adapter, session.user.id, env);
             await holdExcludedGroups(
               ctx.context.adapter,
-              { key: consentRequestKey(body.oauth_query), userId: session.user.id, clientId },
+              {
+                key: consentRequestKey(body.oauth_query, session.user.id),
+                userId: session.user.id,
+                clientId,
+              },
               excluded.data,
             );
           }),

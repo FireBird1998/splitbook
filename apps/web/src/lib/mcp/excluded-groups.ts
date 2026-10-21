@@ -18,16 +18,20 @@ export const excludedGroupsSchema = z
   .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))]);
 
 /**
- * The authorization request a consent answers, from parameters that both the signed query the
- * approval page sends and the provider's own copy of it carry, so the choice made on one page
- * can only be applied to that request's grant.
+ * One member's consent to one authorization request, from parameters that both the signed query
+ * the approval page sends and the provider's own copy of it carry, so the choice made on one page
+ * can only be applied to that request's grant. The member is part of the key: an assistant
+ * controls the request's parameters and can sign in as another account, whose hold for the same
+ * parameters must never find, displace or stand in for the member's.
  */
-export function consentRequestKey(query: string): string {
+export function consentRequestKey(query: string, userId: string): string {
   const params = new URLSearchParams(query);
   const request = ['client_id', 'redirect_uri', 'scope', 'state', 'code_challenge', 'resource'].map(
     (name) => params.getAll(name),
   );
-  return createHash('sha256').update(JSON.stringify(request)).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify([userId, request]))
+    .digest('hex');
 }
 
 type HeldExclusion = {
@@ -82,9 +86,9 @@ export async function commitExcludedGroups(
   if (!query) return;
   const held = await adapter.findOne<HeldExclusion>({
     model: 'mcpPendingExclusion',
-    where: [{ field: 'key', value: consentRequestKey(query) }],
+    where: [{ field: 'key', value: consentRequestKey(query, connection.userId) }],
   });
-  if (!held || held.userId !== connection.userId || held.clientId !== connection.clientId) return;
+  if (!held) return;
   await adapter.update({
     model: 'mcpConnection',
     where: [{ field: 'id', value: connection.id }],
