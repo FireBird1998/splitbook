@@ -66,6 +66,8 @@ import {
 } from './expense-list-query';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
+import { formatCurrency } from '@splitbook/shared/currency';
+import { visuallyHidden } from '@/components/common/visually-hidden';
 
 /** Expenses on one page of the list, on a computer or a phone. */
 export const EXPENSE_LIST_PAGE_SIZE = 50;
@@ -186,11 +188,11 @@ export default function ExpenseListView({
   const rangeProblem = customRangeError(query);
   const path = rangeProblem
     ? null
-    : expensePageKey(
-        WEB_QUERY_ACCOUNT,
-        groupId,
-        expenseListFilters(query, { userId, pageSize: EXPENSE_LIST_PAGE_SIZE, month }),
-      );
+    : expensePageKey(WEB_QUERY_ACCOUNT, groupId, {
+        ...expenseListFilters(query, { userId, pageSize: EXPENSE_LIST_PAGE_SIZE, month }),
+        // The summary card says the member's position in every currency (#759).
+        ...(monthCycle ? {} : { includeUserByCurrency: true }),
+      });
   const {
     data: pageRead,
     error,
@@ -608,7 +610,12 @@ export default function ExpenseListView({
       />
 
       {!monthCycle && data && (
-        <ExpenseSummary summary={data.summary} currency={currency} filtered={filters > 0} />
+        <ExpenseSummary
+          summary={data.summary}
+          currency={currency}
+          currencies={groupCurrencies(group)}
+          filtered={filters > 0}
+        />
       )}
 
       {filters > 0 && pagination && (
@@ -797,13 +804,23 @@ function ExpenseCards({
 function ExpenseSummary({
   summary,
   currency,
+  currencies,
   filtered,
 }: {
   summary: ExpensePageRead['summary'];
   currency: string;
+  /** The Group's currencies in its order, main first: each stack follows it (#759). */
+  currencies: readonly string[];
   filtered: boolean;
 }) {
-  const others = summary.totalsByCurrency.filter((total) => total.currency !== currency);
+  // A currency the Group no longer lists comes after its own, in the read's order.
+  const rank = (code: string) => {
+    const at = currencies.indexOf(code);
+    return at < 0 ? currencies.length : at;
+  };
+  const others = summary.totalsByCurrency
+    .filter((total) => total.currency !== currency)
+    .sort((a, b) => rank(a.currency) - rank(b.currency));
   // The main currency's total, unless nothing was spent in it but something was in another
   // (#729): a trip spent in yen reads "¥2,500", not "₹0.00 / ¥2,500".
   const groupTotal = summary.totalsByCurrency.find(
@@ -819,6 +836,40 @@ function ExpenseSummary({
       sx={{ fontSize: '0.875rem', lineHeight: 1.3, display: 'block' }}
     />
   );
+  // The member's position in each currency they have one in, never the main currency alone
+  // as if it were the whole (#759): one line each, as Spent stacks, read as one sentence.
+  const positions = summary.userByCurrency ?? [
+    { currency, userOwes: summary.userOwes, userGetsBack: summary.userGetsBack },
+  ];
+  const position = (
+    term: string,
+    field: 'userOwes' | 'userGetsBack',
+    tone: 'negative' | 'positive',
+  ) => {
+    const rows = positions
+      .filter((row) => row[field] > 0)
+      .sort((a, b) => rank(a.currency) - rank(b.currency));
+    if (rows.length === 0) return [];
+    if (rows.length === 1) return [{ term, value: money(rows[0][field], rows[0].currency, tone) }];
+    const said = rows.map((row) => formatCurrency(row[field], row.currency));
+    return [
+      {
+        term,
+        value: (
+          <>
+            <Box component="span" sx={visuallyHidden}>
+              {`${said.slice(0, -1).join(', ')} and ${said.at(-1)}`}
+            </Box>
+            <Box aria-hidden>
+              {rows.map((row) => (
+                <Box key={row.currency}>{money(row[field], row.currency, tone)}</Box>
+              ))}
+            </Box>
+          </>
+        ),
+      },
+    ];
+  };
   return (
     <Box
       component="section"
@@ -848,12 +899,8 @@ function ExpenseSummary({
             ),
           },
           { term: 'Expenses', value: <StatCount value={summary.count} /> },
-          ...(summary.userOwes > 0
-            ? [{ term: 'You owe', value: money(summary.userOwes, currency, 'negative') }]
-            : []),
-          ...(summary.userGetsBack > 0
-            ? [{ term: 'You get back', value: money(summary.userGetsBack, currency, 'positive') }]
-            : []),
+          ...position('You owe', 'userOwes', 'negative'),
+          ...position('You get back', 'userGetsBack', 'positive'),
         ]}
       />
     </Box>

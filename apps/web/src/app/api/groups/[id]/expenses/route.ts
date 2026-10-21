@@ -142,6 +142,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       page: parseInt(searchParams.get('page') || '1'),
       limit: pageSize(searchParams.get('limit')),
       includeMemberBreakdown: searchParams.get('includeMemberBreakdown') === '1' || undefined,
+      includeUserByCurrency: searchParams.get('includeUserByCurrency') === '1' || undefined,
       ...added.data,
       // The count of Expenses recurring Expenses added is one of the markers the switch hides.
       includeRecurringCount:
