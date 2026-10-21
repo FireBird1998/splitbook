@@ -12,6 +12,8 @@ import {
   readStoredAmountMinor,
   sumMinorAmounts,
   toMajorAmount,
+  readUnsupportedAmountMinor,
+  unsupportedMajorAmount,
 } from './exact-money';
 import { calculateNetBalances, simplifyDebts, simplifyDebtsMinor } from './debt-simplifier';
 import { computeMemberBreakdown, computeUserOweGetBack } from './expense-summary';
@@ -605,5 +607,29 @@ describe('where an allocation refusal points (#506)', () => {
 
     expect(error).toMatchObject({ message: 'Amount supports at most 2 decimal places' });
     expect(moneyErrorPath(error)).toEqual(['amount']);
+  });
+});
+
+// #810: money in a currency Splitbook no longer supports, such as a legacy DEM Expense, is read
+// as stored, at 2 places as Activity shows it (#779), never checked against today's list.
+describe('money in a currency Splitbook no longer supports (#810)', () => {
+  it('reads canonical minor units as stored, and a legacy amount at 2 places', () => {
+    expect(readUnsupportedAmountMinor({ amount: 40, amountMinor: 4000, moneyVersion: 1 })).toBe(
+      4000,
+    );
+    expect(readUnsupportedAmountMinor({ amountMinor: 4000, moneyVersion: 1 })).toBe(4000);
+    expect(readUnsupportedAmountMinor({ amount: 40 })).toBe(4000);
+    // A binary tail from the old calculator reads as the nearest 2-place amount.
+    expect(readUnsupportedAmountMinor({ amount: 0.1 + 0.2 })).toBe(30);
+    // A version without its minor units, and a record without an amount, as a legacy amount.
+    expect(readUnsupportedAmountMinor({ amount: 12.5, moneyVersion: 1 })).toBe(1250);
+    expect(readUnsupportedAmountMinor({})).toBe(0);
+  });
+
+  it('gives major units at the same 2 places, refusing an unsafe amount', () => {
+    expect(unsupportedMajorAmount(4000)).toBe(40);
+    expect(unsupportedMajorAmount(1)).toBe(0.01);
+    expect(() => unsupportedMajorAmount(Number.MAX_SAFE_INTEGER + 2)).toThrow();
+    expect(() => readUnsupportedAmountMinor({ amount: Number.MAX_SAFE_INTEGER })).toThrow();
   });
 });
