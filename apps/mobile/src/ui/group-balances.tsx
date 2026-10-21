@@ -5,8 +5,14 @@ import { formatCurrency } from '@splitbook/shared/currency';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
 import { recordNeedsConnection, type PendingPayment } from '../data/settlement';
-import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
+import type {
+  GroupCurrencyBalance,
+  GroupDebt,
+  GroupFinancialState,
+  MobileGroup,
+} from '../data/types';
 import {
+  avatarSize,
   Banner,
   Card,
   CompactAvatar,
@@ -17,12 +23,15 @@ import {
   Money,
   RowAmount,
   SectionHeader,
+  SegmentedControl,
   SkeletonOf,
   SkeletonText,
   StatusText,
   scaledSp,
   textVariants,
+  useLargeText,
   useLargestText,
+  useLineBox,
   useTap,
   useTextColumn,
 } from './compact';
@@ -43,6 +52,14 @@ const recordWaitsShort = 'Record once updated';
 /** A Group whose details couldn't be read (owner decision 2A): the sheet needs them (#219). */
 export const recordWaitsForDetails = (name: string) =>
   `Record is available once ${name}’s details load.`;
+
+/** Settle up's two views (#612): the member's Suggested payments, or every Debt before simplifying. */
+type SettleUpView = 'suggested' | 'before';
+/** Under the Debts before simplifying, when fewer payments settle them (#602, as on the web). */
+const fewerPayments = (payments: number, debts: number) =>
+  `${payments} ${payments === 1 ? 'payment settles' : 'payments settle'} the same ${debts} ${
+    debts === 1 ? 'debt' : 'debts'
+  }. Everyone ends settled up either way.`;
 
 /** "₹1,480.00 and €20.00", or "₹1,480.00, €20.00 and ¥8,400". */
 const andList = (words: string[]) =>
@@ -407,9 +424,24 @@ function MemberBalanceCard({
   );
 }
 
-function SuggestedPayments({
+/** "You owe Sam Chen", "Priya Shah owes you" or "Sam Chen owes Priya Shah". */
+const debtTitle = ({ from, to }: GroupDebt, currentUserId: string) =>
+  from.id === currentUserId
+    ? `You owe ${to.name}`
+    : `${from.name} owes ${to.id === currentUserId ? 'you' : to.name}`;
+
+/**
+ * Settle up (#612, boards "Before simplifying"): the member's Suggested payments, each with
+ * Record, or, where the reply has them, every Debt in the currency before simplifying.
+ */
+function SettleUp({
   title,
+  currency,
   payments,
+  debts,
+  suggested,
+  view,
+  onView,
   currentUserId,
   offline,
   locked,
@@ -417,7 +449,14 @@ function SuggestedPayments({
   onRecord,
 }: {
   title: string;
+  currency: string;
   payments: ReturnType<typeof recordablePayments>;
+  /** The currency's Debts before simplifying; undefined in an older reply or Saved copy. */
+  debts: GroupDebt[] | undefined;
+  /** How many Suggested payments the currency has, the member's or not. */
+  suggested: number;
+  view: SettleUpView;
+  onView: (view: SettleUpView) => void;
   currentUserId: string;
   offline: boolean;
   /** A change written in this Group made the Balances shown out of date: Record waits for them. */
@@ -427,94 +466,108 @@ function SuggestedPayments({
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
 }) {
   const reason = offline ? recordNeedsConnection : unavailable;
-  const theme = useTheme();
   // A drag that starts on Record never opens Record payment (#684).
   const recordTap = useTap();
   const { fontScale } = useWindowDimensions();
   const column = useTextColumn();
   const whole = useLargestText();
+  const before = debts !== undefined && view === 'before';
   return (
     <View style={{ gap: 6 }}>
       <SectionHeader
         title={title}
         trailing={
-          // The caption takes the room the title leaves, wrapping there rather than running past
-          // the screen's edge at large text. While a change keeps Record waiting, its reason
-          // takes the caption's place at once, in a box the caption holds, so nothing moves
-          // (#219); the full reason is Record's hint. At large text it keeps room for its
-          // longest word, "Record", four of its em: with less beside the title, as at 200%, it
-          // goes on a line of its own under it, where it was a column a letter wide (#639).
-          <View
-            style={{
-              flex: 1,
-              minWidth: column
-                ? 4 * scaledSp(textVariants.caption.fontSize as number, fontScale)
-                : 0,
-            }}
-          >
-            {inPlace({
-              holds:
-                locked && !offline ? (
-                  <CompactText variant="caption" tone="muted" style={{ textAlign: 'right' }}>
-                    {recordCaption}
-                  </CompactText>
-                ) : null,
-              children: (
-                <StatusText
-                  variant="caption"
-                  tone="muted"
-                  instant={locked && !offline}
-                  style={{ textAlign: 'right' }}
-                >
-                  {locked && !offline ? recordWaitsShort : recordCaption}
-                </StatusText>
-              ),
-            })}
-          </View>
+          // Only Suggested has payments to record.
+          before ? undefined : (
+            // The caption takes the room the title leaves, wrapping there rather than running
+            // past the screen's edge at large text. While a change keeps Record waiting, its
+            // reason takes the caption's place at once, in a box the caption holds, so nothing
+            // moves (#219); the full reason is Record's hint. At large text it keeps room for its
+            // longest word, "Record", four of its em: with less beside the title, as at 200%, it
+            // goes on a line of its own under it, where it was a column a letter wide (#639).
+            <View
+              style={{
+                flex: 1,
+                minWidth: column
+                  ? 4 * scaledSp(textVariants.caption.fontSize as number, fontScale)
+                  : 0,
+              }}
+            >
+              {inPlace({
+                holds:
+                  locked && !offline ? (
+                    <CompactText variant="caption" tone="muted" style={{ textAlign: 'right' }}>
+                      {recordCaption}
+                    </CompactText>
+                  ) : null,
+                children: (
+                  <StatusText
+                    variant="caption"
+                    tone="muted"
+                    instant={locked && !offline}
+                    style={{ textAlign: 'right' }}
+                  >
+                    {locked && !offline ? recordWaitsShort : recordCaption}
+                  </StatusText>
+                ),
+              })}
+            </View>
+          )
         }
       />
-      <Card>
-        {payments.map((payment, index) => {
-          const youPay = payment.paidBy === currentUserId;
-          const title = youPay ? `You pay ${payment.recipient}` : `${payment.payer} pays you`;
-          const amount = formatCurrency(payment.amount, payment.currency);
-          return (
-            <View key={`${payment.paidBy}:${payment.paidTo}`}>
-              {index > 0 ? <Divider /> : null}
-              <View
-                style={{
-                  minHeight: 60,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 10,
-                  paddingVertical: 8,
-                  paddingHorizontal: 14,
-                  // At large text, Record goes onto a line of its own where it would leave the
-                  // payment less than `largeTextColumn`: at 200% on a 360dp phone the amount read
-                  // "₹1,0…" beside it (#639).
-                  ...(column ? { flexWrap: 'wrap', alignContent: 'center', rowGap: 4 } : {}),
-                }}
+      {debts ? (
+        <SegmentedControl
+          label="Settle up view"
+          options={[
+            { value: 'suggested', label: 'Suggested' },
+            { value: 'before', label: 'Before simplifying' },
+          ]}
+          value={view}
+          onChange={onView}
+          stacked={whole}
+        />
+      ) : null}
+      {before ? (
+        <Card>
+          <View accessibilityRole="list" accessibilityLabel="Debts before simplifying">
+            {debts.map((debt, index) => (
+              <View key={`${debt.from.id}:${debt.to.id}:${index}`}>
+                {index > 0 ? <Divider /> : null}
+                <PaymentRow
+                  payer={debt.from.name}
+                  recipient={debt.to.name}
+                  title={debtTitle(debt, currentUserId)}
+                  amount={formatCurrency(debt.amount, currency)}
+                />
+              </View>
+            ))}
+          </View>
+          {suggested < debts.length ? (
+            <>
+              <Divider />
+              <CompactText
+                variant="small"
+                tone="secondary"
+                style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12 }}
               >
-                <View
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants"
+                {fewerPayments(suggested, debts.length)}
+              </CompactText>
+            </>
+          ) : null}
+        </Card>
+      ) : (
+        <Card>
+          {payments.map((payment, index) => {
+            const youPay = payment.paidBy === currentUserId;
+            return (
+              <View key={`${payment.paidBy}:${payment.paidTo}`}>
+                {index > 0 ? <Divider /> : null}
+                <PaymentRow
+                  payer={payment.payer}
+                  recipient={payment.recipient}
+                  title={youPay ? `You pay ${payment.recipient}` : `${payment.payer} pays you`}
+                  amount={formatCurrency(payment.amount, payment.currency)}
                 >
-                  <CompactAvatar small name={payment.payer} />
-                  <Icon name="arrow-forward" size={14} color={theme.textMuted} />
-                  <CompactAvatar small name={payment.recipient} />
-                </View>
-                <View
-                  accessible
-                  accessibilityLabel={`${title}, ${amount}`}
-                  style={{ flex: 1, minWidth: column ?? 0, gap: 1 }}
-                >
-                  <CompactText weight="semibold" numberOfLines={whole ? 0 : 2}>
-                    {title}
-                  </CompactText>
-                  <Money>{amount}</Money>
-                </View>
-                <Trailing column={column}>
                   <CompactButton
                     label="Record"
                     variant="tonal"
@@ -535,21 +588,96 @@ function SuggestedPayments({
                     onPress={() => onRecord(payment.paidBy, payment.paidTo, payment.currency)}
                     tap={recordTap}
                   />
-                </Trailing>
+                </PaymentRow>
               </View>
-            </View>
-          );
-        })}
-        {reason ? (
-          <CompactText
-            variant="small"
-            tone="secondary"
-            style={{ paddingHorizontal: 14, paddingBottom: 12 }}
-          >
-            {reason}
-          </CompactText>
-        ) : null}
-      </Card>
+            );
+          })}
+          {reason ? (
+            <CompactText
+              variant="small"
+              tone="secondary"
+              style={{ paddingHorizontal: 14, paddingBottom: 12 }}
+            >
+              {reason}
+            </CompactText>
+          ) : null}
+        </Card>
+      )}
+    </View>
+  );
+}
+
+/**
+ * A Suggested payment or a Debt: who pays whom, read as one with its amount in the text colour,
+ * and Record after a payment's.
+ */
+function PaymentRow({
+  payer,
+  recipient,
+  title,
+  amount,
+  children,
+}: {
+  payer: string;
+  recipient: string;
+  title: string;
+  amount: string;
+  children?: ReactNode;
+}) {
+  const theme = useTheme();
+  const column = useTextColumn();
+  const whole = useLargestText();
+  // From 130% text the row runs several lines: its avatars keep beside the first, at the top,
+  // as an Activity row's does (#792), centred on that line.
+  const top = useLargeText();
+  const firstLine = useLineBox('body').height;
+  return (
+    <View
+      style={{
+        minHeight: 60,
+        flexDirection: 'row',
+        alignItems: top ? 'flex-start' : 'center',
+        gap: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        // At large text, Record goes onto a line of its own where it would leave the payment
+        // less than `largeTextColumn`: at 200% on a 360dp phone the amount read "₹1,0…" beside
+        // it (#639).
+        ...(column ? { flexWrap: 'wrap', alignContent: 'center', rowGap: 4 } : {}),
+      }}
+    >
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 2,
+          ...(top ? { marginTop: Math.max(0, (firstLine - avatarSize.small) / 2) } : {}),
+        }}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <CompactAvatar small name={payer} />
+        <Icon name="arrow-forward" size={14} color={theme.textMuted} />
+        <CompactAvatar small name={recipient} />
+      </View>
+      <View
+        accessible
+        accessibilityLabel={`${title}, ${amount}`}
+        style={{ flex: 1, minWidth: column ?? 0, gap: 1 }}
+      >
+        <CompactText weight="semibold" numberOfLines={whole ? 0 : 2}>
+          {title}
+        </CompactText>
+        <Money>{amount}</Money>
+      </View>
+      {children ? (
+        column ? (
+          // Beside the text or on its own line, it keeps to the row's end, at its middle.
+          <View style={{ marginLeft: 'auto', alignSelf: 'center' }}>{children}</View>
+        ) : (
+          children
+        )
+      ) : null}
     </View>
   );
 }
@@ -705,6 +833,8 @@ export function GroupBalancesView({
         }
       : null,
   );
+  /** Where the member chose Before simplifying, if they did (#612). */
+  const [before, setBefore] = useState<{ groupId: string; currency: string } | null>(null);
   const notice =
     pending?.groupId === group.id ? (
       <PendingPaymentNotice
@@ -797,6 +927,9 @@ export function GroupBalancesView({
     debts: [],
   };
   const payments = recordablePayments(balances.data, group, currentUserId, currency);
+  // Settle up opens on Suggested, and goes back to it in another currency or Group (#612).
+  const view: SettleUpView =
+    before?.groupId === group.id && before.currency === currency ? 'before' : 'suggested';
   const inCurrency = (heading: string) => (several ? `${heading} · ${currency}` : heading);
   return (
     <View style={{ gap: 14 }}>
@@ -818,7 +951,10 @@ export function GroupBalancesView({
             balance: positions[code] ?? 0,
           }))}
           value={currency}
-          onChange={(code) => setChosen({ groupId: group.id, currency: code })}
+          onChange={(code) => {
+            setChosen({ groupId: group.id, currency: code });
+            setBefore(null);
+          }}
         />
       ) : null}
       {onSettleAll
@@ -854,9 +990,14 @@ export function GroupBalancesView({
         />
       )}
       {payments.length ? (
-        <SuggestedPayments
-          title={inCurrency('Suggested payments')}
+        <SettleUp
+          title={inCurrency('Settle up')}
+          currency={currency}
           payments={payments}
+          debts={shown.debtsBeforeSimplifying}
+          suggested={shown.debts.length}
+          view={view}
+          onView={(next) => setBefore(next === 'before' ? { groupId: group.id, currency } : null)}
           currentUserId={currentUserId}
           offline={offline}
           locked={balances.changed === true}

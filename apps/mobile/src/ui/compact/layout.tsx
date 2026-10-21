@@ -264,9 +264,12 @@ export const initials = (name: string) =>
     .join('')
     .toUpperCase();
 
+/** A CompactAvatar's box, in dp. */
+export const avatarSize = { regular: 32, small: 26 } as const;
+
 export function CompactAvatar({ name, small = false }: { name: string; small?: boolean }) {
   const theme = useTheme();
-  const size = small ? 26 : 32;
+  const size = small ? avatarSize.small : avatarSize.regular;
   return (
     <View
       accessibilityElementsHidden

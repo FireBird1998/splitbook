@@ -289,17 +289,21 @@ export interface SegmentOption<T extends string> {
 /**
  * A single choice between two or three options, e.g. "One person" / "Several people".
  * Each option's touch area fills its share of the track, so the 44 pill gets a 50 target.
+ * `stacked`, its options take a row each, the chosen one checked, as Settle up's do from 150%
+ * text (#612).
  */
 export function SegmentedControl<T extends string>({
   label,
   options,
   value,
   onChange,
+  stacked = false,
 }: {
   label: string;
   options: SegmentOption<T>[];
   value: T;
   onChange: (value: T) => void;
+  stacked?: boolean;
 }) {
   const theme = useTheme();
   return (
@@ -307,7 +311,7 @@ export function SegmentedControl<T extends string>({
       accessibilityRole="radiogroup"
       accessibilityLabel={label}
       style={{
-        flexDirection: 'row',
+        flexDirection: stacked ? 'column' : 'row',
         paddingHorizontal: 1.5,
         borderRadius: radius.tile,
         backgroundColor: theme.surfaceMuted,
@@ -322,25 +326,32 @@ export function SegmentedControl<T extends string>({
             accessibilityLabel={option.label}
             accessibilityState={{ checked: selected }}
             onPress={() => onChange(option.value)}
-            style={{ flex: 1, paddingVertical: 3, paddingHorizontal: 1.5 }}
+            style={{ flex: stacked ? undefined : 1, paddingVertical: 3, paddingHorizontal: 1.5 }}
           >
             <View
               // Remounted on selection: Android keeps corners square when a background
               // changes from transparent to a colour.
               key={selected ? 'selected' : 'idle'}
               style={{
-                minHeight: touch.dense,
+                minHeight: stacked ? 52 : touch.dense,
                 borderRadius: 10,
                 alignItems: 'center',
-                justifyContent: 'center',
+                justifyContent: stacked ? 'flex-start' : 'center',
+                ...(stacked ? { flexDirection: 'row', gap: 6, paddingHorizontal: 14 } : {}),
                 backgroundColor: selected ? theme.surface : 'transparent',
               }}
             >
+              {stacked ? (
+                // The check's room is kept on every row, so the labels line up.
+                <View style={{ width: 18 }}>
+                  {selected ? <Icon name="checkmark" size={18} color={theme.brand.main} /> : null}
+                </View>
+              ) : null}
               <CompactText
                 weight="semibold"
                 tone={selected ? 'primary' : 'secondary'}
                 spare
-                style={{ fontSize: 14 }}
+                style={{ fontSize: 14, ...(stacked ? { flexShrink: 1 } : {}) }}
               >
                 {option.label}
               </CompactText>

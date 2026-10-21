@@ -120,10 +120,19 @@ export interface ExpenseDraftSummary {
   unconfirmed: boolean;
 }
 
+export interface GroupDebt {
+  from: FinancialPerson;
+  to: FinancialPerson;
+  amount: number;
+}
+
 export interface GroupCurrencyBalance {
   currency: string;
   balances: { user: FinancialPerson; balance: number }[];
-  debts: { from: FinancialPerson; to: FinancialPerson; amount: number }[];
+  /** The Suggested payments (the wire's legacy name). */
+  debts: GroupDebt[];
+  /** Who owes whom before simplifying (#612); absent in an older reply or Saved copy. */
+  debtsBeforeSimplifying?: GroupDebt[];
 }
 
 export interface MobileExpense {
