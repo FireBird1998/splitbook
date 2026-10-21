@@ -1,3 +1,4 @@
+import { settlementBatchActivityShape } from './settlement-batch-activity';
 import { crossCurrencySettlementReadShape } from './validators/settlement';
 import { assistantAttributionSchema } from './draft-attribution';
 /** The Activity page read contract (#210), returned in wire shape. */
@@ -14,6 +15,7 @@ import {
 
 const metadata = z.looseObject({
   ...crossCurrencySettlementReadShape,
+  ...settlementBatchActivityShape,
   amountMinor: z.number().int().safe().optional(),
   preparedBy: assistantAttributionSchema.optional(),
   userId: identity.optional(),
