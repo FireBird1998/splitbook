@@ -48,6 +48,23 @@ async function lisbonAndTokyo(ledger: Ledger) {
       }),
       201,
     );
+  // Sam owes Alex ¥8,400 the other way: settling Alex's Debts must leave it as it is.
+  await dataOf(
+    await ledger.alex.post(`/api/groups/${group}/expenses`, {
+      data: {
+        description: 'Hotel Gracery',
+        amount: 16800,
+        currency: 'JPY',
+        category: 'travel',
+        tag: 'Food',
+        date: new Date().toISOString(),
+        paidBy: [{ user: alex, amount: 16800 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }, { user: sam }],
+      },
+    }),
+    201,
+  );
   return group;
 }
 
@@ -134,13 +151,12 @@ for (const scheme of ['light', 'dark'] as const) {
     );
     expect(await settlementsOf(ledger, group)).toHaveLength(2);
     const balances = await dataOf(await ledger.alex.get(`/api/groups/${group}/balances`));
-    for (const code of ['INR', 'EUR']) {
-      const bucket = balances.byCurrency.find((row: { currency: string }) => row.currency === code);
-      expect(
-        bucket?.balances.find((row: { user: { _id: string } }) => row.user._id === alex)?.balance ??
-          0,
-      ).toBe(0);
-    }
+    // Each currency moved by its own Debt only: rupees and euros cleared, yen as it was.
+    const alexIn = (code: string) =>
+      balances.byCurrency
+        .find((row: { currency: string }) => row.currency === code)
+        ?.balances.find((row: { user: { _id: string } }) => row.user._id === alex)?.balance ?? 0;
+    expect([alexIn('INR'), alexIn('EUR'), alexIn('JPY')]).toEqual([0, 0, 8400]);
     await shoot(page, testInfo, `settled-${scheme}`);
 
     await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${group}/activity`);
