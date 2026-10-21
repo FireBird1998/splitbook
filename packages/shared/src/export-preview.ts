@@ -42,6 +42,15 @@ const count = z.number().int().nonnegative();
 export const backupPreviewSchema = z.object({
   ...common,
   format: z.literal('json'),
+  currencyGroups: z
+    .array(
+      z.object({
+        name: z.string(),
+        currency: z.string(),
+        alternateCurrencies: z.array(z.string()),
+      }),
+    )
+    .optional(),
   fileName: z.string(),
   sizeBytes: count,
   earliestMonth: z

@@ -329,6 +329,11 @@ export default function ExportPreviewPanel({
             {data.sizeBytes >= 1_000_000 ? 'MB' : 'KB'}
           </Typography>
           <Box component="ul" sx={{ pl: 2.5 }}>
+            {data.currencyGroups?.map((group) => (
+              <li key={group.name}>
+                {group.name}: {[group.currency, ...group.alternateCurrencies].join(', ')}
+              </li>
+            ))}
             <li>{data.counts.members} Members</li>
             <li>
               {data.counts.expenses} Expenses
@@ -337,7 +342,11 @@ export default function ExportPreviewPanel({
                 : ''}
               {data.historyIncluded ? ', each with its edit history' : ''}
             </li>
-            {data.paymentsIncluded && <li>{data.counts.payments} Payments</li>}
+            {data.paymentsIncluded && (
+              <li>
+                {data.counts.payments} Payments, including both amounts, currencies and stored rates
+              </li>
+            )}
             {data.deletedExpensesIncluded && (
               <li>
                 {data.counts.deletedExpenses} Deleted{' '}
