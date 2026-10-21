@@ -283,6 +283,8 @@ export function createAppTheme(mode: ThemeMode): Theme {
               minWidth: 44,
               minHeight: 44,
             },
+            // ButtonBase's outline: 0 left the halo alone, too faint to show focus (#830).
+            '&.Mui-focusVisible': focusRing(theme),
           }),
         },
       },
