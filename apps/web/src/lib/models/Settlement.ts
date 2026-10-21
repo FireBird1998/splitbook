@@ -17,6 +17,7 @@ export interface ISettlementDocument extends Partial<CrossCurrencySettlementFiel
   amountMinor?: number;
   moneyVersion?: number;
   creationRequest?: ICreationRequest;
+  batchSettlementIds?: mongoose.Types.ObjectId[];
   pendingActivity: IPendingActivity[];
   currency: string;
   note?: string;
@@ -34,6 +35,13 @@ const SettlementSchema = new Schema<ISettlementDocument>(
     amountMinor: { type: Number, min: 1, validate: Number.isSafeInteger },
     moneyVersion: { type: Number, enum: [1] },
     creationRequest: { type: CreationRequestSchema, default: undefined, select: false },
+    // Only the first row owns the batch retry key and its immutable ordered result IDs.
+    batchSettlementIds: {
+      type: [Schema.Types.ObjectId],
+      default: undefined,
+      select: false,
+      immutable: true,
+    },
     pendingActivity: {
       type: [PendingActivitySchema],
       default: [],
@@ -63,6 +71,7 @@ const SettlementSchema = new Schema<ISettlementDocument>(
     toJSON: {
       transform(_doc, value) {
         delete value.creationRequest;
+        delete value.batchSettlementIds;
         Reflect.deleteProperty(value, 'pendingActivity');
         return value;
       },
