@@ -33,8 +33,17 @@ import type {
   HomeSuggestedPayment,
   UserBalancesResponse,
 } from '@splitbook/shared/types';
+import { getCurrency } from '@splitbook/shared/currency';
 import { recurringExpenseService } from './recurring-expense.service';
 import { PERSON_FIELDS } from './person-fields';
+
+/**
+ * Balances are positions, and no position includes a currency Splitbook no longer supports,
+ * such as a legacy DEM Expense: the Expenses read gives it its own Spent line (#810), but it has
+ * no Balance, Debt or Suggested payment here, so nothing is settled in it (#812).
+ */
+const inSupportedCurrencies = <T extends { currency: string }>(rows: T[]) =>
+  rows.filter((row) => !!getCurrency(row.currency));
 
 export class BalanceService {
   /**
@@ -44,7 +53,7 @@ export class BalanceService {
     await connectDB();
 
     // Get all non-deleted expenses and settlements
-    const [expenses, settlements, group] = await Promise.all([
+    const [storedExpenses, storedSettlements, group] = await Promise.all([
       Expense.find({ group: groupId, isDeleted: false })
         .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
         .lean(),
@@ -56,6 +65,8 @@ export class BalanceService {
 
     if (!group) return null;
 
+    const expenses = inSupportedCurrencies(storedExpenses);
+    const settlements = inSupportedCurrencies(storedSettlements);
     for (const expense of expenses) assertStoredExpenseMoney(expense);
     const present = [
       ...expenses.map((expense) => expense.currency),
@@ -167,7 +178,7 @@ export class BalanceService {
   async getMemberOpenBalances(groupId: string, userId: string) {
     await connectDB();
 
-    const [expenses, settlements] = await Promise.all([
+    const [storedExpenses, storedSettlements] = await Promise.all([
       Expense.find({ group: groupId, isDeleted: false })
         .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
         .lean(),
@@ -176,6 +187,8 @@ export class BalanceService {
         .lean(),
     ]);
 
+    const expenses = inSupportedCurrencies(storedExpenses);
+    const settlements = inSupportedCurrencies(storedSettlements);
     for (const expense of expenses) assertStoredExpenseMoney(expense);
     const currencies = [
       ...new Set([
@@ -223,7 +236,7 @@ export class BalanceService {
     );
 
     const groupIds = groups.map((group) => group._id);
-    const [allExpenses, allSettlements] = await Promise.all([
+    const [storedExpenses, storedSettlements] = await Promise.all([
       Expense.find({ group: { $in: groupIds }, isDeleted: false })
         .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
         .lean(),
@@ -231,6 +244,8 @@ export class BalanceService {
         .select('group currency moneyVersion amount amountMinor paidBy paidTo')
         .lean(),
     ]);
+    const allExpenses = inSupportedCurrencies(storedExpenses);
+    const allSettlements = inSupportedCurrencies(storedSettlements);
 
     for (const expense of allExpenses) assertStoredExpenseMoney(expense);
     const expensesByGroup = new Map<string, typeof allExpenses>();

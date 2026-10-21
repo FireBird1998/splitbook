@@ -1534,6 +1534,14 @@ before computing, so due recurring templates are materialized on read and the
 balances include them, while recurring Expenses are switched on. A non-member
 gets `403` and nothing is materialized.
 
+**A currency Splitbook no longer supports (#812).** Balances are positions, and
+no position includes money in such a currency, such as a legacy `DEM` Expense or
+Settlement: it has no bucket in `byCurrency`, no Balance, Debt or Suggested
+payment, and nothing can be settled in it. The read answers as it would without
+that money, never converting it. The Expenses read still lists it and gives it
+its own Spent line (#810); Home (`GET /api/user/balances`) and the open balances
+checked before a member leaves follow the same rule.
+
 **Response:**
 
 ```json
