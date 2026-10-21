@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { calculateCrossCurrencySettlement } from './cross-currency-settlement';
+import {
+  calculateCrossCurrencySettlement,
+  formatCrossCurrencySettlement,
+} from './cross-currency-settlement';
 
 const currencies = { currency: 'EUR', paidCurrency: 'INR' };
 describe('cross-currency Settlement maths (#727)', () => {
@@ -104,5 +107,61 @@ describe('cross-currency Settlement maths (#727)', () => {
         rate: '1',
       }),
     ).toThrow();
+  });
+});
+
+describe('cross-currency Settlement wording (#727)', () => {
+  const record = {
+    paidByName: 'Sam',
+    currency: 'EUR',
+    amountMinor: 2000,
+    paidCurrency: 'INR',
+    amountPaidMinor: 185000,
+    appliedRate: '92.5',
+    rateKind: 'custom' as const,
+    suggestedRate: '92.1',
+    rateSource: 'frankfurter' as const,
+    rateAsOf: '2026-10-21',
+    rateFetchedAt: '2026-10-21T00:15:00Z',
+  };
+  it('formats both stored amounts, the applied rate and the dated suggestion', () => {
+    expect(formatCrossCurrencySettlement(record)).toBe(
+      'Sam paid ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct)',
+    );
+  });
+  it('names an entered rate and retains required fallback attribution', () => {
+    expect(
+      formatCrossCurrencySettlement({
+        paidByName: 'Sam',
+        currency: 'EUR',
+        amountMinor: 2000,
+        paidCurrency: 'JPY',
+        amountPaidMinor: 3150,
+        appliedRate: '157.5',
+        rateKind: 'entered',
+      }),
+    ).toBe('Sam paid ¥3,150 to clear €20.00 at ¥157.5 per €; no rate suggested');
+    expect(formatCrossCurrencySettlement({ ...record, rateSource: 'exchange-rate-api' })).toBe(
+      'Sam paid ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct) · Rates By Exchange Rate API',
+    );
+    expect(formatCrossCurrencySettlement({ ...record, rateSource: 'mixed' })).toContain(
+      'Rates By Exchange Rate API',
+    );
+  });
+  it('formats stored decimal rates and large minor amounts without floating-point rounding', () => {
+    expect(
+      formatCrossCurrencySettlement({
+        paidByName: 'Sam',
+        currency: 'EUR',
+        amountMinor: 600,
+        paidCurrency: 'INR',
+        amountPaidMinor: 100,
+        appliedRate: '0.166666666666666667',
+        rateKind: 'entered',
+      }),
+    ).toContain('at ₹0.166666666666666667 per €');
+    expect(
+      formatCrossCurrencySettlement({ ...record, amountPaidMinor: 9007199254740991 }),
+    ).toContain('₹90,071,992,547,409.91');
   });
 });
