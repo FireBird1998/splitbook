@@ -4,12 +4,14 @@ import { allowMcpRequest } from '@/lib/mcp/request-limit';
 import { registerSplitbookTools } from '@/lib/mcp/tools';
 import { auth } from '@/lib/auth';
 import { createMcpConnectionHandler } from '@/lib/mcp/connection';
-import { mcpResource } from '@/lib/mcp/config';
+import { mcpResource, mcpUnavailableResponse } from '@/lib/mcp/config';
 import { currentMcpGrant } from '@/lib/mcp/grants';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
+  const unavailable = mcpUnavailableResponse(request);
+  if (unavailable) return unavailable;
   const resource = mcpResource();
   if (!resource) return new Response(null, { status: 404 });
   let body: string;
@@ -61,4 +63,12 @@ export async function POST(request: Request) {
           ),
   );
   return handler(boundedRequest);
+}
+
+// GET keeps its normal 405, but reports the same MCP outage as POST when misconfigured.
+export async function GET(request: Request) {
+  return (
+    mcpUnavailableResponse(request) ??
+    new Response(null, { status: 405, headers: { Allow: 'POST' } })
+  );
 }
