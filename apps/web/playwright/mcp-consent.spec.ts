@@ -104,6 +104,18 @@ for (const allowPreparation of [false, true]) {
         { exact: true },
       ),
     ).toBeVisible();
+    // Which Groups (#617): every Group ticked, with the warning about leaving one out.
+    const groupChoice = page.getByRole('group', { name: 'Which Groups' });
+    const groupBoxes = groupChoice.getByRole('checkbox');
+    expect(await groupBoxes.count()).toBeGreaterThan(1);
+    for (const box of await groupBoxes.all()) await expect(box).toBeChecked();
+    await expect(
+      page.getByText(
+        'Groups you untick are left out of Fictional consent test assistant’s answers, so its totals won’t include them.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(page.getByText('This connection can access all Groups')).toHaveCount(0);
     await expect(page.locator('body')).not.toContainText(/draft/i);
     await page.addStyleTag({ content: 'html { font-size: 130%; }' });
     await expectThemeApplied(page, testInfo);
@@ -129,6 +141,9 @@ for (const allowPreparation of [false, true]) {
     ).toBe(true);
     await reviewScreenshot(page, testInfo, `mcp-consent-130-${allowPreparation}`);
     if (allowPreparation) await permission.check();
+    // The opted-in run also leaves one Group out, which the assistant then never sees (#617).
+    if (allowPreparation)
+      await groupChoice.getByRole('checkbox', { name: /^Kochi to Alleppey/ }).uncheck();
     // Capture only the fictional client's callback; authorization and consent are real.
     await page.route(`${redirectUri}**`, (route) => route.fulfill({ body: 'Connected' }));
     await page.getByRole('button', { name: 'Allow connection', exact: true }).click();
@@ -148,5 +163,23 @@ for (const allowPreparation of [false, true]) {
     expect(exchange.status()).toBe(200);
     const issued = await exchange.json();
     expect(issued.scope.split(' ').includes('drafts:write')).toBe(allowPreparation);
+    const listed = await request.post(resource, {
+      headers: {
+        Authorization: `Bearer ${issued.access_token}`,
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+      },
+      data: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'list_groups', arguments: {} },
+      },
+    });
+    expect(listed.status()).toBe(200);
+    const reply = await listed.text();
+    expect(reply).toContain('Banyan Court Flat 4B');
+    if (allowPreparation) expect(reply).not.toContain('Kochi to Alleppey');
+    else expect(reply).toContain('Kochi to Alleppey');
   });
 }

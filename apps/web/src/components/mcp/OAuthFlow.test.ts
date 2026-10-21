@@ -5,7 +5,12 @@ import { describe, expect, it } from 'vitest';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
-import OAuthFlow, { ConsentChoice, ConsentPermissions } from './OAuthFlow';
+import OAuthFlow, {
+  ConsentChoice,
+  ConsentGroups,
+  ConsentPermissions,
+  consentRequest,
+} from './OAuthFlow';
 
 /* The approval page's permissions, rendered to static markup with the details the server sends. */
 
@@ -18,6 +23,44 @@ const account = {
 const markup = (element: ReactElement) =>
   renderToStaticMarkup(createElement(ThemeProvider, { theme: createAppTheme('light') }, element));
 const render = (element: ReactElement) => text(markup(element));
+
+/** The member's Groups as the approval page lists them (#617). */
+const groups = [
+  {
+    id: 'b00000000000000000000001',
+    name: 'Maple House',
+    theme: 'home',
+    currency: 'INR',
+    archived: false,
+  },
+  {
+    id: 'b00000000000000000000002',
+    name: 'Goa Friends Trip',
+    theme: 'trip',
+    currency: 'INR',
+    archived: false,
+  },
+  {
+    id: 'b00000000000000000000003',
+    name: 'Lisbon Offsite',
+    theme: 'work',
+    currency: 'EUR',
+    archived: true,
+  },
+] as const;
+const groupChoice = (
+  excluded: readonly string[],
+  listed: readonly (typeof groups)[number][] = groups,
+) =>
+  markup(
+    createElement(ConsentGroups, {
+      name: 'Fictional Assistant',
+      groups: listed,
+      excluded,
+      disabled: false,
+      onExcludedChange: () => {},
+    }),
+  );
 
 const permissions = (
   scopes: string[],
@@ -154,6 +197,66 @@ describe('the consent screen', () => {
     expect(shown).toContain(
       'Only allow this if you asked Fictional Assistant to connect just now.',
     );
+  });
+
+  it('lists the member’s Groups, all ticked, and warns that unticked Groups are left out (#617)', () => {
+    const html = groupChoice([]);
+    const shown = text(html);
+    expect(shown).toContain('Which Groups');
+    for (const line of [
+      'Maple House',
+      'Household · INR',
+      'Goa Friends Trip',
+      'Trip · INR',
+      'Lisbon Offsite',
+      'Work · EUR · Archived',
+    ])
+      expect(shown).toContain(line);
+    expect(html.match(/<input[^>]*type="checkbox"[^>]*>/g)).toHaveLength(3);
+    expect(html.match(/<input[^>]*checked=""[^>]*>/g)).toHaveLength(3);
+    expect(shown).toContain('Groups you join later are included.');
+    expect(shown).toContain(
+      'Groups you untick are left out of Fictional Assistant’s answers, so its totals won’t include them.',
+    );
+  });
+
+  it('asks for at least one Group when every Group is unticked (#617)', () => {
+    const html = groupChoice(groups.map((group) => group.id));
+    expect(html.match(/<input[^>]*checked=""[^>]*>/g)).toBeNull();
+    expect(text(html)).toContain('Pick at least one Group.');
+  });
+
+  it('says Groups joined later are included when the member has none yet (#617)', () => {
+    const shown = text(groupChoice([], []));
+    expect(shown).toContain('Groups you join later are included.');
+    expect(shown).not.toContain('Pick at least one Group.');
+  });
+
+  it('no longer says the assistant reaches every Group: the checklist decides (#617)', () => {
+    const shown = render(
+      createElement(OAuthFlow, { query: '', consent: true, account, groups: [...groups] }),
+    );
+    expect(shown).not.toContain('This connection can access all Groups');
+  });
+
+  it('sends the Groups left out with an Allow, and nothing about Groups with a Deny (#617)', () => {
+    const scopes = ['ledger:read', MCP_DRAFT_SCOPE, 'offline_access'];
+    const excluded = ['b00000000000000000000002'];
+    expect(
+      consentRequest({ query: 'signed', accept: true, scopes, drafts: false, excluded }),
+    ).toEqual({
+      oauth_query: 'signed',
+      accept: true,
+      scope: 'ledger:read offline_access',
+      excluded_groups: excluded,
+    });
+    expect(
+      consentRequest({ query: 'signed', accept: false, scopes, drafts: true, excluded }),
+    ).toEqual({
+      oauth_query: 'signed',
+      accept: false,
+      scope: `ledger:read ${MCP_DRAFT_SCOPE} offline_access`,
+    });
   });
 
   it('says nothing about To review when the assistant asks only to read the ledger', () => {

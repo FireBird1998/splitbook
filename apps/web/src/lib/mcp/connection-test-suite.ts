@@ -84,7 +84,8 @@ export function connectionTests(mongo = false) {
     });
   }
 
-  async function authorizeCode(drafts = false, allowDrafts = false, login = false) {
+  /** An authorization request as far as the approval page, with what that page was told. */
+  async function approvalRequest(drafts = false, login = false) {
     const verifier = randomBytes(32).toString('base64url');
     const query = new URLSearchParams({
       client_id: clientId,
@@ -122,12 +123,24 @@ export function connectionTests(mongo = false) {
     );
     expect(details.status).toBe(200);
     approvalShown = await details.json();
+    return { oauthQuery: consentURL.search.slice(1), verifier };
+  }
+
+  async function authorizeCode(
+    drafts = false,
+    allowDrafts = false,
+    login = false,
+    excludedGroups?: readonly string[],
+  ) {
+    const { oauthQuery, verifier } = await approvalRequest(drafts, login);
     const consent = await post(
       '/oauth2/consent',
       {
         accept: true,
-        oauth_query: consentURL.search.slice(1),
+        oauth_query: oauthQuery,
         scope: `${MCP_LEDGER_SCOPE} offline_access${allowDrafts ? ` ${MCP_DRAFT_SCOPE}` : ''}`,
+        // The Groups the member unticked on the approval page (#617).
+        ...(excludedGroups ? { excluded_groups: excludedGroups } : {}),
       },
       true,
     );
@@ -153,8 +166,15 @@ export function connectionTests(mongo = false) {
     });
   }
 
-  async function authorizeClient(drafts = false, allowDrafts = false, login = false) {
-    const exchange = await exchangeCode(await authorizeCode(drafts, allowDrafts, login));
+  async function authorizeClient(
+    drafts = false,
+    allowDrafts = false,
+    login = false,
+    excludedGroups?: readonly string[],
+  ) {
+    const exchange = await exchangeCode(
+      await authorizeCode(drafts, allowDrafts, login, excludedGroups),
+    );
     const issued = await exchange.json();
     expect(exchange.status, JSON.stringify(issued)).toBe(200);
     expect(issued.access_token).toBeTypeOf('string');
@@ -571,6 +591,24 @@ export function connectionTests(mongo = false) {
       expect(approvalShown).toMatchObject({ name: 'Synthetic MCP Client', address: null });
     });
 
+    it('refuses an approval whose left-out Groups are not Group ids (#617)', async () => {
+      for (const excluded of [['not-a-group'], 'a1b2c3d4e5f6a1b2c3d4e5f6', [42]]) {
+        const { oauthQuery } = await approvalRequest();
+        const refused = await post(
+          '/oauth2/consent',
+          {
+            accept: true,
+            oauth_query: oauthQuery,
+            scope: `${MCP_LEDGER_SCOPE} offline_access`,
+            excluded_groups: excluded,
+          },
+          true,
+        );
+        expect(refused.status, JSON.stringify(excluded)).toBe(400);
+        expect(await refused.json()).not.toHaveProperty('url');
+      }
+    });
+
     it('preserves the signed login request and keeps Draft permission opt-in', async () => {
       const ledgerOnly = await authorizeClient(true, false, true);
       expect(ledgerOnly.scope.split(' ')).not.toContain(MCP_DRAFT_SCOPE);
@@ -843,6 +881,155 @@ export function connectionTests(mongo = false) {
           await ledgerClient.close();
           await draftClient.close();
         }
+      });
+
+    /**
+     * Excluded Groups (#617): the Groups a member unticks at approval. To the assistant each one
+     * looks exactly like a Group that doesn't exist, for read and Draft tools alike.
+     */
+    async function withExcludedGroupClient<T>(
+      token: string,
+      work: (
+        reply: (tool: string, args: Record<string, unknown>) => Promise<ToolAnswer>,
+      ) => Promise<T>,
+    ) {
+      exposeTools = true;
+      const client = new Client({ name: 'excluded-groups-test', version: '1' });
+      try {
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(resource), {
+            requestInit: { headers: { Authorization: `Bearer ${token}` } },
+          }),
+        );
+        return await work(async (tool, args) => {
+          const result = await client.callTool({ name: tool, arguments: args });
+          return {
+            isError: result.isError === true,
+            text: (result.content as Array<{ text: string }>)[0].text,
+          };
+        });
+      } finally {
+        exposeTools = false;
+        await client.close();
+      }
+    }
+    type ToolAnswer = { isError: boolean; text: string };
+    const exclusionGroup = (_id: mongoose.Types.ObjectId, name: string, member: unknown) => ({
+      _id,
+      name,
+      defaultCurrency: 'INR',
+      tags: [],
+      members: [{ user: member, joinedAt: new Date() }],
+    });
+
+    if (mongo)
+      it('leaves an Excluded Group out of every tool, answering as for a Group that does not exist (#617)', async () => {
+        const db = mongoClient!.db();
+        const user = await db.collection('users').findOne({ email: 'connection@example.test' });
+        const [reached, leftOut, elsewhere, missing] = Array.from(
+          { length: 4 },
+          () => new mongoose.Types.ObjectId(),
+        );
+        await db
+          .collection('groups')
+          .insertMany([
+            exclusionGroup(reached, 'Exclusion Reached Flat', user!._id),
+            exclusionGroup(leftOut, 'Exclusion Private Retreat', user!._id),
+            exclusionGroup(elsewhere, 'Exclusion Stranger Trip', new mongoose.Types.ObjectId()),
+          ]);
+        // The member already has an item in To review in the Group they then leave out.
+        const before = await authorizeClient(true, true);
+        const draftId = await withExcludedGroupClient(before.access_token, async (reply) => {
+          const created = await reply('create_drafts', {
+            groupId: String(leftOut),
+            requestKey: 'excluded-group-before',
+            drafts: [{ amount: 120 }],
+          });
+          expect(created.isError, created.text).toBe(false);
+          return JSON.parse(created.text).drafts[0].id as string;
+        });
+        const grant = await authorizeClient(true, true, false, [String(leftOut)]);
+        await withExcludedGroupClient(grant.access_token, async (reply) => {
+          const asked = (groupId: mongoose.Types.ObjectId) =>
+            [
+              ['group_context', { groupId: String(groupId) }],
+              ['group_balances', { groupId: String(groupId) }],
+              [
+                'group_spending',
+                { groupId: String(groupId), from: '2026-10-01', to: '2026-10-31' },
+              ],
+              ['list_drafts', { groupId: String(groupId) }],
+              [
+                'create_drafts',
+                {
+                  groupId: String(groupId),
+                  requestKey: 'excluded-group-after',
+                  drafts: [{ amount: 9 }],
+                },
+              ],
+              [
+                'replace_draft',
+                { groupId: String(groupId), draftId, revision: 0, values: { amount: 9 } },
+              ],
+              ['discard_draft', { groupId: String(groupId), draftId, revision: 0 }],
+            ] as const;
+          const listed = await reply('list_groups', {});
+          expect(listed.text).toContain('Exclusion Reached Flat');
+          const replies = [listed.text];
+          for (const [index, [tool, args]] of asked(leftOut).entries()) {
+            const answer = await reply(tool, args);
+            replies.push(answer.text);
+            expect(answer, tool).toEqual({ isError: true, text: 'Group not found' });
+            for (const other of [missing, elsewhere])
+              expect(await reply(tool, asked(other)[index][1]), tool).toEqual(answer);
+          }
+          expect((await reply('group_context', { groupId: String(reached) })).isError).toBe(false);
+          // Never a name, an id or a count that hints at the Group left out.
+          for (const text of replies) {
+            expect(text).not.toContain('Exclusion Private Retreat');
+            expect(text).not.toContain(String(leftOut));
+          }
+        });
+        expect(
+          await db
+            .collection('expensedrafts')
+            .findOne({ _id: new mongoose.Types.ObjectId(draftId) }),
+        ).toMatchObject({ state: 'active', revision: 0, values: { amount: 120 } });
+        await authorizeClient(); // return to ledger-only consent for later assertions
+      });
+
+    if (mongo)
+      it('reaches a Group joined after approval, and applies a new approval on the next call (#617)', async () => {
+        const db = mongoClient!.db();
+        const user = await db.collection('users').findOne({ email: 'connection@example.test' });
+        const [leftOut, joinedLater] = [
+          new mongoose.Types.ObjectId(),
+          new mongoose.Types.ObjectId(),
+        ];
+        await db
+          .collection('groups')
+          .insertOne(exclusionGroup(leftOut, 'Exclusion Quiet Household', user!._id));
+        const grant = await authorizeClient(false, false, false, [String(leftOut)]);
+        await db
+          .collection('groups')
+          .insertOne(exclusionGroup(joinedLater, 'Exclusion Joined Later Trip', user!._id));
+        await withExcludedGroupClient(grant.access_token, async (reply) => {
+          const listed = await reply('list_groups', {});
+          expect(listed.text).toContain('Exclusion Joined Later Trip');
+          expect(listed.text).not.toContain('Exclusion Quiet Household');
+          expect((await reply('group_context', { groupId: String(joinedLater) })).isError).toBe(
+            false,
+          );
+          expect(await reply('group_context', { groupId: String(leftOut) })).toEqual({
+            isError: true,
+            text: 'Group not found',
+          });
+          // Approving again with every Group ticked replaces the choice; the same token's next
+          // call reaches the Group.
+          await authorizeCode(false, false, false, []);
+          expect((await reply('group_context', { groupId: String(leftOut) })).isError).toBe(false);
+        });
+        await authorizeClient(); // return to ledger-only consent for later assertions
       });
 
     type NamesakeGroup = { groupId: string; connectedId: string; namesakeId: string };
