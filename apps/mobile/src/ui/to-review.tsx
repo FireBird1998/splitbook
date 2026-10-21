@@ -147,7 +147,7 @@ function ItemRow({
         ? null
         : 'Date needed';
   const amount = amountLabel(values, currency);
-  const shownAmount = needs && amount === 'Amount needed' ? null : amount;
+  const shownAmount = needs && !values?.amount ? null : amount;
   const content = (
     <>
       <SourceTile item={item} />

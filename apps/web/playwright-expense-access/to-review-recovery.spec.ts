@@ -34,6 +34,31 @@ async function setup(page: Page, ledger: Ledger, changes: ExpenseDraftValues = {
   return draft;
 }
 
+test('a payer-row explanation survives its broader need until the member corrects it (#713)', async ({
+  page,
+  ledger,
+}) => {
+  await setup(page, ledger, {
+    paidBy: [
+      { user: 'a00000000000000000000003', amount: 6.17 },
+      { user: 'a00000000000000000000002' },
+    ],
+  });
+  await page.getByRole('button', { name: 'Review Review recovery meal', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Review expense', exact: true });
+  await expect(panel.getByText('The amount paid by Sam Chen?', { exact: true })).toHaveCount(1);
+  await expect(panel.getByText('Who paid?', { exact: true })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
+  await panel.getByLabel('Paid by Sam Chen', { exact: true }).fill('6.17');
+  await expect(panel.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
+  await expect(panel.getByText('The amount paid by Sam Chen?', { exact: true })).toHaveCount(0);
+  const [draft] = await dataOf(await ledger.priya.get(`/api/groups/${ledger.groupB}/drafts`));
+  expect(draft.values.paidBy).toEqual([
+    { user: 'a00000000000000000000003', amount: 6.17 },
+    { user: 'a00000000000000000000002', amount: 6.17 },
+  ]);
+});
+
 test('payer and Tag quick fixes cover their needs, announce Ready, and wait for explicit save (#712)', async ({
   page,
   ledger,

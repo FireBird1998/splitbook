@@ -81,7 +81,7 @@ export default function ToReviewPanel({
     item.accountItem!.duplicates.map((match) => `${match.kind}:${match.id}`).sort(),
   ]);
   const acknowledged = acknowledgedVersion === duplicateVersion;
-  const incomplete = item.missingFacts.length > 0 || item.accountItem!.problems.length > 0;
+  const incomplete = item.needs.length > 0 || item.accountItem!.problems.length > 0;
   const duplicate = item.accountItem!.duplicates.length > 0;
   const unsent = editor.status !== 'kept';
   const reason = !available

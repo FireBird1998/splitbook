@@ -504,6 +504,26 @@ describe('memberProblems (#435)', () => {
     ).toEqual([]);
   });
 
+  it('suppresses an explained fact by meaning when the Needs wording changes (#713)', () => {
+    const reviewed = model(
+      ['paidBy: Choose who paid.'],
+      {
+        description: 'Station dinner',
+        amount: 30,
+        currency: 'INR',
+        date: '2026-10-16',
+      },
+      ['paidBy'],
+    );
+    const reworded = {
+      ...reviewed,
+      missingFacts: ['the person who covered this'],
+      label: 'Complete the remaining details',
+    };
+    expect(memberProblems(reworded)).toEqual([]);
+    expect(reworded.state).toBe('needs-details');
+  });
+
   it('says a member-level problem in member words, once', () => {
     const values = {
       description: 'Station dinner',
@@ -535,6 +555,37 @@ describe('memberProblems (#435)', () => {
         editing,
       ),
     ).toEqual(['The amount paid by Sam?']);
+  });
+
+  it('keeps an unfamiliar server problem alongside an explained missing payer (#713)', () => {
+    const reviewed = model(
+      ['paidBy: Required', 'Private unrecognized server diagnostic', 'secretPath: internal data'],
+      {},
+      ['paidBy'],
+    );
+    expect(memberProblems({ ...reviewed, missingFacts: ['Different Needs copy'] })).toEqual([
+      'Check the expense details and try again.',
+    ]);
+    expect(reviewed.state).toBe('needs-details');
+  });
+
+  it('keeps row guidance with a broader payer need and names the currently edited member (#713)', () => {
+    const sam = 'a00000000000000000000002';
+    const reviewed = model(
+      ['paidBy: Required', 'paidBy.1.amount: Required', 'paidBy.1.amount: Enter an amount'],
+      {
+        paidBy: [{ user: alex, amount: 10 }, { user: sam }],
+      },
+    );
+    expect(
+      memberProblems(
+        { ...reviewed, missingFacts: ['Correct who covered it'] },
+        { [alex]: 'Alex', [sam]: 'Sam' },
+        {
+          paidBy: [{ user: sam, amount: 10 }, { user: alex }],
+        },
+      ),
+    ).toEqual(['The amount paid by Alex?']);
   });
 
   it('names the person whose exact share was left out, not the Expense amount (#497)', () => {
@@ -603,6 +654,42 @@ describe('a fact that is there but wrong (#506)', () => {
       now,
     ).items[0];
   };
+
+  it.each([
+    [
+      'total decimals',
+      { ...groceries, amount: 10.555, paidBy: [{ user: member }] },
+      'amount: Amount supports at most 2 decimal places',
+    ],
+    [
+      'split total',
+      { ...groceries, splitMethod: 'exact', splitBetween: [{ user: member, amount: 90 }] },
+      'amount: Split amounts must add up to the expense amount',
+    ],
+    [
+      'payer total',
+      { ...groceries, paidBy: [{ user: member, amount: 90 }] },
+      'paidBy: Payer amounts must add up to the expense amount',
+    ],
+    [
+      'percentage total',
+      { ...groceries, splitMethod: 'percentage', splitBetween: [{ user: member, percentage: 90 }] },
+      'splitBetween: Percentages must add up to 100',
+    ],
+  ])('suppresses %s by meaning with different Needs wording (#713)', (_case, values, problem) => {
+    const model = reviewed(values, problem);
+    expect(
+      memberProblems({ ...model, missingFacts: ['Correct the supplied facts'] }, names),
+    ).toEqual([]);
+  });
+
+  it('preserves the amount meaning of a legacy decimal reason filed at another field (#713)', () => {
+    const model = reviewed(
+      { ...groceries, amount: 10.555, paidBy: [{ user: member }] },
+      'tag: Amount supports at most 2 decimal places',
+    );
+    expect(memberProblems(model, names)).toEqual([]);
+  });
 
   it.each([
     [
@@ -897,4 +984,18 @@ describe('the currency an item needs, named by its Group’s kind (#596)', () =>
   it('says the Group currency when the read names no kind', () => {
     expect(inKind().label).toBe('Needs the Group currency');
   });
+
+  it.each(['trip', 'home', undefined] as const)(
+    'suppresses currency meaning for %s without recognizing its rendered name (#713)',
+    (theme) => {
+      const model = inKind(theme);
+      expect(
+        memberProblems({
+          ...model,
+          missingFacts: ['the currency used here'],
+          label: 'Currency needs attention',
+        }),
+      ).toEqual([]);
+    },
+  );
 });

@@ -698,6 +698,35 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     for (const raw of ['paidBy', 'splitMethod', 'splitBetween', 'tagId', 'Choose who paid.'])
       expect(text(list)).not.toContain(raw);
   });
+  it('keeps row explanations and safe unknown guidance beside a split need (#713)', async () => {
+    const f = fixture({ unpaid: true });
+    const item = f.items()[0];
+    item.draft.values = {
+      ...row(6, 'Station dinner', 30).values,
+      splitMethod: 'exact',
+      splitBetween: [{ user: user.id, amount: 30.001 }],
+    };
+    item.draft.missingFields = [];
+    item.problems = [
+      'splitBetween.0.amount: Amount supports at most 2 decimal places',
+      'splitBetween.0.amount: Amount supports at most 2 decimal places',
+      'Private unfamiliar server diagnostic',
+    ];
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    const shown = text(list);
+    expect(shown).toContain('shares with at most 2 decimal places');
+    expect(shown.split('The amount for you can have at most 2 decimal places.')).toHaveLength(2);
+    expect(shown.split('Check the expense details and try again.')).toHaveLength(2);
+    expect(shown).not.toContain('Private unfamiliar');
+    expect(
+      list.root.findAll(
+        (node) =>
+          String(node.type) === 'Pressable' &&
+          node.props.accessibilityLabel === 'Save Station dinner',
+      ),
+    ).toHaveLength(0);
+  });
   it('renders every list section, exact freshly reviewed confirmation, saved and changed outcomes', async () => {
     const f = fixture({ mixed: true });
     f.addReady();

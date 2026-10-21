@@ -23,6 +23,7 @@ function markup(
   missingFields: string[],
   category?: GroupCategory,
   preparedBy: ToReviewItem['draft']['preparedBy'] = { kind: 'member' },
+  presentation?: { missingFacts: string[]; label: string },
 ) {
   const read: ToReviewItem = {
     draft: {
@@ -66,7 +67,7 @@ function markup(
         ThemeProvider,
         { theme: createAppTheme('light') },
         createElement(ToReviewPanel, {
-          item,
+          item: { ...item, ...presentation },
           items: [read],
           context: {
             currency: 'INR',
@@ -141,6 +142,47 @@ const pressedSplit = (html: string) =>
   );
 
 describe('an item in the web To review panel (#441)', () => {
+  it('keeps repeated currency explanations suppressed when the Needs copy changes (#713)', () => {
+    const shown = panel(
+      ['CURRENCY_MISMATCH'],
+      {
+        description: 'Station dinner',
+        amount: 30,
+        currency: 'USD',
+        date: '2026-10-16',
+        paidBy: [{ user: alex, amount: 30 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }],
+        tag: 'Food',
+      },
+      [],
+      'trip',
+      { kind: 'member' },
+      { missingFacts: ['the currency used here'], label: 'Currency needs attention' },
+    );
+    expect(shown).toContain('Still needs the currency used here.');
+    expect(shown).not.toContain('Choose the Group currency.');
+  });
+
+  it('keeps a missing fact blocking even if its display projection is empty (#713)', () => {
+    const html = markup(
+      [],
+      {
+        description: 'Station dinner',
+        amount: 30,
+        currency: 'INR',
+        date: '2026-10-16',
+        paidBy: [{ user: alex, amount: 30 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }],
+      },
+      ['tagId'],
+      undefined,
+      { kind: 'member' },
+      { missingFacts: [], label: '' },
+    );
+    expect(saveDisabled(html)).toBe(true);
+  });
   it('says each missing fact once, in its Needs line, with no repeated problem lines', () => {
     const shown = panel(
       [

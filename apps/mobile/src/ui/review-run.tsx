@@ -372,7 +372,7 @@ function ReviewRunContent({
     ? 'Connect to change or save this'
     : state.pending
       ? 'We didn’t hear back, so it may already be saved'
-      : missing.length
+      : model.needs.length
         ? `${missing.length === 1 ? 'One thing' : `${missing.length} things`} left before you can save: ${missing.join(', ')}`
         : item.duplicates.some(
               (d) => d.kind === 'expense' && !state.matches.some((expense) => expense._id === d.id),
@@ -592,7 +592,7 @@ function ReviewRunContent({
           </CompactText>
         ) : null}
         <OptionalDetails draft={form} locked={locked} onChange={change} />
-        {!!missing.length && (
+        {!!model.needs.length && (
           <Banner tone="warning" message={reason ?? ''}>
             {hasNeed('paidBy') && assistant ? (
               <CompactText variant="small" tone="secondary" style={{ paddingLeft: 4 }}>

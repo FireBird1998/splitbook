@@ -78,19 +78,15 @@ const labels: Record<ToReviewState, string> = {
   'needs-details': 'Needs details',
   'on-this-phone': 'On this phone',
 };
-/** What an item needs when its split, payers or percentages don't add up (#506). */
-export const SPLIT_TOTAL_NEED = 'the split to add up to the total';
-export const PAID_TOTAL_NEED = 'the amounts paid to add up to the total';
-export const PERCENTAGE_TOTAL_NEED = 'the percentages to add up to 100%';
 /** Whether an item's missing facts ask for its amount: missing, or with too many decimals. */
 export const needsAmount = (needs: readonly ReviewNeed[]) =>
   needs.some((need) => need.field === 'amount');
 
-/** Display projection retained for the Needs line and #713's existing explanation callers. */
+/** Display wording for a need; behavior consumes the meaning directly. */
 export function reviewNeedWords(need: ReviewNeed, category?: GroupCategory): string {
-  if (need.reason === 'split-total') return SPLIT_TOTAL_NEED;
-  if (need.reason === 'payer-total') return PAID_TOTAL_NEED;
-  if (need.reason === 'percentage-total') return PERCENTAGE_TOTAL_NEED;
+  if (need.reason === 'split-total') return 'the split to add up to the total';
+  if (need.reason === 'payer-total') return 'the amounts paid to add up to the total';
+  if (need.reason === 'percentage-total') return 'the percentages to add up to 100%';
   if (need.reason === 'group-currency') return groupCurrencyNeed(category);
   if (need.reason === 'decimals') {
     const places = need.precision === 0 ? undefined : `at most ${need.precision} decimal places`;
@@ -125,54 +121,21 @@ function groupCurrencyNeed(category?: GroupCategory) {
   // Named as Add expense names it: the Trip currency, the Household currency (#596).
   return `the ${groupNounTitle(category)} currency`;
 }
-/** A problem the server names by its code, in words that follow "Needs". */
-const codeNeeds = new Map([['CURRENCY_MISMATCH', groupCurrencyNeed]]);
-/** A code's need as any kind of Group words it, to know the Needs line already says it. */
-const kinds: GroupCategory[] = ['trip', 'home', 'couple', 'work', 'other'];
-const codeNeedWords = (problem: string) => {
-  const need = codeNeeds.get(problem);
-  return need ? new Set(kinds.map(need)) : null;
-};
-
 const DECIMALS = /^Amount supports at most (\d+) decimal places$/;
 
-/**
- * What an item needs when a fact it has is wrong rather than missing (#506): worded to follow
- * "Needs", and as a sentence for the problem on its own. Without it, a split that doesn't add up
- * read as a missing amount, and a member could change the total to match the shares. The field
- * says whose decimals are wrong: the total, the shares or the amounts paid.
- */
-function unmetNeed(
-  reason: string,
-  field = 'amount',
-): { need: string; sentence: string } | undefined {
-  const interpreted = validationNeed(reason, [field]);
-  const need = reviewNeedWords(interpreted);
-  if (interpreted.reason === 'split-total')
-    return { need, sentence: 'The split must add up to the total.' };
-  if (interpreted.reason === 'payer-total')
-    return { need, sentence: 'The amounts paid must add up to the total.' };
-  if (interpreted.reason === 'percentage-total')
-    return { need, sentence: 'The percentages must add up to 100%.' };
-  if (interpreted.reason !== 'decimals') return undefined;
-  const places =
-    interpreted.precision === 0 ? undefined : `at most ${interpreted.precision} decimal places`;
-  if (field === 'splitBetween')
-    return {
-      need,
-      sentence: places ? `Each share can have ${places}.` : 'Each share must be a whole number.',
-    };
-  if (field === 'paidBy')
-    return {
-      need,
-      sentence: places
-        ? `Each amount paid can have ${places}.`
-        : 'Each amount paid must be a whole number.',
-    };
-  return {
-    need,
-    sentence: places ? `The amount can have ${places}.` : 'The amount must be a whole number.',
-  };
+/** A sentence for a known invalid fact, from the same interpretation as the Needs line. */
+function needSentence(need: ReviewNeed): string {
+  if (need.reason === 'split-total') return 'The split must add up to the total.';
+  if (need.reason === 'payer-total') return 'The amounts paid must add up to the total.';
+  if (need.reason === 'percentage-total') return 'The percentages must add up to 100%.';
+  const places = need.precision === 0 ? undefined : `at most ${need.precision} decimal places`;
+  if (need.field === 'splitBetween')
+    return places ? `Each share can have ${places}.` : 'Each share must be a whole number.';
+  if (need.field === 'paidBy')
+    return places
+      ? `Each amount paid can have ${places}.`
+      : 'Each amount paid must be a whole number.';
+  return places ? `The amount can have ${places}.` : 'The amount must be a whole number.';
 }
 
 function accountModel(
@@ -472,78 +435,209 @@ function problemPath(message: string) {
     : null;
 }
 
+const memberMessages = [
+  'This item changed while you were looking. Review the latest version before saving.',
+  'The possible matches changed. Check them before saving this expense.',
+  'This item needs another look before saving. Check the details and any possible duplicate.',
+  'Some items changed or need another look. Review them before saving.',
+  'Could not confirm this action. Check your connection and try again.',
+  GROUP_ARCHIVED_MESSAGE,
+];
+const problemCodes = {
+  INVALID_MEMBERS: 'Choose current Group members for who paid and who shared it.',
+  INVALID_TAG: 'Choose an available Tag.',
+  CURRENCY_MISMATCH: 'Choose the Group currency.',
+  STALE_REVISION: 'This item changed. Check the latest version before saving.',
+  'Each person can appear only once': 'Choose each member only once.',
+};
+
+type ReviewExplanation =
+  | { kind: 'message'; message: string }
+  | { kind: 'code'; code: keyof typeof problemCodes }
+  | { kind: 'need'; need: ReviewNeed }
+  | { kind: 'fact'; field: string }
+  | {
+      kind: 'row';
+      field: 'paidBy' | 'splitBetween';
+      index: number;
+      part: string;
+      precision?: number;
+    }
+  | { kind: 'unknown' };
+
+/** Tag name and identity describe the same required fact. */
+const factField = (field: string) => (field === 'tagId' ? 'tag' : field);
+
+/**
+ * The legacy-server compatibility seam: interpret incoming text once, then keep meaning for
+ * both rendering and coverage. Member-row explanations always survive a broader field need.
+ */
+function readReviewProblem(message: string): {
+  explanation: ReviewExplanation;
+  coveredBy: ReviewNeed[];
+} {
+  const coveredBy: ReviewNeed[] = [];
+  if (memberMessages.includes(message))
+    return { explanation: { kind: 'message', message }, coveredBy };
+  const path = problemPath(message);
+  const reason = path?.reason ?? message;
+  if (path && path.index === undefined && Object.hasOwn(facts, path.field)) {
+    coveredBy.push(
+      { field: path.field, reason: 'missing' },
+      { field: path.field, reason: 'invalid' },
+    );
+  }
+  const need = validationNeed(reason, [path?.field ?? 'amount']);
+  // Legacy decimal reasons outside payer/share fields have always named the Expense amount.
+  if (need.reason === 'decimals' && need.field !== 'paidBy' && need.field !== 'splitBetween')
+    need.field = 'amount';
+  if (path?.index === undefined && need.reason !== 'invalid') {
+    if (path) coveredBy.push(need);
+    return { explanation: { kind: 'need', need }, coveredBy };
+  }
+  if (Object.hasOwn(problemCodes, reason)) {
+    if (message === 'CURRENCY_MISMATCH')
+      coveredBy.push({ field: 'currency', reason: 'group-currency' });
+    return { explanation: { kind: 'code', code: reason as keyof typeof problemCodes }, coveredBy };
+  }
+  if (path) {
+    const { field, index, part } = path;
+    if ((field === 'paidBy' || field === 'splitBetween') && index !== undefined) {
+      if (
+        (field === 'paidBy' && part === 'amount') ||
+        (field === 'splitBetween' && ['amount', 'percentage', 'shares'].includes(part))
+      ) {
+        return {
+          explanation: {
+            kind: 'row',
+            field,
+            index: Number(index),
+            part,
+            ...(part === 'amount' && need.reason === 'decimals'
+              ? { precision: need.precision }
+              : {}),
+          },
+          coveredBy,
+        };
+      }
+    }
+    if (Object.hasOwn(facts, field)) return { explanation: { kind: 'fact', field }, coveredBy };
+  }
+  return { explanation: { kind: 'unknown' }, coveredBy };
+}
+
+function rowName(
+  explanation: Extract<ReviewExplanation, { kind: 'row' }>,
+  values: ExpenseDraftValues,
+  names: Readonly<Record<string, string>>,
+) {
+  const row = values[explanation.field]?.[explanation.index];
+  return row ? (names[row.user] ?? 'this member') : 'this member';
+}
+
+function explanationWords(
+  explanation: ReviewExplanation,
+  values: ExpenseDraftValues,
+  names: Readonly<Record<string, string>>,
+): string {
+  switch (explanation.kind) {
+    case 'message':
+      return explanation.message;
+    case 'code':
+      return problemCodes[explanation.code];
+    case 'need':
+      return needSentence(explanation.need);
+    case 'fact': {
+      const fact = facts[explanation.field];
+      return `${fact.charAt(0).toUpperCase()}${fact.slice(1)}?`;
+    }
+    case 'row': {
+      const name = rowName(explanation, values, names);
+      const subject =
+        explanation.field === 'paidBy'
+          ? `amount paid by ${name}`
+          : `${explanation.part} for ${name}`;
+      if (explanation.precision !== undefined) {
+        const limit =
+          explanation.precision === 0
+            ? 'must be a whole number'
+            : `can have at most ${explanation.precision} decimal places`;
+        return `The ${subject} ${limit}.`;
+      }
+      return `The ${subject}?`;
+    }
+    case 'unknown':
+      return 'Check the expense details and try again.';
+  }
+}
+
+/** Same explanation, before rendering. Member names are current domain facts, not parsed prose. */
+function explanationIdentity(
+  explanation: ReviewExplanation,
+  values: ExpenseDraftValues,
+  names: Readonly<Record<string, string>>,
+): string {
+  switch (explanation.kind) {
+    case 'message':
+      return JSON.stringify(['message', explanation.message]);
+    case 'code':
+      return JSON.stringify(['code', explanation.code]);
+    case 'need': {
+      const { field, reason, precision } = explanation.need;
+      const subject = field === 'paidBy' || field === 'splitBetween' ? field : 'amount';
+      return JSON.stringify(['need', subject, reason, precision]);
+    }
+    case 'fact':
+      return JSON.stringify(['fact', factField(explanation.field)]);
+    case 'row':
+      return JSON.stringify([
+        'row',
+        explanation.field,
+        explanation.part,
+        explanation.precision,
+        rowName(explanation, values, names),
+      ]);
+    case 'unknown':
+      return 'unknown';
+  }
+}
+
 /** Interpret known validation paths; never forward server prose or unknown paths to members. */
 export function reviewProblem(
   message: string,
   values: ExpenseDraftValues = {},
   names: Readonly<Record<string, string>> = {},
 ): string {
-  const memberMessages = [
-    'This item changed while you were looking. Review the latest version before saving.',
-    'The possible matches changed. Check them before saving this expense.',
-    'This item needs another look before saving. Check the details and any possible duplicate.',
-    'Some items changed or need another look. Review them before saving.',
-    'Could not confirm this action. Check your connection and try again.',
-    GROUP_ARCHIVED_MESSAGE,
-  ];
-  if (memberMessages.includes(message)) return message;
-  const path = problemPath(message);
-  const reason = path?.reason ?? message;
-  // A row's decimals are said for that member below.
-  const unmet = path?.index === undefined && unmetNeed(reason, path?.field);
-  if (unmet) return unmet.sentence;
-  const known: Record<string, string> = {
-    INVALID_MEMBERS: 'Choose current Group members for who paid and who shared it.',
-    INVALID_TAG: 'Choose an available Tag.',
-    CURRENCY_MISMATCH: 'Choose the Group currency.',
-    STALE_REVISION: 'This item changed. Check the latest version before saving.',
-    'Each person can appear only once': 'Choose each member only once.',
-  };
-  if (Object.hasOwn(known, reason)) return known[reason];
-  if (path) {
-    const { field, index, part } = path;
-    if ((field === 'paidBy' || field === 'splitBetween') && index !== undefined) {
-      const row = values[field]?.[Number(index)];
-      const name = row ? (names[row.user] ?? 'this member') : 'this member';
-      const digits = reason.match(DECIMALS)?.[1];
-      const limit =
-        digits === '0' ? 'must be a whole number' : `can have at most ${digits} decimal places`;
-      if (field === 'paidBy' && part === 'amount')
-        return digits ? `The amount paid by ${name} ${limit}.` : `The amount paid by ${name}?`;
-      if (field === 'splitBetween' && part === 'amount' && digits)
-        return `The amount for ${name} ${limit}.`;
-      if (field === 'splitBetween' && ['amount', 'percentage', 'shares'].includes(part))
-        return `The ${part} for ${name}?`;
-    }
-    const fact = facts[field];
-    if (fact) return `${fact.charAt(0).toUpperCase()}${fact.slice(1)}?`;
-  }
-  return 'Check the expense details and try again.';
+  return explanationWords(readReviewProblem(message).explanation, values, names);
 }
 
-/**
- * An item's problems in member words, once each. A problem about a fact the item already says it
- * needs ("Needs who paid…") is left out, so a missing fact is described once (#435).
- */
+/** An item's additional explanations, once each, after needs already represented are removed. */
 export function memberProblems(
   item: ReviewItemModel,
   names: Readonly<Record<string, string>> = {},
-  /** The values the member is editing, which name the rows a problem points at (#441). */
-  values: ExpenseDraftValues | undefined = item.accountItem?.draft.values,
+  /** Current edits determine the person named by a member-row problem. */
+  values: ExpenseDraftValues = item.accountItem?.draft.values ?? {},
 ): string[] {
   if (!item.accountItem) return [];
-  const { problems } = item.accountItem;
-  const said: string[] = [];
-  for (const problem of problems) {
-    const path = problemPath(problem);
-    if (path && path.index === undefined && item.missingFacts.includes(facts[path.field])) continue;
-    // A wrong fact the Needs line already names (#506); a member's row is still named below.
-    const unmet = path && path.index === undefined && unmetNeed(path.reason, path.field);
-    if (unmet && item.missingFacts.includes(unmet.need)) continue;
-    const coded = codeNeedWords(problem);
-    if (coded && item.missingFacts.some((fact) => coded.has(fact))) continue;
-    const words = reviewProblem(problem, values, names);
-    if (!said.includes(words)) said.push(words);
+  const said = new Set<string>();
+  const words: string[] = [];
+  for (const message of item.accountItem.problems) {
+    const { explanation, coveredBy } = readReviewProblem(message);
+    if (
+      coveredBy.some((covered) =>
+        item.needs.some(
+          (need) =>
+            factField(need.field) === factField(covered.field) &&
+            need.reason === covered.reason &&
+            need.precision === covered.precision,
+        ),
+      )
+    )
+      continue;
+    const identity = explanationIdentity(explanation, values, names);
+    if (said.has(identity)) continue;
+    said.add(identity);
+    words.push(explanationWords(explanation, values, names));
   }
-  return said;
+  return words;
 }
