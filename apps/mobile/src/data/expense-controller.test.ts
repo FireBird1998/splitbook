@@ -916,7 +916,7 @@ describe('native Expense creation and editing', () => {
         draft: { description: 'Keep my dinner', amount: '10', currency: 'JPY' },
       });
       expect(states).not.toContain('uncertain');
-      expect(states).not.toContain('reconciling');
+      expect(states).not.toContain('conflict');
       expect(readsAfterWrite).toBe(0);
       for (const record of records.values()) {
         expect(record).not.toHaveProperty('attempt');
