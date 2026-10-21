@@ -147,6 +147,10 @@ describe('Settlement batch HTTP contract (#734)', () => {
     const log = await events(id);
     expect(log).toHaveLength(2);
     for (const event of log) expect(event.metadata).toMatchObject({ batchId, batchSize: 2 });
+    // Clients read a batch in the order it was recorded by its Settlement ids, which ascend in the
+    // request's order (groupSettlementBatches).
+    const ids = saved.body.data.settlements.map((row: { _id: string }) => row._id);
+    expect(ids).toEqual([...ids].sort());
 
     // Latest changes must retain the same reference, not just the Group's Activity page.
     const latest = await callRoute(userActivity.GET, {

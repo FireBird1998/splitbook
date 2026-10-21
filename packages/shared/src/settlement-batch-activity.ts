@@ -19,10 +19,11 @@ export type SettlementBatchActivityItem<T> =
 const referenceSchema = z.object(settlementBatchActivityShape);
 
 /**
- * Preserve feed order, collecting each batch where its first supplied event appeared. Call
- * again with concatenated pages to complete a split batch; neither input nor prior results
- * change. Single events (including one-row batches) are complete items of their own. An event
- * that arrives twice, as when a newer event shifts the pages, counts once, where it first appeared.
+ * Preserve feed order, collecting each batch where its first supplied event appeared, its events
+ * in the order they were recorded. Call again with concatenated pages to complete a split batch;
+ * neither input nor prior results change. Single events (including one-row batches) are complete
+ * items of their own. An event that arrives twice, as when a newer event shifts the pages, counts
+ * once, where it first appeared.
  */
 export function groupSettlementBatches<T extends SettlementBatchActivityEvent>(
   events: readonly T[],
@@ -52,5 +53,20 @@ export function groupSettlementBatches<T extends SettlementBatchActivityEvent>(
     batch.events.push(event);
     batch.complete = batch.events.length === batch.batchSize;
   }
+  // The feed is newest first, but a batch reads in the order it was recorded: its Settlement ids
+  // are made in the request's order.
+  for (const batch of batches.values()) batch.events.sort(recordedFirst);
   return items;
+}
+
+const settlementIdOf = (event: SettlementBatchActivityEvent) => {
+  const id = event.metadata?.settlementId;
+  return typeof id === 'string' ? id : undefined;
+};
+
+function recordedFirst(a: SettlementBatchActivityEvent, b: SettlementBatchActivityEvent) {
+  const [left, right] = [settlementIdOf(a), settlementIdOf(b)];
+  if (left === undefined || right === undefined)
+    return Number(left === undefined) - Number(right === undefined);
+  return left < right ? -1 : left > right ? 1 : 0;
 }
