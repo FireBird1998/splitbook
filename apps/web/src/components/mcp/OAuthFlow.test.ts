@@ -203,6 +203,21 @@ describe('the consent screen', () => {
       expect(button(label), label).toContain('MuiButton-fullWidth');
   });
 
+  it('still lets the member Deny while no Group is picked (#617)', () => {
+    const html = markup(
+      createElement(ConsentChoice, {
+        name: 'Fictional Assistant',
+        disabled: false,
+        allowBlocked: true,
+        onAllow: () => {},
+        onDeny: () => {},
+      }),
+    );
+    const button = (label: string) => new RegExp(`<button([^>]*)>${label}`).exec(html)?.[1] ?? '';
+    expect(button('Allow connection')).toMatch(/\bdisabled=""/);
+    expect(button('Deny')).not.toMatch(/\bdisabled=""/);
+  });
+
   it.each([[['ledger:read']], [['ledger:read', MCP_DRAFT_SCOPE, 'offline_access']]])(
     'says what the assistant can’t do on every approval (#614): %j',
     (scopes) => {
