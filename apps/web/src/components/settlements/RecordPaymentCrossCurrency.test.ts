@@ -414,3 +414,33 @@ describe('paying a euro Debt in rupees (#727)', () => {
     });
   });
 });
+
+it('groups Record payment and both cross-currency amounts on blur without changing recorded money (#773)', async () => {
+  rate.state = { status: 'ready', suggestion: frankfurter };
+  await act(async () => {
+    renderer = create(sheet(euros, '1842.5'), {
+      createNodeMock: () => ({ focus() {}, addEventListener() {}, removeEventListener() {} }),
+    });
+  });
+  const input = (id: string) => hosts('input').find((node) => node.props.id === id)!;
+  expect(value('record-payment-amount')).toBe('1,842.50');
+  await act(async () => input('record-payment-amount').props.onFocus?.({}));
+  await type('record-payment-amount', '20');
+  expect(value('record-payment-amount')).toBe('20');
+  await act(async () => input('record-payment-amount').props.onBlur?.({}));
+  expect(value('record-payment-amount')).toBe('20.00');
+  await press(radio('INR'));
+  expect(value('record-payment-paid')).toBe('1,842.00');
+  await act(async () => input('record-payment-cleared').props.onFocus?.({}));
+  await type('record-payment-cleared', '15');
+  expect(value('record-payment-cleared')).toBe('15');
+  await act(async () => input('record-payment-cleared').props.onBlur?.({}));
+  expect(value('record-payment-cleared')).toBe('15.00');
+  expect(value('record-payment-paid')).toBe('1,381.50');
+  await act(async () => input('record-payment-paid').props.onFocus?.({}));
+  await type('record-payment-paid', '1,500.00');
+  await act(async () => input('record-payment-paid').props.onBlur?.({}));
+  expect(value('record-payment-paid')).toBe('1,500.00');
+  await submit();
+  expect(saved.payments[0]).toMatchObject({ amount: 15, amountPaidMinor: 150000 });
+});
