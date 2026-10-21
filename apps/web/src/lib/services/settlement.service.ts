@@ -3,12 +3,9 @@ import connectDB from '@/lib/db';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import { lockClearedCurrency, lockLedgerCurrency } from '@/lib/ledger-currency';
 import Group from '@/lib/models/Group';
-import Expense from '@/lib/models/Expense';
-import { isGroupCurrency, type GroupCurrencyList } from '@splitbook/shared/group-currencies';
 import Settlement from '@/lib/models/Settlement';
 import { activityService } from './activity.service';
 import {
-  assertGroupCurrency,
   assertSettlementAuthorization,
   assertSettlementMembers,
 } from '@splitbook/shared/expense-validation';
@@ -27,22 +24,6 @@ import User from '@/lib/models/User';
 import { Types } from 'mongoose';
 import { settlementDebtSnapshot } from './settlement-debt';
 import { PERSON_FIELDS } from './person-fields';
-
-/** Historical currencies can clear a Debt; the paid side still uses the current list. */
-export async function assertSettlementCurrencies(
-  groupId: string,
-  group: GroupCurrencyList,
-  data: CreateSettlementInput,
-) {
-  if (
-    !isGroupCurrency(group, data.currency) &&
-    !(await Expense.exists({ group: groupId, currency: data.currency, isDeleted: false })) &&
-    !(await Settlement.exists({ group: groupId, currency: data.currency }))
-  ) {
-    throw new Error('CURRENCY_MISMATCH');
-  }
-  if (data.paidCurrency) assertGroupCurrency(group, data.paidCurrency);
-}
 
 export class SettlementService {
   /**

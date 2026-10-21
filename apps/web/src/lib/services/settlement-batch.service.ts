@@ -15,12 +15,11 @@ import {
   type CreateSettlementBatchInput,
 } from '@splitbook/shared/validators/settlement-batch';
 import {
-  assertGroupCurrency,
   assertSettlementAuthorization,
   assertSettlementMembers,
 } from '@splitbook/shared/expense-validation';
 import { parseAmountMinor, sumMinorAmounts, toMajorAmount } from '@splitbook/shared/exact-money';
-import { assertSettlementCurrencies } from './settlement.service';
+import { lockClearedCurrency, lockLedgerCurrency } from '@/lib/ledger-currency';
 import { settlementDebtSnapshot } from './settlement-debt';
 import { activityService } from './activity.service';
 import { PERSON_FIELDS } from './person-fields';
@@ -99,22 +98,19 @@ export async function createSettlementBatch(
     groupId,
     async (session) => {
       if (!session) throw new Error('SETTLEMENT_TRANSACTIONS_REQUIRED');
-      const group = await authorize();
+      await authorize();
       // A competing request may have committed while this one waited on the Group fence.
       const concurrent = await replay();
       if (concurrent) return concurrent;
-      assertGroupCurrency(group, data.paidCurrency);
-      await Group.updateOne(
-        { _id: groupId },
-        { $set: { currencyLocked: true } },
-        { timestamps: false },
-      );
       const names = await User.find({ _id: { $in: [paidBy, data.paidTo] } })
         .select('name')
         .lean();
       const result = [];
       for (const [index, row] of rows.entries()) {
-        await assertSettlementCurrencies(groupId, group, row);
+        // Share the single-payment rules inside this batch's own mutation: the cleared
+        // currency may be historical; the paying currency must still be listed.
+        await lockClearedCurrency(groupId, row.currency);
+        await lockLedgerCurrency(groupId, data.paidCurrency);
         const amountMinor = parseAmountMinor(row.amount, row.currency);
         const snapshot = await settlementDebtSnapshot(
           groupId,
