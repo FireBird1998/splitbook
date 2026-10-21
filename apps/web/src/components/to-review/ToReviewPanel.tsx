@@ -135,7 +135,9 @@ export default function ToReviewPanel({
             <CloseIcon />
           </IconButton>
         </Stack>
-        <Typography variant="body2" color="text.secondary">
+        {/* An assistant's host can be long with no hyphens; it wraps anywhere, so its domain stays
+            inside the panel where the member decides whether to save its Draft (#751). */}
+        <Typography variant="body2" color="text.secondary" style={{ overflowWrap: 'anywhere' }}>
           {groupName} · {reviewSource(item.accountItem!)}
         </Typography>
         {editor.note && (
@@ -163,7 +165,7 @@ export default function ToReviewPanel({
         {item.accountItem!.draft.preparedBy.kind === 'assistant' &&
           // Only a fact with no value was left out; a wrong one isn't something it didn't know (#506).
           item.unknownFacts.map((fact) => (
-            <Typography key={fact} variant="body2">
+            <Typography key={fact} variant="body2" style={{ overflowWrap: 'anywhere' }}>
               {item.accountItem!.draft.preparedBy.kind === 'assistant'
                 ? item.accountItem!.draft.preparedBy.name
                 : ''}{' '}
