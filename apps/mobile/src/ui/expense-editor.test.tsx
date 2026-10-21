@@ -1520,19 +1520,12 @@ describe('compact Expense form', () => {
     expect(calls.discard).toHaveBeenCalledOnce();
   });
 
-  it('uses a decimal keypad for Amount beside its read-only currency, then moves to Description', async () => {
+  it('uses a decimal keypad for Amount beside its currency, then moves to Description', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     const amount = ui.input('Amount, Indian Rupee, required');
     expect(amount.props).toMatchObject({ keyboardType: 'decimal-pad', returnKeyType: 'next' });
-    expect(
-      ui
-        .root()
-        .findAll(
-          (node) =>
-            isHost(node, 'View') &&
-            node.props.accessibilityLabel === 'Currency INR, the Group’s currency',
-        ),
-    ).toHaveLength(1);
+    // Online, a Group in one currency offers to add one beside it (#722).
+    expect(ui.pressable('Currency, INR, Indian Rupee. Change currency')).toBeDefined();
     act(() => {
       amount.props.onSubmitEditing();
     });

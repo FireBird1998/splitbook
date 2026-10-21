@@ -697,6 +697,13 @@ function ExpenseTask({
   const currencyChoices = context
     ? expenseCurrencyChoices(context.group, context.group.latestExpenseCurrency, draft.currency)
     : null;
+  // A Group in one currency still opens the sheet to add one (#722), online and with room, as
+  // the web's picker does; offline it keeps its read-only badge.
+  const canAddCurrency =
+    !!controller &&
+    !!context &&
+    !offline &&
+    context.group.alternateCurrencies.length < MAX_EXTRA_CURRENCIES;
   const startedNote =
     context &&
     !draft.original &&
@@ -900,7 +907,11 @@ function ExpenseTask({
             onChange={onChange}
             onLeave={onLeaveField}
             onAmountDone={amountDone}
-            onCurrency={currencyChoices && currencyChoices.length > 1 ? openCurrency : undefined}
+            onCurrency={
+              currencyChoices && (currencyChoices.length > 1 || canAddCurrency)
+                ? openCurrency
+                : undefined
+            }
             currencyLocked={currencyLocked}
           >
             {startedNote ? (
