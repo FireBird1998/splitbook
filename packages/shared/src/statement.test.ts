@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildStatement } from './statement';
 import { buildStatementPreview } from './export-preview';
 import { tripSummary, type TripExpense } from './trip-summary';
-import type { BackupExpenseInput, BackupGroupInput } from './export-backup';
+import { buildBackup, type BackupExpenseInput, type BackupGroupInput } from './export-backup';
 import { dayKeyInZone } from './zoned-calendar';
 const group: BackupGroupInput = {
   id: 'g',
@@ -345,4 +345,13 @@ it('keeps both payment amounts in the cleared-currency statement and its preview
       }),
     ],
   });
+});
+
+it('normalises legacy extra currencies for the statement and preview while the backup stays raw', () => {
+  const alternateCurrencies = ['EUR', 'eur', 'XXX', 'JPY', 'EUR', 'INR'];
+  const legacy = { ...group, alternateCurrencies };
+  const statement = buildStatement(legacy);
+  expect(statement.currencies.map((row) => row.currency)).toEqual(['EUR', 'INR', 'JPY']);
+  expect(buildStatementPreview(statement).currencies.map((row) => row.currency)).toEqual(['EUR', 'INR', 'JPY']);
+  expect(buildBackup([legacy], { exportedAt: '2026-10-21T12:00:00Z', include: [] }).groups[0].alternateCurrencies).toEqual(alternateCurrencies);
 });
