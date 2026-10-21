@@ -1263,4 +1263,30 @@ describe('multi-currency exports (#731)', () => {
       ],
     });
   });
+  it('previews both stored payment amounts in separate statement currency sections', async () => {
+    const id = await crossCurrencyGroup();
+    const answer = await request(alice, `/api/export?groups=${id}&format=statement&preview=1`);
+    expect(answer.status).toBe(200);
+    const preview = exportPreviewSchema.parse(json(answer));
+    expect(preview.format).toBe('statement');
+    if (preview.format !== 'statement') throw new Error('Expected statement');
+    expect(preview.statement.currencies.map((row) => row.currency)).toEqual(['EUR', 'INR', 'JPY']);
+    expect(preview.statement.currencies.find((row) => row.currency === 'EUR')).toMatchObject({
+      paymentTotalMinor: 2000,
+      payments: [
+        {
+          amountMinor: 2000,
+          amountPaidMinor: 185000,
+          paidCurrency: 'INR',
+          appliedRate: '92.5',
+          description:
+            'Bob Tester paid Alice Tester ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
+        },
+      ],
+    });
+    expect(preview.statement.currencies.find((row) => row.currency === 'INR')).toMatchObject({
+      spentMinor: 0,
+      paymentTotalMinor: 0,
+    });
+  });
 });

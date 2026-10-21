@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
 import { exportPreviewSchema, type ExportPreview } from '@splitbook/shared/export-preview';
+import { buildStatement } from '@splitbook/shared/statement';
+import { buildStatementPreview } from '@splitbook/shared/export-preview';
 import ExportPreviewPanel, { type PreviewState } from './ExportPreview';
 
 const csv: ExportPreview = {
@@ -313,4 +315,54 @@ it('names each currency’s balances and Suggested payments for screen readers (
   expect(html).toMatch(/<ul[^>]*aria-label="INR suggested payments"/);
   expect(html).toMatch(/<ul[^>]*aria-label="USD suggested payments"/);
   expect(text(html)).toContain('Bob pays Alice Tester');
+});
+
+it('shows each currency and both stored payment amounts in the statement preview', () => {
+  const statement = buildStatement({
+    id: 'g',
+    name: 'Fictional Europe trip',
+    theme: 'trip',
+    currency: 'INR',
+    alternateCurrencies: ['EUR'],
+    tags: [],
+    names: { a: 'Alex', s: 'Sam' },
+    members: [
+      { id: 'a', name: 'Alex' },
+      { id: 's', name: 'Sam' },
+    ],
+    expenses: [],
+    settlements: [
+      {
+        id: 'p',
+        at: '2026-10-21T12:00:00Z',
+        fromId: 's',
+        toId: 'a',
+        recordedById: 's',
+        currency: 'EUR',
+        amountMinor: 2000,
+        amountPaidMinor: 185000,
+        paidCurrency: 'INR',
+        appliedRate: '92.5',
+        rateKind: 'entered',
+      },
+    ],
+  });
+  const html = render({
+    status: 'ready',
+    data: {
+      format: 'statement',
+      groupNames: [statement.name],
+      generatedAt: '2026-10-21T12:00:00Z',
+      from: null,
+      to: null,
+      timeZone: 'UTC',
+      empty: false,
+      statement: buildStatementPreview(statement),
+    },
+  });
+  expect(html).toContain('aria-label="EUR statement preview"');
+  expect(html).toContain('aria-label="INR statement preview"');
+  expect(text(html)).toContain(
+    'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per €; no rate suggested',
+  );
 });
