@@ -13,7 +13,8 @@ import NativeSelect from '@mui/material/NativeSelect';
 import Typography from '@mui/material/Typography';
 import type { Theme } from '@mui/material/styles';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import { formatCurrency } from '@splitbook/shared/currency';
+import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
+import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
 import { suggestedSettlementMinor } from '@splitbook/shared/settlement-preview';
@@ -21,12 +22,15 @@ import {
   crossCurrencyPaymentFields,
   crossCurrencyRateKind,
   editCrossCurrencyEntry,
+  rateText,
   readCrossCurrencyEntry,
   startCrossCurrencyEntry,
+  suggestedRateText,
   type CrossCurrencyEntry,
   type CrossCurrencyField,
+  type RateSuggestion,
 } from '@splitbook/shared/cross-currency-payment';
-import { useRateSuggestion } from '@/lib/hooks/use-rate-suggestion';
+import { useRateSuggestion, type RateSuggestionState } from '@/lib/hooks/use-rate-suggestion';
 import CrossCurrencyFields from './CrossCurrencyFields';
 import { apiFetch, pinExpectedAccount, reloadForAccountChange } from '@/lib/utils/api-fetch';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
@@ -199,6 +203,11 @@ export default function RecordPaymentForm({
   const [paidCurrency, setPaidCurrency] = useState(start.paidCurrency ?? currency);
   /** The amount cleared, the rate and the amount paid, while it is paid in another currency. */
   const [entry, setEntry] = useState<CrossCurrencyEntry | null>(null);
+  /**
+   * The suggestion the sheet took its rate from, kept while the member enters the payment: a
+   * rate read again meanwhile changes neither the rate nor what the payment records beside it.
+   */
+  const [pinned, setPinned] = useState<RateSuggestion | null>(null);
   const [purpose, setPurpose] = useState(start.purpose ?? 'record');
   const [showOutcome, setShowOutcome] = useState(Boolean(outcome));
   const [loading, setLoading] = useState(false);
@@ -272,7 +281,9 @@ export default function RecordPaymentForm({
 
   const pair = { currency, paidCurrency };
   const cross = !readOnly && paidCurrency !== currency;
-  const rate = useRateSuggestion(groupId, currency, paidCurrency);
+  const liveRate = useRateSuggestion(groupId, currency, paidCurrency);
+  const rate: RateSuggestionState =
+    entry && pinned ? { status: 'ready', suggestion: pinned } : liveRate;
   const suggestion = rate.status === 'ready' ? rate.suggestion : null;
   // The sheet opens on the amount typed or suggested, and the suggestion once it is read.
   const crossEntry = cross && (entry ?? startCrossCurrencyEntry(pair, amount, suggestion));
@@ -296,12 +307,14 @@ export default function RecordPaymentForm({
     if (entry.rate !== '' || entry.drivers.includes('rate') || entry.drivers.includes('paid'))
       return;
     setEntry(startCrossCurrencyEntry({ currency, paidCurrency }, entry.cleared, suggestion));
+    setPinned(suggestion);
   }, [cross, suggestion, entry, currency, paidCurrency]);
 
   /** Pay in another currency, or the Debt's own: the sheet starts again on the amount cleared. */
   const choosePaidCurrency = (next: string) => {
     setPaidCurrency(next);
     setEntry(null);
+    setPinned(null);
     setAck(false);
     setShowOutcome(false);
     if (crossEntry) setAmount(crossEntry.cleared);
@@ -310,6 +323,7 @@ export default function RecordPaymentForm({
   const editCross = (field: CrossCurrencyField, text: string) => {
     if (!crossEntry) return;
     const next = editCrossCurrencyEntry(crossEntry, pair, field, text);
+    if (!entry) setPinned(suggestion);
     setEntry(next);
     setAmount(next.cleared);
     setAmountTyped(true);
@@ -346,6 +360,7 @@ export default function RecordPaymentForm({
         : 0;
     setAmount(suggested > 0 ? amountInputText(suggested, currency) : '');
     setEntry(null);
+    setPinned(null);
   };
 
   const handleSubmit = async () => {
@@ -469,13 +484,23 @@ export default function RecordPaymentForm({
   const noticeText = notice || (blocked ? GONE : '');
   const amountText = shown ? storedAmountText(shown) : amount;
   const noteText = shown ? shown.note : note;
-  const sendLabel = shown
-    ? formatCurrency(shown.amount, shown.currency)
-    : crossEntry
-      ? null
-      : check?.amount.status === 'valid'
-        ? money(check.amount.amountMinor, currency)
-        : null;
+  // A stored payment in another currency resends what it paid (#727).
+  const shownPaid =
+    shown?.paidCurrency && shown.amountPaidMinor !== undefined && shown.appliedRate
+      ? {
+          amount: minorMoney(shown.amountPaidMinor, shown.paidCurrency),
+          rate: `${decimalMoney(rateText(shown.appliedRate), shown.paidCurrency)} per ${getCurrency(shown.currency)?.symbol ?? shown.currency}`,
+        }
+      : null;
+  const sendLabel = shownPaid
+    ? shownPaid.amount
+    : shown
+      ? formatCurrency(shown.amount, shown.currency)
+      : crossEntry
+        ? null
+        : check?.amount.status === 'valid'
+          ? money(check.amount.amountMinor, currency)
+          : null;
   const amountError = check?.amount.status === 'invalid' ? check.amount.message : null;
   const crossReady = !crossEntry || crossReading?.status === 'valid';
   const canSend =
@@ -486,8 +511,9 @@ export default function RecordPaymentForm({
       : (check?.waitingFor ?? null);
   const suggestedMinor = check?.suggestedMinor ?? null;
   const preview = check?.preview ?? null;
+  // With no Debt this way, today's overpayment words and positions say it (#727).
   const crossWords =
-    crossEntry && check?.amount.status === 'valid' && suggestedMinor !== null
+    crossEntry && check?.amount.status === 'valid' && suggestedMinor !== null && suggestedMinor > 0
       ? crossCurrencySummary({
           clearedMinor: check.amount.amountMinor,
           debtMinor: suggestedMinor,
@@ -713,7 +739,7 @@ export default function RecordPaymentForm({
             now={new Date()}
             readOnly={loading}
             onEdit={editCross}
-            onUseSuggestion={(text) => editCross('rate', text)}
+            onUseSuggestion={(exact) => editCross('rate', suggestedRateText(exact))}
           />
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
@@ -727,7 +753,7 @@ export default function RecordPaymentForm({
               }}
             >
               <Box component="label" htmlFor="record-payment-amount" sx={labelSx}>
-                Amount paid
+                {shownPaid ? 'Amount cleared' : 'Amount paid'}
               </Box>
               {suggestedMinor !== null && suggestedMinor > 0 && (
                 <Button
@@ -813,6 +839,11 @@ export default function RecordPaymentForm({
                   },
                 })}
               />
+              {shownPaid && (
+                <Typography sx={{ m: 0, mt: 0.75, fontSize: '0.875rem', color: 'text.secondary' }}>
+                  Paid as {shownPaid.amount} at {shownPaid.rate}
+                </Typography>
+              )}
               {/* Always present, so even its first message is announced, and polite, so it never
                 interrupts typing (#514). */}
               <Typography
@@ -901,7 +932,7 @@ export default function RecordPaymentForm({
           </Typography>
         )}
 
-        {preview && !crossEntry && (
+        {preview && !crossWords && (
           <Box
             component="section"
             aria-labelledby="record-payment-after"

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { readAmountEntry } from './amount-entry';
 import { formatCurrency, getCurrency, getCurrencyPrecision } from './currency';
 import { toMajorAmount } from './exact-money';
+import { crossCurrencySettlementReadShape } from './validators/settlement';
 import { memberLabel } from './activity-timeline';
 import {
   calculateCrossCurrencySettlement,
@@ -64,7 +65,18 @@ const TEN = BigInt(10);
 
 /** An amount in minor units as its field shows it: "1842.00", or "3253" in yen. */
 function amountText(minor: number, currency: string): string {
-  return toMajorAmount(minor, currency).toFixed(getCurrencyPrecision(currency));
+  const places = getCurrencyPrecision(currency);
+  const units = BigInt(minor);
+  const scale = TEN ** BigInt(places);
+  return places
+    ? `${units / scale}.${(units % scale).toString().padStart(places, '0')}`
+    : units.toString();
+}
+
+/** A suggested rate as its field shows it: exactly as suggested, with at least two places. */
+export function suggestedRateText(rate: string): string {
+  const [whole, fraction = ''] = rate.split('.');
+  return `${whole}.${fraction.padEnd(2, '0')}`;
 }
 
 /** A rate as its field shows it: at least two places, at most six, rounded half up. */
@@ -187,7 +199,8 @@ export function startCrossCurrencyEntry(
   return follow(
     {
       cleared: clearedText,
-      rate: suggestion ? rateText(suggestion.rate) : '',
+      // Exactly as suggested: the amount paid follows the suggestion itself, never a rounding.
+      rate: suggestion ? suggestedRateText(suggestion.rate) : '',
       paid: '',
       drivers: suggestion ? ['cleared', 'rate'] : ['cleared'],
     },
@@ -373,31 +386,17 @@ export interface CrossCurrencyRecord extends CrossCurrencySettlementFields {
   pairDebtAfterMinor?: number;
 }
 
-const recordSchema = z.object({
-  paidBy: z.string().optional(),
-  paidByName: z.string().optional(),
-  paidTo: z.string().optional(),
-  paidToName: z.string().optional(),
-  amountMinor: z.number().int().positive(),
-  currency: z.string().min(1),
-  amountPaidMinor: z.number().int().positive(),
-  paidCurrency: z.string().min(1),
-  appliedRate: z.string().refine((rate) => {
-    try {
-      rateFraction(rate);
-      return true;
-    } catch {
-      return false;
-    }
-  }),
-  rateKind: z.enum(['suggested', 'custom', 'entered']),
-  suggestedRate: z.string().optional(),
-  rateSource: z.enum(['frankfurter', 'exchange-rate-api', 'mixed']).optional(),
-  rateAsOf: z.string().optional(),
-  rateFetchedAt: z.string().optional(),
-  pairDebtBeforeMinor: z.number().int().optional(),
-  pairDebtAfterMinor: z.number().int().optional(),
-});
+const recordSchema = z
+  .object({
+    ...crossCurrencySettlementReadShape,
+    paidBy: z.string().optional(),
+    paidByName: z.string().optional(),
+    paidTo: z.string().optional(),
+    paidToName: z.string().optional(),
+    amountMinor: z.number().int().positive(),
+    currency: z.string().min(1),
+  })
+  .required({ amountPaidMinor: true, paidCurrency: true, appliedRate: true, rateKind: true });
 
 /** A payment's record in another currency, or null for one in its Debt's own or unreadable. */
 export function readCrossCurrencyRecord(value: unknown): CrossCurrencyRecord | null {

@@ -178,16 +178,32 @@ function CurrencyChip({ currency }: { currency: string }) {
  * (#313) and the Group's Payments. Record payment keeps its place whatever the balances above it
  * are doing (loading, refreshing or failing), so a refresh never loses what the member entered.
  */
+/** Where one currency's Record payment form starts, and what its last payment came to. */
+interface FormState {
+  seq: number;
+  start: RecordPaymentStart;
+  outcome: string | null;
+}
+
 export default function BalancesView({ groupId, userId, group }: BalancesViewProps) {
   /** The currency the member chose to see, or the one Balances opened on (#724). */
   const [chosen, setChosen] = useState<string | null>(null);
   const blank = useCallback((): RecordPaymentStart => ({ from: userId, to: '' }), [userId]);
-  /** Each new `seq` starts the form afresh; nothing else (such as a refresh) resets it. */
-  const [form, setForm] = useState<{
-    seq: number;
-    start: RecordPaymentStart;
-    outcome: string | null;
-  }>(() => ({ seq: 0, start: blank(), outcome: null }));
+  /**
+   * Record payment for each currency's Debts, by currency (#727): each new `seq` starts that form
+   * afresh; nothing else (such as a refresh or another tab) resets it.
+   */
+  const [forms, setForms] = useState<Record<string, FormState>>({});
+  const formOf = (code: string): FormState =>
+    forms[code] ?? { seq: 0, start: blank(), outcome: null };
+  const setFormOf = useCallback(
+    (code: string, next: (current: FormState) => FormState) =>
+      setForms((all) => ({
+        ...all,
+        [code]: next(all[code] ?? { seq: 0, start: blank(), outcome: null }),
+      })),
+    [blank],
+  );
   const [formPair, setFormPair] = useState({ from: userId, to: '' });
   // Payments whose reply was lost, offered whatever the suggestions say (#198).
   const attempts = useSettlementAttempts(userId, groupId);
@@ -210,18 +226,18 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     void mutateSettlements();
   }, [mutate, mutateSettlements]);
 
-  const openForm = (start: RecordPaymentStart) =>
-    setForm((current) => ({ seq: current.seq + 1, start, outcome: null }));
+  const openForm = (start: RecordPaymentStart, code = currency) =>
+    setFormOf(code, (current) => ({ seq: current.seq + 1, start, outcome: null }));
   const onFormDone = useCallback(
-    (outcome: string | null) => {
+    (code: string, outcome: string | null) => {
       refresh();
-      setForm((current) => ({
+      setFormOf(code, (current) => ({
         seq: current.seq + 1,
         start: { ...blank(), focus: outcome ? 'outcome' : 'from' },
         outcome,
       }));
     },
-    [refresh, blank],
+    [refresh, blank, setFormOf],
   );
 
   const groupCurrency = group.defaultCurrency;
@@ -255,14 +271,20 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   );
   // Settle up's figures in exact minor units, for the currency shown.
   const shownLedger = ledgerOf(shownBucket ?? read, currency);
-  // A payment clears a Debt in the currency shown, so the form reads that currency's figures,
-  // and it can be paid in any of the Group's currencies (#727).
-  const ledger: LedgerState = shownLedger
-    ? { status: 'ready', ledger: shownLedger }
-    : read || error
-      ? { status: 'error' }
-      : { status: 'loading' };
-  const payCurrencies = [currency, ...groupCurrencies(group).filter((code) => code !== currency)];
+  // A payment clears a Debt in its currency, so each currency's form reads that currency's
+  // figures, and it can be paid in any of the Group's currencies (#727).
+  const ledgerFor = (code: string): LedgerState => {
+    const figures = ledgerOf(buckets.find((bucket) => bucket.currency === code) ?? read, code);
+    return figures
+      ? { status: 'ready', ledger: figures }
+      : read || error
+        ? { status: 'error' }
+        : { status: 'loading' };
+  };
+  const payCurrenciesFor = (code: string) => [
+    code,
+    ...groupCurrencies(group).filter((other) => other !== code),
+  ];
 
   const members: PaymentParty[] = viewerFirst(group.members, userId).map((member) => ({
     id: member.user._id,
@@ -297,9 +319,9 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
         `${window.location.pathname}${withoutRecordPaymentLink(link)}`,
       );
       if (!linkMember) return;
-      // Payments are recorded in the main currency, so its tab shows the form.
+      // Home's link suggests a payment in the main currency, so its tab shows the form.
       setChosen(groupCurrency);
-      setForm((current) => ({
+      setFormOf(groupCurrency, (current) => ({
         seq: current.seq + 1,
         outcome: null,
         start: {
@@ -312,7 +334,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
       }));
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [searchParams, linkFrom, linkTo, linkMember, linkAmount, answered, groupCurrency]);
+  }, [searchParams, linkFrom, linkTo, linkMember, linkAmount, answered, groupCurrency, setFormOf]);
 
   const displayName = (person: BalancePerson) => (person._id === userId ? 'You' : person.name);
   const userBalance = balances.find((balance) => balance.user._id === userId);
@@ -336,15 +358,20 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
               <Button
                 color="inherit"
                 size="small"
-                onClick={() =>
-                  openForm({
-                    from: attempt.paidBy,
-                    to: attempt.paidTo,
-                    amount: attemptAmountText(attempt),
-                    purpose: 'check',
-                    focus: 'amount',
-                  })
-                }
+                onClick={() => {
+                  // The payment's own currency's tab shows it (#727).
+                  setChosen(attempt.currency);
+                  openForm(
+                    {
+                      from: attempt.paidBy,
+                      to: attempt.paidTo,
+                      amount: attemptAmountText(attempt),
+                      purpose: 'check',
+                      focus: 'amount',
+                    },
+                    attempt.currency,
+                  );
+                }}
               >
                 Check payment
               </Button>
@@ -709,23 +736,28 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
             {top}
           </Box>
           <Box sx={{ gridArea: 'form', minWidth: 0 }}>
-            {/* The form follows the currency shown: a payment clears a Debt in it (#727). */}
-            <RecordPaymentForm
-              key={`${currency}:${form.seq}`}
-              groupId={groupId}
-              groupName={group.name}
-              accountId={userId}
-              currency={currency}
-              payCurrencies={payCurrencies}
-              mainCurrency={groupCurrency}
-              members={members}
-              ledger={ledger}
-              start={form.start}
-              outcome={form.outcome}
-              onDone={onFormDone}
-              onRefresh={refresh}
-              onPairChange={setFormPair}
-            />
+            {/* One form per currency, the others out of sight, keeping what was entered: a
+                payment clears a Debt in the currency shown (#727). */}
+            {currencies.map((code) => (
+              <Box key={code} sx={{ display: code === currency ? 'block' : 'none' }}>
+                <RecordPaymentForm
+                  key={formOf(code).seq}
+                  groupId={groupId}
+                  groupName={group.name}
+                  accountId={userId}
+                  currency={code}
+                  payCurrencies={payCurrenciesFor(code)}
+                  mainCurrency={groupCurrency}
+                  members={members}
+                  ledger={ledgerFor(code)}
+                  start={formOf(code).start}
+                  outcome={formOf(code).outcome}
+                  onDone={(outcome) => onFormDone(code, outcome)}
+                  onRefresh={refresh}
+                  onPairChange={code === currency ? setFormPair : undefined}
+                />
+              </Box>
+            ))}
           </Box>
           {rest && <Box sx={{ gridArea: 'rest', minWidth: 0 }}>{rest}</Box>}
         </Box>

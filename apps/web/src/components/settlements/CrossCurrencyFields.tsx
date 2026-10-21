@@ -170,7 +170,10 @@ export default function CrossCurrencyFields({
       {rate.status === 'none' && !readOnly && (
         <Alert severity="info" role="status">
           <AlertTitle>No rate suggested right now.</AlertTitle>
-          Splitbook couldn’t get today’s rates. You can still record it with the rate you agreed.
+          {rate.reason === 'currency_unavailable'
+            ? `Splitbook has no rate between ${currency} and ${paidCurrency} right now.`
+            : 'Splitbook couldn’t get today’s rates.'}{' '}
+          You can still record it with the rate you agreed.
         </Alert>
       )}
       <Box
@@ -209,23 +212,26 @@ export default function CrossCurrencyFields({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {head(
             `Rate · ${symbol(paidCurrency)} for each ${symbol(currency)}`,
-            <Box
-              component="span"
-              sx={{
-                fontSize: '0.72rem',
-                fontWeight: 600,
-                px: 1,
-                py: 0.25,
-                borderRadius: '999px',
-                bgcolor:
-                  kind === 'suggested' && suggestion && suggestion.ageDays <= 1
-                    ? 'tint.positive'
-                    : 'tint.warning',
-                color: 'text.primary',
-              }}
-            >
-              {badge}
-            </Box>,
+            // No tag while the suggestion is read: none is known yet.
+            rate.status !== 'loading' && (
+              <Box
+                component="span"
+                sx={{
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: '999px',
+                  bgcolor:
+                    kind === 'suggested' && suggestion && suggestion.ageDays <= 1
+                      ? 'tint.positive'
+                      : 'tint.warning',
+                  color: 'text.primary',
+                }}
+              >
+                {badge}
+              </Box>
+            ),
             'record-payment-rate',
           )}
           {input(
@@ -266,7 +272,7 @@ export default function CrossCurrencyFields({
                 <Button
                   size="small"
                   variant="text"
-                  onClick={() => onUseSuggestion(rateText(note.useSuggestion!))}
+                  onClick={() => onUseSuggestion(note.useSuggestion!)}
                   sx={{ minHeight: 32, px: 1, fontSize: '0.75rem' }}
                 >
                   Use {decimalMoney(rateText(note.useSuggestion), paidCurrency)}
