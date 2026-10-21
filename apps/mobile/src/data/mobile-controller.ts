@@ -5368,7 +5368,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         error.status === 422 &&
         ['INVALID_MEMBERS', 'CURRENCY_MISMATCH', 'NO_SETTLEMENT_DEBT'].includes(error.code ?? '');
       if (changedGroup && current(owner)) invalidateReads(`group:${groupId}`);
-      if (attempt && !state.attempt && correction) {
+      // A settle-up's Retry carries the first try's key, and /settlements/batch answers one that
+      // landed with its reply before it checks the Debts. Refused because they changed, it wasn't
+      // recorded, so it ends as a first try refused does, and keeps nothing to retry (#802). A
+      // single payment's route checks its members before its reply, so its refusals keep the
+      // record, as any other refused Retry does.
+      const debtsChanged =
+        error instanceof RequestError &&
+        error.code === 'NO_SETTLEMENT_DEBT' &&
+        !!attempt &&
+        isBatchBody(attempt.body);
+      if (attempt && correction && (!state.attempt || debtsChanged)) {
         try {
           await lease.write(async () => {
             const value = await storage.load(lease.accountId, groupId);
@@ -5397,7 +5407,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                   }
                 : { status: 'editing' as const }),
               acknowledged: false,
-              message: correction,
+              message:
+                state.attempt && debtsChanged
+                  ? 'These Debts changed, so this payment wasn’t recorded. Close this and check them again.'
+                  : correction,
             },
           });
           return;
