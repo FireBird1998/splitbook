@@ -1540,7 +1540,13 @@ Settlement: it has no bucket in `byCurrency`, no Balance, Debt or Suggested
 payment, and nothing can be settled in it. The read answers as it would without
 that money, never converting it. The Expenses read still lists it and gives it
 its own Spent line (#810); Home (`GET /api/user/balances`) and the open balances
-checked before a member leaves follow the same rule.
+checked before a member leaves follow the same rule, so such money never stops a
+member leaving. Instead, when the Group holds money in such a currency that
+involves the signed-in member (an Expense they paid or share, or a Settlement
+they paid or were paid), the response adds `unsupportedCurrencies`: those codes,
+alphabetically (`["DEM", "FRF"]`). The Leave Group dialog names them and says
+leaving doesn't settle that money. The field is left out when there are none,
+so every other response is unchanged.
 
 **Response:**
 
