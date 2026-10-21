@@ -334,6 +334,29 @@ describe('an Expense in a currency Splitbook no longer supports (#820)', () => {
     expect(await storedRow(expenseId)).toEqual(before);
   });
 
+  // A stale edit says so first, as for any Expense: the member reloads before anything else.
+  it('an edit from an older revision is answered as stale, and nothing stored changes', async () => {
+    const groupId = await berlinTrip();
+    const expenseId = await oldBerlinRent(groupId);
+    // It changed elsewhere since the member read it at revision 0.
+    await Expense.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(expenseId) },
+      { $set: { revision: 1 } },
+    );
+    const before = await storedRow(expenseId);
+    const response = await changeExpense(
+      new Request(`http://localhost/api/groups/${groupId}/expenses/${expenseId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Splitbook-Revision': '0' },
+        body: JSON.stringify({ description: 'Old Berlin flat' }),
+      }),
+      { params: Promise.resolve({ id: groupId, expenseId }) },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ status: 409, code: 'STALE_REVISION' });
+    expect(await storedRow(expenseId)).toEqual(before);
+  });
+
   // Every edit is refused before a save; the save itself still refuses a change to its money.
   it('a save that changes its money is refused, and nothing stored changes', async () => {
     const groupId = await berlinTrip();
