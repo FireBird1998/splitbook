@@ -73,7 +73,8 @@ const events = Array.from({ length: 25 }, (_, index) => ({
 }));
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
-function setup() {
+/** `served` is the record the server answers with: the Electricity bill unless a test says. */
+function setup(served: Record<string, unknown> = record) {
   let cookie: string | null = null;
   let account: string | null = null;
   const drafts = new Map<string, unknown>();
@@ -135,7 +136,7 @@ function setup() {
         if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
         if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
         if (path === `/api/groups/${groupId}/expenses/${expenseId}`)
-          return json({ status: 200, data: record });
+          return json({ status: 200, data: served });
         if (path === `/api/groups/${groupId}/expenses`)
           return json({
             status: 200,
@@ -179,8 +180,8 @@ function setup() {
   return { controller, drafts, activityPages };
 }
 
-async function signedIn() {
-  const setupResult = setup();
+async function signedIn(served?: Record<string, unknown>) {
+  const setupResult = setup(served);
   await setupResult.controller.signIn('sam');
   return setupResult;
 }
@@ -209,6 +210,20 @@ describe('Opening an Expense record', () => {
       financial: { month: '2026-08' },
       restoreScroll: { y: 240 },
     });
+  });
+
+  // #820: an Expense in a currency Splitbook no longer supports, such as a legacy DEM row, is
+  // listed as stored (#810), but its record can't be read exactly here, so opening it says why.
+  it('says why an Expense in a currency Splitbook no longer supports can’t be opened, and stores nothing', async () => {
+    const { controller, drafts } = await signedIn({ ...record, currency: 'DEM' });
+    await controller.openGroup(groupId);
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'blocked',
+      message:
+        'This Expense is in DEM, which Splitbook no longer supports, so it can’t be opened here. It stays in the list as it was recorded.',
+    });
+    expect(drafts.size).toBe(0);
   });
 
   it('opens from an Activity event about it; Back returns to Activity with the older events it showed', async () => {

@@ -111,6 +111,8 @@ describe('a file', () => {
 describe('an amount', () => {
   it('is exact, in its currency’s minor units, with no grouping or symbol', () => {
     expect(formatMinorAmount(124950, 'INR')).toBe('1249.50');
+    // A currency Splitbook no longer supports, at 2 places, as stored (#820).
+    expect(formatMinorAmount(4000, 'DEM')).toBe('40.00');
     expect(formatMinorAmount(1_000_000_000, 'INR')).toBe('10000000.00');
     expect(formatMinorAmount(5, 'EUR')).toBe('0.05');
     expect(formatMinorAmount(0, 'USD')).toBe('0.00');
@@ -119,10 +121,11 @@ describe('an amount', () => {
     expect(formatMinorAmount(-1250, 'EUR')).toBe('-12.50');
   });
 
-  it('refuses an amount it can’t hold exactly, or a currency it doesn’t know', () => {
+  it('refuses an amount it can’t hold exactly, and writes a currency it doesn’t know at 2 places (#820)', () => {
     expect(() => formatMinorAmount(0.5, 'INR')).toThrow();
     expect(() => formatMinorAmount(Number.MAX_SAFE_INTEGER + 2, 'INR')).toThrow();
-    expect(() => formatMinorAmount(100, 'XXX')).toThrow('INVALID_CURRENCY');
+    // Money in a currency Splitbook no longer supports is exported as stored, never refused.
+    expect(formatMinorAmount(100, 'XXX')).toBe('1.00');
   });
 });
 

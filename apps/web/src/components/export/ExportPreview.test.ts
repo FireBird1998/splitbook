@@ -367,6 +367,55 @@ it('shows each currency and both stored payment amounts in the statement preview
   );
 });
 
+// #820: a statement preview with an Expense in a currency Splitbook no longer supports shows its
+// Spent as stored, with its code, never converted.
+it('previews a statement with an Expense in a currency Splitbook no longer supports', () => {
+  const statement = buildStatement({
+    id: 'g',
+    name: 'Fictional Berlin trip',
+    theme: 'trip',
+    currency: 'INR',
+    tags: [],
+    names: { a: 'Alex', b: 'Sam' },
+    members: [
+      { id: 'a', name: 'Alex' },
+      { id: 'b', name: 'Sam' },
+    ],
+    expenses: [
+      {
+        id: 'e1',
+        date: '2026-09-18T00:00:00.000Z',
+        description: 'Old Berlin rent',
+        category: 'housing',
+        tag: 'Rent',
+        currency: 'DEM',
+        amountMinor: 4000,
+        splitMethod: 'equal',
+        paidBy: [{ userId: 'a', amountMinor: 4000 }],
+        splitBetween: [
+          { userId: 'a', amountMinor: 2000 },
+          { userId: 'b', amountMinor: 2000 },
+        ],
+      },
+    ],
+    settlements: [],
+  });
+  const html = render({
+    status: 'ready',
+    data: {
+      format: 'statement',
+      groupNames: [statement.name],
+      generatedAt: '2026-10-21T12:00:00Z',
+      from: null,
+      to: null,
+      timeZone: 'UTC',
+      empty: false,
+      statement: buildStatementPreview(statement),
+    },
+  });
+  expect(text(html)).toMatch(/DEM\s40\.00/);
+});
+
 it('collapses settled empty statement currencies to the same one-line preview', () => {
   const statement = buildStatement({
     id: 'g',

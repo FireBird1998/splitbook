@@ -179,3 +179,31 @@ it('prints a settled empty currency as one line while retaining an outstanding b
   expect(jpy).not.toContain('<table');
   expect(html).toContain('aria-label="Current balances"');
 });
+
+// #820: an Expense in a currency Splitbook no longer supports, such as a legacy DEM row, gets a
+// Spent line of its own, as stored at 2 places and never converted, and no position (#810, #812).
+describe('a statement with an Expense in a currency Splitbook no longer supports (#820)', () => {
+  it('lists it under its own Spent, with its code, and no one’s position', () => {
+    const marks = { ...expense('e9', '2026-09-18', 'Old Berlin rent', 4000), currency: 'DEM' };
+    const statement = buildStatement(
+      { ...TRIP, expenses: [...TRIP.expenses, marks] },
+      { timeZone: 'Asia/Kolkata' },
+    );
+    expect(statement.currencies.find((bucket) => bucket.currency === 'DEM')).toMatchObject({
+      spentMinor: 4000,
+      expenseCount: 1,
+      people: [],
+      suggestedPayments: [],
+    });
+    const shown = text(
+      renderToStaticMarkup(
+        createElement(
+          ThemeProvider,
+          { theme: createAppTheme('light') },
+          createElement(StatementView, { statement }),
+        ),
+      ),
+    );
+    expect(shown).toMatch(/Old Berlin rent[\s\S]*DEM\s40\.00/);
+  });
+});
