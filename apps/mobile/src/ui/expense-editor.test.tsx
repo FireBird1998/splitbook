@@ -1992,6 +1992,18 @@ describe('the currency beside the amount (#720)', () => {
     expect(text(ui.root())).not.toContain('no longer uses GBP');
   });
 
+  it('says the shares are in whole yen, as the web does, and drops it for euros', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId), {
+      readGroup: async () => json({ status: 200, data: travelling }),
+    });
+    await ui.type('Amount, Japanese Yen, required', '2500');
+    expect(text(ui.root())).toContain('Who owes what · JPY · whole yen');
+    await ui.press('Currency, JPY, Japanese Yen. Change currency');
+    await ui.press('EUR, Euro');
+    expect(text(ui.root())).toContain('Who owes what · EUR');
+    expect(text(ui.root())).not.toContain('whole yen');
+  });
+
   it('takes yen whole, saying so in the web’s words', async () => {
     const ui = await render((controller) => controller.openExpense(groupId), {
       readGroup: async () => json({ status: 200, data: travelling }),
