@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
+import Group from '@/lib/models/Group';
+import { settlementService } from '@/lib/services/settlement.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
@@ -192,6 +194,76 @@ describe('cross-currency Settlement HTTP contract (#727)', () => {
     expect((await record(id)).status).toBe(201);
     expect((await read(id)).body.data[0]).toMatchObject(rateFields);
     expect((await leaveGroup(id)).status).toBe(200);
+  });
+  it.each(['EUR', 'USD'])(
+    'clears a legacy unlisted EUR Debt paid in %s, moving only EUR',
+    async (paidCurrency) => {
+      const id = await trip(true);
+      // Reproduce historical records predating the Group currency list.
+      await Group.updateOne({ _id: id }, { defaultCurrency: 'USD', alternateCurrencies: [] });
+      const before = await ledgers(id);
+      const body = {
+        paidBy: sam,
+        paidTo: alex,
+        amount: 20,
+        currency: 'EUR',
+        ...(paidCurrency === 'USD'
+          ? {
+              ...rateFields,
+              paidCurrency,
+              amountPaidMinor: 2200,
+              appliedRate: '1.1',
+              suggestedRate: '1.09',
+            }
+          : {}),
+      };
+      const saved = await record(id, body);
+      expect(saved.status).toBe(201);
+      expect(saved.body.data).toMatchObject(body);
+      const after = await ledgers(id);
+      expect(after.filter((row) => row.currency !== 'EUR')).toEqual(
+        before.filter((row) => row.currency !== 'EUR'),
+      );
+      expect(
+        after.find((row) => row.currency === 'EUR')?.balances.map((row) => row.balance),
+      ).toEqual([0, 0]);
+      expect(after.find((row) => row.currency === 'EUR')?.debts).toEqual([]);
+      expect(after.find((row) => row.currency === 'EUR')?.debtsBeforeSimplifying).toEqual([]);
+    },
+  );
+  it('clears a legacy currency used only by an earlier Settlement', async () => {
+    const group = await groupService.create(
+      { name: 'Fictional legacy payments', defaultCurrency: 'USD', alternateCurrencies: ['EUR'] },
+      alex,
+    );
+    const id = String(group._id);
+    await groupService.addMember(id, sam);
+    await settlementService.create(
+      id,
+      { paidBy: alex, paidTo: sam, amount: 20, currency: 'EUR' },
+      alex,
+    );
+    await Group.updateOne({ _id: id }, { alternateCurrencies: [] });
+    expect(
+      (await record(id, { paidBy: sam, paidTo: alex, amount: 20, currency: 'EUR' })).status,
+    ).toBe(201);
+    expect(
+      (await ledgers(id)).find((row) => row.currency === 'EUR')?.balances.map((row) => row.balance),
+    ).toEqual([0, 0]);
+    expect((await leaveGroup(id)).status).toBe(200);
+  });
+  it('refuses an unused unlisted cleared currency and a legacy unlisted paid currency', async () => {
+    const id = await trip();
+    await Group.updateOne({ _id: id }, { defaultCurrency: 'USD', alternateCurrencies: [] });
+    for (const body of [
+      { paidBy: sam, paidTo: alex, amount: 20, currency: 'GBP' },
+      { ...payment, currency: 'USD', paidCurrency: 'EUR' },
+    ]) {
+      const refused = await record(id, body);
+      expect(refused.status).toBe(422);
+      expect(refused.body.code).toBe('CURRENCY_MISMATCH');
+    }
+    expect((await read(id)).body.data).toEqual([]);
   });
   it('refuses an unlisted paid currency without recording anything', async () => {
     const id = await trip();

@@ -112,7 +112,10 @@ describe('cross-currency Settlement maths (#727)', () => {
 
 describe('cross-currency Settlement wording (#727)', () => {
   const record = {
+    paidBy: 'sam',
     paidByName: 'Sam',
+    paidTo: 'alex',
+    paidToName: 'Alex',
     currency: 'EUR',
     amountMinor: 2000,
     paidCurrency: 'INR',
@@ -126,13 +129,41 @@ describe('cross-currency Settlement wording (#727)', () => {
   };
   it('formats both stored amounts, the applied rate and the dated suggestion', () => {
     expect(formatCrossCurrencySettlement(record)).toBe(
-      'Sam paid ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct)',
+      'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct)',
+    );
+  });
+  it.each([
+    ['sam', 'You paid Alex'],
+    ['alex', 'Sam paid you'],
+    ['someone-else', 'Sam paid Alex'],
+  ])('names both people with viewer %s as You', (viewerId, people) => {
+    expect(formatCrossCurrencySettlement(record, viewerId)).toBe(
+      `${people} ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct)`,
+    );
+  });
+  it('falls back to Paid to when the payer name is missing, as Activity detail does', () => {
+    expect(formatCrossCurrencySettlement({ ...record, paidByName: '  ' })).toMatch(
+      /^Paid to Alex ₹/,
+    );
+    expect(formatCrossCurrencySettlement({ ...record, paidByName: undefined }, 'alex')).toMatch(
+      /^Paid to you ₹/,
+    );
+    expect(formatCrossCurrencySettlement({ ...record, paidToName: undefined })).toMatch(
+      /^Sam paid ₹/,
+    );
+  });
+  it('dates the suggestion by rateAsOf even when it was fetched the next day', () => {
+    expect(formatCrossCurrencySettlement({ ...record, rateAsOf: '2026-10-20' })).toContain(
+      'suggested ₹92.10 (20 Oct)',
     );
   });
   it('names an entered rate and retains required fallback attribution', () => {
     expect(
       formatCrossCurrencySettlement({
+        paidBy: 'sam',
         paidByName: 'Sam',
+        paidTo: 'alex',
+        paidToName: 'Alex',
         currency: 'EUR',
         amountMinor: 2000,
         paidCurrency: 'JPY',
@@ -140,9 +171,9 @@ describe('cross-currency Settlement wording (#727)', () => {
         appliedRate: '157.5',
         rateKind: 'entered',
       }),
-    ).toBe('Sam paid ¥3,150 to clear €20.00 at ¥157.5 per €; no rate suggested');
+    ).toBe('Sam paid Alex ¥3,150 to clear €20.00 at ¥157.5 per €; no rate suggested');
     expect(formatCrossCurrencySettlement({ ...record, rateSource: 'exchange-rate-api' })).toBe(
-      'Sam paid ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct) · Rates By Exchange Rate API',
+      'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct) · Rates By Exchange Rate API',
     );
     expect(formatCrossCurrencySettlement({ ...record, rateSource: 'mixed' })).toContain(
       'Rates By Exchange Rate API',
@@ -151,7 +182,10 @@ describe('cross-currency Settlement wording (#727)', () => {
   it('formats stored decimal rates and large minor amounts without floating-point rounding', () => {
     expect(
       formatCrossCurrencySettlement({
+        paidBy: 'sam',
         paidByName: 'Sam',
+        paidTo: 'alex',
+        paidToName: 'Alex',
         currency: 'EUR',
         amountMinor: 600,
         paidCurrency: 'INR',
