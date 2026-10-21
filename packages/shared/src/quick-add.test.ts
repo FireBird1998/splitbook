@@ -761,3 +761,48 @@ describe('Quick add with the Group’s listed currencies (#732)', () => {
     },
   );
 });
+
+describe('Quick add keeps an unlisted or ambiguous currency explicit (#732)', () => {
+  it.each([
+    ['€20 dinner', 'EUR', '20'],
+    ['Dinner 20 EUR', 'EUR', '20'],
+    ['Dinner 2500 JPY', 'JPY', '2500'],
+    ['Dinner ₩12000', 'KRW', '12000'],
+  ])(
+    'reports the unlisted currency in %s without reinterpreting the amount',
+    (text, currency, amount) => {
+      const line = read(text);
+      expect(line).toMatchObject({
+        currency,
+        currencyListed: false,
+        amountMinor: null,
+        amountText: amount,
+      });
+      expect(line.problems).toEqual([
+        expect.objectContaining({
+          code: 'amount-currency',
+          message: `${currency} is not one of this Group’s currencies. Add it to the Group or choose a listed currency.`,
+        }),
+      ]);
+      expect(
+        quickAddDraftValues(line, { payerId: ALEX.id, tagId: 'Food' }, context()),
+      ).toMatchObject({ currency, amount });
+      expect(read(text, { alternateCurrencies: [currency] }).problems).toEqual([]);
+    },
+  );
+
+  it('asks for a code when a symbol matches several extra currencies', () => {
+    const line = read('Dinner ¥2500', { alternateCurrencies: ['JPY', 'CNY'] });
+    expect(line).toMatchObject({
+      currency: null,
+      currencyCandidates: ['JPY', 'CNY'],
+      amountMinor: null,
+    });
+    expect(line.problems[0]).toMatchObject({ code: 'amount-currency' });
+    expect(read('Dinner 2500 CNY', { alternateCurrencies: ['JPY', 'CNY'] })).toMatchObject({
+      currency: 'CNY',
+      amountMinor: 250000,
+      problems: [],
+    });
+  });
+});
