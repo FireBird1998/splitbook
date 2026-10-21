@@ -118,11 +118,20 @@ for (const [name, Field] of fields) {
         },
       });
     }
+    let beforeInput: ((event: unknown) => void) | undefined;
     await act(async () => {
       renderer = create(createElement(Form), {
         createNodeMock: (element) =>
           element.type === 'input'
-            ? { setSelectionRange: caret, focus: () => {}, value: '' }
+            ? {
+                setSelectionRange: caret,
+                focus: () => {},
+                value: '',
+                addEventListener: (type: string, listener: (event: unknown) => void) => {
+                  if (type === 'beforeinput') beforeInput = listener;
+                },
+                removeEventListener() {},
+              }
             : null,
       });
     });
@@ -141,12 +150,24 @@ for (const [name, Field] of fields) {
           nativeEvent: { inputType, data },
         }),
       );
-    return { input, changed, caret, edit };
+    /** Undo or Redo, as the browser asks for it before it would change the text. */
+    const history = async (inputType: 'historyUndo' | 'historyRedo') => {
+      const event = { inputType, cancelable: true, preventDefault: vi.fn() };
+      await act(async () => beforeInput?.(event));
+      return event;
+    };
+    return { input, changed, caret, edit, history };
   }
 
   it(`${name}: still hands the caller's inputRef the input, as Record payment focuses it`, async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-    const node = { setSelectionRange: () => {}, focus: () => {}, value: '' };
+    const node = {
+      setSelectionRange: () => {},
+      focus: () => {},
+      value: '',
+      addEventListener() {},
+      removeEventListener() {},
+    };
     const inputRef = createRef<HTMLInputElement>();
     await act(async () => {
       renderer = create(
@@ -166,7 +187,13 @@ for (const [name, Field] of fields) {
         {
           createNodeMock: (element) =>
             element.type === 'input'
-              ? { setSelectionRange: caret, focus: () => {}, value: '' }
+              ? {
+                  setSelectionRange: caret,
+                  focus: () => {},
+                  value: '',
+                  addEventListener() {},
+                  removeEventListener() {},
+                }
               : null,
         },
       );
@@ -244,6 +271,77 @@ for (const [name, Field] of fields) {
     expect(input().props.value).toBe('1,842.50');
     expect(changed).toHaveBeenLastCalledWith('1842.50');
     expect(caret).toHaveBeenLastCalledWith(6, 6);
+  });
+
+  it(`${name}: a 9 typed over 842 selected in 1,842.50 reads 19.50, the caret after the 9`, async () => {
+    const { input, changed, caret, edit } = await focused('EUR', '1842.5');
+    await edit('1,9.50', 3, 'insertText', '9');
+    expect(input().props.value).toBe('19.50');
+    expect(changed).toHaveBeenLastCalledWith('19.50');
+    expect(caret).toHaveBeenLastCalledWith(2, 2);
+  });
+
+  it(`${name}: a 9 pasted over 842 reads 19.50 too, but a pasted comma stays refused`, async () => {
+    const pasted = await focused('EUR', '1842.5');
+    await pasted.edit('1,9.50', 3, 'insertFromPaste');
+    expect(pasted.input().props.value).toBe('19.50');
+    await act(async () => renderer.unmount());
+    const comma = await focused('EUR', '1842.5');
+    await comma.edit('1,9,5.50', 5, 'insertFromPaste');
+    expect(comma.input().props.value).toBe('1,9,5.50');
+    expect(readAmountEntry(comma.changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
+  });
+
+  it(`${name}: Undo after a regroup steps back to 123, so a 5 makes 1,235, never 51,234`, async () => {
+    const { input, changed, caret, edit, history } = await focused('EUR', '');
+    for (const typed of ['1', '12', '123', '1234']) await edit(typed);
+    expect(input().props.value).toBe('1,234');
+    const undo = await history('historyUndo');
+    expect(undo.preventDefault).toHaveBeenCalled();
+    expect(input().props.value).toBe('123');
+    expect(changed).toHaveBeenLastCalledWith('123');
+    expect(caret).toHaveBeenLastCalledWith(3, 3);
+    await edit('1235');
+    expect(input().props.value).toBe('1,235');
+    expect(readAmountEntry(changed.mock.lastCall![0], 'EUR')).toEqual({
+      status: 'valid',
+      amountMinor: 123500,
+    });
+  });
+
+  it(`${name}: Redo puts an undone edit back, the caret after it`, async () => {
+    const { input, changed, caret, edit, history } = await focused('EUR', '');
+    for (const typed of ['1', '12', '123', '1234']) await edit(typed);
+    await history('historyUndo');
+    expect(input().props.value).toBe('123');
+    await history('historyRedo');
+    expect(input().props.value).toBe('1,234');
+    expect(changed).toHaveBeenLastCalledWith('1234');
+    expect(caret).toHaveBeenLastCalledWith(5, 5);
+    // Nothing to redo: the amount stays.
+    await history('historyRedo');
+    expect(input().props.value).toBe('1,234');
+  });
+
+  it(`${name}: Undo of a Backspace puts the 8 back, the caret after it, and stops at the amount focus showed`, async () => {
+    const { input, changed, caret, edit, history } = await focused('EUR', '1842.5');
+    await edit('1,42.50', 2, 'deleteContentBackward');
+    await history('historyUndo');
+    expect(input().props.value).toBe('1,842.50');
+    // The form's own amount at focus, as it had it.
+    expect(changed).toHaveBeenLastCalledWith('1842.5');
+    expect(caret).toHaveBeenLastCalledWith(3, 3);
+    const past = await history('historyUndo');
+    expect(past.preventDefault).toHaveBeenCalled();
+    expect(input().props.value).toBe('1,842.50');
+  });
+
+  it(`${name}: an Undo the browser makes itself steps the field's history, not the browser's`, async () => {
+    const { input, changed, edit } = await focused('EUR', '');
+    for (const typed of ['1', '12', '123', '1234']) await edit(typed);
+    await edit('', 0, 'historyUndo');
+    expect(input().props.value).toBe('123');
+    expect(changed).toHaveBeenLastCalledWith('123');
   });
 
   it(`${name}: a whole yen amount regroups too, and INR groups as it does on blur`, async () => {
