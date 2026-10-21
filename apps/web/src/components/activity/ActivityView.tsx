@@ -1,9 +1,9 @@
 'use client';
 import PreparedBy from '@/components/expenses/PreparedBy';
 
-import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
-import { activityPageKey } from '@splitbook/shared/query-keys';
-import useSWR from 'swr';
+import { webActivityPage } from '@/lib/web-query-keys';
+import useSWRInfinite from 'swr/infinite';
+import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -40,17 +40,36 @@ interface ActivityViewProps {
 }
 
 export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
-  const { data, isLoading, error } = useSWR(
-    activityPageKey(WEB_QUERY_ACCOUNT, groupId, { page: 1, limit: 50 }),
+  const { data, isLoading, error, isValidating, size, setSize } = useSWRInfinite(
+    (index, previous: Awaited<ReturnType<typeof fetchWebActivity>> | null) => {
+      if (previous && previous.data.pagination.page >= previous.data.pagination.totalPages)
+        return null;
+      return webActivityPage(groupId, index);
+    },
     fetchWebActivity,
     {
       refreshInterval: 10_000,
+      // Page offsets move together when a new event arrives.
+      revalidateAll: true,
     },
   );
 
   /** The payment whose card is open beside the list (#727). */
   const [openId, setOpenId] = useState<string | null>(null);
-  const activities = (data?.data?.activities || []) as ActivityLike[];
+  // A new event can move the last event of a page onto the next one.
+  const seen = new Set<string>();
+  const activities = (data?.flatMap((page) => page.data.activities) || []).filter((activity) => {
+    if (seen.has(activity._id)) return false;
+    seen.add(activity._id);
+    return true;
+  }) as ActivityLike[];
+  const lastPage = data?.at(-1)?.data.pagination;
+  const hasOlder = Boolean(lastPage && lastPage.page < lastPage.totalPages);
+  // Asked for more pages than are loaded: an older page is on its way, or its read failed. A
+  // failed refresh of the pages shown is not that, and says nothing: the events stay.
+  const askedOlder = Boolean(data && size > data.length);
+  const loadingOlder = isValidating && askedOlder;
+  const olderFailed = Boolean(error) && askedOlder;
   const groups = groupActivitiesByDay(activities);
 
   if (isLoading) {
@@ -63,7 +82,7 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return <Typography color="error.main">{error.message}</Typography>;
   }
 
@@ -187,6 +206,29 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
           </Stack>
         </Box>
       ))}
+      {olderFailed && (
+        <Typography
+          role="alert"
+          variant="body2"
+          sx={{ color: 'status.negative', textAlign: 'center' }}
+        >
+          Couldn’t load older activity. The events shown are still here.
+        </Typography>
+      )}
+      {hasOlder && (
+        <Button
+          variant="text"
+          disabled={loadingOlder}
+          onClick={() => void setSize((data?.length ?? 0) + 1)}
+          sx={{ alignSelf: 'center' }}
+        >
+          {loadingOlder
+            ? 'Loading older activity…'
+            : olderFailed
+              ? 'Try loading older activity'
+              : 'Load older activity'}
+        </Button>
+      )}
     </Stack>
   );
 
