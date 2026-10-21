@@ -9,7 +9,7 @@ import {
 } from '@/lib/utils/api-response';
 import { auth } from '@/lib/auth';
 import { isGroupAdmin } from '@/lib/group-member-emails';
-import { mcpResource } from '@/lib/mcp/config';
+import { whatsLive } from '@/lib/landing/whats-live';
 import { groupReach } from '@/lib/mcp/group-reach';
 import { groupService } from '@/lib/services/group.service';
 
@@ -25,7 +25,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!isGroupAdmin(group, user.id!)) return forbidden();
 
     // Where assistants are off, or the Group doesn't allow them, none reaches it.
-    if (!mcpResource() || group.assistantRule === 'not_allowed') return success({ reach: [] });
+    if (!whatsLive().assistants.available || group.assistantRule === 'not_allowed')
+      return success({ reach: [] });
     const members = group.members.map((member) => {
       const person = member.user as unknown as { _id: { toString(): string }; name?: string };
       return { id: person._id.toString(), name: person.name ?? '' };

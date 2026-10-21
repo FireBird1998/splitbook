@@ -9,14 +9,12 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
-import { format, isToday, isYesterday } from 'date-fns';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import Link from 'next/link';
-import { formatDate } from '@splitbook/shared/date';
 import { PRODUCT_NAME } from '@/lib/product';
 import { assistantAddress } from '@/lib/mcp/assistant-name';
 import {
@@ -24,14 +22,7 @@ import {
   type ConnectedAssistant,
   type ConnectedAssistantsPage,
 } from '@splitbook/shared/connected-assistant';
-
-function lastUsedLabel(value: string | null): string {
-  if (!value) return 'Not used yet';
-  const date = new Date(value);
-  if (isToday(date)) return `Last used ${format(date, 'HH:mm')}`;
-  if (isYesterday(date)) return 'Last used yesterday';
-  return `Last used ${formatDate(date, { omitCurrentYear: true })}`;
-}
+import { lastUsedLabel } from './last-used';
 
 /**
  * Settings' Connected assistants once they have loaded: the MCP URL to add, what assistants can
