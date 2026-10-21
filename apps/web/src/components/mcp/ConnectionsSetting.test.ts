@@ -62,7 +62,7 @@ describe('Settings → Connected assistants', () => {
   it('names To review, not Drafts, and says deleting an item there is permanent (#579)', () => {
     const shown = render();
     expect(shown).toContain(
-      'Assistants can read your ledger. If you also let one prepare Expenses, it can add, change and permanently delete items in your To review. Only you can save Expenses in Splitbook.',
+      'Assistants can answer questions about your Groups, balances and Expenses. If you also let one prepare Expenses, it can add, change and permanently delete items in your To review. Only you can save Expenses in Splitbook.',
     );
     expect(shown).toContain(
       'Disconnecting blocks further requests and keeps what’s in your To review. Previously shared information may remain in your assistant.',

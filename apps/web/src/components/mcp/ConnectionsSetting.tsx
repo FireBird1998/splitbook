@@ -19,20 +19,11 @@ import Link from 'next/link';
 import { formatDate } from '@splitbook/shared/date';
 import { PRODUCT_NAME } from '@/lib/product';
 import { assistantAddress } from '@/lib/mcp/assistant-name';
-
-interface Connection {
-  id: string;
-  clientId: string;
-  scopes: string[];
-  access: string;
-  name: string;
-  lastUsedAt: string | null;
-}
-interface Connections {
-  resource: string;
-  connections: Connection[];
-  nextOffset: number | null;
-}
+import {
+  connectedAssistantAccessLabel,
+  type ConnectedAssistant,
+  type ConnectedAssistantsPage,
+} from '@splitbook/shared/connected-assistant';
 
 function lastUsedLabel(value: string | null): string {
   if (!value) return 'Not used yet';
@@ -41,12 +32,6 @@ function lastUsedLabel(value: string | null): string {
   if (isYesterday(date)) return 'Last used yesterday';
   return `Last used ${formatDate(date, { omitCurrentYear: true })}`;
 }
-
-/** The server's access, in the approval page's words (#615); the server's value decides it. */
-const ACCESS_LABELS: Record<string, string> = {
-  Ledger: 'Read only',
-  'Ledger + To review': 'Read only + To review',
-};
 
 /**
  * Settings' Connected assistants once they have loaded: the MCP URL to add, what assistants can
@@ -58,7 +43,7 @@ export function ConnectionsList({
   onRevoke,
   onLoadMore,
 }: {
-  data: Connections;
+  data: ConnectedAssistantsPage;
   busy: string | null;
   onRevoke: (id: string) => void;
   onLoadMore: () => void;
@@ -72,9 +57,9 @@ export function ConnectionsList({
         {data.resource}
       </Typography>
       <Alert severity="info">
-        Assistants can read your ledger. If you also let one prepare Expenses, it can add, change
-        and permanently delete items in your To review. Only you can save Expenses in {PRODUCT_NAME}
-        .
+        Assistants can answer questions about your Groups, balances and Expenses. If you also let
+        one prepare Expenses, it can add, change and permanently delete items in your To review.
+        Only you can save Expenses in {PRODUCT_NAME}.
       </Alert>
       {data.connections.length === 0 && (
         <Typography variant="body2">No assistants connected.</Typography>
@@ -116,7 +101,7 @@ export function ConnectionsList({
                     </Typography>
                   )}
                   <Typography variant="body2" sx={{ mt: 0.5 }}>
-                    {ACCESS_LABELS[connection.access] ?? connection.access}
+                    {connectedAssistantAccessLabel(connection.access)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {lastUsedLabel(connection.lastUsedAt)}
@@ -153,12 +138,12 @@ export function ConnectionsList({
 }
 
 export default function ConnectionsSetting({ accountId }: { accountId?: string }) {
-  const [data, setData] = useState<Connections | null>(null);
+  const [data, setData] = useState<ConnectedAssistantsPage | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [pending, setPending] = useState<Connection | null>(null);
+  const [pending, setPending] = useState<ConnectedAssistant | null>(null);
   useEffect(() => {
     if (!accountId) return;
     const controller = new AbortController();
