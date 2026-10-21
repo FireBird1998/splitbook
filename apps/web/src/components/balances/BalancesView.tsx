@@ -38,11 +38,12 @@ import {
 } from '@splitbook/shared/settlement-preview';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { balanceCurrencies, openingBalanceCurrency } from '@splitbook/shared/balance-currencies';
+import { groupCurrencies } from '@splitbook/shared/group-currencies';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import { fetchWebBalances, fetchWebRead } from '@/lib/web-read';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import type { SettlementAttempt } from '@/lib/settlement-attempts';
-import { PersonAvatar, TabCard } from './TabCard';
+import { PersonAvatar } from './TabCard';
 import BalanceCurrencySwitch, { BALANCES_PANEL_ID, balanceTabId } from './BalanceCurrencySwitch';
 import PaymentsTable, { type PaymentRead, type PaymentsState } from './PaymentsTable';
 import EveryoneCard, { type EveryoneState } from './EveryoneCard';
@@ -247,18 +248,21 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   const balances = shownBucket?.balances ?? read?.balances ?? [];
   const debts = shownBucket?.debts ?? read?.debts ?? [];
 
-  // Every new payment is in the Group's currency, so the form reads that currency's figures.
+  // Home's Record link suggests a payment in the main currency.
   const groupLedger = ledgerOf(
     buckets.find((bucket) => bucket.currency === groupCurrency) ?? read,
     groupCurrency,
   );
-  const ledger: LedgerState = groupLedger
-    ? { status: 'ready', ledger: groupLedger }
+  // Settle up's figures in exact minor units, for the currency shown.
+  const shownLedger = ledgerOf(shownBucket ?? read, currency);
+  // A payment clears a Debt in the currency shown, so the form reads that currency's figures,
+  // and it can be paid in any of the Group's currencies (#727).
+  const ledger: LedgerState = shownLedger
+    ? { status: 'ready', ledger: shownLedger }
     : read || error
       ? { status: 'error' }
       : { status: 'loading' };
-  // Settle up's figures in exact minor units, for the currency shown.
-  const shownLedger = ledgerOf(shownBucket ?? read, currency);
+  const payCurrencies = [currency, ...groupCurrencies(group).filter((code) => code !== currency)];
 
   const members: PaymentParty[] = viewerFirst(group.members, userId).map((member) => ({
     id: member.user._id,
@@ -437,7 +441,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           >
             {debts.map((debt, index) => {
               const involved = canRecordSettlement(userId, debt.from._id, debt.to._id);
-              const recordable = involved && currency === groupCurrency;
+              const recordable = involved;
               const inForm =
                 recordable && formPair.from === debt.from._id && formPair.to === debt.to._id;
               const payer = displayName(debt.from);
@@ -705,36 +709,23 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
             {top}
           </Box>
           <Box sx={{ gridArea: 'form', minWidth: 0 }}>
-            {currency !== groupCurrency && (
-              <TabCard
-                headingId="record-in-main-currency-heading"
-                title="Record payment"
-                subtitle={`Payments are recorded in ${groupCurrency}, the main currency.`}
-              >
-                <Box sx={{ px: 2.5, pb: 2.5 }}>
-                  <Button variant="outlined" onClick={() => setChosen(groupCurrency)}>
-                    Show {groupCurrency}
-                  </Button>
-                </Box>
-              </TabCard>
-            )}
-            {/* Out of sight on another currency's tab, keeping what was entered. */}
-            <Box sx={{ display: currency === groupCurrency ? 'block' : 'none' }}>
-              <RecordPaymentForm
-                key={form.seq}
-                groupId={groupId}
-                groupName={group.name}
-                accountId={userId}
-                currency={groupCurrency}
-                members={members}
-                ledger={ledger}
-                start={form.start}
-                outcome={form.outcome}
-                onDone={onFormDone}
-                onRefresh={refresh}
-                onPairChange={setFormPair}
-              />
-            </Box>
+            {/* The form follows the currency shown: a payment clears a Debt in it (#727). */}
+            <RecordPaymentForm
+              key={`${currency}:${form.seq}`}
+              groupId={groupId}
+              groupName={group.name}
+              accountId={userId}
+              currency={currency}
+              payCurrencies={payCurrencies}
+              mainCurrency={groupCurrency}
+              members={members}
+              ledger={ledger}
+              start={form.start}
+              outcome={form.outcome}
+              onDone={onFormDone}
+              onRefresh={refresh}
+              onPairChange={setFormPair}
+            />
           </Box>
           {rest && <Box sx={{ gridArea: 'rest', minWidth: 0 }}>{rest}</Box>}
         </Box>

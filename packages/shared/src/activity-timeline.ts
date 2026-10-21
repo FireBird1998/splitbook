@@ -7,6 +7,8 @@ import {
   extraCurrencyChangeDetail,
   extraCurrencyChangeWords,
 } from './group-currency-settings';
+import { readCrossCurrencyRecord } from './cross-currency-payment';
+import { formatCrossCurrencySettlement } from './cross-currency-settlement';
 
 export interface ActivityLike {
   _id: string;
@@ -83,6 +85,9 @@ export function formatActivityHeadline(activity: ActivityLike, viewerId?: string
     case 'expense_deleted':
       return `${actorName} deleted “${meta.description ?? 'an expense'}”`;
     case 'settlement_recorded': {
+      // A Debt paid in another currency says both amounts and the rate (#727).
+      const cross = readCrossCurrencyRecord(meta);
+      if (cross) return formatCrossCurrencySettlement(cross, viewerId);
       const amount =
         typeof meta.amount === 'number' && typeof meta.currency === 'string'
           ? formatCurrency(meta.amount, meta.currency)
@@ -135,6 +140,8 @@ export function formatActivityDetail(activity: ActivityLike, viewerId?: string):
   }
 
   if (activity.type === 'settlement_recorded') {
+    const cross = readCrossCurrencyRecord(meta);
+    if (cross) return `Settlement · ${cross.currency} Debt paid in ${cross.paidCurrency}`;
     const paidTo = memberLabel(meta.paidTo, meta.paidToName, viewerId);
     const paidBy = memberLabel(meta.paidBy, meta.paidByName, viewerId);
     if (paidBy && paidTo) {

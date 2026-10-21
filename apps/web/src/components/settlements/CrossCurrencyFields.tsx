@@ -153,7 +153,7 @@ export default function CrossCurrencyFields({
     </Typography>
   );
 
-  const head = (label: string, end: React.ReactNode, htmlFor: string) => (
+  const head = (label: string, end: ReactNode, htmlFor: string) => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 24 }}>
       <Box component="label" htmlFor={htmlFor} sx={smallLabel}>
         {label}

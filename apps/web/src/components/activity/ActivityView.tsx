@@ -16,6 +16,10 @@ import {
   type ActivityLike,
 } from '@splitbook/shared/activity-timeline';
 import { fetchWebActivity } from '@/lib/web-read';
+import { useState } from 'react';
+import ButtonBase from '@mui/material/ButtonBase';
+import { readCrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
+import PaymentRecordCard from './PaymentRecordCard';
 
 const ACTIVITY_ICONS: Record<string, string> = {
   expense_added: '🧾',
@@ -44,6 +48,8 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     },
   );
 
+  /** The payment whose card is open beside the list (#727). */
+  const [openId, setOpenId] = useState<string | null>(null);
   const activities = (data?.data?.activities || []) as ActivityLike[];
   const groups = groupActivitiesByDay(activities);
 
@@ -74,7 +80,11 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     );
   }
 
-  return (
+  const opened = activities.find((activity) => activity._id === openId);
+  const openRecord =
+    opened?.type === 'settlement_recorded' ? readCrossCurrencyRecord(opened.metadata) : null;
+
+  const list = (
     <Stack spacing={3}>
       {groups.map((group) => (
         <Box key={group.key}>
@@ -96,34 +106,42 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
               const type = activity.type;
               const icon = ACTIVITY_ICONS[type] || '📋';
               const detail = formatActivityDetail(activity, viewerId);
-
-              return (
-                <Box
-                  key={activity._id}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 1.5,
-                    py: 1.5,
-                    borderBottom: '1px solid',
-                    borderColor: 'divider',
-                    '&:last-of-type': { borderBottom: 'none' },
-                  }}
-                >
+              // A Debt paid in another currency opens its card (#727).
+              const payment =
+                type === 'settlement_recorded' && readCrossCurrencyRecord(activity.metadata);
+              const open = payment && activity._id === openId;
+              const rowSx = {
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1.5,
+                py: 1.5,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                '&:last-of-type': { borderBottom: 'none' },
+              } as const;
+              // Spans, so the row's words can sit inside a button.
+              const content = (
+                <>
                   <Typography component="span" sx={{ fontSize: '1.125rem', mt: 0.15 }} aria-hidden>
                     {icon}
                   </Typography>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" color="text.primary">
+                  <Box component="span" sx={{ display: 'block', flex: 1, minWidth: 0 }}>
+                    <Typography
+                      component="span"
+                      variant="body2"
+                      color="text.primary"
+                      sx={{ display: 'block' }}
+                    >
                       {formatActivityHeadline(activity, viewerId)}
                       <PreparedBy value={activity.metadata?.preparedBy} inline />
                     </Typography>
                     {detail && (
                       <Typography
+                        component="span"
                         variant="body2"
                         fontWeight={600}
                         color="text.secondary"
-                        sx={{ mt: 0.25 }}
+                        sx={{ mt: 0.25, display: 'block' }}
                       >
                         {detail}
                       </Typography>
@@ -138,6 +156,31 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
                       {formatActivityTimestamp(activity)}
                     </Typography>
                   </Box>
+                </>
+              );
+
+              return payment ? (
+                <ButtonBase
+                  key={activity._id}
+                  aria-expanded={Boolean(open)}
+                  onClick={() => setOpenId(open ? null : activity._id)}
+                  sx={{
+                    ...rowSx,
+                    width: '100%',
+                    justifyContent: 'flex-start',
+                    textAlign: 'left',
+                    px: 1,
+                    mx: -1,
+                    borderRadius: '10px',
+                    bgcolor: open ? 'tint.brand' : undefined,
+                    '&:hover': { bgcolor: open ? 'tint.brand' : 'action.hover' },
+                  }}
+                >
+                  {content}
+                </ButtonBase>
+              ) : (
+                <Box key={activity._id} sx={rowSx}>
+                  {content}
                 </Box>
               );
             })}
@@ -145,5 +188,29 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
         </Box>
       ))}
     </Stack>
+  );
+
+  return openRecord && opened ? (
+    <Box
+      sx={{
+        display: 'grid',
+        gap: 3,
+        gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 380px' },
+        alignItems: 'start',
+      }}
+    >
+      <Box sx={{ order: { xs: 2, md: 1 }, minWidth: 0 }}>{list}</Box>
+      <Box sx={{ order: { xs: 1, md: 2 }, position: { md: 'sticky' }, top: { md: 88 } }}>
+        <PaymentRecordCard
+          record={openRecord}
+          recordedBy={opened.actor}
+          recordedAt={opened.createdAt}
+          viewerId={viewerId}
+          onClose={() => setOpenId(null)}
+        />
+      </Box>
+    </Box>
+  ) : (
+    list
   );
 }

@@ -7,11 +7,14 @@
 import { format } from 'date-fns';
 import { z } from 'zod';
 import { readAmountEntry } from './amount-entry';
-import { formatCurrency, getCurrencyPrecision } from './currency';
+import { formatCurrency, getCurrency, getCurrencyPrecision } from './currency';
 import { toMajorAmount } from './exact-money';
+import { memberLabel } from './activity-timeline';
 import {
   calculateCrossCurrencySettlement,
   decimalMoney,
+  minorMoney,
+  EXCHANGE_RATE_API_ATTRIBUTION,
   rateFraction,
   type CrossCurrencyAmounts,
   type CrossCurrencySettlementFields,
@@ -354,4 +357,108 @@ export function parseRateSuggestionResponse(payload: unknown): {
 } {
   const { data } = rateReadSchema.parse(payload);
   return { suggestion: data.suggestion, reason: data.suggestion ? null : (data.reason ?? null) };
+}
+
+/** A recorded payment in another currency, as its Activity metadata and its read keep it. */
+export interface CrossCurrencyRecord extends CrossCurrencySettlementFields {
+  paidBy?: string;
+  paidByName?: string;
+  paidTo?: string;
+  paidToName?: string;
+  /** The amount cleared, in the Debt's currency. */
+  amountMinor: number;
+  currency: string;
+  /** The Debt between the two, from the payer's side, before and after; older records lack it. */
+  pairDebtBeforeMinor?: number;
+  pairDebtAfterMinor?: number;
+}
+
+const recordSchema = z.object({
+  paidBy: z.string().optional(),
+  paidByName: z.string().optional(),
+  paidTo: z.string().optional(),
+  paidToName: z.string().optional(),
+  amountMinor: z.number().int().positive(),
+  currency: z.string().min(1),
+  amountPaidMinor: z.number().int().positive(),
+  paidCurrency: z.string().min(1),
+  appliedRate: z.string().refine((rate) => {
+    try {
+      rateFraction(rate);
+      return true;
+    } catch {
+      return false;
+    }
+  }),
+  rateKind: z.enum(['suggested', 'custom', 'entered']),
+  suggestedRate: z.string().optional(),
+  rateSource: z.enum(['frankfurter', 'exchange-rate-api', 'mixed']).optional(),
+  rateAsOf: z.string().optional(),
+  rateFetchedAt: z.string().optional(),
+  pairDebtBeforeMinor: z.number().int().optional(),
+  pairDebtAfterMinor: z.number().int().optional(),
+});
+
+/** A payment's record in another currency, or null for one in its Debt's own or unreadable. */
+export function readCrossCurrencyRecord(value: unknown): CrossCurrencyRecord | null {
+  const read = recordSchema.safeParse(value);
+  return read.success ? read.data : null;
+}
+
+/** "−€20.00", "€0.00" or "+€5.00": a signed amount in a Debt's currency. */
+function signedMoney(minor: number, currency: string): string {
+  if (minor === 0) return formatCurrency(0, currency);
+  return `${minor < 0 ? '−' : '+'}${minorMoney(Math.abs(minor), currency)}`;
+}
+
+const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
+
+/**
+ * What a payment's card shows (#727, the board "Activity and a cross-currency Settlement"):
+ * who paid whom, both amounts, the rate used and the suggestion beside it with its source, the
+ * Debt between the two before and after, and that nothing else moved.
+ */
+export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
+  const per = `per ${getCurrency(record.currency)?.symbol ?? record.currency}`;
+  const payer = memberLabel(record.paidBy, record.paidByName, viewerId) ?? 'Former member';
+  const payee = memberLabel(record.paidTo, record.paidToName, viewerId) ?? 'Former member';
+  const short = (label: string, isViewer: boolean) => (isViewer ? label : firstName(label));
+  const payerShort = short(payer, payer === 'You');
+  const payeeShort = payee === 'You' ? 'you' : firstName(payee);
+  const suggestion =
+    record.suggestedRate && record.rateSource && record.rateAsOf && record.rateFetchedAt
+      ? {
+          rate: `${decimalMoney(rateText(record.suggestedRate), record.paidCurrency)} ${per}`,
+          source: `${SOURCE_NAMES[record.rateSource] ? `${SOURCE_NAMES[record.rateSource]} · r` : 'R'}ates of ${calendarDay(record.rateAsOf)} · fetched ${format(new Date(record.rateFetchedAt), 'd MMM HH:mm')}`,
+          attribution:
+            record.rateSource === 'frankfurter' ? null : { ...EXCHANGE_RATE_API_ATTRIBUTION },
+        }
+      : null;
+  const pair =
+    record.pairDebtBeforeMinor !== undefined && record.pairDebtAfterMinor !== undefined
+      ? {
+          label: `${payerShort} and ${payeeShort} in ${record.currency}:`,
+          before: signedMoney(record.pairDebtBeforeMinor, record.currency),
+          after: signedMoney(record.pairDebtAfterMinor, record.currency),
+        }
+      : null;
+  return {
+    payer,
+    payee,
+    paid: minorMoney(record.amountPaidMinor, record.paidCurrency),
+    clears: `to clear ${minorMoney(record.amountMinor, record.currency)}, a Debt in ${record.currency}`,
+    rateUsed: `${decimalMoney(rateText(record.appliedRate), record.paidCurrency)} ${per}`,
+    badge:
+      record.rateKind === 'custom'
+        ? 'Your rate'
+        : record.rateKind === 'suggested'
+          ? 'Suggested'
+          : 'No suggestion',
+    suggested: suggestion,
+    cleared: minorMoney(record.amountMinor, record.currency),
+    paidAmount: minorMoney(record.amountPaidMinor, record.paidCurrency),
+    pair,
+    unchanged: `${record.paidCurrency} balances didn’t change. Only the Debt’s own currency moves.`,
+    kept: 'The rate is kept as recorded. It never changes, even when rates move later.',
+  };
 }
