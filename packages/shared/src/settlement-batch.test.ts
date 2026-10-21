@@ -3,21 +3,38 @@ import { calculateSettlementBatch } from './settlement-batch';
 
 describe('calculateSettlementBatch', () => {
   it('combines two currencies without converting the cleared Debts', () => {
-    expect(calculateSettlementBatch({
-      debts: [{ currency: 'EUR', amountMinor: 2000 }, { currency: 'INR', amountMinor: 50000 }],
+    expect(
+      calculateSettlementBatch({
+        debts: [
+          { currency: 'EUR', amountMinor: 2000 },
+          { currency: 'INR', amountMinor: 50000 },
+        ],
+        paidCurrency: 'INR',
+        rates: { EUR: { rate: '92.5', rateKind: 'entered' } },
+      }),
+    ).toEqual({
       paidCurrency: 'INR',
-      rates: { EUR: { rate: '92.5', rateKind: 'entered' } },
-    })).toEqual({
-      paidCurrency: 'INR', totalPaidMinor: 235000,
+      totalPaidMinor: 235000,
       settlements: [
-        { currency: 'EUR', amount: 20, amountPaidMinor: 185000, paidCurrency: 'INR', appliedRate: '92.5', rateKind: 'entered' },
+        {
+          currency: 'EUR',
+          amount: 20,
+          amountPaidMinor: 185000,
+          paidCurrency: 'INR',
+          appliedRate: '92.5',
+          rateKind: 'entered',
+        },
         { currency: 'INR', amount: 500 },
       ],
     });
   });
   it('rounds each of three cleared currencies before adding the paid total, including JPY', () => {
     const result = calculateSettlementBatch({
-      debts: [{ currency: 'EUR', amountMinor: 1 }, { currency: 'USD', amountMinor: 1 }, { currency: 'JPY', amountMinor: 1 }],
+      debts: [
+        { currency: 'EUR', amountMinor: 1 },
+        { currency: 'USD', amountMinor: 1 },
+        { currency: 'JPY', amountMinor: 1 },
+      ],
       paidCurrency: 'INR',
       rates: {
         EUR: { rate: '1.5', rateKind: 'entered' },
@@ -33,9 +50,17 @@ describe('calculateSettlementBatch', () => {
     ]);
   });
   it('rounds payments in JPY to whole units and retains each suggested or custom rate', () => {
-    const provenance = { suggestedRate: '150', rateSource: 'frankfurter' as const, rateAsOf: '2026-10-20', rateFetchedAt: '2026-10-21T00:15:00.000Z' };
+    const provenance = {
+      suggestedRate: '150',
+      rateSource: 'frankfurter' as const,
+      rateAsOf: '2026-10-20',
+      rateFetchedAt: '2026-10-21T00:15:00.000Z',
+    };
     const result = calculateSettlementBatch({
-      debts: [{ currency: 'EUR', amountMinor: 1 }, { currency: 'USD', amountMinor: 1 }],
+      debts: [
+        { currency: 'EUR', amountMinor: 1 },
+        { currency: 'USD', amountMinor: 1 },
+      ],
       paidCurrency: 'JPY',
       rates: {
         EUR: { ...provenance, rateKind: 'suggested' },
@@ -49,11 +74,24 @@ describe('calculateSettlementBatch', () => {
     ]);
   });
   it('refuses a missing rate, repeated currency, nonpositive Debt and unsafe total', () => {
-    const calculate = (debts: { currency: string; amountMinor: number }[], rates = {}) => calculateSettlementBatch({ debts, rates, paidCurrency: 'INR' });
+    const calculate = (debts: { currency: string; amountMinor: number }[], rates = {}) =>
+      calculateSettlementBatch({ debts, rates, paidCurrency: 'INR' });
     expect(() => calculate([{ currency: 'EUR', amountMinor: 1 }])).toThrow();
-    expect(() => calculate([{ currency: 'INR', amountMinor: 1 }, { currency: 'INR', amountMinor: 1 }])).toThrow();
+    expect(() =>
+      calculate([
+        { currency: 'INR', amountMinor: 1 },
+        { currency: 'INR', amountMinor: 1 },
+      ]),
+    ).toThrow();
     expect(() => calculate([{ currency: 'INR', amountMinor: 0 }])).toThrow();
-    expect(() => calculate([{ currency: 'INR', amountMinor: Number.MAX_SAFE_INTEGER }, { currency: 'EUR', amountMinor: 100 }], { EUR: { rate: '1', rateKind: 'entered' } })).toThrow();
+    expect(() =>
+      calculate(
+        [
+          { currency: 'INR', amountMinor: Number.MAX_SAFE_INTEGER },
+          { currency: 'EUR', amountMinor: 100 },
+        ],
+        { EUR: { rate: '1', rateKind: 'entered' } },
+      ),
+    ).toThrow();
   });
-
 });
