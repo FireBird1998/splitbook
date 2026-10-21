@@ -12,20 +12,8 @@ import { authClient } from '@/lib/auth-client';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { MCP_DRAFT_SCOPE, MCP_LEDGER_SCOPE } from '@/lib/mcp/config';
+import { CHATGPT, type KnownAssistant } from '@/lib/mcp/connect-choices';
 
-/** An assistant this check knows by the client identity it connects with (#619). */
-export type KnownAssistant = { name: string; clientId: string; guide: string };
-export const CHATGPT: KnownAssistant = {
-  name: 'ChatGPT',
-  clientId: 'https://chatgpt.com/oauth/client.json',
-  guide: '/connect/chatgpt',
-};
-// The client identity Claude used on staging (docs/qa/mcp-staging-2026-10-11.md).
-export const CLAUDE: KnownAssistant = {
-  name: 'Claude',
-  clientId: 'https://claude.ai/oauth/mcp-oauth-client-metadata',
-  guide: '/connect?assistant=claude',
-};
 const connectionPage = z.object({
   connections: z.array(
     z.object({ id: z.string(), clientId: z.string(), scopes: z.array(z.string()) }),
@@ -37,9 +25,9 @@ type Status =
   | { kind: 'loading' | 'unavailable' | 'error' | 'signed-out' }
   | { kind: 'ready'; connections: Connection[] };
 
-function SignIn({ guide }: { guide: string }) {
+function SignIn({ returnTo }: { returnTo: string }) {
   return (
-    <Button component={Link} href={`/login?${new URLSearchParams({ callbackUrl: guide })}`}>
+    <Button component={Link} href={`/login?${new URLSearchParams({ callbackUrl: returnTo })}`}>
       Sign in to check your connection
     </Button>
   );
@@ -91,9 +79,11 @@ export function AuthorizedConnections({
 function ConnectionStatus({
   accountId,
   assistant,
+  returnTo,
 }: {
   accountId: string;
   assistant: KnownAssistant;
+  returnTo: string;
 }) {
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
   useEffect(() => {
@@ -133,7 +123,7 @@ function ConnectionStatus({
     return (
       <>
         <Typography>Your session ended. Sign in again to check access.</Typography>
-        <SignIn guide={assistant.guide} />
+        <SignIn returnTo={returnTo} />
       </>
     );
   if (status.kind === 'unavailable')
@@ -153,12 +143,17 @@ function ConnectionStatus({
   return <AuthorizedConnections name={assistant.name} connections={status.connections} />;
 }
 
-/** Whether a known assistant is authorized for the signed-in member, checked on demand. */
+/**
+ * Whether a known assistant is authorized for the signed-in member, checked on demand. Signing in
+ * comes back to returnTo, the guide the member was reading.
+ */
 export function AssistantAuthorization({
   assistant,
+  returnTo,
   enabled,
 }: {
   assistant: KnownAssistant;
+  returnTo: string;
   enabled: boolean;
 }) {
   const { data: session, isPending, error, refetch } = authClient.useSession();
@@ -177,7 +172,7 @@ export function AssistantAuthorization({
             <Button onClick={() => void refetch()}>Retry session check</Button>
           </>
         ) : !session ? (
-          <SignIn guide={assistant.guide} />
+          <SignIn returnTo={returnTo} />
         ) : !enabled ? (
           <Typography>Connection checking is unavailable in this environment.</Typography>
         ) : (
@@ -186,6 +181,7 @@ export function AssistantAuthorization({
               key={`${session.user.id}:${attempt}`}
               accountId={session.user.id}
               assistant={assistant}
+              returnTo={returnTo}
             />
             <Button onClick={() => setAttempt((value) => value + 1)}>Refresh status</Button>
           </>
@@ -201,5 +197,7 @@ export function AssistantAuthorization({
 }
 
 export default function ChatGPTAuthorization({ enabled }: { enabled: boolean }) {
-  return <AssistantAuthorization assistant={CHATGPT} enabled={enabled} />;
+  return (
+    <AssistantAuthorization assistant={CHATGPT} returnTo="/connect/chatgpt" enabled={enabled} />
+  );
 }

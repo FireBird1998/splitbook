@@ -5,17 +5,25 @@ import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
-/** A value to paste into an assistant, shown in full and copied by a button that says so. */
-export default function CopyValue({ label, value }: { label: string; value: string }) {
+/** Copies text, and says whether it worked so a status line can announce it. */
+export function useCopy(unavailable: string) {
   const [feedback, setFeedback] = useState('');
-  async function copy() {
+  async function copy(value: string, copied = 'Copied.') {
     try {
       await navigator.clipboard.writeText(value);
-      setFeedback('Copied.');
+      setFeedback(copied);
     } catch {
-      setFeedback('Copy unavailable. Select the text above and copy it manually.');
+      setFeedback(unavailable);
     }
   }
+  return { feedback, copy };
+}
+
+/** A value to paste into an assistant, shown in full and copied by a button that says so. */
+export default function CopyValue({ label, value }: { label: string; value: string }) {
+  const { feedback, copy } = useCopy(
+    'Copy unavailable. Select the text above and copy it manually.',
+  );
   return (
     <Stack spacing={1}>
       <Typography
@@ -30,7 +38,7 @@ export default function CopyValue({ label, value }: { label: string; value: stri
       >
         {value}
       </Typography>
-      <Button variant="outlined" onClick={() => void copy()} sx={{ alignSelf: 'flex-start' }}>
+      <Button variant="outlined" onClick={() => void copy(value)} sx={{ alignSelf: 'flex-start' }}>
         Copy {label}
       </Button>
       <Typography role="status" variant="body2">

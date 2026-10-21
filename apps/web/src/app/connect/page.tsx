@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { mcpResource } from '@/lib/mcp/config';
+import { whatsLive } from '@/lib/landing/whats-live';
 import ConnectAssistant from '@/components/mcp/ConnectAssistant';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,7 @@ export default async function Page({
     <ConnectAssistant
       resource={resource}
       assistant={typeof assistant === 'string' ? assistant : undefined}
+      canPrepare={whatsLive().assistants.canPrepare}
     />
   );
 }
