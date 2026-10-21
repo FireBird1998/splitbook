@@ -75,15 +75,36 @@ function RateReader({
   groupId: string;
   currency: string;
   paidCurrency: string;
-  onRead: (currency: string, state: RateSuggestionState) => void;
+  onRead: (pair: string, state: RateSuggestionState) => void;
 }) {
   const state = useRateSuggestion(groupId, currency, paidCurrency);
-  const key = JSON.stringify(state);
+  // The hook answers with a new object each render; report it only when what it says changes.
+  const suggestion = state.status === 'ready' ? state.suggestion : null;
+  const reason = state.status === 'none' ? state.reason : null;
   useEffect(() => {
-    onRead(currency, JSON.parse(key) as RateSuggestionState);
-  }, [currency, key, onRead]);
+    onRead(
+      pairKey(currency, paidCurrency),
+      suggestion
+        ? { status: 'ready', suggestion }
+        : state.status === 'none'
+          ? { status: 'none', reason }
+          : { status: 'loading' },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `suggestion` changes only with its read.
+  }, [
+    currency,
+    paidCurrency,
+    state.status,
+    reason,
+    suggestion?.rate,
+    suggestion?.fetchedAt,
+    onRead,
+  ]);
   return null;
 }
+
+/** A rate belongs to its Debt's currency and the currency it is paid in, never one of them alone. */
+const pairKey = (currency: string, paidCurrency: string) => `${currency}>${paidCurrency}`;
 
 /** The rows of a stored settle-up, as it was sent: never changed, only checked. */
 function storedLines(stored: SettlementAttempt): SettleAllLine[] {
@@ -129,7 +150,7 @@ export default function SettleAllDialog({
   const [error, setError] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const onRead = useCallback(
-    (code: string, state: RateSuggestionState) => setRead((all) => ({ ...all, [code]: state })),
+    (pair: string, state: RateSuggestionState) => setRead((all) => ({ ...all, [pair]: state })),
     [],
   );
 
@@ -157,7 +178,10 @@ export default function SettleAllDialog({
   const rates: Record<string, SettleAllRate> = Object.fromEntries(
     debts.map(({ currency: code }) => [
       code,
-      { state: read[code] ?? { status: 'loading' }, custom: custom[code] ?? null },
+      {
+        state: read[pairKey(code, currency)] ?? { status: 'loading' },
+        custom: custom[code] ?? null,
+      },
     ]),
   );
   const reading = storedBatch
