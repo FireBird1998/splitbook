@@ -300,3 +300,41 @@ describe('Draft attribution through the production MCP route (#745)', () => {
     },
   );
 });
+
+describe('Group currencies through MCP (#732)', () => {
+  it('lists the main and extra currencies in list_groups and group_context', async () => {
+    published.clientId = 'https://currency-helper.example.test/client.json';
+    published.name = 'Fictional Currency Helper';
+    const client = await connect(published.clientId, published.name);
+    try {
+      const group = await groupService.create(
+        {
+          name: 'Fictional multi-currency trip',
+          category: 'trip',
+          defaultCurrency: 'INR',
+          alternateCurrencies: ['EUR', 'JPY'],
+        },
+        DEMO_PERSONA_IDS.alex,
+      );
+      const groupId = String(group._id);
+      const listed = resultData(await client.callTool({ name: 'list_groups', arguments: {} }));
+      expect(listed.groups).toContainEqual(
+        expect.objectContaining({
+          id: groupId,
+          currency: 'INR',
+          alternateCurrencies: ['EUR', 'JPY'],
+        }),
+      );
+      const context = resultData(
+        await client.callTool({ name: 'group_context', arguments: { groupId } }),
+      );
+      expect(context).toMatchObject({
+        id: groupId,
+        currency: 'INR',
+        alternateCurrencies: ['EUR', 'JPY'],
+      });
+    } finally {
+      await client.close();
+    }
+  });
+});
