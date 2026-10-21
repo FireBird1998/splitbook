@@ -305,7 +305,7 @@ describe('balance integrity integration', () => {
     ]);
   });
 
-  it('does not call one currency mixed on Home, though it is not the Group default', async () => {
+  it('calls one currency unmixed, though it is not the Group default, on Home and in its own Balances (#724)', async () => {
     const groupId = await createTrip('USD', alice, 'NYC');
     await groupService.addMember(groupId, bob);
     // Legacy EUR expense written directly, bypassing single-currency validation
@@ -340,9 +340,8 @@ describe('balance integrity integration', () => {
         ],
       },
     ]);
-    // The Group's own Balances still flag euros in a dollar Group: any currency other than its
-    // default, not only more than one currency in use.
-    expect((await balanceService.getGroupBalances(groupId))!.hasMixedCurrencies).toBe(true);
+    // One meaning of mixed currencies (#710): more than one present, here as on Home.
+    expect((await balanceService.getGroupBalances(groupId))!.hasMixedCurrencies).toBe(false);
   });
 
   it('excludes archived trips from dashboard balances', async () => {

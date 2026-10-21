@@ -1273,10 +1273,11 @@ left out of `balances`; one who still has a balance appears under their own
 account name. Former members named by a pairwise Debt retain their name even when
 their overall balance is zero.
 
-`hasMixedCurrencies` is true when any expense or settlement differs from the
-group default. The write path forbids that, so it can only arise from legacy
-data. Each currency has its own `byCurrency` entry; amounts are never combined or
-converted across currencies.
+`hasMixedCurrencies` is true when the Group's Expenses and Settlements are in
+more than one currency, whatever its main currency is (#724): euros alone in a
+rupee Group are not mixed. `GET /api/user/balances` uses the same meaning for each
+Group. Each currency has its own `byCurrency` entry, the main currency always
+among them; amounts are never combined or converted across currencies.
 
 ---
 

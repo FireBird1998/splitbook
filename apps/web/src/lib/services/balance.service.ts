@@ -15,6 +15,7 @@ import {
   type BalanceExpense,
   type BalanceSettlement,
 } from '@splitbook/shared/debt-simplifier';
+import { hasMixedCurrencies } from '@splitbook/shared/balance-currencies';
 import { calculateDebtsMinor } from '@splitbook/shared/debts-before-simplifying';
 import {
   aggregateCurrencyBalances,
@@ -56,14 +57,11 @@ export class BalanceService {
     if (!group) return null;
 
     for (const expense of expenses) assertStoredExpenseMoney(expense);
-    const currencies = [
-      ...new Set([
-        group.defaultCurrency,
-        ...expenses.map((expense) => expense.currency),
-        ...settlements.map((settlement) => settlement.currency),
-      ]),
-    ].sort();
-    const hasMixedCurrencies = currencies.some((currency) => currency !== group.defaultCurrency);
+    const present = [
+      ...expenses.map((expense) => expense.currency),
+      ...settlements.map((settlement) => settlement.currency),
+    ];
+    const currencies = [...new Set([group.defaultCurrency, ...present])].sort();
 
     // Build user info map
     const userMap = new Map<string, { _id: string; name: string; image?: string }>();
@@ -158,7 +156,7 @@ export class BalanceService {
     return {
       ...defaultBalances,
       byCurrency,
-      hasMixedCurrencies,
+      hasMixedCurrencies: hasMixedCurrencies(present),
     };
   }
 
@@ -350,7 +348,7 @@ export class BalanceService {
         name: group.name,
         category: group.category as GroupCategory,
         updatedAt: new Date(group.updatedAt).toISOString(),
-        hasMixedCurrencies: currencies.size > 1,
+        hasMixedCurrencies: hasMixedCurrencies(currencies),
         balances,
       });
     }

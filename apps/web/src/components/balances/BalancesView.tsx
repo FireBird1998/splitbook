@@ -9,10 +9,8 @@ import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import MenuItem from '@mui/material/MenuItem';
 import Skeleton from '@mui/material/Skeleton';
 import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import MoneyText from '@/components/common/MoneyText';
 import ErrorState from '@/components/common/ErrorState';
@@ -39,18 +37,17 @@ import {
   type SettlementLedger,
 } from '@splitbook/shared/settlement-preview';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { balanceCurrencies, openingBalanceCurrency } from '@splitbook/shared/balance-currencies';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import { fetchWebBalances, fetchWebRead } from '@/lib/web-read';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import type { SettlementAttempt } from '@/lib/settlement-attempts';
-import { PersonAvatar } from './TabCard';
+import { PersonAvatar, TabCard } from './TabCard';
+import BalanceCurrencySwitch, { BALANCES_PANEL_ID, balanceTabId } from './BalanceCurrencySwitch';
 import PaymentsTable, { type PaymentRead, type PaymentsState } from './PaymentsTable';
 import EveryoneCard, { type EveryoneState } from './EveryoneCard';
 import type { EveryonePerson } from './everyone-chart';
 import SettleUpViews, { type Debt } from './SettleUpViews';
-
-const MIXED_CURRENCY_WARNING =
-  'This ledger contains multiple currencies. Each balance is shown separately, without conversion.';
 
 interface BalancesViewProps {
   groupId: string;
@@ -82,7 +79,6 @@ interface CurrencyFigures {
 interface BalancesRead {
   data?: Partial<CurrencyFigures> & {
     byCurrency?: CurrencyFigures[];
-    hasMixedCurrencies?: boolean;
   };
 }
 
@@ -182,7 +178,8 @@ function CurrencyChip({ currency }: { currency: string }) {
  * are doing (loading, refreshing or failing), so a refresh never loses what the member entered.
  */
 export default function BalancesView({ groupId, userId, group }: BalancesViewProps) {
-  const [selectedCurrency, setSelectedCurrency] = useState('');
+  /** The currency the member chose to see, or the one Balances opened on (#724). */
+  const [chosen, setChosen] = useState<string | null>(null);
   const blank = useCallback((): RecordPaymentStart => ({ from: userId, to: '' }), [userId]);
   /** Each new `seq` starts the form afresh; nothing else (such as a refresh) resets it. */
   const [form, setForm] = useState<{
@@ -228,15 +225,27 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
 
   const groupCurrency = group.defaultCurrency;
   const read = data?.data;
-  const defaultCurrency = read?.currency || groupCurrency;
   const buckets = read?.byCurrency ?? [];
-  const currency = buckets.some((bucket) => bucket.currency === selectedCurrency)
-    ? selectedCurrency
-    : defaultCurrency;
+  // One currency at a time (#724): the main currency, then each other currency money is in, each
+  // with the member's own position. It opens on the first the member isn't settled up in.
+  const currencies = balanceCurrencies(
+    group,
+    buckets.map((bucket) => bucket.currency),
+  );
+  const positions: Record<string, number> = Object.fromEntries(
+    buckets.map((bucket) => [
+      bucket.currency,
+      bucket.balances.find((balance) => balance.user._id === userId)?.balance ?? 0,
+    ]),
+  );
+  const opening = openingBalanceCurrency(currencies, positions);
+  // Fixed once the balances first answer, so a payment that settles the member in the currency
+  // shown doesn't move the page to another one.
+  if (read && chosen === null) setChosen(opening);
+  const currency = chosen !== null && currencies.includes(chosen) ? chosen : opening;
   const shownBucket = buckets.find((bucket) => bucket.currency === currency);
   const balances = shownBucket?.balances ?? read?.balances ?? [];
   const debts = shownBucket?.debts ?? read?.debts ?? [];
-  const hasMixedCurrencies = Boolean(read?.hasMixedCurrencies);
 
   // Every new payment is in the Group's currency, so the form reads that currency's figures.
   const groupLedger = ledgerOf(
@@ -284,6 +293,8 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
         `${window.location.pathname}${withoutRecordPaymentLink(link)}`,
       );
       if (!linkMember) return;
+      // Payments are recorded in the main currency, so its tab shows the form.
+      setChosen(groupCurrency);
       setForm((current) => ({
         seq: current.seq + 1,
         outcome: null,
@@ -297,7 +308,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
       }));
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [searchParams, linkFrom, linkTo, linkMember, linkAmount, answered]);
+  }, [searchParams, linkFrom, linkTo, linkMember, linkAmount, answered, groupCurrency]);
 
   const displayName = (person: BalancePerson) => (person._id === userId ? 'You' : person.name);
   const userBalance = balances.find((balance) => balance.user._id === userId);
@@ -342,30 +353,18 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
       </Stack>
     ) : null;
 
-  const currencySelector = hasMixedCurrencies ? (
-    <Stack spacing={1.5}>
-      <Alert severity="info">{MIXED_CURRENCY_WARNING}</Alert>
-      <TextField
-        select
-        label="Balance currency"
+  const currencySwitch =
+    currencies.length > 1 ? (
+      <BalanceCurrencySwitch
+        tabs={currencies.map((code) => ({
+          currency: code,
+          main: code === groupCurrency,
+          balance: positions[code] ?? 0,
+        }))}
         value={currency}
-        onChange={(event) => setSelectedCurrency(event.target.value)}
-        size="small"
-        sx={{ maxWidth: 320 }}
-      >
-        {buckets.map((bucket) => (
-          <MenuItem key={bucket.currency} value={bucket.currency}>
-            {bucket.currency}
-          </MenuItem>
-        ))}
-      </TextField>
-      {currency !== groupCurrency && (
-        <Typography variant="caption" color="text.secondary">
-          Historical balances in {currency}. New payments use the Group currency, {groupCurrency}.
-        </Typography>
-      )}
-    </Stack>
-  ) : null;
+        onChange={setChosen}
+      />
+    ) : null;
 
   const balanceCard = (() => {
     const amount = userBalance?.balance ?? 0;
@@ -642,7 +641,12 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           >
             <EmptyState
               title="All settled up"
-              description={`No one owes anyone in this ${theme.nouns.singular} right now.`}
+              description={
+                // With several currencies, others may still be owed: say which one is settled.
+                currencySwitch
+                  ? `No one owes anyone in ${currency} right now.`
+                  : `No one owes anyone in this ${theme.nouns.singular} right now.`
+              }
             />
           </Box>,
           null,
@@ -665,10 +669,16 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   return (
     <Stack spacing={2.5}>
       {unconfirmedPayments}
-      {currencySelector}
+      {currencySwitch}
       {/* Two columns once the tab is wide enough for both (web.css .duo: 600px + 340px), the
-          form beside the figures; one column otherwise, the form straight after Settle up. */}
-      <Box sx={{ containerType: 'inline-size' }}>
+          form beside the figures; one column otherwise, the form straight after Settle up. The
+          switch shows them one currency at a time. */}
+      <Box
+        id={BALANCES_PANEL_ID}
+        role={currencySwitch ? 'tabpanel' : undefined}
+        aria-labelledby={currencySwitch ? balanceTabId(currency) : undefined}
+        sx={{ containerType: 'inline-size' }}
+      >
         <Box
           sx={{
             display: 'grid',
@@ -695,20 +705,36 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
             {top}
           </Box>
           <Box sx={{ gridArea: 'form', minWidth: 0 }}>
-            <RecordPaymentForm
-              key={form.seq}
-              groupId={groupId}
-              groupName={group.name}
-              accountId={userId}
-              currency={groupCurrency}
-              members={members}
-              ledger={ledger}
-              start={form.start}
-              outcome={form.outcome}
-              onDone={onFormDone}
-              onRefresh={refresh}
-              onPairChange={setFormPair}
-            />
+            {currency !== groupCurrency && (
+              <TabCard
+                headingId="record-in-main-currency-heading"
+                title="Record payment"
+                subtitle={`Payments are recorded in ${groupCurrency}, the main currency.`}
+              >
+                <Box sx={{ px: 2.5, pb: 2.5 }}>
+                  <Button variant="outlined" onClick={() => setChosen(groupCurrency)}>
+                    Show {groupCurrency}
+                  </Button>
+                </Box>
+              </TabCard>
+            )}
+            {/* Out of sight on another currency's tab, keeping what was entered. */}
+            <Box sx={{ display: currency === groupCurrency ? 'block' : 'none' }}>
+              <RecordPaymentForm
+                key={form.seq}
+                groupId={groupId}
+                groupName={group.name}
+                accountId={userId}
+                currency={groupCurrency}
+                members={members}
+                ledger={ledger}
+                start={form.start}
+                outcome={form.outcome}
+                onDone={onFormDone}
+                onRefresh={refresh}
+                onPairChange={setFormPair}
+              />
+            </Box>
           </Box>
           {rest && <Box sx={{ gridArea: 'rest', minWidth: 0 }}>{rest}</Box>}
         </Box>

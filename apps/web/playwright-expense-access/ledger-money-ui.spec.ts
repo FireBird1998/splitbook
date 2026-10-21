@@ -336,12 +336,17 @@ test('legacy currencies are individually visible and never combined into one bal
   );
   await enter(page, ledger.sam, `/groups/${ledger.groupB}?tab=balances`);
   const ownBalance = page.getByRole('region', { name: 'All-time balance', exact: true });
+  // Sam owes rupees, so Balances opens on the main currency, one currency at a time (#724).
+  const currencies = page.getByRole('tablist', { name: 'Balances in' });
+  await expect(
+    currencies.getByRole('tab', { name: 'INR, main currency, you owe ₹100.00', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
   await expect(ownBalance.getByText(/₹100\.00/)).toBeVisible();
-  await page.getByRole('combobox', { name: 'Balance currency' }).click();
-  await page.getByRole('option', { name: 'EUR', exact: true }).click();
-  await expect(page.getByRole('listbox')).toBeHidden();
+  await currencies.getByRole('tab', { name: 'EUR, you’re owed €60.00', exact: true }).click();
   await expect(ownBalance.getByText(/€60\.00/)).toBeVisible();
-  await expect(page.getByText(/Historical balances in EUR/)).toBeVisible();
+  await expect(
+    page.getByText('Payments are recorded in INR, the main currency.', { exact: true }),
+  ).toBeVisible();
   // Everyone (#313) follows the same switch: the EUR positions alone, exact, never converted.
   const everyone = page.getByRole('region', { name: 'Everyone', exact: true });
   await expect(everyone.getByText('All-time net · EUR', { exact: true })).toBeVisible();
@@ -356,7 +361,7 @@ test('legacy currencies are individually visible and never combined into one bal
     /Priya Shah\s*−€60\.00\s*Owes\s*Pays you €60\.00$/,
   ]);
   await expect(everyone).not.toContainText('₹');
-  // Historical balances in another currency suggest payments, but none is recorded from them.
+  // Balances in another currency suggest payments; Record waits for the main currency's tab.
   await expect(
     page
       .getByRole('region', { name: 'Settle up', exact: true })
