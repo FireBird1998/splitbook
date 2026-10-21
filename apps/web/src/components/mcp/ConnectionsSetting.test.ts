@@ -195,6 +195,39 @@ describe('Disconnect in Settings', () => {
     });
   };
 
+  it('loads the member’s Groups and shows how many each assistant reaches (#620)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url === '/api/user/assistant-groups'
+          ? Response.json({
+              data: {
+                groups: [
+                  { id: 'b00000000000000000000001', rule: 'allowed' },
+                  { id: 'b00000000000000000000002', rule: 'allowed' },
+                ],
+              },
+              status: 200,
+            })
+          : Response.json({
+              resource: 'https://splitbook.example/mcp',
+              connections: [{ ...CHATGPT, excludedGroupIds: ['b00000000000000000000002'] }],
+              nextOffset: null,
+            }),
+      ),
+    );
+    await act(async () => {
+      renderer = create(
+        createElement(
+          AppTheme,
+          { theme: { [THEME_ID]: createAppTheme('light') } },
+          createElement(ConnectionsSetting, { accountId: 'fictional-account' }),
+        ),
+      );
+    });
+    expect(textOf(renderer!.root)).toContain('1 of 2 Groups');
+  });
+
   it('revokes the assistant whose Disconnect was pressed, not the first one listed', async () => {
     const revoked: unknown[] = [];
     vi.stubGlobal(

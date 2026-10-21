@@ -67,8 +67,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The server as the page calls it; `saving` answers the save. */
-function server(saving: () => Response = () => Response.json({ excludedGroupIds: [] })) {
+/** The server as the page calls it; `saving` answers the save, `revoking` Disconnect. */
+function server(
+  saving: () => Response = () => Response.json({ excludedGroupIds: [] }),
+  {
+    revoking = () => Response.json({ disconnected: true }),
+    reading = () => Response.json(ASSISTANT),
+  } = {},
+) {
   const calls: { url: string; body: unknown }[] = [];
   vi.stubGlobal(
     'fetch',
@@ -76,9 +82,9 @@ function server(saving: () => Response = () => Response.json({ excludedGroupIds:
       if (init?.method === 'POST') {
         calls.push({ url, body: JSON.parse(String(init.body)) });
         if (url === '/api/auth/mcp/connection-groups') return saving();
-        return Response.json({ disconnected: true });
+        return revoking();
       }
-      if (url.startsWith('/api/auth/mcp/connection?')) return Response.json(ASSISTANT);
+      if (url.startsWith('/api/auth/mcp/connection?')) return reading();
       if (url === '/api/user/assistant-groups')
         return Response.json({ data: { groups: GROUPS }, status: 200 });
       return new Response(null, { status: 404 });
@@ -187,5 +193,31 @@ describe('an assistant’s page (#620)', () => {
     );
     expect(calls).toEqual([{ url: '/api/auth/mcp/revoke', body: { id: 'c2' } }]);
     expect(navigation.replace).toHaveBeenCalledWith('/settings#connected-assistants');
+  });
+
+  it('says when the assistant isn’t connected any more', async () => {
+    server(undefined, { reading: () => Response.json({ message: 'Not found' }, { status: 404 }) });
+    const root = await open();
+    expect(textOf(root)).toContain(
+      'This assistant isn’t connected any more. It may have been disconnected or expired.',
+    );
+    expect(root.findAll((node) => node.type === 'input')).toEqual([]);
+  });
+
+  it('keeps the member on the page when Disconnect isn’t confirmed, and revokes nothing on Cancel', async () => {
+    const calls = server(undefined, { revoking: () => new Response(null, { status: 500 }) });
+    const root = await open();
+    await press(button(root, 'Disconnect'));
+    let dialog = root.find((node) => node.props.role === 'dialog');
+    await press(dialog.find((node) => node.type === 'button' && textOf(node).trim() === 'Cancel'));
+    expect(calls).toEqual([]);
+    await press(button(root, 'Disconnect'));
+    dialog = root.find((node) => node.props.role === 'dialog');
+    await press(
+      dialog.find((node) => node.type === 'button' && textOf(node).trim() === 'Disconnect'),
+    );
+    expect(calls).toEqual([{ url: '/api/auth/mcp/revoke', body: { id: 'c2' } }]);
+    expect(textOf(dialog)).toContain('Could not confirm disconnection. Reload and try again.');
+    expect(navigation.replace).not.toHaveBeenCalled();
   });
 });
