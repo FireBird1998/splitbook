@@ -1,9 +1,10 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Paper, Tabs, Tab, ThemeProvider } from '@mui/material';
+import { Alert, Paper, Tabs, Tab, ThemeProvider } from '@mui/material';
 import { createTheme, getContrastRatio, getLuminance, hexToRgb } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { createAppTheme } from './createAppTheme';
+import ErrorState from '@/components/common/ErrorState';
 
 /** A `#rrggbb` colour's hue, in degrees. */
 function hue(color: string): number {
@@ -34,6 +35,15 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
         ).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+
+  it('keeps a banner’s text readable on each status tint (#772)', () => {
+    const { palette } = createAppTheme(mode);
+    for (const tone of ['positive', 'negative', 'warning', 'info'] as const)
+      expect(
+        getContrastRatio(palette.text.primary, palette.tint[tone]),
+        `text on the ${tone} tint`,
+      ).toBeGreaterThanOrEqual(4.5);
   });
 
   it('keeps the shell sidebar readable on its hover and current fills', () => {
@@ -131,4 +141,57 @@ it('server-rendered Paper and tabs use scheme variables before preference adopti
   expect(html).toContain('border-color:var(--mui-palette-divider)');
   expect(html).toContain('background-color:var(--mui-palette-surface-muted)');
   expect(html).toContain('color:var(--mui-palette-text-primary)');
+});
+
+// #772: in dark mode MUI's own standard Alert tint is nearly black, so a banner looked like a hole
+// in its card. Each severity takes the palette's status tint, as the canvas's banner does: its
+// text in the primary colour, its icon in the status colour.
+it.each([
+  ['info', 'info'],
+  ['warning', 'warning'],
+  ['error', 'negative'],
+  ['success', 'positive'],
+] as const)('a standard %s banner takes the %s tint in either scheme', (severity, tone) => {
+  const theme = createTheme({
+    ...createAppTheme('light'),
+    cssVariables: { colorSchemeSelector: '[data-theme="%s"]' },
+    colorSchemes: {
+      light: { palette: createAppTheme('light').palette },
+      dark: { palette: createAppTheme('dark').palette },
+    },
+  });
+  const html = renderToStaticMarkup(
+    createElement(ThemeProvider, { theme }, createElement(Alert, { severity }, 'Prepared items')),
+  );
+  // The banner's root rule, Paper's and MUI's own styles first: the last of each wins.
+  const root = html.match(/\.css-[\w-]+\{([^}]*)\}/)![1];
+  const last = (property: string) =>
+    [...root.matchAll(new RegExp(`(?:^|;)${property}:([^;]+)`, 'g'))].at(-1)?.[1];
+  expect(last('background-color')).toBe(`var(--mui-palette-tint-${tone})`);
+  expect(last('color')).toBe('var(--mui-palette-text-primary)');
+  expect(html).toContain(`color:var(--mui-palette-status-${tone})`);
+});
+
+it('leaves a banner’s own colours to it, as the error state sets them (#772)', () => {
+  const theme = createTheme({
+    ...createAppTheme('light'),
+    cssVariables: { colorSchemeSelector: '[data-theme="%s"]' },
+    colorSchemes: {
+      light: { palette: createAppTheme('light').palette },
+      dark: { palette: createAppTheme('dark').palette },
+    },
+  });
+  const html = renderToStaticMarkup(
+    createElement(ThemeProvider, { theme }, createElement(ErrorState, { message: 'Not loaded.' })),
+  );
+  // The banner's root rule: the last colour declared wins, and it is the error state's own.
+  const [, rootClass, root] = html.match(/(\.css-[\w-]+)\{([^}]*)\}/)!;
+  const colours = [...root.matchAll(/(?:^|;)color:([^;]+)/g)].map((found) => found[1]);
+  expect(colours.at(-1)).toBe('var(--mui-palette-status-negative)');
+  // No rule on the root with more classes outranks it.
+  const outranking = [...html.matchAll(/([^{}<>]+)\{([^}]*)\}/g)].filter(
+    ([, selector, body]) =>
+      selector.startsWith(`${rootClass}.`) && !/\s/.test(selector) && /(?:^|;)color:/.test(body),
+  );
+  expect(outranking).toEqual([]);
 });

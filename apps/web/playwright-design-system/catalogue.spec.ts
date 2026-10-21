@@ -17,6 +17,23 @@ test('feedback visual baseline protects error and recovered states', async ({ pa
   await expect(feedback).toHaveScreenshot('feedback-recovered.png', { animations: 'disabled' });
 });
 
+// #772: each standard banner takes its status tint, also in dark mode, where MUI's own was near
+// black.
+test('banners visual baseline shows each severity on its status tint', async ({
+  page,
+}, testInfo) => {
+  expect(
+    process.platform === 'linux' || Boolean(process.env.DESIGN_BROWSER_WS),
+    'Visual baselines require the documented Linux browser.',
+  ).toBe(true);
+  await page.goto('/dev/design-system');
+  await expectThemeApplied(page, testInfo);
+  await page.evaluate(() => document.fonts.ready);
+  const banners = page.getByRole('region', { name: 'Banners' });
+  await expect(banners.getByRole('alert')).toHaveCount(4);
+  await expect(banners).toHaveScreenshot('banners.png', { animations: 'disabled' });
+});
+
 test('catalogue renders with no auth, database, or application API requests', async ({
   page,
 }, testInfo) => {
