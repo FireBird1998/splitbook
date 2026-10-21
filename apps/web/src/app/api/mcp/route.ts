@@ -1,4 +1,4 @@
-import { connectedAssistantName } from '@/lib/mcp/assistant-name';
+import { connectedAssistantActor } from '@/lib/mcp/assistant-actor';
 import { boundedBody } from '@/lib/draft-http';
 import { allowMcpRequest } from '@/lib/mcp/request-limit';
 import { registerSplitbookTools } from '@/lib/mcp/tools';
@@ -41,16 +41,14 @@ export async function POST(request: Request) {
         scopes,
         true,
       ),
-    async (server, id, scopes, authorize, clientId) =>
+    async (server, id, scopes, authorize, clientId, generation) =>
       registerSplitbookTools(
         server,
-        {
-          id,
+        await connectedAssistantActor(
+          (await auth.$context).adapter,
+          { userId: id, clientId, generation },
           authorize,
-          assistant: {
-            name: await connectedAssistantName((await auth.$context).adapter, clientId),
-          },
-        },
+        ),
         scopes,
         process.env.NEXT_PUBLIC_APP_URL!,
       ),

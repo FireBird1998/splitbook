@@ -15,6 +15,8 @@ export interface McpConnection {
   createdAt: Date;
   name?: string;
   lastUsedAt?: Date | null;
+  /** The Groups the member left out of this assistant's reach (#617). */
+  excludedGroupIds?: string[] | null;
 }
 export interface McpConsent {
   createdAt?: Date;

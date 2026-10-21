@@ -8,9 +8,14 @@ import {
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
 import type { StoredAllocationRow, StoredExpenseSplit } from '@splitbook/shared/expense-detail';
+import type { GroupCategory } from '@splitbook/shared/types';
 import { draftObjectId } from '@splitbook/shared/validators/expense-draft';
 import { balanceService } from './balance.service';
 import { expenseService } from './expense.service';
+import type { DraftActor } from './expense-draft.service';
+
+/** Who reads the ledger through an assistant, and the Groups their connection leaves out (#617). */
+type LedgerReader = Pick<DraftActor, 'id' | 'excludedGroupIds'>;
 
 /**
  * Members as assistants see them: id and name only, never an email or photo (#438). The
@@ -80,61 +85,94 @@ function assistantExpense(expense: RecordedExpense, member: ReturnType<typeof as
   };
 }
 
-export async function requireLedgerMembership(actorId: string, groupId: string) {
+/**
+ * A Group the reader belongs to and their connection reaches. One out of reach answers exactly
+ * as a Group that doesn't exist (#617).
+ */
+export async function requireLedgerMembership(reader: LedgerReader, groupId: string) {
   await connectDB();
   const group = await Group.findOne({
-    _id: draftObjectId.parse(groupId),
-    'members.user': draftObjectId.parse(actorId),
+    _id: { $eq: draftObjectId.parse(groupId), $nin: reader.excludedGroupIds ?? [] },
+    'members.user': draftObjectId.parse(reader.id),
     deletionRequestedAt: null,
   })
     .populate('members.user', 'name')
     .lean();
-  if (!group) throw new Error('FORBIDDEN');
+  if (!group) throw new Error('GROUP_NOT_FOUND');
   return group;
 }
+
+/** A Group as an assistant sees it in a list: no members, Expenses or Balances. */
+function assistantGroup(group: {
+  _id: unknown;
+  name: string;
+  defaultCurrency: string;
+  category: GroupCategory;
+  isArchived: boolean;
+}) {
+  return {
+    id: String(group._id),
+    name: group.name,
+    currency: group.defaultCurrency,
+    theme: group.category,
+    archived: group.isArchived,
+  };
+}
+export type AssistantGroup = ReturnType<typeof assistantGroup>;
+
 export const assistantLedgerService = {
-  async groups(actorId: string, after?: string) {
+  async groups(reader: LedgerReader, after?: string) {
     await connectDB();
     const groups = await Group.find({
-      'members.user': draftObjectId.parse(actorId),
+      'members.user': draftObjectId.parse(reader.id),
       deletionRequestedAt: null,
-      ...(after ? { _id: { $gt: draftObjectId.parse(after) } } : {}),
+      // Left-out Groups are filtered in the query, so a page is never short of what it says.
+      _id: {
+        $nin: reader.excludedGroupIds ?? [],
+        ...(after ? { $gt: draftObjectId.parse(after) } : {}),
+      },
     })
       .sort({ _id: 1 })
       .limit(51)
       .select('name defaultCurrency category isArchived')
       .lean();
     return {
-      groups: groups.slice(0, 50).map((group) => ({
-        id: String(group._id),
-        name: group.name,
-        currency: group.defaultCurrency,
-        theme: group.category,
-        archived: group.isArchived,
-      })),
+      groups: groups.slice(0, 50).map(assistantGroup),
       next: groups.length > 50 ? String(groups[49]._id) : null,
     };
   },
-  async context(actorId: string, groupId: string) {
-    const group = await requireLedgerMembership(actorId, groupId);
+  /** Every Group the member belongs to, as the approval page lists them to tick or leave out. */
+  async approvalGroups(memberId: string): Promise<AssistantGroup[]> {
+    await connectDB();
+    const groups = await Group.find({
+      'members.user': draftObjectId.parse(memberId),
+      deletionRequestedAt: null,
+    })
+      .sort({ name: 1, _id: 1 })
+      .select('name defaultCurrency category isArchived')
+      .lean();
+    return groups.map(assistantGroup);
+  },
+  async context(reader: LedgerReader, groupId: string) {
+    const group = await requireLedgerMembership(reader, groupId);
     return {
       id: String(group._id),
       name: group.name,
       currency: group.defaultCurrency,
-      members: group.members.map((member) => assistantMembers(actorId)(member.user)),
+      members: group.members.map((member) => assistantMembers(reader.id)(member.user)),
       tags: group.tags
         .filter((tag) => !tag.isArchived && !tag.isDeleted)
         .map((tag) => ({ id: String(tag._id), name: tag.name })),
       categories: EXPENSE_CATEGORIES.map(({ id, label }) => ({ id, label })),
     };
   },
-  async balances(actorId: string, groupId: string) {
-    await requireLedgerMembership(actorId, groupId);
+  async balances(reader: LedgerReader, groupId: string) {
+    await requireLedgerMembership(reader, groupId);
     const read = await balanceService.getGroupBalances(groupId, {
       includeDebtsBeforeSimplifying: false,
     });
-    if (!read) throw new Error('FORBIDDEN');
-    const member = assistantMembers(actorId);
+    if (!read) throw new Error('GROUP_NOT_FOUND');
+    const member = assistantMembers(reader.id);
     const bucket = (balances: Pick<typeof read, 'currency' | 'balances' | 'debts'>) => ({
       currency: balances.currency,
       balances: balances.balances.map((row) => ({ user: member(row.user), balance: row.balance })),
@@ -155,10 +193,10 @@ export const assistantLedgerService = {
     };
   },
   async spending(
-    actorId: string,
+    reader: LedgerReader,
     input: { groupId: string; from: string; to: string; page: number; limit: number },
   ) {
-    await requireLedgerMembership(actorId, input.groupId);
+    await requireLedgerMembership(reader, input.groupId);
     const result = await expenseService.getGroupExpenses(
       input.groupId,
       {
@@ -169,11 +207,11 @@ export const assistantLedgerService = {
         sortBy: 'date',
         sortOrder: 'desc',
       },
-      actorId,
+      reader.id,
     );
     return {
       expenses: result.expenses.map((expense) =>
-        assistantExpense(expense as unknown as RecordedExpense, assistantMembers(actorId)),
+        assistantExpense(expense as unknown as RecordedExpense, assistantMembers(reader.id)),
       ),
       pagination: result.pagination,
       // The canonical UI also has legacy default-currency-only scalar totals. An

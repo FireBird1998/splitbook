@@ -47,8 +47,11 @@ for (const allowPreparation of [false, true]) {
     await expect(page).toHaveURL(/\/mcp\/consent\?/);
     // Named by the name it registered, with what it can't do (#614). A registered client
     // publishes no details, so the page says it has no published address.
+    // The name leads the page as its heading (#617).
     await expect(
-      page.getByText('Fictional consent test assistant wants to use your Splitbook', {
+      page.getByRole('heading', {
+        level: 1,
+        name: 'Fictional consent test assistant wants to use your Splitbook',
         exact: true,
       }),
     ).toBeVisible();
@@ -58,10 +61,10 @@ for (const allowPreparation of [false, true]) {
     for (const limit of [
       'Save Expenses or payments',
       'Change anything in a Group',
+      'See Groups left out',
       'See anyone’s email',
     ])
       await expect(page.getByText(limit, { exact: true })).toBeVisible();
-    await expect(page.getByText('See Groups left out')).toHaveCount(0);
     await expect(page.getByText('identified by its published details')).toHaveCount(0);
     await expect(
       page.getByText('Registered by the assistant itself. Its address isn’t published.', {
@@ -104,6 +107,18 @@ for (const allowPreparation of [false, true]) {
         { exact: true },
       ),
     ).toBeVisible();
+    // Which Groups (#617): every Group ticked, with the warning about leaving one out.
+    const groupChoice = page.getByRole('group', { name: 'Which Groups' });
+    const groupBoxes = groupChoice.getByRole('checkbox');
+    expect(await groupBoxes.count()).toBeGreaterThan(1);
+    for (const box of await groupBoxes.all()) await expect(box).toBeChecked();
+    await expect(
+      page.getByText(
+        'Groups you untick are left out of Fictional consent test assistant’s answers, so its totals won’t include them.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(page.getByText('This connection can access all Groups')).toHaveCount(0);
     await expect(page.locator('body')).not.toContainText(/draft/i);
     await page.addStyleTag({ content: 'html { font-size: 130%; }' });
     await expectThemeApplied(page, testInfo);
@@ -129,6 +144,9 @@ for (const allowPreparation of [false, true]) {
     ).toBe(true);
     await reviewScreenshot(page, testInfo, `mcp-consent-130-${allowPreparation}`);
     if (allowPreparation) await permission.check();
+    // The opted-in run also leaves one Group out, which the assistant then never sees (#617).
+    if (allowPreparation)
+      await groupChoice.getByRole('checkbox', { name: /^Kochi to Alleppey/ }).uncheck();
     // Capture only the fictional client's callback; authorization and consent are real.
     await page.route(`${redirectUri}**`, (route) => route.fulfill({ body: 'Connected' }));
     await page.getByRole('button', { name: 'Allow connection', exact: true }).click();
@@ -148,5 +166,40 @@ for (const allowPreparation of [false, true]) {
     expect(exchange.status()).toBe(200);
     const issued = await exchange.json();
     expect(issued.scope.split(' ').includes('drafts:write')).toBe(allowPreparation);
+    const listed = await request.post(resource, {
+      headers: {
+        Authorization: `Bearer ${issued.access_token}`,
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+      },
+      data: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'list_groups', arguments: {} },
+      },
+    });
+    expect(listed.status()).toBe(200);
+    const reply = await listed.text();
+    expect(reply).toContain('Banyan Court Flat 4B');
+    if (allowPreparation) expect(reply).not.toContain('Kochi to Alleppey');
+    else expect(reply).toContain('Kochi to Alleppey');
+    // Asked to approve the same assistant again, the page starts from the choice in force,
+    // never from every Group ticked (#617).
+    await page.goto(
+      `/api/auth/oauth2/authorize?${new URLSearchParams({
+        ...Object.fromEntries(query),
+        state: 'fictional-consent-again',
+        code_challenge: createHash('sha256')
+          .update(randomBytes(32).toString('base64url'))
+          .digest('base64url'),
+      })}`,
+    );
+    await expect(page).toHaveURL(/\/mcp\/consent\?/);
+    const again = page.getByRole('group', { name: 'Which Groups' });
+    await expect(again.getByRole('checkbox', { name: /^Banyan Court Flat 4B/ })).toBeChecked();
+    const kochi = again.getByRole('checkbox', { name: /^Kochi to Alleppey/ });
+    if (allowPreparation) await expect(kochi).not.toBeChecked();
+    else await expect(kochi).toBeChecked();
   });
 }

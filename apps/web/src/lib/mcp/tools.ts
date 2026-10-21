@@ -13,6 +13,19 @@ import { assistantLedgerService } from '@/lib/services/assistant-ledger.service'
 import { expenseDraftService, type DraftActor } from '@/lib/services/expense-draft.service';
 import { MCP_DRAFT_SCOPE } from './config';
 
+/** What a tool answers for each refusal the services throw; anything else gets a retry hint. */
+const REFUSALS = {
+  FORBIDDEN: 'FORBIDDEN',
+  GROUP_ARCHIVED: 'GROUP_ARCHIVED',
+  DRAFT_NOT_FOUND: 'DRAFT_NOT_FOUND',
+  STALE_REVISION: 'STALE_REVISION',
+  REVISION_REQUIRED: 'REVISION_REQUIRED',
+  IDEMPOTENCY_CONFLICT: 'IDEMPOTENCY_CONFLICT',
+  DRAFT_GROUP_LIMIT: DRAFT_GROUP_LIMIT_MESSAGE,
+  // A Group out of reach answers as one that doesn't exist (#617).
+  GROUP_NOT_FOUND: 'Group not found',
+} as const;
+
 /** Tools are request-scoped. Identity and authorization never come from tool arguments. */
 export function registerSplitbookTools(
   server: McpServer,
@@ -30,19 +43,9 @@ export function registerSplitbookTools(
       const message =
         error instanceof z.ZodError
           ? error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')
-          : error instanceof Error &&
-              [
-                'FORBIDDEN',
-                'GROUP_ARCHIVED',
-                'DRAFT_NOT_FOUND',
-                'STALE_REVISION',
-                'REVISION_REQUIRED',
-                'IDEMPOTENCY_CONFLICT',
-              ].includes(error.message)
-            ? error.message
-            : error instanceof Error && error.message === 'DRAFT_GROUP_LIMIT'
-              ? DRAFT_GROUP_LIMIT_MESSAGE
-              : 'Request could not be completed. Fetch the current state before retrying; reuse the original creation key.';
+          : error instanceof Error && Object.hasOwn(REFUSALS, error.message)
+            ? REFUSALS[error.message as keyof typeof REFUSALS]
+            : 'Request could not be completed. Fetch the current state before retrying; reuse the original creation key.';
       return { isError: true, content: [{ type: 'text' as const, text: message }] };
     }
   }
@@ -53,7 +56,7 @@ export function registerSplitbookTools(
       inputSchema: z.object({ after: draftObjectId.optional() }).strict(),
       annotations: read,
     },
-    (input) => run(() => assistantLedgerService.groups(actor.id, input.after)),
+    (input) => run(() => assistantLedgerService.groups(actor, input.after)),
   );
   server.registerTool(
     'group_context',
@@ -63,7 +66,7 @@ export function registerSplitbookTools(
       inputSchema: z.object({ groupId: draftObjectId }).strict(),
       annotations: read,
     },
-    (input) => run(() => assistantLedgerService.context(actor.id, input.groupId)),
+    (input) => run(() => assistantLedgerService.context(actor, input.groupId)),
   );
   server.registerTool(
     'group_balances',
@@ -73,7 +76,7 @@ export function registerSplitbookTools(
       inputSchema: z.object({ groupId: draftObjectId }).strict(),
       annotations: read,
     },
-    (input) => run(() => assistantLedgerService.balances(actor.id, input.groupId)),
+    (input) => run(() => assistantLedgerService.balances(actor, input.groupId)),
   );
   server.registerTool(
     'group_spending',
@@ -98,7 +101,7 @@ export function registerSplitbookTools(
         .refine((input) => input.from <= input.to, 'from must not be after to'),
       annotations: read,
     },
-    (input) => run(() => assistantLedgerService.spending(actor.id, input)),
+    (input) => run(() => assistantLedgerService.spending(actor, input)),
   );
   if (!scopes.includes(MCP_DRAFT_SCOPE) || process.env.PERSISTENT_DRAFTS_ENABLED !== 'true') return;
   const reviewDescription = `These are items in the member's To review in Splitbook, where only the member can save them as Expenses; never call them drafts. Limit: ${ACTIVE_DRAFTS_PER_MEMBER} per member per Group.`;

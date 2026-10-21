@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
-import { connectedAssistantName } from './assistant-name';
+import { connectedAssistantActor } from './assistant-actor';
+import { consentRequestKey, holdExcludedGroups } from './excluded-groups';
 import { registerSplitbookTools } from './tools';
 import { createServer, type Server } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
@@ -36,6 +37,7 @@ export function connectionTests(mongo = false) {
     oauthResource: [],
     oauthClientResource: [],
     mcpConnection: [],
+    mcpPendingExclusion: [],
   };
   let server: Server;
   let origin: string;
@@ -84,7 +86,8 @@ export function connectionTests(mongo = false) {
     });
   }
 
-  async function authorizeCode(drafts = false, allowDrafts = false, login = false) {
+  /** An authorization request as far as the approval page, with what that page was told. */
+  async function approvalRequest(drafts = false, login = false) {
     const verifier = randomBytes(32).toString('base64url');
     const query = new URLSearchParams({
       client_id: clientId,
@@ -122,12 +125,24 @@ export function connectionTests(mongo = false) {
     );
     expect(details.status).toBe(200);
     approvalShown = await details.json();
+    return { oauthQuery: consentURL.search.slice(1), verifier };
+  }
+
+  async function authorizeCode(
+    drafts = false,
+    allowDrafts = false,
+    login = false,
+    excludedGroups?: readonly string[],
+  ) {
+    const { oauthQuery, verifier } = await approvalRequest(drafts, login);
     const consent = await post(
       '/oauth2/consent',
       {
         accept: true,
-        oauth_query: consentURL.search.slice(1),
+        oauth_query: oauthQuery,
         scope: `${MCP_LEDGER_SCOPE} offline_access${allowDrafts ? ` ${MCP_DRAFT_SCOPE}` : ''}`,
+        // The Groups the member unticked on the approval page (#617).
+        ...(excludedGroups ? { excluded_groups: excludedGroups } : {}),
       },
       true,
     );
@@ -153,8 +168,15 @@ export function connectionTests(mongo = false) {
     });
   }
 
-  async function authorizeClient(drafts = false, allowDrafts = false, login = false) {
-    const exchange = await exchangeCode(await authorizeCode(drafts, allowDrafts, login));
+  async function authorizeClient(
+    drafts = false,
+    allowDrafts = false,
+    login = false,
+    excludedGroups?: readonly string[],
+  ) {
+    const exchange = await exchangeCode(
+      await authorizeCode(drafts, allowDrafts, login, excludedGroups),
+    );
     const issued = await exchange.json();
     expect(exchange.status, JSON.stringify(issued)).toBe(200);
     expect(issued.access_token).toBeTypeOf('string');
@@ -219,17 +241,15 @@ export function connectionTests(mongo = false) {
           scopes,
           true,
         ),
-      async (server, id, scopes, authorize, clientId) => {
+      async (server, id, scopes, authorize, clientId, generation) => {
         if (exposeTools)
           registerSplitbookTools(
             server,
-            {
-              id,
+            await connectedAssistantActor(
+              (await auth.$context).adapter,
+              { userId: id, clientId, generation },
               authorize,
-              assistant: {
-                name: await connectedAssistantName((await auth.$context).adapter, clientId),
-              },
-            },
+            ),
             scopes,
             origin,
           );
@@ -571,6 +591,194 @@ export function connectionTests(mongo = false) {
       expect(approvalShown).toMatchObject({ name: 'Synthetic MCP Client', address: null });
     });
 
+    /** Works as another registered assistant, so the main client's grant stays as it was. */
+    async function withAnotherClient(name: string, work: () => Promise<void>) {
+      const registration = await post('/oauth2/register', {
+        client_name: name,
+        redirect_uris: ['https://mcp-client.example.test/callback'],
+        token_endpoint_auth_method: 'none',
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        scope: `${MCP_LEDGER_SCOPE} offline_access`,
+      });
+      expect(registration.status).toBe(201);
+      const first = clientId;
+      clientId = (await registration.json()).client_id;
+      try {
+        await work();
+      } finally {
+        // Disconnect it, so later tests see only the main client's connection.
+        const listing = await fetch(`${origin}/api/auth/mcp/connections`, { headers: { cookie } });
+        const live = (
+          (await listing.json()).connections as Array<{ id: string; clientId: string }>
+        ).filter((row) => row.clientId === clientId);
+        for (const row of live) await post('/mcp/revoke', { id: row.id }, true);
+        clientId = first;
+      }
+    }
+
+    it('starts a new approval from the Groups the connection leaves out, and from none after Disconnect (#617)', () =>
+      withAnotherClient('Synthetic Second Client', async () => {
+        const leftOut = 'c00000000000000000000617';
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+        await authorizeCode(false, false, false, [leftOut]);
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+        const listing = await fetch(`${origin}/api/auth/mcp/connections`, { headers: { cookie } });
+        const connection = (
+          (await listing.json()).connections as Array<{ id: string; clientId: string }>
+        ).find((row) => row.clientId === clientId);
+        expect((await post('/mcp/revoke', { id: connection!.id }, true)).status).toBe(200);
+        // Connecting again after Disconnect starts with every Group ticked.
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+      }));
+
+    it('starts a reconnection after Disconnect from every Group, even when its consent sends no choice (#617)', () =>
+      withAnotherClient('Synthetic Reconnecting Client', async () => {
+        const leftOut = 'c00000000000000000000623';
+        await authorizeCode(false, false, false, [leftOut]);
+        const listing = await fetch(`${origin}/api/auth/mcp/connections`, { headers: { cookie } });
+        const connection = (
+          (await listing.json()).connections as Array<{ id: string; clientId: string }>
+        ).find((row) => row.clientId === clientId);
+        expect((await post('/mcp/revoke', { id: connection!.id }, true)).status).toBe(200);
+        // A consent that sends no choice brings back nothing from before Disconnect.
+        await authorizeCode();
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+      }));
+
+    it('keeps the choice in force when a signed consent then fails (#617)', () =>
+      withAnotherClient('Synthetic Failing Consent Client', async () => {
+        const leftOut = 'c00000000000000000000618';
+        await authorizeCode(false, false, false, [leftOut]);
+        const { oauthQuery } = await approvalRequest();
+        // Signed and accepted, but asking for a scope the client never requested.
+        const failed = await post(
+          '/oauth2/consent',
+          {
+            accept: true,
+            oauth_query: oauthQuery,
+            scope: `${MCP_LEDGER_SCOPE} openid`,
+            excluded_groups: [],
+          },
+          true,
+        );
+        expect(failed.status).toBe(400);
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+        // The choice the failed request held was its own: a later grant for another request
+        // that sends no choice leaves the Groups as they were.
+        await authorizeCode();
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+      }));
+
+    /**
+     * Two accounts holding a choice for the same request parameters, which an assistant controls
+     * (state, code_challenge, redirect_uri), as a race between a member's hold and their grant.
+     */
+    async function holdForBoth(
+      oauthQuery: string,
+      choices: { member?: string[]; other?: string[] },
+    ) {
+      const adapter = (await auth.$context).adapter;
+      const member = await adapter.findOne<{ id: string }>({
+        model: 'user',
+        where: [{ field: 'email', value: 'connection@example.test' }],
+      });
+      const holders = [
+        ['000000000000000000000617', choices.other],
+        [member!.id, choices.member],
+      ] as const;
+      for (const [userId, excluded] of holders)
+        if (excluded)
+          await holdExcludedGroups(
+            adapter,
+            { key: consentRequestKey(oauthQuery, userId), userId, clientId },
+            excluded,
+          );
+    }
+
+    it('commits the member’s own held choice, whatever another account holds for the same request (#617)', () =>
+      withAnotherClient('Synthetic Held Client', async () => {
+        const leftOut = 'c00000000000000000000620';
+        const { oauthQuery } = await approvalRequest();
+        // The member's hold, then another account's for the same request parameters.
+        await holdForBoth(oauthQuery, { member: [leftOut] });
+        await holdForBoth(oauthQuery, { other: [] });
+        const consent = await post(
+          '/oauth2/consent',
+          { accept: true, oauth_query: oauthQuery, scope: `${MCP_LEDGER_SCOPE} offline_access` },
+          true,
+        );
+        expect(consent.status).toBe(200);
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+      }));
+
+    it('never applies another account’s held choice to the member’s grant (#617)', () =>
+      withAnotherClient('Synthetic Planted Client', async () => {
+        const { oauthQuery } = await approvalRequest();
+        await holdForBoth(oauthQuery, { other: ['c00000000000000000000621'] });
+        const consent = await post(
+          '/oauth2/consent',
+          { accept: true, oauth_query: oauthQuery, scope: `${MCP_LEDGER_SCOPE} offline_access` },
+          true,
+        );
+        expect(consent.status).toBe(200);
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+      }));
+
+    it('writes nothing for a Deny or a tampered request that carries left-out Groups (#617)', () =>
+      withAnotherClient('Synthetic Refused Client', async () => {
+        const leftOut = 'c00000000000000000000619';
+        await authorizeCode(false, false, false, [leftOut]);
+        const { oauthQuery } = await approvalRequest();
+        const scope = `${MCP_LEDGER_SCOPE} offline_access`;
+        const denied = await post(
+          '/oauth2/consent',
+          { accept: false, oauth_query: oauthQuery, scope, excluded_groups: [] },
+          true,
+        );
+        expect(denied.ok).toBe(true);
+        const tampered = new URLSearchParams(oauthQuery);
+        tampered.set('state', 'tampered-state');
+        const unsigned = new URLSearchParams(oauthQuery);
+        unsigned.delete('sig');
+        for (const query of [tampered, unsigned]) {
+          const refused = await post(
+            '/oauth2/consent',
+            { accept: true, oauth_query: query.toString(), scope, excluded_groups: [] },
+            true,
+          );
+          expect(refused.status, query.toString()).toBe(400);
+        }
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+      }));
+
+    it('refuses an approval whose left-out Groups are not Group ids (#617)', async () => {
+      for (const excluded of [['not-a-group'], 'a1b2c3d4e5f6a1b2c3d4e5f6', [42]]) {
+        const { oauthQuery } = await approvalRequest();
+        const refused = await post(
+          '/oauth2/consent',
+          {
+            accept: true,
+            oauth_query: oauthQuery,
+            scope: `${MCP_LEDGER_SCOPE} offline_access`,
+            excluded_groups: excluded,
+          },
+          true,
+        );
+        expect(refused.status, JSON.stringify(excluded)).toBe(400);
+        expect(await refused.json()).not.toHaveProperty('url');
+      }
+    });
+
     it('preserves the signed login request and keeps Draft permission opt-in', async () => {
       const ledgerOnly = await authorizeClient(true, false, true);
       expect(ledgerOnly.scope.split(' ')).not.toContain(MCP_DRAFT_SCOPE);
@@ -843,6 +1051,180 @@ export function connectionTests(mongo = false) {
           await ledgerClient.close();
           await draftClient.close();
         }
+      });
+
+    /**
+     * Excluded Groups (#617): the Groups a member unticks at approval. To the assistant each one
+     * looks exactly like a Group that doesn't exist, for read and Draft tools alike.
+     */
+    async function withExcludedGroupClient<T>(
+      token: string,
+      work: (
+        reply: (tool: string, args: Record<string, unknown>) => Promise<ToolAnswer>,
+      ) => Promise<T>,
+    ) {
+      exposeTools = true;
+      const client = new Client({ name: 'excluded-groups-test', version: '1' });
+      try {
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(resource), {
+            requestInit: { headers: { Authorization: `Bearer ${token}` } },
+          }),
+        );
+        return await work(async (tool, args) => {
+          const result = await client.callTool({ name: tool, arguments: args });
+          return {
+            isError: result.isError === true,
+            text: (result.content as Array<{ text: string }>)[0].text,
+          };
+        });
+      } finally {
+        exposeTools = false;
+        await client.close();
+      }
+    }
+    type ToolAnswer = { isError: boolean; text: string };
+    const exclusionGroup = (_id: mongoose.Types.ObjectId, name: string, member: unknown) => ({
+      _id,
+      name,
+      defaultCurrency: 'INR',
+      tags: [],
+      members: [{ user: member, joinedAt: new Date() }],
+    });
+
+    if (mongo)
+      it('leaves an Excluded Group out of every tool, answering as for a Group that does not exist (#617)', async () => {
+        const db = mongoClient!.db();
+        const user = await db.collection('users').findOne({ email: 'connection@example.test' });
+        const [reached, leftOut, elsewhere, missing] = Array.from(
+          { length: 4 },
+          () => new mongoose.Types.ObjectId(),
+        );
+        await db
+          .collection('groups')
+          .insertMany([
+            exclusionGroup(reached, 'Exclusion Reached Flat', user!._id),
+            exclusionGroup(leftOut, 'Exclusion Private Retreat', user!._id),
+            exclusionGroup(elsewhere, 'Exclusion Stranger Trip', new mongoose.Types.ObjectId()),
+          ]);
+        // The member already has an item in To review in the Group they then leave out.
+        const before = await authorizeClient(true, true);
+        const draftId = await withExcludedGroupClient(before.access_token, async (reply) => {
+          const created = await reply('create_drafts', {
+            groupId: String(leftOut),
+            requestKey: 'excluded-group-before',
+            drafts: [{ amount: 120 }],
+          });
+          expect(created.isError, created.text).toBe(false);
+          return JSON.parse(created.text).drafts[0].id as string;
+        });
+        const grant = await authorizeClient(true, true, false, [String(leftOut)]);
+        await withExcludedGroupClient(grant.access_token, async (reply) => {
+          const asked = (groupId: mongoose.Types.ObjectId) =>
+            [
+              ['group_context', { groupId: String(groupId) }],
+              ['group_balances', { groupId: String(groupId) }],
+              [
+                'group_spending',
+                { groupId: String(groupId), from: '2026-10-01', to: '2026-10-31' },
+              ],
+              ['list_drafts', { groupId: String(groupId) }],
+              [
+                'create_drafts',
+                {
+                  groupId: String(groupId),
+                  requestKey: 'excluded-group-after',
+                  drafts: [{ amount: 9 }],
+                },
+              ],
+              [
+                'replace_draft',
+                { groupId: String(groupId), draftId, revision: 0, values: { amount: 9 } },
+              ],
+              ['discard_draft', { groupId: String(groupId), draftId, revision: 0 }],
+            ] as const;
+          const listed = await reply('list_groups', {});
+          expect(listed.text).toContain('Exclusion Reached Flat');
+          const replies = [listed.text];
+          for (const [index, [tool, args]] of asked(leftOut).entries()) {
+            const answer = await reply(tool, args);
+            replies.push(answer.text);
+            expect(answer, tool).toEqual({ isError: true, text: 'Group not found' });
+            for (const other of [missing, elsewhere])
+              expect(await reply(tool, asked(other)[index][1]), tool).toEqual(answer);
+          }
+          expect((await reply('group_context', { groupId: String(reached) })).isError).toBe(false);
+          // A Draft id from the Group left out, sent with a reachable Group, is as unknown as
+          // any other; replaying the earlier request key there finds nothing either.
+          const unknownDraft = String(new mongoose.Types.ObjectId());
+          const draftArgs = (tool: 'replace_draft' | 'discard_draft', id: string) =>
+            tool === 'replace_draft'
+              ? { groupId: String(reached), draftId: id, revision: 0, values: { amount: 9 } }
+              : { groupId: String(reached), draftId: id, revision: 0 };
+          for (const tool of ['replace_draft', 'discard_draft'] as const)
+            expect(await reply(tool, draftArgs(tool, draftId)), tool).toEqual(
+              await reply(tool, draftArgs(tool, unknownDraft)),
+            );
+          expect(
+            await reply('create_drafts', {
+              groupId: String(leftOut),
+              requestKey: 'excluded-group-before',
+              drafts: [{ amount: 120 }],
+            }),
+          ).toEqual({ isError: true, text: 'Group not found' });
+          // Archived as well as left out: still a Group that doesn't exist.
+          await db.collection('groups').updateOne({ _id: leftOut }, { $set: { isArchived: true } });
+          for (const tool of ['group_context', 'list_drafts'])
+            expect(await reply(tool, { groupId: String(leftOut) }), tool).toEqual({
+              isError: true,
+              text: 'Group not found',
+            });
+          // Never a name, an id or a count that hints at the Group left out.
+          for (const text of replies) {
+            expect(text).not.toContain('Exclusion Private Retreat');
+            expect(text).not.toContain(String(leftOut));
+          }
+        });
+        expect(
+          await db
+            .collection('expensedrafts')
+            .findOne({ _id: new mongoose.Types.ObjectId(draftId) }),
+        ).toMatchObject({ state: 'active', revision: 0, values: { amount: 120 } });
+        await authorizeClient(); // return to ledger-only consent for later assertions
+      });
+
+    if (mongo)
+      it('reaches a Group joined after approval, and applies a new approval on the next call (#617)', async () => {
+        const db = mongoClient!.db();
+        const user = await db.collection('users').findOne({ email: 'connection@example.test' });
+        const [leftOut, joinedLater] = [
+          new mongoose.Types.ObjectId(),
+          new mongoose.Types.ObjectId(),
+        ];
+        await db
+          .collection('groups')
+          .insertOne(exclusionGroup(leftOut, 'Exclusion Quiet Household', user!._id));
+        const grant = await authorizeClient(false, false, false, [String(leftOut)]);
+        await db
+          .collection('groups')
+          .insertOne(exclusionGroup(joinedLater, 'Exclusion Joined Later Trip', user!._id));
+        await withExcludedGroupClient(grant.access_token, async (reply) => {
+          const listed = await reply('list_groups', {});
+          expect(listed.text).toContain('Exclusion Joined Later Trip');
+          expect(listed.text).not.toContain('Exclusion Quiet Household');
+          expect((await reply('group_context', { groupId: String(joinedLater) })).isError).toBe(
+            false,
+          );
+          expect(await reply('group_context', { groupId: String(leftOut) })).toEqual({
+            isError: true,
+            text: 'Group not found',
+          });
+          // Approving again with every Group ticked replaces the choice; the same token's next
+          // call reaches the Group.
+          await authorizeCode(false, false, false, []);
+          expect((await reply('group_context', { groupId: String(leftOut) })).isError).toBe(false);
+        });
+        await authorizeClient(); // return to ledger-only consent for later assertions
       });
 
     type NamesakeGroup = { groupId: string; connectedId: string; namesakeId: string };
@@ -1615,6 +1997,45 @@ export function connectionTests(mongo = false) {
           await callAssistant(reconnected.access_token);
           expect(await connectionList()).toHaveLength(1);
           expect((await refresh(issued.refresh_token)).ok).toBe(false);
+        } finally {
+          vi.useRealTimers();
+          await signIn();
+        }
+      });
+
+      it('starts a reconnection after expiry from every Group, and leaves no held choice behind (#617, #618)', async () => {
+        const start = Math.floor(Date.now() / 1000) * 1000;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(start);
+        const [leftOut, laterLeftOut] = ['c00000000000000000000622', 'c00000000000000000000624'];
+        const heldChoices = async () =>
+          (await auth.$context).adapter.findMany({
+            model: 'mcpPendingExclusion',
+            where: [{ field: 'clientId', value: clientId }],
+          });
+        try {
+          await signIn();
+          for (const connection of await connectionList())
+            expect((await post('/mcp/revoke', { id: connection.id }, true)).status).toBe(200);
+          await authorizeClient(false, false, false, [leftOut]);
+          await approvalRequest();
+          expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+          // Unused for 90 days: approving again starts with every Group ticked.
+          vi.setSystemTime(start + 90 * day);
+          await signIn();
+          await approvalRequest();
+          expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+          // A reconnection that sends no choice brings back nothing from before the expiry.
+          await authorizeClient();
+          await approvalRequest();
+          expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+          // Expired again, reconnecting with the page's choice commits it and holds nothing.
+          vi.setSystemTime(start + 180 * day);
+          await signIn();
+          await authorizeClient(false, false, false, [laterLeftOut]);
+          await approvalRequest();
+          expect(approvalShown).toMatchObject({ excludedGroupIds: [laterLeftOut] });
+          expect(await heldChoices()).toEqual([]);
         } finally {
           vi.useRealTimers();
           await signIn();

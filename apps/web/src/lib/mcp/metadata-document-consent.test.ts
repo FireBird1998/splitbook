@@ -64,6 +64,7 @@ const records: MemoryDB = {
   oauthResource: [],
   oauthClientResource: [],
   mcpConnection: [],
+  mcpPendingExclusion: [],
 };
 const auth = betterAuth({
   ...buildAuthOptions({

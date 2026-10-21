@@ -31,6 +31,13 @@ import {
   type McpConnection,
   type McpConsent,
 } from './grants';
+import {
+  commitExcludedGroups,
+  consentRequestKey,
+  excludedGroupsSchema,
+  holdExcludedGroups,
+  liveExcludedGroups,
+} from './excluded-groups';
 import { PRODUCT_NAME } from '@/lib/product';
 
 export function mcpAuthPlugins(env: AuthEnv) {
@@ -79,9 +86,58 @@ export function mcpAuthPlugins(env: AuthEnv) {
             });
           }),
         },
+        {
+          matcher: (ctx) => ctx.path === '/oauth2/consent',
+          handler: createAuthMiddleware(async (ctx) => {
+            // The Groups the member unticked (#617), held for this request until its consent is
+            // granted, when consentReferenceId commits them with the grant.
+            const body = ctx.body as
+              | { accept?: unknown; oauth_query?: unknown; excluded_groups?: unknown }
+              | undefined;
+            if (body?.accept !== true || body.excluded_groups === undefined) return;
+            const excluded = excludedGroupsSchema.safeParse(body.excluded_groups);
+            if (!excluded.success)
+              throw new APIError('BAD_REQUEST', { message: 'Unsupported Group selection.' });
+            const session = await getSessionFromCtx(ctx);
+            // Consent itself refuses a missing session or an invalid request.
+            if (
+              !session ||
+              typeof body.oauth_query !== 'string' ||
+              !(await verifyOAuthQueryParams(body.oauth_query, ctx.context.secret))
+            )
+              return;
+            const clientId = new URLSearchParams(body.oauth_query).get('client_id');
+            if (!clientId) return;
+            await requireMcpMember(ctx.context.adapter, session.user.id, env);
+            await holdExcludedGroups(
+              ctx.context.adapter,
+              {
+                key: consentRequestKey(body.oauth_query, session.user.id),
+                userId: session.user.id,
+                clientId,
+              },
+              excluded.data,
+            );
+          }),
+        },
       ],
     },
     schema: {
+      // The Groups left out on an approval page, held until that request's consent is granted
+      // (#617). Keyed by the authorization request, so they apply to its grant and no other.
+      mcpPendingExclusion: {
+        fields: {
+          key: { type: 'string', required: true, unique: true },
+          userId: {
+            type: 'string',
+            required: true,
+            references: { model: 'user', field: 'id', onDelete: 'cascade' },
+          },
+          clientId: { type: 'string', required: true },
+          excludedGroupIds: { type: 'string[]', required: true },
+          createdAt: { type: 'date', required: true },
+        },
+      },
       mcpConnection: {
         fields: {
           key: { type: 'string', required: true, unique: true },
@@ -91,6 +147,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
             references: { model: 'user', field: 'id', onDelete: 'cascade' },
           },
           clientId: { type: 'string', required: true },
+          // The Groups the member left out of this assistant's reach (#617).
+          excludedGroupIds: { type: 'string[]', required: false },
           generation: { type: 'string', required: true },
           createdAt: { type: 'date', required: true },
           name: { type: 'string', required: false },
@@ -200,6 +258,13 @@ export function mcpAuthPlugins(env: AuthEnv) {
             clientId,
             scopes,
             ...(await assistantForApproval(ctx.context.adapter, clientId)),
+            // The choice in force, so approving the same assistant again keeps it (#617).
+            excludedGroupIds: await liveExcludedGroups(
+              ctx.context.adapter,
+              ctx.context.session.user.id,
+              clientId,
+              env,
+            ),
           });
         },
       ),
@@ -266,7 +331,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
           });
           if (consent && isMcpConnectionExpired(row, consent, env)) {
             // Reconnection starts a fresh authorization. Never let old tokens adopt
-            // it, or rotate over activity that landed after the expiry read.
+            // it, or rotate over activity that landed after the expiry read. It starts from
+            // every Group too: only this approval's choice is committed below (#617).
             const renewed = await context.adapter.update<McpConnection>({
               model: 'mcpConnection',
               where: [
@@ -274,10 +340,21 @@ export function mcpAuthPlugins(env: AuthEnv) {
                 { field: 'generation', value: row.generation },
                 { field: 'lastUsedAt', value: row.lastUsedAt ?? null },
               ],
-              update: { generation: randomUUID(), lastUsedAt: null },
+              update: { generation: randomUUID(), lastUsedAt: null, excludedGroupIds: [] },
             });
             row = renewed ?? (await find());
             if (!row) throw new APIError('FORBIDDEN');
+          } else if (!consent && row.excludedGroupIds?.length) {
+            // Disconnected: this authorization starts from every Group too (#617).
+            row =
+              (await context.adapter.update<McpConnection>({
+                model: 'mcpConnection',
+                where: [
+                  { field: 'id', value: row.id },
+                  { field: 'generation', value: row.generation },
+                ],
+                update: { excludedGroupIds: [] },
+              })) ?? row;
           }
           if (row.name !== name)
             await context.adapter.update({
@@ -288,6 +365,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
               ],
               update: { name },
             });
+          // The member's choice of Groups commits with this grant, or the grant fails (#617).
+          await commitExcludedGroups(context.adapter, row, state?.query);
           return row.generation;
         },
       },
