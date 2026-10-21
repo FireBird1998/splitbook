@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Paper, Tabs, Tab, ThemeProvider } from '@mui/material';
+import { Alert, Paper, Tabs, Tab, ThemeProvider } from '@mui/material';
 import { createTheme, getContrastRatio, getLuminance, hexToRgb } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { createAppTheme } from './createAppTheme';
@@ -34,6 +34,15 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
         ).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+
+  it('keeps a banner’s text readable on each status tint (#772)', () => {
+    const { palette } = createAppTheme(mode);
+    for (const tone of ['positive', 'negative', 'warning', 'info'] as const)
+      expect(
+        getContrastRatio(palette.text.primary, palette.tint[tone]),
+        `text on the ${tone} tint`,
+      ).toBeGreaterThanOrEqual(4.5);
   });
 
   it('keeps the shell sidebar readable on its hover and current fills', () => {
@@ -131,4 +140,29 @@ it('server-rendered Paper and tabs use scheme variables before preference adopti
   expect(html).toContain('border-color:var(--mui-palette-divider)');
   expect(html).toContain('background-color:var(--mui-palette-surface-muted)');
   expect(html).toContain('color:var(--mui-palette-text-primary)');
+});
+
+// #772: in dark mode MUI's own standard Alert tint is nearly black, so a banner looked like a hole
+// in its card. Each severity takes the palette's status tint, as the canvas's banner does: its
+// text in the primary colour, its icon in the status colour.
+it.each([
+  ['info', 'info'],
+  ['warning', 'warning'],
+  ['error', 'negative'],
+  ['success', 'positive'],
+] as const)('a standard %s banner takes the %s tint in either scheme', (severity, tone) => {
+  const theme = createTheme({
+    ...createAppTheme('light'),
+    cssVariables: { colorSchemeSelector: '[data-theme="%s"]' },
+    colorSchemes: {
+      light: { palette: createAppTheme('light').palette },
+      dark: { palette: createAppTheme('dark').palette },
+    },
+  });
+  const html = renderToStaticMarkup(
+    createElement(ThemeProvider, { theme }, createElement(Alert, { severity }, 'Prepared items')),
+  );
+  expect(html).toContain(`background-color:var(--mui-palette-tint-${tone})`);
+  expect(html).toContain('color:var(--mui-palette-text-primary)');
+  expect(html).toContain(`color:var(--mui-palette-status-${tone})`);
 });
