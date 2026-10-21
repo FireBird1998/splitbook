@@ -8,7 +8,8 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Box from '@mui/material/Box';
 import LinearProgress from '@mui/material/LinearProgress';
 import MoneyText from '@/components/common/MoneyText';
-import { toMajorAmount } from '@splitbook/shared/exact-money';
+import { getCurrency } from '@splitbook/shared/currency';
+import { displayMajorAmount } from '@splitbook/shared/exact-money';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import ErrorState from '@/components/common/ErrorState';
 import Typography from '@mui/material/Typography';
@@ -178,8 +179,9 @@ export default function ExportPreviewPanel({
                 </Box>
               );
             }
-            const name = (id: string) =>
-              bucket.people.find((person) => person.id === id)?.name ?? 'Former member';
+            const name = (id: string) => data.statement.names[id] ?? 'Former member';
+            // A currency Splitbook no longer supports has no position, so no one's figures (#820).
+            const inBalances = !!getCurrency(bucket.currency);
             return (
               <Box
                 component="section"
@@ -194,7 +196,7 @@ export default function ExportPreviewPanel({
                   <Box>
                     <Typography variant="body2">Spent</Typography>
                     <MoneyText
-                      amount={toMajorAmount(bucket.spentMinor, bucket.currency)}
+                      amount={displayMajorAmount(bucket.spentMinor, bucket.currency)}
                       currency={bucket.currency}
                       tone="neutral"
                     />
@@ -207,80 +209,92 @@ export default function ExportPreviewPanel({
                     <Typography variant="body2">Payments</Typography>
                     <Typography component="span">{bucket.paymentCount} · </Typography>
                     <MoneyText
-                      amount={toMajorAmount(bucket.paymentTotalMinor, bucket.currency)}
+                      amount={displayMajorAmount(bucket.paymentTotalMinor, bucket.currency)}
                       currency={bucket.currency}
                       tone="neutral"
                     />
                   </Box>
                 </Box>
-                <PreviewTable
-                  label={`${bucket.currency} period contributions`}
-                  headers={['Member', 'Paid', 'Share', 'Net']}
-                >
-                  {bucket.people.map((person) => (
-                    <TableRow key={person.id}>
-                      <TableCell component="th" scope="row">
-                        {person.name}
-                      </TableCell>
-                      {[person.paidMinor, person.shareMinor, person.netMinor].map((minor, i) => (
-                        <TableCell key={i}>
-                          <MoneyText
-                            amount={toMajorAmount(minor, bucket.currency)}
-                            currency={bucket.currency}
-                            tone="neutral"
-                          />
-                        </TableCell>
+                {inBalances ? null : (
+                  <Typography>
+                    {bucket.currency} is a currency Splitbook no longer supports, so this money
+                    isn’t in Balances.
+                  </Typography>
+                )}
+                {inBalances ? (
+                  <>
+                    <PreviewTable
+                      label={`${bucket.currency} period contributions`}
+                      headers={['Member', 'Paid', 'Share', 'Net']}
+                    >
+                      {bucket.people.map((person) => (
+                        <TableRow key={person.id}>
+                          <TableCell component="th" scope="row">
+                            {person.name}
+                          </TableCell>
+                          {[person.paidMinor, person.shareMinor, person.netMinor].map(
+                            (minor, i) => (
+                              <TableCell key={i}>
+                                <MoneyText
+                                  amount={displayMajorAmount(minor, bucket.currency)}
+                                  currency={bucket.currency}
+                                  tone="neutral"
+                                />
+                              </TableCell>
+                            ),
+                          )}
+                        </TableRow>
                       ))}
-                    </TableRow>
-                  ))}
-                </PreviewTable>
-                <Box sx={{ mt: 2 }}>
-                  <Typography component="h5" variant="subtitle1">
-                    Current balances ({bucket.currency})
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Current all-time positions, including every recorded payment. These match
-                    Balances; the period changes spending only.
-                  </Typography>
-                  <PreviewTable
-                    label={`${bucket.currency} current balances`}
-                    headers={['Member', 'Balance']}
-                  >
-                    {bucket.people.map((person) => (
-                      <TableRow key={person.id}>
-                        <TableCell component="th" scope="row">
-                          {person.name}
-                        </TableCell>
-                        <TableCell>
-                          <MoneyText
-                            amount={toMajorAmount(person.balanceMinor, bucket.currency)}
-                            currency={bucket.currency}
-                            tone="neutral"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </PreviewTable>
-                  <Typography component="h5" variant="subtitle1" sx={{ mt: 2 }}>
-                    Suggested payments ({bucket.currency})
-                  </Typography>
-                  {bucket.suggestedPayments.length ? (
-                    <Box component="ul" aria-label={`${bucket.currency} suggested payments`}>
-                      {bucket.suggestedPayments.map((payment) => (
-                        <li key={`${payment.from}-${payment.to}`}>
-                          {name(payment.from)} pays {name(payment.to)}{' '}
-                          <MoneyText
-                            amount={toMajorAmount(payment.amountMinor, bucket.currency)}
-                            currency={bucket.currency}
-                            tone="neutral"
-                          />
-                        </li>
-                      ))}
+                    </PreviewTable>
+                    <Box sx={{ mt: 2 }}>
+                      <Typography component="h5" variant="subtitle1">
+                        Current balances ({bucket.currency})
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Current all-time positions, including every recorded payment. These match
+                        Balances; the period changes spending only.
+                      </Typography>
+                      <PreviewTable
+                        label={`${bucket.currency} current balances`}
+                        headers={['Member', 'Balance']}
+                      >
+                        {bucket.people.map((person) => (
+                          <TableRow key={person.id}>
+                            <TableCell component="th" scope="row">
+                              {person.name}
+                            </TableCell>
+                            <TableCell>
+                              <MoneyText
+                                amount={displayMajorAmount(person.balanceMinor, bucket.currency)}
+                                currency={bucket.currency}
+                                tone="neutral"
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </PreviewTable>
+                      <Typography component="h5" variant="subtitle1" sx={{ mt: 2 }}>
+                        Suggested payments ({bucket.currency})
+                      </Typography>
+                      {bucket.suggestedPayments.length ? (
+                        <Box component="ul" aria-label={`${bucket.currency} suggested payments`}>
+                          {bucket.suggestedPayments.map((payment) => (
+                            <li key={`${payment.from}-${payment.to}`}>
+                              {name(payment.from)} pays {name(payment.to)}{' '}
+                              <MoneyText
+                                amount={displayMajorAmount(payment.amountMinor, bucket.currency)}
+                                currency={bucket.currency}
+                                tone="neutral"
+                              />
+                            </li>
+                          ))}
+                        </Box>
+                      ) : (
+                        <Typography>Settled up.</Typography>
+                      )}
                     </Box>
-                  ) : (
-                    <Typography>Settled up.</Typography>
-                  )}
-                </Box>
+                  </>
+                ) : null}
                 {!!bucket.payments?.length && (
                   <Box sx={{ mt: 2 }}>
                     <Typography component="h5" variant="subtitle1">
@@ -316,7 +330,7 @@ export default function ExportPreviewPanel({
                               <>
                                 {name(payment.fromId)} paid {name(payment.toId)}{' '}
                                 <MoneyText
-                                  amount={toMajorAmount(payment.amountMinor, bucket.currency)}
+                                  amount={displayMajorAmount(payment.amountMinor, bucket.currency)}
                                   currency={bucket.currency}
                                   tone="neutral"
                                 />
@@ -350,7 +364,7 @@ export default function ExportPreviewPanel({
                           <TableCell>{expense.tag}</TableCell>
                           <TableCell>
                             <MoneyText
-                              amount={toMajorAmount(expense.amountMinor, bucket.currency)}
+                              amount={displayMajorAmount(expense.amountMinor, bucket.currency)}
                               currency={bucket.currency}
                               tone="neutral"
                             />
@@ -361,7 +375,7 @@ export default function ExportPreviewPanel({
                                 <Box key={person.userId}>
                                   {name(person.userId)}{' '}
                                   <MoneyText
-                                    amount={toMajorAmount(person.amountMinor, bucket.currency)}
+                                    amount={displayMajorAmount(person.amountMinor, bucket.currency)}
                                     currency={bucket.currency}
                                     tone="neutral"
                                   />

@@ -143,6 +143,11 @@ export interface ExpenseEditor {
   waitingInvitation?: string | null;
   /** Its Group refused this member; entries stay blocked until leaving or Discard. */
   accessLost?: boolean;
+  /**
+   * The Expense can never be opened here, as one in a currency Splitbook no longer supports: its
+   * notice says why and offers only the way back, never Try again (#820).
+   */
+  unopenable?: boolean;
   message: string | null;
   validation: ExpenseValidation;
   returnTo: GroupReturnContext | null;

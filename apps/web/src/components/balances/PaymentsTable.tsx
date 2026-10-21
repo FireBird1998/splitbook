@@ -63,6 +63,12 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
   // Avatars show the person's own initials, the viewer's included.
   const avatarName = (person: PaymentPerson) => person?.name?.trim() || name(person);
   const count = state.status === 'ready' ? state.payments.length : null;
+  // A payment in a currency Splitbook no longer supports has no position, so Balances leave it
+  // out (#812): it is marked, and the count claims only the others (#820).
+  const counted =
+    state.status === 'ready'
+      ? state.payments.filter((payment) => getCurrency(payment.currency)).length
+      : null;
 
   return (
     <TabCard
@@ -73,7 +79,9 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
           ? 'Recorded payments between members'
           : count === 0
             ? 'None recorded yet'
-            : `${count} recorded · already counted in the balances above`
+            : counted === count
+              ? `${count} recorded · already counted in the balances above`
+              : `${count} recorded · ${counted} counted in the balances above`
       }
     >
       {state.status === 'loading' ? (
@@ -194,6 +202,21 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
                       sx={(theme) => ({ ...theme.typography.money, whiteSpace: 'nowrap' })}
                     >
                       {formatCurrency(payment.amount, payment.currency)}
+                      {!getCurrency(payment.currency) && (
+                        <Box
+                          component="span"
+                          sx={{
+                            display: 'block',
+                            fontSize: '0.75rem',
+                            color: 'text.secondary',
+                            // Words, in the body font, under the amount's figures.
+                            fontFamily: (theme) => theme.typography.fontFamily,
+                          }}
+                        >
+                          {' '}
+                          Not in Balances
+                        </Box>
+                      )}
                       {payment.paidCurrency &&
                         payment.amountPaidMinor !== undefined &&
                         payment.appliedRate && (

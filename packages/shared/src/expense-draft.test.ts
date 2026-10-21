@@ -162,6 +162,20 @@ it.each(['paidBy', 'splitBetween'])('shows an editing error for malformed stored
   expect(draft.prepare(['general-id'], 'invalid').submission).toBeUndefined();
 });
 
+// The server refuses its every edit in the same words (#820).
+it('says why an Expense in a currency Splitbook no longer supports can’t be edited', () => {
+  for (const legacy of [
+    { ...saved, currency: 'DEM' },
+    { ...saved, currency: 'DEM', moneyVersion: 1, amountMinor: 3 },
+  ]) {
+    const draft = ExpenseDraft.open(context, legacy);
+    expect(draft.invalidStoredMoney).toBe(true);
+    expect(draft.error).toBe(
+      'This Expense is in DEM, which Splitbook no longer supports. It can’t be changed, only deleted.',
+    );
+  }
+});
+
 it('keeps invalid stored currency out of editable money controls', () => {
   const draft = ExpenseDraft.open(context, { ...saved, currency: 'invalid' });
   expect(draft.invalidStoredMoney).toBe(true);

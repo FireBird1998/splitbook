@@ -1,5 +1,6 @@
 import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
 import mongoose, { Schema, Model } from 'mongoose';
+import { getCurrency } from '@splitbook/shared/currency';
 import { readStoredAmountMinor, sumMinorAmounts } from '@splitbook/shared/exact-money';
 import {
   CreationRequestSchema,
@@ -177,6 +178,15 @@ const ExpenseSchema = new Schema<IExpenseDocument>(
 
 ExpenseSchema.pre('validate', function () {
   if (this.moneyVersion !== 1) return;
+  // Money in a currency Splitbook no longer supports, such as a legacy DEM Expense, can't be
+  // checked against today's list. Left as stored, as a delete leaves it, it isn't checked again;
+  // a change to it still is, and is refused (#820).
+  if (
+    !this.isNew &&
+    !getCurrency(this.currency) &&
+    !this.isModified(['currency', 'amount', 'amountMinor', 'paidBy', 'splitBetween'])
+  )
+    return;
   const total = readStoredAmountMinor(this);
   for (const rows of [this.paidBy, this.splitBetween]) {
     if (new Set(rows.map((row) => String(row.user))).size !== rows.length)

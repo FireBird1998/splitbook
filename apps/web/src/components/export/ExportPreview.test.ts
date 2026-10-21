@@ -130,6 +130,8 @@ it.each([
           from: csv.from,
           to: csv.to,
           timeZone: 'UTC',
+          // Bob isn't among the names: a former member, named so.
+          names: { alice: 'Alice Tester' },
           currencies: [
             {
               currency: 'INR',
@@ -301,6 +303,7 @@ it('names each currency’s balances and Suggested payments for screen readers (
         from: csv.from,
         to: csv.to,
         timeZone: 'UTC',
+        names: { alice: 'Alice Tester', bob: 'Bob' },
         currencies: [bucket('INR'), bucket('USD')],
       },
     },
@@ -365,6 +368,64 @@ it('shows each currency and both stored payment amounts in the statement preview
   expect(text(html)).toContain(
     'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per €; no rate suggested',
   );
+});
+
+// #820: a statement preview with an Expense in a currency Splitbook no longer supports shows its
+// Spent as stored, with its code, never converted.
+it('previews a statement with an Expense in a currency Splitbook no longer supports', () => {
+  const statement = buildStatement({
+    id: 'g',
+    name: 'Fictional Berlin trip',
+    theme: 'trip',
+    currency: 'INR',
+    tags: [],
+    names: { a: 'Alex', b: 'Sam' },
+    members: [
+      { id: 'a', name: 'Alex' },
+      { id: 'b', name: 'Sam' },
+    ],
+    expenses: [
+      {
+        id: 'e1',
+        date: '2026-09-18T00:00:00.000Z',
+        description: 'Old Berlin rent',
+        category: 'housing',
+        tag: 'Rent',
+        currency: 'DEM',
+        amountMinor: 4000,
+        splitMethod: 'equal',
+        paidBy: [{ userId: 'a', amountMinor: 4000 }],
+        splitBetween: [
+          { userId: 'a', amountMinor: 2000 },
+          { userId: 'b', amountMinor: 2000 },
+        ],
+      },
+    ],
+    settlements: [],
+  });
+  const html = render({
+    status: 'ready',
+    data: {
+      format: 'statement',
+      groupNames: [statement.name],
+      generatedAt: '2026-10-21T12:00:00Z',
+      from: null,
+      to: null,
+      timeZone: 'UTC',
+      empty: false,
+      statement: buildStatementPreview(statement),
+    },
+  });
+  const shown = text(html);
+  expect(shown).toMatch(/DEM\s40\.00/);
+  // Its members by name, and no position.
+  expect(shown).toMatch(/Alex[\s\S]*Sam/);
+  expect(shown).not.toContain('Former member');
+  expect(shown).toContain(
+    'DEM is a currency Splitbook no longer supports, so this money isn’t in Balances.',
+  );
+  expect(shown).not.toContain('Settled up.');
+  expect(shown).not.toContain('Current balances');
 });
 
 it('collapses settled empty statement currencies to the same one-line preview', () => {

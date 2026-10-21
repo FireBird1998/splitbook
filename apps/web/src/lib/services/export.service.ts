@@ -11,10 +11,12 @@ import Group from '@/lib/models/Group';
 import Settlement, { type ISettlementDocument } from '@/lib/models/Settlement';
 import User from '@/lib/models/User';
 import { recurringExpenseService } from './recurring-expense.service';
+import { getCurrency } from '@splitbook/shared/currency';
 import {
   assertStoredExpenseMoney,
   checkStoredMoney,
   readStoredAmountMinor,
+  readUnsupportedAmountMinor,
 } from '@splitbook/shared/exact-money';
 import {
   buildExpenseCsv,
@@ -507,10 +509,13 @@ export class ExportService {
       at: payment.createdAt,
       fromId: String(payment.paidBy),
       toId: String(payment.paidTo),
-      amountMinor: checkStoredMoney(() => readStoredAmountMinor(payment), {
-        groupId: String(payment.group),
-        settlementId: String(payment._id),
-      }),
+      // One in a currency Splitbook no longer supports is exported as stored (#820).
+      amountMinor: getCurrency(payment.currency)
+        ? checkStoredMoney(() => readStoredAmountMinor(payment), {
+            groupId: String(payment.group),
+            settlementId: String(payment._id),
+          })
+        : readUnsupportedAmountMinor(payment),
       currency: payment.currency,
       note: payment.note,
       recordedById: String(payment.createdBy),
@@ -521,15 +526,17 @@ export class ExportService {
     expense: LeanExpense,
     tags: Parameters<typeof displayTagReference>[0],
   ): ExportExpense {
-    assertStoredExpenseMoney(expense);
+    // An Expense in a currency Splitbook no longer supports is exported as stored, at 2 places,
+    // unchecked and never converted, as the Expenses read lists it (#810, #820).
+    const supported = !!getCurrency(expense.currency);
+    if (supported) assertStoredExpenseMoney(expense);
+    const minor = (money: { amount: number; amountMinor?: number }) => {
+      const stored = { ...money, currency: expense.currency, moneyVersion: expense.moneyVersion };
+      return supported ? readStoredAmountMinor(stored) : readUnsupportedAmountMinor(stored);
+    };
     const allocation = (row: { user: unknown; amount: number; amountMinor?: number }) => ({
       userId: String(row.user),
-      amountMinor: readStoredAmountMinor({
-        amount: row.amount,
-        amountMinor: row.amountMinor,
-        currency: expense.currency,
-        moneyVersion: expense.moneyVersion,
-      }),
+      amountMinor: minor(row),
     });
     return {
       id: String(expense._id),
@@ -538,7 +545,7 @@ export class ExportService {
       category: expense.category,
       tag: displayTagReference(tags, expense).tag,
       currency: expense.currency,
-      amountMinor: readStoredAmountMinor(expense),
+      amountMinor: minor(expense),
       splitMethod: expense.splitMethod,
       notes: expense.notes,
       paidBy: expense.paidBy.map(allocation),

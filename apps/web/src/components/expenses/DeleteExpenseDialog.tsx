@@ -9,7 +9,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import { formatCurrency } from '@splitbook/shared/currency';
+import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { apiFetch } from '@/lib/utils/api-fetch';
 
 interface DeleteExpenseDialogProps {
@@ -17,7 +17,8 @@ interface DeleteExpenseDialogProps {
   onClose: () => void;
   expense: Record<string, unknown> | null;
   groupId: string;
-  onDeleted: (expenseId: string, revision: number) => void;
+  /** `undo` is null for one the server can't put back. */
+  onDeleted: (expenseId: string, undo: { revision: number } | null) => void;
 }
 
 export default function DeleteExpenseDialog({
@@ -31,6 +32,9 @@ export default function DeleteExpenseDialog({
   const [error, setError] = useState('');
 
   if (!expense) return null;
+  const currency = expense.currency as string;
+  // One in a currency Splitbook no longer supports can't be restored, so it has no Undo (#820).
+  const undoable = !!getCurrency(currency);
 
   const handleDelete = async () => {
     setLoading(true);
@@ -49,7 +53,7 @@ export default function DeleteExpenseDialog({
       }
 
       const result = await res.json();
-      onDeleted(expense._id as string, result.data.revision);
+      onDeleted(expense._id as string, undoable ? { revision: result.data.revision } : null);
       onClose();
     } catch {
       setError('Something went wrong.');
@@ -84,11 +88,13 @@ export default function DeleteExpenseDialog({
         <Typography variant="body2" color="text.primary">
           Are you sure you want to delete{' '}
           <strong>&ldquo;{expense.description as string}&rdquo;</strong> (
-          {formatCurrency(expense.amount as number, expense.currency as string)}
+          {formatCurrency(expense.amount as number, currency)}
           )?
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-          This can be undone shortly after deletion.
+          {undoable
+            ? 'This can be undone shortly after deletion.'
+            : `Splitbook no longer supports ${currency}, so this can’t be undone.`}
         </Typography>
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>

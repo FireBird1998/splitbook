@@ -4,6 +4,7 @@ import Activity from '@/lib/models/Activity';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
+import { inSupportedCurrencies } from '@splitbook/shared/currency';
 import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';
 import {
   memberSpendingByMonth,
@@ -61,14 +62,17 @@ export async function getMemberSpending(
 
   // The member's own Expenses over the window, and the current Month's Expenses of every member
   // for what each Group spent. The Months' figures still count only the member's share.
-  const expenses = await Expense.find({
-    group: { $in: groupIds },
-    isDeleted: false,
-    date: { $gte: range.from, $lt: range.to },
-    $or: [{ 'splitBetween.user': userId }, { date: { $gte: thisMonthRange.from } }],
-  })
-    .select('group currency moneyVersion amount amountMinor date paidBy splitBetween category')
-    .lean();
+  // A currency Splitbook no longer supports has no position, so it is left out (#812, #820).
+  const expenses = inSupportedCurrencies(
+    await Expense.find({
+      group: { $in: groupIds },
+      isDeleted: false,
+      date: { $gte: range.from, $lt: range.to },
+      $or: [{ 'splitBetween.user': userId }, { date: { $gte: thisMonthRange.from } }],
+    })
+      .select('group currency moneyVersion amount amountMinor date paidBy splitBetween category')
+      .lean(),
+  );
   // As Balances does: a stored allocation that doesn't add up is refused, never summed.
   for (const expense of expenses) assertStoredExpenseMoney(expense);
 

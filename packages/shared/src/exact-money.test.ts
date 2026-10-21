@@ -12,6 +12,7 @@ import {
   readStoredAmountMinor,
   sumMinorAmounts,
   toMajorAmount,
+  displayMajorAmount,
   readUnsupportedAmountMinor,
   unsupportedMajorAmount,
 } from './exact-money';
@@ -631,5 +632,15 @@ describe('money in a currency Splitbook no longer supports (#810)', () => {
     expect(unsupportedMajorAmount(1)).toBe(0.01);
     expect(() => unsupportedMajorAmount(Number.MAX_SAFE_INTEGER + 2)).toThrow();
     expect(() => readUnsupportedAmountMinor({ amount: Number.MAX_SAFE_INTEGER })).toThrow();
+  });
+});
+
+// #820: amounts to show, exact in a supported currency, at 2 places in one Splitbook no longer
+// supports, as stored and never converted.
+describe('displayMajorAmount (#820)', () => {
+  it('is exact in a supported currency, and at 2 places in one Splitbook no longer supports', () => {
+    expect(displayMajorAmount(124950, 'INR')).toBe(1249.5);
+    expect(displayMajorAmount(2500, 'JPY')).toBe(2500);
+    expect(displayMajorAmount(4000, 'DEM')).toBe(40);
   });
 });

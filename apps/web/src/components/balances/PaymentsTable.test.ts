@@ -192,6 +192,27 @@ describe('a payment that cleared a Debt in another currency (#727)', () => {
   });
 });
 
+// #820: a payment in a currency Splitbook no longer supports has no position (#812): Balances
+// leave it out, so the row says so and the count claims only the payments Balances include.
+describe('a payment in a currency Splitbook no longer supports (#820)', () => {
+  it('is marked not in Balances, and left out of what Balances count', () => {
+    const marks: PaymentRead = {
+      _id: 'd00000000000000000000009',
+      paidBy: SAM,
+      paidTo: ALEX,
+      amount: 40,
+      currency: 'DEM',
+      note: '',
+      createdAt: '2026-09-17T12:00:00.000Z',
+      createdBy: SAM,
+    };
+    const { text: shown } = render({ status: 'ready', payments: [marks, payments[0]!] });
+    expect(shown).toContain('Payments 2 recorded · 1 counted in the balances above');
+    expect(shown).toMatch(/DEM\s40\.00 Not in Balances/);
+    expect(shown.match(/Not in Balances/g)).toHaveLength(1);
+  });
+});
+
 describe('paymentWhen', () => {
   // Mid-June instants and a mid-July "now": the same year and month in every zone from
   // UTC−12 to UTC+14, so the year rule is tested away from any year's edges.

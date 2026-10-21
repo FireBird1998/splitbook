@@ -50,6 +50,14 @@ export function getCurrency(code: string): Currency | undefined {
   return CURRENCIES.find((c) => c.code === code);
 }
 
+/**
+ * The rows in a currency Splitbook supports today. One in a currency it no longer supports, such
+ * as a legacy DEM Expense, is listed as stored with its own Spent line (#810), but has no
+ * position: Balances (#812), spending, Insights and the Trip summary (#820) leave it out.
+ */
+export const inSupportedCurrencies = <T extends { currency: string }>(rows: readonly T[]) =>
+  rows.filter((row) => !!getCurrency(row.currency));
+
 export function formatCurrency(amount: number, currencyCode: string): string {
   const precision = CURRENCY_CODES.includes(currencyCode) ? getCurrencyPrecision(currencyCode) : 2;
   try {

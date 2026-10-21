@@ -31,6 +31,15 @@ export interface ExpenseMoneyInput {
   splitBetween: MoneySplitInput[];
 }
 
+/**
+ * Why an Expense in a currency Splitbook no longer supports, such as a legacy DEM row, can't be
+ * edited: its money stays as it was recorded (#820). The server refuses its edits in these words,
+ * and the Expense form says them.
+ */
+export function unsupportedCurrencyEditRefusal(currency: string): string {
+  return `This Expense is in ${currency}, which Splitbook no longer supports. It can’t be changed, only deleted.`;
+}
+
 /** Interpret stored money once, without replacing historical remainder allocations. */
 export function readExpenseMoney(stored: StoredExpenseMoney) {
   assertStoredExpenseMoney(stored);

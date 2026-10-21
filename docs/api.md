@@ -1077,6 +1077,20 @@ out of `totalAmount`, `userOwes`, `userGetsBack`, `userByCurrency` and
 `byMember`. The apps show its amount with its code (`DEM 40.00`), last in Spent,
 and no position.
 
+**The other reads, Delete and edits (#820).** The rule holds everywhere else. Export
+lists such an Expense and its allocations, and a payment in such a currency, as
+stored, at 2 places (the CSV's amounts, the backup's `amountMinor`), and the statement gives its currency a
+section with Spent, the Expense count and the Expenses, but no one's figures and
+no Suggested payment. Home's spending (`GET /api/user/spending`), a Group's
+Insights and the Trip summary leave it out entirely, and Insights doesn't start a
+Group's Months at it. Deleting it works, keeping its money as stored. Any edit of
+it, its description alone or nothing new included, and a restore, is refused with
+**422** `UNSUPPORTED_CURRENCY`, "This Expense is in DEM, which Splitbook no longer
+supports. It can’t be changed, only deleted.", and nothing stored changes; a Tag
+change refuses it with that code and those words. On the Balances tab, Payments mark a
+payment in such a currency "Not in Balances" and count only the others as in the
+balances above. Android lists it, and says why it can't open it.
+
 ### GET /api/groups/[id]/expenses/check-duplicate
 
 **Query params:** `?description=...&amount=...&date=...&excludeId=...`
@@ -1090,7 +1104,9 @@ UTC convention used by the list filter.
 Accepts any subset of the create body, plus `isDeleted: false` to restore a
 soft-deleted expense. Each edit appends a diff to the expense's `editHistory`.
 An archived Group refuses an edit, a restore and a `DELETE` of its Expenses
-with **409** `GROUP_ARCHIVED`.
+with **409** `GROUP_ARCHIVED`. An Expense in a currency Splitbook no longer
+supports refuses every edit and a restore with **422** `UNSUPPORTED_CURRENCY`
+(see the Expenses read).
 
 ### POST /api/groups/[id]/expenses/tag-change
 
@@ -1141,8 +1157,9 @@ an outcome for each, in the order asked:
   same request again reports each Expense it changed this way.
 - `changed-elsewhere`: its revision isn't the one sent, so it was left as it is.
 - `unavailable`: it was deleted, or isn't the Group's.
-- `refused`: it couldn't change, for `reason`, such as the Group archived or
-  the Tag archived while the request ran. `code` names a known cause.
+- `refused`: it couldn't change, for `reason`, such as the Group archived, the
+  Tag archived while the request ran, or the Expense in a currency Splitbook no
+  longer supports (`UNSUPPORTED_CURRENCY`). `code` names a known cause.
 
 ---
 
@@ -2004,6 +2021,9 @@ exactly. The shared path, query key (scope `search`) and decoder are `searchPath
 The Export page's download (#317). It answers with a file: one CSV, a zip when
 there are several, or with `format=json` one JSON backup of every chosen Group
 (#318). Refusals and failures use the standard JSON error shape.
+
+An Expense in a currency Splitbook no longer supports is exported as stored, never
+converted (#820; see the Expenses read).
 
 **Query params:**
 

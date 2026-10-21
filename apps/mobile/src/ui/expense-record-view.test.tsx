@@ -38,6 +38,7 @@ const ids = {
   tea: 'b00000000000000000000007',
   rerun: 'b00000000000000000000008',
   groceries: 'b00000000000000000000009',
+  marks: 'b00000000000000000000010',
 };
 const iso = '2026-09-29T14:32:00.000Z';
 const group = {
@@ -163,6 +164,16 @@ const records: Record<string, Record<string, unknown>> = {
     paidBy: [row(priya, 120000)],
     splitBetween: [row(alex, 40000), row(sam, 40000), row(priya, 40000)],
     createdBy: person(priya),
+  }),
+  // A legacy row in Deutsche Marks, a currency Splitbook no longer supports (#820).
+  [ids.marks]: expense(ids.marks, {
+    description: 'Old Berlin rent',
+    currency: 'DEM',
+    amount: 40,
+    amountMinor: 4000,
+    paidBy: [row(alex, 4000)],
+    splitBetween: [row(alex, 2000), row(sam, 2000)],
+    createdBy: alex.id,
   }),
   [ids.weekly]: expense(ids.weekly, {
     description: 'Weekly groceries',
@@ -1096,5 +1107,17 @@ describe('compact Expense record, opening', () => {
     );
     expect(faded).toHaveLength(1);
     expect(text(faded[0])).toContain('Sunday dinner');
+  });
+});
+
+// #820: an Expense in a currency Splitbook no longer supports can never be opened here, so its
+// notice says why and offers only the way back, never Try again.
+describe('an Expense in a currency Splitbook no longer supports (#820)', () => {
+  it('says why it can’t open, with no Try again', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId, ids.marks));
+    const shown = text(ui.root());
+    expect(shown).toContain('Couldn’t open this Expense');
+    expect(shown).toContain('This Expense is in DEM, which Splitbook no longer supports');
+    expect(shown).not.toContain('Try again');
   });
 });

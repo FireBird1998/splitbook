@@ -11,7 +11,7 @@
  * is turned on.
  */
 import { categoryLabel } from './categories';
-import { getCurrencyPrecision } from './currency';
+import { getCurrency, getCurrencyPrecision } from './currency';
 import { expenseDay } from './expense-day';
 import { assertSafeMinorAmount, moneyParticipantId, readLegacyAmountMinor } from './exact-money';
 import type { SplitMethod } from './types';
@@ -57,7 +57,8 @@ export function serializeCsv(
  * INR → "1249.50", `2400` JPY → "2400". No grouping, no symbol, `.` as the decimal point.
  */
 export function formatMinorAmount(amountMinor: number, currency: string): string {
-  const digits = getCurrencyPrecision(currency);
+  // A currency Splitbook no longer supports, such as DEM, at 2 places, as stored (#820).
+  const digits = getCurrency(currency) ? getCurrencyPrecision(currency) : 2;
   const minor = assertSafeMinorAmount(amountMinor);
   const sign = minor < 0 ? '-' : '';
   const units = String(Math.abs(minor));

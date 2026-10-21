@@ -32,7 +32,10 @@ import {
   unsupportedMajorAmount,
 } from '@splitbook/shared/exact-money';
 import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
-import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
+import {
+  decideExpenseMoneyEdit,
+  unsupportedCurrencyEditRefusal,
+} from '@splitbook/shared/expense-money-edit';
 import {
   assertCreateReplay,
   assertPendingActivityCapacity,
@@ -509,6 +512,13 @@ export class ExpenseService {
     if (!expense) return null;
     assertExpectedRevision(expense.revision, expectedRevision);
     const original = expense.toObject();
+    // Money in a currency Splitbook no longer supports stays as it was recorded, with no
+    // position: such an Expense can be deleted, never changed (#820).
+    if (!getCurrency(original.currency))
+      throw new MoneyValidationError(
+        'UNSUPPORTED_CURRENCY',
+        unsupportedCurrencyEditRefusal(original.currency),
+      );
     const { financialEdit, money } = decideExpenseMoneyEdit(original, data);
     if (financialEdit)
       assertExpenseParticipants(
@@ -615,6 +625,8 @@ export class ExpenseService {
         ? { expenseId, outcome: 'changed', revision: changed.revision ?? 0 }
         : { expenseId, outcome: 'unavailable' };
     } catch (error) {
+      if (error instanceof MoneyValidationError && error.code === 'UNSUPPORTED_CURRENCY')
+        return { expenseId, outcome: 'refused', code: error.code, reason: error.message };
       const code =
         error instanceof Error
           ? error.name === 'VersionError'

@@ -4,6 +4,7 @@ import Group from '@/lib/models/Group';
 import Settlement from '@/lib/models/Settlement';
 import User from '@/lib/models/User';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
+import { inSupportedCurrencies } from '@splitbook/shared/currency';
 import { assertStoredExpenseMoney, readStoredAmountMinor } from '@splitbook/shared/exact-money';
 import {
   openingSpendingCurrency,
@@ -83,7 +84,7 @@ export async function getTripSummary(
   // Lazy-on-read, as the Group, Expense and Balances reads do. Never throws into the read.
   await recurringExpenseService.generateDueExpenses(groupId, now);
 
-  const [expenses, settlements] = await Promise.all([
+  const [storedExpenses, storedSettlements] = await Promise.all([
     Expense.find({ group: groupId, isDeleted: false })
       .select(
         'description currency moneyVersion amount amountMinor date paidBy splitBetween tag tagId',
@@ -93,6 +94,9 @@ export async function getTripSummary(
       .select('currency moneyVersion amount amountMinor paidBy paidTo')
       .lean(),
   ]);
+  // A currency Splitbook no longer supports has no position, so it is left out (#812, #820).
+  const expenses = inSupportedCurrencies(storedExpenses);
+  const settlements = inSupportedCurrencies(storedSettlements);
   // As Balances does: a stored allocation that doesn't add up is refused, never summed.
   for (const expense of expenses) assertStoredExpenseMoney(expense);
 
