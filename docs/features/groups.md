@@ -9,7 +9,7 @@ Groups are the core organizing unit. Every expense, settlement, and activity bel
 ## User Stories
 
 1. **As a user**, I can create a new group with a name, description, category, and currency settings.
-2. **As a group admin**, I can edit group details (name, description, currencies, category).
+2. **As a group admin**, I can edit group details (name, description, category), change the main currency until money is recorded, and remove an extra currency nothing uses. Any member can add an extra currency, up to 4 (#721).
 3. **As a group admin**, I can archive a group (soft delete — no more new expenses, but data preserved).
 4. **As a user**, I can see all my groups on the groups page.
 5. **As a user**, I can view a group's detail page with expenses, balances, and activity.
@@ -70,13 +70,14 @@ Groups are the core organizing unit. Every expense, settlement, and activity bel
 
 ## Group Settings Page
 
-Only accessible to group admins.
+Admins see everything below. Members see the Currencies section, where they can add an
+extra currency, and Tags and Leave Group.
 
 ```
 - Edit name, description
 - Change category
-- Update default currency
-- Update alternate currencies
+- Change the main currency, until money is recorded (then it shows as Locked)
+- Remove an extra currency nothing uses; one still in use is refused with what uses it
 - View/manage members (remove member, change role)
 - Generate/revoke invite link
 - Archive group (with confirmation dialog)
