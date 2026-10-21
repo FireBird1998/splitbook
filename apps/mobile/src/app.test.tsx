@@ -3131,3 +3131,36 @@ describe('App after Android recreates the activity (#634)', () => {
     expect(app.text()).toContain('Record payment');
   });
 });
+
+describe('Account → Connected assistants (#622)', () => {
+  it('opens from Account, titled for the member whose assistants they are', async () => {
+    const app = await renderApp((path) => {
+      if (path === '/api/auth/mcp/connections')
+        return json({
+          resource: 'http://localhost:4100/api/mcp',
+          connections: [
+            {
+              id: 'c1',
+              clientId: 'https://helper.example.test/client.json',
+              name: 'Fictional Helper',
+              scopes: ['ledger:read'],
+              access: 'Ledger',
+              lastUsedAt: null,
+              excludedGroupIds: [],
+            },
+          ],
+          nextOffset: null,
+        });
+      if (path === '/api/user/assistant-groups')
+        return json({ status: 200, data: { groups: [{ id: groupId, rule: 'allowed' }] } });
+      return undefined;
+    });
+    await app.press('Account and settings');
+    await app.press('Connected assistants');
+    const shown = app.text();
+    expect(shown).toContain('Account · Sam Chen');
+    expect(shown).toContain('Fictional Helper');
+    expect(shown).toContain('Read only · 1 of 1 Group');
+    expect(app.pressable('Back to Settings')).toBeTruthy();
+  });
+});
