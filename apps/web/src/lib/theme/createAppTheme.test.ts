@@ -20,7 +20,7 @@ function hue(color: string): number {
 }
 
 describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
-  it('rings a button, toggle button or chip focused from the keyboard, as everything else; a menu or list item keeps its highlight (#830)', () => {
+  it('rings a button, icon button, toggle button or chip focused from the keyboard, as everything else; a menu or list item keeps its highlight (#830)', () => {
     const theme = createAppTheme(mode);
     const baseline = theme.components?.MuiCssBaseline?.styleOverrides;
     const rules = (typeof baseline === 'function' ? baseline(theme) : baseline) as Record<
@@ -39,6 +39,8 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
     // ButtonBase's outline: 0 and disableElevation's box-shadow: none hide the global ring.
     expect(root('MuiButton')['&.Mui-focusVisible']).toEqual(rules[':focus-visible']);
     expect(root('MuiToggleButton')['&.Mui-focusVisible']).toEqual(rules[':focus-visible']);
+    // The halo alone, at 35% alpha, is too faint to be a focus indicator.
+    expect(root('MuiIconButton')['&.Mui-focusVisible']).toEqual(rules[':focus-visible']);
     // A chip takes focus only when it acts: clicked, or deleted with Backspace.
     expect(root('MuiChip')['&.Mui-focusVisible']).toEqual(rules[':focus-visible']);
     for (const name of ['MuiMenuItem', 'MuiListItemButton'])

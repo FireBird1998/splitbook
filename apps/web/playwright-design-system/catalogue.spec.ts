@@ -142,13 +142,14 @@ test('a text field focused by click or Tab draws only its own border, an errored
   await expect(iconButton).toHaveCSS('box-shadow', /4px/);
 });
 
-test('a contained, tonal and text button and a chip focused by Tab show the ring (#830)', async ({
+test('a contained, icon, tonal and text button and a chip focused by Tab show the ring (#830)', async ({
   page,
 }) => {
   await page.goto('/dev/design-system');
   await page.getByLabel('Amount with an error').click();
   for (const name of [
     'Reset feedback example',
+    /^Switch to (light|dark) mode using icon$/,
     'Sample tonal action',
     'Sample text action',
     'Sample filter',
@@ -158,9 +159,9 @@ test('a contained, tonal and text button and a chip focused by Tab show the ring
       if (await control.evaluate((element) => element === document.activeElement)) break;
       await page.keyboard.press('Tab');
     }
-    await expect(control, name).toBeFocused();
-    await expect(control, name).toHaveCSS('outline-style', 'solid');
-    await expect(control, name).toHaveCSS('outline-width', '2px');
-    await expect(control, name).toHaveCSS('box-shadow', /4px/);
+    await expect(control, String(name)).toBeFocused();
+    await expect(control, String(name)).toHaveCSS('outline-style', 'solid');
+    await expect(control, String(name)).toHaveCSS('outline-width', '2px');
+    await expect(control, String(name)).toHaveCSS('box-shadow', /4px/);
   }
 });
