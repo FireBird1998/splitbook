@@ -128,6 +128,14 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(sheet).toContainText('Clears your €20.00 Debt to Sam. Sam gets ₹1,842.00.');
     await shoot(page, testInfo, `pay-euro-in-rupees-${scheme}`);
 
+    // Another currency's tab and back keeps what was entered (#727 review).
+    await cleared.fill('15.00');
+    await page.getByRole('tab', { name: /^INR, main currency/ }).click();
+    await page.getByRole('tab', { name: /^EUR, you owe/ }).click();
+    await expect(cleared).toHaveValue('15.00');
+    await expect(paid).toHaveValue('1381.50');
+    await cleared.fill('20.00');
+
     // Your rate, with the suggestion one click away.
     await rate.fill('92.50');
     await expect(paid).toHaveValue('1850.00');

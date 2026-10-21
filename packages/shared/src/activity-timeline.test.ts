@@ -414,6 +414,19 @@ describe('a Debt paid in another currency in Activity (#727)', () => {
     expect(formatActivityDetail(paid(), alex._id)).toBe('Settlement · EUR Debt paid in INR');
   });
 
+  it('shows the rates to at most six places, as the sheet and the card do (#727 review)', () => {
+    // €17.33 cleared with ₹1,596.09: the rate worked out from them has eighteen places.
+    const uneven = paid({
+      amount: 17.33,
+      amountMinor: 1733,
+      amountPaidMinor: 159609,
+      appliedRate: '92.099826889786497403',
+    });
+    expect(formatActivityHeadline(uneven, alex._id)).toBe(
+      'You paid Sam Chen ₹1,596.09 to clear €17.33 at ₹92.099827 per €, suggested ₹92.10 (20 Oct)',
+    );
+  });
+
   it('keeps today’s words for a payment in the Debt’s own currency, or one it can’t read', () => {
     const own = paid({
       paidCurrency: undefined,

@@ -5,6 +5,7 @@ import {
   editCrossCurrencyEntry,
   parseRateSuggestionResponse,
   paymentRecord,
+  suggestedRateText,
   rateBadge,
   rateNote,
   readCrossCurrencyEntry,
@@ -180,6 +181,25 @@ describe('the three linked fields: change any one and the others follow (#727)',
       field: 'rate',
       message: 'That rate pays less than ₹0.01. Check the rate.',
     });
+  });
+});
+
+describe('a suggested rate the member leaves as it is (#727 review)', () => {
+  it('pays exactly what the suggestion gives, however many places the rate has', () => {
+    const rupiahInEuros = { currency: 'IDR', paidCurrency: 'EUR' };
+    const tiny: RateSuggestion = { ...frankfurter, rate: '0.000056789012' };
+
+    const entry = startCrossCurrencyEntry(rupiahInEuros, '1000000', tiny);
+
+    expect(fields(entry)).toEqual(['1000000', '0.000056789012', '56.79']);
+    const reading = readCrossCurrencyEntry(entry, rupiahInEuros);
+    if (reading.status !== 'valid') throw new Error(reading.status);
+    expect(reading.amounts.amountPaidMinor).toBe(5679);
+    expect(crossCurrencyRateKind(rupiahInEuros, reading.amounts, tiny)).toBe('suggested');
+    // A suggestion with fewer places shows at least two.
+    expect(startCrossCurrencyEntry(euroInRupees, '20.00', frankfurter).rate).toBe('92.10');
+    expect(suggestedRateText('0.000056789012')).toBe('0.000056789012');
+    expect(suggestedRateText('92')).toBe('92.00');
   });
 });
 

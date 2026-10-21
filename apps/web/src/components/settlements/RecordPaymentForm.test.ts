@@ -259,6 +259,24 @@ describe('a new payment', () => {
 });
 
 describe('a payment whose reply was lost', () => {
+  it('shows what a payment in another currency paid, and at what rate (#727)', () => {
+    stored.attempts = [
+      attempt({
+        amount: 20,
+        currency: 'EUR',
+        amountPaidMinor: 185000,
+        paidCurrency: 'INR',
+        appliedRate: '92.5',
+        rateKind: 'custom',
+      }),
+    ];
+    const { html, text: shown } = render({ to: SAM }, { currency: 'EUR' });
+    expect(field(html, 'record-payment-amount')).toMatchObject({ value: '20.00', readOnly: true });
+    expect(shown).toContain('Amount cleared');
+    expect(shown).toContain('Paid as ₹1,850.00 at ₹92.50 per €');
+    expect(record(html)).toEqual({ text: 'Record payment ₹1,850.00', disabled: false });
+  });
+
   it('is shown read-only for its pair, and Record sends it again unchanged', () => {
     stored.attempts = [attempt()];
     const { html, text: shown } = render({ to: SAM, amount: '1060.00' });

@@ -64,35 +64,44 @@ const frankfurter: RateSuggestion = {
 let renderer: ReactTestRenderer;
 const done = vi.fn();
 
-async function open(state: RateSuggestionState) {
+/** Record payment for Alex and Sam's euros, as Balances shows it. */
+const sheet = (ledger: SettlementLedger, amount: string) =>
+  createElement(
+    ThemeProvider,
+    { theme: createAppTheme('light') },
+    createElement(RecordPaymentForm, {
+      groupId: GROUP,
+      groupName: 'Lisbon & Tokyo',
+      accountId: YOU,
+      currency: 'EUR',
+      payCurrencies: ['EUR', 'INR', 'JPY'],
+      mainCurrency: 'INR',
+      members: [
+        { id: YOU, name: 'Alex Rivera' },
+        { id: SAM, name: 'Sam Chen' },
+      ],
+      ledger: { status: 'ready', ledger },
+      start: { from: YOU, to: SAM, amount },
+      onDone: done,
+      onRefresh: () => {},
+    }),
+  );
+
+async function open(state: RateSuggestionState, ledger = euros, amount = '20.00') {
   rate.state = state;
   await act(async () => {
-    renderer = create(
-      createElement(
-        ThemeProvider,
-        { theme: createAppTheme('light') },
-        createElement(RecordPaymentForm, {
-          groupId: GROUP,
-          groupName: 'Lisbon & Tokyo',
-          accountId: YOU,
-          currency: 'EUR',
-          payCurrencies: ['EUR', 'INR', 'JPY'],
-          mainCurrency: 'INR',
-          members: [
-            { id: YOU, name: 'Alex Rivera' },
-            { id: SAM, name: 'Sam Chen' },
-          ],
-          ledger: { status: 'ready', ledger: euros },
-          start: { from: YOU, to: SAM, amount: '20.00' },
-          onDone: done,
-          onRefresh: () => {},
-        }),
-      ),
-      { createNodeMock: () => ({ focus() {}, addEventListener() {}, removeEventListener() {} }) },
-    );
+    renderer = create(sheet(ledger, amount), {
+      createNodeMock: () => ({ focus() {}, addEventListener() {}, removeEventListener() {} }),
+    });
   });
   // Pay in rupees.
   await press(radio('INR'));
+}
+
+/** The rate read answers again, while the sheet is open. */
+async function reread(state: RateSuggestionState) {
+  rate.state = state;
+  await act(async () => renderer.update(sheet(euros, '20.00')));
 }
 
 /** The node's text as read: the pieces of one run together, elements apart. */
@@ -321,5 +330,67 @@ describe('paying a euro Debt in rupees (#727)', () => {
 
     expect(value('record-payment-amount')).toBe('15.00');
     expect(hosts('input').some((node) => node.props.id === 'record-payment-rate')).toBe(false);
+  });
+
+  it('names no rate kind while the suggestion is read', async () => {
+    await open({ status: 'loading' });
+    expect(page()).toContain('Looking up a suggested rate…');
+    expect(page()).not.toContain('No suggestion');
+    expect(page()).not.toContain('No rate suggested right now.');
+  });
+
+  it('says when no rate is known for the pair, rather than that rates couldn’t be read', async () => {
+    await open({ status: 'none', reason: 'currency_unavailable' });
+    expect(page()).toContain('No rate suggested right now.');
+    expect(page()).toContain(
+      'Splitbook has no rate between EUR and INR right now. You can still record it with the rate you agreed.',
+    );
+  });
+
+  it('keeps the suggestion it opened with if the rate is read again meanwhile', async () => {
+    await open({ status: 'ready', suggestion: frankfurter });
+    await type('record-payment-rate', '92.50');
+
+    await reread({
+      status: 'ready',
+      suggestion: { ...frankfurter, rate: '92.3', asOf: '2026-10-21' },
+    });
+    await submit();
+
+    expect(saved.payments[0]).toMatchObject({
+      rateKind: 'custom',
+      suggestedRate: '92.1',
+      rateAsOf: '2026-10-20',
+    });
+  });
+
+  it('keeps today’s overpayment words and positions when no Debt runs this way', async () => {
+    // Sam owes Alex €20.00, so nothing is suggested from Alex to Sam.
+    const samOwes: SettlementLedger = {
+      balances: [
+        { userId: YOU, amountMinor: 2000 },
+        { userId: SAM, amountMinor: -2000 },
+      ],
+      suggestions: [{ from: SAM, to: YOU, amountMinor: 2000 }],
+    };
+    await open({ status: 'ready', suggestion: frankfurter }, samOwes, '5.00');
+
+    expect(fields()).toEqual(['5.00', '92.10', '460.50']);
+    expect(page()).toContain('No payment from you to Sam Chen is suggested.');
+    expect(page()).toContain('After this payment');
+    expect(page()).not.toContain('€0.00 Debt');
+    expect(canRecord()).toBe(false);
+  });
+
+  it('puts the exact suggestion back beside the payer’s own rate', async () => {
+    await open({ status: 'ready', suggestion: { ...frankfurter, rate: '92.123456789' } });
+    await type('record-payment-rate', '92.50');
+    await press(button('Use ₹92.123457'));
+    expect(fields()).toEqual(['20.00', '92.123456789', '1842.47']);
+    await submit();
+    expect(saved.payments[0]).toMatchObject({
+      rateKind: 'suggested',
+      suggestedRate: '92.123456789',
+    });
   });
 });
