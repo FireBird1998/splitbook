@@ -48,7 +48,14 @@ import {
 } from '../data/expense-draft';
 import { DateSheet } from './date-sheet';
 import { CurrencySheet } from './currency-sheet';
-import { expenseCurrencyChoices, isGroupCurrency } from '@splitbook/shared/group-currencies';
+import { AddCurrencySheet } from './add-currency-sheet';
+import { useMobileSnapshot } from './use-mobile-snapshot';
+import {
+  MAX_EXTRA_CURRENCIES,
+  expenseCurrencyChoices,
+  groupCurrencies,
+  isGroupCurrency,
+} from '@splitbook/shared/group-currencies';
 import { Button, Loading, Notice } from './primitives';
 import {
   Badge,
@@ -164,6 +171,40 @@ function RetainHeight({
         {children}
       </View>
     </View>
+  );
+}
+
+/**
+ * Add a currency over the Expense form (#722): the controller adds it to the Group, and once it
+ * has, the form offers it and the Expense is in it. The sheet says why the Group refused one.
+ */
+function SelectedAddCurrencySheet({
+  controller,
+  groupName,
+  listed,
+  extraCount,
+  onClose,
+}: {
+  controller: MobileController;
+  groupName: string;
+  listed: readonly string[];
+  extraCount: number;
+  onClose: () => void;
+}) {
+  const adding = useMobileSnapshot(controller, ({ currencyAdd }) => currencyAdd);
+  return (
+    <AddCurrencySheet
+      visible
+      groupName={groupName}
+      listed={listed}
+      extraCount={extraCount}
+      adding={adding.status === 'adding'}
+      message={adding.status === 'error' ? adding.message : null}
+      onAdd={(currency) =>
+        void controller.addGroupCurrency(currency).then((added) => added && onClose())
+      }
+      onCancel={onClose}
+    />
   );
 }
 
@@ -367,9 +408,9 @@ function ExpenseTask({
 }) {
   const theme = useTheme();
   const [editor, setEditor] = useState<'payers' | null>(null);
-  const [sheet, setSheet] = useState<'date' | 'split' | 'tag' | 'currency' | 'options' | null>(
-    null,
-  );
+  const [sheet, setSheet] = useState<
+    'date' | 'split' | 'tag' | 'currency' | 'add-currency' | 'options' | null
+  >(null);
   const scroll = useRef<ScrollView>(null);
   const content = useRef<View>(null);
   const sections = useRef<Partial<Record<ExpenseField, View | null>>>({});
@@ -1158,7 +1199,22 @@ function ExpenseTask({
             onChange({ currency });
             setSheet(null);
           }}
+          // Adding one to the Group (#722) is the controller's: a write, sent online only.
+          onAdd={
+            controller && context.group.alternateCurrencies.length < MAX_EXTRA_CURRENCIES
+              ? () => setSheet('add-currency')
+              : undefined
+          }
           onDone={() => setSheet(null)}
+        />
+      ) : null}
+      {sheet === 'add-currency' && controller && context ? (
+        <SelectedAddCurrencySheet
+          controller={controller}
+          groupName={context.group.name}
+          listed={groupCurrencies(context.group)}
+          extraCount={context.group.alternateCurrencies.length}
+          onClose={() => setSheet(null)}
         />
       ) : null}
       {sheet === 'options' ? (

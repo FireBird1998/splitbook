@@ -1,4 +1,9 @@
-import { tagActionsPath, tagActionCheckPath } from '@splitbook/shared/api-paths';
+import {
+  groupCurrenciesPath,
+  tagActionsPath,
+  tagActionCheckPath,
+} from '@splitbook/shared/api-paths';
+import { groupCurrencySettingsSchema } from '@splitbook/shared/group-currency-settings';
 import { emptyTagManager, tagManager } from './tag-manager';
 import { createAssistants, emptyAssistants } from './assistants';
 import { tagManagement, tagRead, unresolvedTagRecord, type TagRead } from './tag-management';
@@ -324,6 +329,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     sharedDraftCollection: emptySharedDraftCollection(),
     assistants: emptyAssistants(),
     tagManager: emptyTagManager(),
+    currencyAdd: { groupId: null, status: 'idle', message: null },
     tagsOpenFor: null,
     toReview: emptyToReview(),
     offline: { active: false, refreshedAt: null, message: null },
@@ -6593,6 +6599,78 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
+  /**
+   * A member adds a currency to the Group (#722), as any member may on the web: from the Expense
+   * form, whose Expense then takes it, or from the Group's Currencies. It needs a connection, and
+   * a refusal says why in the server's words. Adding one already listed is refused, so a reply
+   * that was lost is settled by reading the Group again.
+   */
+  const addGroupCurrency = async (currency: string) => {
+    const groupId =
+      snapshot.screen === 'expense'
+        ? snapshot.expense.groupId
+        : snapshot.screen === 'group'
+          ? snapshot.detail.id
+          : null;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      !groupId ||
+      snapshot.offline.active ||
+      !getCurrency(currency) ||
+      snapshot.currencyAdd.status === 'adding'
+    )
+      return false;
+    const owner = generation;
+    publish({ ...snapshot, currencyAdd: { groupId, status: 'adding', message: null } });
+    const settled = { groupId, status: 'idle' as const, message: null };
+    try {
+      const value = await request(groupCurrenciesPath(groupId), owner, {
+        method: 'POST',
+        body: { currency },
+      }).finally(() => {
+        // Whatever was answered, the Group's own reads no longer list its currencies as they are.
+        if (current(owner)) invalidateReads(`group:${groupId}`);
+      });
+      const extras = groupCurrencySettingsSchema
+        .parse(Object(value).data)
+        .extraCurrencies.map(({ code }) => code);
+      assertCurrent(owner);
+      const editor = snapshot.expense;
+      if (snapshot.screen !== 'expense' || editor.groupId !== groupId || !editor.context) {
+        publish({ ...snapshot, currencyAdd: settled });
+        return true;
+      }
+      // The form offers it at once, and the Expense being entered is in it.
+      publish({
+        ...snapshot,
+        currencyAdd: settled,
+        expense: {
+          ...editor,
+          context: {
+            ...editor.context,
+            group: { ...editor.context.group, alternateCurrencies: extras },
+          },
+        },
+      });
+      await updateExpenseDraft({ currency });
+      return true;
+    } catch (error) {
+      if (!current(owner) || error instanceof Superseded) return false;
+      publish({
+        ...snapshot,
+        currencyAdd: {
+          groupId,
+          status: 'error',
+          message:
+            error instanceof RequestError && error.status === 422 && error.serverMessage
+              ? error.serverMessage
+              : expenseFailureMessage(error, 'Couldn’t add the currency. Please try again.'),
+        },
+      });
+      return false;
+    }
+  };
+
   /** A Group's Tags, a screen over its view: opened from the Group's options. */
   const openTags = (groupId: string) => {
     if (snapshot.screen === 'group' && snapshot.detail.id === groupId)
@@ -7209,6 +7287,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     refreshToReview,
     openTags,
     closeTags,
+    addGroupCurrency,
     manageTags,
     groupTags,
     keepExpenseAsSharedDraft,

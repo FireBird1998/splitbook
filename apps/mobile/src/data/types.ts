@@ -410,10 +410,21 @@ export interface PendingInvitationStore {
   clear(): Promise<void>;
 }
 
+/**
+ * A currency being added to a Group (#722), from the Expense form or the Group's Currencies: what
+ * the server answered, if it refused.
+ */
+export interface CurrencyAddState {
+  groupId: string | null;
+  status: 'idle' | 'adding' | 'error';
+  message: string | null;
+}
+
 export interface MobileSnapshot {
   /** Account → Connected assistants (#622): its list, Saved copy and Disconnect. */
   assistants: AssistantsState;
   tagManager: TagManagerState;
+  currencyAdd: CurrencyAddState;
   /**
    * The Group whose Tags screen is open over its view. Leaving that view closes it, and it stays
    * open when Android recreates the activity, which mounts the App again (#634).
