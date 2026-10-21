@@ -1224,14 +1224,43 @@ describe('multi-currency exports (#731)', () => {
       'Paid currency': 'INR',
       'Rate (paid per cleared)': '92.5',
     });
-    const preview = exportPreviewSchema.parse(
-      json(await request(alice, path + '&preview=1')),
-    );
+    const preview = exportPreviewSchema.parse(json(await request(alice, path + '&preview=1')));
     expect(preview.format).toBe('csv');
     if (preview.format !== 'csv') throw new Error('Expected CSV preview');
     const shown = preview.files.find((row) => row.kind === 'payments')!;
     expect(shown.header).toEqual(downloaded.header);
     expect(shown.rows[0]).toEqual(Object.values(downloaded.records[0]));
     expect(shown.text).toBe(files[file]);
+  });
+  it('backs up listed currencies and stored rate provenance, and describes them in the preview', async () => {
+    const id = await crossCurrencyGroup();
+    const path = `/api/export?groups=${id}&format=json&include=payments`;
+    const answer = await request(alice, path);
+    expect(answer.status).toBe(200);
+    const backup = backupSchema.parse(json(answer));
+    expect(backup.groups[0]).toMatchObject({
+      currency: 'INR',
+      alternateCurrencies: ['EUR', 'JPY'],
+    });
+    expect(backup.groups[0].settlements[0]).toMatchObject({
+      amountMinor: 2000,
+      currency: 'EUR',
+      amountPaidMinor: 185000,
+      paidCurrency: 'INR',
+      appliedRate: '92.5',
+      rateKind: 'custom',
+      suggestedRate: '92.1',
+      rateSource: 'frankfurter',
+      rateAsOf: '2026-10-20',
+      rateFetchedAt: '2026-10-21T12:00:00Z',
+      pairDebtBeforeMinor: -2000,
+      pairDebtAfterMinor: 0,
+    });
+    const preview = exportPreviewSchema.parse(json(await request(alice, path + '&preview=1')));
+    expect(preview).toMatchObject({
+      currencyGroups: [
+        { name: 'Fictional Europe trip', currency: 'INR', alternateCurrencies: ['EUR', 'JPY'] },
+      ],
+    });
   });
 });

@@ -105,3 +105,43 @@ describe('JSON backup', () => {
     ]);
   });
 });
+
+it('backs up extra currencies and every immutable cross-currency Settlement field', () => {
+  const rateFields = {
+    amountPaidMinor: 185000,
+    paidCurrency: 'INR',
+    appliedRate: '92.5',
+    rateKind: 'custom' as const,
+    suggestedRate: '92.1',
+    rateSource: 'frankfurter' as const,
+    rateAsOf: '2026-10-20',
+    rateFetchedAt: '2026-10-21T12:00:00.000Z',
+    pairDebtBeforeMinor: -2000,
+    pairDebtAfterMinor: 0,
+  };
+  const input = {
+    ...group,
+    alternateCurrencies: ['EUR', 'JPY'],
+    settlements: [
+      {
+        id: 'p',
+        at,
+        fromId: 'b',
+        toId: 'a',
+        amountMinor: 2000,
+        currency: 'EUR',
+        recordedById: 'b',
+        ...rateFields,
+      },
+    ],
+  };
+  const result = backupSchema.parse(
+    buildBackup([input], { exportedAt: at, include: ['payments'] }),
+  );
+  expect(result.groups[0]).toMatchObject({ alternateCurrencies: ['EUR', 'JPY'] });
+  expect(result.groups[0].settlements[0]).toMatchObject({
+    amountMinor: 2000,
+    currency: 'EUR',
+    ...rateFields,
+  });
+});
