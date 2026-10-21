@@ -134,3 +134,36 @@ for (const crossCurrency of [false, true]) {
     await expect(page.getByText('Payment recorded.', { exact: false })).toBeVisible();
   });
 }
+
+// #773, the Designer's gap: an edit inside a grouped amount regroups it as the member types,
+// the caret where it was, and the Expense saves what is shown.
+test('Backspace after the 8 in 1,842.50 leaves 142.50, the caret after the 1, and saves it (#773)', async ({
+  page,
+  ledger,
+}) => {
+  const group = await euroGroup(ledger);
+  await page.context().addCookies((await ledger.alex.storageState()).cookies);
+  await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${group}`);
+  const dialog = await openAddExpense(page);
+  await dialog.getByLabel('What was it for?').fill('Keyboard dinner');
+  const amount = dialog.getByRole('textbox', { name: /^Amount,/ });
+  await amount.fill('1842.50');
+  await amount.press('Tab');
+  await expect(amount).toHaveValue('1,842.50');
+  await page.keyboard.press('Shift+Tab');
+  await expect(amount).toBeFocused();
+  // The caret after "1,8", then Backspace.
+  await amount.press('Home');
+  for (let step = 0; step < 3; step++) await amount.press('ArrowRight');
+  await amount.press('Backspace');
+  await expect(amount).toHaveValue('142.50');
+  // The caret stayed after the 1: the next digit goes there.
+  await page.keyboard.type('9');
+  await expect(amount).toHaveValue('1,942.50');
+  const request = page.waitForRequest(
+    (r) => r.method() === 'POST' && r.url().endsWith(`/api/groups/${group}/expenses`),
+  );
+  await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({ amountMinor: 194250 });
+  await expect(dialog).toBeHidden();
+});

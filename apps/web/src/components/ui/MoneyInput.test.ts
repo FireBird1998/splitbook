@@ -1,6 +1,7 @@
 import { createElement, useState, type ComponentType } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, expect, it, vi } from 'vitest';
+import { readAmountEntry } from '@splitbook/shared/amount-entry';
 import { MoneyInputBase, MoneyTextField } from './MoneyInput';
 
 let renderer: ReactTestRenderer;
@@ -85,5 +86,105 @@ for (const [name, Field] of fields) {
       input().props.onFocus({ target: { value: '1,842.50', selectionStart: 3, selectionEnd: 3 } }),
     );
     expect(input().props.value).toBe('1,842.50');
+  });
+}
+
+// #773, the Designer's gap: while focused the field kept its grouped text and only took an edit
+// that left the commas in their usual places, so Backspace after the 8 in "1,842.50" gave
+// "1,42.50", which was refused. The field now regroups as the member types, the caret after as
+// many characters as before, and a comma that may be a decimal comma ("10,5") stays as typed.
+for (const [name, Field] of fields) {
+  /** The field, focused on `initial` as grouped, with what it hands the form and its caret. */
+  async function focused(currency: string, initial: string) {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const changed = vi.fn();
+    const caret = vi.fn();
+    function Form() {
+      const [value, setValue] = useState(initial);
+      return createElement(Field, {
+        currency,
+        value,
+        onValueChange: (next: string) => {
+          changed(next);
+          setValue(next);
+        },
+      });
+    }
+    await act(async () => {
+      renderer = create(createElement(Form), {
+        createNodeMock: (element) =>
+          element.type === 'input'
+            ? { setSelectionRange: caret, focus: () => {}, value: '' }
+            : null,
+      });
+    });
+    const input = () => renderer.root.findByType('input');
+    await act(async () => input().props.onFocus({ target: input().props }));
+    /** What the member's keystroke left in the field, the caret at `at`. */
+    const edit = (value: string, at = value.length) =>
+      act(async () =>
+        input().props.onChange({ target: { value, selectionStart: at, selectionEnd: at } }),
+      );
+    return { input, changed, caret, edit };
+  }
+
+  it(`${name}: Backspace after the 8 in 1,842.50 regroups to 142.50, the caret after the 1`, async () => {
+    const { input, changed, caret, edit } = await focused('EUR', '1842.5');
+    expect(input().props.value).toBe('1,842.50');
+    await edit('1,42.50', 2);
+    expect(input().props.value).toBe('142.50');
+    expect(changed).toHaveBeenLastCalledWith('142.50');
+    expect(caret).toHaveBeenLastCalledWith(1, 1);
+  });
+
+  it(`${name}: a 5 typed after "1," regroups to 15,842.50, the caret after the 5`, async () => {
+    const { input, changed, caret, edit } = await focused('EUR', '1842.5');
+    await edit('1,5842.50', 3);
+    expect(input().props.value).toBe('15,842.50');
+    expect(changed).toHaveBeenLastCalledWith('15842.50');
+    expect(caret).toHaveBeenLastCalledWith(2, 2);
+  });
+
+  it(`${name}: deleting the first digit of 1,842.50 leaves 842.50`, async () => {
+    const { input, changed, caret, edit } = await focused('EUR', '1842.5');
+    await edit(',842.50', 0);
+    expect(input().props.value).toBe('842.50');
+    expect(changed).toHaveBeenLastCalledWith('842.50');
+    expect(caret).toHaveBeenLastCalledWith(0, 0);
+  });
+
+  it(`${name}: a whole yen amount regroups too, and INR groups as it does on blur`, async () => {
+    const yen = await focused('JPY', '1842');
+    expect(yen.input().props.value).toBe('1,842');
+    await yen.edit('1,42', 2);
+    expect(yen.input().props.value).toBe('142');
+    expect(yen.changed).toHaveBeenLastCalledWith('142');
+    await act(async () => renderer.unmount());
+    const rupees = await focused('INR', '');
+    for (const typed of ['1', '18', '184', '1842', '1,8425', '18,4250']) await rupees.edit(typed);
+    expect(rupees.input().props.value).toBe('184,250');
+    expect(readAmountEntry(rupees.changed.mock.lastCall![0], 'INR')).toEqual({
+      status: 'valid',
+      amountMinor: 18425000,
+    });
+    await act(async () => rupees.input().props.onBlur({}));
+    expect(rupees.input().props.value).toBe('184,250.00');
+  });
+
+  it(`${name}: "10,5" typed key by key stays as typed and is refused, never 105`, async () => {
+    const { input, changed, edit } = await focused('EUR', '');
+    for (const typed of ['1', '10', '10,', '10,5']) await edit(typed);
+    expect(input().props.value).toBe('10,5');
+    expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
+  });
+
+  it(`${name}: Tab's selection, then 3, 0 and 0, saves 300`, async () => {
+    const { input, changed, edit } = await focused('EUR', '1842.5');
+    for (const typed of ['3', '30', '300']) await edit(typed);
+    expect(input().props.value).toBe('300');
+    expect(readAmountEntry(changed.mock.lastCall![0], 'EUR')).toEqual({
+      status: 'valid',
+      amountMinor: 30000,
+    });
   });
 }
