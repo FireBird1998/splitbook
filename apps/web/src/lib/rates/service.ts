@@ -34,7 +34,24 @@ function crossRate(from: string, to: string): string {
 
 export async function refreshRates(providers: RateProviders, now = new Date()) {
   await connectDB();
-  const previous = await RateTable.findById('daily').lean();
+  const day = now.toISOString().slice(0, 10);
+  // A unique singleton plus an atomic day claim works across concurrent instances.
+  try {
+    await RateTable.updateOne(
+      { _id: 'daily' },
+      { $setOnInsert: { entries: [] } },
+      { upsert: true },
+    );
+  } catch (error) {
+    if (!(error && typeof error === 'object' && 'code' in error && error.code === 11000))
+      throw error;
+  }
+  const previous = await RateTable.findOneAndUpdate(
+    { _id: 'daily', attemptedOn: { $ne: day } },
+    { $set: { attemptedOn: day } },
+    { returnDocument: 'before' },
+  ).lean();
+  if (!previous) return { refreshed: false };
   const fetch = async (provider: RateProviders['primary']) => {
     try {
       return (await provider.fetchTable()).map((row) => ({
@@ -62,8 +79,9 @@ export async function refreshRates(providers: RateProviders, now = new Date()) {
       previous?.entries.find((row) => row.currency === code);
     return row ? [row] : [];
   });
-  await RateTable.updateOne({ _id: 'daily' }, { $set: { entries } }, { upsert: true });
-  return { refreshed: true };
+  // An earlier day's slow job cannot replace a newer day's table.
+  await RateTable.updateOne({ _id: 'daily', attemptedOn: day }, { $set: { entries } });
+  return { refreshed: true, availableCurrencies: entries.filter((row) => usable(row, now)).length };
 }
 
 /** App-only read. No assistant operation imports the rate cache. Never calls a provider. */

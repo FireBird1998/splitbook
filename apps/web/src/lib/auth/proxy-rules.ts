@@ -38,6 +38,7 @@ export function resolveProxyResponse({
   if (
     isApiAuth ||
     pathname === '/api/mcp' ||
+    (pathname === '/api/cron/exchange-rates' && method === 'GET') ||
     pathname.startsWith('/.well-known/') ||
     pathname.startsWith('/mcp/')
   )
