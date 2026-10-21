@@ -23,6 +23,7 @@ import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/n
 import { ThemeContext } from './theme';
 import { ToReviewHomeCard, ToReviewGroupBanner, ToReviewList, ToReviewOverlay } from './to-review';
 import { ReviewRunOverlay } from './review-run';
+import { CompactButton } from './compact';
 import { ContinueDrafts } from './home';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -1499,6 +1500,60 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     // The fix sheet closed: its fixes are gone.
     expect(button(list, 'Change currency')).toBeUndefined();
     expect(reviewing(f)).toMatchObject({ amount: 86.555, currency: 'CHF' });
+  });
+
+  /** How a sheet's button is drawn: primary unless it says otherwise. */
+  const variantOf = (tree: ReactTestRenderer, label: string) =>
+    tree.root.findAll((node) => node.type === CompactButton && node.props.label === label)[0]?.props
+      .variant ?? 'primary';
+
+  // The Designer's order for an item no listed currency can keep (#733): the guided review first.
+  it('when no listed currency can keep the amount, leads with the guided review and says why Change can’t', async () => {
+    const { list } = await opened('light', true, 86.555);
+    await tap(list, 'Review Dinner in Zürich');
+    const shown = words(dialog(list, 'Dinner in Zürich'));
+    expect(shown).toContain(
+      'CHF isn’t one of Maple House’s currencies. Review it to fix the amount and the currency.',
+    );
+    const order = [
+      'It also needs an amount with at most 2 decimal places.',
+      'Review it with every detail',
+      'Change currency',
+      'No listed currency can keep CHF\u00a086.555.',
+    ].map((line) => shown.indexOf(line));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(variantOf(list, 'Review it with every detail')).toBe('primary');
+    expect(button(list, 'Change currency').props.disabled).toBe(true);
+    setWindow({ width: 360, height: 780, fontScale: 2 });
+    expect(unreadText(list.toJSON() as ReactTestRendererJSON, 2, 360)).toEqual([]);
+  });
+
+  it('when a listed currency can keep it, keeps Add and Change first, with the guided review the tonal third', async () => {
+    const { f, list } = await opened();
+    // Prepared without a date: it needs one besides a listed currency.
+    const dinner = f.items()[0]!;
+    const values = { ...dinner.draft.values };
+    delete values.date;
+    dinner.draft = { ...dinner.draft, values, missingFields: ['date'] };
+    await act(async () => {
+      await f.controller.refresh();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    await tap(list, 'Review Dinner in Zürich');
+    const shown = words(dialog(list, 'Dinner in Zürich'));
+    expect(shown).toContain(
+      'CHF isn’t one of Maple House’s currencies. Add it, or change this Expense’s currency.',
+    );
+    expect(shown).toContain('It also needs the date.');
+    const order = ['Add CHF to Maple House', 'Change currency', 'Review it with every detail'].map(
+      (line) => shown.indexOf(line),
+    );
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(variantOf(list, 'Add CHF to Maple House')).toBe('primary');
+    expect(variantOf(list, 'Review it with every detail')).toBe('tonal');
+    expect(button(list, 'Change currency').props.disabled).toBe(false);
   });
 
   it('offers the guided review only when the item needs more than a listed currency', async () => {
