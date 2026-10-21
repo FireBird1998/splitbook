@@ -105,10 +105,19 @@ function Runs({ runs }: { runs: TextRun[] }) {
   );
 }
 
-function Details({ line, time }: { line: ActivityLine; time: string }) {
+function Details({
+  line,
+  time,
+  whole = false,
+}: {
+  line: ActivityLine;
+  time: string;
+  /** All the lines it needs, as in an event's detail, where it is read in full (#783). */
+  whole?: boolean;
+}) {
   const parts = [...line.details, { text: time }];
   return (
-    <CompactText variant="caption" tone="secondary" numberOfLines={2}>
+    <CompactText variant="caption" tone="secondary" numberOfLines={whole ? 0 : 2}>
       {parts.map((part, index) => (
         <Fragment key={index}>
           {index > 0 ? ' · ' : ''}
@@ -725,6 +734,7 @@ function ActivityDetail({
               <Details
                 line={{ ...line, details: line.changes.length ? [] : line.details }}
                 time={when}
+                whole
               />
             </View>
           </View>

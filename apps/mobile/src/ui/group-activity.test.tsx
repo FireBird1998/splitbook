@@ -13,7 +13,14 @@ import {
   type ActivityEvent,
   type ActivityState,
 } from '../data/activity';
-import { flatten, layoutHeight, layoutWidth, middleCutEnd, unreadText } from '../test-utils/layout';
+import {
+  flatten,
+  largeTextWindows,
+  layoutHeight,
+  layoutWidth,
+  middleCutEnd,
+  unreadText,
+} from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
@@ -78,7 +85,11 @@ const button = (root: ReactTestInstance, label: string) =>
 const rowIndex = (root: ReactTestInstance, number: number) =>
   buttons(root).findIndex((label) => label?.includes(`Fictional event ${number},`));
 
-function render(props: Partial<Parameters<typeof GroupActivity>[0]> = {}) {
+function render(
+  props: Partial<Parameters<typeof GroupActivity>[0]> = {},
+  /** Rendered in this scheme's colours, as large-text checks are in light and dark. */
+  mode?: 'light' | 'dark',
+) {
   const calls = {
     onRetry: vi.fn(),
     onMore: vi.fn(),
@@ -97,7 +108,15 @@ function render(props: Partial<Parameters<typeof GroupActivity>[0]> = {}) {
     ...props,
   };
   act(() => {
-    screen = create(<GroupActivity {...all} />);
+    screen = create(
+      mode ? (
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <GroupActivity {...all} />
+        </ThemeContext.Provider>
+      ) : (
+        <GroupActivity {...all} />
+      ),
+    );
   });
   return {
     root: screen!.root,
@@ -797,6 +816,66 @@ describe('a payment in another currency’s record (#728)', () => {
     ).toEqual([]);
   });
 });
+
+// #783: an event's detail is where it is read in full, and its details line took at most two
+// lines: at 200% a payment's "You → Sam Chen · €20.00 · Wed 21 Oct 2026, 10:20 AM" needed three.
+describe.each(['light', 'dark'] as const)(
+  'an event’s detail at large text in %s (#783)',
+  (mode) => {
+    const payment = parseActivityPage(
+      {
+        status: 200,
+        data: {
+          activities: [
+            {
+              _id: hex('e', 901),
+              group: groupId,
+              type: 'settlement_recorded',
+              actor: { _id: you, name: 'Alex Rivera' },
+              createdAt: new Date(2026, 9, 21, 10, 20).toISOString(),
+              metadata: {
+                settlementId: 'f00000000000000000000002',
+                amount: 20,
+                amountMinor: 2000,
+                currency: 'EUR',
+                paidBy: you,
+                paidTo: 'a00000000000000000000002',
+                paidByName: 'Alex Rivera',
+                paidToName: 'Sam Chen',
+              },
+            },
+          ],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        },
+      },
+      groupId,
+      1,
+    ).events[0]!;
+
+    it('keeps a row in the list to two lines of details', () => {
+      setWindow({ width: 360, height: 640, fontScale: 2 });
+      render({ state: activity({ events: [payment] }) }, mode);
+      const details = screen!.root.findAll(
+        (node) =>
+          String(node.type) === 'Text' &&
+          node.findAll((child) => child.props.children === '€20.00').length > 0,
+      );
+      expect(details.map((node) => node.props.numberOfLines)).toContain(2);
+    });
+
+    it.each(largeTextWindows)('reads in full, $width dp at $fontScale× text', (size) => {
+      setWindow(size);
+      render({ state: activity({ selected: payment }) }, mode);
+      const tree = screen!.toJSON() as ReactTestRendererJSON;
+      const words = (node: ReactTestRendererJSON | string): string =>
+        typeof node === 'string' ? node : (node.children ?? []).map(words).join('');
+      expect(words(tree)).toContain('You → Sam Chen · €20.00 · Wed 21 Oct 2026, 10:20');
+      // The screen's content is inset 16dp on each side.
+      expect(unreadText(tree, size.fontScale, size.width - 32)).toEqual([]);
+    });
+  },
+);
+
 // #770, from the Designer's #751 check: a credit cut beside a dot read "chat….evil". Once the
 // credit's line knows its width, the app cuts it, with no dot beside the "…"; at the largest
 // text it reads in full.
