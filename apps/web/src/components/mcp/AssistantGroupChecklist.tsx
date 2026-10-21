@@ -1,3 +1,4 @@
+import { assistantReachesGroup } from '@splitbook/shared/assistant-reach';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -29,8 +30,11 @@ export function leavesOutEveryGroup(
   groups: readonly Pick<ApprovalGroup, 'id' | 'rule'>[],
   excluded: readonly string[],
 ) {
-  const allowing = groups.filter((group) => group.rule !== 'not_allowed');
-  return allowing.length > 0 && allowing.every((group) => excluded.includes(group.id));
+  const refs = groups.map((group) => ({ id: group.id, assistantRule: group.rule }));
+  return (
+    refs.some((group) => assistantReachesGroup(group)) &&
+    !refs.some((group) => assistantReachesGroup(group, excluded))
+  );
 }
 
 /**
@@ -65,13 +69,14 @@ export function AssistantGroupChecklist({
       {groups.length > 0 && (
         <FormGroup>
           {groups.map((group) => {
-            const notAllowed = group.rule === 'not_allowed';
+            const reachGroup = { id: group.id, assistantRule: group.rule };
+            const notAllowed = !assistantReachesGroup(reachGroup);
             return (
               <FormControlLabel
                 key={group.id}
                 control={
                   <Checkbox
-                    checked={!notAllowed && !excluded.includes(group.id)}
+                    checked={assistantReachesGroup(reachGroup, excluded)}
                     disabled={disabled || notAllowed}
                     onChange={(event) =>
                       onExcludedChange(
@@ -116,7 +121,9 @@ export function AssistantGroupChecklist({
           them.
         </Typography>
       )}
-      {groups.some((group) => group.rule === 'not_allowed') && (
+      {groups.some(
+        (group) => !assistantReachesGroup({ id: group.id, assistantRule: group.rule }),
+      ) && (
         <Typography variant="body2" color="text.secondary">
           A Group’s admins decide whether assistants can use it.
         </Typography>

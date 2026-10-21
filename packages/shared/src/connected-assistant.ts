@@ -1,3 +1,4 @@
+import { assistantReachesGroup } from './assistant-reach';
 import type { AssistantRule } from './assistant-rule';
 
 /**
@@ -52,10 +53,10 @@ export function assistantGroupCount(
   groups: readonly AssistantGroupRef[],
   excludedGroupIds: readonly string[] = [],
 ): { reached: number; of: number } {
-  const excluded = new Set(excludedGroupIds);
   return {
-    reached: groups.filter((group) => !excluded.has(group.id) && group.rule !== 'not_allowed')
-      .length,
+    reached: groups.filter((group) =>
+      assistantReachesGroup({ id: group.id, assistantRule: group.rule }, excludedGroupIds),
+    ).length,
     of: groups.length,
   };
 }

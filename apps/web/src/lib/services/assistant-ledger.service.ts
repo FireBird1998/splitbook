@@ -1,4 +1,5 @@
 import 'server-only';
+import { assistantGroupFilter } from '@splitbook/shared/assistant-reach';
 import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Registered for the rule's admin, populated below
@@ -87,9 +88,6 @@ function assistantExpense(expense: RecordedExpense, member: ReturnType<typeof as
   };
 }
 
-/** Groups whose Assistant rule lets assistants in (#621); a Group without a rule is Allowed. */
-export const ASSISTANTS_ALLOWED = { assistantRule: { $ne: 'not_allowed' } } as const;
-
 /**
  * A Group the reader belongs to and their connection reaches: not one they left out (#617), nor
  * one whose admins don't allow assistants (#621). One out of reach answers exactly as a Group
@@ -97,11 +95,13 @@ export const ASSISTANTS_ALLOWED = { assistantRule: { $ne: 'not_allowed' } } as c
  */
 export async function requireLedgerMembership(reader: LedgerReader, groupId: string) {
   await connectDB();
+  const reach = assistantGroupFilter({
+    memberId: draftObjectId.parse(reader.id),
+    excludedGroupIds: reader.excludedGroupIds,
+  });
   const group = await Group.findOne({
-    _id: { $eq: draftObjectId.parse(groupId), $nin: reader.excludedGroupIds ?? [] },
-    'members.user': draftObjectId.parse(reader.id),
-    deletionRequestedAt: null,
-    ...ASSISTANTS_ALLOWED,
+    ...reach,
+    _id: { ...reach._id, $eq: draftObjectId.parse(groupId) },
   })
     .populate('members.user', 'name')
     .lean();
@@ -140,15 +140,17 @@ export type ApprovalGroup = AssistantGroup & {
 export const assistantLedgerService = {
   async groups(reader: LedgerReader, after?: string) {
     await connectDB();
+    const reach = assistantGroupFilter({
+      memberId: draftObjectId.parse(reader.id),
+      excludedGroupIds: reader.excludedGroupIds,
+    });
     const groups = await Group.find({
-      'members.user': draftObjectId.parse(reader.id),
-      deletionRequestedAt: null,
+      ...reach,
       // Groups out of reach are filtered in the query, so a page is never short of what it says.
       _id: {
-        $nin: reader.excludedGroupIds ?? [],
+        ...reach._id,
         ...(after ? { $gt: draftObjectId.parse(after) } : {}),
       },
-      ...ASSISTANTS_ALLOWED,
     })
       .sort({ _id: 1 })
       .limit(51)

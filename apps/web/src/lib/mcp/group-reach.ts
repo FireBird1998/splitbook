@@ -1,3 +1,4 @@
+import { assistantReachesGroup, type AssistantReachGroup } from '@splitbook/shared/assistant-reach';
 import type { AuthContext } from 'better-auth';
 import { connectionName } from './assistant-name';
 import type { AuthEnv } from '@/lib/auth/create-auth';
@@ -17,16 +18,14 @@ const PAGE = 100;
 /**
  * The members' Connected assistants that reach a Group: each live connection (its consent is for
  * the connection's current generation, and it hasn't expired, #618) whose member didn't leave the
- * Group out (#617). The caller checks the Group's own rule.
+ * Group out (#617), and whose Group allows assistants (#621).
  */
 export async function groupReach(
   adapter: Adapter,
-  groupId: string,
+  group: AssistantReachGroup,
   members: { id: string; name: string }[],
   env: AuthEnv,
 ): Promise<AssistantReach[]> {
-  // Stored exclusions are lower case; the route also accepts an id in capitals.
-  const id = groupId.toLowerCase();
   const names = new Map(members.map((member) => [member.id, member.name]));
   const reach: AssistantReach[] = [];
   for (let offset = 0; ; offset += PAGE) {
@@ -38,7 +37,7 @@ export async function groupReach(
       sortBy: { field: 'createdAt', direction: 'asc' },
     });
     for (const row of rows) {
-      if (row.excludedGroupIds?.includes(id)) continue;
+      if (!assistantReachesGroup(group, row.excludedGroupIds ?? [])) continue;
       if (!(await liveMcpConsent(adapter, row, env))) continue;
       reach.push({
         member: { id: row.userId, name: names.get(row.userId) ?? '' },

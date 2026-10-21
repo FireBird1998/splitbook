@@ -1,3 +1,4 @@
+import { assistantReachesGroup } from '@splitbook/shared/assistant-reach';
 import {
   getAuthUser,
   unauthorized,
@@ -25,14 +26,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!isGroupAdmin(group, user.id!)) return forbidden();
 
     // Where assistants are off, or the Group doesn't allow them, none reaches it.
-    if (!whatsLive().assistants.available || group.assistantRule === 'not_allowed')
+    const reachGroup = { id, assistantRule: group.assistantRule };
+    if (!whatsLive().assistants.available || !assistantReachesGroup(reachGroup))
       return success({ reach: [] });
     const members = group.members.map((member) => {
       const person = member.user as unknown as { _id: { toString(): string }; name?: string };
       return { id: person._id.toString(), name: person.name ?? '' };
     });
     return success({
-      reach: await groupReach((await auth.$context).adapter, id, members, process.env),
+      reach: await groupReach((await auth.$context).adapter, reachGroup, members, process.env),
     });
   } catch (err) {
     return serverError(err);

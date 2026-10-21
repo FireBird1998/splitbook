@@ -14,7 +14,7 @@ import {
   type DraftSaveOutcome,
 } from '@splitbook/shared/validators/expense-draft';
 import { expenseService } from './expense.service';
-import { ASSISTANTS_ALLOWED } from './assistant-ledger.service';
+import { assistantGroupFilter } from '@splitbook/shared/assistant-reach';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
 import {
@@ -114,7 +114,11 @@ function access(actor: DraftActor, groupId: string) {
  */
 function assistantReach(actor: DraftActor) {
   return actor.assistant
-    ? { excluded: (actor.excludedGroupIds ?? []).map((id) => new mongoose.Types.ObjectId(id)) }
+    ? {
+        excludedGroupIds: (actor.excludedGroupIds ?? []).map(
+          (id) => new mongoose.Types.ObjectId(id),
+        ),
+      }
     : null;
 }
 
@@ -132,16 +136,15 @@ async function requireMembership(
       { session, projection: { _id: 1 } },
     );
   if (!account) throw new Error('FORBIDDEN');
-  const group = await mongoose.connection.db!.collection('groups').findOne(
-    {
-      _id: reach ? { $eq: scope.group, $nin: reach.excluded } : scope.group,
-      'members.user': scope.owner,
-      deletionRequestedAt: null,
-      // Nor one whose admins don't allow assistants (#621).
-      ...(reach ? ASSISTANTS_ALLOWED : {}),
-    },
-    { session, projection: { _id: 1, defaultCurrency: 1, isArchived: 1 } },
-  );
+  const filter = reach ? assistantGroupFilter({ memberId: scope.owner, ...reach }) : null;
+  const group = await mongoose.connection
+    .db!.collection('groups')
+    .findOne(
+      filter
+        ? { ...filter, _id: { ...filter._id, $eq: scope.group } }
+        : { _id: scope.group, 'members.user': scope.owner, deletionRequestedAt: null },
+      { session, projection: { _id: 1, defaultCurrency: 1, isArchived: 1 } },
+    );
   if (!group) throw new Error(reach ? 'GROUP_NOT_FOUND' : 'FORBIDDEN');
   if (refuseArchived && group.isArchived) throw new Error('GROUP_ARCHIVED');
   return group.defaultCurrency as string | undefined;
