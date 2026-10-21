@@ -81,7 +81,11 @@ async function currencyUse(
       .select('description')
       .session(session)
       .lean(),
-    Settlement.countDocuments({ group: groupId, currency }).session(session),
+    // A payment uses the currency it clears and the one it was paid in (#727).
+    Settlement.countDocuments({
+      group: groupId,
+      $or: [{ currency }, { paidCurrency: currency }],
+    }).session(session),
     drafts.countDocuments({ ...toReview, owner: viewer }, { session: session ?? undefined }),
     drafts.countDocuments(
       { ...toReview, owner: { $ne: viewer } },

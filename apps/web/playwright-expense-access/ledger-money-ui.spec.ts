@@ -344,9 +344,12 @@ test('legacy currencies are individually visible and never combined into one bal
   await expect(ownBalance.getByText(/₹100\.00/)).toBeVisible();
   await currencies.getByRole('tab', { name: 'EUR, you’re owed €60.00', exact: true }).click();
   await expect(ownBalance.getByText(/€60\.00/)).toBeVisible();
+  // A Debt in an older Group's euros is settled from its own tab, in euros or rupees (#727).
+  const recordEuros = page.getByRole('region', { name: 'Record payment', exact: true });
+  await expect(recordEuros).toContainText('Synthetic access household · Debt in EUR');
   await expect(
-    page.getByText('Payments are recorded in INR, the main currency.', { exact: true }),
-  ).toBeVisible();
+    recordEuros.getByRole('radiogroup', { name: 'Pay in' }).getByRole('radio'),
+  ).toHaveText(['EUR', 'INR']);
   // Everyone (#313) follows the same switch: the EUR positions alone, exact, never converted.
   const everyone = page.getByRole('region', { name: 'Everyone', exact: true });
   await expect(everyone.getByText('All-time net · EUR', { exact: true })).toBeVisible();
@@ -361,12 +364,12 @@ test('legacy currencies are individually visible and never combined into one bal
     /Priya Shah\s*−€60\.00\s*Owes\s*Pays you €60\.00$/,
   ]);
   await expect(everyone).not.toContainText('₹');
-  // Balances in another currency suggest payments; Record waits for the main currency's tab.
+  // Balances in another currency suggest payments, each recorded from its own tab (#727).
   await expect(
     page
       .getByRole('region', { name: 'Settle up', exact: true })
       .getByRole('button', { name: /^Record/ }),
-  ).toHaveCount(0);
+  ).toHaveCount(1);
   const history = await historyLoaded;
   expect(history.status()).toBe(200);
   await history.finished();

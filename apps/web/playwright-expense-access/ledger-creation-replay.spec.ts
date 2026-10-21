@@ -313,7 +313,13 @@ for (const kind of ['expenses', 'settlements'] as const) {
       ).toBe('USD');
       const replay = await dataOf(await ledger.sam.post(path, { data: explicit, headers }), 201);
       expect(replay).toMatchObject({ _id: first._id, currency: 'INR', amount: first.amount });
-      const fresh = await ledger.sam.post(path, { data: explicit, headers: keyHeaders() });
+      // A live Settlement now keeps its historical cleared currency in use (#727).
+      // Use an unused currency for the refused new Settlement; Expense writes still
+      // require a main/listed currency. Neither refusal may change the replayed record.
+      const fresh = await ledger.sam.post(path, {
+        data: kind === 'settlements' ? { ...explicit, currency: 'JPY' } : explicit,
+        headers: keyHeaders(),
+      });
       expect(fresh.status(), await fresh.text()).toBe(422);
     } finally {
       await client

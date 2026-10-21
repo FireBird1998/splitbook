@@ -4,7 +4,9 @@ import { format } from 'date-fns';
 import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
-import { formatCurrency } from '@splitbook/shared/currency';
+import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
+import { rateText } from '@splitbook/shared/cross-currency-payment';
+import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
 import ErrorState from '@/components/common/ErrorState';
 import { TabCard, PaysArrow, PersonAvatar, visuallyHidden } from './TabCard';
 
@@ -22,6 +24,11 @@ export interface PaymentRead {
   createdAt: string;
   /** Who recorded it: every Settlement stores its recorder. */
   createdBy?: PaymentPerson;
+  /** A Debt paid in another currency (#727): what was paid, and the rate, beside `amount`. */
+  amountPaidMinor?: number;
+  paidCurrency?: string;
+  appliedRate?: string;
+  rateKind?: 'suggested' | 'custom' | 'entered';
 }
 
 export type PaymentsState =
@@ -187,6 +194,22 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
                       sx={(theme) => ({ ...theme.typography.money, whiteSpace: 'nowrap' })}
                     >
                       {formatCurrency(payment.amount, payment.currency)}
+                      {payment.paidCurrency &&
+                        payment.amountPaidMinor !== undefined &&
+                        payment.appliedRate && (
+                          <Box
+                            component="span"
+                            sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}
+                          >
+                            {' '}
+                            paid as {minorMoney(
+                              payment.amountPaidMinor,
+                              payment.paidCurrency,
+                            )} at{' '}
+                            {decimalMoney(rateText(payment.appliedRate), payment.paidCurrency)} per{' '}
+                            {getCurrency(payment.currency)?.symbol ?? payment.currency}
+                          </Box>
+                        )}
                     </Box>
                     <Box component="td" sx={{ overflowWrap: 'anywhere', maxWidth: 280 }}>
                       {note ? (

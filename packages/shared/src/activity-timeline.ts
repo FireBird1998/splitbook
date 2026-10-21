@@ -1,5 +1,6 @@
 import { assistantRuleLabel } from './assistant-rule';
 import { formatCurrency } from './currency';
+import { memberLabel, recordedText } from './member-label';
 import { formatDate, formatDateTime } from './date';
 import { toMajorAmount } from './exact-money';
 import {
@@ -7,6 +8,8 @@ import {
   extraCurrencyChangeDetail,
   extraCurrencyChangeWords,
 } from './group-currency-settings';
+import { rateText, readCrossCurrencyRecord } from './cross-currency-payment';
+import { formatCrossCurrencySettlement } from './cross-currency-settlement';
 
 export interface ActivityLike {
   _id: string;
@@ -47,15 +50,9 @@ export function groupActivitiesByDay(activities: ActivityLike[]): ActivityDayGro
   return Array.from(groups.values());
 }
 
-const words = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
+const words = recordedText;
 
-/**
- * A member as an event names them: "You" when their id is the viewer's (#442), never matched by
- * name, since two members can share one; otherwise their recorded name, or null without one.
- */
-export function memberLabel(id: unknown, name: unknown, viewerId?: string): string | null {
-  return viewerId && id === viewerId ? 'You' : words(name);
-}
+export { memberLabel };
 
 /** A Group edit that changed only its extra currencies (#721): what it added and removed. */
 function currencyListChange(changes: unknown) {
@@ -83,6 +80,18 @@ export function formatActivityHeadline(activity: ActivityLike, viewerId?: string
     case 'expense_deleted':
       return `${actorName} deleted “${meta.description ?? 'an expense'}”`;
     case 'settlement_recorded': {
+      // A Debt paid in another currency says both amounts and the rate (#727).
+      const cross = readCrossCurrencyRecord(meta);
+      // Rates to at most six places, as the sheet and the payment's card show them.
+      if (cross)
+        return formatCrossCurrencySettlement(
+          {
+            ...cross,
+            appliedRate: rateText(cross.appliedRate),
+            ...(cross.suggestedRate ? { suggestedRate: rateText(cross.suggestedRate) } : {}),
+          },
+          viewerId,
+        );
       const amount =
         typeof meta.amount === 'number' && typeof meta.currency === 'string'
           ? formatCurrency(meta.amount, meta.currency)
@@ -135,6 +144,8 @@ export function formatActivityDetail(activity: ActivityLike, viewerId?: string):
   }
 
   if (activity.type === 'settlement_recorded') {
+    const cross = readCrossCurrencyRecord(meta);
+    if (cross) return `Settlement · ${cross.currency} Debt paid in ${cross.paidCurrency}`;
     const paidTo = memberLabel(meta.paidTo, meta.paidToName, viewerId);
     const paidBy = memberLabel(meta.paidBy, meta.paidByName, viewerId);
     if (paidBy && paidTo) {

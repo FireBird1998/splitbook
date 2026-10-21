@@ -169,6 +169,29 @@ describe('Payments', () => {
   });
 });
 
+describe('a payment that cleared a Debt in another currency (#727)', () => {
+  it('shows the amount cleared, then what was paid and at what rate', () => {
+    const inRupees: PaymentRead = {
+      _id: 'd00000000000000000000009',
+      paidBy: ALEX,
+      paidTo: SAM,
+      amount: 20,
+      currency: 'EUR',
+      amountPaidMinor: 185000,
+      paidCurrency: 'INR',
+      appliedRate: '92.5',
+      rateKind: 'custom',
+      note: '',
+      createdAt: '2026-10-21T04:50:00.000Z',
+      createdBy: ALEX,
+    };
+
+    const { html } = render({ status: 'ready', payments: [inRupees] });
+
+    expect(rows(html)[0][2]).toBe('€20.00 paid as ₹1,850.00 at ₹92.50 per €');
+  });
+});
+
 describe('paymentWhen', () => {
   // Mid-June instants and a mid-July "now": the same year and month in every zone from
   // UTC−12 to UTC+14, so the year rule is tested away from any year's edges.

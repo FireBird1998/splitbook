@@ -79,3 +79,23 @@ _Avoid_: pairwise balance, IOU
 **Suggested payment**:
 One of the fewest payments that settle every member's balance in a currency. Recording one is a Settlement.
 _Avoid_: simplified debt, settle-up suggestion
+
+**Cross-currency Settlement**:
+A recorded payment whose paying currency differs from the Debt's currency. It keeps both the amount cleared and the amount paid, plus the applied rate and any Suggested rate with its source and dates. Only the amount cleared changes the ledger; the paid side is an immutable record.
+_Avoid_: currency conversion, converted Settlement
+
+**Amount cleared**:
+The part of a Debt the Settlement clears, in that Debt's currency. This is the Settlement's existing amount and currency, and the only side used for Balances, Debts and Suggested payments.
+_Avoid_: converted amount, original amount
+
+**Amount paid**:
+What the payer actually paid, recorded in the paying currency's minor units. On a Cross-currency Settlement it does not create or change a balance in the paying currency.
+_Avoid_: equivalent amount, converted total
+
+**Suggested rate**:
+The exchange rate offered by Splitbook's rate service when a member records a Cross-currency Settlement, with its provider, as-of date and fetch time. It is a suggestion, not a ledger conversion; the recorded suggestion never changes with newer rates.
+_Avoid_: live rate, guaranteed rate
+
+**Custom rate**:
+The rate the member chooses in place of a Suggested rate. The Settlement retains both. When no suggestion was available, the rate is entered instead; the record says that no rate was suggested.
+_Avoid_: corrected rate, official rate

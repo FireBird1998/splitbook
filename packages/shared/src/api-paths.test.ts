@@ -13,6 +13,7 @@ import {
   invitationsPath,
   recurringExpensesPath,
   groupCurrenciesPath,
+  groupRatesPath,
   searchPath,
   settlementsPath,
   tripSummaryPath,
@@ -124,6 +125,9 @@ describe('the reads only the web makes', () => {
     expect(settlementsPath(groupId)).toBe(`/api/groups/${groupId}/settlements`);
     expect(recurringExpensesPath(groupId)).toBe(`/api/groups/${groupId}/recurring`);
     expect(groupCurrenciesPath(groupId)).toBe(`/api/groups/${groupId}/currencies`);
+    expect(groupRatesPath(groupId, { from: 'EUR', to: 'INR' })).toBe(
+      `/api/groups/${groupId}/rates?from=EUR&to=INR`,
+    );
   });
 
   it('a search, with the query as it is searched', () => {

@@ -21,6 +21,7 @@ import {
   invitationsPath,
   recurringExpensesPath,
   groupCurrenciesPath,
+  groupRatesPath,
   searchPath,
   settlementsPath,
   tagActionsPath,
@@ -193,6 +194,12 @@ export const recurringExpensesKey = (account: QueryAccount, groupId: string) =>
 /** In the ledger scope: an Expense, Settlement or Draft write changes what uses each currency. */
 export const groupCurrenciesKey = (account: QueryAccount, groupId: string) =>
   groupScopedKey('ledger', account, groupId, groupCurrenciesPath(groupId));
+/** A suggested rate between two currencies: read again with the Group's other reads. */
+export const groupRatesKey = (
+  account: QueryAccount,
+  groupId: string,
+  pair: { from: string; to: string },
+) => groupScopedKey('group', account, groupId, groupRatesPath(groupId, pair));
 
 /** The request path a key was built for. */
 export const queryKeyPath = (key: QueryKey): string => key[key.length - 1];

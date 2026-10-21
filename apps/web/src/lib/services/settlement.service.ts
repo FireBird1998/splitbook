@@ -1,24 +1,28 @@
 import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
+import { lockClearedCurrency, lockLedgerCurrency } from '@/lib/ledger-currency';
 import Group from '@/lib/models/Group';
 import Settlement from '@/lib/models/Settlement';
 import { activityService } from './activity.service';
 import {
-  assertGroupCurrency,
   assertSettlementAuthorization,
   assertSettlementMembers,
 } from '@splitbook/shared/expense-validation';
-import type { CreateSettlementInput } from '@splitbook/shared/validators/settlement';
+import {
+  createSettlementSchema,
+  crossCurrencySettlementShape,
+  type CreateSettlementInput,
+} from '@splitbook/shared/validators/settlement';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import {
   assertCreateReplay,
   createRequestMetadata,
   makePendingActivity,
 } from '@/lib/financial-write';
-import { lockLedgerCurrency } from '@/lib/ledger-currency';
 import User from '@/lib/models/User';
 import { Types } from 'mongoose';
+import { settlementDebtSnapshot } from './settlement-debt';
 import { PERSON_FIELDS } from './person-fields';
 
 export class SettlementService {
@@ -40,6 +44,18 @@ export class SettlementService {
 
     assertSettlementMembers(memberIds, paidBy, data.paidTo);
     assertSettlementAuthorization(userId, paidBy, data.paidTo);
+    if (
+      Object.keys(crossCurrencySettlementShape).some(
+        (key) => data[key as keyof CreateSettlementInput] !== undefined,
+      )
+    )
+      data = createSettlementSchema.parse(data);
+    const crossCurrency = Object.fromEntries(
+      Object.keys(crossCurrencySettlementShape).flatMap((key) => {
+        const value = data[key as keyof CreateSettlementInput];
+        return value === undefined ? [] : [[key, value]];
+      }),
+    );
     const amountMinor = parseAmountMinor(data.amount, data.currency);
     if (amountMinor <= 0) throw new Error('INVALID_MONEY');
     const command = {
@@ -66,29 +82,34 @@ export class SettlementService {
     }
     // A retry of a payment recorded before the archive is confirmed above; nothing new is (#578).
     if (group.isArchived) throw new Error('GROUP_ARCHIVED');
-    assertGroupCurrency(group, data.currency);
-
     const settlementId = new Types.ObjectId();
     const names = await User.find({ _id: { $in: [paidBy, data.paidTo] } })
       .select('name')
       .lean();
-    const event = makePendingActivity(groupId, 'settlement_recorded', userId, {
-      settlementId: String(settlementId),
-      paidBy,
-      paidTo: data.paidTo,
-      amount: command.amount,
-      currency: data.currency,
-      paidByName: names.find((person) => String(person._id) === paidBy)?.name,
-      paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
-    });
 
     let settlement;
     try {
       settlement = await withGroupMutation(
         groupId,
         async () => {
-          // In the insert's own mutation, so a removal of the currency can't come in between.
-          await lockLedgerCurrency(groupId, data.currency);
+          // Both currencies are checked in the insert's own mutation, so a removal of either can't
+          // come in between (#721): the cleared one may be an older currency the ledger still
+          // holds (#727); the paid one must be on the Group's list.
+          await lockClearedCurrency(groupId, data.currency);
+          if (data.paidCurrency) await lockLedgerCurrency(groupId, data.paidCurrency);
+          const debtSnapshot = data.paidCurrency
+            ? await settlementDebtSnapshot(groupId, data.currency, paidBy, data.paidTo, amountMinor)
+            : {};
+          const event = makePendingActivity(groupId, 'settlement_recorded', userId, {
+            settlementId: String(settlementId),
+            paidBy,
+            paidTo: data.paidTo,
+            amount: command.amount,
+            currency: data.currency,
+            ...(data.paidCurrency ? { amountMinor, ...crossCurrency, ...debtSnapshot } : {}),
+            paidByName: names.find((person) => String(person._id) === paidBy)?.name,
+            paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
+          });
           return Settlement.create({
             _id: settlementId,
             group: groupId,
@@ -98,6 +119,8 @@ export class SettlementService {
             amountMinor,
             moneyVersion: 1,
             currency: data.currency,
+            ...crossCurrency,
+            ...debtSnapshot,
             note: data.note,
             createdBy: userId,
             ...(requestKey ? { creationRequest: createRequestMetadata(requestKey, command) } : {}),

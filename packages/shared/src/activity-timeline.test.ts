@@ -378,3 +378,65 @@ describe('a change to the extra currencies in Activity (#721)', () => {
     ).toBe('updated the Group');
   });
 });
+
+describe('a Debt paid in another currency in Activity (#727)', () => {
+  const alex = { _id: 'a00000000000000000000001', name: 'Alex Rivera' };
+  const sam = 'a00000000000000000000002';
+  const paid = (metadata: Record<string, unknown> = {}) => ({
+    _id: 'e1',
+    type: 'settlement_recorded',
+    createdAt: '2026-10-21T04:50:00.000Z',
+    actor: alex,
+    metadata: {
+      paidBy: alex._id,
+      paidByName: 'Alex Rivera',
+      paidTo: sam,
+      paidToName: 'Sam Chen',
+      amount: 20,
+      amountMinor: 2000,
+      currency: 'EUR',
+      amountPaidMinor: 185000,
+      paidCurrency: 'INR',
+      appliedRate: '92.5',
+      rateKind: 'custom',
+      suggestedRate: '92.1',
+      rateSource: 'frankfurter',
+      rateAsOf: '2026-10-20',
+      rateFetchedAt: '2026-10-21T00:30:00.000Z',
+      ...metadata,
+    },
+  });
+
+  it('says both amounts and the rate, with the viewer as You', () => {
+    expect(formatActivityHeadline(paid(), alex._id)).toBe(
+      'You paid Sam Chen ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
+    );
+    expect(formatActivityDetail(paid(), alex._id)).toBe('Settlement · EUR Debt paid in INR');
+  });
+
+  it('shows the rates to at most six places, as the sheet and the card do (#727 review)', () => {
+    // €17.33 cleared with ₹1,596.09: the rate worked out from them has eighteen places.
+    const uneven = paid({
+      amount: 17.33,
+      amountMinor: 1733,
+      amountPaidMinor: 159609,
+      appliedRate: '92.099826889786497403',
+    });
+    expect(formatActivityHeadline(uneven, alex._id)).toBe(
+      'You paid Sam Chen ₹1,596.09 to clear €17.33 at ₹92.099827 per €, suggested ₹92.10 (20 Oct)',
+    );
+  });
+
+  it('keeps today’s words for a payment in the Debt’s own currency, or one it can’t read', () => {
+    const own = paid({
+      paidCurrency: undefined,
+      amountPaidMinor: undefined,
+      appliedRate: undefined,
+    });
+    expect(formatActivityHeadline(own, alex._id)).toBe('You recorded €20.00');
+    expect(formatActivityDetail(own, alex._id)).toBe('You → Sam Chen');
+    const unreadable = paid({ appliedRate: 'about 92' });
+    expect(formatActivityHeadline(unreadable, alex._id)).toBe('You recorded €20.00');
+    expect(formatActivityDetail(unreadable, alex._id)).toBe('You → Sam Chen');
+  });
+});

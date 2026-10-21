@@ -97,6 +97,58 @@ export function overpaymentMessage(
   return `${lead} Afterwards ${position} in this Group.`;
 }
 
+/** One side of a payment, as the sheet names them. */
+export interface PaymentSide {
+  isViewer: boolean;
+  name: string;
+}
+
+/**
+ * What a Debt paid in another currency clears, in the sheet's words (#727): the whole Debt, part
+ * of it with the rest still to pay, or more than it, with what that would leave owed the other
+ * way. `paidMinor` is null until the rate or the amount paid is entered.
+ */
+export function crossCurrencySummary({
+  clearedMinor,
+  debtMinor,
+  paidMinor,
+  currency,
+  paidCurrency,
+  payer,
+  payee,
+}: {
+  clearedMinor: number;
+  debtMinor: number;
+  paidMinor: number | null;
+  currency: string;
+  paidCurrency: string;
+  payer: PaymentSide;
+  payee: PaymentSide;
+}): { overpaid: string | null; clears: string } {
+  const payerName = firstName(payer.name);
+  const payeeName = firstName(payee.name);
+  const debt = `${payer.isViewer ? 'your' : `${payerName}’s`} ${money(debtMinor, currency)} Debt to ${payee.isViewer ? 'you' : payeeName}`;
+  const gets =
+    paidMinor === null
+      ? ''
+      : ` ${payee.isViewer ? 'You get' : `${payeeName} gets`} ${money(paidMinor, paidCurrency)}.`;
+  if (paidMinor === null)
+    return { overpaid: null, clears: `Clears ${debt} once you enter the rate or the amount paid.` };
+  if (clearedMinor < debtMinor)
+    return {
+      overpaid: null,
+      clears: `Clears ${money(clearedMinor, currency)} of ${debt}. ${money(debtMinor - clearedMinor, currency)} stays to pay.`,
+    };
+  if (clearedMinor === debtMinor) return { overpaid: null, clears: `Clears ${debt}.${gets}` };
+  const more = money(clearedMinor - debtMinor, currency);
+  const owes = payer.isViewer ? `you owe ${payeeName}` : `${payerName} owes you`;
+  const owedBack = payer.isViewer ? `${payeeName} would owe you` : `you would owe ${payerName}`;
+  return {
+    overpaid: `That’s ${more} more than ${owes} in ${currency}, so ${owedBack} ${more}.`,
+    clears: `Clears ${debt} and ${more} more.${gets}`,
+  };
+}
+
 /** The figures behind the form: the Group's balances, in the Group's currency, once read. */
 export type LedgerState =
   | { status: 'loading' }

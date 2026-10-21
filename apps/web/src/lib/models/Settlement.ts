@@ -1,3 +1,4 @@
+import type { CrossCurrencySettlementFields } from '@splitbook/shared/cross-currency-settlement';
 import mongoose, { Schema, Model } from 'mongoose';
 import { readStoredAmountMinor } from '@splitbook/shared/exact-money';
 import {
@@ -7,7 +8,7 @@ import {
   type IPendingActivity,
 } from '@/lib/financial-write';
 
-export interface ISettlementDocument {
+export interface ISettlementDocument extends Partial<CrossCurrencySettlementFields> {
   _id: mongoose.Types.ObjectId;
   group: mongoose.Types.ObjectId;
   paidBy: mongoose.Types.ObjectId;
@@ -40,6 +41,20 @@ const SettlementSchema = new Schema<ISettlementDocument>(
       validate: (events: unknown[]) => events.length <= 100,
     },
     currency: { type: String, required: true, trim: true },
+    pairDebtBeforeMinor: { type: Number, validate: Number.isSafeInteger, immutable: true },
+    pairDebtAfterMinor: { type: Number, validate: Number.isSafeInteger, immutable: true },
+    amountPaidMinor: { type: Number, min: 1, validate: Number.isSafeInteger, immutable: true },
+    paidCurrency: { type: String, immutable: true },
+    appliedRate: { type: String, immutable: true },
+    suggestedRate: { type: String, immutable: true },
+    rateSource: {
+      type: String,
+      enum: ['frankfurter', 'exchange-rate-api', 'mixed'],
+      immutable: true,
+    },
+    rateAsOf: { type: String, immutable: true },
+    rateFetchedAt: { type: String, immutable: true },
+    rateKind: { type: String, enum: ['suggested', 'custom', 'entered'], immutable: true },
     note: { type: String, trim: true, maxlength: 500 },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },

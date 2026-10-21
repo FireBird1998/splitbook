@@ -405,12 +405,13 @@ in exact minor units, who paid, the split, the date and a Tag.
 
 ### Balances & Settlements
 
-| Component           | Description                                                                                                |
-| ------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `BalancesView`      | The Balances tab: all-time balance, Settle up (suggested payments), Everyone, Record payment and Payments  |
-| `EveryoneCard`      | Everyone (#313): each position as a diverging bar with a tooltip; its table adds "Settled by"; Chart/Table |
-| `RecordPaymentForm` | Record payment on the page: parties-only pairs, suggestion, overpayment tick, unconfirmed saves            |
-| `PaymentsTable`     | Payments: date and time, from → to, amount, note and who recorded it (names only)                          |
+| Component             | Description                                                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `BalancesView`        | The Balances tab: all-time balance, Settle up (suggested payments), Everyone, Record payment and Payments                                 |
+| `EveryoneCard`        | Everyone (#313): each position as a diverging bar with a tooltip; its table adds "Settled by"; Chart/Table                                |
+| `RecordPaymentForm`   | Record payment for the Debt in the currency shown: parties-only pairs, suggestion, overpayment tick, unconfirmed saves, and Pay in (#727) |
+| `CrossCurrencyFields` | A Debt paid in another currency: amount cleared, rate and amount paid, linked; the rate's tag, source and age (#727)                      |
+| `PaymentsTable`       | Payments: date and time, from → to, amount (and what it was paid as, at what rate), note and who recorded it                              |
 
 The suggestion, the overpayment check and the positions after come from the shared settlement
 preview (`@splitbook/shared/settlement-preview`). The UI says "Record payment" and "Payments";
@@ -448,9 +449,10 @@ in a `HomeSlot` of its width.
 
 ### Activity (`src/components/activity/`)
 
-| Component      | Description                                                   |
-| -------------- | ------------------------------------------------------------- |
-| `ActivityView` | Activity feed timeline — fetches one page of 50, no Load More |
+| Component           | Description                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `ActivityView`      | Activity feed timeline — fetches one page of 50, no Load More                                                   |
+| `PaymentRecordCard` | A Debt paid in another currency, opened from its Activity row: both amounts, the rate and the suggestion (#727) |
 
 ### Auth & demo
 
