@@ -211,3 +211,40 @@ test('a settle-up whose reply was lost is sent again unchanged from Check paymen
   expect(await settlementsOf(ledger, group)).toHaveLength(2);
   await expect(unconfirmed).toHaveCount(0);
 });
+
+test('a Debt that changes while Settle up is open is shown again, never overpaid (#734)', async ({
+  page,
+  ledger,
+}) => {
+  const group = await lisbonAndTokyo(ledger);
+  await openBalances(page, ledger, group);
+  await page.getByRole('button', { name: 'Settle both with Sam Chen' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Settle up with Sam Chen' });
+  await expect(sheet).toContainText('Total₹3,322.00');
+
+  // Meanwhile Alex records €15 of the euro Debt elsewhere: €5.00 is left.
+  await dataOf(
+    await ledger.alex.post(`/api/groups/${group}/settlements`, {
+      headers: { 'Idempotency-Key': randomUUID() },
+      data: { paidTo: sam, amount: 15, currency: 'EUR' },
+    }),
+    201,
+  );
+
+  await sheet.getByRole('button', { name: 'Record ₹3,322.00' }).click();
+  await expect(sheet).toContainText('The Debts changed. Check the payment, then record again.');
+  await expect(sheet.getByRole('row').nth(2)).toContainText('€5.00');
+  expect(await settlementsOf(ledger, group)).toHaveLength(1);
+
+  await sheet.getByRole('button', { name: 'Record ₹1,940.50' }).click();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Recorded. You paid Sam Chen ₹1,940.50' }),
+  ).toBeVisible();
+  const balances = await dataOf(await ledger.alex.get(`/api/groups/${group}/balances`));
+  const alexIn = (code: string) =>
+    balances.byCurrency
+      .find((row: { currency: string }) => row.currency === code)
+      ?.balances.find((row: { user: { _id: string } }) => row.user._id === alex)?.balance ?? 0;
+  // Settled in both, never owed back: and the yen Debt the other way is as it was.
+  expect([alexIn('INR'), alexIn('EUR'), alexIn('JPY')]).toEqual([0, 0, 8400]);
+});

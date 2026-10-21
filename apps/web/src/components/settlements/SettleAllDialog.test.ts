@@ -138,6 +138,8 @@ function element(props: Partial<SettleAllDialogProps> = {}) {
       names: { [YOU]: 'Alex Rivera', [SAM]: 'Sam Chen' },
       payCurrencies: ['INR', 'EUR'],
       stored: null,
+      // The Balances read again at Record: unchanged unless a test says otherwise.
+      recheck: async () => offer.debts,
       onClose: vi.fn(),
       onDone: done,
       onRefresh: vi.fn(),
@@ -327,5 +329,63 @@ describe('Settle up with Sam (#734)', () => {
     expect(done).toHaveBeenCalledWith(
       'Recorded. You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00.',
     );
+  });
+});
+
+describe('Debts that change while Settle up is open (#734)', () => {
+  it('shows the Debts as they are now and waits, never paying an amount that’s gone', async () => {
+    // Sam recorded €15 of the euro Debt meanwhile: €5.00 is left.
+    const recheck = vi.fn(async () => [
+      { currency: 'INR', amountMinor: 148000 },
+      { currency: 'EUR', amountMinor: 500 },
+    ]);
+    await mount({ recheck });
+    await press('Record ₹3,322.00');
+
+    expect(network.sent).toEqual([]);
+    expect(shown()).toContain('The Debts changed. Check the payment, then record again.');
+    expect(rows()).toEqual([
+      'Debt Rate You pay',
+      'INR ₹1,480.00 Same currency ₹1,480.00',
+      expect.stringMatching(/^EUR €5\.00 .*₹460\.50$/),
+      'Total ₹1,940.50',
+    ]);
+
+    await press('Record ₹1,940.50');
+    expect(recheck).toHaveBeenCalledTimes(2);
+    expect(network.sent).toHaveLength(1);
+    expect(network.sent[0].body).toMatchObject({
+      settlements: [
+        { amount: 1480, currency: 'INR' },
+        expect.objectContaining({ amount: 5, currency: 'EUR', amountPaidMinor: 46050 }),
+      ],
+    });
+  });
+
+  it('ends the payment when one of its Debts is gone', async () => {
+    const recheck = vi.fn(async () => [{ currency: 'INR', amountMinor: 148000 }]);
+    await mount({ recheck });
+    await press('Record ₹3,322.00');
+
+    expect(network.sent).toEqual([]);
+    expect(shown()).toContain(
+      'This suggested payment has changed. Close this to see the latest balances.',
+    );
+    expect(button('Record ₹3,322.00')).toBeUndefined();
+  });
+
+  it('sends a stored payment again as it was, without reading the Balances again', async () => {
+    network.replies = ['lost'];
+    const recheck = vi.fn(async () => offer.debts);
+    await mount({ recheck });
+    await press('Record ₹3,322.00');
+    expect(recheck).toHaveBeenCalledTimes(1);
+
+    const [kept] = storedAttempts();
+    await act(async () => renderer.update(element({ stored: kept, recheck })));
+    await press('Record ₹3,322.00 again');
+    expect(recheck).toHaveBeenCalledTimes(1);
+    expect(network.sent).toHaveLength(2);
+    expect(network.sent[1]).toEqual(network.sent[0]);
   });
 });

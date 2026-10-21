@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { RateSuggestion } from '@splitbook/shared/cross-currency-payment';
-import { readSettleAll, settleAllOffers, settleAllWords } from './settle-all';
+import {
+  rateKey,
+  readSettleAll,
+  settleAllDebtsBetween,
+  settleAllOffers,
+  settleAllRates,
+  settleAllWords,
+} from './settle-all';
 
 /*
  * #734: Settle up, on the board "Web · Settle both currencies at once". In Lisbon & Tokyo (INR,
@@ -208,5 +215,51 @@ describe('readSettleAll', () => {
       expect.objectContaining({ currency: 'EUR', paidMinor: 2000, kind: 'same' }),
     ]);
     expect(read.amounts!.totalPaidMinor).toBe(3607);
+  });
+});
+
+describe('settleAllDebtsBetween', () => {
+  it('reads every Debt one person owes another, in the Group’s order, as Record checks them', () => {
+    expect(settleAllDebtsBetween(buckets, ALEX, SAM, ORDER)).toEqual(twoDebts);
+    // One way only: what Sam owes Alex is a Debt of its own.
+    expect(settleAllDebtsBetween(buckets, SAM, ALEX, ORDER)).toEqual([
+      { currency: 'JPY', amountMinor: 8400 },
+    ]);
+    expect(settleAllDebtsBetween(buckets, PRIYA, ALEX, ORDER)).toEqual([]);
+  });
+});
+
+describe('settleAllRates', () => {
+  const ready = (rate: string) => ({
+    status: 'ready' as const,
+    suggestion: { ...frankfurter, rate },
+  });
+  const threeDebts = [...twoDebts, { currency: 'JPY', amountMinor: 2500 }];
+
+  it('gives each Debt the rate for the currency it is paid in, never another paying currency’s', () => {
+    const known = {
+      [rateKey('EUR', 'INR')]: ready('92.1'),
+      [rateKey('JPY', 'INR')]: ready('0.56'),
+      [rateKey('INR', 'EUR')]: ready('0.010858'),
+    };
+    expect(settleAllRates(threeDebts, 'INR', known, {})).toEqual({
+      INR: { state: { status: 'loading' }, custom: null },
+      EUR: { state: ready('92.1'), custom: null },
+      JPY: { state: ready('0.56'), custom: null },
+    });
+    // Paid in euros, the yen Debt's rate to euros isn't known yet: not the rupee one.
+    expect(settleAllRates(threeDebts, 'EUR', known, {})).toEqual({
+      INR: { state: ready('0.010858'), custom: null },
+      EUR: { state: { status: 'loading' }, custom: null },
+      JPY: { state: { status: 'loading' }, custom: null },
+    });
+  });
+
+  it('keeps the member’s own rate for a Debt beside what’s known', () => {
+    const known = { [rateKey('EUR', 'INR')]: ready('92.1') };
+    expect(settleAllRates(twoDebts, 'INR', known, { EUR: '92.50' }).EUR).toEqual({
+      state: ready('92.1'),
+      custom: '92.50',
+    });
   });
 });
