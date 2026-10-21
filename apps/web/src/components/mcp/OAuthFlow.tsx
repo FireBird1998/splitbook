@@ -78,8 +78,7 @@ export function ConsentPermissions({
           What <bdi>{details.name}</bdi> can do
         </Typography>
         <Typography>
-          Read only: answer questions about your Groups, balances, Expenses, payments and recent
-          changes.
+          Read only: answer questions about your Groups, balances and Expenses.
         </Typography>
       </Box>
       {details.scopes.includes(MCP_DRAFT_SCOPE) && (
