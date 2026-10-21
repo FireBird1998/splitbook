@@ -451,7 +451,7 @@ in a `HomeSlot` of its width.
 
 | Component           | Description                                                                                                     |
 | ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `ActivityView`      | Activity feed timeline — fetches one page of 50, no Load More                                                   |
+| `ActivityView`      | Activity feed timeline — 50 events per page, with Load older and Try again                                      |
 | `PaymentRecordCard` | A Debt paid in another currency, opened from its Activity row: both amounts, the rate and the suggestion (#727) |
 
 ### Auth & demo

@@ -50,6 +50,8 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     fetchWebActivity,
     {
       refreshInterval: 10_000,
+      // Page offsets move together when a new event arrives.
+      revalidateAll: true,
     },
   );
 
