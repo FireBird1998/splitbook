@@ -1830,10 +1830,14 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
           ? { members: [{ user: { id: actor } }, { user: { id: other } }] }
           : { defaultCurrency: 'EUR' },
       );
-      // Opened again, the sheet doesn't offer the refused payment.
+      // Opened again, the sheet doesn't offer a payment to someone who has left. A Debt in a
+      // currency the Group no longer lists is offered: Splitbook records a Debt in a currency the
+      // Group has used, whichever it lists now (#727, #728).
       from = sent.length;
       await controller.openRecordPayment(actor, recipient, 'INR');
-      expect(controller.getSnapshot().settlement).toMatchObject({ draft: null });
+      expect(controller.getSnapshot().settlement).toMatchObject(
+        code === 'INVALID_MEMBERS' ? { draft: null } : { draft: { currency: 'INR', amount: '30' } },
+      );
       expect(sent.slice(from).filter((request) => !request.startsWith('GET '))).toEqual([]);
       expect(writes).toHaveLength(1);
     },

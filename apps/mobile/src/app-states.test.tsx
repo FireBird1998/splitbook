@@ -2445,8 +2445,9 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await app.press('JPY, you’re owed ¥8,400');
     expect(seen()).toContain('All-time balance · JPY');
     expect(seen()).toContain('Suggested payments · JPY');
-    expect(seen()).toContain('Payments are recorded in INR, the main currency.');
-    expect(app.button('Record Sam Chen’s payment to you')).toBeNull();
+    // Sam's yen Debt is recorded on its own tab (#728).
+    expect(seen()).toContain('Record one once it’s paid');
+    expect(app.button('Record Sam Chen’s payment to you')).not.toBeNull();
 
     // Alex records the ₹30.00 owed to Sam: Balances stay on rupees, now settled up there, rather
     // than moving to euros, the first currency Alex still owes in.
