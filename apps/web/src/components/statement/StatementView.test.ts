@@ -205,5 +205,16 @@ describe('a statement with an Expense in a currency Splitbook no longer supports
       ),
     );
     expect(shown).toMatch(/Old Berlin rent[\s\S]*DEM\s40\.00/);
+    // The DEM section, first of the two: its members by name, and no position.
+    const dem = shown.slice(shown.indexOf('DEM Amounts stay'), shown.indexOf('INR Amounts stay'));
+    expect(dem).toContain('Alex Rivera');
+    expect(dem).toContain('Sam Chen');
+    expect(dem).not.toContain('Former member');
+    expect(dem).toContain(
+      'DEM is a currency Splitbook no longer supports, so this money isn’t in Balances.',
+    );
+    expect(dem).not.toContain('Settled up.');
+    expect(dem).not.toContain('Paid, Share and Net');
+    expect(dem).not.toContain('Balances and suggested payments');
   });
 });

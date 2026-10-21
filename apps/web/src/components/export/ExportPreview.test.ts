@@ -413,7 +413,16 @@ it('previews a statement with an Expense in a currency Splitbook no longer suppo
       statement: buildStatementPreview(statement),
     },
   });
-  expect(text(html)).toMatch(/DEM\s40\.00/);
+  const shown = text(html);
+  expect(shown).toMatch(/DEM\s40\.00/);
+  // Its members by name, and no position.
+  expect(shown).toMatch(/Alex[\s\S]*Sam/);
+  expect(shown).not.toContain('Former member');
+  expect(shown).toContain(
+    'DEM is a currency Splitbook no longer supports, so this money isn’t in Balances.',
+  );
+  expect(shown).not.toContain('Settled up.');
+  expect(shown).not.toContain('Current balances');
 });
 
 it('collapses settled empty statement currencies to the same one-line preview', () => {
