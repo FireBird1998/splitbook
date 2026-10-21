@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { View } from 'react-native';
 import {
   assistantGroupCountLabel,
@@ -46,9 +47,12 @@ const reach = (assistant: ListedAssistant) =>
 
 function AssistantRow({
   assistant,
+  offline,
   onAsk,
 }: {
   assistant: ListedAssistant;
+  /** Read only: Disconnect needs a connection. */
+  offline: boolean;
   onAsk: (id: string) => void;
 }) {
   // At large text Disconnect goes onto a line of its own, at the row's end, where it would
@@ -60,6 +64,8 @@ function AssistantRow({
       variant="text"
       dense
       accessibilityLabel={`Disconnect ${assistant.name}`}
+      disabled={offline}
+      hint={offline ? disconnectNeedsConnection : undefined}
       onPress={() => onAsk(assistant.id)}
     />
   );
@@ -135,10 +141,15 @@ export function ConnectedAssistants({
             {assistants.map((assistant, index) => (
               <View key={assistant.id}>
                 {index > 0 ? <Divider inset={60} /> : null}
-                <AssistantRow assistant={assistant} onAsk={onAsk} />
+                <AssistantRow assistant={assistant} offline={offline} onAsk={onAsk} />
               </View>
             ))}
           </Card>
+          {offline ? (
+            <CompactText variant="caption" tone="secondary" style={{ paddingHorizontal: 2 }}>
+              {disconnectNeedsConnection}
+            </CompactText>
+          ) : null}
         </View>
       ) : assistants ? (
         <Card padded>
@@ -216,6 +227,8 @@ export function AssistantsSnackbar({
   message: string;
   onDismiss: () => void;
 }) {
-  useDismissAfter({ message }, 4000, onDismiss);
+  // One notice per message, so the time runs from when it appeared, not from each render.
+  const notice = useMemo(() => ({ message }), [message]);
+  useDismissAfter(notice, 4000, onDismiss);
   return <Snackbar message={message} bottom={24} />;
 }

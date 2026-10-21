@@ -5168,6 +5168,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** Account → Connected assistants (#622), where the server has assistants switched on. */
   const openAssistants = () => {
     if (route.screen !== 'settings' || snapshot.assistants.available !== true) return;
+    // A snackbar from an earlier visit has said its piece.
+    assistantsData.dismiss();
     navigate({ screen: 'assistants' });
     void assistantsData.read();
   };
@@ -6164,6 +6166,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       case 'assistants':
         // Its Disconnect sheet closes first, and holds while disconnecting.
         if (snapshot.assistants.confirming) return assistantsData.cancel();
+        // Its snackbar goes with it.
+        assistantsData.dismiss();
         return navigate({ screen: 'settings' });
       default:
         return showHome();
