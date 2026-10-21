@@ -203,6 +203,11 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
           </Stack>
         </Box>
       ))}
+      {error && (
+        <Typography role="alert" color="error.main">
+          Couldn’t load older activity. The events shown are still here.
+        </Typography>
+      )}
       {(hasOlder || error) && (
         <Button
           variant="text"
@@ -210,7 +215,11 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
           onClick={() => void setSize((data?.length ?? 0) + (hasOlder ? 1 : 0))}
           sx={{ alignSelf: 'center' }}
         >
-          {loadingOlder ? 'Loading older…' : error ? 'Try again' : 'Load older'}
+          {loadingOlder
+            ? 'Loading older activity…'
+            : error
+              ? 'Try loading older activity'
+              : 'Load older activity'}
         </Button>
       )}
     </Stack>
