@@ -1,7 +1,13 @@
 import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { describe, expect, it, vi } from 'vitest';
 import { decodeStoredSession } from './cookies';
-import type { AccountLocalStorage, CredentialStore, FetchResponse, MobileFetch } from './types';
+import type {
+  AccountLocalStorage,
+  CredentialStore,
+  MobileDependencies,
+  FetchResponse,
+  MobileFetch,
+} from './types';
 
 const alex = {
   id: 'a00000000000000000000001',
@@ -150,6 +156,8 @@ function setup(
       init: RequestInit,
     ) => FetchResponse | Promise<FetchResponse> | undefined;
     newSubmissionKey?: (() => string) | null;
+    /** This phone's Expense drafts, for a test that opens the Expense form. */
+    expenseDrafts?: MobileDependencies['expenseDrafts'];
   } = {},
 ) {
   let keys = 0;
@@ -205,6 +213,7 @@ function setup(
       pendingInvitation: options.pending,
       accountLocal: options.accountLocal ?? device?.accountLocal,
       groupCreations: device?.groupCreations,
+      expenseDrafts: options.expenseDrafts,
       newSubmissionKey:
         options.newSubmissionKey === null
           ? undefined
@@ -1463,11 +1472,27 @@ describe('native session and Group boundary', () => {
       category: 'trip',
       defaultCurrency: 'INR',
       alternateCurrencies: ['EUR', 'JPY'],
+      // Its default Tags, which a new Expense needs.
+      tags: [{ _id: 'a00000000000000000000020', name: 'Food', isArchived: false, createdAt: iso }],
     };
     /** Alex at the new-Group form, with the server keeping what each creation sends. */
     const creating = async () => {
       const sent: Array<Record<string, unknown>> = [];
+      const drafts = new Map<string, unknown>();
       const { controller } = setup({
+        expenseDrafts: {
+          keys: async () => [...drafts.keys()],
+          load: async (_accountId, id) => structuredClone(drafts.get(id) ?? null),
+          save: async (_accountId, id, value) => {
+            drafts.set(id, structuredClone(value));
+          },
+          remove: async (_accountId, id) => {
+            drafts.delete(id);
+          },
+          clear: async () => {
+            drafts.clear();
+          },
+        },
         intercept: (path, init) => {
           if (path === '/api/groups' && init.method === 'POST') {
             sent.push(JSON.parse(String(init.body)));

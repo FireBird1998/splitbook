@@ -8,15 +8,14 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
-import MenuItem from '@mui/material/MenuItem';
 import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
 import Collapse from '@mui/material/Collapse';
 import CircularProgress from '@mui/material/CircularProgress';
-import Autocomplete from '@mui/material/Autocomplete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { CURRENCIES, CURRENCY_CODES } from '@splitbook/shared/currency';
+import { normaliseExtraCurrencies } from '@splitbook/shared/group-currencies';
 import {
   isValidParticipantEmail,
   normalizeParticipantEmails,
@@ -25,6 +24,7 @@ import {
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory } from '@splitbook/shared/types';
 import { apiFetch } from '@/lib/utils/api-fetch';
+import ExtraCurrenciesStep from '@/components/groups/ExtraCurrenciesStep';
 
 export default function NewGroupPage() {
   const router = useRouter();
@@ -44,7 +44,7 @@ export default function NewGroupPage() {
   const [participants, setParticipants] = useState<string[]>([]);
 
   const [description, setDescription] = useState('');
-  const [alternateCurrencies, setAlternateCurrencies] = useState<string[]>([]);
+  const [extraCurrencies, setExtraCurrencies] = useState<string[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -70,6 +70,9 @@ export default function NewGroupPage() {
 
   const theme = getGroupTheme(category);
   const nounTitle = theme.nouns.singular.charAt(0).toUpperCase() + theme.nouns.singular.slice(1);
+  // A new Trip's extra currencies (#723), never its main currency, even one the saved preference
+  // loaded after they were chosen.
+  const extras = normaliseExtraCurrencies(defaultCurrency, extraCurrencies);
   const showDates = theme.dates === 'bounded';
   const dateError = showDates ? validateTripDates(startDate || null, endDate || null) : null;
 
@@ -105,7 +108,8 @@ export default function NewGroupPage() {
           description: description || undefined,
           category,
           defaultCurrency,
-          alternateCurrencies,
+          // Other themes add them later in the Group's settings.
+          alternateCurrencies: theme.extraCurrenciesAtSetup ? extras : [],
           startDate: showDates ? startDate || null : null,
           endDate: showDates ? endDate || null : null,
         }),
@@ -272,23 +276,38 @@ export default function NewGroupPage() {
 
           <TextField
             select
-            label="Currency"
+            id="main-currency"
+            label="Main currency"
             value={defaultCurrency}
-            onChange={(e) => setSelectedCurrency(e.target.value)}
+            onChange={(e) => {
+              setSelectedCurrency(e.target.value);
+              // An extra currency that becomes the main currency leaves the list.
+              setExtraCurrencies((list) => list.filter((code) => code !== e.target.value));
+            }}
             fullWidth
             required
+            slotProps={{ select: { native: true } }}
             helperText={
               waitingForCurrency
                 ? 'Loading saved currency…'
-                : `One currency per ${theme.nouns.singular}`
+                : 'Locked once money is recorded. Pick the one most of you settle in.'
             }
           >
             {CURRENCIES.map((c) => (
-              <MenuItem key={c.code} value={c.code} onClick={() => setSelectedCurrency(c.code)}>
+              <option key={c.code} value={c.code}>
                 {c.flag} {c.code} — {c.name}
-              </MenuItem>
+              </option>
             ))}
           </TextField>
+
+          {theme.extraCurrenciesAtSetup && (
+            <ExtraCurrenciesStep
+              mainCurrency={defaultCurrency}
+              value={extras}
+              onChange={setExtraCurrencies}
+              disabled={loading}
+            />
+          )}
 
           <Box>
             <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1 }}>
@@ -359,25 +378,6 @@ export default function NewGroupPage() {
                 rows={2}
                 placeholder={`What’s this ${theme.nouns.singular} for?`}
               />
-              <Autocomplete
-                multiple
-                options={CURRENCIES.filter((c) => c.code !== defaultCurrency).map((c) => c.code)}
-                value={alternateCurrencies}
-                onChange={(_, val) => setAlternateCurrencies(val.slice(0, 2))}
-                getOptionLabel={(code) => {
-                  const c = CURRENCIES.find((cur) => cur.code === code);
-                  return c ? `${c.flag} ${c.code} — ${c.name}` : code;
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Alternate currencies (max 2)"
-                    helperText={`Legacy option — expenses still use the ${theme.nouns.singular} currency`}
-                  />
-                )}
-                disableCloseOnSelect
-                limitTags={2}
-              />
             </Stack>
           </Collapse>
 
@@ -398,7 +398,7 @@ export default function NewGroupPage() {
               variant="contained"
               disabled={loading || waitingForCurrency || !name.trim() || Boolean(dateError)}
             >
-              {loading ? <CircularProgress size={20} /> : `Create ${theme.nouns.singular}`}
+              {loading ? <CircularProgress size={20} /> : `Create ${nounTitle}`}
             </Button>
           </Stack>
         </Stack>
@@ -429,7 +429,7 @@ export default function NewGroupPage() {
             variant="contained"
             disabled={loading || waitingForCurrency || !name.trim() || Boolean(dateError)}
           >
-            {loading ? <CircularProgress size={20} /> : `Create ${theme.nouns.singular}`}
+            {loading ? <CircularProgress size={20} /> : `Create ${nounTitle}`}
           </Button>
         </Box>
       </Box>

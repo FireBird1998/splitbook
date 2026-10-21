@@ -52,7 +52,7 @@ export const GROUP_THEMES: Record<GroupCategory, GroupTheme> = {
     dates: 'bounded',
     signature: 'checklist',
     recurringExpenses: false,
-    extraCurrenciesAtSetup: false,
+    extraCurrenciesAtSetup: true,
     defaultTags: DEFAULT_GROUP_TAGS_BY_CATEGORY.trip,
     nouns: { singular: 'trip', plural: 'trips' },
     namePlaceholder: 'e.g. Goa Weekend',

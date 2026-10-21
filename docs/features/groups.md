@@ -36,8 +36,9 @@ Groups are the core organizing unit. Every expense, settlement, and activity bel
    - Name (required)
    - Description (optional)
    - Category selector (radio/chips)
-   - Default currency (dropdown, defaults to user's preferred currency)
-   - Alternate currencies (up to 2, optional dropdown)
+   - Main currency (dropdown, defaults to user's preferred currency; locked once money is recorded)
+   - A Trip only: "Spending abroad?", its extra currencies (optional, up to 4, never the main
+     currency). Other themes add them later in the Group's settings (#723)
 3. User submits → API creates group → User becomes admin member
 4. Redirect to group detail page
 5. Activity logged: "group_created"

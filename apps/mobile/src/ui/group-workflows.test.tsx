@@ -216,6 +216,12 @@ describe('a new Trip’s extra currencies (#723)', () => {
         (node.type as unknown) === 'Pressable' &&
         String(node.props.accessibilityLabel).startsWith(label),
     );
+  /** A currency in the list, by its spoken name exactly: "EUR, Euro". */
+  const currencyRow = (label: string) =>
+    renderer!.root.findAll(
+      (node: ReactTestInstance) =>
+        (node.type as unknown) === 'Pressable' && node.props.accessibilityLabel === label,
+    );
   const choosing = () =>
     renderer!.root.find((node: ReactTestInstance) => (node.type as unknown) === 'Modal').props
       .visible;
@@ -244,9 +250,9 @@ describe('a new Trip’s extra currencies (#723)', () => {
     const onChange = form(lisbonAndTokyo);
     act(() => activateWithScreenReader(pressables('Add a currency')[0]));
     expect(choosing()).toBe(true);
-    expect(pressables('INR, ')).toHaveLength(0);
-    expect(pressables('EUR, ')).toHaveLength(0);
-    act(() => activateWithScreenReader(pressables('USD, ')[0]));
+    expect(currencyRow('INR, Indian Rupee')).toHaveLength(0);
+    expect(currencyRow('EUR, Euro')).toHaveLength(0);
+    act(() => activateWithScreenReader(currencyRow('USD, US Dollar')[0]));
     expect(onChange).toHaveBeenCalledExactlyOnceWith({ extraCurrencies: ['EUR', 'JPY', 'USD'] });
     expect(choosing()).toBe(false);
   });
@@ -257,6 +263,8 @@ describe('a new Trip’s extra currencies (#723)', () => {
     expect(pressables('Add a currency')[0].props.accessibilityState).toMatchObject({
       disabled: true,
     });
+    // Disabled for Android too, not only as TalkBack says it.
+    expect(pressables('Add a currency')[0].props.disabled).toBe(true);
   });
 
   it('isn’t offered for a Household, which adds them later in settings', () => {

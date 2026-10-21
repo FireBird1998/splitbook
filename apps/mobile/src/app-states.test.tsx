@@ -1171,7 +1171,7 @@ describe('offline', () => {
     await app.press('New Group');
     const name = app.hosts((p) => p.accessibilityLabel === 'Trip name, required')[0];
     await settle(Promise.resolve(name.props.onChangeText('Cabin Weekend')));
-    const create = app.button('Create trip')!;
+    const create = app.button('Create Trip')!;
     expect(create.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(create.props.accessibilityHint).toBe('Saving needs a connection.');
     expect(app.text()).toContain('Saving needs a connection.');

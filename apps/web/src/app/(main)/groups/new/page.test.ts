@@ -13,12 +13,16 @@ const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
 
 const requests = vi.hoisted(() => [] as { method: string; path: string; body: unknown }[]);
+/** The member's saved currency, and when its read answers. */
+const profile = vi.hoisted(() => ({ currency: 'INR', answered: Promise.resolve() }));
 vi.mock('@/lib/utils/api-fetch', () => ({
   apiFetch: async (path: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
     requests.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    if (method === 'GET' && path === '/api/user/profile')
-      return Response.json({ data: { preferredCurrency: 'INR' } });
+    if (method === 'GET' && path === '/api/user/profile') {
+      await profile.answered;
+      return Response.json({ data: { preferredCurrency: profile.currency } });
+    }
     if (method === 'POST' && path === '/api/groups')
       return Response.json({ data: { _id: 'b00000000000000000000010' } }, { status: 201 });
     return Response.json({ error: 'Unplanned' }, { status: 500 });
@@ -110,6 +114,8 @@ async function submit() {
 }
 
 beforeEach(() => {
+  profile.currency = 'INR';
+  profile.answered = Promise.resolve();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('window', browserWindow);
   vi.stubGlobal('document', browserDocument);
@@ -172,6 +178,27 @@ describe('a new Trip’s extra currencies (#723)', () => {
     await choose(addCurrency(), 'EUR');
     await choose(addCurrency(), 'JPY');
     await choose(mainCurrency(), 'EUR');
+    expect(shown()).toContain('1 of 4');
+    await name('Lisbon & Tokyo');
+    expect(await submit()).toMatchObject({ defaultCurrency: 'EUR', alternateCurrencies: ['JPY'] });
+  });
+
+  it('don’t come back when the main currency changes back', async () => {
+    await mount();
+    await choose(addCurrency(), 'EUR');
+    await choose(mainCurrency(), 'EUR');
+    await choose(mainCurrency(), 'INR');
+    expect(shown()).toContain('0 of 4');
+  });
+
+  it('lose one the saved currency makes the main currency, read after they were chosen', async () => {
+    let answer!: () => void;
+    profile.currency = 'EUR';
+    profile.answered = new Promise((resolve) => (answer = resolve));
+    await mount();
+    await choose(addCurrency(), 'EUR');
+    await choose(addCurrency(), 'JPY');
+    await act(async () => answer());
     expect(shown()).toContain('1 of 4');
     await name('Lisbon & Tokyo');
     expect(await submit()).toMatchObject({ defaultCurrency: 'EUR', alternateCurrencies: ['JPY'] });
