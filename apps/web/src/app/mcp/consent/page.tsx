@@ -3,6 +3,7 @@ import { getAuthUser } from '@/lib/utils/api-response';
 import { mcpResource } from '@/lib/mcp/config';
 import { oauthPageQuery } from '@/lib/mcp/page-query';
 import OAuthFlow from '@/components/mcp/OAuthFlow';
+import { assistantLedgerService } from '@/lib/services/assistant-ledger.service';
 
 export const dynamic = 'force-dynamic';
 export default async function Page({
@@ -21,6 +22,7 @@ export default async function Page({
       account={{ id: user.id, name: user.name, email: user.email }}
       query={query}
       consent={true}
+      groups={await assistantLedgerService.approvalGroups(user.id)}
     />
   );
 }

@@ -31,6 +31,7 @@ import {
   type McpConnection,
   type McpConsent,
 } from './grants';
+import { excludedGroupsSchema, recordExcludedGroups } from './excluded-groups';
 import { PRODUCT_NAME } from '@/lib/product';
 
 export function mcpAuthPlugins(env: AuthEnv) {
@@ -79,6 +80,36 @@ export function mcpAuthPlugins(env: AuthEnv) {
             });
           }),
         },
+        {
+          matcher: (ctx) => ctx.path === '/oauth2/consent',
+          handler: createAuthMiddleware(async (ctx) => {
+            // The Groups the member unticked (#617), recorded before consent is given.
+            const body = ctx.body as
+              | { accept?: unknown; oauth_query?: unknown; excluded_groups?: unknown }
+              | undefined;
+            if (body?.accept !== true || body.excluded_groups === undefined) return;
+            const excluded = excludedGroupsSchema.safeParse(body.excluded_groups);
+            if (!excluded.success)
+              throw new APIError('BAD_REQUEST', { message: 'Unsupported Group selection.' });
+            const session = await getSessionFromCtx(ctx);
+            // Consent itself refuses a missing session or an invalid request.
+            if (
+              !session ||
+              typeof body.oauth_query !== 'string' ||
+              !(await verifyOAuthQueryParams(body.oauth_query, ctx.context.secret))
+            )
+              return;
+            const clientId = new URLSearchParams(body.oauth_query).get('client_id');
+            if (!clientId) return;
+            await requireMcpMember(ctx.context.adapter, session.user.id, env);
+            await recordExcludedGroups(
+              ctx.context.adapter,
+              session.user.id,
+              clientId,
+              excluded.data,
+            );
+          }),
+        },
       ],
     },
     schema: {
@@ -91,6 +122,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
             references: { model: 'user', field: 'id', onDelete: 'cascade' },
           },
           clientId: { type: 'string', required: true },
+          // The Groups the member left out of this assistant's reach (#617).
+          excludedGroupIds: { type: 'string[]', required: false },
           generation: { type: 'string', required: true },
           createdAt: { type: 'date', required: true },
           name: { type: 'string', required: false },

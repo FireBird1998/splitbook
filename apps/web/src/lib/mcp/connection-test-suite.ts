@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { connectedAssistantName } from './assistant-name';
+import { connectedAssistantActor } from './assistant-actor';
 import { registerSplitbookTools } from './tools';
 import { createServer, type Server } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
@@ -239,17 +239,15 @@ export function connectionTests(mongo = false) {
           scopes,
           true,
         ),
-      async (server, id, scopes, authorize, clientId) => {
+      async (server, id, scopes, authorize, clientId, generation) => {
         if (exposeTools)
           registerSplitbookTools(
             server,
-            {
-              id,
+            await connectedAssistantActor(
+              (await auth.$context).adapter,
+              { userId: id, clientId, generation },
               authorize,
-              assistant: {
-                name: await connectedAssistantName((await auth.$context).adapter, clientId),
-              },
-            },
+            ),
             scopes,
             origin,
           );

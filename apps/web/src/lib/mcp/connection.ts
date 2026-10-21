@@ -26,6 +26,7 @@ export function createMcpConnectionHandler(
     scopes: string[],
     authorize: () => Promise<void>,
     clientId: string,
+    generation: unknown,
   ) => void | Promise<void>,
   requestCheck?: (subject: string) => Promise<Response | null>,
 ) {
@@ -88,6 +89,7 @@ export function createMcpConnectionHandler(
                 throw new Error('FORBIDDEN');
             },
             String(claims.client_id),
+            claims.splitbook_generation,
           );
           return server;
         },

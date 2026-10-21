@@ -1,6 +1,6 @@
 # Connected assistants: access and safety
 
-Updated 21 October 2026. The model below is chosen in [#603](https://github.com/FireBird1998/splitbook/issues/603). **Settings with confirmed Disconnect (#615) and server-enforced idle expiry (#618) are implemented. Excluded Groups and the Assistant rule remain separate work.** [Research](research.md) separates current behavior from requirements.
+Updated 21 October 2026. The model below is chosen in [#603](https://github.com/FireBird1998/splitbook/issues/603). **Settings with confirmed Disconnect (#615) and server-enforced idle expiry (#618) are implemented. Excluded Groups are chosen at approval and enforced by every tool since #617. The Assistant rule remains separate work.** [Research](research.md) separates current behavior from requirements.
 
 ## Group access
 
@@ -10,7 +10,7 @@ Reachable Groups = current membership − the connection's Excluded Groups − G
 - The member changes Excluded Groups on the per-assistant page without reconnecting. The next call uses the new selection. Explain that answers leave unticked Groups out.
 - Only admins change the Group's Assistant rule: Allowed by default, or Not allowed. A change records an Activity event naming the admin and new rule.
 - All members see the rule. Only admins see the member, assistant name and last used for assistants that can reach the Group.
-- Every tool enforces current membership, exclusions and the rule alongside grant/revocation checks, including tools for Drafts. Lists omit unreachable Groups. Requests by id will return the same “Group not found” result as a nonexistent Group (#617; today a missing or non-member Group is refused as forbidden); no count, name or existence hint is disclosed.
+- Every tool enforces current membership, exclusions and the rule alongside grant/revocation checks, including tools for Drafts. Lists omit unreachable Groups. Requests by id return the same “Group not found” result as a nonexistent Group or one the member isn’t in (#617); no count, name or existence hint is disclosed.
 - For an Excluded or Not allowed Group, every Draft tool (list, create, replace and discard) is refused, while the member's existing Drafts stay in their To review. Leaving a Group still blocks the former member's access; it does not grant an exception for retained Drafts.
 
 ## Consent and client identity

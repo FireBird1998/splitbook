@@ -27,6 +27,9 @@ export function registerSplitbookTools(
       const value = await work();
       return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
     } catch (error) {
+      // A Group out of reach answers as one that doesn't exist (#617).
+      if (error instanceof Error && error.message === 'GROUP_NOT_FOUND')
+        return { isError: true, content: [{ type: 'text' as const, text: 'Group not found' }] };
       const message =
         error instanceof z.ZodError
           ? error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')
@@ -53,7 +56,7 @@ export function registerSplitbookTools(
       inputSchema: z.object({ after: draftObjectId.optional() }).strict(),
       annotations: read,
     },
-    (input) => run(() => assistantLedgerService.groups(actor.id, input.after)),
+    (input) => run(() => assistantLedgerService.groups(actor, input.after)),
   );
   server.registerTool(
     'group_context',
@@ -63,7 +66,7 @@ export function registerSplitbookTools(
       inputSchema: z.object({ groupId: draftObjectId }).strict(),
       annotations: read,
     },
-    (input) => run(() => assistantLedgerService.context(actor.id, input.groupId)),
+    (input) => run(() => assistantLedgerService.context(actor, input.groupId)),
   );
   server.registerTool(
     'group_balances',
@@ -73,7 +76,7 @@ export function registerSplitbookTools(
       inputSchema: z.object({ groupId: draftObjectId }).strict(),
       annotations: read,
     },
-    (input) => run(() => assistantLedgerService.balances(actor.id, input.groupId)),
+    (input) => run(() => assistantLedgerService.balances(actor, input.groupId)),
   );
   server.registerTool(
     'group_spending',
@@ -98,7 +101,7 @@ export function registerSplitbookTools(
         .refine((input) => input.from <= input.to, 'from must not be after to'),
       annotations: read,
     },
-    (input) => run(() => assistantLedgerService.spending(actor.id, input)),
+    (input) => run(() => assistantLedgerService.spending(actor, input)),
   );
   if (!scopes.includes(MCP_DRAFT_SCOPE) || process.env.PERSISTENT_DRAFTS_ENABLED !== 'true') return;
   const reviewDescription = `These are items in the member's To review in Splitbook, where only the member can save them as Expenses; never call them drafts. Limit: ${ACTIVE_DRAFTS_PER_MEMBER} per member per Group.`;

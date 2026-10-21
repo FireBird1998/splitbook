@@ -1,12 +1,13 @@
 'use client';
 
 import { apiFetch } from '@/lib/utils/api-fetch';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import FormGroup from '@mui/material/FormGroup';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -16,6 +17,8 @@ import { ASSISTANT_CANNOT } from '@/lib/mcp/assistant-limits';
 import type { AssistantDisplay } from '@/lib/mcp/assistant-name';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { PRODUCT_NAME } from '@/lib/product';
+import type { AssistantGroup } from '@/lib/services/assistant-ledger.service';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
 
 /** A connection request as the approval page shows it: the assistant, and what it asks for. */
 type ConsentDetails = AssistantDisplay & { scopes: string[] };
@@ -26,19 +29,22 @@ type SignedInAccount = { id: string; name: string; email: string };
 /**
  * The permissions a connection request asks for, as the approval page lists them: the assistant
  * by name, with its address in small text when it has one (#614), ledger access, and, when it
- * asks for them, preparing items for To review and staying connected; then what it can't do, on
- * every approval.
+ * asks for them, preparing items for To review and staying connected; then which Groups it
+ * reaches (#617) and what it can't do, on every approval.
  */
 export function ConsentPermissions({
   details,
   drafts,
   busy,
   onDraftsChange,
+  groups,
 }: {
   details: ConsentDetails;
   drafts: boolean;
   busy: boolean;
   onDraftsChange: (drafts: boolean) => void;
+  /** The Group checklist, between what the assistant can and can't do. */
+  groups?: ReactNode;
 }) {
   return (
     <>
@@ -81,6 +87,7 @@ export function ConsentPermissions({
           The assistant may stay connected while you are away, until you disconnect it.
         </Typography>
       )}
+      {groups}
       <Box>
         <Typography variant="subtitle2" component="h3" sx={{ overflowWrap: 'anywhere' }}>
           What <bdi>{details.name}</bdi> can’t do
@@ -95,6 +102,110 @@ export function ConsentPermissions({
       </Box>
     </>
   );
+}
+
+/** "Trip · INR", or "Work · EUR · Archived": what a Group is, beside its name. */
+function groupMeta(group: AssistantGroup) {
+  return [getGroupTheme(group.theme ?? 'other').label, group.currency]
+    .concat(group.archived ? ['Archived'] : [])
+    .join(' · ');
+}
+
+/**
+ * Which Groups the assistant reaches (#617): every Group ticked to start. The ones the member
+ * unticks become that connection's Excluded Groups, and Groups joined later are included.
+ */
+export function ConsentGroups({
+  name,
+  groups,
+  excluded,
+  disabled,
+  onExcludedChange,
+}: {
+  name: string;
+  groups: readonly AssistantGroup[];
+  excluded: readonly string[];
+  disabled: boolean;
+  onExcludedChange: (excluded: string[]) => void;
+}) {
+  const nonePicked = groups.length > 0 && groups.every((group) => excluded.includes(group.id));
+  return (
+    <Box component="fieldset" sx={{ border: 0, m: 0, p: 0, minWidth: 0 }}>
+      <Typography component="legend" variant="subtitle2" sx={{ p: 0 }}>
+        Which Groups
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        Groups you join later are included.
+      </Typography>
+      {groups.length > 0 && (
+        <FormGroup>
+          {groups.map((group) => (
+            <FormControlLabel
+              key={group.id}
+              control={
+                <Checkbox
+                  checked={!excluded.includes(group.id)}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onExcludedChange(
+                      event.target.checked
+                        ? excluded.filter((id) => id !== group.id)
+                        : [...excluded, group.id],
+                    )
+                  }
+                />
+              }
+              label={
+                <Box sx={{ py: 0.5 }}>
+                  <Typography variant="body2" fontWeight={500}>
+                    {group.name}
+                  </Typography>
+                  <Typography variant="caption" component="p" color="text.secondary">
+                    {groupMeta(group)}
+                  </Typography>
+                </Box>
+              }
+            />
+          ))}
+        </FormGroup>
+      )}
+      {groups.length > 0 && (
+        <Typography variant="body2">
+          Groups you untick are left out of {name}’s answers, so its totals won’t include them.
+        </Typography>
+      )}
+      {nonePicked && (
+        <Typography variant="body2" color="error" role="status">
+          Pick at least one Group.
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * The consent the page submits: the scopes allowed and, with an Allow, the Groups left out
+ * (#617). A Deny says nothing about Groups.
+ */
+export function consentRequest({
+  query,
+  accept,
+  scopes,
+  drafts,
+  excluded,
+}: {
+  query: string;
+  accept: boolean;
+  scopes: readonly string[];
+  drafts: boolean;
+  excluded: readonly string[];
+}) {
+  return {
+    oauth_query: query,
+    accept,
+    scope: scopes.filter((scope) => scope !== MCP_DRAFT_SCOPE || drafts).join(' '),
+    ...(accept ? { excluded_groups: excluded } : {}),
+  };
 }
 
 /** Who is approving: the signed-in member, by name and email (#614). */
@@ -172,13 +283,18 @@ export default function OAuthFlow({
   query,
   consent,
   account,
+  groups = [],
 }: {
   query: string;
   consent: boolean;
   account: SignedInAccount;
+  /** The member's Groups, for the approval page to tick or leave out (#617). */
+  groups?: readonly AssistantGroup[];
 }) {
   const [details, setDetails] = useState<ConsentDetails | null>(null);
   const [drafts, setDrafts] = useState(false);
+  const [excluded, setExcluded] = useState<string[]>([]);
+  const nonePicked = groups.length > 0 && groups.every((group) => excluded.includes(group.id));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -212,17 +328,11 @@ export default function OAuthFlow({
       const response = await apiFetch(`/api/auth/oauth2/${consent ? 'consent' : 'continue'}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', [EXPECTED_ACCOUNT_HEADER]: account.id },
-        body: JSON.stringify({
-          oauth_query: query,
-          ...(consent
-            ? {
-                accept,
-                scope: details?.scopes
-                  .filter((scope) => scope !== MCP_DRAFT_SCOPE || drafts)
-                  .join(' '),
-              }
-            : { selected: true }),
-        }),
+        body: JSON.stringify(
+          consent
+            ? consentRequest({ query, accept, scopes: details?.scopes ?? [], drafts, excluded })
+            : { oauth_query: query, selected: true },
+        ),
       });
       const result = await response.json();
       if (!response.ok)
@@ -251,16 +361,21 @@ export default function OAuthFlow({
           {consent ? (
             <>
               <SignedInAs account={account} />
-              <Typography>
-                This connection can access all Groups you belong to now and any you join in the
-                future, while you remain a member.
-              </Typography>
               {details && (
                 <ConsentPermissions
                   details={details}
                   drafts={drafts}
                   busy={busy}
                   onDraftsChange={setDrafts}
+                  groups={
+                    <ConsentGroups
+                      name={details.name}
+                      groups={groups}
+                      excluded={excluded}
+                      disabled={busy}
+                      onExcludedChange={setExcluded}
+                    />
+                  }
                 />
               )}
               <Alert severity="info">
@@ -275,7 +390,7 @@ export default function OAuthFlow({
               </Typography>
               <ConsentChoice
                 name={details?.name ?? null}
-                disabled={busy || !details}
+                disabled={busy || !details || nonePicked}
                 onAllow={() => void submit()}
                 onDeny={() => void submit(false)}
               />

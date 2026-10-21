@@ -64,6 +64,8 @@ export interface DraftActor {
   assistant?: { name: string };
   /** Recheck a connected assistant at each write authorization. */
   authorize?: () => Promise<void>;
+  /** Set only by the MCP boundary: the Groups this connection leaves out (#617). */
+  excludedGroupIds?: readonly string[];
 }
 
 function attribution(actor: DraftActor): DraftAttribution {
@@ -106,11 +108,22 @@ function access(actor: DraftActor, groupId: string) {
   };
 }
 
+/**
+ * What a connected assistant reaches (#617): never a Group its connection leaves out, and to it
+ * a Group out of reach answers exactly as one that doesn't exist. Null for a member.
+ */
+function assistantReach(actor: DraftActor) {
+  return actor.assistant
+    ? { excluded: (actor.excludedGroupIds ?? []).map((id) => new mongoose.Types.ObjectId(id)) }
+    : null;
+}
+
 async function requireMembership(
   scope: ReturnType<typeof access>,
   session?: mongoose.ClientSession,
   /** A save or an assistant's preparation, which an archived Group refuses (#578). */
   refuseArchived = false,
+  reach: ReturnType<typeof assistantReach> = null,
 ) {
   const account = await mongoose.connection
     .db!.collection('users')
@@ -121,13 +134,13 @@ async function requireMembership(
   if (!account) throw new Error('FORBIDDEN');
   const group = await mongoose.connection.db!.collection('groups').findOne(
     {
-      _id: scope.group,
+      _id: reach ? { $eq: scope.group, $nin: reach.excluded } : scope.group,
       'members.user': scope.owner,
       deletionRequestedAt: null,
     },
     { session, projection: { _id: 1, defaultCurrency: 1, isArchived: 1 } },
   );
-  if (!group) throw new Error('FORBIDDEN');
+  if (!group) throw new Error(reach ? 'GROUP_NOT_FOUND' : 'FORBIDDEN');
   if (refuseArchived && group.isArchived) throw new Error('GROUP_ARCHIVED');
   return group.defaultCurrency as string | undefined;
 }
@@ -209,7 +222,7 @@ async function mutate<T>(
   const scope = access(actor, groupId);
   const drafts = await collection();
   await actor.authorize?.();
-  await requireMembership(scope, undefined, refuseArchived);
+  await requireMembership(scope, undefined, refuseArchived, assistantReach(actor));
   // No count-then-insert fallback: it would violate the per-member cap under concurrency.
   if (!(await supportsGroupTransactions())) throw new Error('DRAFT_TRANSACTIONS_REQUIRED');
   return withGroupMutation(String(scope.group), async (session) => {
@@ -224,7 +237,12 @@ async function mutate<T>(
       );
     if (!account.matchedCount) throw new Error('FORBIDDEN');
     // Checked again inside the transaction, so an archive that commits first stops the write.
-    const groupCurrency = await requireMembership(scope, session, refuseArchived);
+    const groupCurrency = await requireMembership(
+      scope,
+      session,
+      refuseArchived,
+      assistantReach(actor),
+    );
     return write(drafts, scope, session, groupCurrency);
   });
 }
@@ -531,7 +549,7 @@ export const expenseDraftService = {
   async list(actor: DraftActor, groupId: string) {
     const scope = access(actor, groupId);
     const drafts = await collection();
-    const currency = await requireMembership(scope);
+    const currency = await requireMembership(scope, undefined, false, assistantReach(actor));
     // Each owner's active Drafts in this Group are bounded by the per-member limit.
     return (
       await drafts
