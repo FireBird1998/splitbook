@@ -193,7 +193,7 @@ describe('cross-currency Settlement HTTP contract (#727)', () => {
     ).toMatchObject({ amountMinor: 2000, ...rateFields });
   });
   it.each([20, 5, 21])(
-    'stores the signed simplified pair Debt before and after clearing EUR %s',
+    'stores the signed before-simplifying pair Debt before and after clearing EUR %s',
     async (amount) => {
       const id = await trip();
       const body = { ...payment, amount, amountPaidMinor: amount * 9250 };
@@ -252,42 +252,49 @@ describe('cross-currency Settlement HTTP contract (#727)', () => {
       ).toMatchObject(snapshot);
     },
   );
-  it('snapshots no direct suggested transfer as zero when simplification routes through a third member', async () => {
-    const id = await trip();
-    await groupService.addMember(id, priya);
-    await expenseService.create(
-      id,
-      {
-        description: 'Fictional ticket for Alex',
-        amount: 20,
-        currency: 'EUR',
-        category: 'food',
-        tag: 'Food',
-        date: new Date('2026-10-21T12:00:00Z'),
-        paidBy: [{ user: priya, amount: 20 }],
-        splitMethod: 'equal',
-        splitBetween: [{ user: alex }],
-      },
-      priya,
-    );
-    const before = (await ledgers(id)).find((row) => row.currency === 'EUR');
-    expect(before?.debts).toMatchObject([{ from: { _id: sam }, to: { _id: priya }, amount: 20 }]);
-    expect(before?.debtsBeforeSimplifying).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          from: expect.objectContaining({ _id: sam }),
-          to: expect.objectContaining({ _id: alex }),
+  it.each([alex, priya])(
+    'snapshots the before-simplifying pair Debt when paying %s through a third-member plan',
+    async (payee) => {
+      const id = await trip();
+      await groupService.addMember(id, priya);
+      await expenseService.create(
+        id,
+        {
+          description: 'Fictional ticket for Alex',
           amount: 20,
-        }),
-      ]),
-    );
-    const saved = await record(id);
-    expect(saved.status).toBe(201);
-    expect(saved.body.data).toMatchObject({ pairDebtBeforeMinor: 0, pairDebtAfterMinor: 0 });
-    expect((await ledgers(id)).find((row) => row.currency === 'EUR')?.debts).toMatchObject([
-      { from: { _id: alex }, to: { _id: priya }, amount: 20 },
-    ]);
-  });
+          currency: 'EUR',
+          category: 'food',
+          tag: 'Food',
+          date: new Date('2026-10-21T12:00:00Z'),
+          paidBy: [{ user: priya, amount: 20 }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: alex }],
+        },
+        priya,
+      );
+      const before = (await ledgers(id)).find((row) => row.currency === 'EUR');
+      expect(before?.debts).toMatchObject([{ from: { _id: sam }, to: { _id: priya }, amount: 20 }]);
+      expect(before?.debtsBeforeSimplifying).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            from: expect.objectContaining({ _id: sam }),
+            to: expect.objectContaining({ _id: alex }),
+            amount: 20,
+          }),
+        ]),
+      );
+      const saved = await record(id, { ...payment, paidTo: payee });
+      expect(saved.status).toBe(201);
+      expect(saved.body.data).toMatchObject(
+        payee === alex
+          ? { pairDebtBeforeMinor: -2000, pairDebtAfterMinor: 0 }
+          : { pairDebtBeforeMinor: 0, pairDebtAfterMinor: 2000 },
+      );
+      expect((await ledgers(id)).find((row) => row.currency === 'EUR')?.debts).toMatchObject(
+        payee === alex ? [{ from: { _id: alex }, to: { _id: priya }, amount: 20 }] : [],
+      );
+    },
+  );
   it('settles an extra-currency balance and lets the member leave without a manual currency conversion', async () => {
     const id = await trip();
     expect((await leaveGroup(id)).body.code).toBe('OPEN_BALANCE');
