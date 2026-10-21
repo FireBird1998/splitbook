@@ -204,7 +204,11 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
         </Box>
       ))}
       {error && (
-        <Typography role="alert" color="error.main">
+        <Typography
+          role="alert"
+          variant="body2"
+          sx={{ color: 'status.negative', textAlign: 'center' }}
+        >
           Couldn’t load older activity. The events shown are still here.
         </Typography>
       )}
