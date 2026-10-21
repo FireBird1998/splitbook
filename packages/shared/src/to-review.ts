@@ -30,7 +30,7 @@ export interface ReviewItemModel {
   groupId: string;
   createdAt: string;
   state: ToReviewState;
-  groupCategory?: GroupCategory;
+  theme?: GroupCategory;
   /** Meaning retained before member wording is rendered. Member rows keep their source path. */
   needs: ReviewNeed[];
   /**
@@ -205,7 +205,7 @@ function accountModel(
     groupId: item.draft.groupId,
     createdAt: item.draft.createdAt,
     state,
-    groupCategory: category,
+    theme: category,
     needs,
     get missingFacts() {
       return words(needs);

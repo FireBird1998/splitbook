@@ -91,7 +91,7 @@ export function toReviewQuickFixes(
       ...new Set(
         item.needs
           .filter((need) => !covered.has(need.field === 'tagId' ? 'tag' : need.field))
-          .map((need) => reviewNeedWords(need, item.groupCategory)),
+          .map((need) => reviewNeedWords(need, item.theme)),
       ),
     ],
     summary: item.state === 'ready' ? summarize(values, context) : null,
