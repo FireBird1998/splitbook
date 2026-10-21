@@ -59,6 +59,10 @@ function fixture() {
       await rows.remove(account, path);
     },
   };
+  type ConnectionState = { isConnected: boolean | null; isInternetReachable?: boolean | null };
+  /** What NetInfo last reported, once a test has reported something. */
+  let connectionState: ConnectionState | null = null;
+  const connection = new Set<(state: ConnectionState) => void>();
   const untrusted = { current: null as unknown };
   const record = (value: { current: unknown }) => ({
     load: async () => structuredClone(value.current),
@@ -145,6 +149,14 @@ function fixture() {
           },
         },
         savedQueries,
+        netInfo: {
+          // As NetInfo does, a new listener hears the connection as it is now.
+          addEventListener: (listener) => {
+            connection.add(listener);
+            listener(connectionState ?? { isConnected: !server.offline });
+            return () => connection.delete(listener);
+          },
+        },
         accountLocal: {
           owner: {
             load: async () => owner,
@@ -182,10 +194,19 @@ function fixture() {
       | undefined;
     return row ? row.value.connections.connections.map((connection) => connection.name) : null;
   };
-  return { create, server, requests, bodies, savedAssistants };
+  /** NetInfo reports the device's connection, and whether it reaches the internet. */
+  const connect = (isConnected: boolean, isInternetReachable?: boolean | null) => {
+    const state = { isConnected, isInternetReachable };
+    server.offline = !isConnected || isInternetReachable === false;
+    connectionState = state;
+    connection.forEach((listener) => listener(state));
+  };
+  return { create, server, requests, bodies, savedAssistants, connect };
 }
 type Fixture = ReturnType<typeof fixture>;
 type Controller = ReturnType<Fixture['create']>;
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 /** Settings, then Connected assistants, read until nothing is loading. */
 async function openAssistants(controller: Controller) {
@@ -340,6 +361,70 @@ describe('Connected assistants on Android (#622)', () => {
     expect(f.requests.slice(sent).filter((request) => request.startsWith('POST'))).toEqual([]);
     expect(state().disconnectMessage).toBe('Disconnecting needs a connection.');
     restarted.dispose();
+  });
+
+  it('shows its Saved copy under the offline banner, read only, when the internet goes mid-visit', async () => {
+    const f = fixture();
+    const { controller, state } = await readOnline(f);
+    // The phone keeps its Wi-Fi, but the internet goes.
+    f.connect(true, false);
+    await controller.refresh('pull');
+    await vi.waitFor(() => expect(state().status).toBe('ready'));
+    expect(state()).toMatchObject({
+      saved: true,
+      assistants: [{ name: 'Fictional Helper' }, { name: 'Fictional Reader' }],
+    });
+    expect(controller.getSnapshot().offline.active).toBe(true);
+    const sent = f.requests.length;
+    controller.askDisconnectAssistant('c1');
+    await controller.disconnectAssistant();
+    expect(f.requests.slice(sent).filter((request) => request.startsWith('POST'))).toEqual([]);
+    expect(state().disconnectMessage).toBe('Disconnecting needs a connection.');
+    controller.dispose();
+  });
+
+  it('reads again once when the internet returns, and the offline banner lifts', async () => {
+    const f = fixture();
+    const { controller, state } = await readOnline(f);
+    f.connect(true, false);
+    await controller.refresh('pull');
+    await vi.waitFor(() => expect(controller.getSnapshot().offline.active).toBe(true));
+    // Meanwhile Fictional Helper was disconnected on the web.
+    f.server.connections = [reader];
+    const sent = f.requests.length;
+    f.connect(true, true);
+    await vi.waitFor(() => expect(state().saved).toBe(false));
+    expect(state().assistants?.map((assistant) => assistant.name)).toEqual(['Fictional Reader']);
+    expect(controller.getSnapshot().offline.active).toBe(false);
+    // NetInfo reports the same return again: nothing more is read.
+    f.connect(true, true);
+    await settle();
+    expect(
+      f.requests.slice(sent).filter((request) => request === `GET ${connectionsPath}`),
+    ).toEqual([`GET ${connectionsPath}`]);
+    controller.dispose();
+  });
+
+  it('shows no list once it says this phone keeps no copy', async () => {
+    const f = fixture();
+    const { controller, state } = await readOnline(f);
+    // Splitbook stops answering as Disconnect is sent: its Saved copy went first.
+    f.server.offline = true;
+    controller.askDisconnectAssistant('c1');
+    await controller.disconnectAssistant();
+    expect(state().disconnectMessage).toBe('Couldn’t confirm the disconnection. Try again.');
+    controller.cancelDisconnectAssistant();
+    await controller.refresh('pull');
+    await vi.waitFor(() => expect(state().status).not.toBe('loading'));
+    expect(state()).toMatchObject({
+      unsaved: true,
+      saved: false,
+      assistants: null,
+      refreshedAt: null,
+      message: 'Connected assistants aren’t saved on this phone. Connect to see them.',
+    });
+    expect(controller.getSnapshot().offline.active).toBe(true);
+    controller.dispose();
   });
 
   it('says plainly offline when this phone keeps no copy', async () => {
