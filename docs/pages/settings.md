@@ -32,7 +32,7 @@ Allow users to update their profile preferences.
 │         │  ── Keyboard shortcuts ──                   │
 │         │  ┌─────────────────────────────────────┐   │
 │         │  │ (●) Single-key shortcuts            │   │
-│         │  │ N, /, J, K and E; ⌘K keeps working  │   │
+│         │  │ N, /, J, K, E, X; ⌘K keeps working  │   │
 │         │  └─────────────────────────────────────┘   │
 │         │                                             │
 │         │  ── Account ──                              │
@@ -67,7 +67,7 @@ Allow users to update their profile preferences.
 - Show success toast: "Settings saved!"
 - Show error toast if update fails
 - "Sign Out" button triggers `signOut()` from Auth.js → redirects to landing page
-- **Single-key shortcuts** (#322) turns N, /, J, K and E off (WCAG 2.1.4), so they never
+- **Single-key shortcuts** (#322) turns N, /, J, K, E and X off (WCAG 2.1.4), so they never
   clash with a screen reader or voice control. It is kept in `localStorage` for the
   signed-in member on this device, on by default, and applies at once on every open page
   and tab. ⌘K (Ctrl+K) search keeps working. See `docs/ui.md`, "Keyboard shortcuts".
