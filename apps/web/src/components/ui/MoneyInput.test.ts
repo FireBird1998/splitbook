@@ -1,4 +1,4 @@
-import { createElement, useState, type ComponentType } from 'react';
+import { createElement, createRef, useState, type ComponentType, type Ref } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, expect, it, vi } from 'vitest';
 import { readAmountEntry } from '@splitbook/shared/amount-entry';
@@ -29,7 +29,12 @@ it('shows a new controlled amount while focused, rather than keeping an earlier 
 const fields: Array<
   [
     string,
-    ComponentType<{ value: string; currency: string; onValueChange: (value: string) => void }>,
+    ComponentType<{
+      value: string;
+      currency: string;
+      onValueChange: (value: string) => void;
+      inputRef?: Ref<HTMLInputElement>;
+    }>,
   ]
 > = [
   ['MoneyInputBase', MoneyInputBase],
@@ -37,12 +42,13 @@ const fields: Array<
 ];
 for (const [name, Field] of fields) {
   it.each([
-    ['EUR', '500', '500.00', '300'],
-    ['EUR', '1842.5', '1,842.50', '2000'],
-    ['JPY', '1200', '1,200', '800'],
+    ['EUR', '500', '500.00', '300', '300'],
+    // Grouped as it is typed since the Designer's #773 gap.
+    ['EUR', '1842.5', '1,842.50', '2000', '2,000'],
+    ['JPY', '1200', '1,200', '800', '800'],
   ])(
     `${name}: preserves Tab's selected %s amount so typing replaces it`,
-    async (currency, initial, shown, replacement) => {
+    async (currency, initial, shown, replacement, replaced) => {
       vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
       const changed = vi.fn();
       function Form() {
@@ -70,7 +76,7 @@ for (const [name, Field] of fields) {
       );
       expect(input().props.value).toBe(shown);
       await act(async () => input().props.onChange({ target: { value: replacement } }));
-      expect(input().props.value).toBe(replacement);
+      expect(input().props.value).toBe(replaced);
       expect(changed).toHaveBeenLastCalledWith(replacement);
     },
   );
@@ -130,6 +136,19 @@ for (const [name, Field] of fields) {
       );
     return { input, changed, caret, edit };
   }
+
+  it(`${name}: still hands the caller's inputRef the input, as Record payment focuses it`, async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const node = { setSelectionRange: () => {}, focus: () => {}, value: '' };
+    const inputRef = createRef<HTMLInputElement>();
+    await act(async () => {
+      renderer = create(
+        createElement(Field, { currency: 'EUR', value: '', onValueChange: () => {}, inputRef }),
+        { createNodeMock: (element) => (element.type === 'input' ? node : null) },
+      );
+    });
+    expect(inputRef.current).toBe(node);
+  });
 
   it(`${name}: Backspace after the 8 in 1,842.50 regroups to 142.50, the caret after the 1`, async () => {
     const { input, changed, caret, edit } = await focused('EUR', '1842.5');

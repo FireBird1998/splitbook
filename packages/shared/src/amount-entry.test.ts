@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatAmountEntry, ungroupAmountEntry, readAmountEntry } from './amount-entry';
+import {
+  formatAmountEntry,
+  regroupAmountEntry,
+  ungroupAmountEntry,
+  readAmountEntry,
+} from './amount-entry';
 
 // One source for every amount field's rules and words: Record payment (#312, #514) and an
 // Expense's amount (#528).
@@ -112,6 +117,35 @@ describe('grouped amount display (#773)', () => {
     expect(ungroupAmountEntry('1,84,2')).toBe('1,84,2');
     expect(readAmountEntry('1,84,2', 'EUR').status).toBe('invalid');
     expect(formatAmountEntry('1842.5', 'JPY')).toBe('1842.5');
+  });
+
+  it.each([
+    ['1,42.50', '1,842.50', '142.50'],
+    ['1,5842.50', '1,842.50', '15,842.50'],
+    ['18425', '1,842', '18,425'],
+    ['1842.5', '1842.', '1,842.5'],
+    ['.5', '.', '.5'],
+    ['1,42', '1,842', '142'],
+    ['1,000,00', '1,000,000', '100,000'],
+  ])('regroups %s, edited from %s, as it is typed: %s', (typed, before, regrouped) => {
+    expect(regroupAmountEntry(typed, before)).toBe(regrouped);
+  });
+
+  it.each([
+    ['10,', '10'],
+    ['10,5', '10,'],
+    ['10,50', '10,5'],
+    ['1,234,', '1,234'],
+    ['1,84,2', '1,842'],
+    // Deleting from a refused "10,55", or replacing 842 with a 5, is not deleting from a
+    // grouped amount, so the comma may still be a decimal comma.
+    ['10,5', '10,55'],
+    ['1,5', '1,842'],
+    ['', '1'],
+    ['1e3', '13'],
+    ['-5', '5'],
+  ])('leaves %s, edited from %s, as typed', (typed, before) => {
+    expect(regroupAmountEntry(typed, before)).toBeNull();
   });
 
   it('shows zero shares and large exact values without float rounding', () => {

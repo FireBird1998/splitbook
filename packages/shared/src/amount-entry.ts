@@ -14,6 +14,9 @@ export type AmountReading =
 /** "1,060.00", or "1,060" for a currency without decimal places. */
 const example = (currency: string) => (getCurrencyPrecision(currency) === 0 ? '1,060' : '1,060.00');
 
+/** Commas only as thousands separators, in their usual places: "1,060.50", not "10,50". */
+const thousandsGrouped = /^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/;
+
 /**
  * "Yen has no smaller unit. Enter a whole amount, like ¥2,500.": part of a whole-unit currency's
  * unit, in the words every amount says it (#719), a payer's and a share's too (#755). Undefined
@@ -53,7 +56,7 @@ export function readAmountEntry(text: string, currency: string): AmountReading {
   if (/^[-−]\s*(?:\d[\d,]*(?:\.\d*)?|\.\d+)$/.test(typed)) {
     return { status: 'invalid', message: aboveZero(currency) };
   }
-  if (typed.includes(',') && !/^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/.test(typed)) {
+  if (typed.includes(',') && !thousandsGrouped.test(typed)) {
     return { status: 'invalid', message: like };
   }
   const plain = typed.replaceAll(',', '');
@@ -84,9 +87,36 @@ export function readAmountEntry(text: string, currency: string): AmountReading {
 
 /** Remove only correctly placed thousands separators; malformed input remains a refusal. */
 export function ungroupAmountEntry(text: string): string {
-  return /^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/.test(text.trim())
-    ? text.trim().replaceAll(',', '')
-    : text;
+  return thousandsGrouped.test(text.trim()) ? text.trim().replaceAll(',', '') : text;
+}
+
+/**
+ * The amount being typed, grouped as it is typed (#773): its commas dropped and its whole part
+ * grouped in threes, as `formatAmountEntry` groups it on blur, its decimals as typed and not
+ * padded. `before` is the text the field showed before this edit. Backspace after the 8 in
+ * "1,842.50" leaves "1,42.50", which reads "142.50"; a 5 typed after "1," gives "15,842.50".
+ *
+ * Null where the text stays as typed: not an amount even without its commas, or ending in a
+ * comma and at most two digits, as a decimal comma would ("10,", "10,5"), so "10,5" is refused
+ * rather than read as 105. Only deleting from grouped text may leave one of its own commas
+ * there: "1,842" less its 8 is "1,42", which reads 142.
+ */
+export function regroupAmountEntry(text: string, before: string): string | null {
+  const plain = text.replaceAll(',', '');
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(plain)) return null;
+  if (/,\d{0,2}$/.test(text) && !(thousandsGrouped.test(before) && onlyDeleted(before, text))) {
+    return null;
+  }
+  const [whole = '', fraction] = plain.split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
+}
+
+/** Whether `after` is `before` less one run of characters, as Backspace, Delete or Cut leave it. */
+function onlyDeleted(before: string, after: string): boolean {
+  let kept = 0;
+  while (kept < after.length && after[kept] === before[kept]) kept++;
+  return after.length < before.length && before.endsWith(after.slice(kept));
 }
 
 /** Display on blur only. Invalid input stays visible, and no amount is rounded or repaired. */
