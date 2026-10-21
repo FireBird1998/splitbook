@@ -151,6 +151,8 @@ export default function ExpenseSelectionPanel({
     setSendingTo(tag.name);
     setOutcome(null);
     setFailure(null);
+    // An earlier export's word no longer describes these Expenses; one still preparing stays.
+    setExported((now) => (now?.status === 'preparing' ? now : null));
     try {
       const reply = await onChangeTag(tag._id);
       const misses = reply.results
