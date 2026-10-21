@@ -282,6 +282,19 @@ describe('the selection panel (#610)', () => {
     expect(choices).toEqual(['Move to Groceries', 'Move to Household']);
   });
 
+  it('marks the current Tag when every selected Expense already has it', async () => {
+    const current = () =>
+      renderer!.root
+        .findAll((node) => node.type === 'button' && node.props['aria-current'] === 'true')
+        .map((node) => node.props['aria-label']);
+    panel([GROCERIES, WATER]);
+    await press('Change Tag');
+    expect(current()).toEqual(['Move to Groceries']);
+    panel([GROCERIES, { ...ELECTRICITY, tag: 'Household', tagId: TAGS.household }]);
+    await press('Change Tag');
+    expect(current()).toEqual([]);
+  });
+
   it('moves them to the Tag, and lists what didn’t change, each with its reason and Open', async () => {
     const onOpen = vi.fn();
     const onChangeTag = vi.fn(async () => ({
