@@ -251,11 +251,12 @@ member's setting and one listener for the page's keys; components register a han
 | J, K       | The focused table | Move focus to the next or previous Expense's button      |
 | Enter      | The focused table | The button's own: opens its Expense in the side panel    |
 | E          | The focused table | Edits the Expense whose row has focus, else the open one |
+| X          | The focused table | Ticks or unticks the focused row's Expense (#610)        |
 
 - **/ outside the Expenses tab.** On another tab of a Group (or its settings) it opens the
   Group's Expenses tab and focuses the search there; outside a Group, where there is no Group
   to search, it opens search across Groups, as ⌘K does.
-- **Single keys** (N, /, J, K, E) never fire while focus is in a field (an input, text
+- **Single keys** (N, /, J, K, E, X) never fire while focus is in a field (an input, text
   area, select, editable text, or a widget that takes letters, such as MUI's Select), while a
   dialog or menu is open, or with Ctrl, Alt or ⌘ held.
 - **The Settings switch** turns single keys off (WCAG 2.1.4). It is kept per member on the

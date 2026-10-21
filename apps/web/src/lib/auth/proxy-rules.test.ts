@@ -18,6 +18,12 @@ function passesThrough(response: Response): boolean {
 }
 
 describe('proxy rules', () => {
+  it('lets only the exact cron GET reach its secret guard without a session', () => {
+    expect(passesThrough(decide('/api/cron/exchange-rates', false))).toBe(true);
+    expect(decide('/api/cron/exchange-rates/other', false).status).toBe(401);
+    expect(decide('/api/cron/exchange-rates', false, 'POST').status).toBe(401);
+    expect(decide('/api/groups/abc/rates?from=USD&to=EUR', false).status).toBe(401);
+  });
   it('lets MCP verify bearer credentials and preserve authorization queries itself', () => {
     expect(passesThrough(decide('/api/mcp', false, 'POST'))).toBe(true);
     expect(passesThrough(decide('/.well-known/oauth-authorization-server/api/auth', false))).toBe(

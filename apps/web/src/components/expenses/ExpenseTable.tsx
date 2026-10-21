@@ -3,6 +3,7 @@ import PreparedBy from './PreparedBy';
 
 import { Fragment } from 'react';
 import Box from '@mui/material/Box';
+import Checkbox from '@mui/material/Checkbox';
 import { format } from 'date-fns';
 import MoneyText from '@/components/common/MoneyText';
 import { visuallyHidden } from '@/components/common/visually-hidden';
@@ -16,6 +17,7 @@ import {
 import { ExpenseTag, PayerLabel, PositionText, RepeatsIcon } from './expense-row-parts';
 import TripDayRow from './TripDayRow';
 import { useExpenseTableKeys } from './expense-table-keys';
+import type { ExpenseSelection } from './expense-selection';
 import type { TripDayHeading } from './expense-trip-days';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
@@ -28,6 +30,10 @@ export const EXPENSE_TABLE_COLUMNS = [
   'Amount',
   'You',
 ] as const;
+
+/** A row's checkbox names its Expense and day: "Select Weekly groceries, 30 September" (#610). */
+const selectLabel = (expense: ExpenseRead) =>
+  `Select ${expense.description}, ${format(expenseLocalDate(expense.date), 'd MMMM')}`;
 
 /** "Wed 30 Sep", with the year when it isn't this year's: the day it is dated, in every zone (#437). */
 export function expenseDayLabel(date: string, now: Date = new Date()): string {
@@ -58,6 +64,11 @@ interface ExpenseTableProps {
    * with the day's total goes above it. Heading rows open nothing.
    */
   dayHeadings?: ReadonlyMap<string, TripDayHeading> | null;
+  /**
+   * The Expenses ticked for a change to all of them (#610): each row gets a checkbox, the
+   * header one for every row shown. While some are ticked, a click on a row ticks it too.
+   */
+  selection?: Pick<ExpenseSelection, 'selected' | 'onSelect' | 'onSelectAll'>;
 }
 
 const cell = {
@@ -91,9 +102,14 @@ export default function ExpenseTable({
   stale = false,
   dayHeadings = null,
   onEdit,
+  selection,
 }: ExpenseTableProps) {
   const now = new Date();
-  const onKeyDown = useExpenseTableKeys({ openId, onEdit });
+  const onKeyDown = useExpenseTableKeys({ openId, onEdit, onSelect: selection?.onSelect });
+  const ticked = selection ? expenses.filter((expense) => selection.selected.has(expense._id)) : [];
+  const selecting = ticked.length > 0;
+  // A click on the checkbox ticks it, and never opens the row too.
+  const keepToCheckbox = (event: { stopPropagation: () => void }) => event.stopPropagation();
   return (
     <Box
       component="section"
@@ -129,6 +145,25 @@ export default function ExpenseTable({
           </Box>
           <thead>
             <tr>
+              {selection && (
+                <Box
+                  component="th"
+                  scope="col"
+                  sx={{ ...cell, height: 'auto', py: '4px', width: 40 }}
+                >
+                  <Checkbox
+                    size="small"
+                    checked={selecting && ticked.length === expenses.length}
+                    indeterminate={selecting && ticked.length < expenses.length}
+                    onChange={() => selection.onSelectAll()}
+                    slotProps={{
+                      input: {
+                        'aria-label': `Select all ${expenses.length} ${expenses.length === 1 ? 'Expense' : 'Expenses'}`,
+                      },
+                    }}
+                  />
+                </Box>
+              )}
               {EXPENSE_TABLE_COLUMNS.map((column) => (
                 <Box
                   component="th"
@@ -153,26 +188,43 @@ export default function ExpenseTable({
           <tbody>
             {expenses.map((expense) => {
               const open = expense._id === openId;
+              const chosen = Boolean(selection?.selected.has(expense._id));
               const repeats = recurringExpensesEnabled && Boolean(expense.recurringExpense);
               const heading = dayHeadings?.get(expense._id);
               return (
                 <Fragment key={expense._id}>
                   {heading ? (
-                    <TripDayRow heading={heading} columns={EXPENSE_TABLE_COLUMNS.length} />
+                    <TripDayRow
+                      heading={heading}
+                      columns={EXPENSE_TABLE_COLUMNS.length + (selection ? 1 : 0)}
+                    />
                   ) : null}
                   <Box
                     component="tr"
                     data-expense-id={expense._id}
-                    onClick={() => onToggle(expense._id)}
+                    onClick={() =>
+                      selecting ? selection!.onSelect(expense._id) : onToggle(expense._id)
+                    }
                     sx={{
                       cursor: 'pointer',
-                      '& > td': { bgcolor: open ? 'tint.brand' : undefined },
-                      '&:hover > td': { bgcolor: open ? 'tint.brand' : 'surface.hover' },
+                      '& > td': { bgcolor: open || chosen ? 'tint.brand' : undefined },
+                      '&:hover > td': { bgcolor: open || chosen ? 'tint.brand' : 'surface.hover' },
                       '&:has(button:focus-visible) > td': {
-                        bgcolor: open ? 'tint.brand' : 'surface.hover',
+                        bgcolor: open || chosen ? 'tint.brand' : 'surface.hover',
                       },
                     }}
                   >
+                    {selection && (
+                      <Box component="td" sx={{ ...cell, width: 40 }}>
+                        <Checkbox
+                          size="small"
+                          checked={chosen}
+                          onClick={keepToCheckbox}
+                          onChange={() => selection.onSelect(expense._id)}
+                          slotProps={{ input: { 'aria-label': selectLabel(expense) } }}
+                        />
+                      </Box>
+                    )}
                     <Box
                       component="td"
                       sx={{

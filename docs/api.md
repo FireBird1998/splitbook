@@ -83,6 +83,96 @@ See [`auth.md`](auth.md).
 
 ---
 
+## Suggested exchange rates
+
+### GET /api/groups/[id]/rates?from=EUR&to=INR
+
+Requires the app session and current Group membership. An MCP bearer token alone is not an
+app session. Anonymous requests answer **401**; non-members (including nonexistent Groups)
+answer **403**. Invalid path ids answer **400**; missing or unsupported currency codes answer
+**422** `VALIDATION_ERROR`. Both codes must be in the supported 30-currency registry.
+
+The server reads its daily cache only; this request never calls a provider. Rates are units
+of `to` per one unit of `from`, as a decimal string rounded half up to 12 decimal places.
+No ledger amount is converted or changed. Example:
+
+```json
+{
+  "data": {
+    "suggestion": {
+      "from": "EUR",
+      "to": "INR",
+      "rate": "112.5",
+      "source": "mixed",
+      "asOf": "2026-10-20",
+      "fetchedAt": "2026-10-21T18:00:00.000Z",
+      "ageDays": 1,
+      "attributionRequired": true,
+      "attribution": {
+        "text": "Rates By Exchange Rate API",
+        "url": "https://www.exchangerate-api.com"
+      },
+      "components": [
+        {
+          "currency": "EUR",
+          "source": "frankfurter",
+          "asOf": "2026-10-20",
+          "fetchedAt": "2026-10-21T18:00:00.000Z"
+        },
+        {
+          "currency": "INR",
+          "source": "exchange-rate-api",
+          "asOf": "2026-10-21",
+          "fetchedAt": "2026-10-21T18:00:00.000Z"
+        }
+      ]
+    }
+  },
+  "status": 200
+}
+```
+
+`source` is `frankfurter`, `exchange-rate-api`, or `mixed`. Headline dates are the oldest of
+the legs used; `ageDays` counts UTC calendar days since `asOf`. USD is the common base, so
+USD pairs have only one component. A primary-only rate has `attributionRequired: false`
+and `attribution: null`. If either leg is fallback, the client must display the returned
+attribution text and link wherever the suggested rate appears. These rates must never be
+passed to an assistant or exposed by another rate read.
+
+No suggestion is a normal **200**, for example:
+
+```json
+{ "data": { "suggestion": null, "reason": "unavailable" }, "status": 200 }
+```
+
+Reasons: `unavailable` (no usable table or unrepresentable cross rate),
+`currency_unavailable` (a supported currency has no quote), `stale` (a required cached quote
+is older than three UTC days or invalid), or `same_currency` (no exchange is needed).
+Exactly three days old is usable. A provider outage preserves the previous table without
+changing its source or timestamps, but age is checked on every read. Responses, including
+refusals, use `Cache-Control: private, no-store`.
+
+### GET /api/cron/exchange-rates
+
+A server job, **not a member API**. Requires `Authorization: Bearer <CRON_SECRET>`; a missing
+server setting or incorrect/missing header answers **401**. It fetches one primary USD table
+and, only when needed, one fallback table. A Mongo day claim deduplicates concurrent runs.
+The **200** reply contains `data.refreshed` (whether this invocation obtained fresh provider
+quotes), and, when true, `data.availableCurrencies` (usable cached non-USD
+quotes). A previously claimed day answers **200** with `data.refreshed: false` without fetching.
+If neither provider supplies any fresh supported quotes, the attempt answers **502** with
+`data: { refreshed: false, reason: "providers_unavailable", availableCurrencies }`. The job logs
+zero fresh currencies and the count of usable saved currencies, never rates. Saved suggestions
+keep their source and timestamps and remain readable within the freshness limit. The day stays
+claimed; the next daily invocation retries. Database faults answer **500**. All cron responses
+use `Cache-Control: no-store` and never return rates.
+
+The schedule is `0 18 * * *` UTC in `apps/web/vercel.json`. Production needs the owner to set
+`CRON_SECRET` and deploy that configuration. Provider keys are not needed. See
+[ADR 0010](adr/0010-exchange-rate-suggestions.md) for source terms, freshness and isolation.
+
+---
+
 ## User
 
 | Method | Path                 | Description                      |
@@ -571,6 +661,7 @@ No body needed. Adds the current user to the group. Returns `201` on join, or
 | POST   | `/api/groups/[id]/expenses`                 | Add expense                |
 | GET    | `/api/groups/[id]/expenses`                 | List (with filters)        |
 | GET    | `/api/groups/[id]/expenses/check-duplicate` | Pre-submit duplicate check |
+| POST   | `/api/groups/[id]/expenses/tag-change`      | Move Expenses to one Tag   |
 | GET    | `/api/groups/[id]/expenses/[expenseId]`     | Get single expense         |
 | PATCH  | `/api/groups/[id]/expenses/[expenseId]`     | Update expense             |
 | DELETE | `/api/groups/[id]/expenses/[expenseId]`     | Soft delete                |
@@ -779,6 +870,58 @@ Accepts any subset of the create body, plus `isDeleted: false` to restore a
 soft-deleted expense. Each edit appends a diff to the expense's `editHistory`.
 An archived Group refuses an edit, a restore and a `DELETE` of its Expenses
 with **409** `GROUP_ARCHIVED`.
+
+### POST /api/groups/[id]/expenses/tag-change
+
+Moves several of the Group's Expenses to one Tag (#610). Any member may, as
+for a single edit.
+
+```json
+{
+  "tagId": "<an active Tag of the Group>",
+  "expenses": [{ "id": "<Expense id>", "revision": 3 }]
+}
+```
+
+`expenses` lists 1 to 100 Expenses (`EXPENSE_TAG_CHANGE_MAX`), each once, with
+the revision the member last saw. A non-member gets **403**. A Tag that isn't
+an active Tag of the Group gets **422** `INVALID_TAG`, and an archived Group
+**409** `GROUP_ARCHIVED`; a list that is empty, too long or names an Expense
+twice gets **422** `VALIDATION_ERROR`. Each of these changes nothing.
+
+Otherwise each Expense changes on its own, under a single edit's rules: it
+gets its own `editHistory` entry and `expense_updated` Activity event, and one
+that can't change doesn't stop the rest. Nothing is retried. The reply lists
+an outcome for each, in the order asked:
+
+```json
+{
+  "status": 200,
+  "data": {
+    "tagId": "<the Tag>",
+    "results": [
+      { "expenseId": "<id>", "outcome": "changed", "revision": 4 },
+      { "expenseId": "<id>", "outcome": "unchanged", "revision": 2 },
+      { "expenseId": "<id>", "outcome": "changed-elsewhere" },
+      { "expenseId": "<id>", "outcome": "unavailable" },
+      {
+        "expenseId": "<id>",
+        "outcome": "refused",
+        "code": "GROUP_ARCHIVED",
+        "reason": "<member words>"
+      }
+    ]
+  }
+}
+```
+
+- `changed`: it is on the Tag now, at `revision`.
+- `unchanged`: it was already on the Tag, so it wasn't edited. Sending the
+  same request again reports each Expense it changed this way.
+- `changed-elsewhere`: its revision isn't the one sent, so it was left as it is.
+- `unavailable`: it was deleted, or isn't the Group's.
+- `refused`: it couldn't change, for `reason`, such as the Group archived or
+  the Tag archived while the request ran. `code` names a known cause.
 
 ---
 

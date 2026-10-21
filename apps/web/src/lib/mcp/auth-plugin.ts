@@ -1,4 +1,4 @@
-import { connectedAssistantName } from './assistant-name';
+import { assistantForApproval, connectedAssistantName } from './assistant-name';
 import { randomUUID } from 'node:crypto';
 import type { AuthContext, BetterAuthPlugin } from 'better-auth';
 import {
@@ -16,7 +16,7 @@ import { getOAuthProviderState, verifyOAuthQueryParams } from '@better-auth/oaut
 import { z } from 'zod';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import type { AuthEnv } from '@/lib/auth/create-auth';
-import { MCP_LEDGER_SCOPE, MCP_SCOPES, mcpResource } from './config';
+import { MCP_DRAFT_SCOPE, MCP_LEDGER_SCOPE, MCP_SCOPES, mcpResource } from './config';
 import { currentMcpGrant, requireMcpMember, type McpConnection, type McpConsent } from './grants';
 import { PRODUCT_NAME } from '@/lib/product';
 
@@ -78,6 +78,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
           clientId: { type: 'string', required: true },
           generation: { type: 'string', required: true },
           createdAt: { type: 'date', required: true },
+          name: { type: 'string', required: false },
+          lastUsedAt: { type: 'date', required: false },
         },
       },
     },
@@ -112,7 +114,9 @@ export function mcpAuthPlugins(env: AuthEnv) {
               connections.push({
                 id: row.id,
                 clientId: row.clientId,
-                name: await connectedAssistantName(ctx.context.adapter, row.clientId),
+                name: row.name ?? (await connectedAssistantName(ctx.context.adapter, row.clientId)),
+                lastUsedAt: row.lastUsedAt ?? null,
+                access: consent.scopes.includes(MCP_DRAFT_SCOPE) ? 'Ledger + To review' : 'Ledger',
                 scopes: consent.scopes,
               });
           }
@@ -141,7 +145,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
           const revoked = await ctx.context.adapter.update<McpConnection>({
             model: 'mcpConnection',
             where,
-            update: { generation: randomUUID() },
+            update: { generation: randomUUID(), lastUsedAt: null },
           });
           if (!revoked) throw new APIError('NOT_FOUND');
           ctx.setHeader('Cache-Control', 'no-store');
@@ -171,7 +175,12 @@ export function mcpAuthPlugins(env: AuthEnv) {
           )
             throw new APIError('BAD_REQUEST', { message: 'Unsupported connection permissions.' });
           ctx.setHeader('Cache-Control', 'no-store');
-          return ctx.json({ clientId, scopes });
+          // The assistant by the name it publishes, never by its raw client identity (#614).
+          return ctx.json({
+            clientId,
+            scopes,
+            ...(await assistantForApproval(ctx.context.adapter, clientId)),
+          });
         },
       ),
     },
@@ -198,6 +207,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
           const query = new URLSearchParams(state?.query);
           const clientId = query.get('client_id');
           if (!clientId) throw new APIError('BAD_REQUEST');
+          const name = await connectedAssistantName(context.adapter, clientId);
           const key = JSON.stringify([user.id, clientId]);
           const find = () =>
             context.adapter.findOne<McpConnection>({
@@ -215,6 +225,8 @@ export function mcpAuthPlugins(env: AuthEnv) {
                   clientId,
                   generation: randomUUID(),
                   createdAt: new Date(),
+                  name,
+                  lastUsedAt: null,
                 },
               });
             } catch (error) {
@@ -222,6 +234,15 @@ export function mcpAuthPlugins(env: AuthEnv) {
               if (!row) throw error;
             }
           }
+          if (row.name !== name)
+            await context.adapter.update({
+              model: 'mcpConnection',
+              where: [
+                { field: 'id', value: row.id },
+                { field: 'generation', value: row.generation },
+              ],
+              update: { name },
+            });
           return row.generation;
         },
       },

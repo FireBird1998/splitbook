@@ -47,6 +47,19 @@ import {
 } from '@splitbook/shared/tag-identity';
 import { expenseDate, expenseDay } from '@splitbook/shared/expense-day';
 import { PERSON_FIELDS } from './person-fields';
+import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
+import type {
+  ExpenseTagChangeRequest,
+  ExpenseTagChangeResult,
+} from '@splitbook/shared/expense-tag-change';
+
+/** Why one Expense of a Tag change couldn't change, in member words, by the error that said so. */
+const tagChangeRefusals: Record<string, string> = {
+  FORBIDDEN: 'You’re no longer a member of this Group.',
+  GROUP_ARCHIVED: GROUP_ARCHIVED_MESSAGE,
+  INVALID_TAG: 'The Tag isn’t active any more.',
+  ACTIVITY_BACKLOG_FULL: 'Splitbook couldn’t record this change just now. Try it again later.',
+};
 
 /**
  * The stored-amount bounds for an Expense list's amount range (#310), or null without one.
@@ -502,6 +515,63 @@ export class ExpenseService {
       { path: 'splitBetween.user', select: PERSON_FIELDS },
       { path: 'createdBy', select: PERSON_FIELDS },
     ]);
+  }
+
+  /**
+   * Move several Expenses to one Tag (#610). The member, the Group and the Tag are checked once;
+   * then each Expense changes on its own, as a single edit does, with its own history entry and
+   * Activity event, so one that can't change never stops the rest. An Expense already on the Tag
+   * is left as it is, so a retry edits nothing twice. Nothing is retried.
+   */
+  async changeTags(
+    groupId: string,
+    actorId: string,
+    { tagId, expenses }: ExpenseTagChangeRequest,
+  ): Promise<ExpenseTagChangeResult[]> {
+    const group = await this.requireAccessGroup({ actorId, groupId, expenseId: '' }, true);
+    const tag = group.tags.find((entry) => String(entry._id) === tagId);
+    if (!tag || tag.isArchived || tag.isDeleted) throw new Error('INVALID_TAG');
+    const results: ExpenseTagChangeResult[] = [];
+    for (const { id, revision } of expenses)
+      results.push(await this.changeTag({ actorId, groupId, expenseId: id }, tagId, revision));
+    return results;
+  }
+
+  /** One Expense of `changeTags`: what happened to it, never an error that loses the others. */
+  private async changeTag(
+    access: ExpenseAccess,
+    tagId: string,
+    revision: number,
+  ): Promise<ExpenseTagChangeResult> {
+    const expenseId = access.expenseId;
+    const current = await Expense.findOne({ _id: expenseId, group: access.groupId })
+      .select('tagId revision isDeleted')
+      .lean();
+    if (!current || current.isDeleted) return { expenseId, outcome: 'unavailable' };
+    if (current.tagId && String(current.tagId) === tagId)
+      return { expenseId, outcome: 'unchanged', revision: current.revision ?? 0 };
+    try {
+      const changed = await this.update(access, { tagId }, revision);
+      return changed
+        ? { expenseId, outcome: 'changed', revision: changed.revision ?? 0 }
+        : { expenseId, outcome: 'unavailable' };
+    } catch (error) {
+      const code =
+        error instanceof Error
+          ? error.name === 'VersionError'
+            ? 'STALE_REVISION'
+            : error.message
+          : '';
+      if (code === 'STALE_REVISION') return { expenseId, outcome: 'changed-elsewhere' };
+      if (!tagChangeRefusals[code])
+        console.error('Expense Tag change failed:', { expenseId, error });
+      return {
+        expenseId,
+        outcome: 'refused',
+        ...(tagChangeRefusals[code] ? { code } : {}),
+        reason: tagChangeRefusals[code] ?? 'Splitbook couldn’t change this Expense.',
+      };
+    }
   }
 
   /** Soft deletion preserves identity, request keys and all audit history. */

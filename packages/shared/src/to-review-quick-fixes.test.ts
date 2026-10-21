@@ -72,6 +72,25 @@ function model(...items: ToReviewItem[]): ReviewItemModel[] {
 }
 
 describe('To review quick fixes', () => {
+  it('covers payer and Tag needs independently of their displayed wording (#712)', () => {
+    const [draft] = model(item({ ...full, paidBy: undefined, tagId: undefined, date: undefined }));
+    const reworded = {
+      ...draft,
+      missingFacts: ['the person who paid', 'a Tag choice', 'the date'],
+      unknownFacts: ['the person who paid', 'a Tag choice', 'the date'],
+    };
+    const fixes = toReviewQuickFixes(reworded, context);
+    expect(fixes.fixes.map((fix) => fix.fact)).toEqual(['paidBy', 'tag']);
+    expect(fixes.stillNeeds).toEqual(['the date']);
+    expect(reworded.state).toBe('needs-details');
+    const corrected = applyQuickFix(
+      applyQuickFix(draft.accountItem!.draft.values!, 'paidBy', alex),
+      'tag',
+      tag(5),
+    );
+    expect(model(item({ ...corrected, date: full.date }))[0].state).toBe('ready');
+  });
+
   it('offers who paid as chips with You first and suggested, never chosen', () => {
     const [taxi] = model(item({ ...full, description: 'Taxi', paidBy: undefined }, ['paidBy']));
     const fixes = toReviewQuickFixes(taxi, context);

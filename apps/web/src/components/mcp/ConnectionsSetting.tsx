@@ -3,24 +3,53 @@
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogActions from '@mui/material/DialogActions';
+import { format, isToday, isYesterday } from 'date-fns';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import Link from 'next/link';
-import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
+import { formatDate } from '@splitbook/shared/date';
 import { PRODUCT_NAME } from '@/lib/product';
 
 interface Connection {
   id: string;
   clientId: string;
   scopes: string[];
+  access: string;
+  name: string;
+  lastUsedAt: string | null;
 }
 interface Connections {
   resource: string;
   connections: Connection[];
   nextOffset: number | null;
+}
+
+function lastUsedLabel(value: string | null): string {
+  if (!value) return 'Not used yet';
+  const date = new Date(value);
+  if (isToday(date)) return `Last used ${format(date, 'HH:mm')}`;
+  if (isYesterday(date)) return 'Last used yesterday';
+  return `Last used ${formatDate(date, { omitCurrentYear: true })}`;
+}
+
+/** A metadata address helps distinguish same-named assistants; registered ids are not URLs. */
+function assistantAddress(clientId: string): string | null {
+  try {
+    const url = new URL(clientId);
+    return ['https:', 'http:'].includes(url.protocol)
+      ? `${url.host}${url.pathname === '/' ? '' : url.pathname}`
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -56,12 +85,15 @@ export function ConnectionsList({
       )}
       {data.connections.map((connection) => (
         <Stack key={connection.id} spacing={1}>
-          <Typography sx={{ overflowWrap: 'anywhere' }}>{connection.clientId}</Typography>
-          <Typography variant="body2">
-            All current and future Groups · Ledger access
-            {connection.scopes.includes(MCP_DRAFT_SCOPE)
-              ? ' · To review access, including permanent deletion'
-              : ''}
+          <Typography sx={{ overflowWrap: 'anywhere' }}>{connection.name}</Typography>
+          {assistantAddress(connection.clientId) && (
+            <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+              {assistantAddress(connection.clientId)}
+            </Typography>
+          )}
+          <Typography variant="body2">{connection.access}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {lastUsedLabel(connection.lastUsedAt)}
           </Typography>
           <Button
             variant="outlined"
@@ -90,6 +122,8 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [pending, setPending] = useState<Connection | null>(null);
   useEffect(() => {
     if (!accountId) return;
     const controller = new AbortController();
@@ -121,6 +155,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
         body: JSON.stringify({ id }),
       });
       if (!response.ok) throw new Error();
+      setDialogOpen(false);
       setData(
         (current) =>
           current && {
@@ -185,10 +220,46 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
           <ConnectionsList
             data={data}
             busy={busy}
-            onRevoke={(id) => void revoke(id)}
+            onRevoke={(id) => {
+              setPending(data.connections.find((item) => item.id === id) ?? null);
+              setDialogOpen(true);
+            }}
             onLoadMore={() => void loadMore()}
           />
         )}
+        <Dialog
+          open={dialogOpen}
+          slotProps={{ transition: { onExited: () => setPending(null) } }}
+          onClose={() => {
+            if (!busy) setDialogOpen(false);
+          }}
+          aria-labelledby="disconnect-assistant-title"
+          aria-describedby="disconnect-assistant-description"
+        >
+          <DialogTitle id="disconnect-assistant-title">Disconnect {pending?.name}?</DialogTitle>
+          <DialogContent>
+            <DialogContentText id="disconnect-assistant-description">
+              The assistant stops at once. Items already prepared stay in your To review. Previously
+              shared information may remain in your assistant.
+            </DialogContentText>
+            {error && <Alert severity="error">{error}</Alert>}
+          </DialogContent>
+          <DialogActions>
+            <Button disabled={busy !== null} onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              color="error"
+              sx={{ color: 'status.negative' }}
+              disabled={busy !== null || !pending}
+              onClick={() => {
+                if (pending) void revoke(pending.id);
+              }}
+            >
+              Disconnect
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Stack>
     </Paper>
   );
