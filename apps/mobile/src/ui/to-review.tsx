@@ -15,9 +15,13 @@ import {
   type ItemQuickFixes,
   type QuickFixFact,
 } from '@splitbook/shared/to-review-quick-fixes';
-import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
+import type {
+  ExpenseDraftValues,
+  PersistedExpenseDraft,
+} from '@splitbook/shared/validators/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
 import {
+  Badge,
   Banner,
   BottomSheet,
   Card,
@@ -44,6 +48,7 @@ import { fonts, useTheme } from './theme';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import { recentDay } from './day-format';
+import { ChangeCurrencySheet, UnlistedCurrencySheet, type UnlistedItem } from './review-currency';
 
 const offlineMessage =
   'You’re offline. What Claude prepared and what you set aside show up when you’re back online';
@@ -67,12 +72,32 @@ function amountLabel(values?: ExpenseDraftValues, groupCurrency?: string) {
   // As entered, never rounded: the Needs line says when it has too many decimals (#537).
   return formatCurrencyAsEntered(values.amount, currency);
 }
+/** What the currency fix needs of an item (#733): its name, where it's from, and its amount. */
+function unlistedItem(item: ReviewItemModel, currency: string): UnlistedItem {
+  const values = item.accountItem?.draft.values;
+  const date =
+    values?.date && Number.isFinite(new Date(values.date).getTime())
+      ? recentDay(expenseLocalDate(values.date))
+      : null;
+  return {
+    description: values?.description || 'Expense to review',
+    detail: [sourceLabel(item), date].filter(Boolean).join(' · '),
+    amount: values?.amount,
+    currency,
+  };
+}
 function sourceLabel(item: ReviewItemModel) {
   if (item.id.startsWith('save:')) return 'Save awaiting confirmation';
   if (item.deviceItem) return 'Unfinished · only on this phone';
   const source = item.accountItem?.draft.preparedBy;
   return source?.kind === 'assistant' ? `Prepared by ${source.name}` : 'Set aside by you';
 }
+
+/** The currency of an item its Group doesn't list (#733), or null. */
+const unlistedCurrency = (item: ReviewItemModel) =>
+  item.needs.some((need) => need.reason === 'currency-not-listed')
+    ? (item.accountItem?.draft.values?.currency ?? null)
+    : null;
 
 /**
  * Where an item came from, at the start of its row: the assistant's initials, a bookmark for
@@ -115,9 +140,12 @@ function ItemRow({
   onPress,
   accessibilityLabel,
   disabled = false,
+  badge,
 }: {
   item: ReviewItemModel;
   label?: string | null;
+  /** Beside where it came from, such as "Currency not listed" (#733). */
+  badge?: string;
   /** The Group's currency. */
   currency?: string;
   /** Said under an item only on this phone, where the list spans Groups. */
@@ -161,11 +189,14 @@ function ItemRow({
                 : 'Description needed')}
         </CompactText>
         {large && shownAmount ? <Money>{shownAmount}</Money> : null}
-        <CompactText variant="caption" tone="secondary">
-          {sourceLabel(item)}
-          {date ? ` · ${date}` : ''}
-          {groupName ? ` · ${groupName}` : ''}
-        </CompactText>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+          <CompactText variant="caption" tone="secondary">
+            {sourceLabel(item)}
+            {date ? ` · ${date}` : ''}
+            {groupName ? ` · ${groupName}` : ''}
+          </CompactText>
+          {badge ? <Badge label={badge} tone="warning" /> : null}
+        </View>
         {item.state !== 'on-this-phone' && label && (
           <CompactText variant="caption" tone={item.state === 'ready' ? 'positive' : 'warning'}>
             {label}
@@ -610,6 +641,7 @@ function AccountRow({
         accessibilityLabel={`Review ${item.accountItem?.draft.values?.description || 'expense details'}`}
         disabled={disabled}
         onPress={onOpen}
+        badge={unlistedCurrency(item) ? 'Currency not listed' : undefined}
       />
       <View style={{ paddingLeft: rowInset, paddingRight: 8, paddingBottom: 8, gap: 8 }}>
         {quick?.summary ? (
@@ -764,9 +796,26 @@ export function ToReviewList({
   const groupName =
     own?.groupName ?? (state.detail.id === groupId ? state.detail.data?.name : null) ?? 'Group';
   const disabled = collection.busy || collection.pending || state.offline || unavailable;
-  // An item opens in the guided review, with Add expense's fields and pickers (#435).
+  // An item in a currency the Group doesn't list opens its fix (#733); any other, the guided
+  // review, with Add expense's fields and pickers (#435).
+  const [fixing, setFixing] = useState<{
+    id: string;
+    changing: boolean;
+    /** The item as it was opened: offline, the list holds no account items to read it from. */
+    item: UnlistedItem;
+    draft: PersistedExpenseDraft;
+  } | null>(null);
+  const currencyAdd = useMobileSnapshot(controller, (snapshot) => snapshot.currencyAdd);
   const openItem = (item: ReviewItemModel) => {
-    if (item.accountItem) void controller.startReviewRun(groupId, item.accountItem.draft.id);
+    const currency = unlistedCurrency(item);
+    if (currency && item.accountItem)
+      setFixing({
+        id: item.id,
+        changing: false,
+        item: unlistedItem(item, currency),
+        draft: item.accountItem.draft,
+      });
+    else if (item.accountItem) void controller.startReviewRun(groupId, item.accountItem.draft.id);
   };
   // Problems ask about the signed-in member as "you" (#434).
   const names = Object.fromEntries(
@@ -814,6 +863,24 @@ export function ToReviewList({
     if (!collection.busy) controller.closeToReview();
   };
   const loaded = model.counts.total === 0 && state.toReview.status === 'ready' && !state.offline;
+  // The item being fixed, as the latest read has it: fixed, or gone once read online, it closes.
+  const fixingNow = fixing ? model.items.find((item) => item.id === fixing.id) : undefined;
+  const settled =
+    !!fixing &&
+    (fixingNow
+      ? !unlistedCurrency(fixingNow)
+      : !state.offline && state.toReview.status === 'ready');
+  useEffect(() => {
+    if (settled) setFixing(null);
+  }, [settled]);
+  const fixingGroup = collection.context?.group ?? {
+    name: groupName,
+    defaultCurrency: own?.currency ?? '',
+    alternateCurrencies:
+      state.toReview.read.groups.find((read) => read.groupId === groupId)?.alternateCurrencies ??
+      [],
+  };
+  const fixingDraft = fixingNow?.accountItem?.draft ?? fixing?.draft;
   const name = (id: string) =>
     id === state.auth.user?.id
       ? 'You'
@@ -1053,6 +1120,34 @@ export function ToReviewList({
             </>
           )}
         </ScrollView>
+        {fixing && !settled && fixingDraft ? (
+          fixing.changing ? (
+            <ChangeCurrencySheet
+              item={fixing.item}
+              group={fixingGroup}
+              disabled={disabled}
+              onUse={(currency) =>
+                void client.changeCurrency(fixingDraft, currency).then(() => setFixing(null))
+              }
+              onClose={() => setFixing({ ...fixing, changing: false })}
+            />
+          ) : (
+            <UnlistedCurrencySheet
+              item={fixing.item}
+              group={fixingGroup}
+              offline={state.offline}
+              disabled={collection.busy || collection.pending || unavailable}
+              adding={
+                currencyAdd.groupId === groupId
+                  ? currencyAdd
+                  : { groupId, status: 'idle', message: null }
+              }
+              onAdd={() => void controller.addGroupCurrency(fixing.item.currency)}
+              onChange={() => setFixing({ ...fixing, changing: true })}
+              onClose={() => setFixing(null)}
+            />
+          )
+        ) : null}
         {collection.notice && (
           <PayerNotice
             notice={collection.notice}

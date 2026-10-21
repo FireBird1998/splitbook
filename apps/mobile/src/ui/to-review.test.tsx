@@ -1,7 +1,13 @@
 import type { ReactElement } from 'react';
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
+import { unreadText } from '../test-utils/layout';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { onlineManager, focusManager } from '@tanstack/query-core';
 import { Alert } from 'react-native';
@@ -133,6 +139,8 @@ function fixture(
      * server reviews it as CURRENCY_NOT_LISTED until CHF is added or its currency changed.
      */
     francs?: boolean;
+    /** With Maple House's list full: 4 extra currencies, the most a Group can have. */
+    fullList?: boolean;
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -178,7 +186,7 @@ function fixture(
     items = [review(incomplete), review({ ...first, groupId: otherGroupId })];
   let extras: string[] = [];
   if (options.francs) {
-    extras = ['EUR', 'JPY'];
+    extras = options.fullList ? ['EUR', 'JPY', 'GBP', 'USD'] : ['EUR', 'JPY'];
     const dinner = row(7, 'Dinner in Zürich', 86);
     items = [review({ ...dinner, values: { ...dinner.values, currency: 'CHF' } })];
   }
@@ -1343,8 +1351,8 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     (node?.findAll((child) => String(child.type) === 'Text') ?? [])
       .map((child) => child.children.filter((part) => typeof part === 'string').join(''))
       .join('\n');
-  async function opened(mode: 'light' | 'dark' = 'light') {
-    const f = fixture({ francs: true });
+  async function opened(mode: 'light' | 'dark' = 'light', fullList = false) {
+    const f = fixture({ francs: true, fullList });
     await signIn(f);
     await act(async () => {
       await f.controller.openToReview(groupId);
@@ -1372,6 +1380,20 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
       'Changing keeps 86.00 and changes only the currency; nothing is converted.',
     );
     expect(button(list, 'Add CHF to Maple House')).toBeDefined();
+    expect(button(list, 'Change currency')).toBeDefined();
+  });
+
+  it('with the Group’s list full, offers only to change the currency, and says why', async () => {
+    const { list } = await opened('light', true);
+    await tap(list, 'Review Dinner in Zürich');
+    const shown = words(dialog(list, 'Dinner in Zürich'));
+    expect(shown).toContain(
+      'CHF isn’t one of Maple House’s currencies. Change this Expense’s currency.',
+    );
+    expect(shown).toContain(
+      'Maple House already has 4 extra currencies, the most a Group can have. An admin can remove one nothing uses in Group settings.',
+    );
+    expect(button(list, 'Add CHF to Maple House')).toBeUndefined();
     expect(button(list, 'Change currency')).toBeDefined();
   });
 
@@ -1409,6 +1431,17 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     expect(dialog(list, 'Change currency')).toBeNull();
     expect(dialog(list, 'Dinner in Zürich')).toBeNull();
     expect(button(list, 'Save Dinner in Zürich')).toBeDefined();
+  });
+
+  it.each([1.3, 2])('reads both sheets in full on a 360dp phone at %s× text', async (fontScale) => {
+    const { list } = await opened();
+    setWindow({ width: 360, height: 780, fontScale });
+    await tap(list, 'Review Dinner in Zürich');
+    const tree = list.toJSON() as ReactTestRendererJSON;
+    expect(unreadText(tree, fontScale, 360)).toEqual([]);
+    await tap(list, 'Change currency');
+    await tap(list, 'EUR, Euro');
+    expect(unreadText(list.toJSON() as ReactTestRendererJSON, fontScale, 360)).toEqual([]);
   });
 
   it('offline, adding says it needs a connection and sends nothing', async () => {

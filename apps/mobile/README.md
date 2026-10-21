@@ -160,6 +160,10 @@ For native fixtures, use `verify:expenses --seed-fixtures /absolute/path/manifes
 
 Done and Android Back retain sheet edits in the account-scoped draft. Changing split method clears incompatible split values; participant toggles retain their entries within the same method. Existing equal-split drafts remain readable. Every custom submission uses the same persisted immutable body/key and explicit retry rules as equal splits. The HTTP verifier now saves all five methods with multiple payers, reverses participant order to verify stable remainder placement, interrupts each committed response, restarts, retries explicitly, and compares the authorized saved allocations and Activity with the preview.
 
+### An unlisted currency in To review (#733)
+
+A To review item in a currency its Group doesn't list (the server's `CURRENCY_NOT_LISTED`, #732) needs details, and its row says **Currency not listed**. Opening it shows what's wrong and the web's two fixes, in the shared `unlistedCurrencyFix` words: **Add CHF to …** adds the currency to the Group, as the Expense form's Add a currency does (#722), and To review reads the item again; it needs a connection. **Change currency** picks one of the Group's currencies and keeps the amount as entered, unconverted (the draft collection's `changeCurrency`), and the item is reviewed again.
+
 ## Expense detail, editing, and deletion (#55)
 
 Open an Expense from the Group ledger to see its stored currency, payers, allocations, Tag, notes, and available edit history. **Edit expense** retains the record’s original values, including historical rounding and archived Tag association. Metadata-only changes send only changed metadata; they do not recalculate or resend allocations. **Delete expense** shows the saved record and requires explicit confirmation before soft deletion. Successful writes refresh the Group ledger, balances, and Home. The backend records Activity, verified through authorized HTTP reads; the native Activity screen remains a separate ticket.
