@@ -60,7 +60,6 @@ import {
   type LedgerState,
 } from './record-payment';
 
-
 /** Someone who can be picked as From or To. */
 export interface PaymentParty {
   id: string;
@@ -224,10 +223,13 @@ export default function RecordPaymentForm({
   const focusOnStart = useRef(start.focus);
 
   const attempts = useSettlementAttempts(accountId, groupId);
-  const stored =
+  const pairAttempt =
     from && to && from !== to
       ? (attempts.find((attempt) => samePair(attempt, from, to)) ?? null)
       : null;
+  // A stored settle-up (#734) is checked in its own sheet, never shown here as one payment.
+  const settling = pairAttempt?.batch ? pairAttempt : null;
+  const stored = settling ? null : pairAttempt;
 
   // A stored payment that disappears while it is shown was settled in another tab.
   useEffect(() => {
@@ -499,7 +501,7 @@ export default function RecordPaymentForm({
   const amountError = check?.amount.status === 'invalid' ? check.amount.message : null;
   const crossReady = !crossEntry || crossReading?.status === 'valid';
   const canSend =
-    !loading && !blocked && (stored !== null || (check?.ready === true && crossReady));
+    !loading && !blocked && !settling && (stored !== null || (check?.ready === true && crossReady));
   const why =
     crossEntry && crossReading?.status === 'incomplete' && check?.waitingFor == null
       ? 'Enter the rate or the amount paid to record it'
@@ -626,6 +628,14 @@ export default function RecordPaymentForm({
                 them.
               </Box>
             )}
+          </Alert>
+        )}
+
+        {settling && (
+          <Alert severity="warning" role="status">
+            A payment that settles several Debts with{' '}
+            {settling.paidBy === accountId ? settling.paidToName : settling.paidByName} may already
+            be recorded. Check it in Settle up before recording another.
           </Alert>
         )}
 
