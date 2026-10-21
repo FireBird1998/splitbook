@@ -511,9 +511,9 @@ describe('A Household’s Balances', () => {
   );
 
   /** Balances owing, as read; `after` a change written here, while they're read again. */
-  const changed = (after: boolean) => (
+  const changed = (after: boolean, group: MobileGroup = maple) => (
     <GroupBalancesView
-      group={maple}
+      group={group}
       currentUserId={you}
       state={{
         groupId: maple.id,
@@ -564,30 +564,36 @@ describe('A Household’s Balances', () => {
   // room the title leaves, wrapping there, and the reason Record waits takes the caption's place.
   // #639: at 360dp and 200% that room was a column a letter wide, and the title sat out of sight
   // in the middle of the tall row; where the title leaves less than the caption's longest word,
-  // the caption goes on a line of its own under it. #612: "Settle up", shorter than "Suggested
-  // payments" was, leaves it that room at 200% in a Group with one currency.
+  // the caption goes on a line of its own under it. #612: from 150% text it always has a line of
+  // its own, from its start, as the boards have it, whether the title is "Settle up" or
+  // "Settle up · INR".
   it.each([
-    [360, 1, 'beside'],
-    [360, 1.3, 'beside'],
-    [412, 1.3, 'beside'],
-    [360, 2, 'beside'],
-    [412, 2, 'beside'],
-  ])(
-    'the payments’ caption fits beside its title, %sdp wide at %s× text, or %s it',
-    (width, scale, place) => {
+    [360, 1, 'beside', 1],
+    [360, 1.3, 'beside', 1],
+    [412, 1.3, 'beside', 1],
+    [360, 2, 'under', 1],
+    [412, 2, 'under', 1],
+    [360, 1.3, 'beside', 2],
+    [360, 2, 'under', 2],
+  ] as const)(
+    'the payments’ caption fits beside its title, %sdp wide at %s× text, or %s it, in %s currencies',
+    (width, scale, place, currencies) => {
+      const group = currencies > 1 ? { ...maple, alternateCurrencies: ['EUR'] } : maple;
       setWindow({ width, fontScale: scale });
       const room = width - 32;
       /** The header row, its title, and how tall it lays out, with its caption. */
       const header = (after: boolean) => {
         act(() => {
-          renderer = create(changed(after));
+          renderer = create(changed(after, group));
         });
         const [row] = findHosts(renderer!.toJSON(), (props, type) => {
           const style = flatten(props.style);
-          return type === 'View' && style.flexDirection === 'row' && style.minHeight === 32;
+          return type === 'View' && style.minHeight === 32;
         }).filter((node) =>
           findHosts(node, (_props, type) => type === 'Text').some((title) =>
-            (title.children ?? []).includes('Settle up'),
+            (title.children ?? []).some(
+              (words) => typeof words === 'string' && words.startsWith('Settle up'),
+            ),
           ),
         );
         const [title, caption] = row!.children as ReactTestRendererJSON[];

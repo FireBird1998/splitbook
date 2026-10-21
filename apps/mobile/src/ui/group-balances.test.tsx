@@ -1284,6 +1284,48 @@ describe('Settle up, suggested or before simplifying (#612)', () => {
     expect(labelled(root, 'You pay Sam Chen, ₹1,480.00')).toHaveLength(1);
   });
 
+  it('opens on Suggested again once the member’s payments are gone and back', () => {
+    const element = (data: GroupCurrencyBalance[]) => (
+      <ThemeContext.Provider value={getSemanticTokens('light')}>
+        <GroupBalancesView
+          group={group()}
+          currentUserId={you}
+          state={financial({ data })}
+          pending={null}
+          offline={false}
+          onRecord={vi.fn()}
+          onCheckPayment={vi.fn()}
+          onRefreshBalances={() => undefined}
+        />
+      </ThemeContext.Provider>
+    );
+    const root = view([rupees]);
+    press(root, 'Before simplifying');
+    // Alex records the last payment: the section goes, then a new Expense brings it back.
+    act(() =>
+      screen!.update(
+        element([
+          {
+            currency: 'INR',
+            balances: [
+              { user: alex, balance: 0 },
+              { user: samChen, balance: 730 },
+              { user: priyaShah, balance: -730 },
+            ],
+            debts: [{ from: priyaShah, to: samChen, amount: 730 }],
+            debtsBeforeSimplifying: [{ from: priyaShah, to: samChen, amount: 730 }],
+          },
+        ]),
+      ),
+    );
+    expect(switches(root)).toHaveLength(0);
+    act(() => screen!.update(element([rupees])));
+    expect(options(root)).toEqual([
+      ['Suggested', true],
+      ['Before simplifying', false],
+    ]);
+  });
+
   it('shows Suggested alone, with no switch, for a reply without Debts', () => {
     const root = view([euros, rupees, yen]);
     press(root, 'JPY, you’re owed ¥8,400');
