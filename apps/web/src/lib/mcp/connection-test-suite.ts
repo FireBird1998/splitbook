@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { connectedAssistantActor } from './assistant-actor';
+import { consentRequestKey, holdExcludedGroups } from './excluded-groups';
 import { registerSplitbookTools } from './tools';
 import { createServer, type Server } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
@@ -658,6 +659,63 @@ export function connectionTests(mongo = false) {
         await authorizeCode();
         await approvalRequest();
         expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+      }));
+
+    /**
+     * Two accounts holding a choice for the same request parameters, which an assistant controls
+     * (state, code_challenge, redirect_uri), as a race between a member's hold and their grant.
+     */
+    async function holdForBoth(
+      oauthQuery: string,
+      choices: { member?: string[]; other?: string[] },
+    ) {
+      const adapter = (await auth.$context).adapter;
+      const member = await adapter.findOne<{ id: string }>({
+        model: 'user',
+        where: [{ field: 'email', value: 'connection@example.test' }],
+      });
+      const holders = [
+        ['000000000000000000000617', choices.other],
+        [member!.id, choices.member],
+      ] as const;
+      for (const [userId, excluded] of holders)
+        if (excluded)
+          await holdExcludedGroups(
+            adapter,
+            { key: consentRequestKey(oauthQuery, userId), userId, clientId },
+            excluded,
+          );
+    }
+
+    it('commits the member’s own held choice, whatever another account holds for the same request (#617)', () =>
+      withAnotherClient('Synthetic Held Client', async () => {
+        const leftOut = 'c00000000000000000000620';
+        const { oauthQuery } = await approvalRequest();
+        // The member's hold, then another account's for the same request parameters.
+        await holdForBoth(oauthQuery, { member: [leftOut] });
+        await holdForBoth(oauthQuery, { other: [] });
+        const consent = await post(
+          '/oauth2/consent',
+          { accept: true, oauth_query: oauthQuery, scope: `${MCP_LEDGER_SCOPE} offline_access` },
+          true,
+        );
+        expect(consent.status).toBe(200);
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+      }));
+
+    it('never applies another account’s held choice to the member’s grant (#617)', () =>
+      withAnotherClient('Synthetic Planted Client', async () => {
+        const { oauthQuery } = await approvalRequest();
+        await holdForBoth(oauthQuery, { other: ['c00000000000000000000621'] });
+        const consent = await post(
+          '/oauth2/consent',
+          { accept: true, oauth_query: oauthQuery, scope: `${MCP_LEDGER_SCOPE} offline_access` },
+          true,
+        );
+        expect(consent.status).toBe(200);
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
       }));
 
     it('writes nothing for a Deny or a tampered request that carries left-out Groups (#617)', () =>
