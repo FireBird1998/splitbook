@@ -476,6 +476,9 @@ in a `HomeSlot` of its width.
 - All interactive elements are keyboard accessible
 - MUI components provide ARIA attributes by default
 - Focus indicators on all interactive elements, via the `focus.main` / `focus.ring` tokens
+- An outlined or filled text field shows focus with its own focused border, not the ring around
+  its input (#823). A bare input whose box lights on focus, as Quick add and search do, turns the
+  ring off too; one in a box that doesn't keeps it
 - Screen reader labels on icon-only buttons
 
 Enforced by `playwright/theme-a11y.spec.ts`, which runs **axe-core** across four

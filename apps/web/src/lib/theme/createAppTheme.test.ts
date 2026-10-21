@@ -32,7 +32,7 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
     // An outlined or filled field's focused border is its indicator.
     for (const field of ['.MuiOutlinedInput-input', '.MuiFilledInput-input'])
       expect(rules[`${field}:focus-visible`], field).toEqual({ boxShadow: 'none' });
-    expect(Object.keys(rules).filter((selector) => /Button/.test(selector))).toEqual([]);
+    expect(Object.keys(rules).filter((selector) => /button/i.test(selector))).toEqual([]);
   });
 
   it('keeps small status text readable on its tint and ordinary surfaces', () => {
