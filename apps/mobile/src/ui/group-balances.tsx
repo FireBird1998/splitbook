@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Pressable, View, useWindowDimensions } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
 import { balanceCurrencies, openingBalanceCurrency } from '@splitbook/shared/balance-currencies';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
@@ -19,7 +19,6 @@ import {
   SkeletonOf,
   SkeletonText,
   StatusText,
-  hairSpace,
   scaledSp,
   textVariants,
   useLargestText,
@@ -29,7 +28,8 @@ import {
 import { inPlace, ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
-import { fonts, useTheme } from './theme';
+import { CurrencyTabs } from './currency-tabs';
+import { useTheme } from './theme';
 
 export const recordNeedsConnection = 'Recording a payment needs a connection.';
 /** Balances not yet read again after a change: their payments wait for the read (#219). */
@@ -153,7 +153,7 @@ function PendingPaymentNotice({
 }
 
 /** One currency Balances can show, with the member's own balance in it. */
-interface CurrencyTab {
+interface BalanceTab {
   currency: string;
   /** The Group's main currency. */
   main: boolean;
@@ -184,7 +184,7 @@ function currencyPositions(
 }
 
 /** "INR, main currency, you owe ₹1,480.00", as a screen reader names the tab (as on the web). */
-function tabName({ currency, main, balance }: CurrencyTab) {
+function tabName({ currency, main, balance }: BalanceTab) {
   const tone = getMoneyTone(balance);
   const amount = formatCurrency(Math.abs(balance), currency);
   return [
@@ -200,81 +200,33 @@ function tabName({ currency, main, balance }: CurrencyTab) {
 
 /**
  * Balances in one currency at a time (#725, boards "Balances" and its 130% version), as on the
- * web (#724): a tab per currency with the member's own position in it. The tabs wrap onto more
- * lines when they don't fit on one, as at large text, rather than clip.
+ * web (#724): a tab per currency with the member's own position in it (CurrencyTabs).
  */
 function BalanceCurrencySwitch({
   tabs,
   value,
   onChange,
 }: {
-  tabs: readonly CurrencyTab[];
+  tabs: readonly BalanceTab[];
   value: string;
   onChange: (currency: string) => void;
 }) {
-  const theme = useTheme();
-  // A drag that starts on a tab never chooses it (#693).
-  const tap = useTap();
   return (
-    <View
-      accessibilityRole="tablist"
-      accessibilityLabel="Balances in"
-      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}
-    >
-      {tabs.map((tab) => {
-        const selected = tab.currency === value;
+    <CurrencyTabs
+      label="Balances in"
+      tabs={tabs.map((tab) => {
         const tone = getMoneyTone(tab.balance);
-        return (
-          <Pressable
-            key={tab.currency}
-            accessibilityRole="tab"
-            accessibilityLabel={tabName(tab)}
-            accessibilityState={{ selected }}
-            {...tap.on(() => onChange(tab.currency))}
-            style={{ maxWidth: '100%' }}
-          >
-            <View
-              // Remounted on selection: Android keeps corners square when a background changes.
-              key={selected ? 'selected' : 'idle'}
-              style={{
-                minHeight: 56,
-                justifyContent: 'center',
-                gap: 1,
-                // The chosen tab's border is twice as wide, inside the same size.
-                paddingVertical: selected ? 7 : 8,
-                paddingHorizontal: selected ? 13 : 14,
-                borderRadius: 12,
-                borderWidth: selected ? 2 : 1,
-                borderColor: selected ? theme.brand.main : theme.borderStrong,
-                backgroundColor: selected ? theme.brand.bg : theme.surface,
-              }}
-            >
-              <CompactText
-                variant="caption"
-                tone={selected ? 'brand' : 'secondary'}
-                spare
-                style={{ fontFamily: fonts.mono }}
-              >
-                {tab.currency}
-                {tab.main ? (
-                  <CompactText
-                    variant="caption"
-                    tone={selected ? 'brand' : 'secondary'}
-                    weight="medium"
-                  >
-                    {' · main'}
-                  </CompactText>
-                ) : null}
-              </CompactText>
-              <Money
-                size="table"
-                tone={tone === 'neutral' ? 'secondary' : tone}
-              >{`${formatSignedCurrency(tab.balance, tab.currency)}${hairSpace}`}</Money>
-            </View>
-          </Pressable>
-        );
+        return {
+          currency: tab.currency,
+          main: tab.main,
+          figure: formatSignedCurrency(tab.balance, tab.currency),
+          figureTone: tone === 'neutral' ? 'secondary' : tone,
+          name: tabName(tab),
+        };
       })}
-    </View>
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 
