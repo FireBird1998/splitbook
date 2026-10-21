@@ -24,6 +24,8 @@ let settlements: typeof import('../route');
 let balances: typeof import('../../balances/route');
 let activity: typeof import('../../activity/route');
 let expenses: typeof import('../../expenses/route');
+let currencies: typeof import('../../currencies/route');
+let currency: typeof import('../../currencies/[code]/route');
 let cookie: string;
 beforeAll(async () => {
   await connectSignedIn(db);
@@ -33,6 +35,8 @@ beforeAll(async () => {
   balances = await import('../../balances/route');
   activity = await import('../../activity/route');
   expenses = await import('../../expenses/route');
+  currencies = await import('../../currencies/route');
+  currency = await import('../../currencies/[code]/route');
 });
 beforeEach(async () => {
   await db.reset();
@@ -57,7 +61,7 @@ const payment = {
   paidCurrency: 'INR',
   settlements: [{ currency: 'INR', amount: 20 }, eur],
 };
-async function trip(expenseAmount = 40) {
+async function trip(expenseAmount = 40, currencies = ['EUR', 'INR', 'JPY']) {
   const group = await groupService.create(
     {
       name: 'Fictional batch trip',
@@ -69,7 +73,7 @@ async function trip(expenseAmount = 40) {
   );
   const id = String(group._id);
   await groupService.addMember(id, sam);
-  for (const currency of ['EUR', 'INR', 'JPY']) {
+  for (const currency of currencies) {
     await expenseService.create(
       id,
       {
@@ -133,6 +137,76 @@ async function events(id: string) {
   );
 }
 describe('Settlement batch HTTP contract (#734)', () => {
+  it('never records a batch paid in a currency removed while the request is running', async () => {
+    const adminCookie = await signIn('alex');
+    const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    for (let round = 0; round < 12; round += 1) {
+      // Yen is listed but unused until the batch pays both Debts in it.
+      const id = await trip(40, ['EUR', 'INR']);
+      const request = {
+        paidBy: sam,
+        paidTo: alex,
+        paidCurrency: 'JPY',
+        settlements: [
+          {
+            currency: 'INR',
+            amount: 20,
+            amountPaidMinor: 2000,
+            appliedRate: '100',
+            rateKind: 'entered',
+          },
+          {
+            currency: 'EUR',
+            amount: 20,
+            amountPaidMinor: 3250,
+            appliedRate: '162.5',
+            rateKind: 'entered',
+          },
+        ],
+      };
+      const [removal, paid] = await Promise.all([
+        pause(round % 3).then(() =>
+          callRoute(currency.DELETE, {
+            method: 'DELETE',
+            path: `/api/groups/${id}/currencies/JPY`,
+            params: { id, code: 'JPY' },
+            cookie: adminCookie,
+          }),
+        ),
+        pause((round + 1) % 3).then(() => record(id, request)),
+      ]);
+      const settings = await callRoute(currencies.GET, {
+        method: 'GET',
+        path: `/api/groups/${id}/currencies`,
+        params: { id },
+        cookie,
+      });
+      const saved = await read(id);
+      const label = `round ${round}: removal ${removal.status}, payment ${paid.status}`;
+      expect(settings.status, label).toBe(200);
+      expect(saved.status, label).toBe(200);
+      const listed = settings.body.data.extraCurrencies.some(
+        (row: { code: string }) => row.code === 'JPY',
+      );
+      expect([200, 409], label).toContain(removal.status);
+      expect([201, 422], label).toContain(paid.status);
+      expect(listed, label).toBe(removal.status !== 200);
+      if (paid.status === 201) {
+        expect(listed, label).toBe(true);
+        expect(saved.body.data, label).toHaveLength(2);
+        expect(saved.body.data, label).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ currency: 'INR', paidCurrency: 'JPY' }),
+            expect.objectContaining({ currency: 'EUR', paidCurrency: 'JPY' }),
+          ]),
+        );
+      } else {
+        expect(paid.body.code, label).toBe('CURRENCY_MISMATCH');
+        expect(saved.body.data, label).toEqual([]);
+        expect(await events(id), label).toEqual([]);
+      }
+    }
+  });
   it('records two currencies atomically with immutable pair figures and one Activity event each', async () => {
     const id = await trip();
     const before = await ledgers(id);
