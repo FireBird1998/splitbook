@@ -106,6 +106,21 @@ describe('Connect an assistant', () => {
     );
   });
 
+  it('styles the breadcrumb and title as the rest of the app does (#619)', () => {
+    const html = connect();
+    for (const href of ['/', '/settings#connected-assistants'])
+      expect(new RegExp(`<a[^>]*href="${href}"[^>]*>`).exec(html)?.[0], href).toContain(
+        'MuiLink-root',
+      );
+    expect(html).not.toMatch(/<h1[^>]*MuiTypography-h3/);
+  });
+
+  it('tells Claude Code users to check the connection in Claude Code, having no live check here (#619)', () => {
+    const shown = text(connect('claude-code'));
+    expect(shown).toContain('Run /mcp in Claude Code to check its connection.');
+    expect(shown).not.toContain('Check your authorization');
+  });
+
   it('opens the picker from Settings’ Connect link (#619)', () => {
     const html = markup(
       createElement(ConnectionsSetting, { accountId: 'a00000000000000000000001' }),
