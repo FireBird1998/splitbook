@@ -10,13 +10,24 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { PersonAvatar } from '@/components/balances/TabCard';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
+import { ASSISTANT_CANNOT } from '@/lib/mcp/assistant-limits';
+import type { AssistantDisplay } from '@/lib/mcp/assistant-name';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { PRODUCT_NAME } from '@/lib/product';
 
+/** A connection request as the approval page shows it: the assistant, and what it asks for. */
+type ConsentDetails = AssistantDisplay & { scopes: string[] };
+
+/** The member signed in on this page, who approves or denies. */
+type SignedInAccount = { id: string; name: string; email: string };
+
 /**
- * The permissions a connection request asks for, as the consent screen lists them: the client,
- * ledger access, and, when it asks for them, preparing items for To review and staying connected.
+ * The permissions a connection request asks for, as the approval page lists them: the assistant
+ * by name, with its address in small text when it has one (#614), ledger access, and, when it
+ * asks for them, preparing items for To review and staying connected; then what it can't do, on
+ * every approval.
  */
 export function ConsentPermissions({
   details,
@@ -24,17 +35,29 @@ export function ConsentPermissions({
   busy,
   onDraftsChange,
 }: {
-  details: { clientId: string; scopes: string[] };
+  details: ConsentDetails;
   drafts: boolean;
   busy: boolean;
   onDraftsChange: (drafts: boolean) => void;
 }) {
   return (
     <>
-      <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
-        Client identity: {details.clientId}
-      </Typography>
-      <Typography>Ledger permission: read Group details, Balances and spending.</Typography>
+      <Box>
+        <Typography variant="h6" component="h2" sx={{ overflowWrap: 'anywhere' }}>
+          <bdi>{details.name}</bdi> wants to use your {PRODUCT_NAME}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+          {details.address
+            ? `${details.address} · identified by its published details`
+            : 'Registered by the assistant itself. Its address isn’t published.'}
+        </Typography>
+      </Box>
+      <Box>
+        <Typography variant="subtitle2" component="h3" sx={{ overflowWrap: 'anywhere' }}>
+          What <bdi>{details.name}</bdi> can do
+        </Typography>
+        <Typography>Ledger permission: read Group details, Balances and spending.</Typography>
+      </Box>
       {details.scopes.includes(MCP_DRAFT_SCOPE) && (
         <FormControlLabel
           control={
@@ -58,20 +81,103 @@ export function ConsentPermissions({
           The assistant may stay connected while you are away, until you disconnect it.
         </Typography>
       )}
+      <Box>
+        <Typography variant="subtitle2" component="h3" sx={{ overflowWrap: 'anywhere' }}>
+          What <bdi>{details.name}</bdi> can’t do
+        </Typography>
+        <Box component="ul" sx={{ m: 0, pl: 3 }}>
+          {ASSISTANT_CANNOT.map((limit) => (
+            <Typography key={limit} component="li" variant="body2">
+              {limit}
+            </Typography>
+          ))}
+        </Box>
+      </Box>
     </>
+  );
+}
+
+/** Who is approving: the signed-in member, by name and email (#614). */
+function SignedInAs({ account }: { account: SignedInAccount }) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        p: 1.5,
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 2,
+      }}
+    >
+      <PersonAvatar name={account.name || account.email} />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" component="p" color="text.secondary">
+          Signed in as
+        </Typography>
+        {account.name && (
+          <Typography variant="body2" fontWeight={500}>
+            {account.name}
+          </Typography>
+        )}
+        <Typography
+          variant="caption"
+          component="p"
+          color="text.secondary"
+          sx={{ overflowWrap: 'anywhere' }}
+        >
+          {account.email}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Allow or Deny, with the caution beside them: allow only an assistant the member asked to
+ * connect just now, named once the request's details arrive (#614).
+ */
+export function ConsentChoice({
+  name,
+  disabled,
+  onAllow,
+  onDeny,
+}: {
+  name: string | null;
+  disabled: boolean;
+  onAllow: () => void;
+  onDeny: () => void;
+}) {
+  return (
+    <Stack spacing={1}>
+      <Stack direction="row" spacing={2}>
+        <Button variant="contained" disabled={disabled} onClick={onAllow}>
+          Allow connection
+        </Button>
+        <Button disabled={disabled} onClick={onDeny}>
+          Deny
+        </Button>
+      </Stack>
+      {name && (
+        <Typography variant="body2" color="text.secondary">
+          Only allow this if you asked <bdi>{name}</bdi> to connect just now.
+        </Typography>
+      )}
+    </Stack>
   );
 }
 
 export default function OAuthFlow({
   query,
   consent,
-  accountId,
+  account,
 }: {
   query: string;
   consent: boolean;
-  accountId: string;
+  account: SignedInAccount;
 }) {
-  const [details, setDetails] = useState<{ clientId: string; scopes: string[] } | null>(null);
+  const [details, setDetails] = useState<ConsentDetails | null>(null);
   const [drafts, setDrafts] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -79,7 +185,7 @@ export default function OAuthFlow({
     if (!consent) return;
     const controller = new AbortController();
     apiFetch(`/api/auth/mcp/consent-details?${new URLSearchParams({ oauth_query: query })}`, {
-      headers: { [EXPECTED_ACCOUNT_HEADER]: accountId },
+      headers: { [EXPECTED_ACCOUNT_HEADER]: account.id },
       signal: controller.signal,
       cache: 'no-store',
     })
@@ -97,7 +203,7 @@ export default function OAuthFlow({
         if (!controller.signal.aborted) setError(reason.message);
       });
     return () => controller.abort();
-  }, [query, consent, accountId]);
+  }, [query, consent, account.id]);
 
   async function submit(accept = true) {
     setBusy(true);
@@ -105,7 +211,7 @@ export default function OAuthFlow({
     try {
       const response = await apiFetch(`/api/auth/oauth2/${consent ? 'consent' : 'continue'}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', [EXPECTED_ACCOUNT_HEADER]: accountId },
+        headers: { 'Content-Type': 'application/json', [EXPECTED_ACCOUNT_HEADER]: account.id },
         body: JSON.stringify({
           oauth_query: query,
           ...(consent
@@ -144,6 +250,7 @@ export default function OAuthFlow({
           {error && <Alert severity="error">{error}</Alert>}
           {consent ? (
             <>
+              <SignedInAs account={account} />
               <Typography>
                 This connection can access all Groups you belong to now and any you join in the
                 future, while you remain a member.
@@ -163,18 +270,15 @@ export default function OAuthFlow({
                 Disconnect at any time in Settings. Your To review items stay yours; disconnecting
                 cannot erase information already shared with the assistant.
               </Typography>
-              <Stack direction="row" spacing={2}>
-                <Button
-                  variant="contained"
-                  disabled={busy || !details}
-                  onClick={() => void submit()}
-                >
-                  Allow connection
-                </Button>
-                <Button disabled={busy || !details} onClick={() => void submit(false)}>
-                  Deny
-                </Button>
-              </Stack>
+              <Typography variant="body2">
+                {PRODUCT_NAME} checks your access on every request.
+              </Typography>
+              <ConsentChoice
+                name={details?.name ?? null}
+                disabled={busy || !details}
+                onAllow={() => void submit()}
+                onDeny={() => void submit(false)}
+              />
             </>
           ) : (
             <>

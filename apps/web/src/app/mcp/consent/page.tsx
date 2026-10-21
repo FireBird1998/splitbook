@@ -16,5 +16,11 @@ export default async function Page({
   if (!user) {
     redirect(`/login?${new URLSearchParams({ callbackUrl: '/mcp/consent?' + query })}`);
   }
-  return <OAuthFlow accountId={user.id} query={query} consent={true} />;
+  return (
+    <OAuthFlow
+      account={{ id: user.id, name: user.name, email: user.email }}
+      query={query}
+      consent={true}
+    />
+  );
 }
