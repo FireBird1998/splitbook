@@ -255,3 +255,68 @@ it('round trips each preview format and keeps statement previews to one Group', 
   ).toBe(false);
   expect(parseExportQuery(values({ groups: MAPLE, preview: 'true' })).success).toBe(false);
 });
+
+describe('just these Expenses (#613)', () => {
+  const WATER = 'e00000000000000000000001';
+  const RENT = 'e00000000000000000000002';
+
+  it('reads one Group’s Expenses as one CSV with each member’s share, each named once', () => {
+    expect(
+      parseExportQuery(values({ groups: MAPLE, expenses: `${WATER},${RENT},${WATER}` })),
+    ).toEqual({
+      success: true,
+      data: {
+        groupIds: [MAPLE],
+        expenseIds: [WATER, RENT],
+        include: ['shares'],
+        format: 'csv',
+        timeZone: 'UTC',
+      },
+    });
+  });
+
+  it('refuses them across Groups, for a period, with anything else included, in another format, or more than 100', () => {
+    const many = Array.from({ length: 101 }, (_, index) => index.toString(16).padStart(24, '0'));
+    for (const query of [
+      { groups: `${MAPLE},${GOA}`, expenses: WATER },
+      { groups: MAPLE, expenses: WATER, from: '2026-09-01', to: '2026-09-30' },
+      { groups: MAPLE, expenses: WATER, include: 'shares,payments' },
+      { groups: MAPLE, expenses: WATER, include: 'deleted' },
+      { groups: MAPLE, expenses: WATER, format: 'json' },
+      { groups: MAPLE, expenses: 'not-an-expense' },
+      { groups: MAPLE, expenses: many.join(',') },
+    ])
+      expect(parseExportQuery(values(query)).success, JSON.stringify(query)).toBe(false);
+    expect(
+      parseExportQuery(values({ groups: MAPLE, expenses: many.slice(1).join(',') })).success,
+    ).toBe(true);
+  });
+
+  it('sends them in the path, which the server reads back as the same request', () => {
+    const request: ExportRequest = {
+      groupIds: [MAPLE],
+      expenseIds: [WATER, RENT],
+      include: ['shares'],
+      format: 'csv',
+      timeZone: 'Asia/Kolkata',
+    };
+    expect(parseExportQuery(values(queryOf(exportPath(request))))).toEqual({
+      success: true,
+      data: request,
+    });
+  });
+
+  it('are one CSV named for the Group and the day', () => {
+    expect(
+      planExportFiles(
+        ['Maple House'],
+        { include: ['shares'], expenseIds: [WATER] },
+        { today: '2026-10-21' },
+      ),
+    ).toEqual({
+      files: [{ group: 0, kind: 'expenses', name: 'maple-house-2026-10-21-selected-expenses.csv' }],
+      download: 'maple-house-2026-10-21-selected-expenses.csv',
+      zipped: false,
+    });
+  });
+});

@@ -6,6 +6,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
 import type { ExpenseTagChangeReply } from '@splitbook/shared/expense-tag-change';
+import { exportPath } from '@splitbook/shared/api-paths';
 
 /*
  * #610: selecting Expenses on a computer and moving them to one Tag: the selection, the table's
@@ -17,6 +18,7 @@ const { default: ExpenseTable } = await import('./ExpenseTable');
 const { default: ExpenseSelectionPanel } = await import('./ExpenseSelectionPanel');
 const { useExpenseSelection } = await import('./expense-selection');
 const { changeExpenseTags } = await import('./expense-tag-change');
+const { exportSelectedExpenses } = await import('./expense-export');
 
 const GROUP = 'c00000000000000000000001';
 const ALEX = { _id: 'a00000000000000000000001', name: 'Alex Rivera', image: null };
@@ -245,6 +247,7 @@ describe('the selection panel (#610)', () => {
     expenses: ExpenseRead[],
     onChangeTag = vi.fn<(tagId: string) => Promise<ExpenseTagChangeReply>>(),
     onOpen = vi.fn(),
+    onExport = vi.fn<() => Promise<string>>(),
   ) =>
     show(
       createElement(ExpenseSelectionPanel, {
@@ -254,6 +257,7 @@ describe('the selection panel (#610)', () => {
         onClear: vi.fn(),
         onChangeTag,
         onOpen,
+        onExport,
       }),
     );
 
@@ -313,6 +317,70 @@ describe('the selection panel (#610)', () => {
     await press('Move to Household');
     expect(shown()).toContain('This Group is archived.');
     expect(buttons('Change Tag')).toHaveLength(1);
+  });
+});
+
+describe('Export selected (#613)', () => {
+  it('exports the selected Expenses from the panel, and says the file is downloading', async () => {
+    const onExport = vi.fn(async () => 'maple-house-2026-10-21-selected-expenses.csv');
+    show(
+      createElement(ExpenseSelectionPanel, {
+        expenses: [GROCERIES, WATER],
+        userId: ALEX._id,
+        tags: GROUP_TAGS,
+        onClear: vi.fn(),
+        onChangeTag: vi.fn(),
+        onOpen: vi.fn(),
+        onExport,
+      }),
+    );
+    await press('Export selected');
+    expect(onExport).toHaveBeenCalledOnce();
+    expect(shown()).toContain('maple-house-2026-10-21-selected-expenses.csv is downloading.');
+  });
+
+  it('downloads just their CSV with each member’s share, named for the Group and the day', async () => {
+    const asked: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        asked.push(url);
+        return new Response('\uFEFFDate,Description\r\n', {
+          headers: {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition':
+              'attachment; filename="maple-house-2026-10-21-selected-expenses.csv"',
+          },
+        });
+      }),
+    );
+    const link = { href: '', download: '', style: {}, click: vi.fn(), remove: vi.fn() };
+    vi.stubGlobal('document', { createElement: () => link, body: { appendChild: vi.fn() } });
+
+    const fileName = await exportSelectedExpenses(GROUP, [GROCERIES, WATER], 'Asia/Kolkata');
+
+    expect(asked).toEqual([
+      exportPath({
+        groupIds: [GROUP],
+        expenseIds: [GROCERIES._id, WATER._id],
+        include: ['shares'],
+        format: 'csv',
+        timeZone: 'Asia/Kolkata',
+      }),
+    ]);
+    expect(fileName).toBe('maple-house-2026-10-21-selected-expenses.csv');
+    expect(link.download).toBe('maple-house-2026-10-21-selected-expenses.csv');
+    expect(link.click).toHaveBeenCalledOnce();
+  });
+
+  it('says why a refused export downloaded nothing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ error: 'Forbidden', status: 403 }, { status: 403 })),
+    );
+    await expect(exportSelectedExpenses(GROUP, [GROCERIES], 'UTC')).rejects.toThrow(
+      'You can only export Groups you’re in. Reload the page to see your Groups.',
+    );
   });
 });
 
