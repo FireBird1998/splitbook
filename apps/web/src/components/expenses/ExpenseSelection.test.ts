@@ -273,6 +273,29 @@ describe('the selection panel (#610)', () => {
     expect(shown()).toContain('Your position on theseyou lent₹86.99');
   });
 
+  // #810: a currency Splitbook no longer supports stays out of the total, never converted.
+  it('leaves an Expense in a currency Splitbook no longer supports out of their total', () => {
+    const marks = {
+      ...GROCERIES,
+      _id: 'e00000000000000000000009',
+      description: 'Old Berlin rent',
+      currency: 'DEM',
+      amount: 40,
+      amountMinor: undefined,
+      moneyVersion: undefined,
+      paidBy: [{ user: ALEX, amount: 40 }],
+      splitBetween: [
+        { user: ALEX, amount: 20 },
+        { user: SAM, amount: 20 },
+      ],
+    } as ExpenseRead;
+    panel([GROCERIES, marks]);
+    expect(shown()).toContain('2 selected · ₹1,240.50');
+    expect(shown()).toContain('Old Berlin rent');
+    expect(shown()).toContain('DEM 40.00');
+    expect(shown()).toContain('Your position on theseyou lent₹827.00');
+  });
+
   it('offers only the Group’s active Tags to move them to', async () => {
     panel([GROCERIES]);
     await press('Change Tag');

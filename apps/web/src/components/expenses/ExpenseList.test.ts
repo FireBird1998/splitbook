@@ -308,6 +308,69 @@ describe('the Expense table', () => {
   });
 });
 
+// #810: an Expense in a currency Splitbook no longer supports, as an old database holds it,
+// shows its stored amount with its code, as Activity does (#779), and no position.
+describe('an Expense in a currency Splitbook no longer supports (#810)', () => {
+  const marks = expense(
+    5,
+    'Old Berlin rent',
+    'Household',
+    ALEX,
+    [
+      [ALEX, 2000],
+      [SAM, 2000],
+    ],
+    {
+      currency: 'DEM',
+      amount: 40,
+      amountMinor: undefined,
+      moneyVersion: undefined,
+      paidBy: [{ user: ALEX, amount: 40 }],
+      splitBetween: [
+        { user: ALEX, amount: 20 },
+        { user: SAM, amount: 20 },
+      ],
+    },
+  );
+
+  it('shows its amount with its code in the table, and nothing to settle', () => {
+    const html = render(
+      createElement(ExpenseTable, {
+        expenses: [marks],
+        userId: ALEX._id,
+        recurringExpensesEnabled: false,
+        label: 'Expenses',
+        caption: 'Expenses',
+        openId: null,
+        onToggle: vi.fn(),
+        panelId: 'expense-panel',
+      }),
+    );
+    expect(rows(html)[0]?.slice(1)).toEqual([
+      'Old Berlin rent Household',
+      'AR You',
+      'Equally · 2',
+      'DEM 40.00',
+      '— nothing to settle',
+    ]);
+  });
+
+  it('shows its amount with its code on a card', () => {
+    const html = render(
+      createElement(ExpenseCard, {
+        expense: marks,
+        userId: ALEX._id,
+        recurringExpensesEnabled: false,
+        isExpanded: false,
+        onToggleExpand: vi.fn(),
+        details: createElement('p', null, 'Opened'),
+        detailsId: 'card-details',
+      }),
+    );
+    expect(text(html)).toContain('Old Berlin rent You paid · Equally · 2 Household DEM 40.00');
+  });
+});
+
 describe('an Expense card on a phone', () => {
   const card = (row: ExpenseRead, recurringExpensesEnabled = false, isExpanded = false) =>
     render(

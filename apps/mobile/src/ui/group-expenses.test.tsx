@@ -561,6 +561,33 @@ describe('Expense rows', () => {
     expect(onOpenExpense).toHaveBeenCalledWith(electricity.id);
   });
 
+  // #810: an Expense in a currency Splitbook no longer supports shows its stored amount with
+  // its code, as Activity does (#779), and no position: there is nothing exact to say.
+  it('show an Expense in a currency Splitbook no longer supports with its code, and no position', () => {
+    const marks: MobileExpense = {
+      ...expense(
+        'e00000000000000000000009',
+        'Old Berlin rent',
+        30,
+        [[you, 4000]],
+        [
+          [you, 2000],
+          [sam, 2000],
+        ],
+        'Household',
+      ),
+      currency: 'DEM',
+    };
+    const { root } = view({
+      state: financial({
+        data: [marks],
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+      }),
+    });
+    // Intl writes a code-prefixed amount with a no-break space.
+    expect(buttons(root)).toContain('Old Berlin rent, DEM\u00a040.00, You paid, Household');
+  });
+
   it('open on a tap or a screen reader’s activate, never on a drag, in a Month too short to scroll (#665)', () => {
     // Three rows in one Month, as on the device: the list can't scroll, so nothing takes a drag.
     const { root, onOpenExpense } = view({
