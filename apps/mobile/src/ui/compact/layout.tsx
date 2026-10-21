@@ -343,6 +343,7 @@ export const ListRow = memo(function ListRow({
   meta,
   metaTone = 'secondary',
   metaLines = 1,
+  note,
   trailing,
   trailingLoading = false,
   trailingWidth,
@@ -361,6 +362,11 @@ export const ListRow = memo(function ListRow({
   metaTone?: TextTone;
   /** Lines the meta may take: more where it explains a choice, as in a sheet's options. */
   metaLines?: number;
+  /**
+   * A caption under the meta that must keep its end readable, as an assistant's credit does its
+   * domain (#751): one line, cut in the middle, whole at the largest text.
+   */
+  note?: string;
   trailing?: ReactNode;
   trailingLoading?: boolean;
   trailingWidth?: number;
@@ -389,6 +395,16 @@ export const ListRow = memo(function ListRow({
         {meta ? (
           <CompactText variant="caption" tone={metaTone} numberOfLines={whole ? 0 : metaLines}>
             {meta}
+          </CompactText>
+        ) : null}
+        {note ? (
+          <CompactText
+            variant="caption"
+            tone="secondary"
+            numberOfLines={whole ? 0 : 1}
+            ellipsizeMode="middle"
+          >
+            {note}
           </CompactText>
         ) : null}
       </View>
