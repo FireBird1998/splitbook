@@ -635,6 +635,21 @@ export function connectionTests(mongo = false) {
         expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
       }));
 
+    it('starts a reconnection after Disconnect from every Group, even when its consent sends no choice (#617)', () =>
+      withAnotherClient('Synthetic Reconnecting Client', async () => {
+        const leftOut = 'c00000000000000000000623';
+        await authorizeCode(false, false, false, [leftOut]);
+        const listing = await fetch(`${origin}/api/auth/mcp/connections`, { headers: { cookie } });
+        const connection = (
+          (await listing.json()).connections as Array<{ id: string; clientId: string }>
+        ).find((row) => row.clientId === clientId);
+        expect((await post('/mcp/revoke', { id: connection!.id }, true)).status).toBe(200);
+        // A consent that sends no choice brings back nothing from before Disconnect.
+        await authorizeCode();
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+      }));
+
     it('keeps the choice in force when a signed consent then fails (#617)', () =>
       withAnotherClient('Synthetic Failing Consent Client', async () => {
         const leftOut = 'c00000000000000000000618';
@@ -1982,6 +1997,45 @@ export function connectionTests(mongo = false) {
           await callAssistant(reconnected.access_token);
           expect(await connectionList()).toHaveLength(1);
           expect((await refresh(issued.refresh_token)).ok).toBe(false);
+        } finally {
+          vi.useRealTimers();
+          await signIn();
+        }
+      });
+
+      it('starts a reconnection after expiry from every Group, and leaves no held choice behind (#617, #618)', async () => {
+        const start = Math.floor(Date.now() / 1000) * 1000;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(start);
+        const [leftOut, laterLeftOut] = ['c00000000000000000000622', 'c00000000000000000000624'];
+        const heldChoices = async () =>
+          (await auth.$context).adapter.findMany({
+            model: 'mcpPendingExclusion',
+            where: [{ field: 'clientId', value: clientId }],
+          });
+        try {
+          await signIn();
+          for (const connection of await connectionList())
+            expect((await post('/mcp/revoke', { id: connection.id }, true)).status).toBe(200);
+          await authorizeClient(false, false, false, [leftOut]);
+          await approvalRequest();
+          expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+          // Unused for 90 days: approving again starts with every Group ticked.
+          vi.setSystemTime(start + 90 * day);
+          await signIn();
+          await approvalRequest();
+          expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+          // A reconnection that sends no choice brings back nothing from before the expiry.
+          await authorizeClient();
+          await approvalRequest();
+          expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+          // Expired again, reconnecting with the page's choice commits it and holds nothing.
+          vi.setSystemTime(start + 180 * day);
+          await signIn();
+          await authorizeClient(false, false, false, [laterLeftOut]);
+          await approvalRequest();
+          expect(approvalShown).toMatchObject({ excludedGroupIds: [laterLeftOut] });
+          expect(await heldChoices()).toEqual([]);
         } finally {
           vi.useRealTimers();
           await signIn();
