@@ -163,8 +163,12 @@ it.each([
   const html = renderToStaticMarkup(
     createElement(ThemeProvider, { theme }, createElement(Alert, { severity }, 'Prepared items')),
   );
-  expect(html).toContain(`background-color:var(--mui-palette-tint-${tone})`);
-  expect(html).toContain('color:var(--mui-palette-text-primary)');
+  // The banner's root rule, Paper's and MUI's own styles first: the last of each wins.
+  const root = html.match(/\.css-[\w-]+\{([^}]*)\}/)![1];
+  const last = (property: string) =>
+    [...root.matchAll(new RegExp(`(?:^|;)${property}:([^;]+)`, 'g'))].at(-1)?.[1];
+  expect(last('background-color')).toBe(`var(--mui-palette-tint-${tone})`);
+  expect(last('color')).toBe('var(--mui-palette-text-primary)');
   expect(html).toContain(`color:var(--mui-palette-status-${tone})`);
 });
 

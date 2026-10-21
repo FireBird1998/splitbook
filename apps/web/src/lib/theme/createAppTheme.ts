@@ -375,16 +375,16 @@ export function createAppTheme(mode: ThemeMode): Theme {
               warning: 'warning',
               error: 'negative',
               success: 'positive',
-            };
+            } as const;
             return {
               borderRadius: RADIUS.md,
               variants: Object.entries(tones).map(([colorSeverity, tone]) => ({
                 props: { variant: 'standard', colorSeverity },
                 style: {
-                  backgroundColor: palette.tint[tone as keyof typeof palette.tint],
+                  backgroundColor: palette.tint[tone],
                   color: palette.text.primary,
                   [`& .${alertClasses.icon}`]: {
-                    color: palette.status[tone as keyof typeof palette.status],
+                    color: palette.status[tone],
                   },
                 },
               })),
