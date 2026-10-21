@@ -121,9 +121,12 @@ for (const [name, Field] of fields) {
     const input = () => renderer.root.findByType('input');
     await act(async () => input().props.onFocus({ target: input().props }));
     /** What the member's keystroke left in the field, the caret at `at`. */
-    const edit = (value: string, at = value.length) =>
+    const edit = (value: string, at = value.length, inputType = 'insertText') =>
       act(async () =>
-        input().props.onChange({ target: { value, selectionStart: at, selectionEnd: at } }),
+        input().props.onChange({
+          target: { value, selectionStart: at, selectionEnd: at },
+          nativeEvent: { inputType },
+        }),
       );
     return { input, changed, caret, edit };
   }
@@ -153,6 +156,25 @@ for (const [name, Field] of fields) {
     expect(caret).toHaveBeenLastCalledWith(0, 0);
   });
 
+  it(`${name}: Backspace over a grouping comma steps back past it, so the next one takes the 1`, async () => {
+    const { input, changed, caret, edit } = await focused('EUR', '1842.5');
+    await edit('1842.50', 1, 'deleteContentBackward');
+    expect(input().props.value).toBe('1,842.50');
+    expect(changed).toHaveBeenLastCalledWith('1842.50');
+    expect(caret).toHaveBeenLastCalledWith(1, 1);
+  });
+
+  it(`${name}: Delete before a grouping comma steps past it, so the next one takes the 8`, async () => {
+    const { input, changed, caret, edit } = await focused('EUR', '1842.5');
+    await edit('1842.50', 1, 'deleteContentForward');
+    expect(input().props.value).toBe('1,842.50');
+    expect(caret).toHaveBeenLastCalledWith(2, 2);
+    await edit('1,42.50', 2, 'deleteContentForward');
+    expect(input().props.value).toBe('142.50');
+    expect(changed).toHaveBeenLastCalledWith('142.50');
+    expect(caret).toHaveBeenLastCalledWith(1, 1);
+  });
+
   it(`${name}: a whole yen amount regroups too, and INR groups as it does on blur`, async () => {
     const yen = await focused('JPY', '1842');
     expect(yen.input().props.value).toBe('1,842');
@@ -174,6 +196,14 @@ for (const [name, Field] of fields) {
   it(`${name}: "10,5" typed key by key stays as typed and is refused, never 105`, async () => {
     const { input, changed, edit } = await focused('EUR', '');
     for (const typed of ['1', '10', '10,', '10,5']) await edit(typed);
+    expect(input().props.value).toBe('10,5');
+    expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
+  });
+
+  it(`${name}: Backspace in a refused "10,55" leaves "10,5" as typed, still refused`, async () => {
+    const { input, changed, edit } = await focused('EUR', '');
+    for (const typed of ['1', '10', '10,', '10,5', '10,55']) await edit(typed);
+    await edit('10,5', 4, 'deleteContentBackward');
     expect(input().props.value).toBe('10,5');
     expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
   });
