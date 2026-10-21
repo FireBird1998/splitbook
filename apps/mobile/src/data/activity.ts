@@ -4,6 +4,7 @@ import { parseActivityPageResponse } from '@splitbook/shared/activity-page-read'
 import { getCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import { crossCurrencySettlementReadShape } from '@splitbook/shared/validators/settlement';
+import { settlementBatchActivityShape } from '@splitbook/shared/settlement-batch-activity';
 import { currencyCode } from '@splitbook/shared/wire-fields';
 import { objectId } from './dto';
 import type { LoadStatus, ScrollAnchor } from './types';
@@ -29,6 +30,8 @@ const metadata = z.object({
    */
   amountMinor: z.number().int().safe().optional(),
   ...crossCurrencySettlementReadShape,
+  /** A settle-up's reference: its first Settlement's id, and how many it recorded (#734). */
+  ...settlementBatchActivityShape,
   recurring: z.boolean().optional(),
   action: z.string().optional(),
   /** The Assistant rule an admin set (#621). */

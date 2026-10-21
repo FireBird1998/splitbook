@@ -3,6 +3,7 @@ import { assistantRuleLabel } from '@splitbook/shared/assistant-rule';
 import { readCrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
 import { minorMoney } from '@splitbook/shared/cross-currency-settlement';
 import { memberLabel } from '@splitbook/shared/member-label';
+import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
 import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST } from '@splitbook/shared/group-themes';
 import {
@@ -407,6 +408,27 @@ export function describeActivity(
     default:
       return line('changed the Group', null, []);
   }
+}
+
+/**
+ * A payment that settled several Debts at once (#734), as one row: "You paid Sam Chen ₹3,322.00 to
+ * clear ₹1,480.00 and €20.00", then each Debt and its rate, in the shared words the web says.
+ * `events` are the batch's events loaded so far; `batchSize`, how many it has in all.
+ */
+export function describeSettlementBatch(
+  events: ActivityEvent[],
+  batchSize: number,
+  { currentUserId }: { currentUserId: string; currency: string },
+): ActivityLine {
+  const words = settlementBatchWords(events, batchSize, currentUserId);
+  return {
+    actor: words.payer,
+    verb: 'paid',
+    subject: words.payee,
+    complement: words.amounts,
+    details: [...words.debts, ...(words.rest ? [words.rest] : [])].map((text) => ({ text })),
+    changes: [],
+  };
 }
 
 /** The whole row as one sentence for screen readers. */
