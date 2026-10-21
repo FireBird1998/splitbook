@@ -884,3 +884,38 @@ it.each(['Lunch 450 rupees', 'Dinner rs 20'])(
     });
   },
 );
+
+describe('Quick add reads an unlisted currency as one the member chose instead (#732)', () => {
+  const swiss = { alternateCurrencies: ['EUR', 'JPY'] };
+
+  it('reads the amount in the chosen currency, as typed and unconverted', () => {
+    const line = read('CHF 86 dinner', { ...swiss, currencyChoice: { said: 'CHF', code: 'EUR' } });
+    expect(line).toMatchObject({
+      description: 'Dinner',
+      currency: 'EUR',
+      currencyListed: true,
+      amountMinor: 8600,
+      amountText: '86',
+      problems: [],
+    });
+  });
+
+  it('checks the amount against the chosen currency', () => {
+    const line = read('CHF 86.50 dinner', {
+      ...swiss,
+      currencyChoice: { said: 'CHF', code: 'JPY' },
+    });
+    expect(line).toMatchObject({ currency: 'JPY', amountMinor: null, amountText: '86.50' });
+    expect(line.problems).toEqual([expect.objectContaining({ code: 'amount-decimals' })]);
+  });
+
+  it('lets the choice lapse once the line names another currency', () => {
+    const line = read('GBP 86 dinner', { ...swiss, currencyChoice: { said: 'CHF', code: 'EUR' } });
+    expect(line).toMatchObject({ currency: 'GBP', currencyListed: false, amountMinor: null });
+  });
+
+  it('ignores a choice the Group doesn’t list', () => {
+    const line = read('CHF 86 dinner', { currencyChoice: { said: 'CHF', code: 'EUR' } });
+    expect(line).toMatchObject({ currency: 'CHF', currencyListed: false, amountMinor: null });
+  });
+});
