@@ -488,6 +488,22 @@ describe('settling up in several currencies at once (#734)', () => {
     ]);
   });
 
+  it('ends when a Debt is gone by the time it’s recorded, and sends nothing', async () => {
+    let euros = 20;
+    const { controller, batches, records } = await opened(({ pathname }) =>
+      pathname === `/api/groups/${groupId}/balances` ? json(balances(euros)) : undefined,
+    );
+    euros = 0;
+    await controller.recordSettlement();
+    expect(batches).toEqual([]);
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'ready',
+      batch: null,
+      message: 'This suggested payment has changed. Close this to see the latest balances.',
+    });
+  });
+
   it('ends when Splitbook finds a Debt gone, and keeps nothing to retry', async () => {
     const { controller, batches, records } = await opened(({ pathname }, init) =>
       pathname.endsWith('/settlements/batch') && init.method === 'POST'
@@ -543,14 +559,51 @@ describe('settling up in several currencies at once (#734)', () => {
     expect(restarted.getSnapshot().snackbar?.message).toBe('Payment recorded');
   });
 
-  it('keeps it unconfirmed when the reply records something else', async () => {
+  it.each<[string, (data: ReturnType<typeof batchRecorded>) => void]>([
+    [
+      'pays another amount for a Debt',
+      (data) => {
+        data.settlements[1] = {
+          ...data.settlements[1]!,
+          amountPaidMinor: 185000,
+        } as (typeof data.settlements)[number];
+      },
+    ],
+    [
+      'clears another amount of a Debt',
+      (data) => {
+        Object.assign(data.settlements[0]!, { amount: 1400, amountMinor: 140000 });
+      },
+    ],
+    [
+      'pays another total',
+      (data) => {
+        data.totalPaidMinor += 1;
+      },
+    ],
+    [
+      'lists its Settlements in another order',
+      (data) => {
+        data.settlements.reverse();
+      },
+    ],
+    [
+      'pays in another currency',
+      (data) => {
+        data.paidCurrency = 'EUR';
+      },
+    ],
+    [
+      'leaves a Settlement out',
+      (data) => {
+        data.settlements.pop();
+      },
+    ],
+  ])('keeps it unconfirmed when the reply %s', async (_, change) => {
     const { controller, records } = await opened(({ pathname }, init) => {
       if (!pathname.endsWith('/settlements/batch') || init.method !== 'POST') return undefined;
       const data = batchRecorded(JSON.parse(String(init.body)));
-      data.settlements[1] = {
-        ...data.settlements[1]!,
-        amountPaidMinor: 185000,
-      } as (typeof data.settlements)[number];
+      change(data);
       return json({ status: 201, data }, 201);
     });
     await controller.recordSettlement();
