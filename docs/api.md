@@ -1286,6 +1286,7 @@ among them; amounts are never combined or converted across currencies.
 | Method | Path                                    | Description                                   |
 | ------ | --------------------------------------- | --------------------------------------------- |
 | GET    | `/api/groups/[id]/trip-summary?tz=IANA` | A Trip's whole-trip summary, its Insights tab |
+| GET    | `/api/groups/[id]/insights?tz=IANA`     | A Group's Month against the Months before it  |
 
 ### GET /api/groups/[id]/trip-summary
 
@@ -1300,11 +1301,16 @@ decoded by `@splitbook/shared/trip-summary-read` (path and query key in
   `INVALID_TIME_ZONE`.
 - **Only a Trip has one.** A Group of another Theme is `409` `NOT_A_TRIP`
   (`Only a Trip has a Trip summary.`), before anything is generated.
+- `currency` (optional, #729) picks the currency every figure is in; anything
+  but a supported code is `400` `INVALID_CURRENCY`. Without it, the summary
+  opens on the currency with the most Expenses on the whole trip, a tie going to
+  the main currency (`@splitbook/shared/spending-currencies`). Nothing is
+  converted and no rate is used.
 - **Side effect:** due recurring templates are generated first, as the Group's
   other reads do, respecting the product-wide switch (#289) and the Theme; a
   Trip's Theme has none, so on a Trip nothing is added either way.
 
-Amounts are exact minor units of the Group's currency. The response holds:
+Amounts are exact minor units of the summary's `currency`. The response holds:
 
 - `spentMinor`, `expenseCount`, `yourShareMinor`, `youPaidMinor`,
   `yourExpenseCount`, `peopleCount` (everyone with a share), and
@@ -1320,8 +1326,16 @@ Amounts are exact minor units of the Group's currency. The response holds:
   of the Trip's Spent (whole percents that total 100, by largest remainder);
 - `suggestedPayments`: `{ from, to, amountMinor }`, people as `{ id, name }`,
   exactly the payments Balances suggests in the Group's currency;
-- `otherCurrencies` (legacy Groups only: listed, never converted) and
-  `hasExpenses` (any Expense at all).
+- `otherCurrencies` (every other currency spent in: listed, never converted)
+  and `hasExpenses` (any Expense at all);
+- `currencies`, last: what the whole trip spent in each currency
+  (`currency`, `expenseCount`, `spentMinor`), the main currency first, then the
+  Group's extra currencies in order, then any other, for the currency switch.
+
+The Insights read (`GET /api/groups/[id]/insights?month=&compare=&tz=`) takes
+the same `currency`, opens on the currency with the most Expenses in the Month
+without it, and ends with the same `currencies` for that Month. The fields it
+sent before #315 are unchanged.
 
 **Expenses outside the Trip's dates** count in every whole-trip figure (Spent,
 shares, per person per day, By Tag), as the trip strip's total and the Expenses
