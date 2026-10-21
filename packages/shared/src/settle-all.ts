@@ -11,7 +11,7 @@ import {
   suggestedRateText,
   type RateSuggestion,
 } from './cross-currency-payment';
-import { getCurrencyPrecision } from './currency';
+import { getCurrency, getCurrencyPrecision } from './currency';
 import { minorMoney } from './cross-currency-settlement';
 import { readLegacyAmountMinor, toMajorAmount } from './exact-money';
 import { canRecordSettlement } from './settlement-authorization';
@@ -98,9 +98,13 @@ export function settleAllDebtsBetween(
     .map(({ currency, amountMinor }) => ({ currency, amountMinor }));
 }
 
-/** Each Suggested payment with an exact amount above zero, its currency in `currencies`' order. */
+/**
+ * Each Suggested payment with an exact amount above zero, its currency in `currencies`' order.
+ * A currency Splitbook no longer supports has no position, so nothing is settled in it (#812).
+ */
 function suggested(buckets: readonly SuggestedPayments[], currencies: readonly string[]) {
   return [...buckets]
+    .filter(({ currency }) => getCurrency(currency) !== undefined)
     .sort((a, b) => rank(currencies, a.currency) - rank(currencies, b.currency))
     .flatMap(({ currency, debts }) =>
       debts.flatMap((debt) => {
