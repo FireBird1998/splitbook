@@ -4664,6 +4664,48 @@ describe('an Expense in one of the Group’s currencies (#720)', () => {
       expect(controller.getSnapshot().expense.draft?.currency).toBe('JPY');
     });
 
+    // The Tester's Medium on 49d3c2ab: Splitbook added CHF, but the form never learnt it, and
+    // adding it again was refused as already listed.
+    it.each(['its reply is lost on the way back', 'the Group already lists it'] as const)(
+      'when adding one fails because %s, reads the Group again and puts the Expense in it',
+      async (failure) => {
+        const { state, intercept } = currencies();
+        let groupReads = 0;
+        const { controller } = setup((path, init) => {
+          if (path === `/api/groups/${groupId}`) groupReads += 1;
+          if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST') {
+            state.added.push(JSON.parse(String(init.body)));
+            // Splitbook adds CHF either way: just now, or earlier for another member.
+            state.extras = [...state.extras, 'CHF'];
+            return failure === 'the Group already lists it'
+              ? Promise.resolve(
+                  json(
+                    {
+                      error: 'CHF is already one of this Group’s currencies.',
+                      code: 'INVALID_GROUP_CURRENCIES',
+                      status: 422,
+                    },
+                    422,
+                  ),
+                )
+              : Promise.reject(new TypeError('Network request failed'));
+          }
+          return intercept(path, init);
+        });
+        await controller.signIn('alex');
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({ amount: '18', description: 'Fondue', tagId });
+        const before = groupReads;
+        expect(await controller.addGroupCurrency('CHF')).toBe(true);
+        expect(state.added).toEqual([{ currency: 'CHF' }]);
+        expect(groupReads).toBeGreaterThan(before);
+        const { expense, currencyAdd } = controller.getSnapshot();
+        expect(expense.context?.group.alternateCurrencies).toEqual(['EUR', 'JPY', 'CHF']);
+        expect(expense.draft).toMatchObject({ currency: 'CHF', amount: '18' });
+        expect(currencyAdd).toMatchObject({ status: 'idle', message: null });
+      },
+    );
+
     // The Group's Currencies (board "Group currencies"), from its options, as on the web.
     it('reads the Group’s Currencies, and shows one added there at once', async () => {
       const { state, intercept } = currencies();

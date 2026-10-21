@@ -54,6 +54,8 @@ vi.mock('@/lib/utils/api-fetch', () => ({
       status: 500,
       body: { error: 'Unplanned' },
     };
+    // Status 0: the request went out, and no reply came back.
+    if (answer.status === 0) throw new TypeError('Failed to fetch');
     return new Response(JSON.stringify(answer.body), { status: answer.status });
   },
 }));
@@ -291,6 +293,53 @@ describe('adding a currency from the Expense form (#722)', () => {
       'Currency, JPY, Japanese Yen. Change currency',
     );
   });
+
+  // The Tester's Medium on 49d3c2ab: the currency was added, but the form never learnt it.
+  it.each([
+    ['its reply is lost on the way back', { status: 0, body: null }],
+    [
+      'the Group already lists it',
+      {
+        status: 422,
+        body: {
+          error: 'CHF is already one of this Group’s currencies.',
+          code: 'INVALID_GROUP_CURRENCIES',
+        },
+      },
+    ],
+  ])(
+    'when adding one fails because %s, reads the Group again and puts the Expense in it',
+    async (_, answer) => {
+      answers.set(`POST ${PATH}`, answer);
+      // Splitbook added CHF: reading the Group again lists it.
+      answers.set(`GET /api/groups/${GROUP}`, {
+        status: 200,
+        body: { status: 200, data: lisbon(['EUR', 'JPY', 'CHF']) },
+      });
+      await mount();
+      await openPicker();
+      await click(option('Add a currency…'));
+      await click(
+        addDialog()!.findAll(
+          (node) =>
+            typeof node.type === 'string' &&
+            node.props.role === 'option' &&
+            textOf(node).startsWith('CHF'),
+        )[0]!,
+      );
+      await click(buttonIn(addDialog()!, 'Add CHF'));
+      expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
+        `POST ${PATH}`,
+        `GET /api/groups/${GROUP}`,
+      ]);
+      expect(addDialog()).toBeNull();
+      expect(currencyButton().props['aria-label']).toBe(
+        'Currency, CHF, Swiss Franc. Change currency',
+      );
+      await openPicker();
+      expect(options()).toContain('CHF Swiss Franc');
+    },
+  );
 
   it('lets a Group in one currency open the picker to add one', async () => {
     await mount({ ...lisbon([]), latestExpenseCurrency: null });
