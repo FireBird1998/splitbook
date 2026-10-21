@@ -9,21 +9,12 @@ var UNIT = Math.sqrt(1.6);
 function cameraOf({ scale, azimuth = AZIMUTH, elevation = ELEVATION }) {
   const a = azimuth * RADIANS;
   const e = elevation * RADIANS;
-  return {
-    sinA: Math.sin(a),
-    cosA: Math.cos(a),
-    sinE: Math.sin(e),
-    cosE: Math.cos(e),
-    k: scale * UNIT,
-  };
+  return { sinA: Math.sin(a), cosA: Math.cos(a), sinE: Math.sin(e), cosE: Math.cos(e), k: scale * UNIT };
 }
 function iso([x, y, z], projection) {
   const { origin } = projection;
   const { sinA, cosA, sinE, cosE, k } = cameraOf(projection);
-  return [
-    origin[0] + (x * sinA - y * cosA) * k,
-    origin[1] + ((x * cosA + y * sinA) * sinE - z * cosE) * k,
-  ];
+  return [origin[0] + (x * sinA - y * cosA) * k, origin[1] + ((x * cosA + y * sinA) * sinE - z * cosE) * k];
 }
 function axisVector(projection, [dx, dy, dz]) {
   const origin = iso([0, 0, 0], projection);
@@ -36,21 +27,17 @@ function translateAlong(projection, by) {
   return `translate(${fine(x)} ${fine(y)})`;
 }
 function holdStill(element, [dx, dy]) {
-  const text = dx || dy ? `translate(${-dx} ${-dy})` : '';
-  element
-    .querySelectorAll('[data-hold]')
-    .forEach((node) =>
-      text ? node.setAttribute('transform', text) : node.removeAttribute('transform'),
-    );
+  const text = dx || dy ? `translate(${-dx} ${-dy})` : "";
+  element.querySelectorAll("[data-hold]").forEach((node) => text ? node.setAttribute("transform", text) : node.removeAttribute("transform"));
 }
 
 // src/figures/tour.js
-var KEYS = 'Click, or press → or Space, for the next step; Home starts over.';
+var KEYS = "Click, or press → or Space, for the next step; Home starts over.";
 function runTour(root, makeScene) {
-  const stage = root.querySelector('[data-stage]');
-  const readout = root.querySelector('[data-readout]');
-  const status = stage.querySelector('[data-status]');
-  const still = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const stage = root.querySelector("[data-stage]");
+  const readout = root.querySelector("[data-readout]");
+  const status = stage.querySelector("[data-status]");
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)");
   let paused = false;
   const held = () => still.matches || paused;
   const say = (text) => {
@@ -60,14 +47,14 @@ function runTour(root, makeScene) {
     if (status) status.textContent = text;
   };
   const scene = makeScene({
-    svg: stage.querySelector('svg'),
+    svg: stage.querySelector("svg"),
     held,
     say,
     announce,
     tell(text) {
       say(text);
       announce(text);
-    },
+    }
   });
   let frame = 0;
   let last = 0;
@@ -90,8 +77,8 @@ function runTour(root, makeScene) {
     run();
   }
   function onKey(event) {
-    if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') next();
-    else if (event.key === 'Home') {
+    if (event.key === "ArrowRight" || event.key === " " || event.key === "Enter") next();
+    else if (event.key === "Home") {
       scene.restart();
       run();
     } else return;
@@ -102,24 +89,24 @@ function runTour(root, makeScene) {
       visible = entries[entries.length - 1].isIntersecting;
       if (visible) run();
     },
-    { rootMargin: '120px 0px' },
+    { rootMargin: "120px 0px" }
   );
   observer.observe(stage);
-  stage.addEventListener('click', next);
-  stage.addEventListener('keydown', onKey);
-  const pause = root.querySelector('[data-pause]');
+  stage.addEventListener("click", next);
+  stage.addEventListener("keydown", onKey);
+  const pause = root.querySelector("[data-pause]");
   function togglePause() {
     paused = !paused;
-    pause.textContent = paused ? 'Play' : 'Pause';
+    pause.textContent = paused ? "Play" : "Pause";
     run();
   }
   if (pause && !still.matches) {
     pause.hidden = false;
-    pause.addEventListener('click', togglePause);
+    pause.addEventListener("click", togglePause);
   }
   stage.tabIndex = 0;
-  stage.setAttribute('role', 'group');
-  stage.setAttribute('aria-label', `Live tour. ${KEYS}`);
+  stage.setAttribute("role", "group");
+  stage.setAttribute("aria-label", `Live tour. ${KEYS}`);
   if (still.matches) {
     scene.poseStill();
     scene.update(0, true);
@@ -129,38 +116,37 @@ function runTour(root, makeScene) {
     cancelAnimationFrame(frame);
     frame = 0;
     observer.disconnect();
-    stage.removeEventListener('click', next);
-    stage.removeEventListener('keydown', onKey);
+    stage.removeEventListener("click", next);
+    stage.removeEventListener("keydown", onKey);
     if (pause) {
-      pause.removeEventListener('click', togglePause);
+      pause.removeEventListener("click", togglePause);
       pause.hidden = true;
-      pause.textContent = 'Pause';
+      pause.textContent = "Pause";
     }
-    stage.removeAttribute('tabindex');
-    stage.removeAttribute('role');
-    stage.removeAttribute('aria-label');
+    stage.removeAttribute("tabindex");
+    stage.removeAttribute("role");
+    stage.removeAttribute("aria-label");
   };
 }
-var ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+var ease = (t) => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
 var lerp = (a, b, t) => a + (b - a) * t;
-var inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-var rupees = (minor) => '₹' + inr.format(Math.abs(minor / 100));
+var inr = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+var rupees = (minor) => "₹" + inr.format(Math.abs(minor / 100));
 var signed = (minor) => {
   const v = Math.round(minor / 100);
-  return v === 0 ? '0' : (v > 0 ? '+' : '−') + inr.format(Math.abs(v));
+  return v === 0 ? "0" : (v > 0 ? "+" : "−") + inr.format(Math.abs(v));
 };
 var SHIFT_SECONDS = 0.5;
 function counterReadings(count) {
   let at = Array.from({ length: count }, () => 0);
   let shifts = [];
-  const moved = (s) => Math.round((s.amountMinor / 100) * ease(s.t / SHIFT_SECONDS)) * 100;
-  const apply = (amountOf) =>
-    at.map((value, i) =>
-      shifts.reduce(
-        (sum, s) => sum + (s.up === i ? amountOf(s) : s.down === i ? -amountOf(s) : 0),
-        value,
-      ),
-    );
+  const moved = (s) => Math.round(s.amountMinor / 100 * ease(s.t / SHIFT_SECONDS)) * 100;
+  const apply = (amountOf) => at.map(
+    (value, i) => shifts.reduce(
+      (sum, s) => sum + (s.up === i ? amountOf(s) : s.down === i ? -amountOf(s) : 0),
+      value
+    )
+  );
   return {
     /** What each counter reads now. */
     get shown() {
@@ -189,7 +175,7 @@ function counterReadings(count) {
       shifts = shifts.filter((s) => s.t < SHIFT_SECONDS);
     },
     /** Nothing is moving. */
-    settled: () => shifts.length === 0,
+    settled: () => shifts.length === 0
   };
 }
 function drawCounters(elements, readings) {
@@ -198,7 +184,7 @@ function drawCounters(elements, readings) {
     const text = signed(shown[i]);
     if (el.textContent !== text) el.textContent = text;
     const v = Math.round(shown[i] / 100);
-    el.dataset.sign = v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
+    el.dataset.sign = v > 0 ? "pos" : v < 0 ? "neg" : "zero";
     el.dataset.target = String(Math.round(targets[i] / 100));
   });
 }
@@ -217,15 +203,14 @@ function nettingStation({ svg, held, tell }, D) {
   const counters = D.xs.map((_, i) => q(`[data-count="${i}"]`));
   const debtCords = D.debts.map((_, i) => q(`[data-debt="${i}"]`));
   const payCords = D.payments.map((_, i) => q(`[data-pay="${i}"]`));
-  const coins = [...svg.querySelectorAll('[data-coin]')];
+  const coins = [...svg.querySelectorAll("[data-coin]")];
   const shuttle = q('[data-part="shuttle"]');
   const hanger = q('[data-part="hanger"]');
   const lamp = q('[data-lamp="run"]');
   const screen = [0, 1, 2].map((i) => q(`[data-line="${i}"]`));
-  const setScreen = (lines) =>
-    screen.forEach((el, i) => {
-      if (el.textContent !== (lines[i] ?? '')) el.textContent = lines[i] ?? '';
-    });
+  const setScreen = (lines) => screen.forEach((el, i) => {
+    if (el.textContent !== (lines[i] ?? "")) el.textContent = lines[i] ?? "";
+  });
   const idx = (id) => D.ids.indexOf(id);
   const nameOf = (id) => D.names[idx(id)];
   const coinsFor = (minor) => Math.round(minor / D.coin);
@@ -237,7 +222,7 @@ function nettingStation({ svg, held, tell }, D) {
   const readings = counterReadings(D.xs.length);
   let stacks = D.xs.map(() => []);
   let carried = [];
-  let phase = 'idle';
+  let phase = "idle";
   let clock = 0;
   let payIndex = 0;
   let landed = false;
@@ -245,26 +230,26 @@ function nettingStation({ svg, held, tell }, D) {
   let drop = 0;
   let fromX = D.home;
   function restart() {
-    phase = 'idle';
+    phase = "idle";
     clock = 0;
     payIndex = 0;
     readings.jump(D.balances);
     stacks = D.xs.map(() => []);
     carried = [];
-    coins.forEach((c) => (c.style.display = 'none'));
-    debtCords.forEach((c) => (c.style.opacity = '1'));
-    payCords.forEach((c) => (c.style.opacity = '0'));
+    coins.forEach((c) => c.style.display = "none");
+    debtCords.forEach((c) => c.style.opacity = "1");
+    payCords.forEach((c) => c.style.opacity = "0");
     sx = D.home;
     drop = 0;
-    lamp.removeAttribute('data-on');
-    setScreen(['NETTING', `${D.debts.length} debts`, `${N} people`]);
+    lamp.removeAttribute("data-on");
+    setScreen(["NETTING", `${D.debts.length} debts`, `${N} people`]);
     tell(`${D.debts.length} debts between ${N} people`);
   }
   function startNet() {
-    phase = 'net';
+    phase = "net";
     clock = 0;
-    lamp.setAttribute('data-on', '');
-    setScreen(['NETTING', `${D.debts.length} debts`, `→ ${D.payments.length} pays`]);
+    lamp.setAttribute("data-on", "");
+    setScreen(["NETTING", `${D.debts.length} debts`, `→ ${D.payments.length} pays`]);
     tell(`Netting · ${D.debts.length} debts become ${D.payments.length} payments`);
     let next2 = 0;
     D.balances.forEach((b, i) => {
@@ -272,15 +257,15 @@ function nettingStation({ svg, held, tell }, D) {
     });
   }
   function swapCords() {
-    debtCords.forEach((c, i) => (c.style.opacity = String(1 - ease((clock - i * 0.28) / 0.3))));
-    payCords.forEach((c, i) => (c.style.opacity = String(ease((clock - 1.4 - i * 0.3) / 0.35))));
+    debtCords.forEach((c, i) => c.style.opacity = String(1 - ease((clock - i * 0.28) / 0.3)));
+    payCords.forEach((c, i) => c.style.opacity = String(ease((clock - 1.4 - i * 0.3) / 0.35)));
   }
   function showNetted() {
     clock = NETTED_AT;
     swapCords();
   }
   function startPay(j) {
-    phase = 'pay';
+    phase = "pay";
     payIndex = j;
     clock = 0;
     landed = false;
@@ -289,9 +274,9 @@ function nettingStation({ svg, held, tell }, D) {
     setScreen([
       `PAY ${j + 1}/${D.payments.length}`,
       `${nameOf(p.from).toUpperCase()}→${nameOf(p.to).toUpperCase()}`,
-      rupees(p.amountMinor),
+      rupees(p.amountMinor)
     ]);
-    tell(payWords(j, 'pays'));
+    tell(payWords(j, "pays"));
   }
   function land() {
     const p = D.payments[payIndex];
@@ -301,7 +286,7 @@ function nettingStation({ svg, held, tell }, D) {
     else stacks[to].push(...stacks[from].splice(stacks[from].length - coinsFor(p.amountMinor)));
     carried = [];
     readings.raiseAndLower(from, to, p.amountMinor);
-    payCords[payIndex].style.opacity = '0';
+    payCords[payIndex].style.opacity = "0";
     landed = true;
   }
   function completePay() {
@@ -309,25 +294,25 @@ function nettingStation({ svg, held, tell }, D) {
     sx = D.xs[idx(D.payments[payIndex].to)];
     drop = 0;
     if (payIndex + 1 < D.payments.length) {
-      phase = 'paid';
+      phase = "paid";
       clock = 0;
     } else finish();
   }
   function finish() {
-    phase = 'done';
+    phase = "done";
     clock = 0;
-    lamp.removeAttribute('data-on');
-    setScreen(['SETTLED', `${D.payments.length} pays`, 'all ₹0']);
+    lamp.removeAttribute("data-on");
+    setScreen(["SETTLED", `${D.payments.length} pays`, "all ₹0"]);
     tell(`Settled in ${D.payments.length} payments · every counter at 0`);
   }
   function update(dt, calm) {
     clock += dt;
-    if (phase === 'idle') {
+    if (phase === "idle") {
       if (clock > 1.8) startNet();
-    } else if (phase === 'net') {
+    } else if (phase === "net") {
       swapCords();
       if (clock > 3.2) startPay(0);
-    } else if (phase === 'pay') {
+    } else if (phase === "pay") {
       const p = D.payments[payIndex];
       const from = idx(p.from);
       const to = idx(p.to);
@@ -357,9 +342,9 @@ function nettingStation({ svg, held, tell }, D) {
           else finish();
         }
       }
-    } else if (phase === 'paid') {
+    } else if (phase === "paid") {
       if (clock > PAID_BEAT) startPay(payIndex + 1);
-    } else if (phase === 'done') {
+    } else if (phase === "done") {
       sx = lerp(sx, D.home, Math.min(1, dt * 2));
       if (clock > 4.2) restart();
     }
@@ -367,38 +352,38 @@ function nettingStation({ svg, held, tell }, D) {
   }
   function draw() {
     drawCounters(counters, readings);
-    shuttle.setAttribute('transform', T(sx - D.home, 0, 0));
-    hanger.setAttribute('transform', T(0, 0, -drop));
+    shuttle.setAttribute("transform", T(sx - D.home, 0, 0));
+    hanger.setAttribute("transform", T(0, 0, -drop));
     holdStill(hanger, axisVector(P, [0, 0, -drop]));
-    coins.forEach((c) => (c.style.display = 'none'));
-    stacks.forEach((list, i) =>
-      list.forEach((id, h) => {
+    coins.forEach((c) => c.style.display = "none");
+    stacks.forEach(
+      (list, i) => list.forEach((id, h) => {
         const el = coins[id];
-        el.style.display = '';
-        el.setAttribute('transform', T(D.xs[i], 0, stackZ(h)));
-      }),
+        el.style.display = "";
+        el.setAttribute("transform", T(D.xs[i], 0, stackZ(h)));
+      })
     );
     carried.forEach((id, h) => {
       const el = coins[id];
-      el.style.display = '';
-      el.setAttribute('transform', T(sx, 0, D.magRest - drop - (carried.length - h) * D.coinT));
+      el.style.display = "";
+      el.setAttribute("transform", T(sx, 0, D.magRest - drop - (carried.length - h) * D.coinT));
     });
   }
   function next() {
-    if (phase === 'idle') {
+    if (phase === "idle") {
       startNet();
       if (held()) showNetted();
-    } else if (phase === 'net') {
+    } else if (phase === "net") {
       showNetted();
       startPay(0);
       if (held()) completePay();
-    } else if (phase === 'pay') {
+    } else if (phase === "pay") {
       completePay();
-      if (phase === 'paid') {
-        if (held()) tell(payWords(payIndex, 'paid'));
+      if (phase === "paid") {
+        if (held()) tell(payWords(payIndex, "paid"));
         else startPay(payIndex + 1);
       }
-    } else if (phase === 'paid') {
+    } else if (phase === "paid") {
       startPay(payIndex + 1);
       if (held()) completePay();
     } else restart();
@@ -417,38 +402,11 @@ function nettingStation({ svg, held, tell }, D) {
 }
 
 // src/figures/netting-station.tour-entry.js
-var DATA = {
-  P: {
-    origin: [394.47399860764364, 254.87108155706503],
-    scale: 1.3118718483257004,
-    azimuth: 60,
-    elevation: 30,
-  },
-  names: ['You', 'Priya', 'Sam', 'Alex'],
-  ids: ['you', 'priya', 'sam', 'alex'],
-  balances: [5e4, -1e4, 3e4, -7e4],
-  debts: [
-    { from: 'priya', to: 'you', amountMinor: 3e4 },
-    { from: 'you', to: 'sam', amountMinor: 1e4 },
-    { from: 'alex', to: 'you', amountMinor: 3e4 },
-    { from: 'alex', to: 'priya', amountMinor: 2e4 },
-    { from: 'alex', to: 'sam', amountMinor: 2e4 },
-  ],
-  payments: [
-    { from: 'alex', to: 'you', amountMinor: 5e4 },
-    { from: 'alex', to: 'sam', amountMinor: 2e4 },
-    { from: 'priya', to: 'sam', amountMinor: 1e4 },
-  ],
-  coin: 1e4,
-  xs: [-118, -43, 32, 107],
-  trayTop: 27.2,
-  coinT: 1.6,
-  magRest: 74,
-  home: -118,
-};
+var DATA = { "P": { "origin": [394.47399860764364, 254.87108155706503], "scale": 1.3118718483257004, "azimuth": 60, "elevation": 30 }, "names": ["You", "Priya", "Sam", "Alex"], "ids": ["you", "priya", "sam", "alex"], "balances": [5e4, -1e4, 3e4, -7e4], "debts": [{ "from": "priya", "to": "you", "amountMinor": 3e4 }, { "from": "you", "to": "sam", "amountMinor": 1e4 }, { "from": "alex", "to": "you", "amountMinor": 3e4 }, { "from": "alex", "to": "priya", "amountMinor": 2e4 }, { "from": "alex", "to": "sam", "amountMinor": 2e4 }], "payments": [{ "from": "alex", "to": "you", "amountMinor": 5e4 }, { "from": "alex", "to": "sam", "amountMinor": 2e4 }, { "from": "priya", "to": "sam", "amountMinor": 1e4 }], "coin": 1e4, "xs": [-118, -43, 32, 107], "trayTop": 27.2, "coinT": 1.6, "magRest": 74, "home": -118 };
 function play(root) {
   return playTour(root, DATA);
 }
-play.license =
-  'Anatomy kit (https://github.com/wheresryan22/anatomy)\n\nMIT License\n\nCopyright (c) 2026 Ryan\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the "Software"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.';
-export { play };
+play.license = 'Anatomy kit (https://github.com/wheresryan22/anatomy)\n\nMIT License\n\nCopyright (c) 2026 Ryan\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the "Software"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.';
+export {
+  play
+};

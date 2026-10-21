@@ -9,38 +9,24 @@ var UNIT = Math.sqrt(1.6);
 function cameraOf({ scale, azimuth = AZIMUTH, elevation = ELEVATION }) {
   const a = azimuth * RADIANS;
   const e = elevation * RADIANS;
-  return {
-    sinA: Math.sin(a),
-    cosA: Math.cos(a),
-    sinE: Math.sin(e),
-    cosE: Math.cos(e),
-    k: scale * UNIT,
-  };
+  return { sinA: Math.sin(a), cosA: Math.cos(a), sinE: Math.sin(e), cosE: Math.cos(e), k: scale * UNIT };
 }
 function iso([x, y, z], projection) {
   const { origin } = projection;
   const { sinA, cosA, sinE, cosE, k } = cameraOf(projection);
-  return [
-    origin[0] + (x * sinA - y * cosA) * k,
-    origin[1] + ((x * cosA + y * sinA) * sinE - z * cosE) * k,
-  ];
+  return [origin[0] + (x * sinA - y * cosA) * k, origin[1] + ((x * cosA + y * sinA) * sinE - z * cosE) * k];
 }
 var tenth = (value) => {
-  const text = (Math.round(value * 10) / 10).toFixed(1).replace(/\.0$/, '');
-  return text === '-0' ? '0' : text;
+  const text = (Math.round(value * 10) / 10).toFixed(1).replace(/\.0$/, "");
+  return text === "-0" ? "0" : text;
 };
 function pathOf(points, closed = false) {
-  if (!points.length) return '';
-  return (
-    points.map(([x, y], at) => `${at ? 'L' : 'M'}${tenth(x)} ${tenth(y)}`).join('') +
-    (closed ? 'Z' : '')
-  );
+  if (!points.length)
+    return "";
+  return points.map(([x, y], at) => `${at ? "L" : "M"}${tenth(x)} ${tenth(y)}`).join("") + (closed ? "Z" : "");
 }
 function onTop(points, z, projection, closed = false) {
-  return pathOf(
-    points.map(([x, y]) => iso([x, y, z], projection)),
-    closed,
-  );
+  return pathOf(points.map(([x, y]) => iso([x, y, z], projection)), closed);
 }
 var lineOnTop = (from, to, z, projection) => onTop([from, to], z, projection);
 function axisVector(projection, [dx, dy, dz]) {
@@ -54,21 +40,17 @@ function translateAlong(projection, by) {
   return `translate(${fine(x)} ${fine(y)})`;
 }
 function holdStill(element, [dx, dy]) {
-  const text = dx || dy ? `translate(${-dx} ${-dy})` : '';
-  element
-    .querySelectorAll('[data-hold]')
-    .forEach((node) =>
-      text ? node.setAttribute('transform', text) : node.removeAttribute('transform'),
-    );
+  const text = dx || dy ? `translate(${-dx} ${-dy})` : "";
+  element.querySelectorAll("[data-hold]").forEach((node) => text ? node.setAttribute("transform", text) : node.removeAttribute("transform"));
 }
 
 // src/figures/tour.js
-var KEYS = 'Click, or press → or Space, for the next step; Home starts over.';
+var KEYS = "Click, or press → or Space, for the next step; Home starts over.";
 function runTour(root, makeScene) {
-  const stage = root.querySelector('[data-stage]');
-  const readout = root.querySelector('[data-readout]');
-  const status = stage.querySelector('[data-status]');
-  const still = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const stage = root.querySelector("[data-stage]");
+  const readout = root.querySelector("[data-readout]");
+  const status = stage.querySelector("[data-status]");
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)");
   let paused = false;
   const held = () => still.matches || paused;
   const say = (text) => {
@@ -78,14 +60,14 @@ function runTour(root, makeScene) {
     if (status) status.textContent = text;
   };
   const scene = makeScene({
-    svg: stage.querySelector('svg'),
+    svg: stage.querySelector("svg"),
     held,
     say,
     announce,
     tell(text) {
       say(text);
       announce(text);
-    },
+    }
   });
   let frame = 0;
   let last = 0;
@@ -108,8 +90,8 @@ function runTour(root, makeScene) {
     run();
   }
   function onKey(event) {
-    if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') next();
-    else if (event.key === 'Home') {
+    if (event.key === "ArrowRight" || event.key === " " || event.key === "Enter") next();
+    else if (event.key === "Home") {
       scene.restart();
       run();
     } else return;
@@ -120,24 +102,24 @@ function runTour(root, makeScene) {
       visible = entries[entries.length - 1].isIntersecting;
       if (visible) run();
     },
-    { rootMargin: '120px 0px' },
+    { rootMargin: "120px 0px" }
   );
   observer.observe(stage);
-  stage.addEventListener('click', next);
-  stage.addEventListener('keydown', onKey);
-  const pause = root.querySelector('[data-pause]');
+  stage.addEventListener("click", next);
+  stage.addEventListener("keydown", onKey);
+  const pause = root.querySelector("[data-pause]");
   function togglePause() {
     paused = !paused;
-    pause.textContent = paused ? 'Play' : 'Pause';
+    pause.textContent = paused ? "Play" : "Pause";
     run();
   }
   if (pause && !still.matches) {
     pause.hidden = false;
-    pause.addEventListener('click', togglePause);
+    pause.addEventListener("click", togglePause);
   }
   stage.tabIndex = 0;
-  stage.setAttribute('role', 'group');
-  stage.setAttribute('aria-label', `Live tour. ${KEYS}`);
+  stage.setAttribute("role", "group");
+  stage.setAttribute("aria-label", `Live tour. ${KEYS}`);
   if (still.matches) {
     scene.poseStill();
     scene.update(0, true);
@@ -147,38 +129,37 @@ function runTour(root, makeScene) {
     cancelAnimationFrame(frame);
     frame = 0;
     observer.disconnect();
-    stage.removeEventListener('click', next);
-    stage.removeEventListener('keydown', onKey);
+    stage.removeEventListener("click", next);
+    stage.removeEventListener("keydown", onKey);
     if (pause) {
-      pause.removeEventListener('click', togglePause);
+      pause.removeEventListener("click", togglePause);
       pause.hidden = true;
-      pause.textContent = 'Pause';
+      pause.textContent = "Pause";
     }
-    stage.removeAttribute('tabindex');
-    stage.removeAttribute('role');
-    stage.removeAttribute('aria-label');
+    stage.removeAttribute("tabindex");
+    stage.removeAttribute("role");
+    stage.removeAttribute("aria-label");
   };
 }
-var ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+var ease = (t) => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
 var lerp = (a, b, t) => a + (b - a) * t;
-var inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-var rupees = (minor) => '₹' + inr.format(Math.abs(minor / 100));
+var inr = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+var rupees = (minor) => "₹" + inr.format(Math.abs(minor / 100));
 var signed = (minor) => {
   const v = Math.round(minor / 100);
-  return v === 0 ? '0' : (v > 0 ? '+' : '−') + inr.format(Math.abs(v));
+  return v === 0 ? "0" : (v > 0 ? "+" : "−") + inr.format(Math.abs(v));
 };
 var SHIFT_SECONDS = 0.5;
 function counterReadings(count) {
   let at = Array.from({ length: count }, () => 0);
   let shifts = [];
-  const moved = (s) => Math.round((s.amountMinor / 100) * ease(s.t / SHIFT_SECONDS)) * 100;
-  const apply = (amountOf) =>
-    at.map((value, i) =>
-      shifts.reduce(
-        (sum, s) => sum + (s.up === i ? amountOf(s) : s.down === i ? -amountOf(s) : 0),
-        value,
-      ),
-    );
+  const moved = (s) => Math.round(s.amountMinor / 100 * ease(s.t / SHIFT_SECONDS)) * 100;
+  const apply = (amountOf) => at.map(
+    (value, i) => shifts.reduce(
+      (sum, s) => sum + (s.up === i ? amountOf(s) : s.down === i ? -amountOf(s) : 0),
+      value
+    )
+  );
   return {
     /** What each counter reads now. */
     get shown() {
@@ -207,7 +188,7 @@ function counterReadings(count) {
       shifts = shifts.filter((s) => s.t < SHIFT_SECONDS);
     },
     /** Nothing is moving. */
-    settled: () => shifts.length === 0,
+    settled: () => shifts.length === 0
   };
 }
 function drawCounters(elements, readings) {
@@ -216,7 +197,7 @@ function drawCounters(elements, readings) {
     const text = signed(shown[i]);
     if (el.textContent !== text) el.textContent = text;
     const v = Math.round(shown[i] / 100);
-    el.dataset.sign = v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
+    el.dataset.sign = v > 0 ? "pos" : v < 0 ? "neg" : "zero";
     el.dataset.target = String(Math.round(targets[i] / 100));
   });
 }
@@ -233,7 +214,7 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
   const drops = D.xs.map((_, i) => q(`[data-drop="${i}"]`));
   const chutes = D.xs.map((_, i) => q(`[data-chute="${i}"]`));
   const bars = D.steps.map((_, i) => q(`[data-bar="${i}"]`));
-  const chips = [...svg.querySelectorAll('[data-chip]')];
+  const chips = [...svg.querySelectorAll("[data-chip]")];
   const stacks = D.xs.map((_, i) => [0, 1, 2, 3].map((j) => q(`[data-stack="${i}-${j}"]`)));
   const pushers = D.xs.map((_, i) => q(`[data-pusher="${i}"]`));
   const counters = D.xs.map((_, i) => q(`[data-count="${i}"]`));
@@ -251,13 +232,13 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
     return [
       s.title.toUpperCase(),
       rupees(s.amountMinor),
-      same ? `${values.length} × ${rupees(values[0])}` : `${values.length} chips`,
+      same ? `${values.length} × ${rupees(values[0])}` : `${values.length} chips`
     ];
   }
   const readings = counterReadings(D.xs.length);
   let fill = D.xs.map(() => 0);
   let beltTravel = 0;
-  let phase = 'idle';
+  let phase = "idle";
   let e = -1;
   let clock = 0;
   let bar = { x: D.mag, onBelt: false };
@@ -268,21 +249,21 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
   let pushersY = D.xs.map(() => 0);
   function setScreen(lines) {
     screen.forEach((el, i) => {
-      if (el.textContent !== (lines[i] ?? '')) el.textContent = lines[i] ?? '';
+      if (el.textContent !== (lines[i] ?? "")) el.textContent = lines[i] ?? "";
     });
   }
   function resetMagazine() {
     bars.forEach((el, i) => {
       if (el.parentNode !== inMag) inMag.appendChild(el);
-      el.setAttribute('transform', T(D.mag, 0, -2.4 * i));
-      el.style.display = '';
-      el.querySelectorAll('[data-cut]').forEach((c) => (c.style.display = 'none'));
+      el.setAttribute("transform", T(D.mag, 0, -2.4 * i));
+      el.style.display = "";
+      el.querySelectorAll("[data-cut]").forEach((c) => c.style.display = "none");
     });
   }
   function liftMagazine(from) {
     bars.forEach((el, i) => {
       if (i < from) return;
-      el.setAttribute('transform', T(D.mag, 0, -2.4 * (i - from)));
+      el.setAttribute("transform", T(D.mag, 0, -2.4 * (i - from)));
     });
   }
   function begin(next2) {
@@ -290,54 +271,54 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
     clock = 0;
     pushing = null;
     if (e >= D.steps.length) {
-      phase = 'done';
-      payLamps.forEach((l) => l.removeAttribute('data-on'));
+      phase = "done";
+      payLamps.forEach((l) => l.removeAttribute("data-on"));
       setScreen([
-        'DONE',
+        "DONE",
         `${D.steps.length} split`,
-        `sum ${rupees(readings.targets.reduce((a, b) => a + b, 0))}`,
+        `sum ${rupees(readings.targets.reduce((a, b) => a + b, 0))}`
       ]);
-      const text = D.names.map((n, i) => `${n} ${signed(readings.targets[i])}`).join(' · ');
+      const text = D.names.map((n, i) => `${n} ${signed(readings.targets[i])}`).join(" · ");
       say(text);
       announce(`All ${D.steps.length} Expenses split. ${text}`);
       return;
     }
     const s = D.steps[e];
-    phase = 'load';
+    phase = "load";
     bar = { x: D.mag, onBelt: false };
     cut = { k: 0, sub: 0, t: 0 };
     line = [];
-    payLamps.forEach((l, i) =>
-      i === s.paidBy ? l.setAttribute('data-on', '') : l.removeAttribute('data-on'),
+    payLamps.forEach(
+      (l, i) => i === s.paidBy ? l.setAttribute("data-on", "") : l.removeAttribute("data-on")
     );
     setScreen(screenFor(s));
     tell(`${s.title} ${rupees(s.amountMinor)} · ${D.names[s.paidBy]} paid`);
   }
   function restart() {
     e = -1;
-    phase = 'idle';
+    phase = "idle";
     clock = 0;
     readings.jump(D.xs.map(() => 0));
     fill = D.xs.map(() => 0);
-    stacks.flat().forEach((el) => (el.style.display = 'none'));
+    stacks.flat().forEach((el) => el.style.display = "none");
     chips.forEach((c) => {
-      c.style.display = 'none';
+      c.style.display = "none";
       q('[data-part="store"]').appendChild(c);
     });
-    payLamps.forEach((l) => l.removeAttribute('data-on'));
+    payLamps.forEach((l) => l.removeAttribute("data-on"));
     resetMagazine();
-    setScreen(['READY', `${D.steps.length} Expenses`, '']);
+    setScreen(["READY", `${D.steps.length} Expenses`, ""]);
     tell(`Line idle · ${D.steps.length} Expenses waiting`);
   }
   const nOf = (s) => s.chips.length;
-  const cutX = (s, k) => D.blade + (nOf(s) * D.cw) / 2 - k * D.cw;
+  const cutX = (s, k) => D.blade + nOf(s) * D.cw / 2 - k * D.cw;
   function finishInstantly() {
     if (e < 0 || e >= D.steps.length) return;
     const s = D.steps[e];
-    bars[e].style.display = 'none';
-    chips.forEach((c) => (c.style.display = 'none'));
+    bars[e].style.display = "none";
+    chips.forEach((c) => c.style.display = "none");
     s.chips.forEach((c) => {
-      if (fill[c.to] < 4) stacks[c.to][fill[c.to]].style.display = '';
+      if (fill[c.to] < 4) stacks[c.to][fill[c.to]].style.display = "";
       fill[c.to] += 1;
     });
     readings.jump(s.after);
@@ -346,16 +327,16 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
   }
   function update(dt, calm) {
     clock += dt;
-    if (phase === 'load') {
+    if (phase === "load") {
       const s = D.steps[e];
       const t = ease(clock / 1);
       bar.x = lerp(D.mag, D.loadX, t);
-      const half = (nOf(s) * D.cw) / 2;
+      const half = nOf(s) * D.cw / 2;
       if (!bar.onBelt && bar.x - half > D.mag + 27) {
         onBelt.appendChild(bars[e]);
         bar.onBelt = true;
       }
-      bars[e].setAttribute('transform', T(bar.x, 0, 0));
+      bars[e].setAttribute("transform", T(bar.x, 0, 0));
       liftMagazine(e + 1);
       beltTravel += Math.max(0, bar.x - (bar._last ?? bar.x));
       bar._last = bar.x;
@@ -364,13 +345,13 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
           onBelt.appendChild(bars[e]);
           bar.onBelt = true;
         }
-        phase = 'toSaw';
+        phase = "toSaw";
         clock = 0;
         cut = { k: nOf(s) - 1, sub: 0, t: 0, from: bar.x };
       }
-    } else if (phase === 'toSaw' || phase === 'cut') {
+    } else if (phase === "toSaw" || phase === "cut") {
       const s = D.steps[e];
-      if (phase === 'toSaw') {
+      if (phase === "toSaw") {
         const goal = cutX(s, cut.k);
         const speed = 90;
         const step = Math.min(speed * dt, goal - bar.x);
@@ -378,7 +359,7 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
         beltTravel += step;
         if (goal - bar.x < 0.01) {
           bar.x = goal;
-          phase = 'cut';
+          phase = "cut";
           cut.sub = 0;
           cut.t = 0;
         }
@@ -399,10 +380,10 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
           const y0 = D.chip.y - D.chip.d / 2;
           const y1 = Math.min(D.chip.y + D.chip.d / 2, saw.y);
           if (y1 > y0) {
-            line2.style.display = '';
-            line2.setAttribute('d', lineOnTop([lx, y0], [lx, y1], D.belt.top + D.chip.h + 0.02, P));
-            if (y1 < D.chip.y + D.chip.d / 2) line2.setAttribute('data-free', 'end');
-            else line2.removeAttribute('data-free');
+            line2.style.display = "";
+            line2.setAttribute("d", lineOnTop([lx, y0], [lx, y1], D.belt.top + D.chip.h + 0.02, P));
+            if (y1 < D.chip.y + D.chip.d / 2) line2.setAttribute("data-free", "end");
+            else line2.removeAttribute("data-free");
           }
           if (cut.t >= dur[1]) {
             cut.sub = 2;
@@ -414,55 +395,55 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
             saw.y = -30;
             cut.k -= 1;
             if (cut.k >= 1) {
-              phase = 'toSaw';
+              phase = "toSaw";
             } else {
-              phase = 'spread';
+              phase = "spread";
               clock = 0;
-              bars[e].style.display = 'none';
-              const half = (nOf(s) * D.cw) / 2;
+              bars[e].style.display = "none";
+              const half = nOf(s) * D.cw / 2;
               line = s.chips.map((c, j) => ({
                 ...c,
                 x: bar.x + half - (j + 0.5) * D.cw,
                 y: D.chip.y,
                 z: 0,
                 el: chips[j],
-                state: 'belt',
+                state: "belt"
               }));
               line.forEach((c) => {
                 onBelt.appendChild(c.el);
-                c.el.style.display = '';
-                c.el.setAttribute('transform', T(c.x, 0, 0));
+                c.el.style.display = "";
+                c.el.setAttribute("transform", T(c.x, 0, 0));
               });
               say(`Cut into ${line.length} chips · ${screenFor(s)[2]}`);
             }
           }
         }
       }
-      bars[e].setAttribute('transform', T(bar.x, 0, 0));
-    } else if (phase === 'spread' || phase === 'sort') {
+      bars[e].setAttribute("transform", T(bar.x, 0, 0));
+    } else if (phase === "spread" || phase === "sort") {
       const s = D.steps[e];
-      if (phase === 'spread') {
+      if (phase === "spread") {
         const t = ease(clock / 0.7);
-        const lead = bar.x + (nOf(s) * D.cw) / 2 - D.cw / 2;
-        line.forEach((c, j) => (c.x = lead + t * 10 - j * lerp(D.cw, 15, t)));
+        const lead = bar.x + nOf(s) * D.cw / 2 - D.cw / 2;
+        line.forEach((c, j) => c.x = lead + t * 10 - j * lerp(D.cw, 15, t));
         if (clock >= 0.7) {
-          phase = 'sort';
+          phase = "sort";
           clock = 0;
           say(`${s.title}: each chip to the bin it belongs to`);
         }
       } else if (!pushing) {
-        const waiting = line.filter((c) => c.state === 'belt');
+        const waiting = line.filter((c) => c.state === "belt");
         if (!waiting.length) {
-          if (line.every((c) => c.state === 'landed')) {
-            phase = 'hold';
+          if (line.every((c) => c.state === "landed")) {
+            phase = "hold";
             clock = 0;
             say(`${s.title} split · the counters add up to ₹0`);
           }
         } else {
-          const next2 = waiting.reduce((a, b) => (D.xs[b.to] - b.x < D.xs[a.to] - a.x ? b : a));
+          const next2 = waiting.reduce((a, b) => D.xs[b.to] - b.x < D.xs[a.to] - a.x ? b : a);
           const gap = D.xs[next2.to] - next2.x;
           const step = Math.min(110 * dt, Math.max(0, gap));
-          waiting.forEach((c) => (c.x += step));
+          waiting.forEach((c) => c.x += step);
           beltTravel += step;
           if (gap - step < 0.01) {
             next2.x = D.xs[next2.to];
@@ -484,8 +465,8 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
           c.z = 0;
         } else {
           pushersY[st] = reach * (1 - ease((t - 0.28) / 0.3));
-          if (c.state === 'belt') {
-            c.state = 'falling';
+          if (c.state === "belt") {
+            c.state = "falling";
             chutes[st].appendChild(c.el);
           }
           const u = Math.min(1, (t - 0.28) / 0.55);
@@ -495,9 +476,7 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
           if (u < 0.6) {
             const v = ease(u / 0.6);
             const y = lerp(D.push.rest + reach + D.chip.d / 2, ch.yB + 2, v);
-            const surface =
-              ch.zA +
-              ((Math.min(Math.max(y, ch.yA), ch.yB) - ch.yA) * (ch.zB - ch.zA)) / (ch.yB - ch.yA);
+            const surface = ch.zA + (Math.min(Math.max(y, ch.yA), ch.yB) - ch.yA) * (ch.zB - ch.zA) / (ch.yB - ch.yA);
             c.y = y;
             c.z = surface - D.belt.top;
           } else {
@@ -506,10 +485,10 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
             c.y = lerp(ch.yB + 2, yEnd, v);
             c.z = lerp(ch.zB - D.belt.top, zEnd, v * v);
           }
-          if (u >= 1 && c.state === 'falling') {
-            c.state = 'landed';
-            c.el.style.display = 'none';
-            if (fill[st] < 4) stacks[st][fill[st]].style.display = '';
+          if (u >= 1 && c.state === "falling") {
+            c.state = "landed";
+            c.el.style.display = "none";
+            if (fill[st] < 4) stacks[st][fill[st]].style.display = "";
             fill[st] += 1;
             readings.raiseAndLower(D.steps[e].paidBy, st, c.amountMinor);
           }
@@ -520,13 +499,13 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
         }
       }
       line.forEach((c) => {
-        if (c.state !== 'landed') c.el.setAttribute('transform', T(c.x, c.y - D.chip.y, c.z));
+        if (c.state !== "landed") c.el.setAttribute("transform", T(c.x, c.y - D.chip.y, c.z));
       });
-    } else if (phase === 'hold' && clock > 1.4) {
+    } else if (phase === "hold" && clock > 1.4) {
       begin(e + 1);
-    } else if (phase === 'done' && clock > 4.5) {
+    } else if (phase === "done" && clock > 4.5) {
       restart();
-    } else if (phase === 'idle' && clock > 1.6) {
+    } else if (phase === "idle" && clock > 1.6) {
       begin(0);
     }
     readings.step(dt, calm);
@@ -535,18 +514,18 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
     drawCounters(counters, readings);
     pushers.forEach((el, i) => {
       const off = translateAlong(P, [0, pushersY[i], 0]);
-      el.setAttribute('transform', off);
+      el.setAttribute("transform", off);
       const [dx, dy] = axisVector(P, [0, pushersY[i], 0]);
       holdStill(el, [dx, dy]);
     });
-    sawHead.setAttribute('transform', T(0, saw.y, 0));
-    sawSlide.setAttribute('transform', T(0, 0, saw.dz));
-    const running = phase !== 'idle' && phase !== 'done';
-    if (running) runLamp.setAttribute('data-on', '');
-    else runLamp.removeAttribute('data-on');
+    sawHead.setAttribute("transform", T(0, saw.y, 0));
+    sawSlide.setAttribute("transform", T(0, 0, saw.dz));
+    const running = phase !== "idle" && phase !== "done";
+    if (running) runLamp.setAttribute("data-on", "");
+    else runLamp.removeAttribute("data-on");
     const pitch = 14;
     const phaseX = beltTravel % pitch;
-    let marks = '';
+    let marks = "";
     for (let x = D.belt.x0 + 4 + phaseX; x < D.belt.x1 - 3; x += pitch) {
       marks += lineOnTop([x, D.belt.y0], [x, D.belt.y1], D.belt.top, P);
     }
@@ -561,17 +540,17 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
     }
     begin(lastStep);
     for (let n = 0; n < 60 * 60 && !(pushing && pushing.t >= 0.5); n++) update(1 / 60, true);
-    phase = 'hold';
+    phase = "hold";
     clock = 0;
   }
   function next() {
-    if (phase === 'done') restart();
+    if (phase === "done") restart();
     else {
       finishInstantly();
       begin(e + 1);
       if (held() && e < D.steps.length) {
         finishInstantly();
-        phase = 'hold';
+        phase = "hold";
         update(0, true);
       }
     }
@@ -581,73 +560,11 @@ function splittingLine({ svg, held, say, announce, tell }, D) {
 }
 
 // src/figures/splitting-line.tour-entry.js
-var DATA = {
-  P: {
-    origin: [452.4394880557713, 269.32483845391226],
-    scale: 1.1545438746370078,
-    azimuth: 60,
-    elevation: 30,
-  },
-  names: ['You', 'Priya', 'Sam', 'Alex'],
-  steps: [
-    {
-      title: 'Dinner',
-      amountMinor: 12e4,
-      paidBy: 0,
-      method: 'equal',
-      shares: [1, 1, 1, 1],
-      chips: [
-        { to: 3, amountMinor: 3e4 },
-        { to: 2, amountMinor: 3e4 },
-        { to: 1, amountMinor: 3e4 },
-        { to: 0, amountMinor: 3e4 },
-      ],
-      after: [9e4, -3e4, -3e4, -3e4],
-    },
-    {
-      title: 'Cab',
-      amountMinor: 6e4,
-      paidBy: 1,
-      method: 'equal',
-      shares: [1, 1, 1],
-      chips: [
-        { to: 3, amountMinor: 2e4 },
-        { to: 2, amountMinor: 2e4 },
-        { to: 1, amountMinor: 2e4 },
-      ],
-      after: [9e4, 1e4, -5e4, -5e4],
-    },
-    {
-      title: 'Groceries',
-      amountMinor: 1e5,
-      paidBy: 2,
-      method: 'shares',
-      shares: [2, 1, 1, 1],
-      chips: [
-        { to: 3, amountMinor: 2e4 },
-        { to: 2, amountMinor: 2e4 },
-        { to: 1, amountMinor: 2e4 },
-        { to: 0, amountMinor: 2e4 },
-        { to: 0, amountMinor: 2e4 },
-      ],
-      after: [5e4, -1e4, 3e4, -7e4],
-    },
-  ],
-  xs: [-70, 0, 70, 140],
-  cw: 12,
-  chip: { y: -12, d: 14, h: 3 },
-  belt: { x0: -232, x1: 206, y0: -23, y1: -1, top: 28 },
-  blade: -144.5,
-  mag: -265,
-  loadX: -206,
-  push: { y0: -64, gland: -40, z: 32, r: 4.2, rod: 1.2, rest: -27, stroke: 27 },
-  bin: { y0: 14, y1: 44, h: 16 },
-  chute: { yA: 2, yB: 15.6, zA: 27.6, zB: 17.4 },
-  armZ: 86,
-};
+var DATA = { "P": { "origin": [452.4394880557713, 269.32483845391226], "scale": 1.1545438746370078, "azimuth": 60, "elevation": 30 }, "names": ["You", "Priya", "Sam", "Alex"], "steps": [{ "title": "Dinner", "amountMinor": 12e4, "paidBy": 0, "method": "equal", "shares": [1, 1, 1, 1], "chips": [{ "to": 3, "amountMinor": 3e4 }, { "to": 2, "amountMinor": 3e4 }, { "to": 1, "amountMinor": 3e4 }, { "to": 0, "amountMinor": 3e4 }], "after": [9e4, -3e4, -3e4, -3e4] }, { "title": "Cab", "amountMinor": 6e4, "paidBy": 1, "method": "equal", "shares": [1, 1, 1], "chips": [{ "to": 3, "amountMinor": 2e4 }, { "to": 2, "amountMinor": 2e4 }, { "to": 1, "amountMinor": 2e4 }], "after": [9e4, 1e4, -5e4, -5e4] }, { "title": "Groceries", "amountMinor": 1e5, "paidBy": 2, "method": "shares", "shares": [2, 1, 1, 1], "chips": [{ "to": 3, "amountMinor": 2e4 }, { "to": 2, "amountMinor": 2e4 }, { "to": 1, "amountMinor": 2e4 }, { "to": 0, "amountMinor": 2e4 }, { "to": 0, "amountMinor": 2e4 }], "after": [5e4, -1e4, 3e4, -7e4] }], "xs": [-70, 0, 70, 140], "cw": 12, "chip": { "y": -12, "d": 14, "h": 3 }, "belt": { "x0": -232, "x1": 206, "y0": -23, "y1": -1, "top": 28 }, "blade": -144.5, "mag": -265, "loadX": -206, "push": { "y0": -64, "gland": -40, "z": 32, "r": 4.2, "rod": 1.2, "rest": -27, "stroke": 27 }, "bin": { "y0": 14, "y1": 44, "h": 16 }, "chute": { "yA": 2, "yB": 15.6, "zA": 27.6, "zB": 17.4 }, "armZ": 86 };
 function play(root) {
   return playTour(root, DATA);
 }
-play.license =
-  'Anatomy kit (https://github.com/wheresryan22/anatomy)\n\nMIT License\n\nCopyright (c) 2026 Ryan\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the "Software"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.';
-export { play };
+play.license = 'Anatomy kit (https://github.com/wheresryan22/anatomy)\n\nMIT License\n\nCopyright (c) 2026 Ryan\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the "Software"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.';
+export {
+  play
+};
