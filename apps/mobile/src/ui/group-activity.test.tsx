@@ -860,26 +860,13 @@ describe('a payment that settled several Debts at once (#734)', () => {
   const people = { paidBy: you, paidTo: sam, paidByName: 'Alex Rivera', paidToName: 'Sam Chen' };
   const batch = { batchId: 'f00000000000000000000001', batchSize: 2 };
   const recorded = new Date(2026, 8, 30, 11, 30).toISOString();
-  const [rupees, euros] = parseActivityPage(
+  // As the feed lists it: newest first, and a batch's events share one time, so the euro Debt's
+  // Settlement, recorded second, comes first.
+  const [euros, rupees] = parseActivityPage(
     {
       status: 200,
       data: {
         activities: [
-          {
-            _id: hex('e', 901),
-            group: groupId,
-            type: 'settlement_recorded',
-            actor: { _id: you, name: 'Alex Rivera' },
-            createdAt: recorded,
-            metadata: {
-              ...people,
-              ...batch,
-              settlementId: 'f00000000000000000000001',
-              amount: 1480,
-              amountMinor: 148000,
-              currency: 'INR',
-            },
-          },
           {
             _id: hex('e', 902),
             group: groupId,
@@ -905,6 +892,21 @@ describe('a payment that settled several Debts at once (#734)', () => {
               pairDebtAfterMinor: 0,
             },
           },
+          {
+            _id: hex('e', 901),
+            group: groupId,
+            type: 'settlement_recorded',
+            actor: { _id: you, name: 'Alex Rivera' },
+            createdAt: recorded,
+            metadata: {
+              ...people,
+              ...batch,
+              settlementId: 'f00000000000000000000001',
+              amount: 1480,
+              amountMinor: 148000,
+              currency: 'INR',
+            },
+          },
         ],
         pagination: { page: 1, limit: 20, total: 2, totalPages: 1 },
       },
@@ -914,10 +916,10 @@ describe('a payment that settled several Debts at once (#734)', () => {
   ).events as [ActivityEvent, ActivityEvent];
   const whole = 'You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00';
 
-  it('shows its Settlements as one row, in the single payment’s words', () => {
+  it('shows its Settlements as one row, in the single payment’s words and recorded order', () => {
     const { root, onSelect } = render({
       state: activity({
-        events: [rupees, euros, ...events.slice(0, 3)],
+        events: [euros, rupees, ...events.slice(0, 3)],
         pagination: { page: 1, limit: 20, total: 5, totalPages: 1 },
       }),
     });
@@ -927,22 +929,23 @@ describe('a payment that settled several Debts at once (#734)', () => {
     expect(rows[0]).toContain('€20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct)');
     expect(text(root)).not.toContain('recorded a payment');
     act(() => button(root, rows[0]!)[0]!.props.onPress());
-    expect(onSelect).toHaveBeenCalledWith(rupees._id);
+    // The row is where the payment is in the feed: at its newest event.
+    expect(onSelect).toHaveBeenCalledWith(euros._id);
   });
 
   it('says where the rest of one a page boundary split is, and joins it once that page loads', () => {
     const { root, update } = render({
       state: activity({
-        events: [...events.slice(0, 19), rupees],
+        events: [...events.slice(0, 19), euros],
         pagination: { page: 1, limit: 20, total: 21, totalPages: 2 },
       }),
     });
     const split = buttons(root).find((label) => label?.includes('Sam Chen'));
-    expect(split).toContain('You paid Sam Chen to clear ₹1,480.00 and 1 more Debt');
+    expect(split).toContain('You paid Sam Chen to clear €20.00 and 1 more Debt');
     expect(split).toContain('The rest of this payment is in older Activity.');
     update({
       state: activity({
-        events: [...events.slice(0, 19), rupees, euros],
+        events: [...events.slice(0, 19), euros, rupees],
         pagination: { page: 2, limit: 20, total: 21, totalPages: 2 },
       }),
     });
@@ -951,8 +954,8 @@ describe('a payment that settled several Debts at once (#734)', () => {
     expect(text(root)).not.toContain('more Debt');
   });
 
-  it('opens the payment with each of its Settlements’ records', () => {
-    const { root } = render({ state: activity({ events: [rupees, euros], selected: rupees }) });
+  it('opens the payment with each of its Settlements’ records, in recorded order', () => {
+    const { root } = render({ state: activity({ events: [euros, rupees], selected: euros }) });
     const shown = text(root);
     expect(shown).toContain('Payment');
     expect(shown).toContain('to clear ₹1,480.00 and €20.00');

@@ -487,10 +487,11 @@ function device() {
           activities: network.noActivity
             ? []
             : [
-                // Alex's settle-up, one event for each Settlement with the batch's reference (#734).
+                // Alex's settle-up, one event for each Settlement with the batch's reference (#734),
+                // newest first as the feed lists them: the last one recorded comes first.
                 ...(network.eurosPaid && id === lisbon && paymentBodies.at(-1)?.settlements
-                  ? (paymentBodies.at(-1)!.settlements as Record<string, number | string>[]).map(
-                      (row, index, rows) => ({
+                  ? (paymentBodies.at(-1)!.settlements as Record<string, number | string>[])
+                      .map((row, index, rows) => ({
                         _id: `d0000000000000000000002${index}`,
                         group: id,
                         actor: { _id: alex.id, name: alex.name },
@@ -510,8 +511,8 @@ function device() {
                           batchId: 'f00000000000000000000010',
                           batchSize: rows.length,
                         },
-                      }),
-                    )
+                      }))
+                      .reverse()
                   : []),
                 // Alex's euro payment, as the server records it in Activity (#728).
                 ...(network.eurosPaid && id === lisbon && !paymentBodies.at(-1)?.settlements
