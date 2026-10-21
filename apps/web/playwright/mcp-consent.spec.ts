@@ -58,10 +58,10 @@ for (const allowPreparation of [false, true]) {
     for (const limit of [
       'Save Expenses or payments',
       'Change anything in a Group',
+      'See Groups left out',
       'See anyone’s email',
     ])
       await expect(page.getByText(limit, { exact: true })).toBeVisible();
-    await expect(page.getByText('See Groups left out')).toHaveCount(0);
     await expect(page.getByText('identified by its published details')).toHaveCount(0);
     await expect(
       page.getByText('Registered by the assistant itself. Its address isn’t published.', {
@@ -181,5 +181,22 @@ for (const allowPreparation of [false, true]) {
     expect(reply).toContain('Banyan Court Flat 4B');
     if (allowPreparation) expect(reply).not.toContain('Kochi to Alleppey');
     else expect(reply).toContain('Kochi to Alleppey');
+    // Asked to approve the same assistant again, the page starts from the choice in force,
+    // never from every Group ticked (#617).
+    await page.goto(
+      `/api/auth/oauth2/authorize?${new URLSearchParams({
+        ...Object.fromEntries(query),
+        state: 'fictional-consent-again',
+        code_challenge: createHash('sha256')
+          .update(randomBytes(32).toString('base64url'))
+          .digest('base64url'),
+      })}`,
+    );
+    await expect(page).toHaveURL(/\/mcp\/consent\?/);
+    const again = page.getByRole('group', { name: 'Which Groups' });
+    await expect(again.getByRole('checkbox', { name: /^Banyan Court Flat 4B/ })).toBeChecked();
+    const kochi = again.getByRole('checkbox', { name: /^Kochi to Alleppey/ });
+    if (allowPreparation) await expect(kochi).not.toBeChecked();
+    else await expect(kochi).toBeChecked();
   });
 }

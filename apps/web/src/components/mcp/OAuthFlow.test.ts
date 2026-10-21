@@ -159,14 +159,14 @@ describe('the consent screen', () => {
     (scopes) => {
       const shown = permissions(scopes);
       expect(shown).toContain('What Fictional Assistant can’t do');
+      // "See Groups left out" since the server leaves them out (#617).
       for (const limit of [
         'Save Expenses or payments',
         'Change anything in a Group',
+        'See Groups left out',
         'See anyone’s email',
       ])
         expect(shown).toContain(limit);
-      // Not until the server leaves Groups out (#617): the page never claims a limit it lacks.
-      expect(shown).not.toContain('See Groups left out');
     },
   );
 
@@ -215,8 +215,9 @@ describe('the consent screen', () => {
     expect(html.match(/<input[^>]*type="checkbox"[^>]*>/g)).toHaveLength(3);
     expect(html.match(/<input[^>]*checked=""[^>]*>/g)).toHaveLength(3);
     expect(shown).toContain('Groups you join later are included.');
-    expect(shown).toContain(
-      'Groups you untick are left out of Fictional Assistant’s answers, so its totals won’t include them.',
+    expect(shown).toContain('Groups you untick are left out of');
+    expect(html).toContain(
+      '<bdi>Fictional Assistant</bdi>’s answers, so its totals won’t include them.',
     );
   });
 

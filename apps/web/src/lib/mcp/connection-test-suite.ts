@@ -589,6 +589,38 @@ export function connectionTests(mongo = false) {
       expect(approvalShown).toMatchObject({ name: 'Synthetic MCP Client', address: null });
     });
 
+    it('starts a new approval from the Groups the connection leaves out, and from none after Disconnect (#617)', async () => {
+      const registration = await post('/oauth2/register', {
+        client_name: 'Synthetic Second Client',
+        redirect_uris: ['https://mcp-client.example.test/callback'],
+        token_endpoint_auth_method: 'none',
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        scope: `${MCP_LEDGER_SCOPE} offline_access`,
+      });
+      expect(registration.status).toBe(201);
+      const first = clientId;
+      clientId = (await registration.json()).client_id;
+      try {
+        const leftOut = 'c00000000000000000000617';
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+        await authorizeCode(false, false, false, [leftOut]);
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [leftOut] });
+        const listing = await fetch(`${origin}/api/auth/mcp/connections`, { headers: { cookie } });
+        const connection = (
+          (await listing.json()).connections as Array<{ id: string; clientId: string }>
+        ).find((row) => row.clientId === clientId);
+        expect((await post('/mcp/revoke', { id: connection!.id }, true)).status).toBe(200);
+        // Connecting again after Disconnect starts with every Group ticked.
+        await approvalRequest();
+        expect(approvalShown).toMatchObject({ excludedGroupIds: [] });
+      } finally {
+        clientId = first;
+      }
+    });
+
     it('refuses an approval whose left-out Groups are not Group ids (#617)', async () => {
       for (const excluded of [['not-a-group'], 'a1b2c3d4e5f6a1b2c3d4e5f6', [42]]) {
         const { oauthQuery } = await approvalRequest();
@@ -982,6 +1014,31 @@ export function connectionTests(mongo = false) {
               expect(await reply(tool, asked(other)[index][1]), tool).toEqual(answer);
           }
           expect((await reply('group_context', { groupId: String(reached) })).isError).toBe(false);
+          // A Draft id from the Group left out, sent with a reachable Group, is as unknown as
+          // any other; replaying the earlier request key there finds nothing either.
+          const unknownDraft = String(new mongoose.Types.ObjectId());
+          const draftArgs = (tool: 'replace_draft' | 'discard_draft', id: string) =>
+            tool === 'replace_draft'
+              ? { groupId: String(reached), draftId: id, revision: 0, values: { amount: 9 } }
+              : { groupId: String(reached), draftId: id, revision: 0 };
+          for (const tool of ['replace_draft', 'discard_draft'] as const)
+            expect(await reply(tool, draftArgs(tool, draftId)), tool).toEqual(
+              await reply(tool, draftArgs(tool, unknownDraft)),
+            );
+          expect(
+            await reply('create_drafts', {
+              groupId: String(leftOut),
+              requestKey: 'excluded-group-before',
+              drafts: [{ amount: 120 }],
+            }),
+          ).toEqual({ isError: true, text: 'Group not found' });
+          // Archived as well as left out: still a Group that doesn't exist.
+          await db.collection('groups').updateOne({ _id: leftOut }, { $set: { isArchived: true } });
+          for (const tool of ['group_context', 'list_drafts'])
+            expect(await reply(tool, { groupId: String(leftOut) }), tool).toEqual({
+              isError: true,
+              text: 'Group not found',
+            });
           // Never a name, an id or a count that hints at the Group left out.
           for (const text of replies) {
             expect(text).not.toContain('Exclusion Private Retreat');
