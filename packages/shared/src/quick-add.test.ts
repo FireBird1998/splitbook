@@ -893,6 +893,7 @@ describe('Quick add reads an unlisted currency as one the member chose instead (
     expect(line).toMatchObject({
       description: 'Dinner',
       currency: 'EUR',
+      chosenInsteadOf: 'CHF',
       currencyListed: true,
       amountMinor: 8600,
       amountText: '86',
@@ -912,6 +913,7 @@ describe('Quick add reads an unlisted currency as one the member chose instead (
   it('lets the choice lapse once the line names another currency', () => {
     const line = read('GBP 86 dinner', { ...swiss, currencyChoice: { said: 'CHF', code: 'EUR' } });
     expect(line).toMatchObject({ currency: 'GBP', currencyListed: false, amountMinor: null });
+    expect(line.chosenInsteadOf).toBeUndefined();
   });
 
   it('ignores a choice the Group doesn’t list', () => {

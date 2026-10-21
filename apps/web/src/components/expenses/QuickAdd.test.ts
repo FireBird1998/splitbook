@@ -391,6 +391,10 @@ describe('Quick add with a currency the Group doesn’t list (#732)', () => {
     });
     expect(chips(html)).toContain('Amount €86.00');
     expect(model.ready).toBe(true);
+    // The line still says CHF, so the hint says what was read instead.
+    expect(model.message.text).toMatch(
+      /^Read as EUR instead of CHF, one of Lisbon & Tokyo’s currencies\. Nothing is converted\. Press Enter to add it\./,
+    );
   });
 });
 
