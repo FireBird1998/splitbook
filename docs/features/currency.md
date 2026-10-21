@@ -21,7 +21,8 @@ currencies, choose an existing Group's Expense currency, or convert any amount.
 
 ## User Stories
 
-1. **As a Group creator**, I choose its main currency. ✅
+1. **As a Group creator**, I choose its main currency, and a new Trip can list its
+   extra currencies from the start. ✅
 2. **As a member**, I can add an extra currency the Group needs. ✅
 3. **As an admin**, I can remove an extra currency only while nothing uses it. ✅
 4. **As a member**, a new Expense starts in the currency of my latest Expense
@@ -34,6 +35,16 @@ currencies, choose an existing Group's Expense currency, or convert any amount.
 ---
 
 ## Currency Selection UI
+
+### When creating a Trip
+
+A new Trip, on the web and Android (#723), has an optional "Spending abroad?"
+step after "Main currency". Each extra currency added shows as a chip with
+Remove. "Add a currency" offers only currencies the Trip doesn't list yet, never
+the main currency, and is disabled at 4. An extra that becomes the main currency
+leaves the list. Other Group types get no step and send no extras, even if extras
+were chosen while the theme was Trip; the shared theme field
+`extraCurrenciesAtSetup` decides this. They add extras later in Group settings.
 
 ### In Group Settings
 
