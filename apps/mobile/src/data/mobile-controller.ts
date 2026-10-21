@@ -1,4 +1,4 @@
-import { tagActionsPath, tagActionCheckPath } from '@splitbook/shared/api-paths';
+import { groupRatesPath, tagActionsPath, tagActionCheckPath } from '@splitbook/shared/api-paths';
 import { emptyTagManager, tagManager } from './tag-manager';
 import { createAssistants, emptyAssistants } from './assistants';
 import { tagManagement, tagRead, unresolvedTagRecord, type TagRead } from './tag-management';
@@ -34,15 +34,30 @@ import {
 } from '@splitbook/shared/query-keys';
 import { activityExpenseId, emptyActivity, emptyExpenseHistory } from './activity';
 import {
+  crossCurrencyPaymentFields,
+  editCrossCurrencyEntry,
+  parseRateSuggestionResponse,
+  readCrossCurrencyEntry,
+  startCrossCurrencyEntry,
+  suggestedRateText,
+  type CrossCurrencyField,
+  type PaymentCurrencies,
+} from '@splitbook/shared/cross-currency-payment';
+import { getCurrencyPrecision } from '@splitbook/shared/currency';
+import {
   emptySettlement,
+  enterRateOrPaid,
   parseRecordedSettlement,
   parseSettlementAttempt,
   settlementBody,
   settlementCorrectionSummary,
   settlementFields,
   settlementSuggestion,
+  recordNeedsConnection,
+  recordWaitsForRate,
   validateSettlementDraft,
   type PendingPayment,
+  type RateState,
   type SettlementChoice,
   type SettlementDraft,
   type SettlementField,
@@ -103,7 +118,7 @@ import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getCurrency } from '@splitbook/shared/currency';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { currentMonthKey, toDateParam } from '@splitbook/shared/date';
-import { startingExpenseCurrency } from '@splitbook/shared/group-currencies';
+import { groupCurrencies, startingExpenseCurrency } from '@splitbook/shared/group-currencies';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 
 import {
@@ -435,6 +450,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let cookieAccount: string | null = null;
   let generation = 0;
   let settlementRequest = 0;
+  /** The Record payment sheet's latest look-up of a suggested rate (#728): older answers wait. */
+  let rateRequest = 0;
   /**
    * The Record payment sheet whose check couldn't reach Splitbook: the internet's return checks
    * again (#685). It lasts for that visit of the sheet, since each visit is a new route.
@@ -4658,6 +4675,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...state,
         status: 'editing',
         draft: { paidBy, paidTo, currency, amount: String(debt.amount), note: '' },
+        crossCurrency: null,
         suggested: debt.amount,
         acknowledged: false,
         message: null,
@@ -4717,6 +4735,136 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       publish({ ...snapshot, settlement: { ...snapshot.settlement, acknowledged } });
   };
+  /** An amount as a field shows it, "20.00", or "1060" in yen; as typed while it isn't one. */
+  const fieldAmount = (amount: string, currency: string) => {
+    try {
+      return toMajorAmount(parseAmountMinor(amount, currency), currency).toFixed(
+        getCurrencyPrecision(currency),
+      );
+    } catch {
+      return amount;
+    }
+  };
+  /** The sheet's entries can change: a payment being entered, not one already sent. */
+  const enteringSettlement = () =>
+    snapshot.screen === 'settlement' &&
+    ['editing', 'review'].includes(snapshot.settlement.status) &&
+    !snapshot.settlement.attempt &&
+    snapshot.settlement.draft !== null;
+  /**
+   * Pay in: the Debt's own currency, or another of the Group's (#728, the web's #727). The amount
+   * cleared carries over; another currency starts afresh at its suggested rate, looked up live.
+   */
+  const choosePaidCurrency = async (paidCurrency: string) => {
+    const state = snapshot.settlement;
+    if (!enteringSettlement() || !state.draft || !state.group || !state.groupId) return;
+    const { draft, crossCurrency, groupId } = state;
+    if ((crossCurrency?.paidCurrency ?? draft.currency) === paidCurrency) return;
+    if (paidCurrency !== draft.currency && !groupCurrencies(state.group).includes(paidCurrency))
+      return;
+    const asked = ++rateRequest;
+    const cleared = crossCurrency?.entry.cleared ?? fieldAmount(draft.amount, draft.currency);
+    const next = { ...draft, amount: cleared };
+    const pair = { currency: draft.currency, paidCurrency };
+    publish({
+      ...snapshot,
+      settlement: {
+        ...state,
+        status: 'editing',
+        draft: next,
+        crossCurrency:
+          paidCurrency === draft.currency
+            ? null
+            : {
+                paidCurrency,
+                entry: startCrossCurrencyEntry(pair, cleared, null),
+                rate: { status: 'loading' },
+              },
+        acknowledged: cleared === draft.amount && state.acknowledged,
+        message: null,
+        validation: { ...state.validation, errors: validateSettlementDraft(next) },
+      },
+    });
+    if (paidCurrency !== draft.currency) await lookUpRate(groupId, pair, asked);
+  };
+  /**
+   * The Group's suggested rate for the pair (#726), once per choice of currency, and again when
+   * the connection returns to a sheet that couldn't reach Splitbook. The sheet opens at it unless
+   * the member has already set the rate or the amount paid; theirs stays.
+   */
+  const lookUpRate = async (groupId: string, pair: PaymentCurrencies, asked: number) => {
+    const owner = generation,
+      view = route;
+    let rate: RateState;
+    try {
+      const { suggestion, reason } = parseRateSuggestionResponse(
+        await request(
+          groupRatesPath(groupId, { from: pair.currency, to: pair.paidCurrency }),
+          owner,
+        ),
+      );
+      rate = suggestion ? { status: 'ready', suggestion } : { status: 'none', reason };
+    } catch (error) {
+      // "No rate suggested" is for the rate service alone: offline, the sheet waits instead.
+      rate =
+        error instanceof RequestError && error.networkFailure
+          ? { status: 'unreachable' }
+          : { status: 'none', reason: null };
+    }
+    const state = snapshot.settlement;
+    const cross = state.crossCurrency;
+    if (
+      !current(owner) ||
+      view !== route ||
+      asked !== rateRequest ||
+      cross?.paidCurrency !== pair.paidCurrency
+    )
+      return;
+    const { entry } = cross;
+    const untouched =
+      entry.rate === '' && !entry.drivers.includes('rate') && !entry.drivers.includes('paid');
+    publish({
+      ...snapshot,
+      settlement: {
+        ...state,
+        crossCurrency: {
+          ...cross,
+          rate,
+          entry:
+            rate.status === 'ready' && untouched
+              ? startCrossCurrencyEntry(pair, entry.cleared, rate.suggestion)
+              : entry,
+        },
+      },
+    });
+  };
+  /** One of the three linked fields changed: it and the one set before it stay, the third follows. */
+  const editCrossCurrency = (field: CrossCurrencyField, text: string) => {
+    const state = snapshot.settlement;
+    const cross = state.crossCurrency;
+    if (!enteringSettlement() || !state.draft || !cross) return;
+    const pair = { currency: state.draft.currency, paidCurrency: cross.paidCurrency };
+    const entry = editCrossCurrencyEntry(cross.entry, pair, field, text);
+    const draft = { ...state.draft, amount: entry.cleared };
+    publish({
+      ...snapshot,
+      settlement: {
+        ...state,
+        status: 'editing',
+        draft,
+        crossCurrency: { ...cross, entry },
+        acknowledged: draft.amount === state.draft.amount && state.acknowledged,
+        message: null,
+        validation: { ...state.validation, errors: validateSettlementDraft(draft) },
+      },
+    });
+  };
+  /** Use ₹92.10: the suggested rate again, beside the member's own (#728). */
+  const restoreSuggestedRate = () => {
+    const rate = snapshot.settlement.crossCurrency?.rate;
+    if (rate?.status === 'ready')
+      editCrossCurrency('rate', suggestedRateText(rate.suggestion.rate));
+  };
   const recordSettlement = async () => {
     const state = snapshot.settlement,
       lease = accountStorage(),
@@ -4728,6 +4876,27 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !state.groupId
     )
       return;
+    // A payment in another currency waits for its rate and both amounts (#728). Offline it waits
+    // for a connection: a rate typed then would be recorded as if none could be suggested.
+    const cross = state.attempt ? null : state.crossCurrency;
+    const pair = cross && { currency: state.draft.currency, paidCurrency: cross.paidCurrency };
+    const reading = cross && pair ? readCrossCurrencyEntry(cross.entry, pair) : null;
+    if (cross && reading) {
+      const waiting =
+        cross.rate.status === 'loading'
+          ? recordWaitsForRate
+          : cross.rate.status === 'unreachable'
+            ? recordNeedsConnection
+            : reading.status === 'incomplete'
+              ? enterRateOrPaid
+              : reading.status === 'invalid'
+                ? reading.message
+                : null;
+      if (waiting) {
+        publish({ ...snapshot, settlement: { ...state, status: 'editing', message: waiting } });
+        return;
+      }
+    }
     // Corrections stay on their fields, every entry is kept, and nothing is requested.
     if (!state.attempt) {
       const errors = validateSettlementDraft(state.draft);
@@ -4759,8 +4928,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     const owner = generation,
       view = route,
-      groupId = state.groupId,
-      draft = state.draft;
+      groupId = state.groupId;
+    // A payment in another currency shows what it paid once its record is stored (#728).
+    let draft = state.draft,
+      stored = draft;
     const owns = queryOwner(queryClient, groupKey(account(), groupId));
     let attempt = state.attempt,
       completed = false,
@@ -4834,7 +5005,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }
         // The Debt's own currency needs no other check: the Balances just read have a Debt in it,
         // and the server records one in a currency the Group no longer lists, too (#727, #728).
-        const body = settlementBody(draft);
+        // Paid in another currency, it sends what was paid and at what rate beside the amount
+        // cleared, with the suggestion the sheet looked up, if any.
+        const paid =
+          cross && pair && reading?.status === 'valid'
+            ? crossCurrencyPaymentFields(
+                pair,
+                reading.amounts,
+                cross.rate.status === 'ready' ? cross.rate.suggestion : null,
+              )
+            : undefined;
+        if (paid) stored = { ...draft, paid };
+        const body = settlementBody(stored);
         const pending = { key: dependencies.newSubmissionKey?.() ?? '', body };
         const value = { version: 1, accountId: lease.accountId, groupId, ...pending };
         parseSettlementAttempt(value, lease.accountId, groupId);
@@ -4849,7 +5031,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         attempt = pending;
       }
       if (!current(owner) || view !== route || !owns()) return;
-      publish({ ...snapshot, settlement: { ...snapshot.settlement, attempt } });
+      draft = stored;
+      publish({ ...snapshot, settlement: { ...snapshot.settlement, attempt, draft } });
       sending = true;
       const response = await ledgerWrite(groupId, `/api/groups/${groupId}/settlements`, owner, {
         method: 'POST',
@@ -6296,8 +6479,33 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         view.screen === 'settlement' &&
         settlementUnreachable === view &&
         snapshot.settlement.status === 'error';
-    if (!check && !bannerShown()) return null;
+    // A suggested rate that couldn't be looked up offline is looked up again (#728).
+    const cross = view.screen === 'settlement' ? snapshot.settlement.crossCurrency : null;
+    const rate =
+      cross?.rate.status === 'unreachable' &&
+      snapshot.settlement.draft &&
+      snapshot.settlement.groupId
+        ? {
+            groupId: snapshot.settlement.groupId,
+            pair: {
+              currency: snapshot.settlement.draft.currency,
+              paidCurrency: cross.paidCurrency,
+            },
+          }
+        : null;
+    if (!check && !rate && !bannerShown()) return null;
     return async () => {
+      if (rate) {
+        const asked = ++rateRequest;
+        publish({
+          ...snapshot,
+          settlement: {
+            ...snapshot.settlement,
+            crossCurrency: cross && { ...cross, rate: { status: 'loading' } },
+          },
+        });
+        await lookUpRate(rate.groupId, rate.pair, asked);
+      }
       if (check) await retrySettlementCheck();
       // Checking again opened the sheet anew, for the same Group, unless it was closed meanwhile.
       const shown =
@@ -7267,6 +7475,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     updateSettlement,
     recordSettlement,
     acknowledgeSettlement,
+    choosePaidCurrency,
+    editCrossCurrency,
+    restoreSuggestedRate,
     touchSettlementField,
     updateCreation,
     touchCreationField,

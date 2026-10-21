@@ -1439,6 +1439,10 @@ function GroupScreen() {
           onAcknowledge={controller.acknowledgeSettlement}
           onRecord={() => void controller.recordSettlement()}
           onRetry={() => void controller.retrySettlementCheck()}
+          onChoosePaidCurrency={(currency) => void controller.choosePaidCurrency(currency)}
+          onEditCrossCurrency={controller.editCrossCurrency}
+          onUseSuggestedRate={controller.restoreSuggestedRate}
+          onOpenLink={(url) => void Linking.openURL(url).catch(() => undefined)}
           onDiscard={() =>
             Alert.alert(
               'Discard this unconfirmed payment?',

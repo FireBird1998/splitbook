@@ -4,7 +4,7 @@ import { balanceCurrencies, openingBalanceCurrency } from '@splitbook/shared/bal
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
-import type { PendingPayment } from '../data/settlement';
+import { recordNeedsConnection, type PendingPayment } from '../data/settlement';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
 import {
   Banner,
@@ -31,7 +31,8 @@ import { Icon } from './primitives';
 import { CurrencyTabs } from './currency-tabs';
 import { useTheme } from './theme';
 
-export const recordNeedsConnection = 'Recording a payment needs a connection.';
+/** Record's reason offline, here and on the Record payment sheet (#728). */
+export { recordNeedsConnection };
 /** Balances not yet read again after a change: their payments wait for the read (#219). */
 export const recordWaitsForBalances = 'Record is available once these balances are updated.';
 /** Above the suggested payments: when to record one. */
