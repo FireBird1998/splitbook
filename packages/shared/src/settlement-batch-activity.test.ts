@@ -65,6 +65,14 @@ describe('groupSettlementBatches (#734)', () => {
     });
   });
 
+  it('keeps a batch event without a settlementId after the recorded ones, in feed order', () => {
+    const x = event('x', { batchId: 'batch-a', batchSize: 4 });
+    const y = event('y', { batchId: 'batch-a', batchSize: 4 });
+    expect(groupSettlementBatches([x, a2, y, a1])).toEqual([
+      { kind: 'batch', batchId: 'batch-a', batchSize: 4, events: [a1, a2, x, y], complete: true },
+    ]);
+  });
+
   it('marks a page-split batch incomplete', () => {
     expect(groupSettlementBatches([a1, middle])).toEqual([
       { kind: 'batch', batchId: 'batch-a', batchSize: 2, events: [a1], complete: false },

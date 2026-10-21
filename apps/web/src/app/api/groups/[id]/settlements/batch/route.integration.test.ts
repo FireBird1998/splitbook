@@ -200,7 +200,7 @@ describe('Settlement batch HTTP contract (#734)', () => {
     const adminCookie = await signIn('alex');
     const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
     const outcomes = new Set<string>();
-    for (let round = 0; round < 12; round += 1) {
+    for (let round = 0; round < 30; round += 1) {
       // Yen is listed but unused until the batch pays both Debts in it.
       const id = await trip(40, ['EUR', 'INR']);
       const request = {
@@ -225,9 +225,10 @@ describe('Settlement batch HTTP contract (#734)', () => {
         ],
       };
       const [removal, paid] = await Promise.all([
-        // The removal starts later each round, so it lands both before and after the batch's
-        // currency check: a check moved outside the batch's own mutation fails one side.
-        pause(round * 5).then(() =>
+        // The removal starts 1 ms later each round, so it lands both before and after the batch's
+        // currency check, and inside the few ms where a check moved outside the batch's own
+        // mutation would let both succeed.
+        pause(round).then(() =>
           callRoute(currency.DELETE, {
             method: 'DELETE',
             path: `/api/groups/${id}/currencies/JPY`,
