@@ -487,8 +487,34 @@ function device() {
           activities: network.noActivity
             ? []
             : [
+                // Alex's settle-up, one event for each Settlement with the batch's reference (#734).
+                ...(network.eurosPaid && id === lisbon && paymentBodies.at(-1)?.settlements
+                  ? (paymentBodies.at(-1)!.settlements as Record<string, number | string>[]).map(
+                      (row, index, rows) => ({
+                        _id: `d0000000000000000000002${index}`,
+                        group: id,
+                        actor: { _id: alex.id, name: alex.name },
+                        type: 'settlement_recorded',
+                        createdAt: iso,
+                        metadata: {
+                          ...row,
+                          ...(row.amountPaidMinor === undefined
+                            ? {}
+                            : { paidCurrency: paymentBodies.at(-1)!.paidCurrency }),
+                          paidBy: alex.id,
+                          paidTo: sam._id,
+                          paidByName: alex.name,
+                          paidToName: sam.name,
+                          settlementId: `f0000000000000000000001${index}`,
+                          amountMinor: Math.round(Number(row.amount) * 100),
+                          batchId: 'f00000000000000000000010',
+                          batchSize: rows.length,
+                        },
+                      }),
+                    )
+                  : []),
                 // Alex's euro payment, as the server records it in Activity (#728).
-                ...(network.eurosPaid && id === lisbon
+                ...(network.eurosPaid && id === lisbon && !paymentBodies.at(-1)?.settlements
                   ? [
                       {
                         _id: 'd00000000000000000000009',
@@ -3359,6 +3385,17 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     ]);
     expect(app.text()).toContain('Payment recorded');
     expect(settling()).toBeNull();
+
+    // Activity shows the payment as one row, in the single payment's words.
+    await app.press('Activity');
+    const rows = app
+      .hosts(
+        (p) =>
+          p.accessibilityRole === 'button' && String(p.accessibilityLabel).includes('Sam Chen'),
+      )
+      .map((node) => String(node.props.accessibilityLabel));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain('You paid Sam Chen ₹1,872.00 to clear ₹30.00 and €20.00');
   });
 });
 

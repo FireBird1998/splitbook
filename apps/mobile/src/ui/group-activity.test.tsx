@@ -852,3 +852,119 @@ describe.each(['light', 'dark'] as const)(
     });
   },
 );
+
+// #734: a payment that settled several Debts at once, one Settlement for each, shows as one row,
+// even when a page boundary splits it, and opens the batch's records.
+describe('a payment that settled several Debts at once (#734)', () => {
+  const sam = 'a00000000000000000000002';
+  const people = { paidBy: you, paidTo: sam, paidByName: 'Alex Rivera', paidToName: 'Sam Chen' };
+  const batch = { batchId: 'f00000000000000000000001', batchSize: 2 };
+  const recorded = new Date(2026, 8, 30, 11, 30).toISOString();
+  const [rupees, euros] = parseActivityPage(
+    {
+      status: 200,
+      data: {
+        activities: [
+          {
+            _id: hex('e', 901),
+            group: groupId,
+            type: 'settlement_recorded',
+            actor: { _id: you, name: 'Alex Rivera' },
+            createdAt: recorded,
+            metadata: {
+              ...people,
+              ...batch,
+              settlementId: 'f00000000000000000000001',
+              amount: 1480,
+              amountMinor: 148000,
+              currency: 'INR',
+            },
+          },
+          {
+            _id: hex('e', 902),
+            group: groupId,
+            type: 'settlement_recorded',
+            actor: { _id: you, name: 'Alex Rivera' },
+            createdAt: recorded,
+            metadata: {
+              ...people,
+              ...batch,
+              settlementId: 'f00000000000000000000002',
+              amount: 20,
+              amountMinor: 2000,
+              currency: 'EUR',
+              amountPaidMinor: 184200,
+              paidCurrency: 'INR',
+              appliedRate: '92.1',
+              rateKind: 'suggested',
+              suggestedRate: '92.1',
+              rateSource: 'frankfurter',
+              rateAsOf: '2026-10-20',
+              rateFetchedAt: new Date(2026, 9, 21, 6, 0).toISOString(),
+              pairDebtBeforeMinor: -2000,
+              pairDebtAfterMinor: 0,
+            },
+          },
+        ],
+        pagination: { page: 1, limit: 20, total: 2, totalPages: 1 },
+      },
+    },
+    groupId,
+    1,
+  ).events as [ActivityEvent, ActivityEvent];
+  const whole = 'You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00';
+
+  it('shows its Settlements as one row, in the single payment’s words', () => {
+    const { root, onSelect } = render({
+      state: activity({
+        events: [rupees, euros, ...events.slice(0, 3)],
+        pagination: { page: 1, limit: 20, total: 5, totalPages: 1 },
+      }),
+    });
+    const rows = buttons(root).filter((label) => label?.includes('Sam Chen'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain(whole);
+    expect(rows[0]).toContain('€20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct)');
+    expect(text(root)).not.toContain('recorded a payment');
+    act(() => button(root, rows[0]!)[0]!.props.onPress());
+    expect(onSelect).toHaveBeenCalledWith(rupees._id);
+  });
+
+  it('says where the rest of one a page boundary split is, and joins it once that page loads', () => {
+    const { root, update } = render({
+      state: activity({
+        events: [...events.slice(0, 19), rupees],
+        pagination: { page: 1, limit: 20, total: 21, totalPages: 2 },
+      }),
+    });
+    const split = buttons(root).find((label) => label?.includes('Sam Chen'));
+    expect(split).toContain('You paid Sam Chen to clear ₹1,480.00 and 1 more Debt');
+    expect(split).toContain('The rest of this payment is in older Activity.');
+    update({
+      state: activity({
+        events: [...events.slice(0, 19), rupees, euros],
+        pagination: { page: 2, limit: 20, total: 21, totalPages: 2 },
+      }),
+    });
+    expect(buttons(root).filter((label) => label?.includes('Sam Chen'))).toHaveLength(1);
+    expect(buttons(root).find((label) => label?.includes('Sam Chen'))).toContain(whole);
+    expect(text(root)).not.toContain('more Debt');
+  });
+
+  it('opens the payment with each of its Settlements’ records', () => {
+    const { root } = render({ state: activity({ events: [rupees, euros], selected: rupees }) });
+    const shown = text(root);
+    expect(shown).toContain('Payment');
+    expect(shown).toContain('to clear ₹1,480.00 and €20.00');
+    expect(shown).toContain('₹1,480.00, same currency, no rate');
+    // The euro Debt's record, as a single payment in another currency opens it (#728).
+    expect(shown).toContain('to clear €20.00, a Debt in EUR');
+    expect(shown).toContain('Rate used');
+    expect(shown).toContain('What it changed');
+    expect(
+      root.findAll(
+        (node) => typeof node.type === 'string' && node.props.accessibilityLabel === whole,
+      ),
+    ).toHaveLength(1);
+  });
+});

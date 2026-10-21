@@ -6,6 +6,7 @@ import {
   dayLabel,
   describeActivity,
   describeChanges,
+  describeSettlementBatch,
   spokenActivity,
   type ActivityDetail,
   type ActivityLine,
@@ -642,5 +643,96 @@ describe('a Debt paid in another currency (#728)', () => {
         expect.stringMatching(/^DEM\s40\.00$/),
       ]);
     });
+  });
+});
+
+// #734: a payment that settled several Debts at once is one Activity row, in the single payment's
+// words, read through the Activity page's parse as the server sends it.
+describe('a payment that settled several Debts at once (#734)', () => {
+  const alex = 'a00000000000000000000001',
+    sam = 'a00000000000000000000002';
+  const people = { paidBy: alex, paidTo: sam, paidByName: 'Alex Rivera', paidToName: 'Sam Chen' };
+  const batch = { batchId: 'f00000000000000000000001', batchSize: 2 };
+  const events = parseActivityPage(
+    {
+      status: 200,
+      data: {
+        activities: [
+          event({
+            _id: 'd00000000000000000000011',
+            type: 'settlement_recorded',
+            actor: { _id: alex, name: 'Alex Rivera' },
+            metadata: {
+              ...people,
+              ...batch,
+              settlementId: 'f00000000000000000000001',
+              amount: 1480,
+              amountMinor: 148000,
+              currency: 'INR',
+            } as ActivityEvent['metadata'],
+          }),
+          event({
+            _id: 'd00000000000000000000012',
+            type: 'settlement_recorded',
+            actor: { _id: alex, name: 'Alex Rivera' },
+            metadata: {
+              ...people,
+              ...batch,
+              settlementId: 'f00000000000000000000002',
+              amount: 20,
+              amountMinor: 2000,
+              currency: 'EUR',
+              amountPaidMinor: 184200,
+              paidCurrency: 'INR',
+              appliedRate: '92.1',
+              rateKind: 'suggested',
+              suggestedRate: '92.1',
+              rateSource: 'frankfurter',
+              rateAsOf: '2026-10-20',
+              rateFetchedAt: '2026-10-21T00:30:00.000Z',
+            } as ActivityEvent['metadata'],
+          }),
+        ],
+        pagination: { page: 1, limit: 20, total: 2, totalPages: 1 },
+      },
+    },
+    'b00000000000000000000001',
+    1,
+  ).events;
+
+  it('keeps each event’s batch reference through the page’s parse', () => {
+    expect(events.map(({ metadata }) => [metadata.batchId, metadata.batchSize])).toEqual([
+      ['f00000000000000000000001', 2],
+      ['f00000000000000000000001', 2],
+    ]);
+  });
+
+  it('says what was paid in all, each Debt cleared, and each one’s rate', () => {
+    const line = describeSettlementBatch(events, 2, { currentUserId: alex, currency: 'INR' });
+    expect(line).toMatchObject({
+      actor: 'You',
+      verb: 'paid',
+      subject: 'Sam Chen',
+      complement: '₹3,322.00 to clear ₹1,480.00 and €20.00',
+    });
+    expect(line.details.map((detail) => detail.text)).toEqual([
+      '₹1,480.00, same currency, no rate',
+      '€20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct)',
+    ]);
+    expect(spokenActivity(line, '10:20')).toBe(
+      'You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00, ₹1,480.00, same currency, no rate, €20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct), 10:20',
+    );
+  });
+
+  it('says where the rest of a payment a page boundary split is', () => {
+    const line = describeSettlementBatch(events.slice(0, 1), 2, {
+      currentUserId: alex,
+      currency: 'INR',
+    });
+    expect(line.complement).toBe('to clear ₹1,480.00 and 1 more Debt');
+    expect(line.details.map((detail) => detail.text)).toEqual([
+      '₹1,480.00, same currency, no rate',
+      'The rest of this payment is in older Activity.',
+    ]);
   });
 });
