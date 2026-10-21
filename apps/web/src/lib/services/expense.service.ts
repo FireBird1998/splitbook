@@ -32,7 +32,10 @@ import {
   unsupportedMajorAmount,
 } from '@splitbook/shared/exact-money';
 import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
-import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
+import {
+  decideExpenseMoneyEdit,
+  unsupportedCurrencyEditRefusal,
+} from '@splitbook/shared/expense-money-edit';
 import {
   assertCreateReplay,
   assertPendingActivityCapacity,
@@ -514,7 +517,7 @@ export class ExpenseService {
     if (!getCurrency(original.currency))
       throw new MoneyValidationError(
         'UNSUPPORTED_CURRENCY',
-        `This Expense is in ${original.currency}, which Splitbook no longer supports. It can’t be changed, only deleted.`,
+        unsupportedCurrencyEditRefusal(original.currency),
       );
     const { financialEdit, money } = decideExpenseMoneyEdit(original, data);
     if (financialEdit)

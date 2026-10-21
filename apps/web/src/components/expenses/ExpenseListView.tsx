@@ -347,13 +347,17 @@ export default function ExpenseListView({
     revision?: number;
   }>({ open: false, message: '' });
 
-  const handleDeleted = (expenseId: string, revision: number) => {
+  const handleDeleted = (expenseId: string, undo: { revision: number } | null) => {
     void mutate();
     if (openId === expenseId) {
       if (onComputer) focusAfterClose.current = '';
       showOpen(null, 'replace');
     }
-    setSnackbar({ open: true, message: 'Expense deleted', expenseId, revision });
+    setSnackbar({
+      open: true,
+      message: 'Expense deleted',
+      ...(undo ? { expenseId, revision: undo.revision } : {}),
+    });
   };
 
   const handleUndo = async () => {

@@ -1,8 +1,10 @@
 import { inAmountWords } from './amount-entry';
+import { getCurrency } from './currency';
 import { moneyParticipantId, normalizeExpenseMoney } from './exact-money';
 import {
   decideExpenseMoneyEdit,
   readExpenseMoney,
+  unsupportedCurrencyEditRefusal,
   type StoredExpenseMoney,
 } from './expense-money-edit';
 import type { ExpenseSplitMethod } from './split-calculation';
@@ -113,7 +115,9 @@ export class ExpenseDraft {
         }
       } catch {
         values.currency = context.currency;
-        error = 'This expense contains invalid stored amounts and cannot be edited.';
+        error = getCurrency(base.currency)
+          ? 'This expense contains invalid stored amounts and cannot be edited.'
+          : unsupportedCurrencyEditRefusal(base.currency);
       }
     }
     return new ExpenseDraft({
