@@ -409,8 +409,8 @@ The members' Connected assistants that reach the Group, for its admins (#621):
 }
 ```
 
-A connection appears while it is live and its member hasn't left this Group
-out. The list is empty when the Group is Not allowed or assistants are off.
+A connection appears while it is live (not disconnected or expired, #618) and its
+member hasn't left this Group out. The list is empty when the Group is Not allowed or assistants are off.
 **Authorization:** Only group admins; anyone else gets **403**.
 `apps/web/src/app/api/groups/[id]/assistant-rule/route.integration.test.ts`
 covers both routes.

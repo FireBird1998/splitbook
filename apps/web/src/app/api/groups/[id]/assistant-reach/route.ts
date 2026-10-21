@@ -31,7 +31,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const person = member.user as unknown as { _id: { toString(): string }; name?: string };
       return { id: person._id.toString(), name: person.name ?? '' };
     });
-    return success({ reach: await groupReach((await auth.$context).adapter, id, members) });
+    return success({
+      reach: await groupReach((await auth.$context).adapter, id, members, process.env),
+    });
   } catch (err) {
     return serverError(err);
   }
