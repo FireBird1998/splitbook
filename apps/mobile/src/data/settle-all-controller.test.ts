@@ -614,6 +614,41 @@ describe('settling up in several currencies at once (#734)', () => {
     expect(records.size).toBe(1);
   });
 
+  it('says a retry refused because its Debts changed wasn’t recorded, and keeps nothing to retry (#802)', async () => {
+    let posts = 0;
+    const { controller, batches, create, records } = await opened(({ pathname }, init) => {
+      if (!pathname.endsWith('/settlements/batch') || init.method !== 'POST') return undefined;
+      // The first send's reply never arrives; by its retry, the Debts have changed.
+      return ++posts === 1
+        ? Promise.reject(new Error('Response lost'))
+        : json(
+            {
+              status: 422,
+              code: 'NO_SETTLEMENT_DEBT',
+              error: 'There is no Debt to settle in EUR.',
+            },
+            422,
+          );
+    });
+    await controller.recordSettlement();
+    expect(controller.getSnapshot().settlement.status).toBe('uncertain');
+    controller.dispose();
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openSettlements(groupId);
+    await restarted.recordSettlement();
+    expect(batches).toHaveLength(2);
+    expect(batches[1]).toEqual(batches[0]);
+    expect(restarted.getSnapshot().settlement).toMatchObject({
+      status: 'ready',
+      batch: null,
+      attempt: null,
+      message:
+        'These Debts changed, so this payment wasn’t recorded. Close this and check them again.',
+    });
+    expect(records.size).toBe(0);
+  });
+
   it('is only for Debts between the same two people, one way, in two currencies or more', async () => {
     const { controller } = setup(({ pathname }) =>
       pathname === `/api/groups/${groupId}/balances` ? json(balances(0)) : undefined,
