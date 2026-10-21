@@ -32,6 +32,11 @@ const rowButtons = (page: Page) =>
   main(page)
     .getByRole('region', { name: /^Expenses/ })
     .locator('tr[data-expense-id] button[aria-expanded]');
+/** Each row's checkbox, which comes before its button in the Tab order (#610). */
+const rowBoxes = (page: Page) =>
+  main(page)
+    .getByRole('region', { name: /^Expenses/ })
+    .locator('tr[data-expense-id] input[type="checkbox"]');
 const searchBox = (page: Page) => page.getByRole('searchbox', { name: /^Search Expenses in / });
 const addHint = (page: Page) => addExpenseButton(page).locator('kbd');
 const formDialog = (page: Page) => page.getByRole('dialog', { name: /^Add expense/ });
@@ -74,7 +79,7 @@ test('the keyboard path through the Expense table: J and K move, Enter opens, E 
   await expect(buttons.nth(3)).toBeVisible();
   const names = await descriptions(page);
 
-  // The footer lists the keys; there is no X, since nothing selects rows.
+  // The footer lists the keys.
   await expect(footer(page)).toBeVisible();
   await expect(footer(page).locator('dt, dd')).toHaveText([
     'JK',
@@ -83,6 +88,8 @@ test('the keyboard path through the Expense table: J and K move, Enter opens, E 
     'Open',
     'E',
     'Edit',
+    'X',
+    'Select',
     'N',
     'New expense',
     '/',
@@ -133,14 +140,17 @@ test('the keyboard path through the Expense table: J and K move, Enter opens, E 
   await expect(editDialog(page)).toHaveCount(0);
   await expect(main(page).getByRole('region', { name: `${names[1]} details` })).toBeVisible();
 
-  // X selects nothing: the table has no row selection.
+  // X ticks the row the keyboard is on, and again unticks it (#610).
+  const box = main(page)
+    .getByRole('region', { name: /^Expenses/ })
+    .getByRole('checkbox', { name: `Select ${names[2]}, ` });
   await page.keyboard.press('x');
   await expect(buttons.nth(2)).toBeFocused();
-  await expect(
-    main(page)
-      .getByRole('region', { name: /^Expenses/ })
-      .getByRole('checkbox'),
-  ).toHaveCount(0);
+  await expect(box).toBeChecked();
+  await expect(main(page).getByRole('heading', { name: /^1 selected · / })).toBeVisible();
+  await page.keyboard.press('x');
+  await expect(box).not.toBeChecked();
+  await expect(main(page).getByRole('region', { name: `${names[1]} details` })).toBeVisible();
 });
 
 test('J and K skip Trip day headings while every Expense keeps its Tab stop', async ({
@@ -180,6 +190,8 @@ test('J and K skip Trip day headings while every Expense keeps its Tab stop', as
     await page.keyboard.press('k');
     await expect(buttons.nth(index)).toBeFocused();
   }
+  await page.keyboard.press('Tab');
+  await expect(rowBoxes(page).nth(1)).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(buttons.nth(1)).toBeFocused();
   await page.keyboard.press('Enter');
@@ -301,8 +313,11 @@ test('the Settings switch turns single keys off for this member on this device; 
   await page.keyboard.press('Escape');
   await expect(searchDialog(page)).toHaveCount(0);
 
-  // Every row is still reachable with Tab, and Enter still opens one: nothing needs a shortcut.
+  // Every row is still reachable with Tab, its checkbox first, and Enter still opens one:
+  // nothing needs a shortcut.
   await buttons.first().focus();
+  await page.keyboard.press('Tab');
+  await expect(rowBoxes(page).nth(1)).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(buttons.nth(1)).toBeFocused();
   await page.keyboard.press('Enter');

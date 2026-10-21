@@ -108,8 +108,8 @@ export default function ExpenseTable({
   const onKeyDown = useExpenseTableKeys({ openId, onEdit, onSelect: selection?.onSelect });
   const ticked = selection ? expenses.filter((expense) => selection.selected.has(expense._id)) : [];
   const selecting = ticked.length > 0;
-  // The checkbox cell's own clicks never open the row.
-  const keepToCell = (event: { stopPropagation: () => void }) => event.stopPropagation();
+  // A click on the checkbox ticks it, and never opens the row too.
+  const keepToCheckbox = (event: { stopPropagation: () => void }) => event.stopPropagation();
   return (
     <Box
       component="section"
@@ -215,10 +215,11 @@ export default function ExpenseTable({
                     }}
                   >
                     {selection && (
-                      <Box component="td" onClick={keepToCell} sx={{ ...cell, width: 40 }}>
+                      <Box component="td" sx={{ ...cell, width: 40 }}>
                         <Checkbox
                           size="small"
                           checked={chosen}
+                          onClick={keepToCheckbox}
                           onChange={() => selection.onSelect(expense._id)}
                           slotProps={{ input: { 'aria-label': selectLabel(expense) } }}
                         />

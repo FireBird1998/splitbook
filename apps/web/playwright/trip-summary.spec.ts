@@ -331,7 +331,8 @@ test('a Trip’s Expenses sit under their trip days, each with its total', async
     // A row under a day's heading opens in the side panel (#311), and the headings stay.
     const first = table.locator('tr[data-trip-day] + tr[data-expense-id]').first();
     const expenseId = await first.getAttribute('data-expense-id');
-    await first.locator('td').first().click();
+    // Its date: the first cell holds the checkbox that ticks it (#610).
+    await first.locator('td').nth(1).click();
     await expect.poll(() => new URL(page.url()).searchParams.get('expense')).toBe(expenseId);
     await expect(first.getByRole('button', { expanded: true })).toHaveAttribute(
       'aria-controls',
