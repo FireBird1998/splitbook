@@ -41,6 +41,8 @@ const SettlementSchema = new Schema<ISettlementDocument>(
       validate: (events: unknown[]) => events.length <= 100,
     },
     currency: { type: String, required: true, trim: true },
+    pairDebtBeforeMinor: { type: Number, validate: Number.isSafeInteger, immutable: true },
+    pairDebtAfterMinor: { type: Number, validate: Number.isSafeInteger, immutable: true },
     amountPaidMinor: { type: Number, min: 1, validate: Number.isSafeInteger, immutable: true },
     paidCurrency: { type: String, immutable: true },
     appliedRate: { type: String, immutable: true },

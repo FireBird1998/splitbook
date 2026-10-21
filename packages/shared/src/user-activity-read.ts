@@ -1,4 +1,4 @@
-import { crossCurrencySettlementShape } from './validators/settlement';
+import { crossCurrencySettlementReadShape } from './validators/settlement';
 import { assistantAttributionSchema } from './draft-attribution';
 /**
  * The read contract of the latest Activity across the member's Groups (#309), returned in wire
@@ -16,7 +16,7 @@ export const USER_ACTIVITY_MAX_LIMIT = 50;
 /** An Expense edit's money fields, before and after. Other changes aren't sent. */
 const change = z.looseObject({ old: z.unknown().optional(), new: z.unknown().optional() });
 const metadata = z.looseObject({
-  ...crossCurrencySettlementShape,
+  ...crossCurrencySettlementReadShape,
   amountMinor: z.number().int().safe().optional(),
   preparedBy: assistantAttributionSchema.optional(),
   expenseId: identity.optional(),

@@ -1264,7 +1264,8 @@ For a Cross-currency Settlement, send these fields with the existing body:
 - `paidCurrency`: a supported main or listed extra currency, different from
   `currency`. An unlisted paid currency is **422** `CURRENCY_MISMATCH`.
 - The cleared `currency` may also be a historical currency already used by an
-  Expense or Settlement in this Group, so legacy Debts remain settleable. An
+  live Expense (`isDeleted: false`) or Settlement in this Group, so legacy Debts
+  remain settleable. Settlements have no deletion state. An
   unlisted currency with no such record is **422** `CURRENCY_MISMATCH`. This applies
   to both same-currency and cross-currency Settlements; only the cleared currency's
   ledger moves.
@@ -1312,6 +1313,22 @@ cleared amount); the result's rate is always derived from the resulting amounts,
 not copied from the entered rate. Zero or unsafe results are refused. No floating
 point multiplication or division is used. Callers retain the user's rate separately
 while editing and send the helper's `appliedRate` with the two resulting amounts.
+
+Cross-currency Settlement reads also include server-computed `pairDebtBeforeMinor`
+and `pairDebtAfterMinor`: signed safe integer minor units in the cleared `currency`,
+from the payer's side (owing is negative, receiving is positive). They snapshot the
+**direct transfer between these people in the simplified payment plan**, immediately
+before and after this Settlement, inside its Group mutation. They are immutable,
+returned in Group/Home Activity metadata, and retained unchanged on idempotent retry.
+Client-supplied values are ignored. Old records omit both fields; clients leave that
+line out rather than recomputing it from today's ledger. A €20 Debt paid fully gives
+`-2000 → 0`; paying €5 gives `-2000 → -1500`.
+
+This is not the underlying pairwise Debt before simplifying. A missing direct edge
+in the simplified plan is zero. With Sam owing Alex €20 and Alex owing Priya €20,
+the plan sends Sam to Priya; Sam paying Alex €20 changes it to Alex paying Priya,
+so the Sam–Alex snapshot is `0 → 0`. The closest honest label for these figures is
+“Suggested payment between you and Sam”, not a claim about their underlying Debt.
 
 `formatCrossCurrencySettlement(record, viewerId?: string): string` takes the stored
 cross-currency fields, `amountMinor`, `currency`, and optional `paidBy`, `paidByName`,

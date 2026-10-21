@@ -86,6 +86,9 @@ export function calculateCrossCurrencySettlement(
 
 /** Stored snapshots, never refreshed or recomputed from the current rate service. */
 export interface CrossCurrencySettlementFields {
+  /** Read-only signed direct transfer in the simplified plan, from the payer's side. */
+  pairDebtBeforeMinor?: number;
+  pairDebtAfterMinor?: number;
   amountPaidMinor: number;
   paidCurrency: string;
   appliedRate: string;

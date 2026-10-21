@@ -1,4 +1,4 @@
-import { crossCurrencySettlementShape } from './validators/settlement';
+import { crossCurrencySettlementReadShape } from './validators/settlement';
 import { assistantAttributionSchema } from './draft-attribution';
 /** The Activity page read contract (#210), returned in wire shape. */
 import { z } from 'zod';
@@ -13,7 +13,7 @@ import {
 } from './wire-fields';
 
 const metadata = z.looseObject({
-  ...crossCurrencySettlementShape,
+  ...crossCurrencySettlementReadShape,
   amountMinor: z.number().int().safe().optional(),
   preparedBy: assistantAttributionSchema.optional(),
   userId: identity.optional(),

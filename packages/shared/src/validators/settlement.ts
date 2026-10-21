@@ -24,6 +24,23 @@ export const crossCurrencySettlementShape = {
   rateKind: z.enum(['suggested', 'custom', 'entered']).optional(),
 };
 
+/** Server-computed historical fields never belong to the create input. */
+export const crossCurrencySettlementReadShape = {
+  ...crossCurrencySettlementShape,
+  pairDebtBeforeMinor: z
+    .number()
+    .int()
+    .min(-Number.MAX_SAFE_INTEGER)
+    .max(Number.MAX_SAFE_INTEGER)
+    .optional(),
+  pairDebtAfterMinor: z
+    .number()
+    .int()
+    .min(-Number.MAX_SAFE_INTEGER)
+    .max(Number.MAX_SAFE_INTEGER)
+    .optional(),
+};
+
 export const createSettlementSchema = z
   .object({
     ...crossCurrencySettlementShape,

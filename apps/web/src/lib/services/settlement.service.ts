@@ -24,6 +24,7 @@ import {
 } from '@/lib/financial-write';
 import User from '@/lib/models/User';
 import { Types } from 'mongoose';
+import { settlementDebtSnapshot } from './settlement-debt';
 import { PERSON_FIELDS } from './person-fields';
 
 /** Historical currencies can clear a Debt; the paid side still uses the current list. */
@@ -119,16 +120,6 @@ export class SettlementService {
     const names = await User.find({ _id: { $in: [paidBy, data.paidTo] } })
       .select('name')
       .lean();
-    const event = makePendingActivity(groupId, 'settlement_recorded', userId, {
-      settlementId: String(settlementId),
-      paidBy,
-      paidTo: data.paidTo,
-      amount: command.amount,
-      currency: data.currency,
-      ...(data.paidCurrency ? { amountMinor, ...crossCurrency } : {}),
-      paidByName: names.find((person) => String(person._id) === paidBy)?.name,
-      paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
-    });
 
     let settlement;
     try {
@@ -140,6 +131,19 @@ export class SettlementService {
           const current = await Group.findById(groupId);
           if (!current) throw new Error('FORBIDDEN');
           await assertSettlementCurrencies(groupId, current, data);
+          const debtSnapshot = data.paidCurrency
+            ? await settlementDebtSnapshot(groupId, data.currency, paidBy, data.paidTo, amountMinor)
+            : {};
+          const event = makePendingActivity(groupId, 'settlement_recorded', userId, {
+            settlementId: String(settlementId),
+            paidBy,
+            paidTo: data.paidTo,
+            amount: command.amount,
+            currency: data.currency,
+            ...(data.paidCurrency ? { amountMinor, ...crossCurrency, ...debtSnapshot } : {}),
+            paidByName: names.find((person) => String(person._id) === paidBy)?.name,
+            paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
+          });
           return Settlement.create({
             _id: settlementId,
             group: groupId,
@@ -150,6 +154,7 @@ export class SettlementService {
             moneyVersion: 1,
             currency: data.currency,
             ...crossCurrency,
+            ...debtSnapshot,
             note: data.note,
             createdBy: userId,
             ...(requestKey ? { creationRequest: createRequestMetadata(requestKey, command) } : {}),
