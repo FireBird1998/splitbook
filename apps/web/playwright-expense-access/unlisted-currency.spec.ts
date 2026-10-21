@@ -46,6 +46,44 @@ async function lisbonAndTokyo(ledger: Ledger) {
   return { group, name, food };
 }
 
+/** Items Alex set aside in To review, paid by Alex and shared with Sam. */
+async function setAside(
+  ledger: Ledger,
+  group: string,
+  food: string,
+  items: Array<[description: string, amount: number, currency: string]>,
+) {
+  await dataOf(
+    await ledger.alex.post(`/api/groups/${group}/drafts`, {
+      headers: { 'Idempotency-Key': randomUUID() },
+      data: {
+        drafts: items.map(([description, amount, currency]) => ({
+          description,
+          amount,
+          currency,
+          category: 'food',
+          date: '2026-10-12',
+          tagId: food,
+          paidBy: [{ user: alex, amount }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: alex }, { user: sam }],
+        })),
+      },
+    }),
+    201,
+  );
+}
+
+/** Let adding a currency reach the server, then lose its reply. */
+async function loseAddReply(page: Page, group: string) {
+  await page.route(`**/api/groups/${group}/currencies`, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    const committed = await route.fetch();
+    expect(committed.status()).toBe(201);
+    return route.abort('failed');
+  });
+}
+
 async function expensesOf(ledger: Ledger, group: string) {
   const page = await dataOf(await ledger.alex.get(`/api/groups/${group}/expenses?limit=100`));
   return page.expenses as Array<{ description: string; amount: number; currency: string }>;
@@ -134,30 +172,11 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.emulateMedia({ colorScheme: scheme });
     const { group, name, food } = await lisbonAndTokyo(ledger);
-    const item = (description: string, amount: number, currency: string) => ({
-      description,
-      amount,
-      currency,
-      category: 'food',
-      date: '2026-10-12',
-      tagId: food,
-      paidBy: [{ user: alex, amount }],
-      splitMethod: 'equal',
-      splitBetween: [{ user: alex }, { user: sam }],
-    });
-    await dataOf(
-      await ledger.alex.post(`/api/groups/${group}/drafts`, {
-        headers: { 'Idempotency-Key': randomUUID() },
-        data: {
-          drafts: [
-            item('Dinner in Zürich', 86, 'CHF'),
-            item('Lunch in Geneva', 40.5, 'CHF'),
-            item('Taxi to Alfama', 18.4, 'EUR'),
-          ],
-        },
-      }),
-      201,
-    );
+    await setAside(ledger, group, food, [
+      ['Dinner in Zürich', 86, 'CHF'],
+      ['Lunch in Geneva', 40.5, 'CHF'],
+      ['Taxi to Alfama', 18.4, 'EUR'],
+    ]);
     await enter(page, ledger.alex, `/groups/${group}/review`);
     const needs = page.getByRole('region', { name: 'Needs details', exact: true });
     const ready = page.getByRole('region', { name: 'Ready', exact: true });
@@ -204,3 +223,63 @@ for (const scheme of ['light', 'dark'] as const) {
     expect(await expensesOf(ledger, group)).toEqual([]);
   });
 }
+
+test('Quick add takes CHF as added when its reply is lost (#732)', async ({ page, ledger }) => {
+  const { group, name } = await lisbonAndTokyo(ledger);
+  await enter(page, ledger.alex, `/groups/${group}/expenses`);
+  const quickAdd = page.getByRole('region', { name: 'Quick add' });
+  const { field } = await type(page, 'CHF 86 dinner in Zürich');
+  await loseAddReply(page, group);
+  await quickAdd.getByRole('button', { name: `Add CHF to ${name}` }).click();
+  await expect(quickAdd).toContainText(`Read as CHF, one of ${name}’s currencies.`);
+  await expect(quickAdd).not.toContainText('Couldn’t add the currency');
+  await field.press('Enter');
+  await expect(field).toHaveValue('');
+  expect(
+    (await expensesOf(ledger, group)).filter((row) => row.description === 'Dinner in Zürich'),
+  ).toEqual([expect.objectContaining({ amount: 86, currency: 'CHF' })]);
+});
+
+test('To review takes CHF as added when its reply is lost (#732)', async ({ page, ledger }) => {
+  const { group, name, food } = await lisbonAndTokyo(ledger);
+  await setAside(ledger, group, food, [['Dinner in Zürich', 86, 'CHF']]);
+  await enter(page, ledger.alex, `/groups/${group}/review`);
+  const needs = page.getByRole('region', { name: 'Needs details', exact: true });
+  await loseAddReply(page, group);
+  await needs
+    .getByRole('group', { name: 'Currency for Dinner in Zürich' })
+    .getByRole('button', { name: `Add CHF to ${name}` })
+    .click();
+  await expect(page.getByRole('region', { name: 'Ready', exact: true })).toContainText(
+    'Dinner in Zürich',
+  );
+  await expect(needs).toHaveCount(0);
+  await expect(page.getByText('Check the expense details and try again.')).toHaveCount(0);
+});
+
+test('To review says why adding a currency was refused, in the refusal’s own words (#732)', async ({
+  page,
+  ledger,
+}) => {
+  const { group, name, food } = await lisbonAndTokyo(ledger);
+  await setAside(ledger, group, food, [['Dinner in Zürich', 86, 'CHF']]);
+  await enter(page, ledger.alex, `/groups/${group}/review`);
+  // A refusal the Group, read again, doesn't contradict: CHF stays unlisted.
+  await page.route(`**/api/groups/${group}/currencies`, (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({
+          status: 403,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Only current members can add a currency.' }),
+        })
+      : route.continue(),
+  );
+  const needs = page.getByRole('region', { name: 'Needs details', exact: true });
+  await needs
+    .getByRole('group', { name: 'Currency for Dinner in Zürich' })
+    .getByRole('button', { name: `Add CHF to ${name}` })
+    .click();
+  await expect(page.getByText('Only current members can add a currency.')).toBeVisible();
+  await expect(page.getByText('Check the expense details and try again.')).toHaveCount(0);
+  await expect(needs).toContainText('Dinner in Zürich');
+});

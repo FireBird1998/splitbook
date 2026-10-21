@@ -30,6 +30,7 @@ vi.mock('@/lib/web-read', () => ({
 }));
 
 const requests = vi.hoisted(() => [] as { method: string; path: string; body: unknown }[]);
+/** A status of 0 is a request whose reply never arrives. */
 const answers = vi.hoisted(() => new Map<string, { status: number; body: unknown }>());
 vi.mock('@/lib/utils/api-fetch', () => ({
   apiFetch: async (path: string, init?: RequestInit) => {
@@ -39,6 +40,7 @@ vi.mock('@/lib/utils/api-fetch', () => ({
       status: 500,
       body: { error: 'Unplanned' },
     };
+    if (answer.status === 0) throw new TypeError('Failed to fetch');
     return new Response(JSON.stringify(answer.body), { status: answer.status });
   },
 }));
@@ -57,6 +59,7 @@ const ALEX = 'a00000000000000000000001';
 const SAM = 'a00000000000000000000002';
 const PRIYA = 'a00000000000000000000003';
 const CURRENCIES = `/api/groups/${GROUP}/currencies`;
+const GROUP_READ = `/api/groups/${GROUP}`;
 
 function lisbon(alternateCurrencies: string[]): GroupRead {
   return {
@@ -188,11 +191,55 @@ describe('Quick add with a currency the Group doesn’t list (#732)', () => {
       status: 409,
       body: { error: 'A Group can have at most 4 extra currencies.' },
     });
+    // Read again, the Group still doesn't list CHF, so the refusal stands.
+    answers.set(`GET ${GROUP_READ}`, {
+      status: 200,
+      body: { status: 200, data: lisbon(['EUR', 'JPY']) },
+    });
     await mount(lisbon(['EUR', 'JPY']));
     await type('CHF 86 dinner in Zürich');
     await press('Add CHF to Lisbon & Tokyo');
     expect(shown()).toContain('A Group can have at most 4 extra currencies.');
+    expect(shown()).not.toContain('CHF added');
     expect(renderer.root.findByType('input').props.value).toBe('CHF 86 dinner in Zürich');
+  });
+
+  it('takes CHF as added when its reply is lost but the Group, read again, lists it', async () => {
+    answers.set(`POST ${CURRENCIES}`, { status: 0, body: null });
+    answers.set(`GET ${GROUP_READ}`, {
+      status: 200,
+      body: { status: 200, data: lisbon(['EUR', 'JPY', 'CHF']) },
+    });
+    await mount(lisbon(['EUR', 'JPY']));
+    await type('CHF 86 dinner in Zürich');
+    await press('Add CHF to Lisbon & Tokyo');
+    expect(requests.map(({ method, path }) => `${method} ${path}`)).toContain(`GET ${GROUP_READ}`);
+    expect(shown()).not.toContain('Couldn’t add the currency');
+    expect(shown()).toContain('CHF added to Lisbon & Tokyo.');
+  });
+
+  it('takes an “already listed” refusal as added once the Group, read again, lists it', async () => {
+    answers.set(`POST ${CURRENCIES}`, {
+      status: 409,
+      body: { error: 'CHF is already one of this Group’s currencies.' },
+    });
+    answers.set(`GET ${GROUP_READ}`, {
+      status: 200,
+      body: { status: 200, data: lisbon(['EUR', 'JPY', 'CHF']) },
+    });
+    await mount(lisbon(['EUR', 'JPY']));
+    await type('CHF 86 dinner in Zürich');
+    await press('Add CHF to Lisbon & Tokyo');
+    expect(shown()).not.toContain('already one of');
+    expect(shown()).toContain('CHF added to Lisbon & Tokyo.');
+  });
+
+  it('keeps the lost reply’s words when the Group can’t be read again', async () => {
+    answers.set(`POST ${CURRENCIES}`, { status: 0, body: null });
+    await mount(lisbon(['EUR', 'JPY']));
+    await type('CHF 86 dinner in Zürich');
+    await press('Add CHF to Lisbon & Tokyo');
+    expect(shown()).toContain('Couldn’t add the currency. Check your connection and try again.');
   });
 
   it('reads the line in another of the Group’s currencies and adds it there, unconverted', async () => {
