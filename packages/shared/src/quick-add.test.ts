@@ -53,6 +53,9 @@ describe('readQuickAdd: the design canvas’s line', () => {
   it('reads "Dinner 2400 paid by me" into every part, with nothing left to fix', () => {
     expect(read('Dinner 2400 paid by me')).toEqual({
       description: 'Dinner',
+      currency: 'INR',
+      currencyCandidates: [],
+      currencyListed: true,
       amountMinor: 240000,
       amountText: '2400',
       payer: { memberId: ALEX.id, said: 'me', candidates: [] },
@@ -158,7 +161,7 @@ describe('readQuickAdd: amounts', () => {
     expect(read('Sushi 3000', { currency: 'JPY' }).amountMinor).toBe(3000);
     expect(read('Sushi 3000.5', { currency: 'JPY' }).problems[0]).toMatchObject({
       code: 'amount-decimals',
-      message: 'JPY amounts have no decimal places. Nothing is rounded for you.',
+      message: 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.',
     });
     expect(read('Bibimbap 12000', { currency: 'KRW' }).amountMinor).toBe(12000);
     expect(read('Lunch 12.34', { currency: 'EUR' }).amountMinor).toBe(1234);
@@ -221,7 +224,7 @@ describe('readQuickAdd: amounts', () => {
         field: 'amount',
         code: 'amount-currency',
         kind: 'invalid',
-        message: 'This Group records INR, so write the amount in INR, like ₹2400.',
+        message: `${line.currency} is not one of this Group’s currencies. Add it to the Group or choose a listed currency.`,
       });
     }
     // Words that happen to be currency codes, written as words, are words.
@@ -722,5 +725,199 @@ describe('quickAddDraftValues: the full form’s request', () => {
     expect(
       quickAddDraftValues(read('Dinner 2400'), { payerId: null, tagId: FOOD }, ctx),
     ).not.toHaveProperty('category');
+  });
+});
+
+describe('Quick add with the Group’s listed currencies (#732)', () => {
+  it.each([
+    ['€20 dinner', 'EUR', 2000, '20'],
+    ['Dinner 20 EUR', 'EUR', 2000, '20'],
+    ['Dinner 20 eur', 'EUR', 2000, '20'],
+    ['¥2500 dinner', 'JPY', 2500, '2500'],
+    ['Dinner 2500 JPY', 'JPY', 2500, '2500'],
+    ['Dinner ₩12000', 'KRW', 12000, '12000'],
+  ])(
+    'reads listed currency in %s and carries it into the Expense draft',
+    (text, currency, minor, amount) => {
+      const ctx = context({ alternateCurrencies: ['EUR', 'JPY', 'KRW'] });
+      const line = readQuickAdd(text, ctx);
+      expect(line).toMatchObject({
+        description: 'Dinner',
+        currency,
+        currencyListed: true,
+        amountMinor: minor,
+        problems: [],
+      });
+      expect(quickAddDraftValues(line, { payerId: ALEX.id, tagId: 'Food' }, ctx)).toMatchObject({
+        currency,
+        amount,
+      });
+    },
+  );
+
+  it.each(['Dinner ¥2500.5', 'Dinner 2500.5 JPY', 'Dinner ₩12000.5'])(
+    'refuses fractional whole-unit amounts in %s',
+    (text) => {
+      const line = read(text, { alternateCurrencies: ['JPY', 'KRW'] });
+      expect(line.amountMinor).toBeNull();
+      expect(line.problems).toEqual([expect.objectContaining({ code: 'amount-decimals' })]);
+    },
+  );
+});
+
+describe('Quick add keeps an unlisted or ambiguous currency explicit (#732)', () => {
+  it.each([
+    ['€20 dinner', 'EUR', '20'],
+    ['Dinner 20 EUR', 'EUR', '20'],
+    ['Dinner 2500 JPY', 'JPY', '2500'],
+    ['Dinner ₩12000', 'KRW', '12000'],
+  ])(
+    'reports the unlisted currency in %s without reinterpreting the amount',
+    (text, currency, amount) => {
+      const line = read(text);
+      expect(line).toMatchObject({
+        currency,
+        currencyListed: false,
+        amountMinor: null,
+        amountText: amount,
+      });
+      expect(line.problems).toEqual([
+        expect.objectContaining({
+          code: 'amount-currency',
+          message: `${currency} is not one of this Group’s currencies. Add it to the Group or choose a listed currency.`,
+        }),
+      ]);
+      expect(
+        quickAddDraftValues(line, { payerId: ALEX.id, tagId: 'Food' }, context()),
+      ).toMatchObject({ currency, amount });
+      expect(read(text, { alternateCurrencies: [currency] }).problems).toEqual([]);
+    },
+  );
+
+  it('asks for a code when a symbol matches several extra currencies', () => {
+    const line = read('Dinner ¥2500', { alternateCurrencies: ['JPY', 'CNY'] });
+    expect(line).toMatchObject({
+      currency: null,
+      currencyCandidates: ['JPY', 'CNY'],
+      amountMinor: null,
+    });
+    expect(line.problems[0]).toMatchObject({ code: 'amount-currency' });
+    expect(read('Dinner 2500 CNY', { alternateCurrencies: ['JPY', 'CNY'] })).toMatchObject({
+      currency: 'CNY',
+      amountMinor: 250000,
+      problems: [],
+    });
+  });
+});
+
+describe('Quick add distinguishes ordinary words from listed currency marks (#732)', () => {
+  it.each([
+    ['php 499 course', 49900, 'Php course'],
+    ['Lunch 450 sar', 45000, 'Lunch sar'],
+    ['R 200 auto', 20000, 'R auto'],
+    ['Cab 2 R 450', 45000, 'Cab 2 R'],
+    ['Coffee 120 kr', 12000, 'Coffee kr'],
+  ])('reads %s as rupees in a Group without extras', (text, amountMinor, description) => {
+    expect(read(text)).toMatchObject({
+      currency: 'INR',
+      currencyListed: true,
+      amountMinor,
+      description,
+      problems: [],
+    });
+  });
+
+  it.each([
+    ['20 eur dinner', 'EUR', 2000],
+    ['R 200 auto', 'ZAR', 20000],
+    ['Coffee 120 kr', 'SEK', 12000],
+    ['RM 20 dinner', 'MYR', 2000],
+  ])('still recognises the listed currency in %s', (text, currency, amountMinor) => {
+    expect(read(text, { alternateCurrencies: [currency] })).toMatchObject({
+      currency,
+      currencyListed: true,
+      amountMinor,
+      problems: [],
+    });
+  });
+
+  it('still reports an unlisted euro symbol explicitly', () => {
+    expect(read('€20')).toMatchObject({
+      currency: 'EUR',
+      currencyListed: false,
+      amountMinor: null,
+      amountText: '20',
+    });
+    expect(read('€20').problems).toContainEqual(
+      expect.objectContaining({ code: 'amount-currency' }),
+    );
+  });
+});
+
+it.each([
+  ['Sushi 2500.5', 'JPY', 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.'],
+  ['Dinner 2500.5', 'KRW', 'Won has no smaller unit. Enter a whole amount, like ₩2,500.'],
+])('uses the form’s whole-unit wording for %s in %s', (text, currency, message) => {
+  for (const group of [{ currency }, { alternateCurrencies: [currency] }]) {
+    expect(read(`${text} ${currency}`, group)).toMatchObject({
+      currency,
+      amountMinor: null,
+      problems: [expect.objectContaining({ code: 'amount-decimals', message })],
+    });
+  }
+});
+
+it.each(['Lunch 450 rupees', 'Dinner rs 20'])(
+  'reports INR unlisted for rupee shorthand in a EUR Group: %s (#732)',
+  (text) => {
+    expect(read(text, { currency: 'EUR' })).toMatchObject({
+      currency: 'INR',
+      currencyListed: false,
+      amountMinor: null,
+      problems: [
+        expect.objectContaining({
+          code: 'amount-currency',
+          message:
+            'INR is not one of this Group’s currencies. Add it to the Group or choose a listed currency.',
+        }),
+      ],
+    });
+  },
+);
+
+describe('Quick add reads an unlisted currency as one the member chose instead (#732)', () => {
+  const swiss = { alternateCurrencies: ['EUR', 'JPY'] };
+
+  it('reads the amount in the chosen currency, as typed and unconverted', () => {
+    const line = read('CHF 86 dinner', { ...swiss, currencyChoice: { said: 'CHF', code: 'EUR' } });
+    expect(line).toMatchObject({
+      description: 'Dinner',
+      currency: 'EUR',
+      chosenInsteadOf: 'CHF',
+      currencyListed: true,
+      amountMinor: 8600,
+      amountText: '86',
+      problems: [],
+    });
+  });
+
+  it('checks the amount against the chosen currency', () => {
+    const line = read('CHF 86.50 dinner', {
+      ...swiss,
+      currencyChoice: { said: 'CHF', code: 'JPY' },
+    });
+    expect(line).toMatchObject({ currency: 'JPY', amountMinor: null, amountText: '86.50' });
+    expect(line.problems).toEqual([expect.objectContaining({ code: 'amount-decimals' })]);
+  });
+
+  it('lets the choice lapse once the line names another currency', () => {
+    const line = read('GBP 86 dinner', { ...swiss, currencyChoice: { said: 'CHF', code: 'EUR' } });
+    expect(line).toMatchObject({ currency: 'GBP', currencyListed: false, amountMinor: null });
+    expect(line.chosenInsteadOf).toBeUndefined();
+  });
+
+  it('ignores a choice the Group doesn’t list', () => {
+    const line = read('CHF 86 dinner', { currencyChoice: { said: 'CHF', code: 'EUR' } });
+    expect(line).toMatchObject({ currency: 'CHF', currencyListed: false, amountMinor: null });
   });
 });

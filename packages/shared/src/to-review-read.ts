@@ -14,8 +14,10 @@ const toReviewReadSchema = z.looseObject({
     z.looseObject({
       groupId: identity,
       groupName: z.string(),
-      /** The Group's Expense currency, which a Draft without one takes (#512). */
+      /** The Group's main currency, which a Draft without one takes (#512). */
       currency: z.string().optional(),
+      /** Listed extra currencies, shared by web and Android. */
+      alternateCurrencies: z.array(z.string()).optional(),
       /**
        * The Group's kind, which names its currency: the Trip currency (#596). One this client
        * doesn't know reads as none, and the Group is named as a Group.

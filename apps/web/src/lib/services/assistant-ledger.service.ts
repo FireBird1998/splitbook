@@ -4,6 +4,7 @@ import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Registered for the rule's admin, populated below
 import type { AssistantRule } from '@splitbook/shared/assistant-rule';
+import { normaliseExtraCurrencies } from '@splitbook/shared/group-currencies';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import {
   moneyParticipantId,
@@ -154,10 +155,16 @@ export const assistantLedgerService = {
     })
       .sort({ _id: 1 })
       .limit(51)
-      .select('name defaultCurrency category isArchived')
+      .select('name defaultCurrency alternateCurrencies category isArchived')
       .lean();
     return {
-      groups: groups.slice(0, 50).map(assistantGroup),
+      groups: groups.slice(0, 50).map((group) => ({
+        ...assistantGroup(group),
+        alternateCurrencies: normaliseExtraCurrencies(
+          group.defaultCurrency,
+          group.alternateCurrencies,
+        ),
+      })),
       next: groups.length > 50 ? String(groups[49]._id) : null,
     };
   },
@@ -201,6 +208,10 @@ export const assistantLedgerService = {
       id: String(group._id),
       name: group.name,
       currency: group.defaultCurrency,
+      alternateCurrencies: normaliseExtraCurrencies(
+        group.defaultCurrency,
+        group.alternateCurrencies,
+      ),
       members: group.members.map((member) => assistantMembers(reader.id)(member.user)),
       tags: group.tags
         .filter((tag) => !tag.isArchived && !tag.isDeleted)

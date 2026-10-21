@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import ButtonBase from '@mui/material/ButtonBase';
@@ -25,7 +25,8 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import LaptopOutlinedIcon from '@mui/icons-material/LaptopOutlined';
 import { expensePageKey } from '@splitbook/shared/query-keys';
-import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
+import { WEB_QUERY_ACCOUNT, isWebGroupsRead } from '@/lib/web-query-keys';
+import { addGroupCurrency } from '@/lib/add-group-currency';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toDateParam } from '@splitbook/shared/date';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
@@ -35,11 +36,12 @@ import {
   quickAddDraftValues,
   readQuickAdd,
   suggestQuickAddTag,
+  type QuickAddContext,
   type QuickAddHistoryItem,
 } from '@splitbook/shared/quick-add';
 import { findReferencedTag } from '@splitbook/shared/tag-identity';
 import { visuallyHidden } from '@/components/common/visually-hidden';
-import { FONT_MONO } from '@/lib/theme/tokens';
+import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { fetchWebExpensePage } from '@/lib/web-read';
 import ExpenseFormDialog from './ExpenseFormDialog';
 import { quickAddModel, type QuickAddChip, type QuickAddModel } from './quick-add-view';
@@ -110,6 +112,13 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [formDraft, setFormDraft] = useState<ExpenseDraft | null>(null);
   const [announcement, setAnnouncement] = useState({ id: 0, text: '' });
+  // A listed currency the member chose for the line's unlisted one, while the line names it.
+  const [currencyChoice, setCurrencyChoice] = useState<QuickAddContext['currencyChoice']>(null);
+  const [addingCurrency, setAddingCurrency] = useState(false);
+  const [currencyError, setCurrencyError] = useState<{ text: string; message: string } | null>(
+    null,
+  );
+  const { mutate } = useSWRConfig();
   const { save } = useExpenseDraftSave(setDraft);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -133,9 +142,10 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
   );
 
   const today = toDateParam(new Date());
+  const alternateCurrencies = group.alternateCurrencies;
   const context = useMemo(
-    () => ({ currency, today, viewerId: userId, members }),
-    [currency, today, userId, members],
+    () => ({ currency, alternateCurrencies, currencyChoice, today, viewerId: userId, members }),
+    [currency, alternateCurrencies, currencyChoice, today, userId, members],
   );
   const read = useMemo(() => readQuickAdd(text, context), [text, context]);
   const payerChoice = payerPick && payerPick.said === read.payer.said ? payerPick.memberId : null;
@@ -161,7 +171,7 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
   const model = quickAddModel({
     read,
     today,
-    currency,
+    group,
     viewerId: userId,
     members,
     payerId,
@@ -188,6 +198,22 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
     setText('');
     setPayerPick(null);
     setTagPick(null);
+    setCurrencyChoice(null);
+  };
+
+  /** Adds the line's currency to the Group; the Group's read then lists it (#732). */
+  const addCurrency = async () => {
+    const code = model.unlisted?.currency;
+    if (!code || addingCurrency) return;
+    setAddingCurrency(true);
+    setCurrencyError(null);
+    const refused = await addGroupCurrency(groupId, code);
+    if (refused) setCurrencyError({ text, message: refused });
+    else {
+      announce(`${code} added to ${group.name}.`);
+      await mutate(isWebGroupsRead);
+    }
+    setAddingCurrency(false);
   };
 
   const add = async () => {
@@ -198,7 +224,7 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
     }
     const sent = text;
     const description = read.description;
-    const amount = formatCurrency(toMajorAmount(read.amountMinor!, currency), currency);
+    const amount = formatCurrency(toMajorAmount(read.amountMinor!, read.currency!), read.currency!);
     const result = await save(draft.edit(values()), tagIds);
     if (result.status === 'saved') {
       clear();
@@ -237,7 +263,9 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
         ? current.message
         : current?.kind === 'not-sent' && draft.error
           ? draft.error
-          : null;
+          : currencyError?.text === text
+            ? currencyError.message
+            : null;
 
   return (
     <>
@@ -265,6 +293,11 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
         onPickTag={setTagPick}
         inputRef={inputRef}
         announcement={announcement}
+        onAddCurrency={() => void addCurrency()}
+        onChooseCurrency={(code) => {
+          if (read.currency) setCurrencyChoice({ said: read.currency, code });
+        }}
+        addingCurrency={addingCurrency}
       />
       <ExpenseFormDialog
         open={formDraft !== null}
@@ -309,6 +342,12 @@ export interface QuickAddViewProps {
   onPickTag: (id: string) => void;
   inputRef?: Ref<HTMLInputElement>;
   announcement: { id: number; text: string };
+  /** Adds the line's unlisted currency to the Group (#732). */
+  onAddCurrency: () => void;
+  /** Reads the line in one of the Group's currencies instead. */
+  onChooseCurrency: (code: string) => void;
+  /** While the currency is being added. */
+  addingCurrency: boolean;
 }
 
 /** The field, its chips and its buttons. Presentational: `QuickAddExpense` owns the state. */
@@ -330,6 +369,9 @@ export function QuickAddView({
   onPickTag,
   inputRef,
   announcement,
+  onAddCurrency,
+  onChooseCurrency,
+  addingCurrency,
 }: QuickAddViewProps) {
   const id = useId();
   const inputId = `${id}-field`;
@@ -528,6 +570,42 @@ export function QuickAddView({
           >
             {model.message.text}
           </Typography>
+          {model.unlisted ? (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+              {model.unlisted.add ? (
+                <Button
+                  onClick={onAddCurrency}
+                  disabled={addingCurrency || saving}
+                  startIcon={
+                    addingCurrency ? (
+                      <CircularProgress size={16} color="inherit" aria-hidden />
+                    ) : (
+                      <AddIcon aria-hidden />
+                    )
+                  }
+                  sx={{
+                    minHeight: 44,
+                    borderRadius: `${RADIUS.sm}px`,
+                    textTransform: 'none',
+                    bgcolor: 'tint.brand',
+                    color: 'primary.main',
+                    '&:hover': { bgcolor: 'tint.brand', boxShadow: 'inset 0 0 0 1px currentColor' },
+                  }}
+                >
+                  {model.unlisted.add}
+                </Button>
+              ) : (
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {model.unlisted.adding}
+                </Typography>
+              )}
+              <CurrencyChoice
+                choices={model.unlisted.choices}
+                disabled={addingCurrency || saving}
+                onSelect={onChooseCurrency}
+              />
+            </Box>
+          ) : null}
         </Box>
       ) : null}
 
@@ -684,6 +762,57 @@ function ReadChip({
         {chip.spoken}
       </Box>
     </Box>
+  );
+}
+
+/** "Use another currency": reads the line in one of the Group's currencies, unconverted (#732). */
+function CurrencyChoice({
+  choices,
+  disabled,
+  onSelect,
+}: {
+  choices: string[];
+  disabled: boolean;
+  onSelect: (code: string) => void;
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const menuId = useId();
+  const buttonId = useId();
+  return (
+    <>
+      <Button
+        id={buttonId}
+        variant="text"
+        aria-haspopup="menu"
+        aria-expanded={Boolean(anchor)}
+        aria-controls={anchor ? menuId : undefined}
+        disabled={disabled}
+        onClick={(event) => setAnchor(event.currentTarget)}
+        sx={{ minHeight: 44, borderRadius: `${RADIUS.sm}px`, textTransform: 'none' }}
+      >
+        Use another currency
+      </Button>
+      <Menu
+        id={menuId}
+        anchorEl={anchor}
+        open={Boolean(anchor)}
+        onClose={() => setAnchor(null)}
+        slotProps={{ list: { 'aria-labelledby': buttonId, dense: false } }}
+      >
+        {choices.map((code) => (
+          <MenuItem
+            key={code}
+            onClick={() => {
+              setAnchor(null);
+              onSelect(code);
+            }}
+            sx={{ minHeight: 44 }}
+          >
+            {code}
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
   );
 }
 

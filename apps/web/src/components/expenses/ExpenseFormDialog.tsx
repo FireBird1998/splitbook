@@ -25,8 +25,8 @@ import {
   startingExpenseCurrency,
 } from '@splitbook/shared/group-currencies';
 import { useSWRConfig } from 'swr';
-import { groupCurrenciesPath, groupPath } from '@splitbook/shared/api-paths';
-import AddCurrencyDialog, { answerOf } from '@/components/groups/AddCurrencyDialog';
+import AddCurrencyDialog from '@/components/groups/AddCurrencyDialog';
+import { addGroupCurrency } from '@/lib/add-group-currency';
 import { isWebGroupsRead } from '@/lib/web-query-keys';
 import { readAmountEntry } from '@splitbook/shared/amount-entry';
 import {
@@ -36,7 +36,7 @@ import {
 } from '@splitbook/shared/expense-draft';
 import { useExpenseDraftSave } from './use-expense-draft-save';
 import { getDefaultExpenseTag } from './expense-form-helpers';
-import { parseGroupResponse, type GroupRead } from '@splitbook/shared/group-read';
+import type { GroupRead } from '@splitbook/shared/group-read';
 import { apiFetch } from '@/lib/utils/api-fetch';
 
 // ─── Types ─────────────────────────────────────────────
@@ -201,39 +201,16 @@ function ExpenseDraftDialog({
     void refreshReads(isWebGroupsRead);
   };
   /**
-   * Whether the Group, read again, lists the currency: after a failure, it may have been added all
-   * the same, its reply lost on the way back, or by another member first.
+   * Adds the currency to the Group; one added despite a failure (its reply lost, or another
+   * member first) counts as added, as the Group read again says (#722, #732).
    */
-  const listedNow = async (code: string) => {
-    try {
-      const response = await apiFetch(groupPath(groupId));
-      return groupCurrencies(parseGroupResponse(await response.json())).includes(code);
-    } catch {
-      return false;
-    }
-  };
-  /** The Group's answer to adding the currency: added, or why not. */
-  const tryAdding = async (code: string) => {
-    try {
-      const answer = await answerOf(
-        await apiFetch(groupCurrenciesPath(groupId), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ currency: code }),
-        }),
-      );
-      return answer.settings ? null : answer.message;
-    } catch {
-      return 'Couldn’t add the currency. Check your connection and try again.';
-    }
-  };
   const addCurrency = async (code: string) => {
     setAddBusy(true);
     setAddError('');
     try {
-      const failure = await tryAdding(code);
-      if (failure === null || (await listedNow(code))) takeAdded(code);
-      else setAddError(failure);
+      const refused = await addGroupCurrency(groupId, code);
+      if (refused === null) takeAdded(code);
+      else setAddError(refused);
     } finally {
       setAddBusy(false);
     }

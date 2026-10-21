@@ -20,7 +20,7 @@ import QuickAddExpense, {
   QuickAddView,
   type QuickAddViewProps,
 } from './QuickAddExpense';
-import { TAG_NEEDED, quickAddDateLabel, quickAddModel } from './quick-add-view';
+import { TAG_NEEDED, quickAddDateLabel, quickAddModel, type QuickAddGroup } from './quick-add-view';
 
 /*
  * #320: Quick add as the server renders it: the field, the chips for what was read, the line
@@ -49,6 +49,15 @@ const HOME_TAGS = [
   { id: 'd00000000000000000000013', label: 'Utilities' },
 ];
 
+/** The Group most cases type into: main currency INR, no extra currencies. */
+const GOA: QuickAddGroup = { name: 'Goa Friends Trip', defaultCurrency: 'INR' };
+/** Lisbon & Tokyo, a fictional Trip: main currency INR, extra currencies EUR and JPY (#732). */
+const LISBON: QuickAddGroup = {
+  name: 'Lisbon & Tokyo',
+  defaultCurrency: 'INR',
+  alternateCurrencies: ['EUR', 'JPY'],
+};
+
 /** Today, through the app's own formatter, so the labels hold in any zone. */
 const TODAY = toDateParam(new Date());
 const context: QuickAddContext = {
@@ -65,15 +74,25 @@ function view(
     tags = TRIP_TAGS,
     members = MEMBERS,
     payerId,
+    group = GOA,
+    currencyChoice,
     ...props
   }: Partial<QuickAddViewProps> & {
     tags?: typeof TRIP_TAGS;
     members?: QuickAddMember[];
     payerId?: string | null;
+    group?: QuickAddGroup;
+    currencyChoice?: QuickAddContext['currencyChoice'];
   } = {},
   mode: 'light' | 'dark' = 'light',
 ) {
-  const read = readQuickAdd(typed, { ...context, members });
+  const read = readQuickAdd(typed, {
+    ...context,
+    currency: group.defaultCurrency,
+    alternateCurrencies: group.alternateCurrencies,
+    currencyChoice,
+    members,
+  });
   const suggestion = suggestQuickAddTag(
     read.description,
     tags.map(({ id, label }) => ({ id, name: label })),
@@ -82,7 +101,7 @@ function view(
   const model = quickAddModel({
     read,
     today: TODAY,
-    currency: 'INR',
+    group,
     viewerId: ALEX.id,
     members,
     payerId: payer,
@@ -110,6 +129,9 @@ function view(
         tagId: suggestion?.tagId ?? null,
         onPickTag: vi.fn(),
         announcement: { id: 0, text: '' },
+        onAddCurrency: vi.fn(),
+        onChooseCurrency: vi.fn(),
+        addingCurrency: false,
         ...props,
       }),
     ),
@@ -324,6 +346,55 @@ describe('the Quick add field', () => {
     const light = view('Dinner 2400 paid by me').html;
     const dark = view('Dinner 2400 paid by me', {}, 'dark').html;
     expect(chips(dark)).toEqual(chips(light));
+  });
+});
+
+describe('Quick add with a currency the Group doesn’t list (#732)', () => {
+  it('shows the amount as typed, holds Add expense and offers both fixes', () => {
+    const { html, model } = view('CHF 86 dinner in Zürich', { group: LISBON });
+    expect(chips(html)).toContain('Amount · not on the list CHF 86.00');
+    expect(spoken(html)).toContain('Amount: CHF 86.00, not one of Lisbon & Tokyo’s currencies');
+    expect(model.ready).toBe(false);
+    expect(model.message).toEqual({
+      text: 'CHF isn’t one of Lisbon & Tokyo’s currencies.',
+      tone: 'needed',
+    });
+    expect(button(html, 'Add expense')![1]).toMatch(/\sdisabled=""/);
+    expect(button(html, 'Add CHF to Lisbon & Tokyo')).toBeDefined();
+    expect(button(html, 'Use another currency')![1]).toContain('aria-haspopup="menu"');
+  });
+
+  it('offers only another currency once the Group has 4 extra currencies', () => {
+    const full = { ...LISBON, alternateCurrencies: ['EUR', 'JPY', 'USD', 'GBP'] };
+    const { html } = view('CHF 86 dinner', { group: full });
+    expect(button(html, 'Add CHF to Lisbon & Tokyo')).toBeUndefined();
+    expect(text(html)).toContain(
+      'Lisbon & Tokyo already has 4 extra currencies, the most a Group can have.',
+    );
+    expect(button(html, 'Use another currency')).toBeDefined();
+  });
+
+  it('reads a listed extra currency in its own money, and says so with what adding does', () => {
+    const { html, model } = view('€30 dinner', { group: LISBON });
+    expect(chips(html)).toContain('Amount €30.00');
+    expect(model.ready).toBe(true);
+    expect(model.message.text).toMatch(
+      /^Read as EUR, one of Lisbon & Tokyo’s currencies\. Sam and Priya each owe you €10\.00\. Press Enter to add it\./,
+    );
+    expect(button(html, 'Use another currency')).toBeUndefined();
+  });
+
+  it('reads the line in the listed currency the member chose instead', () => {
+    const { html, model } = view('CHF 90 dinner', {
+      group: LISBON,
+      currencyChoice: { said: 'CHF', code: 'EUR' },
+    });
+    expect(chips(html)).toContain('Amount €90.00');
+    expect(model.ready).toBe(true);
+    // The line still says CHF, so the hint says what was read instead.
+    expect(model.message.text).toMatch(
+      /^Read as EUR instead of CHF, one of Lisbon & Tokyo’s currencies\. Nothing is converted\. Sam and Priya each owe you €30\.00\. Press Enter to add it\./,
+    );
   });
 });
 

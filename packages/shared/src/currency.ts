@@ -75,8 +75,7 @@ function decimalPlaces(value: number): number {
  * more, so an amount that can't be kept as it is ("₹10.555") never reads as one that can.
  */
 export function formatCurrencyAsEntered(amount: number, currencyCode: string): string {
-  const precision = CURRENCY_CODES.includes(currencyCode) ? getCurrencyPrecision(currencyCode) : 2;
-  const places = Math.min(Math.max(precision, decimalPlaces(amount)), 20);
+  const places = placesAsEntered(amount, currencyCode);
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -87,6 +86,21 @@ export function formatCurrencyAsEntered(amount: number, currencyCode: string): s
   } catch {
     return `${currencyCode} ${amount}`;
   }
+}
+
+/** The amount alone as entered, without its currency: "86.00", "1,234.50", "10.555" (#732). */
+export function formatAmountAsEntered(amount: number, currencyCode: string): string {
+  const places = placesAsEntered(amount, currencyCode);
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: places,
+    maximumFractionDigits: places,
+  }).format(amount);
+}
+
+/** Its currency's places, or every decimal the amount has when it has more. */
+function placesAsEntered(amount: number, currencyCode: string): number {
+  const precision = CURRENCY_CODES.includes(currencyCode) ? getCurrencyPrecision(currencyCode) : 2;
+  return Math.min(Math.max(precision, decimalPlaces(amount)), 20);
 }
 
 /**

@@ -2,8 +2,9 @@
  * What Quick add (#320) shows for a line it has read: the chips, the line under them and the
  * sentence a screen reader hears. Pure, so the component tests and the field agree.
  */
-import { formatCurrency } from '@splitbook/shared/currency';
+import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import { calculateSplitAmountsMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import { unlistedCurrencyFix, type UnlistedCurrencyFix } from '@splitbook/shared/group-currencies';
 import {
   quickAddSplitMembers,
   type QuickAddMember,
@@ -34,11 +35,18 @@ export interface QuickAddTagChoice {
   how: 'chosen' | 'suggested';
 }
 
+/** The Group typed into: its name and currencies. */
+export interface QuickAddGroup {
+  name: string;
+  defaultCurrency: string;
+  alternateCurrencies?: readonly string[];
+}
+
 export interface QuickAddModelInput {
   read: QuickAddRead;
   /** Today in the viewer's zone, `yyyy-MM-dd`. */
   today: string;
-  currency: string;
+  group: QuickAddGroup;
   viewerId: string;
   members: readonly QuickAddMember[];
   /** Who paid: as read, or as the member picked. */
@@ -54,6 +62,8 @@ export interface QuickAddModel {
   message: { text: string; tone: 'hint' | 'needed' | 'invalid' };
   /** Whether Enter adds it. */
   ready: boolean;
+  /** Set while the line names a currency the Group doesn't list, with what to do about it (#732). */
+  unlisted: UnlistedCurrencyFix | null;
   /** Whether something typed is refused, so the field is marked invalid. */
   invalid: boolean;
   /** One sentence for screen readers once typing pauses. */
@@ -101,7 +111,7 @@ function list(names: string[]): string {
 export function quickAddModel({
   read,
   today,
-  currency,
+  group,
   viewerId,
   members,
   payerId,
@@ -126,7 +136,13 @@ export function quickAddModel({
     );
     return shared.length ? name : first;
   };
+  // The line's own currency when it names a listed one; nothing is converted.
+  const currency = read.currency ?? group.defaultCurrency;
   const money = (minor: number) => formatCurrency(toMajorAmount(minor, currency), currency);
+  const unlisted =
+    read.currency && !read.currencyListed && read.amountText !== null
+      ? unlistedCurrencyFix(group, read.currency, Number(read.amountText))
+      : null;
 
   const selected = quickAddSplitMembers(read, payerId, members);
   const amountProblem = problemFor('amount');
@@ -146,15 +162,19 @@ export function quickAddModel({
   const amount =
     read.amountMinor !== null
       ? money(read.amountMinor)
-      : amountProblem?.kind === 'invalid'
-        ? (AMOUNT_CHECKS[amountProblem.code] ?? 'Check amount')
-        : 'Needed';
+      : unlisted
+        ? formatCurrencyAsEntered(Number(read.amountText), unlisted.currency)
+        : amountProblem?.kind === 'invalid'
+          ? (AMOUNT_CHECKS[amountProblem.code] ?? 'Check amount')
+          : 'Needed';
   chips.push({
     key: 'amount',
-    label: 'Amount',
+    label: unlisted ? 'Amount · not on the list' : 'Amount',
     value: amount,
     state: stateFor('amount'),
-    spoken: `Amount: ${read.amountMinor !== null ? amount : amountProblem?.kind === 'invalid' ? `${read.amountText ?? 'refused'}, ${amount.toLowerCase()}` : 'needed'}`,
+    spoken: unlisted
+      ? `Amount: ${amount}, not one of ${group.name}’s currencies`
+      : `Amount: ${read.amountMinor !== null ? amount : amountProblem?.kind === 'invalid' ? `${read.amountText ?? 'refused'}, ${amount.toLowerCase()}` : 'needed'}`,
   });
   const payer = payerId
     ? nameOf(payerId)
@@ -210,7 +230,9 @@ export function quickAddModel({
   });
 
   let message: QuickAddModel['message'];
-  if (problems.length) {
+  if (unlisted && problems[0]?.field === 'amount') {
+    message = { text: unlisted.notListed, tone: 'needed' };
+  } else if (problems.length) {
     message = {
       text: problems[0].message,
       tone: problems[0].kind === 'invalid' ? 'invalid' : 'needed',
@@ -223,7 +245,15 @@ export function quickAddModel({
       tag.how === 'suggested'
         ? ` ${tag.name} is a suggestion: adding accepts it, or pick another Tag.`
         : '';
-    message = { text: `${position}${suggestion}`, tone: 'hint' };
+    // A line in an extra currency says which, then what adding does; nothing is converted.
+    const readAs = read.chosenInsteadOf
+      ? `Read as ${currency} instead of ${read.chosenInsteadOf}, one of ${group.name}’s currencies. Nothing is converted.`
+      : `Read as ${currency}, one of ${group.name}’s currencies.`;
+    const lead =
+      currency === group.defaultCurrency && !read.chosenInsteadOf
+        ? position
+        : `${readAs} ${position} Press Enter to add it.`;
+    message = { text: `${lead}${suggestion}`, tone: 'hint' };
   }
 
   function positionSentence(totalMinor: number, sharing: string[], paidBy: string): string {
@@ -254,6 +284,7 @@ export function quickAddModel({
     chips,
     message,
     ready,
+    unlisted,
     invalid: problems.some((problem) => problem.kind === 'invalid'),
     summary: `${chips.map((chip) => `${chip.label}: ${chip.value}`).join('. ')}. ${message.text}`,
   };

@@ -292,7 +292,7 @@ describe("Settlements and Drafts in the Group's currencies (#719)", () => {
     const [ramen, tacos] = reviewed.body.data;
     expect(ramen.problems).toEqual([]);
     expect(ramen.allocation).toMatchObject({ currency: 'JPY' });
-    expect(tacos.problems).toEqual(['CURRENCY_MISMATCH']);
+    expect(tacos.problems).toEqual(['CURRENCY_NOT_LISTED']);
   });
 });
 

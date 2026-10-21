@@ -7,6 +7,7 @@ import {
   expenseCurrencyChoices,
   normaliseExtraCurrencies,
   startingExpenseCurrency,
+  unlistedCurrencyFix,
 } from './group-currencies';
 import { amountReadAloud, wholeUnit } from './currency';
 import { assertGroupCurrency } from './expense-validation';
@@ -122,5 +123,47 @@ describe('an amount read aloud with its currency (#719)', () => {
     expect(wholeUnit('JPY')).toBe('yen');
     expect(wholeUnit('KRW')).toBe('won');
     expect(wholeUnit('INR')).toBeNull();
+  });
+});
+
+describe('unlistedCurrencyFix: an Expense in a currency the Group doesn’t list (#732)', () => {
+  const lisbon = { ...trip, name: 'Lisbon & Tokyo' };
+
+  it('says what is wrong and offers both fixes, in the boards’ words', () => {
+    expect(unlistedCurrencyFix(lisbon, 'CHF', 86)).toEqual({
+      currency: 'CHF',
+      notListed: 'CHF isn’t one of Lisbon & Tokyo’s currencies.',
+      ask: 'Add it, or change this Expense’s currency.',
+      add: 'Add CHF to Lisbon & Tokyo',
+      choices: ['INR', 'EUR', 'JPY'],
+      adding: 'Adding lets everyone use CHF, the 3rd of 4 extra currencies.',
+      changing: 'Changing keeps 86.00 and changes only the currency; nothing is converted.',
+    });
+  });
+
+  it('offers only a change once the Group lists 4 extra currencies', () => {
+    const full = { ...lisbon, alternateCurrencies: ['EUR', 'JPY', 'USD', 'GBP'] };
+    expect(unlistedCurrencyFix(full, 'CHF', 86)).toMatchObject({
+      ask: 'Change this Expense’s currency.',
+      add: null,
+      choices: ['INR', 'EUR', 'JPY', 'USD', 'GBP'],
+      adding:
+        'Lisbon & Tokyo already has 4 extra currencies, the most a Group can have. An admin can remove one nothing uses in Group settings.',
+    });
+  });
+
+  it('keeps the amount as entered, with every decimal it has', () => {
+    expect(unlistedCurrencyFix(lisbon, 'CHF', 1234.5).changing).toBe(
+      'Changing keeps 1,234.50 and changes only the currency; nothing is converted.',
+    );
+    expect(unlistedCurrencyFix(lisbon, 'CHF', 10.555).changing).toBe(
+      'Changing keeps 10.555 and changes only the currency; nothing is converted.',
+    );
+  });
+
+  it('says nothing is converted without an amount to keep', () => {
+    expect(unlistedCurrencyFix(lisbon, 'CHF', undefined).changing).toBe(
+      'Changing changes only the currency; nothing is converted.',
+    );
   });
 });
