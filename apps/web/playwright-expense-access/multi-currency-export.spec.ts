@@ -71,7 +71,9 @@ for (const size of ['desktop', 'phone'] as const) {
       ).toBeVisible();
       await expect(preview).toContainText('1850.00');
       await expect(preview).toContainText('92.5');
-      await expect(preview).toContainText('Cross-currency payments add Amount paid, Paid currency and Rate');
+      await expect(preview).toContainText(
+        'Cross-currency payments add Amount paid, Paid currency and Rate',
+      );
       await page.screenshot({
         path: testInfo.outputPath(`${size}-${mode}-csv-preview.png`),
         fullPage: true,

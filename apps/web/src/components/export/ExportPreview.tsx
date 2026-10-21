@@ -416,7 +416,7 @@ export default function ExportPreviewPanel({
             ))}
             <li>{data.counts.members} Members</li>
             <li>
-              {data.counts.expenses} Expenses
+              {data.counts.expenses} {data.counts.expenses === 1 ? 'Expense' : 'Expenses'}
               {data.earliestMonth
                 ? ` since ${new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${data.earliestMonth}-15T12:00:00Z`))}`
                 : ''}
@@ -424,7 +424,8 @@ export default function ExportPreviewPanel({
             </li>
             {data.paymentsIncluded && (
               <li>
-                {data.counts.payments} Payments, including both amounts, currencies and stored rates
+                {data.counts.payments} {data.counts.payments === 1 ? 'Payment' : 'Payments'},
+                including both amounts, currencies and stored rates
               </li>
             )}
             {data.deletedExpensesIncluded && (
