@@ -6,6 +6,7 @@ import {
   getCurrency,
   getCurrencyPrecision,
 } from '@splitbook/shared/currency';
+import { MoneyValidationError, parseAmountMinor } from '@splitbook/shared/exact-money';
 import { groupCurrencies, unlistedCurrencyFix } from '@splitbook/shared/group-currencies';
 import type { CurrencyAddState, MobileGroup } from '../data/types';
 import { PRODUCT_NAME } from '../product';
@@ -24,6 +25,17 @@ export interface UnlistedItem {
 
 export const addNeedsConnection = 'Adding a currency needs a connection.';
 const changeNeedsConnection = 'Changing the currency needs a connection.';
+
+/** Whether a currency keeps the amount as it is: yen has no smaller unit to keep 86.50's 50 in. */
+function keepsAmount(amount: number | undefined, currency: string) {
+  if (amount === undefined) return true;
+  try {
+    parseAmountMinor(amount, currency);
+    return true;
+  } catch (error) {
+    return !(error instanceof MoneyValidationError && error.code === 'INVALID_MONEY_PRECISION');
+  }
+}
 
 /**
  * A To review item in a currency its Group doesn't list (#733, board "To review: unlisted
@@ -54,6 +66,13 @@ export function UnlistedCurrencySheet({
   const busy = adding.status === 'adding';
   return (
     <BottomSheet visible title={item.description} doneLabel="Close" onDone={onClose}>
+      {/* Both fixes wait for a connection: said once, above them, as well as under each. */}
+      {offline ? (
+        <Banner
+          tone="offline"
+          message="You’re offline. Adding or changing a currency needs a connection."
+        />
+      ) : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <CompactText variant="small" tone="secondary" style={{ flex: 1 }}>
           {item.detail}
@@ -98,7 +117,8 @@ export function UnlistedCurrencySheet({
 /**
  * Change currency (#733, board "To review: change the currency"): one of the Group's currencies
  * for the item. Its amount stays as entered; nothing is converted, so the sheet says to check it
- * against the receipt.
+ * against the receipt. A currency that can't keep the amount, as yen can't keep 86.50, isn't
+ * offered, and its row says why.
  */
 export function ChangeCurrencySheet({
   item,
@@ -142,9 +162,13 @@ export function ChangeCurrencySheet({
       >
         {groupCurrencies(group).map((code) => {
           const name = getCurrency(code)?.name ?? code;
+          const kept = keepsAmount(item.amount, code);
           const notes = [
             code === group.defaultCurrency ? 'Main currency' : null,
             getCurrencyPrecision(code) === 0 ? 'Whole amounts only' : null,
+            kept || item.amount === undefined
+              ? null
+              : `Can’t keep ${formatAmountAsEntered(item.amount, item.currency)}`,
           ].filter((note): note is string => !!note);
           const checked = code === chosen;
           return (
@@ -154,9 +178,9 @@ export function ChangeCurrencySheet({
               accessibilityLabel={[code, name, ...notes.map((note) => note.toLowerCase())].join(
                 ', ',
               )}
-              accessibilityState={{ checked, disabled }}
-              disabled={disabled}
-              {...tap.on(() => setChosen(code))}
+              accessibilityState={{ checked, disabled: disabled || !kept }}
+              disabled={disabled || !kept}
+              {...tap.on(() => kept && setChosen(code))}
               style={{
                 minHeight: 56,
                 flexDirection: 'row',
@@ -167,14 +191,18 @@ export function ChangeCurrencySheet({
                 backgroundColor: checked ? theme.brand.bg : 'transparent',
               }}
             >
+              {/* One it can't be changed to reads as unavailable, in a colour still read at 4.5:1. */}
               <CompactText
                 weight="semibold"
+                tone={kept ? undefined : 'secondary'}
                 style={{ minWidth: 48, textAlign: 'center', fontFamily: fonts.mono }}
               >
                 {code}
               </CompactText>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <CompactText weight="semibold">{name}</CompactText>
+                <CompactText weight="semibold" tone={kept ? undefined : 'secondary'}>
+                  {name}
+                </CompactText>
                 {notes.length ? (
                   <CompactText variant="caption" tone="secondary">
                     {notes.join(' · ')}

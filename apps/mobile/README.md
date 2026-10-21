@@ -162,7 +162,7 @@ Done and Android Back retain sheet edits in the account-scoped draft. Changing s
 
 ### An unlisted currency in To review (#733)
 
-A To review item in a currency its Group doesn't list (the server's `CURRENCY_NOT_LISTED`, #732) needs details, and its row says **Currency not listed**. Opening it shows what's wrong and the web's two fixes, in the shared `unlistedCurrencyFix` words: **Add CHF to …** adds the currency to the Group, as the Expense form's Add a currency does (#722), and To review reads the item again; it needs a connection. **Change currency** picks one of the Group's currencies and keeps the amount as entered, unconverted (the draft collection's `changeCurrency`), and the item is reviewed again.
+A To review item in a currency its Group doesn't list (the server's `CURRENCY_NOT_LISTED`, #732) needs details, and its row says **Currency not listed**. Opening it shows what's wrong and the web's two fixes, in the shared `unlistedCurrencyFix` words: **Add CHF to …** adds the currency to the Group, as the Expense form's Add a currency does (#722), and To review reads the item again; it needs a connection. **Change currency** picks one of the Group's currencies and keeps the amount as entered, unconverted (the draft collection's `changeCurrency`), and the item is reviewed again. A currency that can't keep the amount isn't offered: yen has no smaller unit, so for 86.50 its row reads **Whole amounts only · Can't keep 86.50**. Offline, the sheet says once at the top that both fixes need a connection, and both wait.
 
 ## Expense detail, editing, and deletion (#55)
 
