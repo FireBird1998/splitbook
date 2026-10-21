@@ -98,9 +98,10 @@ test('saved profile currency is selected and persisted when creating a new Group
     preferredCurrency: 'USD',
   });
   await page.goto(appURL('/groups/new'));
-  await expect(page.getByRole('combobox', { name: /^Currency/ })).toContainText('USD');
+  // The new Group's main currency is a native select (#723): its value is the one chosen.
+  await expect(page.getByRole('combobox', { name: 'Main currency' })).toHaveValue('USD');
   await page.getByLabel('Trip name').fill('Saved currency Group');
-  await page.getByRole('button', { name: 'Create trip', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Trip', exact: true }).click();
   // A new Group opens on its Expenses tab: its own address redirects there (#305).
   await expect(page).toHaveURL(/\/groups\/[a-f0-9]{24}\/expenses$/);
   const groupId = new URL(page.url()).pathname.split('/').at(-2);
@@ -245,16 +246,18 @@ for (const chosenCurrency of ['EUR', 'INR']) {
     try {
       await enter(page, ledger, '/groups/new');
       await page.getByLabel('Trip name').fill('Explicit currency Group');
-      await expect(page.getByRole('button', { name: 'Create trip', exact: true })).toBeDisabled();
-      await chooseCurrency(page, 'Currency', chosenCurrency, chosenCurrency === 'INR');
-      await expect(page.getByRole('button', { name: 'Create trip', exact: true })).toBeEnabled();
+      await expect(page.getByRole('button', { name: 'Create Trip', exact: true })).toBeDisabled();
+      await page.getByRole('combobox', { name: 'Main currency' }).selectOption(chosenCurrency);
+      await expect(page.getByRole('button', { name: 'Create Trip', exact: true })).toBeEnabled();
       const loaded = page.waitForResponse(
         (result) => new URL(result.url()).pathname === profilePath,
       );
       response.release();
       await loaded;
-      await expect(page.getByRole('combobox', { name: /^Currency/ })).toContainText(chosenCurrency);
-      await page.getByRole('button', { name: 'Create trip', exact: true }).click();
+      await expect(page.getByRole('combobox', { name: 'Main currency' })).toHaveValue(
+        chosenCurrency,
+      );
+      await page.getByRole('button', { name: 'Create Trip', exact: true }).click();
       await expect(page).toHaveURL(/\/groups\/[a-f0-9]{24}\/expenses$/);
       const groupId = new URL(page.url()).pathname.split('/').at(-2);
       expect(await dataOf(await ledger.sam.get(`/api/groups/${groupId}`))).toMatchObject({
@@ -299,8 +302,8 @@ for (const invalidPreference of [false, true]) {
     );
     await enter(page, ledger, '/groups/new');
     await page.getByLabel('Trip name').fill('Fallback currency Group');
-    await expect(page.getByRole('button', { name: 'Create trip', exact: true })).toBeEnabled();
-    await expect(page.getByRole('combobox', { name: /^Currency/ })).toContainText('INR');
+    await expect(page.getByRole('button', { name: 'Create Trip', exact: true })).toBeEnabled();
+    await expect(page.getByRole('combobox', { name: 'Main currency' })).toHaveValue('INR');
     await expect(page.getByText('Loading saved currency…')).toHaveCount(0);
   });
 }
