@@ -29,7 +29,7 @@ import {
   sumMinorAmounts,
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
-import { getCurrencyPrecision } from '@splitbook/shared/currency';
+import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
 import {
   assertCreateReplay,
@@ -340,7 +340,10 @@ export class ExpenseService {
           .select('currency moneyVersion amount amountMinor paidBy splitBetween')
           .lean();
       }
-      for (const record of allFiltered) assertStoredExpenseMoney(record);
+      // Stored money outlives today's currency list (#779, #810): an Expense in a currency
+      // Splitbook no longer supports is listed as stored, unchecked, and left out of every figure.
+      for (const record of allFiltered)
+        if (getCurrency(record.currency)) assertStoredExpenseMoney(record);
       const window = allFiltered.filter(
         (row) => row.currency === tagGroup?.defaultCurrency,
       ) as LeanExpenseContribution[];
@@ -405,6 +408,8 @@ export class ExpenseService {
 
     const summaryCurrencies = new Map<string, number[]>();
     for (const record of summaryAgg) {
+      // A currency Splitbook no longer supports has no precision to total it in: left out (#810).
+      if (!getCurrency(record.currency)) continue;
       const values = summaryCurrencies.get(record.currency) ?? [];
       values.push(readStoredAmountMinor(record));
       summaryCurrencies.set(record.currency, values);

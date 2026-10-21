@@ -10,6 +10,7 @@ import IosShareOutlinedIcon from '@mui/icons-material/IosShareOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import MoneyText from '@/components/common/MoneyText';
 import { RADIUS } from '@/lib/theme/tokens';
+import { getCurrency } from '@splitbook/shared/currency';
 import { readStoredAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
 import { expensePayerSummary, listedExpensePosition } from '@splitbook/shared/expense-row';
@@ -57,10 +58,13 @@ export function tagChangeSummary(results: readonly ExpenseTagChangeResult[], tag
     .join(' ');
 }
 
-/** Every amount the Expenses add up to, one per currency, in exact minor units. */
+/**
+ * Every amount the Expenses add up to, one per currency, in exact minor units. A currency
+ * Splitbook no longer supports has no precision to total it in, so it's left out (#810).
+ */
 function totals(expenses: readonly ExpenseRead[]) {
   const byCurrency = new Map<string, number>();
-  for (const expense of expenses)
+  for (const expense of expenses.filter((row) => getCurrency(row.currency)))
     byCurrency.set(
       expense.currency,
       (byCurrency.get(expense.currency) ?? 0) +
