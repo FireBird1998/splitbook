@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NewGroupPage from './page';
@@ -11,6 +11,11 @@ import NewGroupPage from './page';
 
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
+// MUI's menu renders inline while open, since its popover needs a browser.
+vi.mock('@mui/material/Menu', () => ({
+  default: ({ open, children }: { open: boolean; children: ReactNode }) =>
+    open ? createElement('ul', { role: 'menu' }, children) : null,
+}));
 
 const requests = vi.hoisted(() => [] as { method: string; path: string; body: unknown }[]);
 /** The member's saved currency, and when its read answers. */
@@ -68,19 +73,29 @@ const textOf = (node: ReactTestInstance | null): string =>
         .trim()
     : '';
 const shown = () => textOf(renderer.root);
+/** The button that offers a new Trip's extra currencies. */
 const addCurrency = () =>
-  renderer.root.find(
-    (node) => node.type === 'select' && node.props['aria-label'] === 'Add a currency',
-  );
+  renderer.root.find((node) => node.type === 'button' && textOf(node) === 'Add a currency');
+/** The currencies its open menu offers, by code. */
+const menuCodes = () =>
+  renderer.root
+    .findAll((node) => node.type === 'li' && node.props.role === 'menuitem')
+    .map((item) => textOf(item).slice(0, 3));
+/** Add a currency from the menu. */
+async function add(code: string) {
+  await act(async () => {
+    addCurrency().props.onClick({ currentTarget: element() });
+  });
+  const item = renderer.root
+    .findAll((node) => node.type === 'li' && node.props.role === 'menuitem')
+    .find((node) => textOf(node).startsWith(`${code} `));
+  if (!item) throw new Error(`${code} isn’t offered`);
+  await act(async () => {
+    item.props.onClick({});
+  });
+}
 const mainCurrency = () =>
   renderer.root.find((node) => node.type === 'select' && node.props.id === 'main-currency');
-/** The currencies a select offers, by code. */
-const offered = (select: ReactTestInstance) =>
-  select
-    .findAll((node) => node.type === 'option')
-    .map((option) => String(option.props.value))
-    .filter(Boolean);
-
 async function choose(select: ReactTestInstance, value: string) {
   await act(async () => {
     select.props.onChange({ target: { value } });
@@ -139,13 +154,19 @@ describe('a new Trip’s extra currencies (#723)', () => {
     expect(shown()).toContain('Anyone in the Group can add more later.');
     expect(shown()).toContain('0 of 4');
     // Never the main currency.
-    expect(offered(addCurrency())).not.toContain('INR');
+    await act(async () => {
+      addCurrency().props.onClick({ currentTarget: element() });
+    });
+    expect(menuCodes()).not.toContain('INR');
 
-    await choose(addCurrency(), 'EUR');
-    await choose(addCurrency(), 'JPY');
+    await add('EUR');
+    await add('JPY');
     expect(shown()).toContain('2 of 4');
-    expect(offered(addCurrency())).not.toEqual(expect.arrayContaining(['EUR']));
-    expect(offered(addCurrency())).not.toEqual(expect.arrayContaining(['JPY']));
+    await act(async () => {
+      addCurrency().props.onClick({ currentTarget: element() });
+    });
+    expect(menuCodes()).not.toEqual(expect.arrayContaining(['EUR']));
+    expect(menuCodes()).not.toEqual(expect.arrayContaining(['JPY']));
 
     await name('Lisbon & Tokyo');
     expect(await submit()).toMatchObject({
@@ -156,10 +177,19 @@ describe('a new Trip’s extra currencies (#723)', () => {
     });
   });
 
+  it('say how many there are as it changes, to a screen reader too', async () => {
+    await mount();
+    await add('EUR');
+    const count = renderer.root.find(
+      (node) => typeof node.type === 'string' && textOf(node) === '1 of 4',
+    );
+    expect(count.props['aria-live']).toBe('polite');
+  });
+
   it('take one off with its Remove button', async () => {
     await mount();
-    await choose(addCurrency(), 'EUR');
-    await choose(addCurrency(), 'JPY');
+    await add('EUR');
+    await add('JPY');
     await press('Remove EUR');
     expect(shown()).toContain('1 of 4');
     await name('Lisbon & Tokyo');
@@ -168,15 +198,15 @@ describe('a new Trip’s extra currencies (#723)', () => {
 
   it('stop at 4, as a Group can have no more', async () => {
     await mount();
-    for (const code of ['EUR', 'JPY', 'USD', 'GBP']) await choose(addCurrency(), code);
+    for (const code of ['EUR', 'JPY', 'USD', 'GBP']) await add(code);
     expect(shown()).toContain('4 of 4');
     expect(addCurrency().props.disabled).toBe(true);
   });
 
   it('lose one that becomes the main currency', async () => {
     await mount();
-    await choose(addCurrency(), 'EUR');
-    await choose(addCurrency(), 'JPY');
+    await add('EUR');
+    await add('JPY');
     await choose(mainCurrency(), 'EUR');
     expect(shown()).toContain('1 of 4');
     await name('Lisbon & Tokyo');
@@ -185,7 +215,7 @@ describe('a new Trip’s extra currencies (#723)', () => {
 
   it('don’t come back when the main currency changes back', async () => {
     await mount();
-    await choose(addCurrency(), 'EUR');
+    await add('EUR');
     await choose(mainCurrency(), 'EUR');
     await choose(mainCurrency(), 'INR');
     expect(shown()).toContain('0 of 4');
@@ -196,8 +226,8 @@ describe('a new Trip’s extra currencies (#723)', () => {
     profile.currency = 'EUR';
     profile.answered = new Promise((resolve) => (answer = resolve));
     await mount();
-    await choose(addCurrency(), 'EUR');
-    await choose(addCurrency(), 'JPY');
+    await add('EUR');
+    await add('JPY');
     await act(async () => answer());
     expect(shown()).toContain('1 of 4');
     await name('Lisbon & Tokyo');
@@ -209,8 +239,8 @@ describe('a new Trip’s extra currencies (#723)', () => {
     profile.currency = 'EUR';
     profile.answered = new Promise((resolve) => (answer = resolve));
     await mount();
-    await choose(addCurrency(), 'EUR');
-    await choose(addCurrency(), 'JPY');
+    await add('EUR');
+    await add('JPY');
     await act(async () => answer());
     await choose(mainCurrency(), 'INR');
     expect(shown()).toContain('1 of 4');
@@ -220,7 +250,7 @@ describe('a new Trip’s extra currencies (#723)', () => {
 
   it('aren’t offered for a Household, and none are sent, even ones chosen for a Trip', async () => {
     await mount();
-    await choose(addCurrency(), 'EUR');
+    await add('EUR');
     const household = renderer.root.find(
       (node) =>
         node.type === 'button' && node.props.role === 'radio' && textOf(node).includes('Household'),

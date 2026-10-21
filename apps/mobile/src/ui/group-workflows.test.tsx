@@ -188,14 +188,18 @@ describe('a new Trip’s extra currencies (#723)', () => {
     startDate: '',
     endDate: '',
   };
-  const form = (draft: typeof lisbonAndTokyo | Record<string, unknown>, onChange = vi.fn()) => {
+  const form = (
+    draft: typeof lisbonAndTokyo | Record<string, unknown>,
+    onChange = vi.fn(),
+    busy = false,
+  ) => {
     act(() => {
       renderer = create(
         <GroupCreateForm
           draft={{ ...lisbonAndTokyo, ...draft }}
           onChange={onChange}
           onSubmit={vi.fn()}
-          busy={false}
+          busy={busy}
           message={null}
           uncertain={false}
           onCheckGroups={vi.fn()}
@@ -238,6 +242,37 @@ describe('a new Trip’s extra currencies (#723)', () => {
       expect(text()).toContain(words);
     expect(pressables('EUR, Euro, added. Remove')).toHaveLength(1);
     expect(pressables('JPY, Japanese Yen, added. Remove')).toHaveLength(1);
+  });
+
+  it('says the count as it changes, to TalkBack too', () => {
+    form(lisbonAndTokyo);
+    const count = renderer!.root.find(
+      (node: ReactTestInstance) =>
+        (node.type as unknown) === 'Text' && node.children.join('') === '2 of 4',
+    );
+    expect(count.props.accessibilityLiveRegion).toBe('polite');
+  });
+
+  it('makes each chip a full touch target', () => {
+    form(lisbonAndTokyo);
+    for (const chip of [
+      ...pressables('EUR, Euro, added. Remove'),
+      ...pressables('Add a currency'),
+    ]) {
+      expect(chip.props.style({ pressed: false }).minHeight).toBe(44);
+      expect(chip.props.hitSlop).toEqual({ top: 2, bottom: 2, left: 2, right: 2 });
+    }
+  });
+
+  it('dims its chips while the Group is being sent', () => {
+    form(lisbonAndTokyo, vi.fn(), true);
+    for (const chip of [
+      ...pressables('EUR, Euro, added. Remove'),
+      ...pressables('Add a currency'),
+    ]) {
+      expect(chip.props.disabled).toBe(true);
+      expect(chip.props.style({ pressed: false }).opacity).toBeLessThan(1);
+    }
   });
 
   it('removes one with a tap on it', () => {
