@@ -810,19 +810,46 @@ describe('Quick add keeps an unlisted or ambiguous currency explicit (#732)', ()
   });
 });
 
-it('does not silently use the main currency for lowercase foreign codes or rupee shorthand (#732)', () => {
-  for (const text of ['Dinner 20 eur', 'Dinner usd20']) {
+describe('Quick add distinguishes ordinary words from listed currency marks (#732)', () => {
+  it.each([
+    ['php 499 course', 49900, 'Php course'],
+    ['Lunch 450 sar', 45000, 'Lunch sar'],
+    ['R 200 auto', 20000, 'R auto'],
+    ['Cab 2 R 450', 45000, 'Cab 2 R'],
+    ['Coffee 120 kr', 12000, 'Coffee kr'],
+  ])('reads %s as rupees in a Group without extras', (text, amountMinor, description) => {
     expect(read(text)).toMatchObject({
+      currency: 'INR',
+      currencyListed: true,
+      amountMinor,
+      description,
+      problems: [],
+    });
+  });
+
+  it.each([
+    ['20 eur dinner', 'EUR', 2000],
+    ['R 200 auto', 'ZAR', 20000],
+    ['Coffee 120 kr', 'SEK', 12000],
+    ['RM 20 dinner', 'MYR', 2000],
+  ])('still recognises the listed currency in %s', (text, currency, amountMinor) => {
+    expect(read(text, { alternateCurrencies: [currency] })).toMatchObject({
+      currency,
+      currencyListed: true,
+      amountMinor,
+      problems: [],
+    });
+  });
+
+  it('still reports an unlisted euro symbol explicitly', () => {
+    expect(read('€20')).toMatchObject({
+      currency: 'EUR',
       currencyListed: false,
       amountMinor: null,
       amountText: '20',
-      problems: [expect.objectContaining({ code: 'amount-currency' })],
     });
-  }
-  expect(read('Dinner rs20', { currency: 'EUR' })).toMatchObject({
-    currency: 'INR',
-    currencyListed: false,
-    amountMinor: null,
-    amountText: '20',
+    expect(read('€20').problems).toContainEqual(
+      expect.objectContaining({ code: 'amount-currency' }),
+    );
   });
 });
