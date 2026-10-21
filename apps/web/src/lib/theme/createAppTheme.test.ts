@@ -239,6 +239,11 @@ it.each([
   );
   expect(outranking).toEqual([]);
   const rules = [...html.matchAll(/([^{}<>]+)\{([^}]*)\}/g)];
+  // Nor does a rule reach into the message: it keeps the root's primary colour.
+  const message = rules.filter(
+    ([, selector, body]) => selector.includes('.MuiAlert-message') && /(?:^|;)color:/.test(body),
+  );
+  expect(message).toEqual([]);
   for (const part of ['MuiAlert-icon', 'MuiButton-text'])
     expect(
       rules.some(
