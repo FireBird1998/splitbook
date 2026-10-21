@@ -1,6 +1,13 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
+import { findHosts, flatten, largeTextWindows, unreadText } from '../test-utils/layout';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -300,6 +307,22 @@ describe('a new Trip’s extra currencies (#723)', () => {
     });
     // Disabled for Android too, not only as TalkBack says it.
     expect(pressables('Add a currency')[0].props.disabled).toBe(true);
+  });
+
+  // On the emulator at 200% on a 360dp phone, the heading row ran past the card: "Optio…", and
+  // no count.
+  it.each(largeTextWindows)('reads in full, $width dp at $fontScale× text', (size) => {
+    setWindow(size);
+    form(lisbonAndTokyo);
+    const card = findHosts(
+      renderer!.toJSON() as ReactTestRendererJSON,
+      (props, type) =>
+        type === 'View' &&
+        flatten(props.style).padding === 14 &&
+        flatten(props.style).borderWidth === 1,
+    ).find((node) => JSON.stringify(node).includes('Spending abroad?'));
+    // The form sits 16dp in from each edge of the screen.
+    expect(unreadText(card!, size.fontScale, size.width - 32)).toEqual([]);
   });
 
   it('isn’t offered for a Household, which adds them later in settings', () => {
