@@ -76,7 +76,8 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
   const askedOlder = Boolean(data && size > data.length);
   const loadingOlder = isValidating && askedOlder;
   const olderFailed = Boolean(error) && askedOlder;
-  // A payment that settled several Debts at once is one row, where its first event is (#734).
+  // Group all loaded pages together: a split payment becomes one complete row when its older
+  // events arrive, at the first event already shown (#734, #800).
   const grouped = groupSettlementBatches(activities);
   const rows = grouped.map((item) =>
     item.kind === 'event' ? item.event : newestEvent(item, activities),
