@@ -188,7 +188,9 @@ describe('Settle up with Sam (#734)', () => {
     expect(shown()).toContain(
       'Records 2 Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.',
     );
-    expect(button('INR')!.props['aria-pressed']).toBe(true);
+    // Pay in reads as Record payment's does: a choice of one.
+    expect(button('INR')!.props.role).toBe('radio');
+    expect(button('INR')!.props['aria-checked']).toBe(true);
 
     await press('Record ₹3,322.00');
 
@@ -253,7 +255,7 @@ describe('Settle up with Sam (#734)', () => {
     rates.byPair = { 'INR>EUR': { status: 'ready', suggestion: suggestion('0.010858') } };
     await mount();
     await press('EUR');
-    expect(button('EUR')!.props['aria-pressed']).toBe(true);
+    expect(button('EUR')!.props['aria-checked']).toBe(true);
     expect(rows()).toEqual([
       'Debt Rate You pay',
       expect.stringMatching(/^INR ₹1,480\.00 €0\.010858 per ₹ Suggested .* €16\.07$/),
