@@ -352,6 +352,31 @@ describe('Export selected (#613)', () => {
     expect(shown()).toContain('maple-house-2026-10-21-selected-expenses.csv is downloading.');
   });
 
+  it('stops saying an earlier export is downloading once a Tag change starts', async () => {
+    show(
+      createElement(ExpenseSelectionPanel, {
+        expenses: [GROCERIES, WATER],
+        userId: ALEX._id,
+        tags: GROUP_TAGS,
+        onClear: vi.fn(),
+        onChangeTag: vi.fn(async () => ({
+          tagId: TAGS.household,
+          results: [
+            { expenseId: GROCERIES._id, outcome: 'changed' as const, revision: 3 },
+            { expenseId: WATER._id, outcome: 'changed' as const, revision: 2 },
+          ],
+        })),
+        onOpen: vi.fn(),
+        onExport: vi.fn(async () => 'maple-house-2026-10-21-selected-expenses.csv'),
+      }),
+    );
+    await press('Export selected');
+    await press('Change Tag');
+    await press('Move to Household');
+    expect(shown()).toContain('Moved 2 Expenses to Household.');
+    expect(shown()).not.toContain('is downloading.');
+  });
+
   it('downloads just their CSV with each member’s share, named for the Group and the day', async () => {
     const asked: string[] = [];
     vi.stubGlobal(
