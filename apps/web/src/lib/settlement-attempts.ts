@@ -1,6 +1,9 @@
 import { z } from 'zod/v4';
 import type { CrossCurrencySettlementFields } from '@splitbook/shared/cross-currency-settlement';
 import { crossCurrencySettlementShape } from '@splitbook/shared/validators/settlement';
+import { createSettlementBatchSchema } from '@splitbook/shared/validators/settlement-batch';
+import type { SettlementBatchItem } from '@splitbook/shared/settlement-batch';
+import { parseAmountMinor, sumMinorAmounts, toMajorAmount } from '@splitbook/shared/exact-money';
 
 /**
  * Unconfirmed Settlements on the web (#198).
@@ -40,6 +43,11 @@ export interface SettlementPayment extends Partial<CrossCurrencySettlementFields
   amount: number;
   currency: string;
   note: string;
+  /**
+   * A payment that settles several Debts at once (#734): one row for each, sent together to the
+   * batch route. `currency` is then the one currency it is paid in, and `amount` what it pays in all.
+   */
+  batch?: SettlementBatchItem[];
 }
 
 /** A payment as the dialog records it: the parties' names are kept for display. */
@@ -88,7 +96,17 @@ const PAID_SIDE = Object.keys(
  * another currency's paid side and rate.
  */
 export function settlementBody(payment: SettlementPayment) {
-  const { paidBy, paidTo, amount, currency, note } = payment;
+  const { paidBy, paidTo, amount, currency, note, batch } = payment;
+  // The batch route's body: the people and paying currency once, then each Debt's row (#734).
+  if (batch)
+    return JSON.stringify(
+      createSettlementBatchSchema.parse({
+        paidBy,
+        paidTo,
+        paidCurrency: currency,
+        settlements: batch,
+      }),
+    );
   const paidSide = Object.fromEntries(
     PAID_SIDE.filter((field) => payment[field] !== undefined).map((field) => [
       field,
@@ -96,6 +114,30 @@ export function settlementBody(payment: SettlementPayment) {
     ]),
   );
   return JSON.stringify({ paidBy, paidTo, amount, currency, note, ...paidSide });
+}
+
+/** Where a stored body goes: a payment settling several Debts at once has its own route (#734). */
+export function settlementPath(groupId: string, body: string) {
+  const sent = parseJson(body) as { settlements?: unknown } | undefined;
+  return `/api/groups/${groupId}/settlements${Array.isArray(sent?.settlements) ? '/batch' : ''}`;
+}
+
+/** A stored batch's body as a payment: what it pays in all, in the one currency it is paid in. */
+function batchPayment(body: unknown): SettlementPayment | null {
+  const sent = createSettlementBatchSchema.safeParse(body);
+  if (!sent.success || !sent.data.paidBy) return null;
+  const { paidBy, paidTo, paidCurrency, settlements } = sent.data;
+  const paidMinor = sumMinorAmounts(
+    settlements.map((row) => row.amountPaidMinor ?? parseAmountMinor(row.amount, row.currency)),
+  );
+  return {
+    paidBy,
+    paidTo,
+    amount: toMajorAmount(paidMinor, paidCurrency),
+    currency: paidCurrency,
+    note: '',
+    batch: settlements,
+  };
 }
 
 const groupPrefix = (accountId: string, groupId: string) => `${PREFIX}${accountId}:${groupId}:`;
@@ -127,12 +169,14 @@ function parseEntry(entryKey: string, raw: string | null): SettlementAttempt | n
   if (raw === null) return null;
   const record = storedRecord.safeParse(parseJson(raw));
   if (!record.success) return null;
-  const body = sentBody.safeParse(parseJson(record.data.body));
-  if (!body.success || body.data.paidBy === body.data.paidTo) return null;
+  const sent = parseJson(record.data.body);
+  const single = sentBody.safeParse(sent);
+  const payment = single.success ? single.data : batchPayment(sent);
+  if (!payment || payment.paidBy === payment.paidTo) return null;
   const { accountId, groupId, key, paidByName, paidToName } = record.data;
-  if (entryKey !== storageKey(accountId, groupId, body.data.paidBy, body.data.paidTo)) return null;
+  if (entryKey !== storageKey(accountId, groupId, payment.paidBy, payment.paidTo)) return null;
   return {
-    ...body.data,
+    ...payment,
     accountId,
     groupId,
     key,
