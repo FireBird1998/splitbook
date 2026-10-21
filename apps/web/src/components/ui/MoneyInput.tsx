@@ -49,11 +49,28 @@ type Entry = { text: string; value: string };
 const historyStep = (inputType: string) =>
   inputType === 'historyUndo' ? -1 : inputType === 'historyRedo' ? 1 : 0;
 
-/** Cmd or Ctrl with Z undoes and with Shift+Z or Y redoes; any other key is no step. */
-function shortcutStep({ key, metaKey, ctrlKey, shiftKey, altKey }: KeyboardEvent) {
-  if (!(metaKey || ctrlKey) || altKey) return 0;
-  if (key.toLowerCase() === 'z') return shiftKey ? 1 : -1;
-  return key.toLowerCase() === 'y' && !shiftKey ? 1 : 0;
+/** Cmd or Ctrl with Z undoes and with Shift+Z redoes, as Ctrl+Y does; any other key is no step. */
+function shortcutStep({
+  key,
+  code,
+  metaKey,
+  ctrlKey,
+  shiftKey,
+  altKey,
+  isComposing,
+}: KeyboardEvent) {
+  if (!(metaKey || ctrlKey) || altKey || isComposing) return 0;
+  // The letter on a Latin layout, else the key's place, as a Cyrillic layout's Ctrl+Я.
+  const letter = /^[a-z]$/i.test(key)
+    ? key.toLowerCase()
+    : code === 'KeyZ'
+      ? 'z'
+      : code === 'KeyY'
+        ? 'y'
+        : '';
+  if (letter === 'z') return shiftKey ? 1 : -1;
+  // Cmd+Y is Chrome's History on a Mac.
+  return letter === 'y' && ctrlKey && !metaKey && !shiftKey ? 1 : 0;
 }
 
 /** Group only the display; focus and blur never edit the form's stored value. */
@@ -110,7 +127,8 @@ function useMoneyEntry(
     // undid itself.
     const fromKeys = (event: KeyboardEvent) => {
       const by = shortcutStep(event);
-      if (by === 0) return;
+      // A read-only amount, as one in doubt is, is the form's to keep.
+      if (by === 0 || node.readOnly) return;
       event.preventDefault();
       step(by);
     };
@@ -122,13 +140,19 @@ function useMoneyEntry(
       step(by);
     };
     const afterInput = (event: Event) => step(historyStep((event as InputEvent).inputType));
+    // The next composition is a step of its own.
+    const composed = () => {
+      history.current = { ...history.current, composing: false };
+    };
     node.addEventListener('keydown', fromKeys);
     node.addEventListener('beforeinput', beforeInput);
     node.addEventListener('input', afterInput);
+    node.addEventListener('compositionend', composed);
     return () => {
       node.removeEventListener('keydown', fromKeys);
       node.removeEventListener('beforeinput', beforeInput);
       node.removeEventListener('input', afterInput);
+      node.removeEventListener('compositionend', composed);
     };
   });
   return {
@@ -172,7 +196,10 @@ function useMoneyEntry(
       };
       const { entries, at, composing } = synced();
       const last = entries[at];
-      if (last === undefined || last.text !== next.text || last.value !== next.value) {
+      if (last !== undefined && last.text === next.text && last.value === next.value) {
+        // No step, but an edit all the same: nothing is left to redo.
+        history.current = { entries: entries.slice(0, at + 1), at, composing };
+      } else {
         // A composition's updates replace each other.
         const kept = composing && isComposing ? at : at + 1;
         history.current = {
