@@ -1,9 +1,11 @@
 import { createElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { SWRConfig } from 'swr';
+import { mutate, SWRConfig } from 'swr';
 import { ThemeProvider } from '@mui/material/styles';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
+import { groupRequestTicket, noteGroupAccess } from '@/lib/group-access';
+import { matchWebGroupRead, webActivityPagesKey } from '@/lib/web-query-keys';
 import ActivityView from './ActivityView';
 
 const GROUP = 'c00000000000000000000001';
@@ -37,14 +39,15 @@ const headlines = () =>
     .findAllByType('span')
     .map((node) => textOf(node).trim())
     .filter((text) => /^You added “Expense \d+”$/.test(text));
-async function render() {
+/** `appCache` renders on SWR's own cache, the one `group-access` clears. */
+async function render({ appCache = false } = {}) {
   await act(async () => {
     renderer = create(
       createElement(
         SWRConfig,
         {
           value: {
-            provider: () => new Map(),
+            ...(appCache ? {} : { provider: () => new Map() }),
             dedupingInterval: 0,
             refreshInterval: 0,
             revalidateOnFocus: false,
@@ -245,4 +248,35 @@ it('keeps offering Load older activity, with no failure line, when only a refres
   } finally {
     vi.useRealTimers();
   }
+});
+
+// ADR 0006: losing the Group deletes what the tab holds for it, the loaded pages included. SWR's
+// filtered mutate never reaches a `useSWRInfinite` key, so the pages need their own (#800).
+it('deletes its loaded pages on the first refused read of the Group', async () => {
+  api.mockImplementation(async () => answer(1, [event(1)]));
+  await render({ appCache: true });
+  expect(headlines()).toEqual(['You added “Expense 1”']);
+  vi.stubGlobal('window', {});
+  await act(async () => {
+    noteGroupAccess({
+      method: 'GET',
+      path: `/api/groups/${GROUP}/expenses`,
+      status: 403,
+      accountId: null,
+      ticket: groupRequestTicket(),
+    });
+  });
+  expect(headlines()).toEqual([]);
+});
+
+it('reads its pages again when a save refreshes the Group’s reads and its timeline key', async () => {
+  api.mockImplementation(async () => answer(1, [event(2)], 1));
+  await render({ appCache: true });
+  expect(headlines()).toEqual(['You added “Expense 2”']);
+  api.mockImplementation(async () => answer(1, [event(1), event(2)], 2));
+  // As use-expense-draft-save does: the matcher alone never reaches the timeline.
+  await act(async () => {
+    await Promise.all([mutate(matchWebGroupRead(GROUP)), mutate(webActivityPagesKey(GROUP))]);
+  });
+  expect(headlines()).toEqual(['You added “Expense 1”', 'You added “Expense 2”']);
 });
