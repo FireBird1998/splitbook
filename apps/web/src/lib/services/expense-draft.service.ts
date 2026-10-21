@@ -145,7 +145,10 @@ async function requireMembership(
       filter
         ? { ...filter, _id: { ...filter._id, $eq: scope.group } }
         : { _id: scope.group, 'members.user': scope.owner, deletionRequestedAt: null },
-      { session, projection: { _id: 1, defaultCurrency: 1, alternateCurrencies: 1, isArchived: 1 } },
+      {
+        session,
+        projection: { _id: 1, defaultCurrency: 1, alternateCurrencies: 1, isArchived: 1 },
+      },
     );
   if (!group) throw new Error(reach ? 'GROUP_NOT_FOUND' : 'FORBIDDEN');
   if (refuseArchived && group.isArchived) throw new Error('GROUP_ARCHIVED');
