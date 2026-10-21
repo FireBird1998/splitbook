@@ -925,7 +925,9 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
         await f.controller.openGroup(groupId);
       });
       const rows = await render(<GroupRows controller={f.controller} />, mode);
-      expect(text(rows)).toContain('You paid · prepared by ChatGPT');
+      // The credit has a caption line of its own (#751).
+      expect(text(rows)).toContain('prepared by ChatGPT');
+      expect(text(rows)).not.toContain('You paid · prepared by');
       await act(async () => {
         await f.controller.openExpense(groupId, savedExpense._id);
       });

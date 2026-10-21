@@ -519,3 +519,31 @@ describe('an event’s detail', () => {
     expect(JSON.stringify(screen!.toJSON())).toContain(`"Wed 30 Sep 2026, ${clock}"`);
   });
 });
+
+// #751: a long assistant host in an event's details was cut at its end after two lines.
+describe('an assistant’s credit in an Activity row (#751)', () => {
+  const host = 'chatgpt.com.secure-assistant-connector.evil.example.test';
+  const prepared: ActivityEvent = {
+    ...event(1),
+    metadata: { ...event(1).metadata, preparedBy: { kind: 'assistant', name: host } },
+  };
+  const credit = (root: ReactTestInstance) =>
+    root.find(
+      (node) =>
+        isHost(node, 'Text') &&
+        node.children.filter((child) => typeof child === 'string').join('') ===
+          `prepared by ${host}`,
+    );
+
+  it('takes a line of its own, cut in the middle so the domain stays, with the whole name read aloud', () => {
+    const { root } = render({ state: activity({ events: [prepared] }) });
+    expect(credit(root).props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'middle' });
+    expect(buttons(root).some((label) => label?.includes(`prepared by ${host}`))).toBe(true);
+  });
+
+  it('wraps in full at the largest text', () => {
+    setWindow({ fontScale: 2 });
+    const { root } = render({ state: activity({ events: [prepared] }) });
+    expect(credit(root).props.numberOfLines).toBe(0);
+  });
+});

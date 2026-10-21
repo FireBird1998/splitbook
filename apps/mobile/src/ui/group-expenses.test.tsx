@@ -907,3 +907,40 @@ describe.each(['light', 'dark'] as const)('Expense rows at large text in %s (#63
       ).toEqual([]);
   });
 });
+
+// #751: an assistant's credit names its host in full, and a long host was cut at its end in the
+// row's one-line caption, hiding the domain that tells members who the assistant really is.
+describe('an assistant’s credit on an Expense row (#751)', () => {
+  const host = 'chatgpt.com.secure-assistant-connector.evil.example.test';
+  const prepared: MobileExpense = { ...groceries, preparedBy: { kind: 'assistant', name: host } };
+  const credit = (root: ReactTestInstance) =>
+    root.find(
+      (node) =>
+        isHost(node, 'Text') &&
+        node.children.filter((child) => typeof child === 'string').join('') ===
+          `prepared by ${host}`,
+    );
+  const preparedView = () =>
+    view({
+      state: financial({
+        data: [prepared],
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+      }),
+    });
+
+  it('takes a line of its own, cut in the middle so the domain stays, with the whole name read aloud', () => {
+    const { root } = preparedView();
+    expect(credit(root).props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'middle' });
+    expect(text(root)).toContain('You paid · Groceries');
+    expect(text(root)).not.toContain('You paid · prepared by');
+    expect(buttons(root)).toContain(
+      `Weekly groceries, ₹1,249.50, You paid, prepared by ${host}, Groceries, you lent ₹833.00`,
+    );
+  });
+
+  it('wraps in full at the largest text', () => {
+    setWindow({ fontScale: 2 });
+    const { root } = preparedView();
+    expect(credit(root).props.numberOfLines).toBe(0);
+  });
+});
