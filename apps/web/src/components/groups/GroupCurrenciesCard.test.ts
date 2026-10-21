@@ -96,6 +96,12 @@ describe('a Group’s currencies in its settings (#721)', () => {
     expect(page).not.toContain('Only admins can remove a currency.');
   });
 
+  it('names its Add button for the currency, apart from Recurring’s Add on the same page', () => {
+    const html = render(lisbonAndTokyo, { id: SAM, isAdmin: false, adminNames: ['Sam', 'Priya'] });
+
+    expect(html).toContain('aria-label="Add a currency"');
+  });
+
   it('lets a member add but not remove, and names the admins to ask', () => {
     const html = render(lisbonAndTokyo, { id: SAM, isAdmin: false, adminNames: ['Sam', 'Priya'] });
 
