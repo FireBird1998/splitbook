@@ -1,8 +1,7 @@
 'use client';
 import PreparedBy from '@/components/expenses/PreparedBy';
 
-import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
-import { activityPageKey } from '@splitbook/shared/query-keys';
+import { webActivityPage } from '@/lib/web-query-keys';
 import useSWRInfinite from 'swr/infinite';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
@@ -45,7 +44,7 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     (index, previous: Awaited<ReturnType<typeof fetchWebActivity>> | null) => {
       if (previous && previous.data.pagination.page >= previous.data.pagination.totalPages)
         return null;
-      return activityPageKey(WEB_QUERY_ACCOUNT, groupId, { page: index + 1, limit: 50 });
+      return webActivityPage(groupId, index);
     },
     fetchWebActivity,
     {

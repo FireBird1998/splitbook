@@ -10,7 +10,7 @@ import {
   type TagSnapshot,
 } from '@splitbook/shared/tag-management';
 import { apiFetch } from '@/lib/utils/api-fetch';
-import { matchWebGroupRead, matchWebGroupContent } from '@/lib/web-query-keys';
+import { matchWebGroupRead, matchWebGroupContent, webActivityPagesKey } from '@/lib/web-query-keys';
 import {
   forgetTagAction,
   hasRetainedTagAction,
@@ -157,8 +157,10 @@ export function useTagManager(scope: TagActionScope) {
       mayRefresh = false;
     });
     try {
-      if (!check)
+      if (!check) {
         void mutate(matchWebGroupContent(scope.groupId), undefined, { revalidate: false });
+        void mutate(webActivityPagesKey(scope.groupId), undefined, { revalidate: false });
+      }
       const response = await apiFetch(
         check ? `${path}/${attempt.command.requestId}` : path,
         check
@@ -223,7 +225,10 @@ export function useTagManager(scope: TagActionScope) {
     } finally {
       // A lost reply may still have changed Tag names in Expenses and pickers.
       stopWatchingCleanup();
-      if (mayRefresh && !lost.current) void mutate(matchWebGroupRead(scope.groupId));
+      if (mayRefresh && !lost.current) {
+        void mutate(matchWebGroupRead(scope.groupId));
+        void mutate(webActivityPagesKey(scope.groupId));
+      }
       if (current(ticket)) {
         setBusy(false);
         running.current = false;
