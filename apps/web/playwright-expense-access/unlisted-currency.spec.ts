@@ -283,3 +283,32 @@ test('To review says why adding a currency was refused, in the refusal’s own w
   await expect(page.getByText('Check the expense details and try again.')).toHaveCount(0);
   await expect(needs).toContainText('Dinner in Zürich');
 });
+
+test('To review offers only a change once the Group’s list filled after it loaded, keeping the refusal’s words (#804)', async ({
+  page,
+  ledger,
+}) => {
+  const { group, name, food } = await lisbonAndTokyo(ledger);
+  await setAside(ledger, group, food, [['Dinner in Zürich', 86, 'CHF']]);
+  await enter(page, ledger.alex, `/groups/${group}/review`);
+  const needs = page.getByRole('region', { name: 'Needs details', exact: true });
+  const dinner = needs.getByRole('group', { name: 'Currency for Dinner in Zürich' });
+  const add = dinner.getByRole('button', { name: `Add CHF to ${name}` });
+  await expect(add).toBeVisible();
+  // Meanwhile Sam fills the list: 4 extra currencies, the most a Group can have.
+  for (const currency of ['GBP', 'USD'])
+    await dataOf(
+      await ledger.sam.post(`/api/groups/${group}/currencies`, { data: { currency } }),
+      201,
+    );
+  await add.click();
+  await expect(page.getByText('A Group can have at most 4 extra currencies.')).toBeVisible();
+  await expect(dinner).toContainText(
+    `CHF isn’t one of ${name}’s currencies. Change this Expense’s currency.`,
+  );
+  await expect(dinner).toContainText(
+    `${name} already has 4 extra currencies, the most a Group can have. An admin can remove one nothing uses in Group settings.`,
+  );
+  await expect(add).toHaveCount(0);
+  await expect(page.getByText('A Group can have at most 4 extra currencies.')).toBeVisible();
+});
