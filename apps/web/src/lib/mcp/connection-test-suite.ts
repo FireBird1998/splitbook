@@ -1265,6 +1265,59 @@ export function connectionTests(mongo = false) {
       });
 
     if (mongo)
+      it('hides a Group pending deletion from the real client’s reads and Draft writes (#753)', async () => {
+        const db = mongoClient!.db();
+        const user = await db.collection('users').findOne({ email: 'connection@example.test' });
+        const live = new mongoose.Types.ObjectId();
+        const deleting = new mongoose.Types.ObjectId();
+        await db
+          .collection('groups')
+          .insertMany([
+            exclusionGroup(live, 'Still Live Club', user!._id),
+            exclusionGroup(deleting, 'Pending Deletion Club', user!._id),
+          ]);
+        const grant = await authorizeClient(true, true);
+        await withExcludedGroupClient(grant.access_token, async (reply) => {
+          const groupId = String(deleting);
+          // The same connection reaches the Group before its deletion is requested.
+          expect((await reply('group_context', { groupId })).isError).toBe(false);
+          const created = await reply('create_drafts', {
+            groupId,
+            requestKey: 'before-group-deletion',
+            drafts: [{ amount: 75 }],
+          });
+          expect(created.isError, created.text).toBe(false);
+          const draftId = JSON.parse(created.text).drafts[0].id as string;
+          await db
+            .collection('groups')
+            .updateOne({ _id: deleting }, { $set: { deletionRequestedAt: new Date() } });
+          const listed = await reply('list_groups', {});
+          expect(listed.isError).toBe(false);
+          expect(listed.text).toContain('Still Live Club');
+          expect.soft(listed.text).not.toContain('Pending Deletion Club');
+          expect.soft(listed.text).not.toContain(groupId);
+          for (const [tool, args] of [
+            ['group_context', { groupId }],
+            ['group_balances', { groupId }],
+            ['group_spending', { groupId, from: '2026-10-01', to: '2026-10-31' }],
+            ['list_drafts', { groupId }],
+            [
+              'create_drafts',
+              { groupId, requestKey: 'after-group-deletion', drafts: [{ amount: 9 }] },
+            ],
+            ['replace_draft', { groupId, draftId, revision: 0, values: { amount: 9 } }],
+            ['discard_draft', { groupId, draftId, revision: 0 }],
+          ] as const) {
+            expect
+              .soft(await reply(tool, args), tool)
+              .toEqual({ isError: true, text: 'Group not found' });
+          }
+          expect((await reply('group_context', { groupId: String(live) })).isError).toBe(false);
+        });
+        await authorizeClient(); // return to ledger-only consent for later assertions
+      });
+
+    if (mongo)
       it('reaches a Group joined after approval, and applies a new approval on the next call (#617)', async () => {
         const db = mongoClient!.db();
         const user = await db.collection('users').findOne({ email: 'connection@example.test' });
