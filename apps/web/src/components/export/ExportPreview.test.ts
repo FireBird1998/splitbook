@@ -408,3 +408,9 @@ it('places the cross-currency column note beneath the payments preview table onl
   expect(html.indexOf(note)).toBeGreaterThan(html.indexOf('</table>'));
   expect(text(render({ status: 'ready', data: csv }))).not.toContain(note);
 });
+
+it.each([0, 1, 2])('uses the correct Expense and Payment plurals for %s in the backup preview', (count) => {
+  const html = render({ status: 'ready', data: { format: 'json', groupNames: ['Fictional trip'], generatedAt: '2026-10-21T12:00:00Z', from: null, to: null, timeZone: 'UTC', empty: false, fileName: 'backup.json', sizeBytes: 1000, earliestMonth: null, historyIncluded: true, paymentsIncluded: true, deletedExpensesIncluded: false, counts: { members: 2, expenses: count, payments: count, deletedExpenses: 0, editHistoryEntries: 0 } } });
+  expect(text(html)).toContain(`${count} ${count === 1 ? 'Expense' : 'Expenses'}, each with its edit history`);
+  expect(text(html)).toContain(`${count} ${count === 1 ? 'Payment' : 'Payments'}, including both amounts, currencies and stored rates`);
+});

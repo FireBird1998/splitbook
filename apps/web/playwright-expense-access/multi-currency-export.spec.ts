@@ -71,6 +71,7 @@ for (const size of ['desktop', 'phone'] as const) {
       ).toBeVisible();
       await expect(preview).toContainText('1850.00');
       await expect(preview).toContainText('92.5');
+      await expect(preview).toContainText('Cross-currency payments add Amount paid, Paid currency and Rate');
       await page.screenshot({
         path: testInfo.outputPath(`${size}-${mode}-csv-preview.png`),
         fullPage: true,
@@ -80,6 +81,7 @@ for (const size of ['desktop', 'phone'] as const) {
         await expect(
           preview.getByRole('region', { name: `${currency} statement preview`, exact: true }),
         ).toBeVisible();
+      await expect(preview).toContainText('JPY: nothing in this period; everyone is settled up.');
       await expect(preview).toContainText(
         'Sam Chen paid Alex Rivera ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
       );
@@ -99,8 +101,10 @@ for (const size of ['desktop', 'phone'] as const) {
       await page.getByLabel('Format', { exact: true }).selectOption('json');
       await expect(preview).toContainText('Fictional Europe trip: INR, EUR, JPY');
       await expect(preview).toContainText(
-        '1 Payments, including both amounts, currencies and stored rates',
+        '1 Payment, including both amounts, currencies and stored rates',
       );
+      await expect(preview).toContainText('1 Expense');
+      await expect(preview).not.toContainText('1 Expenses');
       await page.screenshot({
         path: testInfo.outputPath(`${size}-${mode}-backup-preview.png`),
         fullPage: true,
