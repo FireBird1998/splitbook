@@ -1172,3 +1172,66 @@ describe('Export selected Expenses (#613)', () => {
     expect(json(answer)).toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });
+
+describe('multi-currency exports (#731)', () => {
+  async function crossCurrencyGroup() {
+    const group = await groupService.create(
+      {
+        name: 'Fictional Europe trip',
+        category: 'trip',
+        defaultCurrency: 'INR',
+        alternateCurrencies: ['EUR', 'JPY'],
+      },
+      alice,
+    );
+    const id = String(group._id);
+    await groupService.addMember(id, bob);
+    await expenseService.create(
+      id,
+      { ...command('Fictional tickets', 40, alice, [alice, bob]), currency: 'EUR' },
+      alice,
+    );
+    await settlementService.create(
+      id,
+      {
+        paidTo: alice,
+        amount: 20,
+        currency: 'EUR',
+        amountPaidMinor: 185000,
+        paidCurrency: 'INR',
+        appliedRate: '92.5',
+        suggestedRate: '92.1',
+        rateKind: 'custom',
+        rateSource: 'frankfurter',
+        rateAsOf: '2026-10-20',
+        rateFetchedAt: '2026-10-21T12:00:00Z',
+      },
+      bob,
+    );
+    return id;
+  }
+
+  it('downloads both payment amounts and the rate, with an identical CSV preview', async () => {
+    const id = await crossCurrencyGroup();
+    const path = exportOf([id], { include: ['payments'] });
+    const { files } = await zip(alice, path);
+    const file = Object.keys(files).find((key) => key.endsWith('-payments.csv'))!;
+    const downloaded = table(files[file]);
+    expect(downloaded.records[0]).toMatchObject({
+      Amount: '20.00',
+      Currency: 'EUR',
+      'Amount paid': '1850.00',
+      'Paid currency': 'INR',
+      'Rate (paid per cleared)': '92.5',
+    });
+    const preview = exportPreviewSchema.parse(
+      json(await request(alice, path + '&preview=1')).data,
+    );
+    expect(preview.format).toBe('csv');
+    if (preview.format !== 'csv') throw new Error('Expected CSV preview');
+    const shown = preview.files.find((row) => row.kind === 'payments')!;
+    expect(shown.header).toEqual(downloaded.header);
+    expect(shown.rows[0]).toEqual(Object.values(downloaded.records[0]));
+    expect(shown.text).toBe(files[file]);
+  });
+});

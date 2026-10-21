@@ -551,3 +551,29 @@ describe('the payments CSV', () => {
     ]);
   });
 });
+
+it('exports both stored payment amounts beside their currencies and the exact applied rate', () => {
+  const payment = {
+    id: 'cross',
+    at: '2026-10-21T12:00:00Z',
+    fromId: ALEX,
+    toId: SAM,
+    amountMinor: 2000,
+    currency: 'EUR',
+    recordedById: ALEX,
+    amountPaidMinor: 185000,
+    paidCurrency: 'INR',
+    appliedRate: '92.5',
+    rateKind: 'entered' as const,
+  };
+  const csv = buildPaymentCsv({ payments: [payment], names: NAMES, timeZone: 'UTC' });
+  const row = Object.fromEntries(csv.header.map((key, index) => [key, csv.rows[0][index]]));
+  expect(row).toMatchObject({
+    Amount: '20.00',
+    Currency: 'EUR',
+    'Amount paid': '1850.00',
+    'Paid currency': 'INR',
+    'Rate (paid per cleared)': '92.5',
+  });
+  expect(csv.header.indexOf('Paid currency')).toBe(csv.header.indexOf('Amount paid') + 1);
+});
