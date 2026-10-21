@@ -724,3 +724,40 @@ describe('quickAddDraftValues: the full form’s request', () => {
     ).not.toHaveProperty('category');
   });
 });
+
+describe('Quick add with the Group’s listed currencies (#732)', () => {
+  it.each([
+    ['€20 dinner', 'EUR', 2000, '20'],
+    ['Dinner 20 EUR', 'EUR', 2000, '20'],
+    ['Dinner 20 eur', 'EUR', 2000, '20'],
+    ['¥2500 dinner', 'JPY', 2500, '2500'],
+    ['Dinner 2500 JPY', 'JPY', 2500, '2500'],
+    ['Dinner ₩12000', 'KRW', 12000, '12000'],
+  ])(
+    'reads listed currency in %s and carries it into the Expense draft',
+    (text, currency, minor, amount) => {
+      const ctx = context({ alternateCurrencies: ['EUR', 'JPY', 'KRW'] });
+      const line = readQuickAdd(text, ctx);
+      expect(line).toMatchObject({
+        description: 'Dinner',
+        currency,
+        currencyListed: true,
+        amountMinor: minor,
+        problems: [],
+      });
+      expect(quickAddDraftValues(line, { payerId: ALEX.id, tagId: 'Food' }, ctx)).toMatchObject({
+        currency,
+        amount,
+      });
+    },
+  );
+
+  it.each(['Dinner ¥2500.5', 'Dinner 2500.5 JPY', 'Dinner ₩12000.5'])(
+    'refuses fractional whole-unit amounts in %s',
+    (text) => {
+      const line = read(text, { alternateCurrencies: ['JPY', 'KRW'] });
+      expect(line.amountMinor).toBeNull();
+      expect(line.problems).toEqual([expect.objectContaining({ code: 'amount-decimals' })]);
+    },
+  );
+});
