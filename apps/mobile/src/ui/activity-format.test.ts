@@ -345,11 +345,16 @@ describe('Group edits in plain language', () => {
       details: ['Nothing used it'],
       changes: ['Extra currencies EUR, GBP → EUR'],
     });
-    // An older entry recorded without its list says nothing more.
+    // An older entry recorded without its list says nothing more, added or removed.
     expect(read(edit({ alternateCurrencies: { old: ['EUR'], new: ['EUR', 'CHF'] } }))).toEqual({
       headline: 'You added CHF to the Group’s currencies, 11:05',
       details: [],
       changes: ['Extra currencies EUR → EUR, CHF'],
+    });
+    expect(read(edit({ alternateCurrencies: { old: ['EUR', 'GBP'], new: ['EUR'] } }))).toEqual({
+      headline: 'You removed GBP from the Group’s currencies, 11:05',
+      details: [],
+      changes: ['Extra currencies EUR, GBP → EUR'],
     });
   });
 

@@ -568,3 +568,34 @@ describe('a change to the Group’s currencies, as read from the server (#721)',
     );
   });
 });
+
+describe('an older removal from the Group’s currencies, as read from the server (#721)', () => {
+  it('never says nothing used it without the list recorded with it', () => {
+    const page = parseActivityPage(
+      {
+        data: {
+          activities: [
+            {
+              _id: hex('f', 2),
+              group: groupId,
+              type: 'group_updated',
+              actor: { _id: you, name: 'Alex Rivera' },
+              createdAt: new Date(2026, 8, 30, 11, 0).toISOString(),
+              metadata: { changes: { alternateCurrencies: { old: ['EUR', 'GBP'], new: ['EUR'] } } },
+            },
+          ],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        },
+        status: 200,
+      },
+      groupId,
+      1,
+    );
+
+    const { root } = render({
+      state: activity({ events: page.events, pagination: page.pagination }),
+    });
+
+    expect(buttons(root)).toContain('You removed GBP from the Group’s currencies, 11:00 AM');
+  });
+});

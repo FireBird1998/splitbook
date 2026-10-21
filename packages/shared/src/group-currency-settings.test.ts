@@ -228,8 +228,10 @@ describe('a change to the extra currencies, as Activity names it (#721)', () => 
     expect(extraCurrencyChangeDetail({ added: ['JPY'], removed: ['GBP'] }, recorded)).toBe(
       'Lisbon & Tokyo now uses INR, EUR and JPY',
     );
-    // An entry recorded without its list, or with a list it can't read, says nothing more.
+    // An entry recorded without its list, or with a list it can't read, says nothing more: an
+    // older removal may have dropped a currency still in use, so it never says nothing used it.
     expect(extraCurrencyChangeDetail({ added: ['JPY'], removed: [] }, {})).toBeNull();
+    expect(extraCurrencyChangeDetail({ added: [], removed: ['GBP'] }, {})).toBeNull();
     expect(
       extraCurrencyChangeDetail(
         { added: ['JPY'], removed: [] },

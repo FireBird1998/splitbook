@@ -10,6 +10,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
 import Activity from '@/lib/models/Activity';
 import Group from '@/lib/models/Group';
+import Expense from '@/lib/models/Expense';
+import Settlement from '@/lib/models/Settlement';
 import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
@@ -439,10 +441,14 @@ describe('DELETE /api/groups/[id]/currencies/[code] (#721)', () => {
       headers: { 'X-Splitbook-Revision': String(deleted!.revision) },
     });
 
-    expect(restored.status).toBe(422);
-    expect(restored.body).toMatchObject({
-      error: 'Currency is not one of this Group’s currencies',
-      code: 'CURRENCY_MISMATCH',
+    // Nothing else uses pounds now, so the answer says how to bring it back.
+    expect(restored).toEqual({
+      status: 422,
+      body: {
+        error: 'Add GBP to the Group’s currencies to restore it.',
+        status: 422,
+        code: 'CURRENCY_MISMATCH',
+      },
     });
     expect(
       (await expenseService.getById({ actorId: alex, groupId, expenseId: tea._id }))?.isDeleted,
@@ -451,6 +457,30 @@ describe('DELETE /api/groups/[id]/currencies/[code] (#721)', () => {
 });
 
 describe('an older Expense in a currency the Group doesn’t list (#721)', () => {
+  it('can be restored while another live Expense still uses that currency', async () => {
+    const groupId = await lisbonAndTokyo();
+    const tea = await addExpense(groupId, dinner('Afternoon tea', 30, 'GBP'));
+    await addExpense(groupId, dinner('Fish and chips', 24, 'GBP'));
+    const deleted = await expenseService.delete(
+      { actorId: alex, groupId, expenseId: tea._id },
+      tea.revision,
+    );
+    // An older Group's list could leave out a currency its Expenses use.
+    await Group.updateOne({ _id: groupId }, { $set: { alternateCurrencies: ['EUR'] } });
+
+    const restored = await callRoute(expense.PATCH, {
+      method: 'PATCH',
+      path: `/api/groups/${groupId}/expenses/${tea._id}`,
+      params: { id: groupId, expenseId: tea._id },
+      cookie: await signIn('alex'),
+      body: { isDeleted: false },
+      headers: { 'X-Splitbook-Revision': String(deleted!.revision) },
+    });
+
+    expect(restored.status, JSON.stringify(restored.body)).toBe(200);
+    expect(restored.body.data).toMatchObject({ isDeleted: false, currency: 'GBP' });
+  });
+
   it('can still be edited while it keeps its currency', async () => {
     const groupId = await lisbonAndTokyo();
     const tea = await addExpense(groupId, dinner('Afternoon tea', 30, 'GBP'));
@@ -533,5 +563,61 @@ describe('PATCH /api/groups/[id] keeps the same rules for the extra currencies (
       },
     });
     expect((await read(groupId)).body.data.mainCurrency).toEqual({ code: 'INR', locked: true });
+  });
+});
+
+describe('removing a currency while records arrive in it (#721)', () => {
+  /** Whether the Group still lists yen, and whether any live record is in yen. */
+  async function yenState(groupId: string) {
+    const stored = await Group.findById(groupId).lean();
+    const listed = (stored!.alternateCurrencies ?? []).includes('JPY');
+    const used =
+      (await Expense.countDocuments({
+        group: groupId,
+        currency: 'JPY',
+        isDeleted: { $ne: true },
+      })) + (await Settlement.countDocuments({ group: groupId, currency: 'JPY' }));
+    return { listed, used };
+  }
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it('never leaves a live Expense or Settlement in a currency the Group no longer lists', async () => {
+    for (let round = 0; round < 12; round += 1) {
+      const groupId = await lisbonAndTokyo();
+      const cookie = await signIn('sam');
+      const [removal, saved, paid] = await Promise.all([
+        pause(round % 3).then(() => remove(groupId, 'JPY')),
+        pause((round + 1) % 3).then(() =>
+          callRoute(expenses.POST, {
+            method: 'POST',
+            path: `/api/groups/${groupId}/expenses`,
+            params: { id: groupId },
+            cookie,
+            body: {
+              ...dinner(`Ramen ${round}`, 2500, 'JPY'),
+              paidBy: [{ user: sam, amount: 2500 }],
+            },
+          }),
+        ),
+        pause((round + 2) % 3).then(() =>
+          callRoute(settlements.POST, {
+            method: 'POST',
+            path: `/api/groups/${groupId}/settlements`,
+            params: { id: groupId },
+            cookie,
+            body: { paidTo: alex, amount: 1000, currency: 'JPY' },
+          }),
+        ),
+      ]);
+
+      const { listed, used } = await yenState(groupId);
+      const label = `round ${round}: ${removal.status} ${saved.status} ${paid.status}`;
+      // Each side either went through or was refused for the other, and never both.
+      expect([200, 409], label).toContain(removal.status);
+      expect([201, 422], label).toContain(saved.status);
+      expect([201, 422], label).toContain(paid.status);
+      expect(listed || used === 0, label).toBe(true);
+      expect(listed, label).toBe(removal.status !== 200);
+    }
   });
 });

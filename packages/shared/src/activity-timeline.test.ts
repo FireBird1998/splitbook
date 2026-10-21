@@ -335,6 +335,13 @@ describe('a change to the extra currencies in Activity (#721)', () => {
     expect(
       formatActivityDetail({ ...older, metadata: { changes: older.metadata.changes } }),
     ).toBeNull();
+    const olderRemoval = change(['EUR', 'GBP'], ['EUR']);
+    expect(
+      formatActivityDetail({
+        ...olderRemoval,
+        metadata: { changes: olderRemoval.metadata.changes },
+      }),
+    ).toBeNull();
     expect(
       formatActivityDetail(change(['EUR'], ['EUR', 'JPY'], { name: { old: 'a', new: 'b' } })),
     ).toBeNull();
