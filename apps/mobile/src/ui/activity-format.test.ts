@@ -461,3 +461,115 @@ describe('an assistant’s credit in an Activity line (#751)', () => {
     expect(spokenActivity(line, '10:42')).toContain(`prepared by ${host}`);
   });
 });
+
+// #728: a Debt paid in another currency, as the board "Activity" shows it, read through the
+// Activity page's parse as the server sends it.
+describe('a Debt paid in another currency (#728)', () => {
+  const alex = 'a00000000000000000000001',
+    sam = 'a00000000000000000000002';
+  const paid = (metadata: Record<string, unknown> = {}) =>
+    parseActivityPage(
+      {
+        status: 200,
+        data: {
+          activities: [
+            event({
+              type: 'settlement_recorded',
+              actor: { _id: alex, name: 'Alex Rivera' },
+              metadata: {
+                settlementId: 'f00000000000000000000001',
+                amount: 20,
+                amountMinor: 2000,
+                currency: 'EUR',
+                paidBy: alex,
+                paidTo: sam,
+                paidByName: 'Alex Rivera',
+                paidToName: 'Sam Chen',
+                amountPaidMinor: 185000,
+                paidCurrency: 'INR',
+                appliedRate: '92.5',
+                rateKind: 'custom',
+                suggestedRate: '92.1',
+                rateSource: 'frankfurter',
+                rateAsOf: '2026-10-21',
+                rateFetchedAt: '2026-10-21T00:30:00.000Z',
+                pairDebtBeforeMinor: -2000,
+                pairDebtAfterMinor: 0,
+                ...metadata,
+              } as ActivityEvent['metadata'],
+            }),
+          ],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        },
+      },
+      'b00000000000000000000001',
+      1,
+    ).events[0];
+
+  it('says who paid whom, both amounts, then the rate beside the suggestion', () => {
+    const line = describeActivity(paid(), { currentUserId: alex, currency: 'INR' });
+    expect(line).toMatchObject({
+      actor: 'You',
+      verb: 'paid',
+      subject: 'Sam Chen',
+      complement: '₹1,850.00 to clear €20.00',
+    });
+    expect(line.details.map((detail) => detail.text)).toEqual([
+      'at ₹92.50 per €, suggested ₹92.10 (21 Oct)',
+    ]);
+    expect(spokenActivity(line, '10:20')).toBe(
+      'You paid Sam Chen ₹1,850.00 to clear €20.00, at ₹92.50 per €, suggested ₹92.10 (21 Oct), 10:20',
+    );
+  });
+
+  it('names the viewer "you" when they were paid, says when no rate was suggested, and names a second source', () => {
+    const entered = describeActivity(
+      paid({
+        rateKind: 'entered',
+        appliedRate: '92.4',
+        amountPaidMinor: 184800,
+        suggestedRate: undefined,
+        rateSource: undefined,
+        rateAsOf: undefined,
+        rateFetchedAt: undefined,
+      }),
+      { currentUserId: sam, currency: 'INR' },
+    );
+    expect(entered).toMatchObject({
+      actor: 'Alex Rivera',
+      verb: 'paid',
+      subject: 'you',
+      complement: '₹1,848.00 to clear €20.00',
+    });
+    expect(entered.details.map((detail) => detail.text)).toEqual([
+      'at ₹92.40 per €; no rate suggested',
+    ]);
+    const mixed = describeActivity(paid({ rateSource: 'mixed' }), {
+      currentUserId: alex,
+      currency: 'INR',
+    });
+    expect(mixed.details.map((detail) => detail.text)).toEqual([
+      'at ₹92.50 per €, suggested ₹92.10 (21 Oct) · Rates By Exchange Rate API',
+    ]);
+  });
+
+  it('keeps a payment in its Debt’s own currency as before', () => {
+    const line = describeActivity(
+      paid({
+        amountPaidMinor: undefined,
+        paidCurrency: undefined,
+        appliedRate: undefined,
+        rateKind: undefined,
+        suggestedRate: undefined,
+        rateSource: undefined,
+        rateAsOf: undefined,
+        rateFetchedAt: undefined,
+        pairDebtBeforeMinor: undefined,
+        pairDebtAfterMinor: undefined,
+      }),
+      { currentUserId: alex, currency: 'INR' },
+    );
+    expect(line).toMatchObject({ actor: 'You', verb: 'recorded a payment', subject: null });
+    expect(line.details.map((detail) => detail.text)).toEqual(['You → Sam Chen', '€20.00']);
+  });
+});

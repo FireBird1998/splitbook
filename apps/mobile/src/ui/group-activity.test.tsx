@@ -13,7 +13,7 @@ import {
   type ActivityEvent,
   type ActivityState,
 } from '../data/activity';
-import { flatten, layoutHeight, layoutWidth, middleCutEnd } from '../test-utils/layout';
+import { flatten, layoutHeight, layoutWidth, middleCutEnd, unreadText } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { GroupActivity } from './group-activity';
@@ -618,8 +618,10 @@ describe('an assistant’s credit in an Activity row (#751)', () => {
     root.find(
       (node) =>
         isHost(node, 'Text') &&
-        node.children.filter((child) => typeof child === 'string').join('') ===
-          `prepared by ${host}`,
+        node.children
+          .filter((child) => typeof child === 'string')
+          .join('')
+          .trimEnd() === `prepared by ${host}`,
     );
 
   it('takes a line of its own, cut in the middle so the domain stays, with the whole name read aloud', () => {
@@ -639,12 +641,15 @@ describe('an assistant’s credit in an Activity row (#751)', () => {
     expect(credit(root).props.numberOfLines ?? 0).toBe(0);
   });
 
+  // Its end shows the domain to its last letter: "…evil.example.test" at 100% on the emulator and
+  // "…vil.example.test" at 130%, where the line keeps room for the ellipsis Android draws wider
+  // than it measured (#766).
   it.each([
-    [1, host],
-    [1.3, host],
-    [1, long],
-    [1.3, long],
-  ])('keeps the domain readable on a 360dp phone at %s× text: %s', (fontScale, name) => {
+    [1, host, /evil\.example\.test\s*$/],
+    [1.3, host, /example\.test\s*$/],
+    [1, long, /evil\.example\.test\s*$/],
+    [1.3, long, /example\.test\s*$/],
+  ])('keeps the domain readable on a 360dp phone at %s× text: %s', (fontScale, name, end) => {
     setWindow({ width: 360, height: 640, fontScale });
     render({ state: activity({ events: [preparedBy(name)] }) });
     // The list lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
@@ -655,6 +660,138 @@ describe('an assistant’s credit in an Activity row (#751)', () => {
         360 - 34,
         `prepared by ${name}`,
       ),
-    ).toContain('evil.example.test');
+    ).toMatch(end);
+  });
+});
+
+// #728: the board "The Settlement's record": a Debt paid in another currency, opened from its
+// Activity row, read the way the app reads every page.
+describe('a payment in another currency’s record (#728)', () => {
+  const sam = 'a00000000000000000000002';
+  /** Fetched at 06:00 on 21 Oct on this phone; recorded at 10:20. */
+  const fetchedAt = new Date(2026, 9, 21, 6, 0).toISOString();
+  const payment = (metadata: Record<string, unknown> = {}) =>
+    parseActivityPage(
+      {
+        status: 200,
+        data: {
+          activities: [
+            {
+              _id: hex('e', 900),
+              group: groupId,
+              type: 'settlement_recorded',
+              actor: { _id: you, name: 'Alex Rivera' },
+              createdAt: new Date(2026, 9, 21, 10, 20).toISOString(),
+              metadata: {
+                settlementId: 'f00000000000000000000001',
+                amount: 20,
+                amountMinor: 2000,
+                currency: 'EUR',
+                paidBy: you,
+                paidTo: sam,
+                paidByName: 'Alex Rivera',
+                paidToName: 'Sam Chen',
+                amountPaidMinor: 185000,
+                paidCurrency: 'INR',
+                appliedRate: '92.5',
+                rateKind: 'custom',
+                suggestedRate: '92.1',
+                rateSource: 'frankfurter',
+                rateAsOf: '2026-10-20',
+                rateFetchedAt: fetchedAt,
+                pairDebtBeforeMinor: -2000,
+                pairDebtAfterMinor: 0,
+                ...metadata,
+              },
+            },
+          ],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        },
+      },
+      groupId,
+      1,
+    ).events[0];
+  const labelled = (root: ReactTestInstance, label: string) =>
+    root.findAll(
+      (node) => typeof node.type === 'string' && node.props.accessibilityLabel === label,
+    );
+
+  it('shows both amounts, the rate used beside the suggestion, and what it changed', () => {
+    const { root } = render({ state: activity({ selected: payment() }) });
+    const shown = text(root);
+    for (const words of [
+      'Payment',
+      'Paid',
+      '₹1,850.00',
+      'to clear €20.00, a Debt in EUR',
+      'Rate used',
+      '₹92.50 per €',
+      'Your rate',
+      'Suggested',
+      '₹92.10 per €',
+      'Frankfurter · rates of 20 Oct · fetched 21 Oct 06:00',
+      'Amount cleared',
+      '€20.00',
+      'Amount paid',
+      'Recorded',
+      'by you',
+      'What it changed',
+      'You and Sam in EUR:',
+      '−€20.00',
+      '€0.00',
+      'INR balances didn’t change. Only the Debt’s own currency moves.',
+      'The rate is kept as recorded. It never changes, even when rates move later.',
+    ])
+      expect(shown).toContain(words);
+    // Read aloud, the record says what happened in one line first.
+    expect(labelled(root, 'You paid Sam Chen ₹1,850.00 to clear €20.00')).toHaveLength(1);
+    // A Debt paid in another currency isn't the payment's old "You → Sam Chen" line.
+    expect(shown).not.toContain('recorded a payment');
+  });
+
+  it('links a second source’s attribution where its rate shows', () => {
+    const onOpenLink = vi.fn();
+    const { root } = render({
+      state: activity({ selected: payment({ rateSource: 'exchange-rate-api' }) }),
+      onOpenLink,
+    });
+    expect(text(root)).toContain('Rates of 20 Oct · fetched 21 Oct 06:00');
+    const [link] = labelled(root, 'Rates By Exchange Rate API');
+    expect(link?.props.accessibilityRole).toBe('link');
+    act(() => link!.props.onPress());
+    expect(onOpenLink).toHaveBeenCalledWith('https://www.exchangerate-api.com');
+  });
+
+  it('leaves out what an older record didn’t keep, and says when no rate was suggested', () => {
+    const { root } = render({
+      state: activity({
+        selected: payment({
+          rateKind: 'entered',
+          suggestedRate: undefined,
+          rateSource: undefined,
+          rateAsOf: undefined,
+          rateFetchedAt: undefined,
+          pairDebtBeforeMinor: undefined,
+          pairDebtAfterMinor: undefined,
+        }),
+      }),
+    });
+    const shown = text(root);
+    expect(shown).toContain('No suggestion');
+    expect(shown).not.toContain('per €Suggested');
+    expect(shown).not.toContain('You and Sam in EUR:');
+    expect(shown).toContain('INR balances didn’t change. Only the Debt’s own currency moves.');
+  });
+
+  it.each([
+    { width: 360, height: 640, fontScale: 1.3 },
+    { width: 360, height: 640, fontScale: 2 },
+  ])('reads in full, $width dp at $fontScale× text', (size) => {
+    setWindow(size);
+    render({ state: activity({ selected: payment() }) });
+    // The screen's content is inset 16dp on each side.
+    expect(
+      unreadText(screen!.toJSON() as ReactTestRendererJSON, size.fontScale, size.width - 32),
+    ).toEqual([]);
   });
 });

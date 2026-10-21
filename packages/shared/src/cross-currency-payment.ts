@@ -7,7 +7,7 @@
 import { format } from 'date-fns';
 import { z } from 'zod';
 import { readAmountEntry } from './amount-entry';
-import { formatCurrency, getCurrency, getCurrencyPrecision } from './currency';
+import { formatCurrency, getCurrency, getCurrencyPrecision, wholeUnit } from './currency';
 import { toMajorAmount } from './exact-money';
 import { crossCurrencySettlementReadShape } from './validators/settlement';
 import { memberLabel } from './member-label';
@@ -411,6 +411,81 @@ function signedMoney(minor: number, currency: string): string {
 }
 
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
+
+/** "€20.00": an amount the sheet names, in its currency's minor units. */
+const amountMoney = (minor: number, currency: string) =>
+  formatCurrency(toMajorAmount(Math.abs(minor), currency), currency);
+
+/** "rounded to the paisa", "in whole yen": how the amount paid is rounded. */
+export function paidRounding(currency: string): string {
+  if (getCurrencyPrecision(currency) === 0) return `in whole ${wholeUnit(currency) ?? currency}`;
+  if (currency === 'INR') return 'rounded to the paisa';
+  return `rounded to ${amountMoney(1, currency)}`;
+}
+
+/** What the amount cleared is of the Debt: all of it, part of it, or more. */
+export function clearedPart(
+  clearedMinor: number | null,
+  debtMinor: number | null,
+  currency: string,
+): string | null {
+  if (debtMinor === null || debtMinor <= 0) return null;
+  if (clearedMinor === null || clearedMinor === debtMinor) return 'the whole Debt';
+  if (clearedMinor < debtMinor) return `part of ${amountMoney(debtMinor, currency)}`;
+  return `more than the ${amountMoney(debtMinor, currency)} Debt`;
+}
+
+/** One side of a payment, as the sheet names them. */
+export interface PaymentSide {
+  isViewer: boolean;
+  name: string;
+}
+
+/**
+ * What a Debt paid in another currency clears, in the sheet's words (#727): the whole Debt, part
+ * of it with the rest still to pay, or more than it, with what that would leave owed the other
+ * way. `paidMinor` is null until the rate or the amount paid is entered.
+ */
+export function crossCurrencySummary({
+  clearedMinor,
+  debtMinor,
+  paidMinor,
+  currency,
+  paidCurrency,
+  payer,
+  payee,
+}: {
+  clearedMinor: number;
+  debtMinor: number;
+  paidMinor: number | null;
+  currency: string;
+  paidCurrency: string;
+  payer: PaymentSide;
+  payee: PaymentSide;
+}): { overpaid: string | null; clears: string } {
+  const payerName = firstName(payer.name);
+  const payeeName = firstName(payee.name);
+  const debt = `${payer.isViewer ? 'your' : `${payerName}’s`} ${amountMoney(debtMinor, currency)} Debt to ${payee.isViewer ? 'you' : payeeName}`;
+  const gets =
+    paidMinor === null
+      ? ''
+      : ` ${payee.isViewer ? 'You get' : `${payeeName} gets`} ${amountMoney(paidMinor, paidCurrency)}.`;
+  if (paidMinor === null)
+    return { overpaid: null, clears: `Clears ${debt} once you enter the rate or the amount paid.` };
+  if (clearedMinor < debtMinor)
+    return {
+      overpaid: null,
+      clears: `Clears ${amountMoney(clearedMinor, currency)} of ${debt}. ${amountMoney(debtMinor - clearedMinor, currency)} stays to pay.`,
+    };
+  if (clearedMinor === debtMinor) return { overpaid: null, clears: `Clears ${debt}.${gets}` };
+  const more = amountMoney(clearedMinor - debtMinor, currency);
+  const owes = payer.isViewer ? `you owe ${payeeName}` : `${payerName} owes you`;
+  const owedBack = payer.isViewer ? `${payeeName} would owe you` : `you would owe ${payerName}`;
+  return {
+    overpaid: `That’s ${more} more than ${owes} in ${currency}, so ${owedBack} ${more}.`,
+    clears: `Clears ${debt} and ${more} more.${gets}`,
+  };
+}
 
 /**
  * What a payment's card shows (#727, the board "Activity and a cross-currency Settlement"):
