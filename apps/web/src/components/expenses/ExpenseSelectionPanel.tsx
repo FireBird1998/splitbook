@@ -10,7 +10,13 @@ import IosShareOutlinedIcon from '@mui/icons-material/IosShareOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import MoneyText from '@/components/common/MoneyText';
 import { RADIUS } from '@/lib/theme/tokens';
-import { readStoredAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import { getCurrency } from '@splitbook/shared/currency';
+import {
+  readStoredAmountMinor,
+  readUnsupportedAmountMinor,
+  toMajorAmount,
+  unsupportedMajorAmount,
+} from '@splitbook/shared/exact-money';
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
 import { expensePayerSummary, listedExpensePosition } from '@splitbook/shared/expense-row';
 import type {
@@ -57,22 +63,31 @@ export function tagChangeSummary(results: readonly ExpenseTagChangeResult[], tag
     .join(' ');
 }
 
-/** Every amount the Expenses add up to, one per currency, in exact minor units. */
+/**
+ * Every amount the Expenses add up to, one per currency, in exact minor units. A currency
+ * Splitbook no longer supports adds its own, as stored, last (#810).
+ */
 function totals(expenses: readonly ExpenseRead[]) {
   const byCurrency = new Map<string, number>();
   for (const expense of expenses)
     byCurrency.set(
       expense.currency,
       (byCurrency.get(expense.currency) ?? 0) +
-        readStoredAmountMinor({
-          currency: expense.currency,
-          moneyVersion: expense.moneyVersion,
-          amount: expense.amount,
-          amountMinor: expense.amountMinor,
-        }),
+        (getCurrency(expense.currency)
+          ? readStoredAmountMinor({
+              currency: expense.currency,
+              moneyVersion: expense.moneyVersion,
+              amount: expense.amount,
+              amountMinor: expense.amountMinor,
+            })
+          : readUnsupportedAmountMinor(expense)),
     );
-  return [...byCurrency];
+  return [...byCurrency].sort(([a], [b]) => Number(!getCurrency(a)) - Number(!getCurrency(b)));
 }
+
+/** Minor units in major units, as stored for a currency Splitbook no longer supports (#810). */
+const major = (minor: number, currency: string) =>
+  getCurrency(currency) ? toMajorAmount(minor, currency) : unsupportedMajorAmount(minor);
 
 /** What the Expenses mean for the member together, per currency: lent or owe, exactly. */
 function positions(expenses: readonly ExpenseRead[], userId: string) {
@@ -207,7 +222,7 @@ export default function ExpenseSelectionPanel({
             <Box component="span" key={currency}>
               {index > 0 ? ' + ' : ''}
               <MoneyText
-                amount={toMajorAmount(minor, currency)}
+                amount={major(minor, currency)}
                 currency={currency}
                 tone="neutral"
                 sx={{ fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 'inherit' }}

@@ -133,6 +133,25 @@ describe('trip day headings', () => {
   });
 });
 
+// #810: a currency Splitbook no longer supports has no precision to add it up in, so a day's
+// total leaves it out, never converted; its row still shows on that day.
+it('trip day headings leave a currency Splitbook no longer supports out of a day’s total (#810)', () => {
+  const marks = expense('2026-09-17T00:00:00.000Z', 'Old Berlin cab', 4000, {
+    currency: 'DEM',
+    amount: 40,
+    amountMinor: undefined,
+    moneyVersion: undefined,
+    paidBy: [{ user: ALEX, amount: 40 }],
+    splitBetween: [
+      { user: ALEX, amount: 20 },
+      { user: SAM, amount: 20 },
+    ],
+  });
+  const [day] = [...tripDayHeadings([marks, EXPENSES[4]], { ...TRIP, timeZone: 'UTC' }).values()];
+  expect(day.totals).toEqual([{ currency: 'INR', amountMinor: 64000, amount: 640 }]);
+  expect(day.expenseCount).toBe(2);
+});
+
 describe('the Expenses table by trip day', () => {
   function render(
     dayHeadings: ReturnType<typeof tripDayHeadings> | null,

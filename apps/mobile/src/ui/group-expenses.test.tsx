@@ -282,6 +282,22 @@ describe('Expenses summary', () => {
     expect(shown).toContain(`Updated ${refreshedLabel(at)}`);
   });
 
+  // #810: Spent's line in a currency Splitbook no longer supports comes last, as the read sends it.
+  it('says a currency Splitbook no longer supports last among the other currencies', () => {
+    const { root } = view({
+      state: financial({
+        summary: summary({
+          totalsByCurrency: [
+            { currency: 'INR', totalAmount: 18420 },
+            { currency: 'EUR', totalAmount: 42.5 },
+            { currency: 'DEM', totalAmount: 40 },
+          ],
+        }),
+      }),
+    });
+    expect(text(root)).toContain('Also €42.50 · DEM\u00a040.00 in other currencies');
+  });
+
   it('keeps other currencies out of the member’s figures, and says so', () => {
     const { root } = view({
       state: financial({
@@ -559,6 +575,33 @@ describe('Expense rows', () => {
     expect(shown).toContain('you owe ₹953.33');
     press(root, 'Electricity bill, ₹2,860.00, Sam Chen paid, Utilities, you owe ₹953.33');
     expect(onOpenExpense).toHaveBeenCalledWith(electricity.id);
+  });
+
+  // #810: an Expense in a currency Splitbook no longer supports shows its stored amount with
+  // its code, as Activity does (#779), and no position: there is nothing exact to say.
+  it('show an Expense in a currency Splitbook no longer supports with its code, and no position', () => {
+    const marks: MobileExpense = {
+      ...expense(
+        'e00000000000000000000009',
+        'Old Berlin rent',
+        30,
+        [[you, 4000]],
+        [
+          [you, 2000],
+          [sam, 2000],
+        ],
+        'Household',
+      ),
+      currency: 'DEM',
+    };
+    const { root } = view({
+      state: financial({
+        data: [marks],
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+      }),
+    });
+    // Intl writes a code-prefixed amount with a no-break space.
+    expect(buttons(root)).toContain('Old Berlin rent, DEM\u00a040.00, You paid, Household');
   });
 
   it('open on a tap or a screen reader’s activate, never on a drag, in a Month too short to scroll (#665)', () => {

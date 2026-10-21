@@ -3,12 +3,14 @@ import {
   assertStoredExpenseMoney,
   parseAmountMinor,
   readStoredAmountMinor,
+  readUnsupportedAmountMinor,
   toMajorAmount,
+  unsupportedMajorAmount,
 } from '@splitbook/shared/exact-money';
 import {
-  ExpensePageReadError,
   parseExpensePageResponse,
   type ExpenseAllocationRead,
+  type ExpensePageRead,
 } from '@splitbook/shared/expense-page-read';
 import {
   GroupBalancesReadError,
@@ -38,6 +40,7 @@ function assertCurrencies(codes: string[], Failure: new () => Error) {
   if (codes.some((code) => getCurrency(code) === undefined)) throw new Failure();
 }
 const exact = (value: number, code: string) => toMajorAmount(parseAmountMinor(value, code), code);
+
 function personData(value: FinancialPersonRead): FinancialPerson {
   if (value === null) return { id: null, name: 'Former member', image: null };
   if (typeof value === 'string') return { id: value, name: 'Former member', image: null };
@@ -64,19 +67,42 @@ export function parseGroupBalances(value: unknown): GroupCurrencyBalance[] {
   }));
 }
 
+/** An Expense in a currency Splitbook no longer supports, as stored (#810). */
+function storedExpense(row: ExpensePageRead['expenses'][number]): MobileExpense {
+  const allocation = (item: ExpenseAllocationRead) => ({
+    user: personData(item.user),
+    amountMinor: readUnsupportedAmountMinor({ ...item, moneyVersion: row.moneyVersion }),
+    amount: item.amount,
+  });
+  return {
+    id: row._id,
+    groupId: row.group,
+    description: row.description,
+    currency: row.currency,
+    amount: row.amount,
+    amountMinor: readUnsupportedAmountMinor(row),
+    date: new Date(row.date),
+    createdAt: new Date(row.createdAt),
+    updatedAt: new Date(row.updatedAt),
+    category: row.category,
+    tag: row.tag ?? '',
+    ...(row.preparedBy ? { preparedBy: row.preparedBy } : {}),
+    tagId: row.tagId ?? null,
+    paidBy: row.paidBy.map(allocation),
+    splitBetween: row.splitBetween.map(allocation),
+    splitMethod: row.splitMethod,
+  };
+}
+
 export function parseExpensePage(value: unknown, groupId: string, defaultCurrency: string) {
   const body = parseExpensePageResponse(value);
-  assertCurrencies(
-    [
-      ...body.expenses.map((row) => row.currency),
-      ...body.summary.totalsByCurrency.map((row) => row.currency),
-    ],
-    ExpensePageReadError,
-  );
+  // An Expense in a currency Splitbook no longer supports is read as stored, as Activity reads
+  // such money since #779, and so is Spent's line for it, which the server sends last (#810).
   if (body.pagination.limit !== PAGE_SIZE) throw new Error('Unexpected Expense page size');
   if (body.summary.count !== body.pagination.total) throw new Error('Inconsistent expense count');
   const expenses: MobileExpense[] = body.expenses.map((row) => {
     if (row.group !== groupId) throw new Error('Unexpected Expense Group');
+    if (!getCurrency(row.currency)) return storedExpense(row);
     // Populated former members can be null. Validate allocation amounts with
     // unique placeholders while keeping their unavailable identities honest in UI.
     assertStoredExpenseMoney({
@@ -131,7 +157,9 @@ export function parseExpensePage(value: unknown, groupId: string, defaultCurrenc
       count: body.summary.count,
       totalsByCurrency: body.summary.totalsByCurrency.map((row) => ({
         currency: row.currency,
-        totalAmount: exact(row.totalAmount, row.currency),
+        totalAmount: getCurrency(row.currency)
+          ? exact(row.totalAmount, row.currency)
+          : unsupportedMajorAmount(readUnsupportedAmountMinor({ amount: row.totalAmount })),
       })),
       userOwes: exact(body.summary.userOwes, defaultCurrency),
       userGetsBack: exact(body.summary.userGetsBack, defaultCurrency),

@@ -273,6 +273,33 @@ describe('the selection panel (#610)', () => {
     expect(shown()).toContain('Your position on theseyou lent₹86.99');
   });
 
+  // #810: a currency Splitbook no longer supports adds its own line to the total, last, as
+  // stored and never converted; the position leaves it out.
+  it('adds an Expense in a currency Splitbook no longer supports to their total as its own line', () => {
+    const marks = {
+      ...GROCERIES,
+      _id: 'e00000000000000000000009',
+      description: 'Old Berlin rent',
+      currency: 'DEM',
+      amount: 40,
+      amountMinor: undefined,
+      moneyVersion: undefined,
+      paidBy: [{ user: ALEX, amount: 40 }],
+      splitBetween: [
+        { user: ALEX, amount: 20 },
+        { user: SAM, amount: 20 },
+      ],
+    } as ExpenseRead;
+    panel([GROCERIES, marks]);
+    expect(shown()).toMatch(/2 selected · ₹1,240\.50 \+ DEM\s40\.00/);
+    expect(shown()).toContain('Old Berlin rent');
+    expect(shown()).toContain('DEM 40.00');
+    expect(shown()).toContain('Your position on theseyou lent₹827.00');
+    // Selected above the rupee one, it still comes last.
+    panel([marks, GROCERIES]);
+    expect(shown()).toMatch(/2 selected · ₹1,240\.50 \+ DEM\s40\.00/);
+  });
+
   it('offers only the Group’s active Tags to move them to', async () => {
     panel([GROCERIES]);
     await press('Change Tag');

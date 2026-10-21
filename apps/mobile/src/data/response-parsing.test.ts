@@ -178,6 +178,47 @@ describe('parseExpensePage', () => {
     expect(page.summary.byMember).toStrictEqual([]);
   });
 
+  // #810: stored money outlives today's currency list, as Activity reads it since #779. A row in
+  // DEM is read as stored, in 2 places as Activity shows such money, never checked or converted,
+  // and so is Spent's DEM line, which the server sends last.
+  it('reads an Expense in a currency Splitbook no longer supports as stored (#810)', () => {
+    const body = clone(expensePage);
+    body.data.expenses.push({
+      ...expense,
+      _id: 'c00000000000000000000009',
+      description: 'Old Berlin rent',
+      currency: 'DEM',
+      amount: 40,
+      amountMinor: undefined,
+      moneyVersion: undefined,
+      paidBy: [{ user: person, amount: 40, amountMinor: undefined }],
+      splitBetween: [
+        { user: person, amount: 20, amountMinor: undefined },
+        { user: null, amount: 20, amountMinor: undefined },
+      ],
+    } as unknown as typeof expense);
+    Object.assign(body.data.pagination, { total: 2 });
+    Object.assign(body.data.summary, { count: 2 });
+    body.data.summary.totalsByCurrency.push({ currency: 'DEM', totalAmount: 40 });
+    const page = parseExpensePage(body, groupId, 'INR');
+    expect(page.expenses[1]).toMatchObject({
+      description: 'Old Berlin rent',
+      currency: 'DEM',
+      amount: 40,
+      amountMinor: 4000,
+      paidBy: [{ amount: 40, amountMinor: 4000 }],
+      splitBetween: [
+        { amount: 20, amountMinor: 2000 },
+        { user: { id: null, name: 'Former member', image: null }, amount: 20, amountMinor: 2000 },
+      ],
+    });
+    // Spent's DEM line, last, as stored.
+    expect(page.summary.totalsByCurrency).toStrictEqual([
+      { currency: 'INR', totalAmount: 10 },
+      { currency: 'DEM', totalAmount: 40 },
+    ]);
+  });
+
   it.each([
     ['a 50-row page', (body: typeof expensePage) => (body.data.pagination.limit = 50)],
     ['a 1-row page', (body: typeof expensePage) => (body.data.pagination.limit = 1)],
@@ -188,14 +229,6 @@ describe('parseExpensePage', () => {
     [
       'an Expense of another Group',
       (body: typeof expensePage) => (body.data.expenses[0].group = otherGroup),
-    ],
-    [
-      'a historical Expense currency',
-      (body: typeof expensePage) => (body.data.expenses[0].currency = 'DEM'),
-    ],
-    [
-      'a historical total currency',
-      (body: typeof expensePage) => (body.data.summary.totalsByCurrency[0].currency = 'DEM'),
     ],
     [
       'an inexact total',

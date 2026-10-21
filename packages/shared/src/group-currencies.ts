@@ -68,9 +68,12 @@ export function groupCurrencies(group: GroupCurrencyList): string[] {
 export function inGroupCurrencyOrder(group: GroupCurrencyList, currencies: Iterable<string>) {
   const given = new Set(currencies);
   const listed = groupCurrencies(group);
+  const others = [...given].filter((code) => !listed.includes(code)).sort();
+  // One Splitbook no longer supports, such as DEM, comes last of all (#810).
   return [
     ...listed.filter((code) => given.has(code)),
-    ...[...given].filter((code) => !listed.includes(code)).sort(),
+    ...others.filter((code) => getCurrency(code)),
+    ...others.filter((code) => !getCurrency(code)),
   ];
 }
 

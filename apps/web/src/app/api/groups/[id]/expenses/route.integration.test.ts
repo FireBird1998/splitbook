@@ -486,6 +486,108 @@ describe('the count of Expenses recurring Expenses added', () => {
   });
 });
 
+// #810: stored money outlives today's currency list, as Activity reads it since #779. A Group
+// holding an Expense in DEM, which Splitbook no longer supports, still reads: the Expense is
+// listed as stored, Spent has a DEM line of its own, and no position includes it. Nothing is
+// converted.
+describe('an Expense in a currency Splitbook no longer supports (#810)', () => {
+  /** A legacy row in Deutsche Marks, as an old database holds it: Alice paid, Bob and she share. */
+  async function berlinRent(fixture: Fixture) {
+    await Expense.collection.insertOne({
+      group: new mongoose.Types.ObjectId(fixture.groupId),
+      description: 'Old Berlin rent',
+      amount: 40,
+      currency: 'DEM',
+      category: 'housing',
+      date: new Date(2026, 8, 15, 12),
+      paidBy: [{ user: new mongoose.Types.ObjectId(alice), amount: 40 }],
+      splitMethod: 'equal',
+      splitBetween: [
+        { user: new mongoose.Types.ObjectId(alice), amount: 20 },
+        { user: new mongoose.Types.ObjectId(bob), amount: 20 },
+      ],
+      tag: 'Household',
+      tagId: new mongoose.Types.ObjectId(fixture.tagIds.Household),
+      createdBy: new mongoose.Types.ObjectId(alice),
+      isDeleted: false,
+      createdAt: new Date(2026, 8, 15, 12),
+      updatedAt: new Date(2026, 8, 15, 12),
+    });
+  }
+
+  it('gives each currency Splitbook no longer supports its own Spent line, alphabetically, last', async () => {
+    const fixture = await household();
+    // Written first, the francs still come after the marks.
+    await Expense.collection.insertOne({
+      group: new mongoose.Types.ObjectId(fixture.groupId),
+      description: 'Old Paris taxi',
+      amount: 12.5,
+      currency: 'FRF',
+      category: 'transport',
+      date: new Date(2026, 8, 16, 12),
+      paidBy: [{ user: new mongoose.Types.ObjectId(alice), amount: 12.5 }],
+      splitMethod: 'equal',
+      splitBetween: [{ user: new mongoose.Types.ObjectId(alice), amount: 12.5 }],
+      tag: 'Household',
+      tagId: new mongoose.Types.ObjectId(fixture.tagIds.Household),
+      createdBy: new mongoose.Types.ObjectId(alice),
+      isDeleted: false,
+      createdAt: new Date(2026, 8, 16, 12),
+      updatedAt: new Date(2026, 8, 16, 12),
+    });
+    await berlinRent(fixture);
+    const { status, body } = await read(fixture.groupId, '?page=1&limit=20');
+    expect(status).toBe(200);
+    expect(
+      body.data.summary.totalsByCurrency.map((row: { currency: string }) => row.currency),
+    ).toEqual(['INR', 'DEM', 'FRF']);
+    expect(body.data.summary.totalsByCurrency.slice(1)).toEqual([
+      { currency: 'DEM', totalAmount: 40 },
+      { currency: 'FRF', totalAmount: 12.5 },
+    ]);
+  });
+
+  it.each([
+    ['the first page', '?page=1&limit=20&includeMemberBreakdown=1'],
+    ['a page of two', '?page=1&limit=2&includeMemberBreakdown=1'],
+    [
+      'each currency’s position',
+      '?page=1&limit=20&includeMemberBreakdown=1&includeUserByCurrency=1',
+    ],
+  ])('reads %s with it listed as stored, and the INR figures as they were', async (_, query) => {
+    const fixture = await household();
+    const before = await read(fixture.groupId, query);
+    expect(before.status).toBe(200);
+    await berlinRent(fixture);
+    const { status, body } = await read(fixture.groupId, query);
+    expect(status).toBe(200);
+    // The shared decoder both apps use reads it too.
+    expect(() => parseExpensePageResponse(body)).not.toThrow();
+    // Spent gains its own DEM line, last, as stored; every position stays as it was.
+    const { count, totalsByCurrency, ...figures } = body.data.summary;
+    const {
+      count: countBefore,
+      totalsByCurrency: totalsBefore,
+      ...figuresBefore
+    } = before.body.data.summary;
+    expect(figures).toEqual(figuresBefore);
+    expect(totalsByCurrency).toEqual([...totalsBefore, { currency: 'DEM', totalAmount: 40 }]);
+    expect(count).toBe(countBefore + 1);
+    expect(body.data.pagination.total).toBe(before.body.data.pagination.total + 1);
+    const all = await read(fixture.groupId, '?page=1&limit=20');
+    expect(
+      all.body.data.expenses.find(
+        (expense: { description: string }) => expense.description === 'Old Berlin rent',
+      ),
+    ).toMatchObject({
+      currency: 'DEM',
+      amount: 40,
+      paidBy: [{ amount: 40 }],
+      splitBetween: [{ amount: 20 }, { amount: 20 }],
+    });
+  });
+});
+
 describe('who may read', () => {
   it('refuses someone outside the Group, and a signed-out caller, before any filter is read', async () => {
     const fixture = await household();

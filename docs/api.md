@@ -1065,6 +1065,18 @@ requests Android and the web made with answers recorded before #310):
 page. `byMember` appears only when `includeMemberBreakdown=1`; `net` is
 `share - paid`, so positive means under-contributed for the window.
 
+**A currency Splitbook no longer supports (#810).** Stored money outlives today's
+currency list, as in Activity (#779). An Expense in such a currency, such as a
+legacy row in `DEM`, is listed with its stored `amount`, `currency` and
+allocations, unchecked and never converted. It counts in `count` and
+`pagination.total`, and Spent includes it as its own line: `totalsByCurrency`
+ends with one entry per such currency, summed from the stored minor units at 2
+places (`readUnsupportedAmountMinor`), after the Group's currencies and any it
+no longer lists, alphabetically. Positions and per-currency views don't include it: it stays
+out of `totalAmount`, `userOwes`, `userGetsBack`, `userByCurrency` and
+`byMember`. The apps show its amount with its code (`DEM 40.00`), last in Spent,
+and no position.
+
 ### GET /api/groups/[id]/expenses/check-duplicate
 
 **Query params:** `?description=...&amount=...&date=...&excludeId=...`

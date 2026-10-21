@@ -18,6 +18,7 @@ import {
   sumMinorAmounts,
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
+import { getCurrency } from '@splitbook/shared/currency';
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
 import { dayKeyInZone, type Instant } from '@splitbook/shared/zoned-calendar';
 import { tripDayName } from '@/components/trip-summary/trip-days';
@@ -98,16 +99,20 @@ export function tripDayHeadings(
       current = { heading, totals: new Map() };
       headings.set(expense._id, heading);
     }
-    const minor = readStoredAmountMinor({
-      amount: expense.amount,
-      amountMinor: expense.amountMinor,
-      currency: expense.currency,
-      moneyVersion: expense.moneyVersion,
-    });
-    current.totals.set(
-      expense.currency,
-      sumMinorAmounts([current.totals.get(expense.currency) ?? 0, minor]),
-    );
+    // A currency Splitbook no longer supports has no precision to total it in: the day's total
+    // leaves it out, never converted, and its row still shows (#810).
+    if (getCurrency(expense.currency)) {
+      const minor = readStoredAmountMinor({
+        amount: expense.amount,
+        amountMinor: expense.amountMinor,
+        currency: expense.currency,
+        moneyVersion: expense.moneyVersion,
+      });
+      current.totals.set(
+        expense.currency,
+        sumMinorAmounts([current.totals.get(expense.currency) ?? 0, minor]),
+      );
+    }
     current.heading.expenseCount += 1;
   }
   close();
