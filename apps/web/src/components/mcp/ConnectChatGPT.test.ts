@@ -8,13 +8,13 @@ import ConnectChatGPT from './ConnectChatGPT';
 
 /* The Connect ChatGPT guide, rendered to static markup. */
 
-const guide = () =>
+const guide = (canPrepare = true) =>
   text(
     renderToStaticMarkup(
       createElement(
         ThemeProvider,
         { theme: createAppTheme('light') },
-        createElement(ConnectChatGPT, { resource: 'https://splitbook.example/mcp' }),
+        createElement(ConnectChatGPT, { resource: 'https://splitbook.example/mcp', canPrepare }),
       ),
     ),
   );
@@ -38,5 +38,11 @@ describe('the Connect ChatGPT guide', () => {
     expect(shown).not.toMatch(/private Drafts?/i);
     // Members choose the Groups since Excluded Groups (#617).
     expect(shown).not.toContain('All current and future Groups');
+  });
+
+  it('calls it To review access where it is offered, in the Glossary’s words (#619)', () => {
+    expect(guide()).toContain('leave To review access off');
+    expect(guide()).not.toMatch(/Draft access/);
+    expect(guide(false)).not.toContain('To review access');
   });
 });

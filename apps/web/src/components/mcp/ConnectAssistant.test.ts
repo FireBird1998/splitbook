@@ -14,8 +14,11 @@ import ConnectionsSetting from './ConnectionsSetting';
 const resource = 'https://splitbook.example/api/mcp';
 const markup = (element: ReactElement) =>
   renderToStaticMarkup(createElement(ThemeProvider, { theme: createAppTheme('light') }, element));
-const connect = (assistant?: string, server: string | null = resource) =>
-  markup(createElement(ConnectAssistant, { resource: server, assistant }));
+const connect = (assistant?: string, server: string | null = resource, canPrepare = true) =>
+  markup(createElement(ConnectAssistant, { resource: server, assistant, canPrepare }));
+/** The opening tag of the link to a choice, whatever order its attributes come in. */
+const choiceLink = (html: string, id: string) =>
+  new RegExp(`<a[^>]*href="/connect\\?assistant=${id}"[^>]*>`).exec(html)?.[0] ?? '';
 
 describe('Connect an assistant', () => {
   it('offers Claude, ChatGPT, Claude Code and Other MCP client, each linking to its setup (#619)', () => {
@@ -30,7 +33,8 @@ describe('Connect an assistant', () => {
         new RegExp(`<a[^>]*href="/connect\\?assistant=${id}"[^>]*>(?:<[^>]+>)*${label}<`),
       );
     // Claude is chosen until the member picks another.
-    expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/connect\?assistant=claude"/);
+    expect(choiceLink(html, 'claude')).toContain('aria-current="page"');
+    expect(choiceLink(html, 'chatgpt')).not.toContain('aria-current');
   });
 
   it.each([
@@ -88,6 +92,18 @@ describe('Connect an assistant', () => {
     expect(shown).toContain('Prepare Expenses for your To review, if you allow it');
     expect(shown).toContain('Only you save them.');
     for (const limit of ASSISTANT_CANNOT) expect(shown).toContain(limit);
+  });
+
+  it('leaves To review out where this deployment can’t prepare Expenses (#619)', () => {
+    for (const assistant of ['claude', 'chatgpt', 'claude-code', 'other'])
+      expect(text(connect(assistant, resource, false)), assistant).not.toContain('To review');
+    expect(text(connect('other'))).toContain('Prepare Expenses for your To review');
+  });
+
+  it('leads back to Connected assistants in Settings (#619)', () => {
+    expect(connect()).toMatch(
+      /<a[^>]*href="\/settings#connected-assistants"[^>]*>Connected assistants<\/a>/,
+    );
   });
 
   it('opens the picker from Settings’ Connect link (#619)', () => {

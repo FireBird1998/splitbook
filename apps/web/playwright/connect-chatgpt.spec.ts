@@ -54,6 +54,16 @@ test('Connect offers four assistants, each opening its setup (#619)', async ({ p
     if (enabled) await expect(page.getByText(step, { exact: true })).toBeVisible();
   }
   await expect(page.getByRole('heading', { name: 'What an assistant can do' })).toBeVisible();
+  if (process.env.MCP_GUIDE_TEST_MODE !== 'invalid') {
+    // Signing in from a choice comes back to that choice, not to another guide.
+    await page.goto('/connect?assistant=chatgpt');
+    await expect(
+      page.getByRole('link', { name: 'Sign in to check your connection' }),
+    ).toHaveAttribute(
+      'href',
+      `/login?${new URLSearchParams({ callbackUrl: '/connect?assistant=chatgpt' })}`,
+    );
+  }
   if (enabled) {
     await page.goto('/connect?assistant=claude-code');
     await expect(
