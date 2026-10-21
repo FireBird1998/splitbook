@@ -58,6 +58,7 @@ import {
 import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
+import { AssistantsSnackbar, ConnectedAssistants } from './src/ui/connected-assistants';
 import { ControllerExpenseEditor } from './src/ui/controller-expense-editor';
 import { useMobileSnapshot, sameSelection } from './src/ui/use-mobile-snapshot';
 import { scrollToShow } from './src/ui/scroll';
@@ -218,7 +219,8 @@ function SplitBook() {
   if (
     configurationReady &&
     !['restoring', 'error', 'sign-out-unconfirmed'].includes(state.auth.status) &&
-    (state.screen === 'invite' || (authenticated && ['settings', 'create'].includes(state.screen)))
+    (state.screen === 'invite' ||
+      (authenticated && ['settings', 'assistants', 'create'].includes(state.screen)))
   )
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -470,6 +472,7 @@ function TaskScreen() {
       invitation: snapshot.invitation,
       groups: snapshot.groups,
       offline: snapshot.offline,
+      assistants: snapshot.assistants,
       feedback: refreshFeedback(snapshot),
     }),
     (a, b) =>
@@ -521,19 +524,21 @@ function TaskScreen() {
         title={
           state.screen === 'settings'
             ? 'Settings'
-            : state.screen === 'create'
-              ? 'Create a Group'
-              : 'You’re invited'
+            : state.screen === 'assistants'
+              ? 'Connected assistants'
+              : state.screen === 'create'
+                ? 'Create a Group'
+                : 'You’re invited'
         }
         // Disabled while joining: the join finishes and opens its Group (#152).
         leading={{
           kind: 'back',
-          label: 'Back to Home',
+          label: state.screen === 'assistants' ? 'Back to Settings' : 'Back to Home',
           onPress: () => void controller.back(),
           disabled: state.invitation.status === 'joining',
         }}
         actions={
-          authenticated && state.screen !== 'settings' ? (
+          authenticated && !['settings', 'assistants'].includes(state.screen) ? (
             <IconButton
               icon="settings-outline"
               label="Settings"
@@ -577,7 +582,7 @@ function TaskScreen() {
           // A pull on New Group or an invitation checks the session, as the write it offers needs
           // (#286): on an invitation it then reads the invitation again.
           refreshControl={
-            ['create', 'invite'].includes(state.screen) ? (
+            ['create', 'invite', 'assistants'].includes(state.screen) ? (
               <RefreshControl
                 refreshing={feedback.pull}
                 onRefresh={() => void controller.refresh('pull')}
@@ -597,6 +602,8 @@ function TaskScreen() {
               preferenceMessage={preference.message}
               onRetryPreference={() => void appearance.restore()}
               environment={environment}
+              assistantsAvailable={state.assistants.available === true}
+              onOpenAssistants={controller.openAssistants}
               onOpenWeb={() => {
                 void Linking.openURL(new URL('/settings', environment.webOrigin).href).catch(() => {
                   Alert.alert('Couldn’t open web settings', 'Check your browser and try again.');
@@ -616,6 +623,14 @@ function TaskScreen() {
                   ],
                 )
               }
+            />
+          ) : state.screen === 'assistants' ? (
+            <ConnectedAssistants
+              state={state.assistants}
+              offline={state.offline.active}
+              onAsk={controller.askDisconnectAssistant}
+              onCancel={controller.cancelDisconnectAssistant}
+              onDisconnect={() => void controller.disconnectAssistant()}
             />
           ) : state.screen === 'create' ? (
             <GroupCreateForm
@@ -679,6 +694,12 @@ function TaskScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      {state.screen === 'assistants' && state.assistants.snackbar ? (
+        <AssistantsSnackbar
+          message={state.assistants.snackbar}
+          onDismiss={controller.dismissAssistantsSnackbar}
+        />
+      ) : null}
     </>
   );
 }

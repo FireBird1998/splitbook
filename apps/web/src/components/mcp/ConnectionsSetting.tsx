@@ -15,6 +15,7 @@ import { PRODUCT_NAME } from '@/lib/product';
 import { assistantAddress } from '@/lib/mcp/assistant-name';
 import {
   assistantGroupCount,
+  assistantGroupCountLabel,
   type AssistantGroupRef,
   connectedAssistantAccessLabel,
   type ConnectedAssistant,
@@ -29,13 +30,10 @@ import DisconnectDialog from './DisconnectDialog';
 import { lastUsedLabel } from './last-used';
 
 /** "2 of 3 Groups": the member's Groups an assistant reaches (#620). */
-function groupCountLabel(
+const groupCountLabel = (
   groups: readonly AssistantGroupRef[],
   excludedGroupIds?: readonly string[],
-) {
-  const { reached, of } = assistantGroupCount(groups, excludedGroupIds);
-  return `${reached} of ${of} ${of === 1 ? 'Group' : 'Groups'}`;
-}
+) => assistantGroupCountLabel(assistantGroupCount(groups, excludedGroupIds));
 
 /**
  * Settings' Connected assistants once they have loaded: the MCP URL to add, what assistants can
