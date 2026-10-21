@@ -2,8 +2,8 @@
 
 > **Status.** Groups support a main currency and up to 4 extra currencies. Expenses
 > can use any listed currency; balances and spending keep each currency separate.
-> Nothing in the ledger is converted. The remaining multi-currency payment,
-> export and Quick add work is listed below, not described as live behaviour.
+> Nothing in the ledger is converted. The remaining multi-currency
+> export, batch payment and Quick add work is listed below, not described as live behaviour.
 
 ## Overview
 
@@ -148,10 +148,14 @@ the member's own position: "You owe", "You’re owed" or "Settled up". It opens 
 the first currency the member is not settled in, or the main currency when all
 are settled.
 
-The Record payment UI still records in the main currency. Other currencies show
-"Payments are recorded in INR, the main currency." (using the Group's code).
-The Settlement API already accepts a listed extra currency for a payment in that
-same currency; paying in a different currency is not yet on main.
+On the web, Record payment can clear a Debt in its own currency or record a
+payment in another of the Group's listed currencies (#727). A Cross-currency
+Settlement keeps the amount cleared, amount paid and applied rate, together with
+any Suggested rate and its source and dates. Only the amount cleared changes
+balances, Debts and Suggested payments; the paid side is an immutable record.
+See [Cross-currency Settlements](../api.md#cross-currency-settlements-727) for the
+fields and rate rules. Android's corresponding payment sheet is separate work
+(#728).
 
 ## Currency in Spending
 
@@ -195,8 +199,10 @@ it". Older events without the metadata show no such detail.
 - Any member can add an extra currency. Only admins can remove one, with
   `CURRENCY_IN_USE` (409) while a live Expense, Settlement or active To review
   item uses it. The main currency cannot be removed.
-- Expense and Settlement saves require a listed currency, otherwise 422
-  `CURRENCY_MISMATCH`. Recurring Expenses still require the main currency.
+- Expense saves require a listed currency, otherwise 422 `CURRENCY_MISMATCH`.
+  A Settlement can also clear a historical currency still used by a live Expense
+  or Settlement. Its paying currency must be listed. Recurring Expenses still
+  require the main currency.
 - Restoring a deleted Expense may also use a historical currency still used by
   another live Expense or a Settlement. Otherwise it asks the member to add the
   currency back first.
@@ -206,7 +212,7 @@ it". Older events without the metadata show no such detail.
 ## Still to Land
 
 The rate service is live (see [rates](../api.md#suggested-exchange-rates)), but no rate converts
-balances, Debts or spending. Cross-currency payments (#727), multi-currency
-exports (#731), one request for several payments (#734), and the Quick add and
+balances, Debts or spending. Multi-currency exports (#731), one request for
+several payments (#734), and the Quick add and
 assistant/To review currency follow-ups (#732) are separate work. They are not
 part of the behaviour described above.
