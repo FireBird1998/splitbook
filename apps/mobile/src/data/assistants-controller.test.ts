@@ -38,6 +38,8 @@ function fixture() {
     assistantsOff: false,
     /** The optional Group-count read fails while connections still answer. */
     failGroups: false,
+    /** Split the server list into pages when a paging test asks for it. */
+    pageSize: null as number | null,
     /** The next Disconnect fails on the server. */
     failRevoke: false,
     /** The next read of the connection list waits for this, answering with the list as it was asked. */
@@ -94,13 +96,19 @@ function fixture() {
     if (path === '/api/groups') return json({ status: 200, data: [] });
     if (path === '/api/user/balances')
       return json({ status: 200, data: { buckets: [], groups: [] } });
-    if (path === connectionsPath) {
+    if (path === connectionsPath || path.startsWith(`${connectionsPath}?`)) {
       if (server.assistantsOff) return json({ message: 'Not found' }, 404);
       const connections = server.connections,
         hold = server.holdNextRead;
       server.holdNextRead = null;
       await hold;
-      return json({ resource: 'http://localhost:4157/api/mcp', connections, nextOffset: null });
+      const offset = Number(new URL(path, 'http://localhost:4157').searchParams.get('offset') ?? 0);
+      const end = server.pageSize === null ? connections.length : offset + server.pageSize;
+      return json({
+        resource: 'http://localhost:4157/api/mcp',
+        connections: connections.slice(offset, end),
+        nextOffset: end < connections.length ? end : null,
+      });
     }
     if (path === '/api/user/assistant-groups') {
       if (server.failGroups) return json({ message: 'Something went wrong' }, 500);
@@ -183,7 +191,8 @@ function fixture() {
           stores: [savedQueries, record(untrusted)],
         },
         fetch: async (url, init) => {
-          const path = new URL(url).pathname;
+          const address = new URL(url);
+          const path = address.pathname + address.search;
           requests.push(`${init.method ?? 'GET'} ${path}`);
           if (server.offline) throw new TypeError('Network request failed');
           return respond(path, init);
@@ -330,6 +339,24 @@ describe('Connected assistants on Android (#622)', () => {
     expect(f.requests).toContain('GET /api/user/assistant-groups');
     controller.openAssistants();
     expect(controller.getSnapshot().screen).toBe('assistants');
+    controller.dispose();
+  });
+
+  it('follows nextOffset and lists assistants from the second page (#775)', async () => {
+    const f = fixture();
+    f.server.pageSize = 1;
+    const controller = f.create();
+    await controller.signIn('alex');
+    const state = await openAssistants(controller);
+    expect(state()).toMatchObject({
+      available: true,
+      status: 'ready',
+      assistants: [
+        { id: helper.id, name: helper.name },
+        { id: reader.id, name: reader.name },
+      ],
+    });
+    expect(f.requests).toContain(`GET ${connectionsPath}?offset=1`);
     controller.dispose();
   });
 
