@@ -262,6 +262,13 @@ describe('the consent screen', () => {
     expect(shown).toContain('Not you?');
   });
 
+  it('names Not you as signing in with another account for assistive technology (#735)', () => {
+    const html = markup(createElement(OAuthFlow, { query: '', consent: true, account }));
+    expect(html).toMatch(
+      /<button[^>]*aria-label="Not you\? Sign in with another account"[^>]*>Not you\?<\/button>/,
+    );
+  });
+
   it('says Splitbook checks the member’s access on every request (#614)', () => {
     const shown = render(createElement(OAuthFlow, { query: '', consent: true, account }));
     expect(shown).toContain('Splitbook checks your access on every request.');

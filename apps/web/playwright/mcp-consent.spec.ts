@@ -308,7 +308,9 @@ test('Not you returns a different account to the same signed approval without gr
   await expect(page).toHaveURL(/\/mcp\/consent\?/);
   const original = new URL(page.url());
   await expect(page.getByText('Alex Rivera', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Not you?', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Not you? Sign in with another account', exact: true })
+    .click();
   // Wait for the new document to load before choosing a persona, not just its URL.
   await page.waitForURL(/\/login\?/);
   expect(new URL(page.url()).searchParams.get('callbackUrl')).toBe(
