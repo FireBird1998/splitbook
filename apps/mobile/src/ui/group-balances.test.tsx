@@ -18,6 +18,7 @@ import {
 import type { PendingPayment } from '../data/settlement';
 import { findHosts, flatten, largeTextWindows, unreadText } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
+import { hairSpace } from './compact';
 import { ThemeContext } from './theme';
 import {
   RecordPaymentSheet,
@@ -744,3 +745,227 @@ describe('Record payment’s amount at large text (#639)', () => {
     }
   });
 });
+
+// #725: Balances one currency at a time, as on the web (#724). Boards "Balances" and its 130%
+// version: a "Balances in" switch with the member's position on each tab, opening on the first
+// currency they aren't settled up in; each tab's balance, Suggested payments and Everyone are in
+// that currency only, and nothing is converted.
+describe('Balances, one currency at a time (#725)', () => {
+  const trip = (): MobileGroup => ({
+    ...group('trip'),
+    name: 'Lisbon & Tokyo',
+    alternateCurrencies: ['EUR', 'JPY'],
+  });
+  const tripInr = (owe = -1480): GroupCurrencyBalance => ({
+    currency: 'INR',
+    balances: [
+      { user: person(you, 'Alex Rivera'), balance: owe },
+      { user: person(sam, 'Sam Chen'), balance: 730 - owe },
+      { user: person(priya, 'Priya Shah'), balance: -730 },
+    ],
+    debts: [
+      ...(owe
+        ? [{ from: person(you, 'Alex Rivera'), to: person(sam, 'Sam Chen'), amount: -owe }]
+        : []),
+      { from: person(priya, 'Priya Shah'), to: person(sam, 'Sam Chen'), amount: 730 },
+    ],
+  });
+  const eur: GroupCurrencyBalance = {
+    currency: 'EUR',
+    balances: [
+      { user: person(you, 'Alex Rivera'), balance: -20 },
+      { user: person(sam, 'Sam Chen'), balance: 20 },
+    ],
+    debts: [{ from: person(you, 'Alex Rivera'), to: person(sam, 'Sam Chen'), amount: 20 }],
+  };
+  const jpy: GroupCurrencyBalance = {
+    currency: 'JPY',
+    balances: [
+      { user: person(you, 'Alex Rivera'), balance: 8400 },
+      { user: person(sam, 'Sam Chen'), balance: -8400 },
+    ],
+    debts: [{ from: person(sam, 'Sam Chen'), to: person(you, 'Alex Rivera'), amount: 8400 }],
+  };
+  /** As the server sends them: alphabetically, not in the Group's order. */
+  const buckets = (inrBucket = tripInr()) => [eur, inrBucket, jpy];
+  const element = (data: GroupCurrencyBalance[], onRecord = vi.fn()) => (
+    <GroupBalancesView
+      group={trip()}
+      currentUserId={you}
+      state={financial({ data })}
+      pending={null}
+      offline={false}
+      onRecord={onRecord}
+      onCheckPayment={vi.fn()}
+      onRefreshBalances={() => undefined}
+    />
+  );
+  const tablists = (root: ReactTestInstance) =>
+    root.findAll(
+      (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'tablist',
+    );
+  /** Each tab's spoken name, and whether it is the currency shown. */
+  const tabs = (root: ReactTestInstance) =>
+    tablists(root)
+      .flatMap((list) =>
+        list.findAll(
+          (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'tab',
+        ),
+      )
+      .map((tab) => [tab.props.accessibilityLabel, tab.props.accessibilityState?.selected]);
+  const choose = (root: ReactTestInstance, name: string) => {
+    const [tab] = labelled(root, name);
+    act(() => tab!.props.onPress());
+  };
+
+  it('shows a tab per currency in the Group’s order, each with the member’s position, the main currency marked', () => {
+    const root = render(element(buckets()));
+    expect(tablists(root).map((list) => list.props.accessibilityLabel)).toEqual(['Balances in']);
+    expect(tabs(root)).toEqual([
+      ['INR, main currency, you owe ₹1,480.00', true],
+      ['EUR, you owe €20.00', false],
+      ['JPY, you’re owed ¥8,400', false],
+    ]);
+    // Each tab's words keep a hair space to spare (#639).
+    expect(text(root).replaceAll(hairSpace, '')).toContain(
+      'INR · main−₹1,480.00EUR−€20.00JPY+¥8,400',
+    );
+  });
+
+  it('shows the main currency’s balance, payments and everyone while the member owes in it, and says nothing is converted', () => {
+    const onRecord = vi.fn();
+    const root = render(element(buckets(), onRecord));
+    const shown = text(root);
+    expect(shown).toContain('All-time balance · INR');
+    expect(labelled(root, 'You owe ₹1,480.00')).toHaveLength(2);
+    expect(shown).toContain('Suggested payments · INR');
+    expect(shown).toContain('Everyone · INR');
+    expect(labelled(root, 'Sam Chen gets back ₹2,210.00')).toHaveLength(1);
+    expect(shown).toContain('Each currency keeps its own balances. Nothing is converted.');
+    for (const other of ['EUR', 'JPY']) {
+      expect(shown).not.toContain(`All-time balance · ${other}`);
+      expect(shown).not.toContain(`Everyone · ${other}`);
+    }
+    act(() => labelled(root, 'Record your payment to Sam Chen')[0]!.props.onPress());
+    expect(onRecord).toHaveBeenCalledWith(you, sam, 'INR');
+  });
+
+  it('opens on the first currency the member isn’t settled up in, and on the main one when settled in all', () => {
+    const root = render(element(buckets(tripInr(0))));
+    expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe('EUR, you owe €20.00');
+    expect(tabs(root)[0]).toEqual(['INR, main currency, you’re settled up', false]);
+    expect(text(root)).toContain('All-time balance · EUR');
+    act(() => screen?.unmount());
+
+    const settled = (bucket: GroupCurrencyBalance): GroupCurrencyBalance => ({
+      ...bucket,
+      balances: bucket.balances.map((row) => ({ ...row, balance: 0 })),
+      debts: [],
+    });
+    const again = render(element([settled(eur), settled(tripInr(0)), settled(jpy)]));
+    expect(tabs(again).find(([, selected]) => selected)?.[0]).toBe(
+      'INR, main currency, you’re settled up',
+    );
+  });
+
+  it('shows another currency on its own, its payments listed and recorded in the main currency', () => {
+    const root = render(element(buckets()));
+    choose(root, 'JPY, you’re owed ¥8,400');
+    expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe('JPY, you’re owed ¥8,400');
+    const shown = text(root);
+    expect(shown).toContain('All-time balance · JPY');
+    expect(labelled(root, 'You’re owed ¥8,400')).toHaveLength(1);
+    expect(labelled(root, 'You get back ¥8,400')).toHaveLength(1);
+    expect(shown).toContain('Suggested payments · JPY');
+    expect(labelled(root, 'Sam Chen pays you, ¥8,400')).toHaveLength(1);
+    // Payments are recorded in the main currency until #727.
+    expect(labelled(root, 'Record Sam Chen’s payment to you')).toHaveLength(0);
+    expect(shown).toContain('Payments are recorded in INR, the main currency.');
+    expect(shown).not.toContain('Record one once it’s paid');
+    expect(shown).toContain('Everyone · JPY');
+    expect(labelled(root, 'Sam Chen owes ¥8,400')).toHaveLength(1);
+    expect(shown).not.toContain('All-time balance · INR');
+    expect(shown).not.toContain('₹2,210.00');
+  });
+
+  it('keeps the currency shown when the balances are read again, even once the member is settled up in it', () => {
+    const root = render(element(buckets()));
+    act(() => screen!.update(element(buckets(tripInr(0)))));
+    expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe(
+      'INR, main currency, you’re settled up',
+    );
+    expect(text(root)).toContain('All-time balance · INR');
+    expect(text(root)).toContain('Settled up');
+
+    choose(root, 'JPY, you’re owed ¥8,400');
+    act(() => screen!.update(element(buckets())));
+    expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe('JPY, you’re owed ¥8,400');
+  });
+
+  it('shows no switch and no note for a Group in one currency', () => {
+    const root = render(element([inr]));
+    expect(tablists(root)).toHaveLength(0);
+    const shown = text(root);
+    expect(shown).toContain('All-time balance · INR');
+    expect(shown).toContain('Everyone');
+    expect(shown).not.toContain('Everyone · INR');
+    expect(shown).not.toContain('Nothing is converted.');
+  });
+});
+
+// #725, board "Balances" at 130%: the tabs wrap onto more lines rather than clipping, and each
+// tab, its card and its rows read in full, up to a Group's five currencies.
+describe.each(['light', 'dark'] as const)(
+  'Balances’ currency switch at large text in %s (#725)',
+  (mode) => {
+    const person2 = (id: string, name: string) => ({ id, name, image: null });
+    const bucket = (currency: string, balance: number): GroupCurrencyBalance => ({
+      currency,
+      balances: [
+        { user: person2(you, 'Alex Rivera'), balance },
+        { user: person2(sam, 'Sam Chen'), balance: -balance },
+      ],
+      debts: [
+        balance < 0
+          ? { from: person2(you, 'Alex Rivera'), to: person2(sam, 'Sam Chen'), amount: -balance }
+          : { from: person2(sam, 'Sam Chen'), to: person2(you, 'Alex Rivera'), amount: balance },
+      ],
+    });
+    it.each(largeTextWindows.flatMap((size) => [3, 5].map((count) => ({ ...size, count }))))(
+      '$count currencies read in full, $width dp at $fontScale× text',
+      ({ count, ...size }) => {
+        setWindow(size);
+        const all = [
+          bucket('INR', -148_000.5),
+          bucket('EUR', -1_240.75),
+          bucket('JPY', 186_000),
+          bucket('USD', 2_000.25),
+          bucket('GBP', -310.4),
+        ].slice(0, count);
+        render(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <GroupBalancesView
+              group={{
+                ...group('trip'),
+                alternateCurrencies: ['EUR', 'JPY', 'USD', 'GBP'].slice(0, count - 1),
+              }}
+              currentUserId={you}
+              state={financial({ data: all })}
+              pending={null}
+              offline={false}
+              onRecord={vi.fn()}
+              onCheckPayment={vi.fn()}
+              onRefreshBalances={() => undefined}
+            />
+          </ThemeContext.Provider>,
+        );
+        const tree = screen!.toJSON() as ReactTestRendererJSON;
+        const [list] = findHosts(tree, (props) => props.accessibilityRole === 'tablist');
+        expect(list).toBeDefined();
+        expect(flatten(list!.props.style).flexWrap).toBe('wrap');
+        // The screen's content is inset 16dp on each side.
+        expect(unreadText(tree, size.fontScale, size.width - 32)).toEqual([]);
+      },
+    );
+  },
+);

@@ -142,6 +142,11 @@ function device() {
     failing: [] as string[],
     /** Alex has recorded the ₹30.00 owed to Sam: Balances are settled. */
     paid: false,
+    /**
+     * Lisbon Offsite also keeps euros and yen (#725): Alex owes Sam €20.00 there, and Sam owes
+     * Alex ¥8,400, besides the ₹30.00.
+     */
+    currencies: false,
   };
   /**
    * The saved copies can't be removed, as on a full or read-only disk; or the drafts can't be
@@ -216,11 +221,14 @@ function device() {
       )
     )
       return json({}, 500);
+    const extra = network.currencies && id === lisbon;
     if (path === `/api/groups/${id}`)
       return json({
         data: network.removed.includes(found._id)
           ? { ...found, members: found.members.filter(({ user }) => user.name !== alex.name) }
-          : found,
+          : extra
+            ? { ...found, alternateCurrencies: ['EUR', 'JPY'] }
+            : found,
         status: 200,
       });
     if (path === `/api/groups/${maple}/expenses/${expenseId}`)
@@ -270,6 +278,19 @@ function device() {
         status: 200,
         data: {
           byCurrency: [
+            // As the server sorts them: alphabetically.
+            ...(extra
+              ? [
+                  {
+                    currency: 'EUR',
+                    balances: [
+                      { user: { ...alex, _id: alex.id }, balance: -20 },
+                      { user: sam, balance: 20 },
+                    ],
+                    debts: [{ from: { ...alex, _id: alex.id }, to: sam, amount: 20 }],
+                  },
+                ]
+              : []),
             {
               currency: 'INR',
               balances: [
@@ -278,6 +299,18 @@ function device() {
               ],
               debts: network.paid ? [] : [{ from: { ...alex, _id: alex.id }, to: sam, amount: 30 }],
             },
+            ...(extra
+              ? [
+                  {
+                    currency: 'JPY',
+                    balances: [
+                      { user: { ...alex, _id: alex.id }, balance: 8400 },
+                      { user: sam, balance: -8400 },
+                    ],
+                    debts: [{ from: sam, to: { ...alex, _id: alex.id }, amount: 8400 }],
+                  },
+                ]
+              : []),
           ],
         },
       });
@@ -2324,6 +2357,51 @@ describe('A Group says what is true, without jumps (#219)', () => {
     storage.release();
     await settle(recording);
     expect(seen()).toContain(`All-time balance · INRUpdated ${refreshedLabel(phone.clock.now)}`);
+  });
+
+  // #725: Balances one currency at a time, through the real App and controller.
+  it('shows Balances one currency at a time, and stays on the one a payment settles Alex in (#725)', async () => {
+    const phone = device();
+    phone.network.currencies = true;
+    await signedIn(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[lisbon]);
+    await app.press('Balances');
+    const tabs = () =>
+      app
+        .hosts((p) => p.accessibilityRole === 'tablist' && p.accessibilityLabel === 'Balances in')
+        .flatMap((list) =>
+          list.findAll(
+            (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'tab',
+          ),
+        )
+        .map((tab) => [tab.props.accessibilityLabel, tab.props.accessibilityState?.selected]);
+    expect(tabs()).toEqual([
+      ['INR, main currency, you owe ₹30.00', true],
+      ['EUR, you owe €20.00', false],
+      ['JPY, you’re owed ¥8,400', false],
+    ]);
+    expect(seen()).toContain('All-time balance · INR');
+    expect(seen()).toContain('Everyone · INR');
+    expect(seen()).not.toContain('All-time balance · EUR');
+    expect(seen()).toContain('Each currency keeps its own balances. Nothing is converted.');
+
+    await app.press('JPY, you’re owed ¥8,400');
+    expect(seen()).toContain('All-time balance · JPY');
+    expect(seen()).toContain('Suggested payments · JPY');
+    expect(seen()).toContain('Payments are recorded in INR, the main currency.');
+    expect(app.button('Record Sam Chen’s payment to you')).toBeNull();
+
+    // Alex records the ₹30.00 owed to Sam: Balances stay on rupees, now settled up there, rather
+    // than moving to euros, the first currency Alex still owes in.
+    await app.press('INR, main currency, you owe ₹30.00');
+    await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+    await settle(controller().recordSettlement());
+    expect(app.text()).toContain('Payment recorded');
+    expect(tabs()[0]).toEqual(['INR, main currency, you’re settled up', true]);
+    expect(seen()).toContain('All-time balance · INR');
+    expect(seen()).toContain('Settled up');
   });
 
   it('keeps local Month labels on the controller clock across midnight', async () => {
