@@ -1505,6 +1505,8 @@ export function connectionTests(mongo = false) {
       ).toBe(403);
       expect((await refresh(refreshed.refresh_token)).ok).toBe(false);
     });
+    // Keep these last: freshConnection revokes every connection, invalidating the earlier
+    // tests' shared credentials. Each inactivity scenario establishes its own fresh grant.
     describe('inactivity expiry', () => {
       const day = 86_400_000;
       const signIn = async () => {

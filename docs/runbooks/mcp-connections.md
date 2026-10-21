@@ -8,14 +8,19 @@ Group context and the item tools list the Category choices. An assistant sets a 
 
 MCP is disabled by default. Enable it only on the deployment intended for connector testing:
 
-| Variable              | Staging                                                      | Production, after acceptance          |
-| --------------------- | ------------------------------------------------------------ | ------------------------------------- |
-| `MCP_ENABLED`         | `true`                                                       | `true`                                |
-| `MCP_RESOURCE_URL`    | `https://mcp.staging.splitbook.in/api/mcp`                   | `https://mcp.splitbook.in/api/mcp`    |
-| `NEXT_PUBLIC_APP_URL` | Canonical staging app HTTPS origin                           | Canonical production app HTTPS origin |
-| `AUTH_MODE`           | `google`                                                     | `google`                              |
-| `AUTH_ALLOWED_EMAILS` | Explicit staging testers                                     | Approved members                      |
-| `MCP_ALLOW_DCR`       | `false` by default; enable only for a host that requires DCR | Same tested policy                    |
+| Variable                   | Staging                                                                   | Production, after acceptance                               |
+| -------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `MCP_ENABLED`              | `true`                                                                    | `true`                                                     |
+| `MCP_RESOURCE_URL`         | `https://mcp.staging.splitbook.in/api/mcp`                                | `https://mcp.splitbook.in/api/mcp`                         |
+| `NEXT_PUBLIC_APP_URL`      | Canonical staging app HTTPS origin                                        | Canonical production app HTTPS origin                      |
+| `AUTH_MODE`                | `google`                                                                  | `google`                                                   |
+| `AUTH_ALLOWED_EMAILS`      | Explicit staging testers                                                  | Approved members                                           |
+| `MCP_ALLOW_DCR`            | `false` by default; enable only for a host that requires DCR              | Same tested policy                                         |
+| `MCP_DEPLOYMENT`           | `staging` only for shortened inactivity checks; otherwise unset           | Unset                                                      |
+| `MCP_IDLE_TIMEOUT_SECONDS` | Optional integer 120–7776000 with the staging marker; unset means 90 days | Unset; ignored when `MOBILE_APP_ENV=production`            |
+| `MOBILE_APP_ENV`           | `staging`                                                                 | `production`; prevents copied staging inactivity overrides |
+
+A Vercel environment-variable change requires a staging redeploy before it takes effect.
 
 The current staging app origin is `https://splitbook-staging.vercel.app`, retaining its existing Google callback configuration. The optional `https://staging.splitbook.in` app hostname has not been provisioned. Do not point a staging MCP hostname to the production data environment. Give staging its own MongoDB database, auth secret and Google OAuth callback configuration. Never copy production session or signing-key records into staging. MCP requires an explicit canonical app origin; localhost HTTP is permitted only outside production.
 
@@ -130,9 +135,13 @@ Effective lifetimes:
 
 For a shortened check on an isolated staging deployment, set **both**
 `MCP_DEPLOYMENT=staging` and `MCP_IDLE_TIMEOUT_SECONDS=120`. The timeout must be an integer
-from 1 through 7776000. Leave the deployment marker unset in production: timeout overrides
-are ignored without that explicit staging marker, including in a production-mode build.
-Remove both staging variables to restore 90 days. Do not change production settings for
+from 120 through 7776000: last use is written at most once a minute, so shorter timeouts
+could expire an active connection. Without a timeout, even staging keeps 90 days.
+Timeout overrides are ignored unless the marker is explicitly staging, and always ignored
+when `MOBILE_APP_ENV=production`, even if staging variables were copied. A malformed staging
+value logs a clear configuration error and fails closed at auth initialization; no MCP
+endpoints are enabled by that failed initialization. Remove both staging variables to restore
+90 days, then redeploy staging so the Vercel environment change takes effect. Do not change production settings for
 this check. These settings alter server enforcement, not just the displayed list.
 
 The moved-clock real-client suite runs against memory and MongoDB adapters. It covers a

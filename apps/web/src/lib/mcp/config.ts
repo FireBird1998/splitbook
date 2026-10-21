@@ -5,13 +5,17 @@ import type { AuthEnv } from '@/lib/auth/create-auth';
 export const MCP_REFRESH_TOKEN_SECONDS = 91 * 24 * 60 * 60;
 export const MCP_IDLE_SECONDS = 90 * 24 * 60 * 60;
 
-/** Production ignores test timeouts unless the deployment is explicitly staging. */
+/** Staging alone may shorten inactivity; the production deployment always keeps 90 days. */
 export function mcpIdleSeconds(env: AuthEnv): number {
-  if (env.MCP_DEPLOYMENT !== 'staging' || env.MCP_IDLE_TIMEOUT_SECONDS === undefined)
+  if (
+    env.MOBILE_APP_ENV === 'production' ||
+    env.MCP_DEPLOYMENT !== 'staging' ||
+    env.MCP_IDLE_TIMEOUT_SECONDS === undefined
+  )
     return MCP_IDLE_SECONDS;
   const seconds = Number(env.MCP_IDLE_TIMEOUT_SECONDS);
-  if (!Number.isInteger(seconds) || seconds <= 0 || seconds > MCP_IDLE_SECONDS)
-    throw new Error('MCP_IDLE_TIMEOUT_SECONDS must be an integer from 1 to 7776000');
+  if (!Number.isInteger(seconds) || seconds < 120 || seconds > MCP_IDLE_SECONDS)
+    throw new Error('MCP_IDLE_TIMEOUT_SECONDS must be an integer from 120 to 7776000');
   return seconds;
 }
 
