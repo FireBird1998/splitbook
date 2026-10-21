@@ -7,6 +7,7 @@ export const settlementBatchActivityShape = {
 };
 
 export interface SettlementBatchActivityEvent {
+  _id?: string;
   type: string;
   metadata?: Readonly<Record<string, unknown>> | null;
 }
@@ -20,14 +21,20 @@ const referenceSchema = z.object(settlementBatchActivityShape);
 /**
  * Preserve feed order, collecting each batch where its first supplied event appeared. Call
  * again with concatenated pages to complete a split batch; neither input nor prior results
- * change. Single events (including one-row batches) are complete items of their own.
+ * change. Single events (including one-row batches) are complete items of their own. An event
+ * that arrives twice, as when a newer event shifts the pages, counts once, where it first appeared.
  */
 export function groupSettlementBatches<T extends SettlementBatchActivityEvent>(
   events: readonly T[],
 ): SettlementBatchActivityItem<T>[] {
   const items: SettlementBatchActivityItem<T>[] = [];
   const batches = new Map<string, Extract<SettlementBatchActivityItem<T>, { kind: 'batch' }>>();
+  const seen = new Set<string>();
   for (const event of events) {
+    if (event._id !== undefined) {
+      if (seen.has(event._id)) continue;
+      seen.add(event._id);
+    }
     const reference =
       event.type === 'settlement_recorded' ? referenceSchema.safeParse(event.metadata) : null;
     const batchId = reference?.success ? reference.data.batchId : undefined;
