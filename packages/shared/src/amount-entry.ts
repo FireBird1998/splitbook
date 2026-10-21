@@ -102,6 +102,9 @@ export function ungroupAmountEntry(text: string): string {
   return thousandsGrouped.test(text.trim()) ? text.trim().replaceAll(',', '') : text;
 }
 
+/** An edit that typed no comma: the text the field showed before it, and whether it typed a digit. */
+export type AmountEdit = { from: string; typedDigits: boolean };
+
 /**
  * The amount being typed, grouped as it is typed (#773): its commas dropped and its whole part
  * grouped in threes, as `formatAmountEntry` groups it on blur, its decimals as typed and not
@@ -109,20 +112,22 @@ export function ungroupAmountEntry(text: string): string {
  * after "1," gives "15,842.50".
  *
  * Null where the text stays as typed, as blur leaves it: not an amount the currency takes even
- * without its commas, or with a comma that may be a decimal comma ("10,5", "10,50.", ",842", "1.5,00"),
- * so "10,5" is refused rather than read as 105. `keptFrom` is the text an edit that typed no digit
- * and no comma kept its commas from: a Backspace, Delete or Cut, or a point typed alone. Only when
- * that text was grouped is such a comma the field's own, as in "1,842" less its 8, "1,42", which
- * reads 142, or "1,250" with a point after the 12, "1,2.50", which reads 12.50.
+ * without its commas, or with a comma that may be a decimal comma ("10,5", "10,50.", ",842",
+ * "1.5,00"), so "10,5" is refused rather than read as 105. After an `edit` that typed no comma
+ * into grouped text, its commas are the field's own: one that typed no digit (a Backspace,
+ * Delete or Cut, or a point) regroups whatever it leaves, as "1,842" less its 8, "1,42", reads
+ * 142 and "1,250" with a point after the 12, "1,2.50", reads 12.50. One that typed digits does
+ * too, as a 9 over 842 in "1,842.50", "1,9.50", reads 19.50, unless it leaves "10,5": a comma and
+ * at most two digits ending the text may still be a decimal comma.
  */
 export function regroupAmountEntry(
   text: string,
   currency: string,
-  keptFrom?: string,
+  edit?: AmountEdit,
 ): string | null {
   const plain = text.replaceAll(',', '');
   if (!plainAmount.test(plain)) return null;
-  if (decimalComma.test(text) && !thousandsGrouped.test(keptFrom ?? '')) return null;
+  if (decimalComma.test(text) && !fieldsOwnCommas(text, edit)) return null;
   try {
     parseAmountMinor(plain, currency);
   } catch {
@@ -130,6 +135,12 @@ export function regroupAmountEntry(
   }
   const [whole = '', fraction] = plain.split('.');
   return fraction === undefined ? groupInThrees(whole) : `${groupInThrees(whole)}.${fraction}`;
+}
+
+/** Whether the commas in `text` are the ones the field grouped, kept by an `edit`. */
+function fieldsOwnCommas(text: string, edit: AmountEdit | undefined): boolean {
+  if (edit === undefined || !thousandsGrouped.test(edit.from)) return false;
+  return !edit.typedDigits || !/,\d{0,2}$/.test(text);
 }
 
 /** Display on blur only. Invalid input stays visible, and no amount is rounded or repaired. */

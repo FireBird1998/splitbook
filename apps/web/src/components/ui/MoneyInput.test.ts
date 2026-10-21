@@ -1,4 +1,4 @@
-import { createElement, createRef, useState, type ComponentType, type Ref } from 'react';
+import { createElement, createRef, useEffect, useState, type ComponentType, type Ref } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, expect, it, vi } from 'vitest';
 import { readAmountEntry } from '@splitbook/shared/amount-entry';
@@ -107,8 +107,12 @@ for (const [name, Field] of fields) {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     const changed = vi.fn();
     const caret = vi.fn();
+    let setOutside: (value: string) => void = () => {};
     function Form() {
       const [value, setValue] = useState(initial);
+      useEffect(() => {
+        setOutside = setValue;
+      }, []);
       return createElement(Field, {
         currency,
         value,
@@ -151,12 +155,14 @@ for (const [name, Field] of fields) {
         }),
       );
     /** Undo or Redo, as the browser asks for it before it would change the text. */
-    const history = async (inputType: 'historyUndo' | 'historyRedo') => {
-      const event = { inputType, cancelable: true, preventDefault: vi.fn() };
+    const history = async (inputType: 'historyUndo' | 'historyRedo', cancelable = true) => {
+      const event = { inputType, cancelable, preventDefault: vi.fn() };
       await act(async () => beforeInput?.(event));
       return event;
     };
-    return { input, changed, caret, edit, history };
+    /** The form sets the amount itself, as a Suggested payment does. */
+    const outside = (value: string) => act(async () => setOutside(value));
+    return { input, changed, caret, edit, history, outside };
   }
 
   it(`${name}: still hands the caller's inputRef the input, as Record payment focuses it`, async () => {
@@ -307,6 +313,9 @@ for (const [name, Field] of fields) {
       status: 'valid',
       amountMinor: 123500,
     });
+    // The 5 replaced what Redo would have put back, so Undo goes back to 123.
+    await history('historyUndo');
+    expect(input().props.value).toBe('123');
   });
 
   it(`${name}: Redo puts an undone edit back, the caret after it`, async () => {
@@ -342,6 +351,54 @@ for (const [name, Field] of fields) {
     await edit('', 0, 'historyUndo');
     expect(input().props.value).toBe('123');
     expect(changed).toHaveBeenLastCalledWith('123');
+  });
+
+  it(`${name}: an Undo the browser won't let go of steps once, as its change`, async () => {
+    const { input, edit, history } = await focused('EUR', '');
+    for (const typed of ['1', '12', '123', '1234']) await edit(typed);
+    const undo = await history('historyUndo', false);
+    expect(undo.preventDefault).not.toHaveBeenCalled();
+    expect(input().props.value).toBe('1,234');
+    await edit('', 0, 'historyUndo');
+    expect(input().props.value).toBe('123');
+  });
+
+  it(`${name}: after the form sets the amount itself, Undo doesn't bring back what was typed before`, async () => {
+    const { input, changed, edit, history, outside } = await focused('EUR', '');
+    for (const typed of ['1', '12']) await edit(typed);
+    await outside('500');
+    expect(input().props.value).toBe('500');
+    changed.mockClear();
+    await history('historyUndo');
+    expect(input().props.value).toBe('500');
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it(`${name}: an Undo while not focused changes nothing`, async () => {
+    const { input, changed, edit } = await focused('EUR', '');
+    for (const typed of ['1', '12']) await edit(typed);
+    await act(async () => input().props.onBlur({}));
+    changed.mockClear();
+    await edit('1', 1, 'historyUndo');
+    expect(input().props.value).toBe('12.00');
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it(`${name}: a comma typed after 1,250, then a 5, stays as typed and refused, never 12,505`, async () => {
+    const { input, changed, edit } = await focused('EUR', '');
+    for (const typed of ['1', '12', '125', '1250']) await edit(typed);
+    await edit('1,250,', 6, 'insertText', ',');
+    expect(input().props.value).toBe('1,250,');
+    await edit('1,250,5', 7, 'insertText', '5');
+    expect(input().props.value).toBe('1,250,5');
+    expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
+  });
+
+  it(`${name}: a 5 pasted over 500.00 selected in 10,500.00 stays as typed and refused, never 105`, async () => {
+    const { input, changed, edit } = await focused('EUR', '10500');
+    await edit('10,5', 4, 'insertFromPaste');
+    expect(input().props.value).toBe('10,5');
+    expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
   });
 
   it(`${name}: a whole yen amount regroups too, and INR groups as it does on blur`, async () => {

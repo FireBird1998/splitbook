@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type AmountEdit,
   formatAmountEntry,
   regroupAmountEntry,
   ungroupAmountEntry,
@@ -119,26 +120,30 @@ describe('grouped amount display (#773)', () => {
     expect(formatAmountEntry('1842.5', 'JPY')).toBe('1842.5');
   });
 
-  it.each<[string, string, string | undefined, string]>([
-    ['1,42.50', 'EUR', '1,842.50', '142.50'],
+  /** A Backspace, Delete or Cut, or a point, from `from`: no digit and no comma typed. */
+  const noDigit = (from: string): AmountEdit => ({ from, typedDigits: false });
+  /** Digits typed into `from`, as over a selection, and no comma. */
+  const digits = (from: string): AmountEdit => ({ from, typedDigits: true });
+
+  it.each<[string, string, AmountEdit | undefined, string]>([
+    ['1,42.50', 'EUR', noDigit('1,842.50'), '142.50'],
     ['1,5842.50', 'EUR', undefined, '15,842.50'],
     ['1,8425', 'INR', undefined, '18,425'],
     ['18,4250', 'INR', undefined, '184,250'],
     ['1842.5', 'EUR', undefined, '1,842.5'],
     ['1,842.', 'EUR', undefined, '1,842.'],
     ['.5', 'EUR', undefined, '.5'],
-    ['1,42', 'JPY', '1,842', '142'],
-    ['1,000,00', 'EUR', '1,000,000', '100,000'],
-    ['1,2.50', 'EUR', '1,250', '12.50'],
-    ['184,2.50', 'EUR', '184,250', '1,842.50'],
-  ])(
-    'regroups %s in %s, its commas kept from %s, as it is typed: %s',
-    (typed, currency, from, regrouped) => {
-      expect(regroupAmountEntry(typed, currency, from)).toBe(regrouped);
-    },
-  );
+    ['1,42', 'JPY', noDigit('1,842'), '142'],
+    ['1,000,00', 'EUR', noDigit('1,000,000'), '100,000'],
+    ['1,2.50', 'EUR', noDigit('1,250'), '12.50'],
+    ['184,2.50', 'EUR', noDigit('184,250'), '1,842.50'],
+    ['1,9.50', 'EUR', digits('1,842.50'), '19.50'],
+    ['1,9,000', 'EUR', digits('1,842,000'), '19,000'],
+  ])('regroups %s in %s after %j: %s', (typed, currency, edit, regrouped) => {
+    expect(regroupAmountEntry(typed, currency, edit)).toBe(regrouped);
+  });
 
-  it.each<[string, string, string | undefined]>([
+  it.each<[string, string, AmountEdit | undefined]>([
     ['10,', 'EUR', undefined],
     ['10,5', 'EUR', undefined],
     ['10,50', 'EUR', undefined],
@@ -156,19 +161,21 @@ describe('grouped amount display (#773)', () => {
     // A comma typed first groups nothing, so it may be a decimal comma too.
     [',842', 'EUR', undefined],
     [',842.50', 'EUR', undefined],
-    // Typing a 5 over 842 keeps no commas, and deleting from a refused "10,55" keeps none
-    // from grouped text, so the comma may still be a decimal comma.
+    // Digits typed after one of the field's commas, ending the text, may mean a decimal comma;
+    // and an edit of refused text keeps no commas of the field's.
+    ['10,5', 'EUR', digits('10,500.00')],
+    ['1,9', 'JPY', digits('1,842')],
+    ['10,5', 'EUR', noDigit('10,55')],
     ['1,5', 'EUR', undefined],
     ['1,5.50', 'EUR', undefined],
-    ['10,5', 'EUR', '10,55'],
     // What the currency refuses, blur leaves as typed too.
     ['1200.001', 'EUR', undefined],
     ['1842.5', 'JPY', undefined],
     ['', 'EUR', undefined],
     ['1e3', 'EUR', undefined],
     ['-5', 'EUR', undefined],
-  ])('leaves %s in %s, its commas kept from %s, as typed', (typed, currency, from) => {
-    expect(regroupAmountEntry(typed, currency, from)).toBeNull();
+  ])('leaves %s in %s after %j as typed', (typed, currency, edit) => {
+    expect(regroupAmountEntry(typed, currency, edit)).toBeNull();
   });
 
   it('shows zero shares and large exact values without float rounding', () => {
