@@ -450,6 +450,37 @@ describe('DELETE /api/groups/[id]/currencies/[code] (#721)', () => {
     expect(refused.body.use).toMatchObject({ expenses: { count: 1 }, settlements: 1 });
   });
 
+  it('refuses one used only to pay a Debt in another currency (#727)', async () => {
+    const groupId = await lisbonAndTokyo();
+    await addExpense(groupId, dinner('Fado night', 40, 'EUR'));
+    // Sam clears his €20.00 by paying ¥3,250, so yen holds no Expense, only that payment.
+    const paid = await callRoute(settlements.POST, {
+      method: 'POST',
+      path: `/api/groups/${groupId}/settlements`,
+      params: { id: groupId },
+      cookie: await signIn('sam'),
+      body: {
+        paidTo: alex,
+        amount: 20,
+        currency: 'EUR',
+        amountPaidMinor: 3250,
+        paidCurrency: 'JPY',
+        appliedRate: '162.5',
+        rateKind: 'entered',
+      },
+    });
+    expect(paid.status, JSON.stringify(paid.body)).toBe(201);
+
+    const refused = await remove(groupId, 'JPY');
+
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({
+      code: 'CURRENCY_IN_USE',
+      use: { expenses: { count: 0 }, settlements: 1 },
+    });
+    expect(await extras(groupId)).toEqual(['EUR', 'JPY', 'GBP']);
+  });
+
   it('keeps a deleted Expense from coming back in a currency the Group no longer lists', async () => {
     const groupId = await lisbonAndTokyo();
     const tea = await addExpense(groupId, dinner('Afternoon tea', 30, 'GBP'));
