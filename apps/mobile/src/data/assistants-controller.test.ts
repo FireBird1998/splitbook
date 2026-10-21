@@ -274,6 +274,20 @@ describe('Connected assistants on Android (#622)', () => {
     controller.dispose();
   });
 
+  it('says it disconnected once: leaving the screen ends the snackbar', async () => {
+    const f = fixture();
+    const { controller, state } = await readOnline(f);
+    controller.askDisconnectAssistant('c1');
+    await controller.disconnectAssistant();
+    expect(state().snackbar).toBe('Fictional Helper disconnected');
+    controller.back();
+    expect(controller.getSnapshot().screen).toBe('settings');
+    expect(state().snackbar).toBeNull();
+    controller.openAssistants();
+    expect(state().snackbar).toBeNull();
+    controller.dispose();
+  });
+
   it('keeps the assistant and says so when Disconnect fails', async () => {
     const f = fixture();
     const { controller, state } = await readOnline(f);
