@@ -16,7 +16,12 @@ import {
 const ALEX = 'a00000000000000000000001';
 const SAM = 'a00000000000000000000002';
 const PRIYA = 'a00000000000000000000003';
-const now = new Date('2026-10-21T12:00:00.000Z');
+// Local noon, so the day each row shows holds in every time zone the suite runs in.
+const localNoon = (day: string) => {
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(year, month - 1, date, 12).toISOString();
+};
+const now = new Date(localNoon('2026-10-21'));
 
 const unused: ExtraCurrencyUse = {
   expenses: { count: 0, items: [] },
@@ -48,13 +53,13 @@ describe('an extra currency as its settings row shows it (#721)', () => {
       row(
         'EUR',
         { expenses: expenses(11), settlements: 1 },
-        addedBy(SAM, 'Sam', '2026-10-01T12:00:00.000Z'),
+        addedBy(SAM, 'Sam', localNoon('2026-10-01')),
       ),
     ).toEqual({ inUse: true, line: '11 Expenses · 1 Settlement · added by Sam, 1 Oct' });
     expect(
-      row('JPY', { expenses: expenses(24) }, addedBy(SAM, 'Sam', '2026-10-05T12:00:00.000Z')),
+      row('JPY', { expenses: expenses(24) }, addedBy(SAM, 'Sam', localNoon('2026-10-05'))),
     ).toEqual({ inUse: true, line: '24 Expenses · whole amounts only · added by Sam, 5 Oct' });
-    expect(row('GBP', {}, addedBy(PRIYA, 'Priya', '2026-10-02T12:00:00.000Z'))).toEqual({
+    expect(row('GBP', {}, addedBy(PRIYA, 'Priya', localNoon('2026-10-02')))).toEqual({
       inUse: false,
       line: 'Nothing uses it · added by Priya, 2 Oct',
     });
@@ -72,10 +77,10 @@ describe('an extra currency as its settings row shows it (#721)', () => {
   });
 
   it('calls the viewer you, and gives the year of an earlier one', () => {
-    expect(row('GBP', {}, addedBy(ALEX, 'Alex', '2026-10-02T12:00:00.000Z')).line).toBe(
+    expect(row('GBP', {}, addedBy(ALEX, 'Alex', localNoon('2026-10-02'))).line).toBe(
       'Nothing uses it · added by you, 2 Oct',
     );
-    expect(row('GBP', {}, addedBy(SAM, 'Sam', '2025-12-30T12:00:00.000Z')).line).toBe(
+    expect(row('GBP', {}, addedBy(SAM, 'Sam', localNoon('2025-12-30'))).line).toBe(
       'Nothing uses it · added by Sam, 30 Dec 2025',
     );
   });
@@ -252,7 +257,7 @@ describe('the Group currencies read (#721)', () => {
         {
           code: 'EUR',
           use: { ...unused, expenses: expenses(1, ['Tram 28']) },
-          added: addedBy(SAM, 'Sam', '2026-10-01T12:00:00.000Z'),
+          added: addedBy(SAM, 'Sam', localNoon('2026-10-01')),
         },
         { code: 'GBP', use: unused, added: null },
       ],
