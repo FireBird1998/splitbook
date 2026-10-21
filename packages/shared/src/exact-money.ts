@@ -127,6 +127,30 @@ export function toMajorAmount(amountMinor: number, currency: string): number {
   return amount;
 }
 
+/** The places money in a currency Splitbook no longer supports is read in, as Activity shows it (#779). */
+const UNSUPPORTED_CURRENCY_PLACES = 2;
+
+/**
+ * Money in a currency Splitbook no longer supports, such as a legacy DEM Expense, as stored
+ * (#810): its minor units, at 2 places. Only reads use it; it is never checked against today's
+ * list or converted.
+ */
+export function readUnsupportedAmountMinor(record: {
+  amount?: number;
+  amountMinor?: number;
+  moneyVersion?: number;
+}): number {
+  if (record.moneyVersion !== undefined && Number.isSafeInteger(record.amountMinor))
+    return record.amountMinor!;
+  return assertSafeMinorAmount(
+    Math.round((record.amount ?? 0) * 10 ** UNSUPPORTED_CURRENCY_PLACES),
+  );
+}
+
+/** Such money's minor units in major units, at the same 2 places (#810). */
+export const unsupportedMajorAmount = (amountMinor: number) =>
+  assertSafeMinorAmount(amountMinor) / 10 ** UNSUPPORTED_CURRENCY_PLACES;
+
 /** Only legacy reads tolerate the tiny binary tails produced by the old calculator. */
 export function readLegacyAmountMinor(amount: number, currency: string): number {
   try {

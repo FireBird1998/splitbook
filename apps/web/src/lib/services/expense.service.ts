@@ -26,8 +26,10 @@ import {
   normalizeExpenseMoney,
   parseAmountMinor,
   readStoredAmountMinor,
+  readUnsupportedAmountMinor,
   sumMinorAmounts,
   toMajorAmount,
+  unsupportedMajorAmount,
 } from '@splitbook/shared/exact-money';
 import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
@@ -365,14 +367,17 @@ export class ExpenseService {
               alternateCurrencies: tagGroup?.alternateCurrencies,
             },
             allFiltered.map((row) => row.currency as string),
-          ).map((currency) => ({
-            currency,
-            ...computeUserOweGetBack(
-              allFiltered.filter((row) => row.currency === currency) as LeanExpenseContribution[],
-              userId,
+          )
+            // A currency Splitbook no longer supports has no position (#810).
+            .filter((currency) => getCurrency(currency))
+            .map((currency) => ({
               currency,
-            ),
-          }));
+              ...computeUserOweGetBack(
+                allFiltered.filter((row) => row.currency === currency) as LeanExpenseContribution[],
+                userId,
+                currency,
+              ),
+            }));
         }
       }
 
@@ -407,17 +412,28 @@ export class ExpenseService {
     }
 
     const summaryCurrencies = new Map<string, number[]>();
+    // A currency Splitbook no longer supports is totalled as stored, never converted, and comes
+    // last: Spent has a line for it, as the count has its Expenses (#810).
+    const unsupported = new Map<string, number[]>();
     for (const record of summaryAgg) {
-      // A currency Splitbook no longer supports has no precision to total it in: left out (#810).
-      if (!getCurrency(record.currency)) continue;
-      const values = summaryCurrencies.get(record.currency) ?? [];
-      values.push(readStoredAmountMinor(record));
-      summaryCurrencies.set(record.currency, values);
+      const supported = !!getCurrency(record.currency);
+      const totals = supported ? summaryCurrencies : unsupported;
+      const values = totals.get(record.currency) ?? [];
+      values.push(supported ? readStoredAmountMinor(record) : readUnsupportedAmountMinor(record));
+      totals.set(record.currency, values);
     }
-    const totalsByCurrency = [...summaryCurrencies].map(([currency, values]) => ({
-      currency,
-      totalAmount: toMajorAmount(sumMinorAmounts(values), currency),
-    }));
+    const totalsByCurrency = [
+      ...[...summaryCurrencies].map(([currency, values]) => ({
+        currency,
+        totalAmount: toMajorAmount(sumMinorAmounts(values), currency),
+      })),
+      ...[...unsupported]
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([currency, values]) => ({
+          currency,
+          totalAmount: unsupportedMajorAmount(sumMinorAmounts(values)),
+        })),
+    ];
     const summaryData = {
       totalAmount:
         totalsByCurrency.find((row) => row.currency === tagGroup?.defaultCurrency)?.totalAmount ??

@@ -1069,10 +1069,13 @@ page. `byMember` appears only when `includeMemberBreakdown=1`; `net` is
 currency list, as in Activity (#779). An Expense in such a currency, such as a
 legacy row in `DEM`, is listed with its stored `amount`, `currency` and
 allocations, unchecked and never converted. It counts in `count` and
-`pagination.total`, but no figure includes it: it has no line in
-`totalsByCurrency`, and stays out of `totalAmount`, `userOwes`, `userGetsBack`
-and `byMember`. The apps show its amount with its code (`DEM 40.00`) and no
-position.
+`pagination.total`, and Spent includes it as its own line: `totalsByCurrency`
+ends with one entry per such currency, summed from the stored minor units at 2
+places (`readUnsupportedAmountMinor`), after the Group's currencies and any it
+no longer lists. Positions and per-currency views don't include it: it stays
+out of `totalAmount`, `userOwes`, `userGetsBack`, `userByCurrency` and
+`byMember`. The apps show its amount with its code (`DEM 40.00`), last in Spent,
+and no position.
 
 ### GET /api/groups/[id]/expenses/check-duplicate
 

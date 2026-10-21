@@ -3,10 +3,11 @@ import {
   assertStoredExpenseMoney,
   parseAmountMinor,
   readStoredAmountMinor,
+  readUnsupportedAmountMinor,
   toMajorAmount,
+  unsupportedMajorAmount,
 } from '@splitbook/shared/exact-money';
 import {
-  ExpensePageReadError,
   parseExpensePageResponse,
   type ExpenseAllocationRead,
   type ExpensePageRead,
@@ -39,14 +40,7 @@ function assertCurrencies(codes: string[], Failure: new () => Error) {
   if (codes.some((code) => getCurrency(code) === undefined)) throw new Failure();
 }
 const exact = (value: number, code: string) => toMajorAmount(parseAmountMinor(value, code), code);
-/**
- * Money in a currency Splitbook no longer supports (#810), as stored: in 2 places, as Activity
- * shows such money (#779), unchecked and never converted.
- */
-const storedMinor = (money: { amount: number; amountMinor?: number; moneyVersion?: number }) =>
-  money.moneyVersion !== undefined && Number.isSafeInteger(money.amountMinor)
-    ? money.amountMinor!
-    : Math.round(money.amount * 100);
+
 function personData(value: FinancialPersonRead): FinancialPerson {
   if (value === null) return { id: null, name: 'Former member', image: null };
   if (typeof value === 'string') return { id: value, name: 'Former member', image: null };
@@ -77,7 +71,7 @@ export function parseGroupBalances(value: unknown): GroupCurrencyBalance[] {
 function storedExpense(row: ExpensePageRead['expenses'][number]): MobileExpense {
   const allocation = (item: ExpenseAllocationRead) => ({
     user: personData(item.user),
-    amountMinor: storedMinor({ ...item, moneyVersion: row.moneyVersion }),
+    amountMinor: readUnsupportedAmountMinor({ ...item, moneyVersion: row.moneyVersion }),
     amount: item.amount,
   });
   return {
@@ -86,7 +80,7 @@ function storedExpense(row: ExpensePageRead['expenses'][number]): MobileExpense 
     description: row.description,
     currency: row.currency,
     amount: row.amount,
-    amountMinor: storedMinor(row),
+    amountMinor: readUnsupportedAmountMinor(row),
     date: new Date(row.date),
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
@@ -103,11 +97,7 @@ function storedExpense(row: ExpensePageRead['expenses'][number]): MobileExpense 
 export function parseExpensePage(value: unknown, groupId: string, defaultCurrency: string) {
   const body = parseExpensePageResponse(value);
   // An Expense in a currency Splitbook no longer supports is read as stored, as Activity reads
-  // such money since #779; the server leaves it out of the summary, where one is still refused.
-  assertCurrencies(
-    body.summary.totalsByCurrency.map((row) => row.currency),
-    ExpensePageReadError,
-  );
+  // such money since #779, and so is Spent's line for it, which the server sends last (#810).
   if (body.pagination.limit !== PAGE_SIZE) throw new Error('Unexpected Expense page size');
   if (body.summary.count !== body.pagination.total) throw new Error('Inconsistent expense count');
   const expenses: MobileExpense[] = body.expenses.map((row) => {
@@ -167,7 +157,9 @@ export function parseExpensePage(value: unknown, groupId: string, defaultCurrenc
       count: body.summary.count,
       totalsByCurrency: body.summary.totalsByCurrency.map((row) => ({
         currency: row.currency,
-        totalAmount: exact(row.totalAmount, row.currency),
+        totalAmount: getCurrency(row.currency)
+          ? exact(row.totalAmount, row.currency)
+          : unsupportedMajorAmount(readUnsupportedAmountMinor({ amount: row.totalAmount })),
       })),
       userOwes: exact(body.summary.userOwes, defaultCurrency),
       userGetsBack: exact(body.summary.userGetsBack, defaultCurrency),
