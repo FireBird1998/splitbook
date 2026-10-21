@@ -104,8 +104,8 @@ export const EXCHANGE_RATE_API_ATTRIBUTION = {
   url: 'https://www.exchangerate-api.com',
 } as const;
 
-/** Format decimal digits directly: Intl supplies grouping and the currency's symbol placement. */
-function decimalMoney(decimal: string, currency: string): string {
+/** Nonnegative plain decimals: Intl supplies grouping and the currency’s symbol placement. */
+export function decimalMoney(decimal: string, currency: string): string {
   const [whole, fraction = ''] = decimal.split('.');
   const digits = fraction.padEnd(getCurrencyPrecision(currency), '0');
   return new Intl.NumberFormat('en-US', {
@@ -118,7 +118,8 @@ function decimalMoney(decimal: string, currency: string): string {
     .map((part) => (part.type === 'fraction' ? digits : part.value))
     .join('');
 }
-function minorMoney(minor: number, currency: string): string {
+/** Format a positive safe integer minor amount without passing through floating point. */
+export function minorMoney(minor: number, currency: string): string {
   positiveMinor(minor);
   const places = getCurrencyPrecision(currency);
   const scale = BigInt(10) ** BigInt(places);

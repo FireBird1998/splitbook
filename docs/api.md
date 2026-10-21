@@ -1340,6 +1340,11 @@ The suggestion date is `rateAsOf`, never `rateFetchedAt`. With `entered`, it say
 `exchange-rate-api` or `mixed`, it appends “Rates By Exchange Rate API”; callers
 must link that text to `EXCHANGE_RATE_API_ATTRIBUTION.url` from the same module.
 It never recomputes or looks up the historical amounts or rate.
+The same module, `@splitbook/shared/cross-currency-settlement`, exports
+`decimalMoney(decimal: string, currency: string): string` for nonnegative plain
+decimal strings and `minorMoney(minor: number, currency: string): string` for
+positive safe integer minor amounts. Both preserve exact digits without a
+floating-point conversion; the sheet can reuse them for rates and amounts.
 
 ---
 
