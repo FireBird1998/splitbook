@@ -273,8 +273,9 @@ describe('the selection panel (#610)', () => {
     expect(shown()).toContain('Your position on theseyou lent₹86.99');
   });
 
-  // #810: a currency Splitbook no longer supports stays out of the total, never converted.
-  it('leaves an Expense in a currency Splitbook no longer supports out of their total', () => {
+  // #810: a currency Splitbook no longer supports adds its own line to the total, last, as
+  // stored and never converted; the position leaves it out.
+  it('adds an Expense in a currency Splitbook no longer supports to their total as its own line', () => {
     const marks = {
       ...GROCERIES,
       _id: 'e00000000000000000000009',
@@ -290,7 +291,7 @@ describe('the selection panel (#610)', () => {
       ],
     } as ExpenseRead;
     panel([GROCERIES, marks]);
-    expect(shown()).toContain('2 selected · ₹1,240.50');
+    expect(shown()).toMatch(/2 selected · ₹1,240\.50 \+ DEM\s40\.00/);
     expect(shown()).toContain('Old Berlin rent');
     expect(shown()).toContain('DEM 40.00');
     expect(shown()).toContain('Your position on theseyou lent₹827.00');

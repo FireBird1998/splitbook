@@ -178,4 +178,14 @@ describe('inGroupCurrencyOrder (#759)', () => {
     expect(inGroupCurrencyOrder(trip, ['USD', 'JPY', 'GBP'])).toEqual(['JPY', 'GBP', 'USD']);
     expect(inGroupCurrencyOrder(trip, [])).toEqual([]);
   });
+
+  // #810: a currency Splitbook no longer supports, such as DEM, comes last of all.
+  it('puts one Splitbook no longer supports after those, last', () => {
+    expect(inGroupCurrencyOrder(trip, ['DEM', 'GBP', 'JPY', 'INR'])).toEqual([
+      'INR',
+      'JPY',
+      'GBP',
+      'DEM',
+    ]);
+  });
 });

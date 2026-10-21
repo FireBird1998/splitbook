@@ -282,6 +282,22 @@ describe('Expenses summary', () => {
     expect(shown).toContain(`Updated ${refreshedLabel(at)}`);
   });
 
+  // #810: Spent's line in a currency Splitbook no longer supports comes last, as the read sends it.
+  it('says a currency Splitbook no longer supports last among the other currencies', () => {
+    const { root } = view({
+      state: financial({
+        summary: summary({
+          totalsByCurrency: [
+            { currency: 'INR', totalAmount: 18420 },
+            { currency: 'EUR', totalAmount: 42.5 },
+            { currency: 'DEM', totalAmount: 40 },
+          ],
+        }),
+      }),
+    });
+    expect(text(root)).toContain('Also €42.50 · DEM\u00a040.00 in other currencies');
+  });
+
   it('keeps other currencies out of the member’s figures, and says so', () => {
     const { root } = view({
       state: financial({

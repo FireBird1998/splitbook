@@ -488,7 +488,8 @@ describe('the count of Expenses recurring Expenses added', () => {
 
 // #810: stored money outlives today's currency list, as Activity reads it since #779. A Group
 // holding an Expense in DEM, which Splitbook no longer supports, still reads: the Expense is
-// listed as stored, and kept out of the summary's figures, which are never converted.
+// listed as stored, Spent has a DEM line of its own, and no position includes it. Nothing is
+// converted.
 describe('an Expense in a currency Splitbook no longer supports (#810)', () => {
   /** A legacy row in Deutsche Marks, as an old database holds it: Alice paid, Bob and she share. */
   async function berlinRent(fixture: Fixture) {
@@ -530,9 +531,15 @@ describe('an Expense in a currency Splitbook no longer supports (#810)', () => {
     expect(status).toBe(200);
     // The shared decoder both apps use reads it too.
     expect(() => parseExpensePageResponse(body)).not.toThrow();
-    const { count, ...figures } = body.data.summary;
-    const { count: countBefore, ...figuresBefore } = before.body.data.summary;
+    // Spent gains its own DEM line, last, as stored; every position stays as it was.
+    const { count, totalsByCurrency, ...figures } = body.data.summary;
+    const {
+      count: countBefore,
+      totalsByCurrency: totalsBefore,
+      ...figuresBefore
+    } = before.body.data.summary;
     expect(figures).toEqual(figuresBefore);
+    expect(totalsByCurrency).toEqual([...totalsBefore, { currency: 'DEM', totalAmount: 40 }]);
     expect(count).toBe(countBefore + 1);
     expect(body.data.pagination.total).toBe(before.body.data.pagination.total + 1);
     const all = await read(fixture.groupId, '?page=1&limit=20');

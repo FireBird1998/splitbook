@@ -700,6 +700,23 @@ describe('the Expense list', () => {
       expect(text(summary)).toContain('You get back ¥1,500');
     });
 
+    // #810: a currency Splitbook no longer supports has its own Spent line, last of all, after
+    // one the Group no longer lists; no position includes it.
+    it('stacks a currency Splitbook no longer supports last in Spent, after a removed one', () => {
+      reads.set(LIST, {
+        data: page(EXPENSES, {
+          totalsByCurrency: [
+            { currency: 'DEM', totalAmount: 40 },
+            { currency: 'INR', totalAmount: 42000 },
+            { currency: 'GBP', totalAmount: 10 },
+          ],
+        }),
+      });
+      const html = lisbon();
+      const summary = html.slice(html.search(/<section\b[^>]*aria-label="Summary"/));
+      expect(text(summary)).toMatch(/^Spent ₹42,000\.00 £10\.00 DEM\s40\.00 Expenses 4/);
+    });
+
     it('leaves out a currency the member is square in', () => {
       reads.set(LIST, {
         data: page(EXPENSES, {
