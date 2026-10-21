@@ -6,9 +6,12 @@ import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import AddIcon from '@mui/icons-material/Add';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
-import { reviewDate, type ReviewItemModel } from '@splitbook/shared/to-review';
+import type { UnlistedCurrencyFix } from '@splitbook/shared/group-currencies';
+import { reviewDate, reviewNeedWords, type ReviewItemModel } from '@splitbook/shared/to-review';
 import type { ItemQuickFixes, QuickFixFact } from '@splitbook/shared/to-review-quick-fixes';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { reviewAmount, reviewSource } from './ReviewDetails';
@@ -62,6 +65,9 @@ export default function ReviewRow({
   onMore,
   onSave,
   onDelete,
+  currencyFix,
+  onAddCurrency,
+  onChangeCurrency,
 }: {
   item: ReviewItemModel;
   quick: ItemQuickFixes;
@@ -81,6 +87,10 @@ export default function ReviewRow({
   onMore: (fact: QuickFixFact) => void;
   onSave: () => void;
   onDelete: () => void;
+  /** Set when the item's currency isn't one of its Group's (#732). */
+  currencyFix?: (UnlistedCurrencyFix & { currency: string }) | null;
+  onAddCurrency?: () => void;
+  onChangeCurrency?: (code: string) => void;
 }) {
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   // A missing fact is said once, in the Needs line, so its place here stays empty (#512).
@@ -89,6 +99,11 @@ export default function ReviewRow({
   const meta = [values.date && reviewDate(values.date), reviewSource(item.accountItem!)]
     .filter(Boolean)
     .join(' · ');
+  // The currency fix says what's wrong itself, so the Needs line leaves it out.
+  const currencyWords = reviewNeedWords({ field: 'currency', reason: 'currency-not-listed' });
+  const stillNeeds = currencyFix
+    ? quick.stillNeeds.filter((words) => words !== currencyWords)
+    : quick.stillNeeds;
   const groups = quick.fixes.map((fix) => ({
     fix,
     options: showAll.has(fix.fact) ? fix.options : fix.visible,
@@ -142,6 +157,25 @@ export default function ReviewRow({
         >
           <Typography component="span" display="block" fontWeight={600}>
             {title}
+            {currencyFix && ' '}
+            {currencyFix && (
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-block',
+                  ml: 1,
+                  px: 1,
+                  borderRadius: `${RADIUS.sm}px`,
+                  bgcolor: 'tint.warning',
+                  color: 'status.warning',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  verticalAlign: 'middle',
+                }}
+              >
+                Currency not listed
+              </Box>
+            )}
           </Typography>
           <Typography component="span" display="block" variant="body2" color="text.secondary">
             {meta}
@@ -250,7 +284,60 @@ export default function ReviewRow({
           </Box>
         );
       })}
-      {item.state === 'needs-details' && quick.stillNeeds.length > 0 && (
+      {currencyFix && (
+        <Box
+          role="group"
+          aria-label={`Currency for ${title}`}
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1.5 }}
+        >
+          <Typography variant="body2">
+            {currencyFix.notListed} {currencyFix.ask}
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+            {currencyFix.add && (
+              <Button
+                disabled={disabled}
+                startIcon={<AddIcon aria-hidden />}
+                onClick={onAddCurrency}
+                sx={{
+                  minHeight: { xs: 44, md: 36 },
+                  textTransform: 'none',
+                  bgcolor: 'tint.brand',
+                  color: 'primary.main',
+                  '&:hover': { bgcolor: 'tint.brand', boxShadow: 'inset 0 0 0 1px currentColor' },
+                }}
+              >
+                {currencyFix.add}
+              </Button>
+            )}
+            <TextField
+              select
+              size="small"
+              label="Change currency to"
+              value=""
+              disabled={disabled}
+              onChange={(event) => {
+                if (event.target.value) onChangeCurrency?.(event.target.value);
+              }}
+              slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
+              sx={{ minWidth: 180 }}
+            >
+              <option value="" disabled>
+                Change to…
+              </option>
+              {currencyFix.choices.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
+            </TextField>
+          </Box>
+          <Typography variant="caption" color="text.secondary">
+            {currencyFix.adding} {currencyFix.changing}
+          </Typography>
+        </Box>
+      )}
+      {item.state === 'needs-details' && stillNeeds.length > 0 && (
         <Stack
           direction="row"
           spacing={1}
@@ -265,7 +352,7 @@ export default function ReviewRow({
         >
           <Typography variant="body2" color="text.secondary">
             {quick.fixes.length ? 'Still needs: ' : 'Needs '}
-            {quick.stillNeeds.join(', ')}
+            {stillNeeds.join(', ')}
           </Typography>
           <Button
             variant="outlined"

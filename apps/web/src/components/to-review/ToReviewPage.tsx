@@ -32,9 +32,11 @@ import type {
   ExpenseDraftValues,
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
+import { unlistedCurrencyFix } from '@splitbook/shared/group-currencies';
 import { writeOpenExpense } from '@/components/expenses/expense-list-query';
+import { addGroupCurrency } from '@/lib/add-group-currency';
 import { visuallyHidden } from '@/components/insights/a11y';
-import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
+import { WEB_QUERY_ACCOUNT, isWebGroupsRead } from '@/lib/web-query-keys';
 import { useGroup } from '@/lib/hooks/use-groups';
 import { RADIUS } from '@/lib/theme/tokens';
 import { TO_REVIEW_KEY, useToReview } from './use-to-review';
@@ -198,6 +200,39 @@ export default function ToReviewPage({
       }
       const left = before.fixes.some((fix) => fix.fact !== fact) || before.stillNeeds.length > 0;
       setAnnounce(left ? '' : `${nameOf(draft)} moved to Ready`);
+    });
+  }
+  /** An item in a currency its Group doesn't list: add the currency, or change the item's (#732). */
+  const currencyFixFor = (item: ReviewItemModel) => {
+    const values = item.accountItem?.draft.values;
+    if (!group || !values?.currency) return null;
+    if (!item.needs.some((need) => need.reason === 'currency-not-listed')) return null;
+    return {
+      currency: values.currency,
+      ...unlistedCurrencyFix(group, values.currency, values.amount),
+    };
+  };
+  /** Adds the item's currency to the Group; every item in it then reviews again. */
+  async function addCurrency(item: ReviewItemModel, code: string) {
+    refocus.current = item.id;
+    await action(async () => {
+      const refused = await addGroupCurrency(groupId, code);
+      if (refused) throw new Error(refused);
+      await Promise.all([refresh(), mutate(isWebGroupsRead)]);
+      setAnnounce(`${code} added to ${group?.name || 'the Group'}`);
+    });
+  }
+  /** Changes only the item's currency: its amount stays as entered, never converted. */
+  async function changeCurrency(item: ReviewItemModel, code: string) {
+    const draft = item.accountItem!.draft;
+    refocus.current = item.id;
+    await action(async () => {
+      try {
+        await client.replace(draft, { ...(draft.values ?? {}), currency: code });
+      } finally {
+        await refresh();
+      }
+      setAnnounce(`${nameOf(draft)} is now in ${code}`);
     });
   }
   /** "You for all N": item by item, skipping any changed elsewhere; Undo restores only its own. */
@@ -710,6 +745,12 @@ export default function ToReviewPage({
                             }
                             onSave={() => void saveOne(item.accountItem!.draft, false, [])}
                             onDelete={() => setDeleting(item)}
+                            currencyFix={currencyFixFor(item)}
+                            onAddCurrency={() => {
+                              const code = item.accountItem?.draft.values?.currency;
+                              if (code) void addCurrency(item, code);
+                            }}
+                            onChangeCurrency={(code) => void changeCurrency(item, code)}
                           />
                         ))}
                       </Stack>
