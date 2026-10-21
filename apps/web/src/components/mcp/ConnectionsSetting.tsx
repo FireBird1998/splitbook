@@ -218,8 +218,8 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
         <Typography variant="subtitle1" component="h2" fontWeight={600}>
           Connected assistants
         </Typography>
-        <Button component={Link} href="/connect/chatgpt" sx={{ alignSelf: 'flex-start' }}>
-          Connect ChatGPT
+        <Button component={Link} href="/connect" sx={{ alignSelf: 'flex-start' }}>
+          Connect an assistant
         </Button>
         {error && (
           <Alert

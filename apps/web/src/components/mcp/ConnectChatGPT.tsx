@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import ChatGPTAuthorization from './ChatGPTAuthorization';
+import CopyValue from './CopyValue';
 import Link from 'next/link';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -15,42 +15,84 @@ import { PRODUCT_NAME } from '@/lib/product';
 
 const testPrompt = `Run ${PRODUCT_NAME} connection_status only and show the result. Do not read my Groups, balances or expenses.`;
 
-function CopyValue({ label, value }: { label: string; value: string }) {
-  const [feedback, setFeedback] = useState('');
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(value);
-      setFeedback('Copied.');
-    } catch {
-      setFeedback('Copy unavailable. Select the text above and copy it manually.');
-    }
-  }
+/** A staging deployment's server address, so guides say they're for testing. */
+export function isStagingResource(resource: string) {
+  return /(^|[.-])staging([.-]|$)/i.test(new URL(resource).hostname);
+}
+
+/** ChatGPT's setup steps, on its own guide and in Connect's picker (#619). */
+export function ChatGPTSetup({ resource, staging }: { resource: string; staging: boolean }) {
   return (
-    <Stack spacing={1}>
-      <Typography
-        component="p"
-        sx={{
-          overflowWrap: 'anywhere',
-          userSelect: 'all',
-          bgcolor: 'action.hover',
-          p: 2,
-          borderRadius: 1,
-        }}
-      >
-        {value}
-      </Typography>
-      <Button variant="outlined" onClick={() => void copy()} sx={{ alignSelf: 'flex-start' }}>
-        Copy {label}
-      </Button>
-      <Typography role="status" variant="body2">
-        {feedback}
-      </Typography>
-    </Stack>
+    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+      <Stack component="ol" spacing={3} sx={{ pl: 3, my: 0 }}>
+        <Stack component="li" spacing={1} sx={{ display: 'list-item' }}>
+          <Typography component="h2" variant="h6">
+            Open ChatGPT Plugins
+          </Typography>
+          <Typography>
+            Choose the plus button, then “Add custom MCP server”. Give it the name {PRODUCT_NAME}
+            {staging ? ' Staging' : ''} and a description such as “Read my shared expenses”.
+          </Typography>
+          <Button
+            component="a"
+            href="https://chatgpt.com/plugins"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open ChatGPT (new tab)
+          </Button>
+        </Stack>
+        <Stack component="li" spacing={1} sx={{ display: 'list-item' }}>
+          <Typography component="h2" variant="h6">
+            Add the server and choose OAuth
+          </Typography>
+          <Typography>Choose a public endpoint and paste this entire server URL.</Typography>
+          <CopyValue label="server URL" value={resource} />
+          <Box component="details">
+            <Typography component="summary" sx={{ cursor: 'pointer' }}>
+              OAuth and CIMD details
+            </Typography>
+            <Typography sx={{ mt: 1, overflowWrap: 'anywhere' }}>
+              Use OAuth with Client ID Metadata Document (CIMD). ChatGPT’s client identity is
+              https://chatgpt.com/oauth/client.json. No API key or client secret is needed.
+            </Typography>
+            <Typography>
+              Request ledger:read and offline_access. Do not request drafts:write.
+            </Typography>
+          </Box>
+          <Typography>
+            Review and acknowledge the warning in ChatGPT, then choose “Create as a plugin”.
+          </Typography>
+        </Stack>
+        <Stack component="li" spacing={1} sx={{ display: 'list-item' }}>
+          <Typography component="h2" variant="h6">
+            Authorize read-only access
+          </Typography>
+          <Typography>
+            Sign in to {PRODUCT_NAME} when prompted. Check the account and permissions, leave Draft
+            access off, and approve. Review the discovered tools and install the plugin in ChatGPT.
+          </Typography>
+        </Stack>
+        <Stack component="li" spacing={1} sx={{ display: 'list-item' }}>
+          <Typography component="h2" variant="h6">
+            Try the connection in chat
+          </Typography>
+          <Typography>
+            Start a new chat, type @ and select your {PRODUCT_NAME} plugin, then send this prompt.
+          </Typography>
+          <CopyValue label="test prompt" value={testPrompt} />
+          <Typography>
+            The test result appears in ChatGPT. Opening ChatGPT or copying a value does not confirm
+            authorization or a successful test.
+          </Typography>
+        </Stack>
+      </Stack>
+    </Paper>
   );
 }
 
 export default function ConnectChatGPT({ resource }: { resource: string | null }) {
-  const staging = resource && /(^|[.-])staging([.-]|$)/i.test(new URL(resource).hostname);
+  const staging = resource && isStagingResource(resource);
   return (
     <Container component="main" maxWidth="md" sx={{ py: { xs: 3, sm: 6 } }}>
       <Stack spacing={3}>
@@ -73,8 +115,9 @@ export default function ConnectChatGPT({ resource }: { resource: string | null }
               Your access, your choice
             </Typography>
             <Typography>
-              All current and future Groups you belong to are included. Read-only ledger access
-              cannot save Expenses or see what’s in your To review.
+              You choose which Groups ChatGPT reaches when you approve, and Groups you join later
+              are included. Read-only ledger access cannot save Expenses or see what’s in your To
+              review.
             </Typography>
             <Typography>
               Refresh access lets ChatGPT stay authorized between visits until you disconnect.
@@ -89,74 +132,7 @@ export default function ConnectChatGPT({ resource }: { resource: string | null }
         {!resource ? (
           <Alert severity="info">Not available in this environment</Alert>
         ) : (
-          <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-            <Stack component="ol" spacing={3} sx={{ pl: 3, my: 0 }}>
-              <Stack component="li" spacing={1} sx={{ display: 'list-item' }}>
-                <Typography component="h2" variant="h6">
-                  Open ChatGPT Plugins
-                </Typography>
-                <Typography>
-                  Choose the plus button, then “Add custom MCP server”. Give it the name{' '}
-                  {PRODUCT_NAME}
-                  {staging ? ' Staging' : ''} and a description such as “Read my shared expenses”.
-                </Typography>
-                <Button
-                  component="a"
-                  href="https://chatgpt.com/plugins"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open ChatGPT (new tab)
-                </Button>
-              </Stack>
-              <Stack component="li" spacing={1} sx={{ display: 'list-item' }}>
-                <Typography component="h2" variant="h6">
-                  Add the server and choose OAuth
-                </Typography>
-                <Typography>Choose a public endpoint and paste this entire server URL.</Typography>
-                <CopyValue label="server URL" value={resource} />
-                <Box component="details">
-                  <Typography component="summary" sx={{ cursor: 'pointer' }}>
-                    OAuth and CIMD details
-                  </Typography>
-                  <Typography sx={{ mt: 1, overflowWrap: 'anywhere' }}>
-                    Use OAuth with Client ID Metadata Document (CIMD). ChatGPT’s client identity is
-                    https://chatgpt.com/oauth/client.json. No API key or client secret is needed.
-                  </Typography>
-                  <Typography>
-                    Request ledger:read and offline_access. Do not request drafts:write.
-                  </Typography>
-                </Box>
-                <Typography>
-                  Review and acknowledge the warning in ChatGPT, then choose “Create as a plugin”.
-                </Typography>
-              </Stack>
-              <Stack component="li" spacing={1} sx={{ display: 'list-item' }}>
-                <Typography component="h2" variant="h6">
-                  Authorize read-only access
-                </Typography>
-                <Typography>
-                  Sign in to {PRODUCT_NAME} when prompted. Check the account and permissions, leave
-                  Draft access off, and approve. Review the discovered tools and install the plugin
-                  in ChatGPT.
-                </Typography>
-              </Stack>
-              <Stack component="li" spacing={1} sx={{ display: 'list-item' }}>
-                <Typography component="h2" variant="h6">
-                  Try the connection in chat
-                </Typography>
-                <Typography>
-                  Start a new chat, type @ and select your {PRODUCT_NAME} plugin, then send this
-                  prompt.
-                </Typography>
-                <CopyValue label="test prompt" value={testPrompt} />
-                <Typography>
-                  The test result appears in ChatGPT. Opening ChatGPT or copying a value does not
-                  confirm authorization or a successful test.
-                </Typography>
-              </Stack>
-            </Stack>
-          </Paper>
+          <ChatGPTSetup resource={resource} staging={Boolean(staging)} />
         )}
         <ChatGPTAuthorization enabled={Boolean(resource)} />
         <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
