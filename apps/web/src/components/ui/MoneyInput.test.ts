@@ -150,10 +150,34 @@ for (const [name, Field] of fields) {
     expect(inputRef.current).toBe(node);
   });
 
+  it(`${name}: an edit while not focused, as autofill makes, leaves Tab's later selection alone`, async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const caret = vi.fn();
+    await act(async () => {
+      renderer = create(
+        createElement(Field, { currency: 'EUR', value: '', onValueChange: () => {} }),
+        {
+          createNodeMock: (element) =>
+            element.type === 'input'
+              ? { setSelectionRange: caret, focus: () => {}, value: '' }
+              : null,
+        },
+      );
+    });
+    await act(async () =>
+      renderer.root.findByType('input').props.onChange({
+        target: { value: '1842', selectionStart: 4, selectionEnd: 4 },
+        nativeEvent: { inputType: 'insertReplacementText' },
+      }),
+    );
+    await act(async () => renderer.root.findByType('input').props.onFocus({}));
+    expect(caret).not.toHaveBeenCalled();
+  });
+
   it(`${name}: Backspace after the 8 in 1,842.50 regroups to 142.50, the caret after the 1`, async () => {
     const { input, changed, caret, edit } = await focused('EUR', '1842.5');
     expect(input().props.value).toBe('1,842.50');
-    await edit('1,42.50', 2);
+    await edit('1,42.50', 2, 'deleteContentBackward');
     expect(input().props.value).toBe('142.50');
     expect(changed).toHaveBeenLastCalledWith('142.50');
     expect(caret).toHaveBeenLastCalledWith(1, 1);
@@ -169,7 +193,7 @@ for (const [name, Field] of fields) {
 
   it(`${name}: deleting the first digit of 1,842.50 leaves 842.50`, async () => {
     const { input, changed, caret, edit } = await focused('EUR', '1842.5');
-    await edit(',842.50', 0);
+    await edit(',842.50', 0, 'deleteContentBackward');
     expect(input().props.value).toBe('842.50');
     expect(changed).toHaveBeenLastCalledWith('842.50');
     expect(caret).toHaveBeenLastCalledWith(0, 0);
@@ -197,7 +221,7 @@ for (const [name, Field] of fields) {
   it(`${name}: a whole yen amount regroups too, and INR groups as it does on blur`, async () => {
     const yen = await focused('JPY', '1842');
     expect(yen.input().props.value).toBe('1,842');
-    await yen.edit('1,42', 2);
+    await yen.edit('1,42', 2, 'deleteContentBackward');
     expect(yen.input().props.value).toBe('142');
     expect(yen.changed).toHaveBeenLastCalledWith('142');
     await act(async () => renderer.unmount());
@@ -216,6 +240,33 @@ for (const [name, Field] of fields) {
     const { input, changed, edit } = await focused('EUR', '');
     for (const typed of ['1', '10', '10,', '10,5']) await edit(typed);
     expect(input().props.value).toBe('10,5');
+    expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
+  });
+
+  it(`${name}: a 5 typed over 500.00 selected in 10,500.00 stays as typed and refused, never 105`, async () => {
+    const { input, changed, edit } = await focused('EUR', '10500');
+    expect(input().props.value).toBe('10,500.00');
+    await edit('10,5', 4);
+    expect(input().props.value).toBe('10,5');
+    expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
+  });
+
+  it(`${name}: an amount the currency refuses stays as typed, as blur leaves it`, async () => {
+    const euros = await focused('EUR', '');
+    await euros.edit('1200.001');
+    expect(euros.input().props.value).toBe('1200.001');
+    await act(async () => renderer.unmount());
+    const yen = await focused('JPY', '');
+    await yen.edit('1842.5');
+    expect(yen.input().props.value).toBe('1842.5');
+    await act(async () => yen.input().props.onBlur({}));
+    expect(yen.input().props.value).toBe('1842.5');
+  });
+
+  it(`${name}: "10,50" then a point stays as typed and refused, never 1,050`, async () => {
+    const { input, changed, edit } = await focused('EUR', '');
+    for (const typed of ['1', '10', '10,', '10,5', '10,50', '10,50.']) await edit(typed);
+    expect(input().props.value).toBe('10,50.');
     expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
   });
 

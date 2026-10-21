@@ -137,10 +137,20 @@ describe('grouped amount display (#773)', () => {
     ['10,50', '10,5'],
     ['1,234,', '1,234'],
     ['1,84,2', '1,842'],
+    // A comma with fewer than three digits after it stays a possible decimal comma when a point
+    // or another group follows, and so does one among the decimals.
+    ['10,50.', '10,50'],
+    ['10,5.', '10,5'],
+    ['10,5,000', '10,5,00'],
+    ['10.5,0', '10.5,'],
+    ['10.5,055', '10.5,05'],
+    ['1.5,000', '1.5,00'],
+    ['1,842.50,000', '1,842.50,00'],
     // Deleting from a refused "10,55", or replacing 842 with a 5, is not deleting from a
     // grouped amount, so the comma may still be a decimal comma.
     ['10,5', '10,55'],
     ['1,5', '1,842'],
+    ['1,5.50', '1,842.50'],
     ['', '1'],
     ['1e3', '13'],
     ['-5', '5'],
