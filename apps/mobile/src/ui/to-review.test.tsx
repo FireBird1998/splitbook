@@ -1390,6 +1390,8 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     const { list } = await opened();
     expect(text(list)).toContain('Needs details');
     expect(text(list)).toContain('Currency not listed');
+    // Android's rows stay compact: what saving records is a Ready row's line only (#793).
+    expect(text(list)).not.toContain('You paid · Split equally');
     await tap(list, 'Review Dinner in Zürich');
     const sheet = dialog(list, 'Dinner in Zürich');
     expect(sheet).not.toBeNull();

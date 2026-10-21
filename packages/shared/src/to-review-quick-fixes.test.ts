@@ -199,6 +199,34 @@ describe('To review quick fixes', () => {
     expect(toReviewQuickFixes(unsplit, context).summary).toBeNull();
   });
 
+  it('keeps the summary off a row whose payer or split doesn’t add up, listed currency or not', () => {
+    const unlisted = (values: ExpenseDraftValues) => ({
+      ...item(values),
+      problems: ['CURRENCY_NOT_LISTED'],
+    });
+    const payerShort: ExpenseDraftValues = { ...full, paidBy: [{ user: alex, amount: 1 }] };
+    const sharesShort: ExpenseDraftValues = {
+      ...full,
+      splitMethod: 'exact',
+      splitBetween: [
+        { user: alex, amount: 1 },
+        { user: sam, amount: 1 },
+      ],
+    };
+    const rows = model(
+      unlisted({ ...payerShort, currency: 'CHF' }),
+      unlisted({ ...sharesShort, currency: 'CHF' }),
+      item(payerShort),
+      item(sharesShort),
+    );
+    expect(rows.map((row) => toReviewQuickFixes(row, context).summary)).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
   it('keeps a lone payer without an amount, and sets the Tag identity over its name', () => {
     const values: ExpenseDraftValues = { ...full, paidBy: undefined, tag: 'Old name' };
     expect(applyQuickFix(values, 'paidBy', sam)).toEqual({
