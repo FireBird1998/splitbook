@@ -296,6 +296,215 @@ describe('Expenses summary', () => {
   });
 });
 
+// #730, board "Trip strip and summary by currency": a Trip in more than one currency shows its
+// All time card one currency at a time, from its Trip summary (#729), as the web does: a
+// "Spending in" tab per currency with what was spent in it, opening on the most Expenses, and
+// the member's figures in that currency only, never converted.
+describe('A Trip’s spending, one currency at a time (#730)', () => {
+  const lisbon = (): MobileGroup => ({
+    ...group('trip'),
+    name: 'Lisbon & Tokyo',
+    alternateCurrencies: ['EUR', 'JPY'],
+  });
+  const figures: Record<string, [count: number, spent: number, share: number, paid: number]> = {
+    INR: [3, 4_860_000, 1_620_000, 2_000_000],
+    EUR: [11, 124_000, 40_000, 60_000],
+    JPY: [24, 186_000, 62_000, 70_400],
+  };
+  /** The Trip summary in `currency`, as the read answers it (#729). */
+  const read = (currency: string) => {
+    const [count, spent, share, paid] = figures[currency]!;
+    return {
+      timeZone: 'UTC',
+      currency,
+      tripDates: { start: null, end: null },
+      window: null,
+      dayCount: 0,
+      tooManyDays: false,
+      spentMinor: spent,
+      expenseCount: count,
+      yourShareMinor: share,
+      youPaidMinor: paid,
+      yourExpenseCount: 1,
+      peopleCount: 3,
+      perPersonPerDayMinor: null,
+      days: [],
+      dailyAverageMinor: null,
+      beforeTrip: null,
+      afterTrip: null,
+      byTag: [],
+      suggestedPayments: [],
+      otherCurrencies: [],
+      hasExpenses: true,
+      currencies: ['INR', 'EUR', 'JPY'].map((code) => ({
+        currency: code,
+        expenseCount: figures[code]![0],
+        spentMinor: figures[code]![1],
+      })),
+    };
+  };
+  const trip = (
+    overrides: Partial<NonNullable<GroupFinancialState['trip']>> = {},
+  ): NonNullable<GroupFinancialState['trip']> => ({
+    status: 'ready',
+    data: read('JPY'),
+    message: null,
+    refreshedAt: at,
+    stale: false,
+    restored: false,
+    chosen: null,
+    ...overrides,
+  });
+  const shown = (state: NonNullable<GroupFinancialState['trip']> = trip()) => ({
+    ...financial(
+      {
+        summary: summary({
+          count: 38,
+          totalsByCurrency: [
+            { currency: 'INR', totalAmount: 48600 },
+            { currency: 'EUR', totalAmount: 1240 },
+            { currency: 'JPY', totalAmount: 186000 },
+          ],
+        }),
+      },
+      null,
+    ),
+    trip: state,
+  });
+  /** Each tab's spoken name, and whether it is the currency shown. */
+  const tabs = (root: ReactTestInstance) =>
+    root
+      .findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityRole === 'tablist' &&
+          node.props.accessibilityLabel === 'Spending in',
+      )
+      .flatMap((list) =>
+        list.findAll(
+          (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'tab',
+        ),
+      )
+      .map((tab) => [tab.props.accessibilityLabel, tab.props.accessibilityState?.selected]);
+
+  it('opens on the currency with the most Expenses, with what was spent in each, and says why', () => {
+    const { root } = view({ group: lisbon(), state: shown(), onChooseTripCurrency: vi.fn() });
+    expect(tabs(root)).toEqual([
+      ['INR, main currency, ₹48,600.00 spent in 3 Expenses', false],
+      ['EUR, €1,240.00 spent in 11 Expenses', false],
+      ['JPY, ¥186,000 spent in 24 Expenses', true],
+    ]);
+    for (const stat of ['Spent: ¥186,000', 'Your share: ¥62,000', 'You paid: ¥70,400'])
+      expect(labelled(root, stat)).toHaveLength(1);
+    const words = text(root).replaceAll(hairSpace, '');
+    expect(words).toContain('INR · main₹48,600.00EUR€1,240.00JPY¥186,000');
+    expect(words).toContain(
+      'Opened on JPY, the currency with the most Expenses (24). Each currency is shown on its own.',
+    );
+    expect(words).toContain('38 expenses');
+    expect(words).toContain(`Updated ${refreshedLabel(at)}`);
+    // The switch takes the place of the note on other currencies.
+    expect(words).not.toContain('in other currencies');
+  });
+
+  it('asks for the currency chosen, and shows its figures only once they are read in it', () => {
+    const onChooseTripCurrency = vi.fn();
+    const { root } = view({ group: lisbon(), state: shown(), onChooseTripCurrency });
+    press(root, 'EUR, €1,240.00 spent in 11 Expenses');
+    expect(onChooseTripCurrency).toHaveBeenCalledWith('EUR');
+    act(() =>
+      screen!.update(
+        <GroupExpensesView
+          group={lisbon()}
+          currentUserId={you}
+          state={shown(trip({ chosen: 'EUR', status: 'loading' }))}
+          kept={null}
+          savedExpenseId={null}
+          now={now}
+          onSelectMonth={vi.fn()}
+          onRefreshExpenses={vi.fn()}
+          onLoadMore={vi.fn()}
+          onLoadNewer={vi.fn()}
+          onOpenExpense={vi.fn()}
+          onResumeDraft={vi.fn()}
+          onDiscardDraft={vi.fn()}
+          onChooseTripCurrency={onChooseTripCurrency}
+        />,
+      ),
+    );
+    expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe(
+      'EUR, €1,240.00 spent in 11 Expenses',
+    );
+    // The yen figures never show under euros.
+    expect(labelled(root, 'Spent: ¥186,000')).toHaveLength(0);
+    act(() =>
+      screen!.update(
+        <GroupExpensesView
+          group={lisbon()}
+          currentUserId={you}
+          state={shown(trip({ chosen: 'EUR', data: read('EUR') }))}
+          kept={null}
+          savedExpenseId={null}
+          now={now}
+          onSelectMonth={vi.fn()}
+          onRefreshExpenses={vi.fn()}
+          onLoadMore={vi.fn()}
+          onLoadNewer={vi.fn()}
+          onOpenExpense={vi.fn()}
+          onResumeDraft={vi.fn()}
+          onDiscardDraft={vi.fn()}
+          onChooseTripCurrency={onChooseTripCurrency}
+        />,
+      ),
+    );
+    for (const stat of ['Spent: €1,240.00', 'Your share: €400.00', 'You paid: €600.00'])
+      expect(labelled(root, stat)).toHaveLength(1);
+    const words = text(root);
+    expect(words).toContain('Each currency is shown on its own.');
+    expect(words).not.toContain('Opened on');
+  });
+
+  it('says it is this phone’s copy, with the time it was read, offline', () => {
+    const { root } = view({
+      group: lisbon(),
+      state: shown(trip({ restored: true })),
+      offline: true,
+      onChooseTripCurrency: vi.fn(),
+    });
+    expect(text(root)).toContain(`Saved ${refreshedLabel(at)}`);
+    expect(labelled(root, 'Spent: ¥186,000')).toHaveLength(1);
+  });
+
+  it('keeps the card as it was for a Trip in one currency', () => {
+    const { root } = view({ group: group('trip'), state: financial({}, null) });
+    expect(tabs(root)).toEqual([]);
+    expect(labelled(root, 'Spent: ₹18,420.00')).toHaveLength(1);
+  });
+
+  it.each(largeTextWindows)(
+    'reads in full, the tabs wrapping, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      // The card alone: the rows under it keep their own large-text rules (#639).
+      const state = shown();
+      view({
+        group: lisbon(),
+        state: { ...state, expenses: { ...state.expenses, data: [] } },
+        onChooseTripCurrency: vi.fn(),
+      });
+      const tree = screen!.toJSON() as ReactTestRendererJSON;
+      const [list] = findHosts(
+        tree,
+        (props) =>
+          props.accessibilityRole === 'tablist' && props.accessibilityLabel === 'Spending in',
+      );
+      expect(flatten(list!.props.style).flexWrap).toBe('wrap');
+      // The screen's content is inset 16dp on each side.
+      expect(unreadText(tree, size.fontScale, size.width - 32)).toEqual([]);
+    },
+  );
+});
+
 describe('Expense rows', () => {
   it('sit under day headings and say what the member lent or owes', () => {
     // A US phone too: day first, and Yesterday named like Today (#640).
