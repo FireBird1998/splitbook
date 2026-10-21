@@ -40,9 +40,10 @@ export function tripStripFigures({
       ? chosen
       : (summary?.currency ?? group.defaultCurrency);
   const spent = spending.find((row) => row.currency === currency);
+  // The main currency's balances are the read's own, as the strip has always shown them.
   const bucket =
-    balances?.byCurrency?.find((row) => row.currency === currency)?.balances ??
-    (currency === group.defaultCurrency ? balances?.balances : undefined);
+    (currency === group.defaultCurrency ? balances?.balances : undefined) ??
+    balances?.byCurrency?.find((row) => row.currency === currency)?.balances;
   return {
     currencies,
     currency,
