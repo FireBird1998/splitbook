@@ -182,6 +182,13 @@ describe('Draft attribution through the production MCP route (#745)', () => {
       expectedName: 'poser-helper.example.test',
     },
     {
+      // Past 40 characters the host stays whole, so its real domain is never cut off.
+      label: 'posing published name on a long host',
+      host: 'chatgpt.com.secure-assistant-connector.evil.example.test',
+      publishedName: 'Official chatgpt.com',
+      expectedName: 'chatgpt.com.secure-assistant-connector.evil.example.test',
+    },
+    {
       label: 'honest published name',
       host: 'honest-helper.example.test',
       publishedName: '  Fictional Trip Helper  ',
