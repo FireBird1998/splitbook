@@ -113,7 +113,9 @@ export function ConnectionsList({
                   color="error"
                   size="small"
                   sx={{ color: 'status.negative', borderColor: 'status.negative' }}
-                  aria-label={`Disconnect ${connection.name}`}
+                  // Two assistants may share a name: the address, or else the last use, tells
+                  // their buttons apart.
+                  aria-label={`Disconnect ${connection.name}, ${address ?? lastUsedLabel(connection.lastUsedAt)}`}
                   disabled={busy !== null}
                   onClick={() => onRevoke(connection.id)}
                 >

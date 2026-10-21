@@ -21,9 +21,22 @@ const poser = vi.hoisted(() => ({
   redirectUri: 'https://poser-helper.example.test/callback',
   name: 'Official chatgpt.com',
 }));
+/** Approved before #615, whose row kept the posing name it published. */
+const elder = vi.hoisted(() => ({
+  clientId: 'https://elder-helper.example.test/oauth/client.json',
+  redirectUri: 'https://elder-helper.example.test/callback',
+  name: 'Claude by claude.ai',
+}));
+/** Approved before connections stored a name at all. */
+const quiet = vi.hoisted(() => ({
+  clientId: 'https://quiet-helper.example.test/oauth/client.json',
+  redirectUri: 'https://quiet-helper.example.test/callback',
+  name: 'Official chatgpt.com',
+}));
 vi.mock('@better-auth/cimd/node', () => ({
   fetchClientMetadataResource: vi.fn(async (input: string | URL) => {
-    const { clientId, redirectUri, name } = String(input) === poser.clientId ? poser : assistant;
+    const { clientId, redirectUri, name } =
+      [poser, elder, quiet].find(({ clientId }) => clientId === String(input)) ?? assistant;
     return Response.json({
       client_id: clientId,
       client_name: name,
@@ -114,6 +127,30 @@ async function askApproval({ clientId, redirectUri }: typeof assistant) {
   return approval;
 }
 
+/** The member approves the request on the approval page. */
+async function approve(approval: URL) {
+  const consent = await call('/oauth2/consent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: origin, cookie },
+    body: JSON.stringify({
+      accept: true,
+      oauth_query: approval.search.slice(1),
+      scope: MCP_LEDGER_SCOPE,
+    }),
+  });
+  expect(consent.status, await consent.clone().text()).toBe(200);
+}
+
+/** This assistant's connection as Settings lists it. */
+async function listed({ clientId }: typeof assistant) {
+  const response = await call('/mcp/connections', { headers: { cookie } });
+  expect(response.status).toBe(200);
+  const { connections } = (await response.json()) as {
+    connections: Array<{ clientId: string; name: string; access: string }>;
+  };
+  return connections.find((connection) => connection.clientId === clientId);
+}
+
 describe('the approval page for an assistant with a metadata document', () => {
   it('shows the name the document publishes and the address with its path (#614)', async () => {
     const approval = await askApproval(assistant);
@@ -136,20 +173,30 @@ describe('the approval page for an assistant with a metadata document', () => {
       { headers: { cookie } },
     );
     expect(await details.json()).toMatchObject({ name: 'poser-helper.example.test' });
-    const consent = await call('/oauth2/consent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Origin: origin, cookie },
-      body: JSON.stringify({
-        accept: true,
-        oauth_query: approval.search.slice(1),
-        scope: MCP_LEDGER_SCOPE,
-      }),
+    await approve(approval);
+    expect(await listed(poser)).toMatchObject({
+      name: 'poser-helper.example.test',
+      access: 'Ledger',
     });
-    expect(consent.status, await consent.clone().text()).toBe(200);
-    const listed = await call('/mcp/connections', { headers: { cookie } });
-    expect(listed.status).toBe(200);
-    expect((await listed.json()).connections).toMatchObject([
-      { clientId: poser.clientId, name: 'poser-helper.example.test', access: 'Ledger' },
-    ]);
+  });
+});
+
+describe('Settings for connections approved before #615', () => {
+  /** The stored row of this member's connection to the assistant, as the database holds it. */
+  const row = ({ clientId }: typeof assistant) =>
+    (records.mcpConnection as Array<{ clientId: string; name?: string | null }>).find(
+      (entry) => entry.clientId === clientId,
+    )!;
+
+  it('names a row stored with a posing name by its host, with no migration', async () => {
+    await approve(await askApproval(elder));
+    row(elder).name = 'Claude by claude.ai'; // As main's #615 stored a cleaned published name.
+    expect(await listed(elder)).toMatchObject({ name: 'elder-helper.example.test' });
+  });
+
+  it('names a row stored without a name as the approval page names the assistant', async () => {
+    await approve(await askApproval(quiet));
+    row(quiet).name = null;
+    expect(await listed(quiet)).toMatchObject({ name: 'quiet-helper.example.test' });
   });
 });

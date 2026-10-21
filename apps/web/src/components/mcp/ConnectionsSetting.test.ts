@@ -1,13 +1,31 @@
-import { createElement } from 'react';
+import { createElement, type ComponentType, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ThemeProvider } from '@mui/material/styles';
-import { describe, expect, it, vi } from 'vitest';
+import { ThemeProvider as EmotionThemeProvider } from '@emotion/react';
+import { THEME_ID, ThemeProvider } from '@mui/material/styles';
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { listItems, text } from '@/lib/test-utils/markup';
-import { ConnectionsList } from './ConnectionsSetting';
+import ConnectionsSetting, { ConnectionsList } from './ConnectionsSetting';
 
-/* Settings' Connected assistants once loaded, rendered to static markup. */
+/*
+ * Settings' Connected assistants: once loaded, rendered to static markup; and Disconnect, rendered
+ * with only the server behind `fetch` a stand-in. Without a document, the confirmation dialog
+ * renders in place and Next's Link as a plain link.
+ */
+
+vi.mock('next/link', async () => {
+  const { createElement } = await import('react');
+  return { default: (props: object) => createElement('a', props) };
+});
+vi.mock('@mui/material/Dialog', async () => {
+  const { createElement } = await import('react');
+  return {
+    default: ({ open, children }: { open: boolean; children: ReactNode }) =>
+      open ? createElement('div', { role: 'dialog' }, children) : null,
+  };
+});
 
 type Listed = Parameters<typeof ConnectionsList>[0]['data']['connections'][number];
 
@@ -97,8 +115,8 @@ describe('Settings → Connected assistants', () => {
       ),
     ]);
     for (const [row, name] of [
-      [rows[0], 'ChatGPT'],
-      [rows[1], 'Synthetic Assistant'],
+      [rows[0], 'ChatGPT, chatgpt.com/oauth/client.json'],
+      [rows[1], 'Synthetic Assistant, assistant.example.test/client.json'],
     ] as const) {
       const disconnect = /<button\b[^>]*>/.exec(row.html)![0];
       expect(disconnect).toContain(`aria-label="Disconnect ${name}"`);
@@ -107,5 +125,93 @@ describe('Settings → Connected assistants', () => {
       expect(disconnect).toContain('MuiButton-sizeSmall');
       expect(disconnect).not.toContain('MuiButton-fullWidth');
     }
+  });
+
+  it('names each Disconnect apart, even for two assistants with one name', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 9, 21));
+      const labels = [
+        ...markup([
+          CHATGPT,
+          { ...SYNTHETIC, id: 'c3', clientId: 'registered-one', name: 'Assistant' },
+          {
+            ...CHATGPT,
+            id: 'c4',
+            clientId: 'registered-two',
+            name: 'Assistant',
+          },
+        ]).matchAll(/<button\b[^>]*aria-label="(Disconnect [^"]*)"/g),
+      ].map(([, label]) => label);
+      expect(labels).toEqual([
+        'Disconnect ChatGPT, chatgpt.com/oauth/client.json',
+        'Disconnect Assistant, Not used yet',
+        'Disconnect Assistant, Last used 29 Aug',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('Disconnect in Settings', () => {
+  let renderer: ReactTestRenderer | undefined;
+  afterEach(() => {
+    act(() => renderer?.unmount());
+    renderer = undefined;
+    vi.unstubAllGlobals();
+  });
+
+  /** MUI's own provider reads the document on mount; Emotion's carries the theme without one. */
+  const AppTheme = EmotionThemeProvider as ComponentType<{ theme: object; children?: ReactNode }>;
+  const textOf = (node: ReactTestInstance | string): string =>
+    typeof node === 'string' ? node : node.children.map(textOf).join('');
+  const press = async (button: ReactTestInstance) => {
+    await act(async () => {
+      button.props.onClick({ preventDefault() {}, stopPropagation() {} });
+    });
+  };
+
+  it('revokes the assistant whose Disconnect was pressed, not the first one listed', async () => {
+    const revoked: unknown[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === '/api/auth/mcp/revoke') {
+          revoked.push(JSON.parse(String(init?.body)));
+          return Response.json({ disconnected: true });
+        }
+        return Response.json({
+          resource: 'https://splitbook.example/mcp',
+          connections: [CHATGPT, SYNTHETIC],
+          nextOffset: null,
+        });
+      }),
+    );
+    await act(async () => {
+      renderer = create(
+        createElement(
+          AppTheme,
+          { theme: { [THEME_ID]: createAppTheme('light') } },
+          createElement(ConnectionsSetting, { accountId: 'fictional-account' }),
+        ),
+      );
+    });
+    await press(
+      renderer!.root.find(
+        (node) =>
+          node.type === 'button' &&
+          node.props['aria-label'] ===
+            'Disconnect Synthetic Assistant, assistant.example.test/client.json',
+      ),
+    );
+    const dialog = renderer!.root.find((node) => node.props.role === 'dialog');
+    expect(textOf(dialog)).toContain('Disconnect Synthetic Assistant?');
+    await press(
+      dialog.find((node) => node.type === 'button' && textOf(node).trim() === 'Disconnect'),
+    );
+    expect(revoked).toEqual([{ id: 'c2' }]);
+    expect(textOf(renderer!.root)).toContain('ChatGPT');
+    expect(textOf(renderer!.root)).not.toContain('Synthetic Assistant');
   });
 });

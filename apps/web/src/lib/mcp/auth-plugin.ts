@@ -1,4 +1,4 @@
-import { assistantForApproval } from './assistant-name';
+import { assistantDisplay, assistantForApproval } from './assistant-name';
 import { randomUUID } from 'node:crypto';
 import type { AuthContext, BetterAuthPlugin } from 'better-auth';
 import {
@@ -114,9 +114,12 @@ export function mcpAuthPlugins(env: AuthEnv) {
               connections.push({
                 id: row.id,
                 clientId: row.clientId,
-                // A row stored without a name is named as the approval page names it (#615).
+                // Named as the approval page names it (#615), the stored name read as the one
+                // published: a row stored earlier with a posing name, or none, gives the host.
                 name:
-                  row.name ?? (await assistantForApproval(ctx.context.adapter, row.clientId)).name,
+                  row.name != null
+                    ? assistantDisplay(row.clientId, row.name).name
+                    : (await assistantForApproval(ctx.context.adapter, row.clientId)).name,
                 lastUsedAt: row.lastUsedAt ?? null,
                 access: consent.scopes.includes(MCP_DRAFT_SCOPE) ? 'Ledger + To review' : 'Ledger',
                 scopes: consent.scopes,
