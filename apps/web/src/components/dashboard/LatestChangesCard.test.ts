@@ -245,6 +245,17 @@ describe('a payment that settled several Debts at once, on Home (#734)', () => {
     },
   });
 
+  it('sits at its newest event, the one the read lists first', () => {
+    const later = '2026-10-21T04:51:00.000Z';
+    const [euros, rupees] = batch.activities;
+    const html = view({
+      status: 'ready',
+      activities: [{ ...euros, createdAt: later }, rupees],
+    });
+    expect(rows(html)[0].text).toContain(formatDateTime(later));
+    expect(rows(html)[0].text).toContain('to clear ₹1,480.00 and €20.00');
+  });
+
   it('is one change: who paid whom, what it cleared, and what was paid in all', () => {
     expect(rows(view({ status: 'ready', activities: batch.activities }))).toEqual([
       {

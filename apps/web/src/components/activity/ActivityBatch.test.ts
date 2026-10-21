@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { ThemeProvider } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { formatActivityTimestamp } from '@splitbook/shared/activity-timeline';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 
 /*
@@ -132,6 +133,23 @@ describe('a payment that settled several Debts at once, on the Activity tab (#73
     expect(textOf(card)).toContain(
       'Each currency’s balances moved only by its own Debt. The rates are kept as recorded.',
     );
+  });
+
+  it('sits at its newest event in the feed, and reads its Debts in the order they were recorded', async () => {
+    // The euro Settlement was recorded a minute after the rupee one, so the feed lists it first.
+    const later = { ...euros, createdAt: new Date(2026, 9, 21, 10, 21).toISOString() };
+    page.activities = [later, rupees];
+    await mount();
+    const row = textOf(batchRows()[0]);
+    expect(row).toContain(formatActivityTimestamp(later));
+    expect(row).not.toContain(formatActivityTimestamp(rupees));
+    expect(row.indexOf('₹1,480.00, same currency')).toBeLessThan(row.indexOf('€20.00 at'));
+
+    await act(async () => batchRows()[0].props.onClick());
+    const card = hosts('section').find(
+      (node) => node.props['aria-labelledby'] === 'payment-record-heading',
+    )!;
+    expect(textOf(card)).toContain('to clear ₹1,480.00 and €20.00');
   });
 
   it('says what it has of a payment the page cut short, and where the rest is', async () => {
