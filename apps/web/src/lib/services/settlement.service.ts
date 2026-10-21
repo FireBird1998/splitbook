@@ -94,9 +94,8 @@ export class SettlementService {
       paidBy,
       paidTo: data.paidTo,
       amount: command.amount,
-      amountMinor,
       currency: data.currency,
-      ...crossCurrency,
+      ...(data.paidCurrency ? { amountMinor, ...crossCurrency } : {}),
       paidByName: names.find((person) => String(person._id) === paidBy)?.name,
       paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
     });

@@ -1286,8 +1286,8 @@ Incomplete or inconsistent cross-currency fields are **422** validation errors.
 Partial payments and paying more than the Debt retain the existing rules.
 
 `POST` and `GET /api/groups/[id]/settlements` return these fields unchanged.
-`settlement_recorded` metadata in both Group Activity and Home's latest Activity
-also carries `amountMinor`, `currency`, and all supplied cross-currency fields.
+For cross-currency payments, `settlement_recorded` metadata in both Group Activity
+and Home's latest Activity also carries `amountMinor`, `currency`, and all supplied cross-currency fields.
 The member-facing reads retain fallback provenance; assistant reads continue to
 expose only ledger amounts, never the rate snapshot.
 
