@@ -28,6 +28,7 @@
  * Framework-free (ADR 0002): no Intl, no DOM, and dates are compared as `yyyy-MM-dd` strings,
  * so no time zone can move a day.
  */
+import { wholeAmountWords } from './amount-entry';
 import { CURRENCIES, formatCurrency, getCurrency, getCurrencyPrecision } from './currency';
 import {
   MAX_EXPENSE_AMOUNT,
@@ -635,7 +636,8 @@ function readAmount(tokens: Token[], listed: readonly string[]): AmountRead {
       const places = getCurrencyPrecision(currency);
       return invalid(
         'amount-decimals',
-        `${currency} amounts have ${places === 0 ? 'no decimal places' : `at most ${places} decimal places`}. Nothing is rounded for you.`,
+        wholeAmountWords(currency) ??
+          `${currency} amounts have at most ${places} decimal places. Nothing is rounded for you.`,
         number,
       );
     }
