@@ -20,6 +20,21 @@ function hue(color: string): number {
 }
 
 describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
+  it('lets a bordered text field’s own border show its focus, with no second ring; a button keeps the ring (#823)', () => {
+    const theme = createAppTheme(mode);
+    const baseline = theme.components?.MuiCssBaseline?.styleOverrides;
+    const rules = (typeof baseline === 'function' ? baseline(theme) : baseline) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    // Every element focused from the keyboard gets the ring, a button among them.
+    expect(rules[':focus-visible']).toMatchObject({ boxShadow: expect.stringContaining('4px') });
+    // An outlined or filled field's focused border is its indicator.
+    for (const field of ['.MuiOutlinedInput-input', '.MuiFilledInput-input'])
+      expect(rules[`${field}:focus-visible`], field).toEqual({ boxShadow: 'none' });
+    expect(Object.keys(rules).filter((selector) => /Button/.test(selector))).toEqual([]);
+  });
+
   it('keeps small status text readable on its tint and ordinary surfaces', () => {
     const theme = createAppTheme(mode);
     for (const tone of ['positive', 'negative', 'warning', 'info'] as const) {

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 import { expectThemeApplied } from '../playwright/fixtures';
 
@@ -102,4 +102,26 @@ test('catalogue demonstrates money, controls, empty and loading states in either
     'data-theme',
     initial === 'dark' ? 'light' : 'dark',
   );
+});
+
+test('a text field focused by click or Tab draws only its own border; an icon button keeps the ring (#823)', async ({
+  page,
+}) => {
+  await page.goto('/dev/design-system');
+  const ring = (control: Locator) =>
+    control.evaluate((element) => getComputedStyle(element).boxShadow);
+  const field = page.getByLabel('Sample expense name');
+  await field.click();
+  await expect(field).toBeFocused();
+  expect(await ring(field)).toBe('none');
+  // From the keyboard: back out to the field before it, and Tab in again.
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(field).toBeFocused();
+  expect(await ring(field)).toBe('none');
+  // On through the second field and a button to the icon button, which keeps the theme's ring.
+  for (let step = 0; step < 3; step++) await page.keyboard.press('Tab');
+  const iconButton = page.getByRole('button', { name: /^Switch to (light|dark) mode using icon$/ });
+  await expect(iconButton).toBeFocused();
+  expect(await ring(iconButton)).toContain('4px');
 });
