@@ -19,7 +19,13 @@ import { fetchWebActivity } from '@/lib/web-read';
 import { useState } from 'react';
 import ButtonBase from '@mui/material/ButtonBase';
 import { readCrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
+import { groupSettlementBatches } from '@splitbook/shared/settlement-batch-activity';
+import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
+import { newestEvent, type ActivityBatch } from './batch-words';
+import BatchPaymentCard from './BatchPaymentCard';
 import PaymentRecordCard from './PaymentRecordCard';
+
+type Batch = ActivityBatch<ActivityLike>;
 
 const ACTIVITY_ICONS: Record<string, string> = {
   expense_added: '🧾',
@@ -70,7 +76,18 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
   const askedOlder = Boolean(data && size > data.length);
   const loadingOlder = isValidating && askedOlder;
   const olderFailed = Boolean(error) && askedOlder;
-  const groups = groupActivitiesByDay(activities);
+  // Group all loaded pages together: a split payment becomes one complete row when its older
+  // events arrive, at the first event already shown (#734, #800).
+  const grouped = groupSettlementBatches(activities);
+  const rows = grouped.map((item) =>
+    item.kind === 'event' ? item.event : newestEvent(item, activities),
+  );
+  const batches = new Map(
+    grouped.flatMap((item): [string, Batch][] =>
+      item.kind === 'batch' ? [[newestEvent(item, activities)._id, item]] : [],
+    ),
+  );
+  const groups = groupActivitiesByDay(rows);
 
   if (isLoading) {
     return (
@@ -99,9 +116,13 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     );
   }
 
-  const opened = activities.find((activity) => activity._id === openId);
+  const opened = rows.find((activity) => activity._id === openId);
+  const openBatch = opened ? batches.get(opened._id) : undefined;
   const openRecord =
-    opened?.type === 'settlement_recorded' ? readCrossCurrencyRecord(opened.metadata) : null;
+    !openBatch && opened?.type === 'settlement_recorded'
+      ? readCrossCurrencyRecord(opened.metadata)
+      : null;
+  const wordsOf = (batch: Batch) => settlementBatchWords(batch.events, batch.batchSize, viewerId);
 
   const list = (
     <Stack spacing={3}>
@@ -124,10 +145,14 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
             {group.activities.map((activity) => {
               const type = activity.type;
               const icon = ACTIVITY_ICONS[type] || '📋';
+              const batch = batches.get(activity._id);
+              const words = batch ? wordsOf(batch) : null;
               const detail = formatActivityDetail(activity, viewerId);
-              // A Debt paid in another currency opens its card (#727).
+              // A Debt paid in another currency opens its card (#727), as does a payment that
+              // settled several (#734).
               const payment =
-                type === 'settlement_recorded' && readCrossCurrencyRecord(activity.metadata);
+                Boolean(batch) ||
+                (type === 'settlement_recorded' && readCrossCurrencyRecord(activity.metadata));
               const open = payment && activity._id === openId;
               const rowSx = {
                 display: 'flex',
@@ -151,10 +176,23 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
                       color="text.primary"
                       sx={{ display: 'block' }}
                     >
-                      {formatActivityHeadline(activity, viewerId)}
-                      <PreparedBy value={activity.metadata?.preparedBy} inline />
+                      {words ? words.headline : formatActivityHeadline(activity, viewerId)}
+                      {!words && <PreparedBy value={activity.metadata?.preparedBy} inline />}
                     </Typography>
-                    {detail && (
+                    {/* Each Debt it cleared and its rate, then where the rest of it is (#734). */}
+                    {words &&
+                      [...words.debts, ...(words.rest ? [words.rest] : [])].map((line) => (
+                        <Typography
+                          key={line}
+                          component="span"
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ mt: 0.25, display: 'block' }}
+                        >
+                          {line}
+                        </Typography>
+                      ))}
+                    {!words && detail && (
                       <Typography
                         component="span"
                         variant="body2"
@@ -232,7 +270,26 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     </Stack>
   );
 
-  return openRecord && opened ? (
+  const card =
+    openBatch && opened ? (
+      <BatchPaymentCard
+        words={wordsOf(openBatch)}
+        recordedBy={opened.actor}
+        recordedAt={opened.createdAt}
+        viewerId={viewerId}
+        onClose={() => setOpenId(null)}
+      />
+    ) : openRecord && opened ? (
+      <PaymentRecordCard
+        record={openRecord}
+        recordedBy={opened.actor}
+        recordedAt={opened.createdAt}
+        viewerId={viewerId}
+        onClose={() => setOpenId(null)}
+      />
+    ) : null;
+
+  return card ? (
     <Box
       sx={{
         display: 'grid',
@@ -243,13 +300,7 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     >
       <Box sx={{ order: { xs: 2, md: 1 }, minWidth: 0 }}>{list}</Box>
       <Box sx={{ order: { xs: 1, md: 2 }, position: { md: 'sticky' }, top: { md: 88 } }}>
-        <PaymentRecordCard
-          record={openRecord}
-          recordedBy={opened.actor}
-          recordedAt={opened.createdAt}
-          viewerId={viewerId}
-          onClose={() => setOpenId(null)}
-        />
+        {card}
       </Box>
     </Box>
   ) : (

@@ -21,6 +21,9 @@ import {
   parseUserActivityResponse,
   type UserActivityEventRead,
 } from '@splitbook/shared/user-activity-read';
+import { groupSettlementBatches } from '@splitbook/shared/settlement-batch-activity';
+import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
+import { newestEvent, type ActivityBatch } from '@/components/activity/batch-words';
 import { fetcher } from '@/lib/utils/fetcher';
 import { RADIUS } from '@/lib/theme/tokens';
 
@@ -154,18 +157,45 @@ export function LatestChangesView({ state, viewerId, onRetry }: LatestChangesVie
         </Box>
       ) : (
         <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-          {state.activities.map((event) => (
-            <LatestChangeRow key={event._id} event={event} viewerId={viewerId} />
-          ))}
+          {/* A payment that settled several Debts at once is one change (#734). */}
+          {groupSettlementBatches(state.activities).map((item) => {
+            const event = item.kind === 'event' ? item.event : newestEvent(item, state.activities);
+            return (
+              <LatestChangeRow
+                key={event._id}
+                event={event}
+                batch={item.kind === 'batch' ? item : undefined}
+                viewerId={viewerId}
+              />
+            );
+          })}
         </Box>
       )}
     </Box>
   );
 }
 
-function LatestChangeRow({ event, viewerId }: { event: UserActivityEventRead; viewerId: string }) {
-  const { actor, action, subject } = activityLineParts(event, viewerId);
-  const amount = formatActivityAmount(event, event.currency);
+function LatestChangeRow({
+  event,
+  batch,
+  viewerId,
+}: {
+  event: UserActivityEventRead;
+  batch?: ActivityBatch<UserActivityEventRead>;
+  viewerId: string;
+}) {
+  const words = batch ? settlementBatchWords(batch.events, batch.batchSize, viewerId) : null;
+  // "You paid Sam Chen to clear ₹1,480.00 and €20.00", and ₹3,322.00 where amounts go.
+  const paidAt = words ? words.amounts.indexOf('to clear ') : -1;
+  const { actor, action, subject } = words
+    ? { actor: words.payer, action: 'paid', subject: words.payee }
+    : activityLineParts(event, viewerId);
+  const cleared = words ? words.amounts.slice(Math.max(paidAt, 0)) : null;
+  const amount: ActivityAmount | null = words
+    ? paidAt > 0
+      ? { after: words.amounts.slice(0, paidAt).trim() }
+      : null
+    : formatActivityAmount(event, event.currency);
 
   return (
     <Box component="li" sx={{ '& + &': { borderTop: 1, borderColor: 'divider' } }}>
@@ -218,10 +248,11 @@ function LatestChangeRow({ event, viewerId }: { event: UserActivityEventRead; vi
                 {' '}
                 <Box component="strong" sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>
                   {subject}
-                  <PreparedBy value={event.metadata.preparedBy} inline />
+                  {!words && <PreparedBy value={event.metadata.preparedBy} inline />}
                 </Box>
               </>
             ) : null}
+            {cleared ? ` ${cleared}` : null}
           </Box>
           <Box
             component="span"

@@ -258,6 +258,36 @@ describe('a new payment', () => {
   });
 });
 
+describe('a payment that settled several Debts at once, whose reply was lost (#734)', () => {
+  it('holds a new payment between the two, and says to check it in Settle up', () => {
+    // You paid Sam ₹3,322.00 for a ₹1,480.00 Debt and a €20.00 one; the reply never came.
+    const batch = [
+      { amount: 1480, currency: 'INR' },
+      {
+        amount: 20,
+        currency: 'EUR',
+        amountPaidMinor: 184200,
+        appliedRate: '92.1',
+        rateKind: 'suggested' as const,
+      },
+    ];
+    stored.attempts = [
+      {
+        ...attempt({ amount: 3322, currency: 'INR', note: '' }),
+        batch,
+        body: JSON.stringify({ paidBy: YOU, paidTo: SAM, paidCurrency: 'INR', settlements: batch }),
+      },
+    ];
+    const { html, text: shown } = render({ to: SAM, amount: '1060.00', purpose: 'record' });
+    expect(shown).toContain(
+      'A payment that settles several Debts with Sam Chen may already be recorded. Check it in Settle up before recording another.',
+    );
+    expect(record(html)?.disabled).toBe(true);
+    // It isn't shown as a payment of its own.
+    expect(field(html, 'record-payment-amount').readOnly).toBe(false);
+  });
+});
+
 describe('a payment whose reply was lost', () => {
   it('shows what a payment in another currency paid, and at what rate (#727)', () => {
     stored.attempts = [

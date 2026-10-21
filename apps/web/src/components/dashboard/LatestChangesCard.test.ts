@@ -201,3 +201,67 @@ describe('the card on Home', () => {
     expect(render(card)).toContain('aria-label="Loading latest changes"');
   });
 });
+
+describe('a payment that settled several Debts at once, on Home (#734)', () => {
+  const lisbon = { _id: 'b00000000000000000000003', name: 'Lisbon & Tokyo' };
+  const at = '2026-10-21T04:50:00.000Z';
+  const people = {
+    paidBy: ALEX,
+    paidTo: 'a00000000000000000000002',
+    paidByName: 'Alex Rivera',
+    paidToName: 'Sam Chen',
+    batchId: 'f00000000000000000000001',
+    batchSize: 2,
+  };
+  const event = (id: string, currency: string, metadata: Record<string, unknown>) => ({
+    _id: id,
+    type: 'settlement_recorded',
+    createdAt: at,
+    group: lisbon,
+    actor: { _id: ALEX, name: 'Alex Rivera' },
+    currency,
+    metadata: { ...people, settlementId: id, currency, ...metadata },
+  });
+  // Newest first, as the read sends them: the euro Settlement was recorded second.
+  const batch = parseUserActivityResponse({
+    status: 200,
+    data: {
+      limit: 10,
+      activities: [
+        event('f00000000000000000000002', 'EUR', {
+          amount: 20,
+          amountMinor: 2000,
+          amountPaidMinor: 184200,
+          paidCurrency: 'INR',
+          appliedRate: '92.1',
+          rateKind: 'suggested',
+          suggestedRate: '92.1',
+          rateSource: 'frankfurter',
+          rateAsOf: '2026-10-20',
+          rateFetchedAt: '2026-10-21T00:30:00.000Z',
+        }),
+        event('f00000000000000000000001', 'INR', { amount: 1480, amountMinor: 148000 }),
+      ],
+    },
+  });
+
+  it('sits at its newest event, the one the read lists first', () => {
+    const later = '2026-10-21T04:51:00.000Z';
+    const [euros, rupees] = batch.activities;
+    const html = view({
+      status: 'ready',
+      activities: [{ ...euros, createdAt: later }, rupees],
+    });
+    expect(rows(html)[0].text).toContain(formatDateTime(later));
+    expect(rows(html)[0].text).toContain('to clear ₹1,480.00 and €20.00');
+  });
+
+  it('is one change: who paid whom, what it cleared, and what was paid in all', () => {
+    expect(rows(view({ status: 'ready', activities: batch.activities }))).toEqual([
+      {
+        href: `/groups/${lisbon._id}/activity`,
+        text: `AR You paid Sam Chen to clear ₹1,480.00 and €20.00 Lisbon & Tokyo · ${formatDateTime(at)} ₹3,322.00`,
+      },
+    ]);
+  });
+});

@@ -40,11 +40,18 @@ import {
   browserPairLock,
   discardSettlementAttempt,
   recordSettlement,
+  samePair,
   type NamedSettlementPayment,
   type SettlementAttempt,
 } from '@/lib/settlement-attempts';
 import {
+  DISCARDED,
+  GONE,
+  NOT_DISCARDED,
+  NOT_STORED,
   RECORD_PAYMENT_FOOTNOTE,
+  STALE,
+  UNCONFIRMED,
   amountInputText,
   checkNewPayment,
   currencyLabel,
@@ -53,18 +60,6 @@ import {
   whoSees,
   type LedgerState,
 } from './record-payment';
-
-const UNCONFIRMED =
-  'This payment may already be recorded. Recording it again sends the same record, so it can’t be counted twice.';
-const GONE =
-  'That payment was confirmed or discarded in another tab, so this can’t send anything. Check Payments below before recording another payment.';
-const NOT_STORED =
-  'Nothing was sent: this browser couldn’t keep a copy of the payment to retry it safely. Allow this site to store data, then record it again.';
-const STALE =
-  'Nothing was sent: this page was opened for a different account than the one signed in now. It reloads for the current account.';
-const NOT_DISCARDED = 'This browser couldn’t discard the payment. Try again.';
-export const DISCARDED =
-  'This browser’s copy of the payment was discarded. Nothing was removed from the Group.';
 
 /** Someone who can be picked as From or To. */
 export interface PaymentParty {
@@ -120,9 +115,6 @@ export interface RecordPaymentFormProps {
   /** The pair the form shows, so Settle up can mark its row. */
   onPairChange?: (pair: { from: string; to: string }) => void;
 }
-
-const samePair = (attempt: SettlementAttempt, a: string, b: string) =>
-  [attempt.paidBy, attempt.paidTo].sort().join() === [a, b].sort().join();
 
 /** "You paid Priya Shah ₹250.25.", "Sam Chen paid you ₹100.00.", from the viewer's side. */
 function recordedMessage(payment: NamedSettlementPayment, viewerId: string) {
@@ -229,10 +221,13 @@ export default function RecordPaymentForm({
   const focusOnStart = useRef(start.focus);
 
   const attempts = useSettlementAttempts(accountId, groupId);
-  const stored =
+  const pairAttempt =
     from && to && from !== to
       ? (attempts.find((attempt) => samePair(attempt, from, to)) ?? null)
       : null;
+  // A stored settle-up (#734) is checked in its own sheet, never shown here as one payment.
+  const settling = pairAttempt?.batch ? pairAttempt : null;
+  const stored = settling ? null : pairAttempt;
 
   // A stored payment that disappears while it is shown was settled in another tab.
   useEffect(() => {
@@ -504,7 +499,7 @@ export default function RecordPaymentForm({
   const amountError = check?.amount.status === 'invalid' ? check.amount.message : null;
   const crossReady = !crossEntry || crossReading?.status === 'valid';
   const canSend =
-    !loading && !blocked && (stored !== null || (check?.ready === true && crossReady));
+    !loading && !blocked && !settling && (stored !== null || (check?.ready === true && crossReady));
   const why =
     crossEntry && crossReading?.status === 'incomplete' && check?.waitingFor == null
       ? 'Enter the rate or the amount paid to record it'
@@ -631,6 +626,14 @@ export default function RecordPaymentForm({
                 them.
               </Box>
             )}
+          </Alert>
+        )}
+
+        {settling && (
+          <Alert severity="warning" role="status">
+            A payment that settles several Debts with{' '}
+            {settling.paidBy === accountId ? settling.paidToName : settling.paidByName} may already
+            be recorded. Check it in Settle up before recording another.
           </Alert>
         )}
 

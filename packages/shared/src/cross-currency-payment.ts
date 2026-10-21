@@ -93,6 +93,12 @@ type RateReading =
   | { status: 'invalid'; message: string }
   | { status: 'valid'; rate: string };
 
+/** A rate as typed, as the plain decimal it is recorded as ("1,092.10" → "1092.10"), or null. */
+export function plainRate(text: string): string | null {
+  const read = readRate(text);
+  return read.status === 'valid' ? read.rate : null;
+}
+
 /** The rate typed, as a plain decimal: commas only as thousands separators. */
 function readRate(text: string): RateReading {
   const typed = text.trim();

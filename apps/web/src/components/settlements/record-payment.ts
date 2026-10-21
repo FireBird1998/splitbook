@@ -250,3 +250,16 @@ export function withoutRecordPaymentLink(search: string): string {
   const rest = query.toString();
   return rest ? `?${rest}` : '';
 }
+
+/** What a stored payment's sheet or form says, for one payment or several Debts at once. */
+export const UNCONFIRMED =
+  'This payment may already be recorded. Recording it again sends the same record, so it can’t be counted twice.';
+export const GONE =
+  'That payment was confirmed or discarded in another tab, so this can’t send anything. Check Payments below before recording another payment.';
+export const NOT_STORED =
+  'Nothing was sent: this browser couldn’t keep a copy of the payment to retry it safely. Allow this site to store data, then record it again.';
+export const STALE =
+  'Nothing was sent: this page was opened for a different account than the one signed in now. It reloads for the current account.';
+export const NOT_DISCARDED = 'This browser couldn’t discard the payment. Try again.';
+export const DISCARDED =
+  'This browser’s copy of the payment was discarded. Nothing was removed from the Group.';
