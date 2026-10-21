@@ -309,6 +309,18 @@ export function sharedDraftCollection({
           await refresh();
         }
       }),
+    /**
+     * Change currency (#733): an item in a currency its Group doesn't list takes a listed one. Its
+     * amount stays as entered; nothing is converted. Then it is reviewed again.
+     */
+    changeCurrency: (draft: PersistedExpenseDraft, currency: string) =>
+      run(async () => {
+        try {
+          await client.replace(draft, { ...(draft.values ?? {}), currency });
+        } finally {
+          await refresh();
+        }
+      }),
     /** "You for all N": item by item, skipping any changed elsewhere; Undo restores only its own. */
     payAll: (drafts: PersistedExpenseDraft[], viewerId: string) =>
       run(async () => {
