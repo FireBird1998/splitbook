@@ -136,6 +136,14 @@ Sign-out also revokes the session on the server, alongside the purge (#202). The
 
 `verify:settings` exercises account details, sign-out, server session revocation, restart/account switching, and delayed response delivery through the real controller and isolated HTTP backend. Native checks separately verify actual SecureStore appearance persistence, system appearance changes, enlarged text, the browser destination, and sign-out/account switching.
 
+## Connected assistants (#622)
+
+Settings › Account offers **Connected assistants** where the server has assistants switched on: opening Settings reads the web's connection list (`GET /api/auth/mcp/connections`), and a 404 means they're off, so the row stays hidden. The screen lists each assistant by name with its access ("Read only" or "Read only + To review"), how many of the member's Groups it reaches ("1 of 2 Groups", from `GET /api/user/assistant-groups` and the shared `assistantGroupCount`, as the web's Settings counts them) and when it was last used. A banner says that connecting an assistant and changing its Groups happen on the web.
+
+Disconnect asks first in a sheet, then sends the web's revoke (`POST /api/auth/mcp/revoke`), removes the assistant, says "<name> disconnected" in a snackbar, and reads the list again. A failure keeps the assistant and the sheet, saying so. Disconnecting needs a connection.
+
+The list is kept as a Saved copy beside Home's, scoped to the backend and account, written on the saved-copy queue and cleared at sign-out with the account's other saved copies. Offline, the screen shows it read only with when it was saved, or says this phone keeps no copy. Back returns to Settings, closing the sheet first.
+
 ## Expense creation and drafts (#53–54)
 
 Open a Group and choose **Add expense**. Equal splits use shared exact-money allocation; the form collects a payer, participants, date, stable Tag identity, and optional category/notes. A past Household Month starts on that Month’s last day. Currency is the Group currency; an outdated draft requires an explicit currency choice and amount review.

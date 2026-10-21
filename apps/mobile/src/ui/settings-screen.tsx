@@ -10,6 +10,7 @@ import {
   CompactText,
   Divider,
   IconTile,
+  ListRow,
   SectionHeader,
   useTap,
 } from './compact';
@@ -35,6 +36,8 @@ export interface SettingsScreenProps {
   environment: { label: string; apiOrigin: string; webOrigin: string };
   onOpenWeb: () => void;
   onSignOut: () => void;
+  /** Account's Connected assistants, given where the server has assistants switched on (#622). */
+  onOpenAssistants?: () => void;
 }
 
 const appearances: Array<{
@@ -79,6 +82,7 @@ export function SettingsScreen({
   environment,
   onOpenWeb,
   onSignOut,
+  onOpenAssistants,
 }: SettingsScreenProps) {
   const theme = useTheme();
   // Settings is short enough not to scroll: a drag that starts on a choice never picks it (#665).
@@ -187,6 +191,18 @@ export function SettingsScreen({
               </CompactText>
             </View>
           </View>
+          {onOpenAssistants ? (
+            <>
+              <Divider inset={58} />
+              <ListRow
+                leading={<IconTile icon="sparkles-outline" />}
+                title="Connected assistants"
+                accessibilityLabel="Connected assistants"
+                trailing={<Icon name="chevron-forward" size={18} />}
+                onPress={onOpenAssistants}
+              />
+            </>
+          ) : null}
         </Card>
       </View>
 

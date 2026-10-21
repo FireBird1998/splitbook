@@ -60,3 +60,8 @@ export function assistantGroupCount(
     of: groups.length,
   };
 }
+
+/** "1 of 3 Groups": how many of the member's Groups an assistant reaches, as both clients say it. */
+export function assistantGroupCountLabel({ reached, of }: { reached: number; of: number }): string {
+  return `${reached} of ${of} ${of === 1 ? 'Group' : 'Groups'}`;
+}
