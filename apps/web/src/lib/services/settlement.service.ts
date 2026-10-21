@@ -1,13 +1,11 @@
 import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
+import { lockClearedCurrency, lockLedgerCurrency } from '@/lib/ledger-currency';
 import Group from '@/lib/models/Group';
-import Expense from '@/lib/models/Expense';
-import { isGroupCurrency, type GroupCurrencyList } from '@splitbook/shared/group-currencies';
 import Settlement from '@/lib/models/Settlement';
 import { activityService } from './activity.service';
 import {
-  assertGroupCurrency,
   assertSettlementAuthorization,
   assertSettlementMembers,
 } from '@splitbook/shared/expense-validation';
@@ -26,22 +24,6 @@ import User from '@/lib/models/User';
 import { Types } from 'mongoose';
 import { settlementDebtSnapshot } from './settlement-debt';
 import { PERSON_FIELDS } from './person-fields';
-
-/** Historical currencies can clear a Debt; the paid side still uses the current list. */
-async function assertSettlementCurrencies(
-  groupId: string,
-  group: GroupCurrencyList,
-  data: CreateSettlementInput,
-) {
-  if (
-    !isGroupCurrency(group, data.currency) &&
-    !(await Expense.exists({ group: groupId, currency: data.currency, isDeleted: false })) &&
-    !(await Settlement.exists({ group: groupId, currency: data.currency }))
-  ) {
-    throw new Error('CURRENCY_MISMATCH');
-  }
-  if (data.paidCurrency) assertGroupCurrency(group, data.paidCurrency);
-}
 
 export class SettlementService {
   /**
@@ -100,22 +82,6 @@ export class SettlementService {
     }
     // A retry of a payment recorded before the archive is confirmed above; nothing new is (#578).
     if (group.isArchived) throw new Error('GROUP_ARCHIVED');
-    // Keep the conservative currency lock, but let a historical cleared currency qualify.
-    await withGroupMutation(
-      groupId,
-      async () => {
-        const current = await Group.findById(groupId);
-        if (!current) throw new Error('FORBIDDEN');
-        await assertSettlementCurrencies(groupId, current, data);
-        await Group.updateOne(
-          { _id: groupId },
-          { $set: { currencyLocked: true } },
-          { timestamps: false },
-        );
-      },
-      { ledger: true },
-    );
-
     const settlementId = new Types.ObjectId();
     const names = await User.find({ _id: { $in: [paidBy, data.paidTo] } })
       .select('name')
@@ -126,11 +92,11 @@ export class SettlementService {
       settlement = await withGroupMutation(
         groupId,
         async () => {
-          // Both currencies rechecked in the insert's own mutation, so a removal of either can't
-          // come in between (#721) before either side is committed.
-          const current = await Group.findById(groupId);
-          if (!current) throw new Error('FORBIDDEN');
-          await assertSettlementCurrencies(groupId, current, data);
+          // Both currencies are checked in the insert's own mutation, so a removal of either can't
+          // come in between (#721): the cleared one may be an older currency the ledger still
+          // holds (#727); the paid one must be on the Group's list.
+          await lockClearedCurrency(groupId, data.currency);
+          if (data.paidCurrency) await lockLedgerCurrency(groupId, data.paidCurrency);
           const debtSnapshot = data.paidCurrency
             ? await settlementDebtSnapshot(groupId, data.currency, paidBy, data.paidTo, amountMinor)
             : {};
