@@ -77,6 +77,12 @@ it('offers Load older, appends the next 50-event page in order, and ends at the 
       Array.from({ length: 50 }, (_, i) => event(i + 1)),
     ),
   );
+  api.mockResolvedValueOnce(
+    answer(
+      1,
+      Array.from({ length: 50 }, (_, i) => event(i + 1)),
+    ),
+  );
   let finish!: (response: Response) => void;
   api.mockImplementationOnce(
     () =>
@@ -99,13 +105,16 @@ it('offers Load older, appends the next 50-event page in order, and ends at the 
   expect(button('Load older')).toBeUndefined();
   expect(api.mock.calls.map(([path]) => path)).toEqual([
     `/api/groups/${GROUP}/activity?page=1&limit=50`,
+    `/api/groups/${GROUP}/activity?page=1&limit=50`,
     `/api/groups/${GROUP}/activity?page=2&limit=50`,
   ]);
 });
 
 it('keeps loaded events after an older-page failure and retries that same page', async () => {
   api.mockResolvedValueOnce(answer(1, [event(1)]));
+  api.mockResolvedValueOnce(answer(1, [event(1)]));
   api.mockResolvedValueOnce(Response.json({ error: 'Unavailable' }, { status: 503 }));
+  api.mockResolvedValueOnce(answer(1, [event(1)]));
   api.mockResolvedValueOnce(answer(2, [event(2)]));
   await render();
   await act(async () => {
@@ -123,6 +132,7 @@ it('keeps loaded events after an older-page failure and retries that same page',
 });
 
 it('keeps the first copy when a newer event shifts an event onto two pages', async () => {
+  api.mockResolvedValueOnce(answer(1, [event(1), event(2)]));
   api.mockResolvedValueOnce(answer(1, [event(1), event(2)]));
   api.mockResolvedValueOnce(
     answer(2, [

@@ -50,7 +50,6 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
     fetchWebActivity,
     {
       refreshInterval: 10_000,
-      revalidateFirstPage: false,
     },
   );
 
