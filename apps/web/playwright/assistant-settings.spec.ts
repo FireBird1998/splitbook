@@ -31,9 +31,14 @@ test('Settings names assistants and only a confirmed Disconnect revokes access',
   await enterAsPersona(page, 'alex');
   await page.goto('/settings');
   await expect(page.getByText('Fictional assistant', { exact: true })).toBeVisible();
-  await expect(page.getByText('Ledger + To review', { exact: true })).toBeVisible();
+  await expect(page.getByText('Read only + To review', { exact: true })).toBeVisible();
   await expect(page.getByText('Not used yet', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await page
+    .getByRole('button', {
+      name: 'Disconnect Fictional assistant, assistant.example.test/client.json',
+      exact: true,
+    })
+    .click();
   const confirmation = page.getByRole('dialog', { name: 'Disconnect Fictional assistant?' });
   await expect(confirmation).toContainText(
     'The assistant stops at once. Items already prepared stay in your To review.',
@@ -48,7 +53,12 @@ test('Settings names assistants and only a confirmed Disconnect revokes access',
   await page.clock.resume();
   await expect(confirmation).toBeHidden();
   expect(revocations).toBe(0);
-  await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await page
+    .getByRole('button', {
+      name: 'Disconnect Fictional assistant, assistant.example.test/client.json',
+      exact: true,
+    })
+    .click();
   await expectNoSeriousA11yViolations(page, testInfo, 'assistant-disconnect');
   await confirmation.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await expect(page.getByText('No assistants connected.', { exact: true })).toBeVisible();

@@ -3,6 +3,7 @@
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -17,20 +18,12 @@ import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import Link from 'next/link';
 import { formatDate } from '@splitbook/shared/date';
 import { PRODUCT_NAME } from '@/lib/product';
-
-interface Connection {
-  id: string;
-  clientId: string;
-  scopes: string[];
-  access: string;
-  name: string;
-  lastUsedAt: string | null;
-}
-interface Connections {
-  resource: string;
-  connections: Connection[];
-  nextOffset: number | null;
-}
+import { assistantAddress } from '@/lib/mcp/assistant-name';
+import {
+  connectedAssistantAccessLabel,
+  type ConnectedAssistant,
+  type ConnectedAssistantsPage,
+} from '@splitbook/shared/connected-assistant';
 
 function lastUsedLabel(value: string | null): string {
   if (!value) return 'Not used yet';
@@ -38,18 +31,6 @@ function lastUsedLabel(value: string | null): string {
   if (isToday(date)) return `Last used ${format(date, 'HH:mm')}`;
   if (isYesterday(date)) return 'Last used yesterday';
   return `Last used ${formatDate(date, { omitCurrentYear: true })}`;
-}
-
-/** A metadata address helps distinguish same-named assistants; registered ids are not URLs. */
-function assistantAddress(clientId: string): string | null {
-  try {
-    const url = new URL(clientId);
-    return ['https:', 'http:'].includes(url.protocol)
-      ? `${url.host}${url.pathname === '/' ? '' : url.pathname}`
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -62,7 +43,7 @@ export function ConnectionsList({
   onRevoke,
   onLoadMore,
 }: {
-  data: Connections;
+  data: ConnectedAssistantsPage;
   busy: string | null;
   onRevoke: (id: string) => void;
   onLoadMore: () => void;
@@ -76,34 +57,75 @@ export function ConnectionsList({
         {data.resource}
       </Typography>
       <Alert severity="info">
-        Assistants can read your ledger. If you also let one prepare Expenses, it can add, change
-        and permanently delete items in your To review. Only you can save Expenses in {PRODUCT_NAME}
-        .
+        Assistants can answer questions about your Groups, balances and Expenses. If you also let
+        one prepare Expenses, it can add, change and permanently delete items in your To review.
+        Only you can save Expenses in {PRODUCT_NAME}.
       </Alert>
       {data.connections.length === 0 && (
         <Typography variant="body2">No assistants connected.</Typography>
       )}
-      {data.connections.map((connection) => (
-        <Stack key={connection.id} spacing={1}>
-          <Typography sx={{ overflowWrap: 'anywhere' }}>{connection.name}</Typography>
-          {assistantAddress(connection.clientId) && (
-            <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-              {assistantAddress(connection.clientId)}
-            </Typography>
-          )}
-          <Typography variant="body2">{connection.access}</Typography>
-          <Typography variant="body2" color="text.secondary">
-            {lastUsedLabel(connection.lastUsedAt)}
-          </Typography>
-          <Button
-            variant="outlined"
-            disabled={busy !== null}
-            onClick={() => onRevoke(connection.id)}
-          >
-            Disconnect
-          </Button>
-        </Stack>
-      ))}
+      {data.connections.length > 0 && (
+        <Box
+          component="ul"
+          aria-label="Connected assistants"
+          sx={{ listStyle: 'none', p: 0, m: 0 }}
+        >
+          {data.connections.map((connection, index) => {
+            const address = assistantAddress(connection.clientId);
+            return (
+              <Box
+                component="li"
+                key={connection.id}
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  columnGap: 2,
+                  rowGap: 1,
+                  py: 1.5,
+                  borderTop: index > 0 ? 1 : 0,
+                  borderColor: 'divider',
+                }}
+              >
+                <Box sx={{ flex: '1 1 16rem', minWidth: 0 }}>
+                  <Typography fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>
+                    {connection.name}
+                  </Typography>
+                  {address && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ overflowWrap: 'anywhere' }}
+                    >
+                      {address}
+                    </Typography>
+                  )}
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                    {connectedAssistantAccessLabel(connection.access)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {lastUsedLabel(connection.lastUsedAt)}
+                  </Typography>
+                </Box>
+                {/* Compact and red, as Sign Out is. */}
+                <Button
+                  variant="outlined"
+                  color="error"
+                  size="small"
+                  sx={{ color: 'status.negative', borderColor: 'status.negative' }}
+                  // Two assistants may share a name: the address, or else the last use, tells
+                  // their buttons apart.
+                  aria-label={`Disconnect ${connection.name}, ${address ?? lastUsedLabel(connection.lastUsedAt)}`}
+                  disabled={busy !== null}
+                  onClick={() => onRevoke(connection.id)}
+                >
+                  Disconnect
+                </Button>
+              </Box>
+            );
+          })}
+        </Box>
+      )}
       {data.nextOffset !== null && (
         <Button disabled={busy !== null} onClick={onLoadMore}>
           Load more connections
@@ -118,12 +140,12 @@ export function ConnectionsList({
 }
 
 export default function ConnectionsSetting({ accountId }: { accountId?: string }) {
-  const [data, setData] = useState<Connections | null>(null);
+  const [data, setData] = useState<ConnectedAssistantsPage | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [pending, setPending] = useState<Connection | null>(null);
+  const [pending, setPending] = useState<ConnectedAssistant | null>(null);
   useEffect(() => {
     if (!accountId) return;
     const controller = new AbortController();
