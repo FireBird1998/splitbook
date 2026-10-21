@@ -14,6 +14,7 @@ import {
   invitationsPath,
   recurringExpensesPath,
   groupCurrenciesPath,
+  groupRatesPath,
   searchPath,
   settlementsPath,
   userActivityPath,
@@ -39,6 +40,7 @@ import {
   queryKeyPath,
   recurringExpensesKey,
   groupCurrenciesKey,
+  groupRatesKey,
   searchKey,
   settlementsKey,
   userActivityKey,
@@ -165,6 +167,17 @@ describe('key factories', () => {
       groupCurrenciesKey(alex, maple),
       ['ledger', environment, alex.accountId, maple, groupCurrenciesPath(maple)],
     ],
+    [
+      'a suggested rate, read again with the Group’s other reads (#727)',
+      groupRatesKey(alex, maple, { from: 'EUR', to: 'INR' }),
+      [
+        'group',
+        environment,
+        alex.accountId,
+        maple,
+        groupRatesPath(maple, { from: 'EUR', to: 'INR' }),
+      ],
+    ],
   ])('%s: scope, environment, account, Group, then the path', (_label, key, expected) => {
     expect(key).toEqual(expected);
     expect(key.every((part) => typeof part === 'string')).toBe(true);
@@ -254,6 +267,7 @@ const reads: ((account: QueryAccount, groupId: string) => QueryKey)[] = [
   (account, groupId) => settlementsKey(account, groupId),
   (account, groupId) => recurringExpensesKey(account, groupId),
   (account, groupId) => groupCurrenciesKey(account, groupId),
+  (account, groupId) => groupRatesKey(account, groupId, { from: 'EUR', to: 'INR' }),
   (account, groupId) => groupInsightsKey(account, groupId, insights),
   (account, groupId) => tripSummaryKey(account, groupId, { timeZone: 'UTC' }),
 ];
@@ -267,7 +281,7 @@ const keys = [alex, sam, alexOnStaging].flatMap((account) =>
 describe('matchers', () => {
   it("select a Group's group, balances and ledger keys, and nothing else", () => {
     const selected = keys.filter(matchGroup(maple));
-    expect(selected).toHaveLength(3 * 10);
+    expect(selected).toHaveLength(3 * 11);
     for (const key of selected) {
       expect(['group', 'balances', 'ledger']).toContain(key[0]);
       expect(key[3]).toBe(maple);
@@ -314,7 +328,7 @@ describe('matchers', () => {
 
   it("select only this account's keys in this environment", () => {
     const selected = keys.filter(matchAccount(alex));
-    expect(selected).toHaveLength(2 * 16);
+    expect(selected).toHaveLength(2 * 17);
     expect(selected).toEqual(
       expect.arrayContaining([...everyKey(alex, maple), ...everyKey(alex, goa)]),
     );

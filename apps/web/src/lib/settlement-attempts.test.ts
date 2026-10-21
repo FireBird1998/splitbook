@@ -9,6 +9,7 @@ import {
   settlementBody,
   subscribeSettlementAttempts,
   type AttemptStorage,
+  type NamedSettlementPayment,
   type SettlementAttempt,
 } from './settlement-attempts';
 
@@ -92,7 +93,7 @@ const newKey = () => `key-${String(++keys).padStart(8, '0')}`;
 function save(
   storage: AttemptStorage | null,
   post: (key: string, body: string) => Promise<Response>,
-  options: { resend?: SettlementAttempt | null; payment?: typeof samPaysPriya } = {},
+  options: { resend?: SettlementAttempt | null; payment?: NamedSettlementPayment } = {},
 ) {
   return recordSettlement({
     storage,
@@ -144,6 +145,67 @@ describe('recordSettlement', () => {
     expect(atSend[0].key).toBe(server.sent[0].key);
     expect(atSend[0].body).toBe(server.sent[0].body);
     expect(server.sent[0].body).toBe(settlementBody(samPaysPriya));
+  });
+
+  it('stores and resends a payment in another currency with its paid side and rate (#727)', async () => {
+    const storage = new MemoryStorage();
+    // Sam clears €20.00 by paying Priya ₹1,850.00, at Sam's own rate beside the suggestion.
+    const inRupees = {
+      ...samPaysPriya,
+      amount: 20,
+      currency: 'EUR',
+      amountPaidMinor: 185000,
+      paidCurrency: 'INR',
+      appliedRate: '92.5',
+      rateKind: 'custom' as const,
+      suggestedRate: '92.1',
+      rateSource: 'frankfurter' as const,
+      rateAsOf: '2026-10-20',
+      rateFetchedAt: '2026-10-21T00:30:00.000Z',
+    };
+    const server = fakeServer((send, commit) => {
+      if (send === 1) {
+        commit();
+        return 'lost';
+      }
+    });
+
+    await save(storage, server.post, { payment: inRupees });
+    const [attempt] = stored(storage);
+
+    expect(JSON.parse(server.sent[0].body)).toEqual({
+      paidBy: SAM,
+      paidTo: PRIYA,
+      amount: 20,
+      currency: 'EUR',
+      note: 'Paid via UPI',
+      amountPaidMinor: 185000,
+      paidCurrency: 'INR',
+      appliedRate: '92.5',
+      rateKind: 'custom',
+      suggestedRate: '92.1',
+      rateSource: 'frankfurter',
+      rateAsOf: '2026-10-20',
+      rateFetchedAt: '2026-10-21T00:30:00.000Z',
+    });
+    // Read back from storage, the payment still says what it paid, for the form to show.
+    expect(attempt).toMatchObject({
+      amount: 20,
+      currency: 'EUR',
+      amountPaidMinor: 185000,
+      paidCurrency: 'INR',
+      appliedRate: '92.5',
+    });
+    expect(await save(storage, server.post, { resend: attempt })).toEqual({ status: 'recorded' });
+    expect(server.sent[1]).toEqual(server.sent[0]);
+    // A payment in the Debt's own currency still sends the body it always has.
+    expect(Object.keys(JSON.parse(settlementBody(samPaysPriya)))).toEqual([
+      'paidBy',
+      'paidTo',
+      'amount',
+      'currency',
+      'note',
+    ]);
   });
 
   it('a different payment between the same two members, either way round, waits for the stored one', async () => {
