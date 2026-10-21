@@ -194,9 +194,11 @@ export const exportPath = ({
   format,
   timeZone,
   preview,
+  expenseIds,
 }: ExportRequest) =>
   `/api/export${query([
     ['groups', groupIds.join(',')],
+    ['expenses', expenseIds?.join(',')],
     ['from', from],
     ['to', to],
     ['include', include.join(',')],

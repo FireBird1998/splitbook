@@ -191,6 +191,65 @@ describe('POST /api/groups/[id]/expenses/tag-change', () => {
     expect(await tagChanges()).toHaveLength(3);
   });
 
+  it('leaves an Expense of another Group as it is, and says it is unavailable here', async () => {
+    const { ids, tagId, change } = await household();
+    // Bob is a member of Goa Trip too, so only the Group in the address keeps its Expense out.
+    const goa = String(
+      (
+        await groupService.create(
+          { name: 'Goa Trip', category: 'trip', defaultCurrency: 'INR', alternateCurrencies: [] },
+          bob,
+        )
+      )._id,
+    );
+    const ferry = String(
+      (
+        await expenseService.create(
+          goa,
+          {
+            description: 'Ferry',
+            amount: 200,
+            currency: 'INR',
+            category: 'transport',
+            tag: 'Transport',
+            date: new Date('2026-09-14T12:00:00Z'),
+            paidBy: [{ user: bob, amount: 200 }],
+            splitMethod: 'equal',
+            splitBetween: [{ user: bob }],
+          },
+          bob,
+        )
+      )._id,
+    );
+    const before = await Expense.findById(ferry).lean();
+
+    const reply = await change({
+      tagId: tagId('Household'),
+      expenses: [
+        { id: ferry, revision: 0 },
+        { id: ids[0], revision: 0 },
+      ],
+    });
+
+    expect(reply.status).toBe(200);
+    expect(reply.body.data.results).toEqual([
+      { expenseId: ferry, outcome: 'unavailable' },
+      { expenseId: ids[0], outcome: 'changed', revision: 1 },
+    ]);
+    const after = await Expense.findById(ferry).lean();
+    expect({
+      tag: after!.tag,
+      tagId: String(after!.tagId),
+      revision: after!.revision,
+      edits: after!.editHistory.length,
+    }).toEqual({
+      tag: 'Transport',
+      tagId: String(before!.tagId),
+      revision: 0,
+      edits: 0,
+    });
+  });
+
   it('refuses an Archived Tag, a Tag not in the Group, an archived Group, a non-member and an oversized or repeated list, changing nothing', async () => {
     const { groupId, ids, tagId, change, stored } = await household();
     const all = ids.map((id) => ({ id, revision: 0 }));
@@ -218,6 +277,10 @@ describe('POST /api/groups/[id]/expenses/tag-change', () => {
       body: { code: 'VALIDATION_ERROR' },
     });
     expect(await change({ tagId: tagId('Rent'), expenses: [all[0], all[0]] })).toMatchObject({
+      status: 422,
+      body: { code: 'VALIDATION_ERROR' },
+    });
+    expect(await change({ tagId: tagId('Rent'), expenses: [] })).toMatchObject({
       status: 422,
       body: { code: 'VALIDATION_ERROR' },
     });

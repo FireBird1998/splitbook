@@ -5,6 +5,9 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import CheckIcon from '@mui/icons-material/Check';
+import IosShareOutlinedIcon from '@mui/icons-material/IosShareOutlined';
+import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import MoneyText from '@/components/common/MoneyText';
 import { RADIUS } from '@/lib/theme/tokens';
 import { readStoredAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
@@ -99,7 +102,8 @@ function positions(expenses: readonly ExpenseRead[], userId: string) {
  * The selected Expenses, in place of the open one (#610, design canvas "GroupExpenses"): how
  * many, their total, each one, and the member's position on them, with Change Tag. Change Tag
  * offers the Group's active Tags; picking one moves every selected Expense to it in one request.
- * What didn't change is listed with why, each with Open. There is no bulk Delete.
+ * What didn't change is listed with why, each with Open. Export selected downloads them as a CSV
+ * with each member's share (#613). There is no bulk Delete.
  */
 export default function ExpenseSelectionPanel({
   expenses,
@@ -108,6 +112,7 @@ export default function ExpenseSelectionPanel({
   onClear,
   onChangeTag,
   onOpen,
+  onExport,
 }: {
   /** The selected Expenses, in the list's order. */
   expenses: readonly ExpenseRead[];
@@ -118,16 +123,27 @@ export default function ExpenseSelectionPanel({
   /** Send the change; rejects with what to tell the member when the request changed nothing. */
   onChangeTag: (tagId: string) => Promise<ExpenseTagChangeReply>;
   onOpen: (expenseId: string) => void;
+  /** Download them as a CSV; resolves with the file's name, rejects with what to tell the member. */
+  onExport?: () => Promise<string>;
 }) {
   const [step, setStep] = useState<'idle' | 'choosing' | 'sending'>('idle');
   const [sendingTo, setSendingTo] = useState('');
   const [outcome, setOutcome] = useState<{ summary: string; misses: Miss[] } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [exported, setExported] = useState<
+    | { status: 'preparing' }
+    | { status: 'done'; fileName: string; count: number }
+    | { status: 'failed'; message: string }
+    | null
+  >(null);
   const active = tags.filter(
     (tag): tag is PanelTag & { _id: string } =>
       Boolean(tag._id) && !tag.isArchived && !tag.isDeleted,
   );
   const count = expenses.length;
+  // The Tag every selected Expense already has, if they share one: its choice says so.
+  const shared = new Set(expenses.map((expense) => expense.tagId ?? null));
+  const currentTagId = shared.size === 1 ? [...shared][0] : null;
 
   const change = async (tag: PanelTag & { _id: string }) => {
     const asked = new Map(expenses.map((expense) => [expense._id, expense.description]));
@@ -135,6 +151,8 @@ export default function ExpenseSelectionPanel({
     setSendingTo(tag.name);
     setOutcome(null);
     setFailure(null);
+    // An earlier export's word no longer describes these Expenses; one still preparing stays.
+    setExported((now) => (now?.status === 'preparing' ? now : null));
     try {
       const reply = await onChangeTag(tag._id);
       const misses = reply.results
@@ -151,6 +169,21 @@ export default function ExpenseSelectionPanel({
       );
     } finally {
       setStep('idle');
+    }
+  };
+
+  const exportThem = async () => {
+    if (!onExport || exported?.status === 'preparing') return;
+    // How many went into the file, though the selection may change while it downloads.
+    const exporting = count;
+    setExported({ status: 'preparing' });
+    try {
+      setExported({ status: 'done', fileName: await onExport(), count: exporting });
+    } catch (error) {
+      setExported({
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'The export couldn’t be prepared.',
+      });
     }
   };
 
@@ -177,6 +210,7 @@ export default function ExpenseSelectionPanel({
                 amount={toMajorAmount(minor, currency)}
                 currency={currency}
                 tone="neutral"
+                sx={{ fontSize: 'inherit', fontWeight: 'inherit', lineHeight: 'inherit' }}
               />
             </Box>
           ))}
@@ -186,12 +220,19 @@ export default function ExpenseSelectionPanel({
         </Button>
       </Stack>
 
-      <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.5 }}>
+      <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.25 }}>
         {expenses.map((expense) => (
           <Box
             component="li"
             key={expense._id}
-            sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5, py: 0.75 }}
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 1.5,
+              py: 1.25,
+              borderTop: 1,
+              borderColor: 'divider',
+            }}
           >
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="body2" fontWeight={600}>
@@ -231,89 +272,152 @@ export default function ExpenseSelectionPanel({
         </Stack>
       </Stack>
 
-      <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mt: 2 }}>
+      {/* Each action's choices and report sit right under its own button. */}
+      <Stack gap={1.25} sx={{ mt: 2 }}>
         <Button
           variant="outlined"
-          size="small"
+          fullWidth
+          startIcon={<LocalOfferOutlinedIcon />}
           aria-expanded={step === 'choosing'}
           disabled={step === 'sending' || active.length === 0}
           onClick={() => setStep(step === 'choosing' ? 'idle' : 'choosing')}
         >
           Change Tag
         </Button>
-      </Stack>
 
-      {step === 'choosing' && (
-        <Box
-          role="group"
-          aria-label={`Move ${count} ${noun(count)} to a Tag`}
-          sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}
-        >
-          {active.map((tag) => (
-            <Button
-              key={tag._id}
-              size="small"
-              variant="contained"
-              color="primary"
-              aria-label={`Move to ${tag.name}`}
-              onClick={() => void change(tag)}
+        {step === 'choosing' && (
+          <Box>
+            <Typography
+              id="expense-selection-move"
+              variant="body2"
+              color="text.secondary"
+              sx={{ mb: 1 }}
             >
-              {tag.name}
-            </Button>
-          ))}
-          <Button size="small" onClick={() => setStep('idle')}>
-            Cancel
-          </Button>
-        </Box>
-      )}
-
-      {step === 'sending' && (
-        <Typography role="status" variant="body2" sx={{ mt: 1.5 }}>
-          Moving {count} {noun(count)} to {sendingTo}…
-        </Typography>
-      )}
-
-      {failure && (
-        <Typography role="alert" variant="body2" color="error" sx={{ mt: 1.5 }}>
-          {failure}
-        </Typography>
-      )}
-
-      {outcome && (
-        <Box role="status" sx={{ mt: 1.5 }}>
-          <Typography variant="body2">
-            {outcome.summary}
-            {outcome.misses.length ? ` ${outcome.misses.length} didn’t change:` : ''}
-          </Typography>
-          {outcome.misses.length > 0 && (
-            <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1 }}>
-              {outcome.misses.map((miss) => (
-                <Box
-                  component="li"
-                  key={miss.expenseId}
-                  sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}
-                >
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={600}>
-                      {miss.description}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {miss.reason}
-                    </Typography>
-                  </Box>
+              Move {count} {noun(count)} to:
+            </Typography>
+            <Box
+              role="group"
+              aria-labelledby="expense-selection-move"
+              sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
+            >
+              {active.map((tag) => {
+                const current = tag._id === currentTagId;
+                return (
                   <Button
+                    key={tag._id}
                     size="small"
-                    aria-label={`Open ${miss.description}`}
-                    onClick={() => onOpen(miss.expenseId)}
+                    variant="outlined"
+                    aria-label={`Move to ${tag.name}`}
+                    aria-current={current ? 'true' : undefined}
+                    startIcon={current ? <CheckIcon /> : undefined}
+                    onClick={() => void change(tag)}
+                    sx={{
+                      borderRadius: 999,
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      color: current ? 'primary.main' : 'text.primary',
+                      borderColor: current ? 'primary.main' : 'divider',
+                      bgcolor: current ? 'tint.brand' : 'surface.muted',
+                    }}
                   >
-                    Open
+                    {tag.name}
                   </Button>
-                </Box>
-              ))}
+                );
+              })}
+              <Button size="small" onClick={() => setStep('idle')}>
+                Cancel
+              </Button>
             </Box>
-          )}
-        </Box>
-      )}
+          </Box>
+        )}
+
+        {step === 'sending' && (
+          <Typography role="status" variant="body2">
+            Moving {count} {noun(count)} to {sendingTo}…
+          </Typography>
+        )}
+
+        {failure && (
+          <Typography role="alert" variant="body2" color="error">
+            {failure}
+          </Typography>
+        )}
+
+        {outcome && (
+          <Box role="status">
+            <Typography variant="body2">
+              {outcome.summary}
+              {outcome.misses.length ? ` ${outcome.misses.length} didn’t change:` : ''}
+            </Typography>
+            {outcome.misses.length > 0 && (
+              <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1 }}>
+                {outcome.misses.map((miss) => (
+                  <Box
+                    component="li"
+                    key={miss.expenseId}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {miss.description}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {miss.reason}
+                      </Typography>
+                    </Box>
+                    <Button
+                      size="small"
+                      aria-label={`Open ${miss.description}`}
+                      onClick={() => onOpen(miss.expenseId)}
+                    >
+                      Open
+                    </Button>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {onExport && (
+          <Button
+            variant="outlined"
+            fullWidth
+            startIcon={<IosShareOutlinedIcon />}
+            disabled={exported?.status === 'preparing'}
+            onClick={() => void exportThem()}
+          >
+            Export selected
+          </Button>
+        )}
+        {exported?.status === 'preparing' && (
+          <Typography role="status" variant="body2">
+            Preparing the export…
+          </Typography>
+        )}
+        {exported?.status === 'done' && (
+          <Box role="status" sx={{ minWidth: 0 }}>
+            <Typography variant="body2">
+              Downloading {exported.count} {noun(exported.count)} as CSV
+            </Typography>
+            {/* The name stays on one line; the whole of it is in the title. */}
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              noWrap
+              title={exported.fileName}
+              sx={{ display: 'block' }}
+            >
+              {exported.fileName}
+            </Typography>
+          </Box>
+        )}
+        {exported?.status === 'failed' && (
+          <Typography role="alert" variant="body2" color="error">
+            {exported.message}
+          </Typography>
+        )}
+      </Stack>
     </Box>
   );
 }

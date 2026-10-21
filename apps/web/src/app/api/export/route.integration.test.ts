@@ -1112,3 +1112,63 @@ describe('Export preview (#611)', () => {
     }
   });
 });
+
+describe('Export selected Expenses (#613)', () => {
+  const selectedOf = (groupId: string, expenseIds: string[], timeZone = 'UTC') =>
+    exportPath({ groupIds: [groupId], expenseIds, include: ['shares'], format: 'csv', timeZone });
+
+  it('gives just the selected Expenses, with the columns and rows of the Group’s CSV with shares', async () => {
+    const maple = await createGroup('Maple House', alice, [bob], { category: 'home' });
+    const rent = await addExpense(maple, alice, 'Rent', 900, alice, [alice, bob], '2026-09-01');
+    const water = await addExpense(
+      maple,
+      alice,
+      'Water cans',
+      120,
+      bob,
+      [alice, bob],
+      '2026-09-05',
+    );
+    await addExpense(maple, alice, 'Cook', 600, alice, [alice, bob], '2026-09-10');
+
+    const whole = await csv(alice, exportOf([maple], { include: ['shares'] }));
+    const selected = await csv(bob, selectedOf(maple, [water, rent]));
+
+    expect(selected.header).toEqual(whole.header);
+    expect(selected.header).toEqual([...EXPENSE_COLUMNS, 'Alice Tester share', 'Bob Tester share']);
+    expect(selected.records).toEqual(
+      whole.records.filter((record) => record.Description !== 'Cook'),
+    );
+    expect(selected.records.map((record) => record.Description)).toEqual(['Water cans', 'Rent']);
+    expect(selected.fileName).toBe(
+      `maple-house-${new Date().toISOString().slice(0, 10)}-selected-expenses.csv`,
+    );
+  });
+
+  it('leaves out an Expense since deleted and one from another Group', async () => {
+    const maple = await createGroup('Maple House', alice, [bob], { category: 'home' });
+    const goa = await createGroup('Goa Trip', alice, [bob]);
+    const rent = await addExpense(maple, alice, 'Rent', 900, alice, [alice, bob], '2026-09-01');
+    const plumber = await addExpense(maple, alice, 'Plumber', 300, alice, [alice, bob]);
+    const ferry = await addExpense(goa, alice, 'Ferry', 200, alice, [alice, bob]);
+    // Not selected: only what was asked for comes out.
+    await addExpense(maple, alice, 'Cook', 600, alice, [alice, bob]);
+    await expenseService.delete({ actorId: alice, groupId: maple, expenseId: plumber }, 0);
+
+    const selected = await csv(alice, selectedOf(maple, [rent, plumber, ferry]));
+
+    expect(selected.records.map((record) => record.Description)).toEqual(['Rent']);
+  });
+
+  it('refuses a Group the member isn’t in, and Expenses from two Groups at once', async () => {
+    const maple = await createGroup('Maple House', alice, [bob], { category: 'home' });
+    const goa = await createGroup('Goa Trip', alice, [bob]);
+    const rent = await addExpense(maple, alice, 'Rent', 900, alice, [alice, bob]);
+
+    expect((await request(carol, selectedOf(maple, [rent]))).status).toBe(403);
+    const both = `/api/export?groups=${maple},${goa}&expenses=${rent}&include=shares`;
+    const answer = await request(alice, both);
+    expect(answer.status).toBe(422);
+    expect(json(answer)).toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+});

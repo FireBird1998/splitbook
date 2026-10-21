@@ -44,6 +44,7 @@ import ExpensePanel, { type ExpensePanelState, type PanelExpense } from './Expen
 import ExpenseSelectionPanel, { tagChangeSummary } from './ExpenseSelectionPanel';
 import { useExpenseSelection } from './expense-selection';
 import { changeExpenseTags } from './expense-tag-change';
+import { exportSelectedExpenses } from './expense-export';
 import DeleteExpenseDialog from './DeleteExpenseDialog';
 import ExpenseStats, { StatCount } from './ExpenseStats';
 import ExpenseTable from './ExpenseTable';
@@ -661,6 +662,9 @@ export default function ExpenseListView({
                   onClear={selection.clear}
                   onChangeTag={changeTag}
                   onOpen={openFromSelection}
+                  onExport={() =>
+                    exportSelectedExpenses(groupId, selected, viewerTimeZone ?? 'UTC')
+                  }
                 />
               ) : (
                 <ExpensePanel
