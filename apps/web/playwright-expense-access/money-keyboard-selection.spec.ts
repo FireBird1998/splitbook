@@ -22,19 +22,28 @@ async function euroGroup(ledger: Ledger) {
   return group;
 }
 
-/** Real Tab selection, never fill() or selectText() for the replacement. */
-async function tabAndReplace(page: Page, field: Locator, initial: string, replacement: string) {
+/**
+ * Real Tab selection, never fill() or selectText() for the replacement, which shows grouped as
+ * it is typed: 2000 as "2,000".
+ */
+async function tabAndReplace(
+  page: Page,
+  field: Locator,
+  initial: string,
+  replacement: string,
+  shown = replacement,
+) {
   await field.fill(initial);
   await field.press('Tab');
   await page.keyboard.press('Shift+Tab');
   await expect(field).toBeFocused();
   await page.keyboard.type(replacement);
-  await expect(field).toHaveValue(replacement);
+  await expect(field).toHaveValue(shown);
 }
 
-for (const [initial, replacement, minor] of [
-  ['500', '300', 30000],
-  ['1842.50', '2000', 200000],
+for (const [initial, replacement, shown, minor] of [
+  ['500', '300', '300', 30000],
+  ['1842.50', '2000', '2,000', 200000],
 ] as const) {
   test(`Tab replaces Expense and payer ${initial} with ${replacement}, including the POST (#773)`, async ({
     page,
@@ -50,6 +59,7 @@ for (const [initial, replacement, minor] of [
       dialog.getByRole('textbox', { name: /^Amount,/ }),
       initial,
       replacement,
+      shown,
     );
     await dialog.getByRole('button', { name: 'Advanced split options' }).click();
     await dialog.getByText('Split payment between multiple people', { exact: true }).click();
@@ -58,6 +68,7 @@ for (const [initial, replacement, minor] of [
       dialog.getByRole('textbox', { name: 'Paid by You', exact: true }),
       initial,
       replacement,
+      shown,
     );
     const request = page.waitForRequest(
       (r) => r.method() === 'POST' && r.url().endsWith(`/api/groups/${group}/expenses`),
@@ -108,6 +119,7 @@ for (const crossCurrency of [false, true]) {
         sheet.getByRole('textbox', { name: 'Amount paid, INR' }),
         '1842.50',
         '2000',
+        '2,000',
       );
     } else {
       await tabAndReplace(page, sheet.getByRole('textbox').first(), '500', '300');

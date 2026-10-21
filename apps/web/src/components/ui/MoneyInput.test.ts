@@ -75,7 +75,9 @@ for (const [name, Field] of fields) {
         }),
       );
       expect(input().props.value).toBe(shown);
-      await act(async () => input().props.onChange({ target: { value: replacement } }));
+      await act(async () =>
+        input().props.onChange({ target: { value: replacement }, nativeEvent: new Event('input') }),
+      );
       expect(input().props.value).toBe(replaced);
       expect(changed).toHaveBeenLastCalledWith(replacement);
     },

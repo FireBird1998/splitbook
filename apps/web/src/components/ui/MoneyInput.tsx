@@ -57,15 +57,20 @@ function useMoneyEntry(
     onBlur: () => setEditing(null),
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const typed = event.target.value;
-      // Regroup as the member types (#773), the caret after as many characters as before. A
-      // grouping comma that Delete took out comes back, so the caret steps past it.
-      const regrouped = regroupAmountEntry(typed, shown);
-      if (regrouped !== null && regrouped !== typed) {
-        const before = typed.slice(0, event.target.selectionStart ?? typed.length);
-        const at = indexAfter(regrouped, before.replaceAll(',', '').length);
-        const forward =
-          (event.nativeEvent as InputEvent | undefined)?.inputType === 'deleteContentForward';
-        caret.current = forward && regrouped[at] === ',' ? at + 1 : at;
+      // Regroup as the member types (#773), the caret after as many characters as before. Only
+      // the input type tells Backspace, Delete or Cut from typing over a selection; an input
+      // event a password manager or autofill sends may have none.
+      const inputType = (event.nativeEvent as Partial<InputEvent>).inputType ?? '';
+      const deletedFrom = inputType.startsWith('delete') ? shown : undefined;
+      const regrouped = regroupAmountEntry(typed, currency, deletedFrom);
+      // Not while unfocused, as autofill edits: the caret would wait for focus and undo Tab's
+      // selection.
+      if (editing !== null && regrouped !== null && regrouped !== typed) {
+        const leftOfCaret = typed.slice(0, event.target.selectionStart ?? typed.length);
+        const caretAt = indexAfter(regrouped, leftOfCaret.replaceAll(',', '').length);
+        // A grouping comma that Delete took out comes back, so the caret steps past it.
+        const stepPast = inputType === 'deleteContentForward' && regrouped[caretAt] === ',';
+        caret.current = stepPast ? caretAt + 1 : caretAt;
       }
       const plain = regrouped === null ? ungroupAmountEntry(typed) : regrouped.replaceAll(',', '');
       setEditing((current) =>

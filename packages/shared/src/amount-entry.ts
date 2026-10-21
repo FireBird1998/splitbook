@@ -17,6 +17,15 @@ const example = (currency: string) => (getCurrencyPrecision(currency) === 0 ? '1
 /** Commas only as thousands separators, in their usual places: "1,060.50", not "10,50". */
 const thousandsGrouped = /^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/;
 
+/** Digits, with a point and any decimals: "1060.5", ".5", "1060.". */
+const plainAmount = /^(?:\d+(?:\.\d*)?|\.\d+)$/;
+
+/** A comma that may be a decimal comma: fewer than three digits after it, or among the decimals. */
+const decimalComma = /,\d{0,2}(?!\d)|\..*,/;
+
+/** "1842" grouped in threes: "1,842". */
+const groupInThrees = (whole: string) => whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
 /**
  * "Yen has no smaller unit. Enter a whole amount, like ¥2,500.": part of a whole-unit currency's
  * unit, in the words every amount says it (#719), a payer's and a share's too (#755). Undefined
@@ -60,7 +69,7 @@ export function readAmountEntry(text: string, currency: string): AmountReading {
     return { status: 'invalid', message: like };
   }
   const plain = typed.replaceAll(',', '');
-  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(plain)) return { status: 'invalid', message: like };
+  if (!plainAmount.test(plain)) return { status: 'invalid', message: like };
   let amountMinor: number;
   try {
     amountMinor = parseAmountMinor(plain, currency);
@@ -93,42 +102,42 @@ export function ungroupAmountEntry(text: string): string {
 /**
  * The amount being typed, grouped as it is typed (#773): its commas dropped and its whole part
  * grouped in threes, as `formatAmountEntry` groups it on blur, its decimals as typed and not
- * padded. `before` is the text the field showed before this edit. Backspace after the 8 in
- * "1,842.50" leaves "1,42.50", which reads "142.50"; a 5 typed after "1," gives "15,842.50".
+ * padded. Backspace after the 8 in "1,842.50" leaves "1,42.50", which reads "142.50"; a 5 typed
+ * after "1," gives "15,842.50".
  *
- * Null where the text stays as typed: not an amount even without its commas, or ending in a
- * comma and at most two digits, as a decimal comma would ("10,", "10,5"), so "10,5" is refused
- * rather than read as 105. Only deleting from grouped text may leave one of its own commas
- * there: "1,842" less its 8 is "1,42", which reads 142.
+ * Null where the text stays as typed, as blur leaves it: not an amount the currency takes even
+ * without its commas, or with a comma that may be a decimal comma ("10,5", "10,50.", "1.5,00"),
+ * so "10,5" is refused rather than read as 105. `deletedFrom` is the text a Backspace, Delete or
+ * Cut took characters from: only when that was grouped is such a comma the field's own, as in
+ * "1,842" less its 8, "1,42", which reads 142.
  */
-export function regroupAmountEntry(text: string, before: string): string | null {
+export function regroupAmountEntry(
+  text: string,
+  currency: string,
+  deletedFrom?: string,
+): string | null {
   const plain = text.replaceAll(',', '');
-  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(plain)) return null;
-  if (/,\d{0,2}$/.test(text) && !(thousandsGrouped.test(before) && onlyDeleted(before, text))) {
+  if (!plainAmount.test(plain)) return null;
+  if (decimalComma.test(text) && !thousandsGrouped.test(deletedFrom ?? '')) return null;
+  try {
+    parseAmountMinor(plain, currency);
+  } catch {
     return null;
   }
   const [whole = '', fraction] = plain.split('.');
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
-}
-
-/** Whether `after` is `before` less one run of characters, as Backspace, Delete or Cut leave it. */
-function onlyDeleted(before: string, after: string): boolean {
-  let kept = 0;
-  while (kept < after.length && after[kept] === before[kept]) kept++;
-  return after.length < before.length && before.endsWith(after.slice(kept));
+  return fraction === undefined ? groupInThrees(whole) : `${groupInThrees(whole)}.${fraction}`;
 }
 
 /** Display on blur only. Invalid input stays visible, and no amount is rounded or repaired. */
 export function formatAmountEntry(text: string, currency: string): string {
   const plain = ungroupAmountEntry(text).trim();
-  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(plain)) return text;
+  if (!plainAmount.test(plain)) return text;
   try {
     const minor = BigInt(parseAmountMinor(plain, currency));
     const precision = getCurrencyPrecision(currency);
     const digits = minor.toString().padStart(precision + 1, '0');
     const whole = precision ? digits.slice(0, -precision) : digits;
-    const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const grouped = groupInThrees(whole);
     return precision ? `${grouped}.${digits.slice(-precision)}` : grouped;
   } catch {
     return text;
