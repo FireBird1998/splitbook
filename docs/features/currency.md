@@ -162,13 +162,12 @@ per currency before bucketing.
 
 ### Within a group
 
-`GET /api/groups/[id]/balances` returns a single number per member, labelled with
-the group's default currency, plus a `hasMixedCurrencies` flag.
-
-⚠️ If a group somehow _does_ contain mixed currencies — only reachable through
-legacy data, since the write path forbids it — that endpoint **sums the amounts
-anyway** and merely raises the flag. The number would be meaningless. The
-dashboard endpoint does not have this problem.
+`GET /api/groups/[id]/balances` returns each currency's balances, Debts and
+Suggested payments in its own `byCurrency` entry, never summed or converted, plus
+a `hasMixedCurrencies` flag: true when the Group's money is in more than one
+currency (#724). The web's Balances shows one currency at a time behind a switch,
+opening on the main currency, or on the first currency the member isn't settled
+up in.
 
 ### Why No Auto-Conversion?
 
