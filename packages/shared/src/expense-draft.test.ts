@@ -276,3 +276,22 @@ describe('a duplicate of a saved Expense (#311)', () => {
     }
   });
 });
+
+// #755 item 2: the web's form, as Android's, refused a payer's part of a yen with the raw
+// "Amount supports at most 0 decimal places"; the amount field says it in the member's words.
+it('refuses part of a yen paid by a payer in the amount field’s words (#755)', () => {
+  const yen = ExpenseDraft.open({ ...context, currency: 'JPY' }).edit({
+    description: 'Ramen',
+    amount: '2500',
+    multiPayerMode: true,
+    payers: [
+      { user: 'alice', amount: '1250.5' },
+      { user: 'bob', amount: '1249.5' },
+    ],
+  });
+  const words = 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.';
+  expect(yen.preview().error).toBe(words);
+  const refused = yen.prepare(['general-id'], 'key-1');
+  expect(refused.submission).toBeUndefined();
+  expect(refused.draft.error).toBe(words);
+});
