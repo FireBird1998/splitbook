@@ -11,9 +11,10 @@
  *
  *   vi.mock('next/headers', async () => (await import('@/lib/test-utils/signed-in-route')).nextHeaders);
  *
- * Better Auth opens its database client on the database MONGODB_URI names when `@/lib/auth`
- * loads, so a test file imports its routes only after `connectSignedIn`, with `await import()`
- * in `beforeAll`. A static import of a route would point Better Auth at the wrong database.
+ * Better Auth runs on the app's one database client (#826), made on the database MONGODB_URI
+ * names when it is first used, so a test file imports its routes only after `connectSignedIn`,
+ * with `await import()` in `beforeAll`. A static import of a route would make that client before
+ * MONGODB_URI names the file's database, and connecting would then refuse.
  */
 
 import mongoose from 'mongoose';

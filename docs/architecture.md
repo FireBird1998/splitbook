@@ -205,8 +205,8 @@ src/
 │   │                               #   callbacks, route protection
 │   ├── auth-mode.ts                # AUTH_MODE resolution + production guard
 │   ├── demo-personas.ts
-│   ├── db.ts                       # Mongoose connection singleton (server-only)
-│   ├── mongodb-client.ts           # Native driver Db for Better Auth's adapter (server-only)
+│   ├── db.ts                       # Mongoose on the app's one MongoDB client (server-only)
+│   ├── mongodb-client.ts           # The one MongoDB client, for Mongoose and Better Auth (server-only)
 │   ├── models/
 │   │   ├── User.ts
 │   │   ├── Group.ts                # Includes tags subdocument array
@@ -423,6 +423,20 @@ class ExpenseService {
 }
 ```
 
+### Database connection
+
+Each server instance holds one MongoDB client (`lib/mongodb-client.ts`), shared by Mongoose and
+Better Auth's adapter (#826). Its database is the one `MONGODB_URI`'s path names; a local URI
+connects directly, a `mongodb+srv://` one never does. It waits at most 5 s for a server, keeps
+at most 10 connections and closes one that is idle for 5 s (`MONGO_CONNECTION_OPTIONS`,
+provisional). On Vercel it is attached with `attachDatabasePool`, so an instance stays alive
+until its idle connections have closed.
+
+Every connection goes through `connectMongo()`, Better Auth's calls included: a failure rejects
+to its caller, never as an unhandled rejection, and the next call tries again. The driver keeps
+a client whose first connect failed on a closed topology, answering "Topology is closed" even
+once the database is back, until it is connected explicitly again.
+
 ### Client Data Fetching Pattern
 
 ```typescript
@@ -480,7 +494,7 @@ ALLOW_TEST_ID_TOKEN=           # Test-only: honour the above under NODE_ENV=prod
 AUTH_RATE_LIMIT_ENABLED=       # Optional override; default on in production only
 
 # Database
-MONGODB_URI=                   # MongoDB connection string
+MONGODB_URI=                   # MongoDB connection string; its path names the database
 
 # App
 NEXT_PUBLIC_APP_URL=           # Public app URL (invite links, Better Auth baseURL + trusted origin)
