@@ -425,6 +425,78 @@ describe('a legacy Group with Expenses in two currencies', () => {
   });
 });
 
+describe('a Group with extra currencies (#729)', () => {
+  /** Rupees, with euros and dollars: in September 1 rupee, 3 euro and 2 dollar Expenses. */
+  async function travelling() {
+    const groupId = await createGroup('Lisbon and New York', [alice, bob]);
+    await mongoose.connection
+      .db!.collection('groups')
+      .updateOne({ _id: oid(groupId) }, { $set: { alternateCurrencies: ['EUR', 'USD'] } });
+    await insertExpense(groupId, '2026-09-02T12:00:00Z', { [alice]: 5000, [bob]: 5000 });
+    for (const day of ['03', '04', '05'])
+      await insertExpense(
+        groupId,
+        `2026-09-${day}T12:00:00Z`,
+        { [alice]: 1000, [bob]: 1000 },
+        { currency: 'EUR' },
+      );
+    for (const day of ['06', '07'])
+      await insertExpense(
+        groupId,
+        `2026-09-${day}T12:00:00Z`,
+        { [alice]: 2500, [bob]: 2500 },
+        { currency: 'USD' },
+      );
+    // August: dollars only, compared but not part of the Month's choice.
+    await insertExpense(
+      groupId,
+      '2026-08-10T12:00:00Z',
+      { [alice]: 700, [bob]: 700 },
+      { currency: 'USD' },
+    );
+    return groupId;
+  }
+
+  it('opens on the currency with the most Expenses in the Month, and lists each currency spent in', async () => {
+    const groupId = await travelling();
+    const { status, body } = await read(groupId, 'month=2026-09&compare=1&tz=UTC');
+    expect(status).toBe(200);
+    const insights = parseGroupInsightsResponse(body);
+    expect(insights.currency).toBe('EUR');
+    expect(column(insights.months, 'spentMinor')).toEqual([0, 6000]);
+    expect(body.data.currencies).toEqual([
+      { currency: 'INR', expenseCount: 1, spentMinor: 10000 },
+      { currency: 'EUR', expenseCount: 3, spentMinor: 6000 },
+      { currency: 'USD', expenseCount: 2, spentMinor: 10000 },
+    ]);
+  });
+
+  it('reads the currency asked for on its own: its Months, Tags and who paid, never converted', async () => {
+    const groupId = await travelling();
+    const { status, body } = await read(groupId, 'month=2026-09&compare=1&tz=UTC&currency=USD');
+    expect(status).toBe(200);
+    expect(body.data.currency).toBe('USD');
+    expect(column(body.data.months, 'spentMinor')).toEqual([1400, 10000]);
+    expect(body.data.otherCurrencies).toEqual([
+      { currency: 'EUR', spentMinor: 6000, expenseCount: 3 },
+      { currency: 'INR', spentMinor: 10000, expenseCount: 1 },
+    ]);
+    // Within dollars, the Tag shares add up to the dollars spent, and so do the payments.
+    const tags = body.data.byTag.tags as Array<{ spentMinor: number }>;
+    expect(tags.reduce((sum, tag) => sum + tag.spentMinor, 0)).toBe(10000);
+    expect(body.data.whoPaid.members).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: alice, paidMinor: 10000 })]),
+    );
+  });
+
+  it('refuses a currency it doesn’t know', async () => {
+    const groupId = await travelling();
+    const { status, body } = await read(groupId, 'month=2026-09&tz=UTC&currency=EURO');
+    expect(status).toBe(400);
+    expect(body.code).toBe('INVALID_CURRENCY');
+  });
+});
+
 describe('recurring Expenses that have fallen due', () => {
   /** A Household whose Rent template started in July, with nothing generated yet. */
   async function householdWithRent() {

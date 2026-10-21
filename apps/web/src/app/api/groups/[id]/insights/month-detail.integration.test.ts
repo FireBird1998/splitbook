@@ -362,6 +362,8 @@ describe('the fields #314 sent', () => {
         'byTag',
         'whoPaid',
         ...(recurringOn ? ['recurring'] : []),
+        // What was spent in each currency, for the currency switch (#729).
+        'currencies',
       ]);
     }
   });
