@@ -63,7 +63,7 @@ function render(
 
 /** The amount field: whether it's marked invalid, and the message it points to, if any. */
 function amountField(html: string) {
-  const input = /<input\b[^>]*\stype="number"[^>]*>/.exec(html)![0];
+  const input = /<input\b[^>]*\sinputMode="(?:decimal|numeric)"[^>]*>/.exec(html)![0];
   const described = /\saria-describedby="([^"]*)"/.exec(input)?.[1];
   const reason = /<p\b([^>]*\saria-live="polite"[^>]*)>([\s\S]*?)<\/p>/.exec(html);
   return {
@@ -113,7 +113,7 @@ const trip = { defaultCurrency: 'INR', alternateCurrencies: ['EUR', 'JPY'] };
 const attribute = (html: string, tag: RegExp, name: string) =>
   new RegExp(`\\s${name}="([^"]*)"`).exec(tag.exec(html)?.[0] ?? '')?.[1] ?? null;
 const currencyButton = /<button\b[^>]*aria-haspopup="listbox"[^>]*>/;
-const amountInput = /<input\b[^>]*\stype="number"[^>]*>/;
+const amountInput = /<input\b[^>]*\sinputMode="(?:decimal|numeric)"[^>]*>/;
 
 describe('the Expense’s currency, beside its amount (#719)', () => {
   it('is a button that says the currency and offers to change it, with the symbol before the amount', () => {

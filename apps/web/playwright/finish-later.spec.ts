@@ -163,7 +163,7 @@ for (const status of [500, 409]) {
       status === 409 ? DRAFT_GROUP_LIMIT_MESSAGE : 'Everything you typed is still here',
     );
     await expect(form(page).getByLabel('What was it for?')).toHaveValue('Fictional groceries');
-    await expect(form(page).getByLabel('Amount')).toHaveValue('125');
+    await expect(form(page).getByLabel('Amount')).toHaveValue('125.00');
     await expectNoSeriousA11yViolations(page, test.info(), 'finish-later');
   });
 }

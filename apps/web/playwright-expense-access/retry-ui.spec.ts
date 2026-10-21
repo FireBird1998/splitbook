@@ -133,7 +133,7 @@ test('validation and cancelled duplicate confirmation retain the draft; advisory
   await (await warning).dismiss();
   await confirmSave;
   await expect(description).toHaveValue('Private rent');
-  await expect(amount).toHaveValue('1200');
+  await expect(amount).toHaveValue('1,200.00');
   await expect(dialog.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
   await description.fill('After duplicate cancellation');
   await page.route('**/expenses/check-duplicate?*', (route) =>

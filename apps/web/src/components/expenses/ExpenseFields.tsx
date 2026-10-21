@@ -1,6 +1,7 @@
 'use client';
 import { useId, useState } from 'react';
 import type { GroupCategory } from '@splitbook/shared/types';
+import { MoneyTextField } from '@/components/ui/MoneyInput';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
@@ -350,12 +351,12 @@ export default function ExpenseFields({
       {/* ─── Amount + Currency + Date (fast path) ─ */}
       <Stack direction={review ? 'column' : { xs: 'column', sm: 'row' }} spacing={1.5}>
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <TextField
+          <MoneyTextField
+            currency={currency}
             label="Amount"
             value={amount}
-            onChange={(e) => edit({ amount: e.target.value })}
+            onValueChange={(value) => edit({ amount: value })}
             required
-            type="number"
             size="small"
             error={!!amountReason}
             sx={{
@@ -678,16 +679,16 @@ export default function ExpenseFields({
                         </MenuItem>
                       ))}
                     </TextField>
-                    <TextField
+                    <MoneyTextField
+                      currency={currency}
                       value={payer.amount}
-                      onChange={(e) => updatePayer(i, 'amount', e.target.value)}
-                      type="number"
+                      onValueChange={(value) => updatePayer(i, 'amount', value)}
                       size="small"
                       placeholder="Amount"
                       sx={{ width: 120 }}
                       slotProps={{
                         htmlInput: {
-                          'aria-label': review ? `Paid by ${memberName(payer.user)}` : undefined,
+                          'aria-label': `Paid by ${memberName(payer.user)}`,
                           min: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
                           step: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
                         },
@@ -850,25 +851,23 @@ export default function ExpenseFields({
                     )}
 
                     {(splitMethod === 'unequal' || splitMethod === 'exact') && isSelected && (
-                      <TextField
+                      <MoneyTextField
+                        currency={currency}
                         value={customAmounts[id] || ''}
-                        onChange={(e) =>
+                        onValueChange={(value) =>
                           edit({
                             customAmounts: {
                               ...customAmounts,
-                              [id]: e.target.value,
+                              [id]: value,
                             },
                           })
                         }
-                        type="number"
                         size="small"
                         placeholder="0.00"
                         sx={{ width: 110 }}
                         slotProps={{
                           htmlInput: {
-                            'aria-label': review
-                              ? `${id === viewerId ? 'Your' : `${memberName(id)}’s`} share`
-                              : undefined,
+                            'aria-label': `${id === viewerId ? 'Your' : `${memberName(id)}’s`} share`,
                             min: 0,
                             step:
                               10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),

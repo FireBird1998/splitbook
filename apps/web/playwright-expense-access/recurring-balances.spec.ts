@@ -169,7 +169,7 @@ test('the Balances tab debt and the Record payment prefill include this month’
   await expect(debts.getByText('₹30,000.00', { exact: true })).toBeVisible();
   await debts.getByRole('button', { name: /^Record .*payment to/ }).click();
   const form = page.getByRole('region', { name: 'Record payment', exact: true });
-  await expect(form.getByRole('textbox', { name: 'Amount paid' })).toHaveValue('30000.00');
+  await expect(form.getByRole('textbox', { name: 'Amount paid' })).toHaveValue('30,000.00');
   // Inspect the prefill only; nothing is recorded.
   expect(await dataOf(await ledger.sam.get(`/api/groups/${ledger.groupB}/settlements`))).toEqual(
     [],

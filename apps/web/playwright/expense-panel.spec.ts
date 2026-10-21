@@ -229,7 +229,7 @@ test('Edit, Duplicate and Delete with Undo, from the panel', async ({ page }, te
   await panel.getByRole('button', { name: 'Duplicate', exact: true }).click();
   const copy = page.getByRole('dialog', { name: /^Add expense/ });
   await expect(copy.getByLabel('What was it for?')).toHaveValue('Panel QA picnic lunch');
-  await expect(copy.getByLabel('Amount')).toHaveValue('150');
+  await expect(copy.getByLabel('Amount')).toHaveValue('150.00');
   await expect(copy.getByLabel('Date')).toHaveValue(await browserToday(page));
   const post = page.waitForRequest(
     (request) =>

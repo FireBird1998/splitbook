@@ -143,7 +143,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await list.getByRole('option', { name: /JPY/ }).click();
     await expect(list).toBeHidden();
     await dialog.getByLabel('What was it for?').fill('Ramen at Ichiran');
-    const amount = dialog.getByRole('spinbutton', { name: /^Amount,/ });
+    const amount = dialog.getByRole('textbox', { name: /^Amount,/ });
     await amount.fill('2500.50');
     await expect(
       dialog.getByText('Yen has no smaller unit. Enter a whole amount, like ¥2,500.', {
@@ -192,7 +192,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await expenseAction(page, 'Ramen at Ichiran', 'Edit');
     const edit = page.getByRole('dialog');
     await expect(edit.getByRole('button', { name: /^Currency, JPY, Japanese Yen/ })).toBeVisible();
-    await expect(edit.getByRole('spinbutton', { name: /^Amount,/ })).toHaveValue('2500');
+    await expect(edit.getByRole('textbox', { name: /^Amount,/ })).toHaveValue('2,500');
   });
 }
 
@@ -457,13 +457,13 @@ test('legacy binary-tail amounts remain editable without changing their exact al
   await expect(expenseInList(page, 'Historical fractional calculation')).toContainText('₹0.60');
   await expenseAction(page, 'Historical fractional calculation', 'Edit');
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByLabel('Amount')).toHaveValue('0.6');
-  await expect(dialog.getByRole('spinbutton')).toHaveCount(5);
+  await expect(dialog.getByLabel('Amount')).toHaveValue('0.60');
+  await expect(dialog.locator('input[inputmode=decimal]')).toHaveCount(5);
   expect(
     await dialog
-      .getByRole('spinbutton')
+      .locator('input[inputmode=decimal]')
       .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value)),
-  ).toEqual(['0.6', '0.3', '0.3', '0.5', '0.1']);
+  ).toEqual(['0.60', '0.30', '0.30', '0.50', '0.10']);
   await dialog.getByLabel('What was it for?').fill('Historical fractional description corrected');
   await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(dialog).toBeHidden();

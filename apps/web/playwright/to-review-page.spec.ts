@@ -134,7 +134,7 @@ test("Claude's one-payer item without a Category is Ready, shows who paid and Ot
     document.documentElement.style.fontSize = '130%';
   });
   await expectNoSeriousA11yViolations(page, testInfo, 'to-review-one-payer');
-  await review.getByRole('spinbutton', { name: 'Amount', exact: true }).fill('15');
+  await review.getByRole('textbox', { name: 'Amount', exact: true }).fill('15');
   await expect
     .poll(async () => (await rows(page))[0].values.paidBy)
     .toEqual([{ user: 'a00000000000000000000001', amount: 15 }]);
@@ -166,7 +166,7 @@ test("a lone payer's mismatched amount stays editable while it is cleared and re
   await page.reload();
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const paid = panel(page).getByLabel('Paid by You', { exact: true });
-  await expect(paid).toHaveValue('10');
+  await expect(paid).toHaveValue('10.00');
   await paid.fill('');
   await expect(paid).toBeVisible();
   await paid.fill('12.34');
@@ -273,7 +273,7 @@ test('a newer read and a stale edit both show the changed facts and author', asy
     },
   });
   await nextRefresh(page);
-  await expect(review.getByRole('spinbutton', { name: /^Amount/ })).toHaveValue('15');
+  await expect(review.getByRole('textbox', { name: /^Amount/ })).toHaveValue('15.00');
   await expect(review.getByRole('status').first()).toContainText(
     'You on another device changed the amount a moment ago: ₹12.34 → ₹15.00',
   );

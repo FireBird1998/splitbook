@@ -34,7 +34,7 @@ test('a Group archived while Sam adds an Expense refuses it, says why and keeps 
     'This Group was archived, so nothing more can be saved in it.',
   );
   await expect(description).toHaveValue('Lake dinner');
-  await expect(amount).toHaveValue('1200');
+  await expect(amount).toHaveValue('1,200.00');
   await expect(dialog.getByRole('button', { name: 'Reload latest' })).toHaveCount(0);
   const list = await dataOf(await ledger.priya.get(`/api/groups/${group._id}/expenses`));
   expect(list.expenses).toEqual([]);
