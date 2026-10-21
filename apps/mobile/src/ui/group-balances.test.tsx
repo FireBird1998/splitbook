@@ -19,7 +19,7 @@ import type { PendingPayment } from '../data/settlement';
 import { findHosts, flatten, largeTextWindows, unreadText } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { hairSpace } from './compact';
-import { ThemeContext } from './theme';
+import { ThemeContext, fonts } from './theme';
 import {
   RecordPaymentSheet,
   recordPaymentFootnote,
@@ -971,3 +971,52 @@ describe.each(['light', 'dark'] as const)(
     );
   },
 );
+
+// #770, from the Designer's #725 check: a currency the member is settled up in reads "Settled up"
+// on its tab, in words and the text colour as the web's tab does, not a grey "₹0.00".
+describe.each(['light', 'dark'] as const)('a settled currency’s tab in %s (#770)', (mode) => {
+  const owing: GroupCurrencyBalance = {
+    currency: 'EUR',
+    balances: [
+      { user: person(you, 'Alex Rivera'), balance: -20 },
+      { user: person(sam, 'Sam Chen'), balance: 20 },
+    ],
+    debts: [{ from: person(you, 'Alex Rivera'), to: person(sam, 'Sam Chen'), amount: 20 }],
+  };
+  const settled: GroupCurrencyBalance = {
+    currency: 'INR',
+    balances: [
+      { user: person(you, 'Alex Rivera'), balance: 0 },
+      { user: person(sam, 'Sam Chen'), balance: 0 },
+    ],
+    debts: [],
+  };
+
+  it('says "Settled up" in the text face and colour, at 360dp', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1 });
+    const theme = getSemanticTokens(mode);
+    const root = render(
+      <ThemeContext.Provider value={theme}>
+        <GroupBalancesView
+          group={{ ...group('trip'), alternateCurrencies: ['EUR'] }}
+          currentUserId={you}
+          state={financial({ data: [owing, settled] })}
+          pending={null}
+          offline={false}
+          onRecord={vi.fn()}
+          onCheckPayment={vi.fn()}
+          onRefreshBalances={() => undefined}
+        />
+      </ThemeContext.Provider>,
+    );
+    const [tab] = labelled(root, 'INR, main currency, you’re settled up');
+    expect(text(tab!).replaceAll(hairSpace, '')).toBe('INR · mainSettled up');
+    const [words] = tab!.findAll(
+      (node) => isHost(node, 'Text') && node.children.includes('Settled up'),
+    );
+    expect(flatten(words!.props.style)).toMatchObject({ color: theme.text });
+    expect(flatten(words!.props.style).fontFamily).not.toBe(fonts.mono);
+    // The tab beside it keeps its amount.
+    expect(text(labelled(root, 'EUR, you owe €20.00')[0]!)).toContain('−€20.00');
+  });
+});
