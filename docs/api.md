@@ -1317,18 +1317,19 @@ while editing and send the helper's `appliedRate` with the two resulting amounts
 Cross-currency Settlement reads also include server-computed `pairDebtBeforeMinor`
 and `pairDebtAfterMinor`: signed safe integer minor units in the cleared `currency`,
 from the payer's side (owing is negative, receiving is positive). They snapshot the
-**direct transfer between these people in the simplified payment plan**, immediately
+**Debt between these two people before simplifying**, immediately
 before and after this Settlement, inside its Group mutation. They are immutable,
 returned in Group/Home Activity metadata, and retained unchanged on idempotent retry.
 Client-supplied values are ignored. Old records omit both fields; clients leave that
 line out rather than recomputing it from today's ledger. A €20 Debt paid fully gives
 `-2000 → 0`; paying €5 gives `-2000 → -1500`.
 
-This is not the underlying pairwise Debt before simplifying. A missing direct edge
-in the simplified plan is zero. With Sam owing Alex €20 and Alex owing Priya €20,
-the plan sends Sam to Priya; Sam paying Alex €20 changes it to Alex paying Priya,
-so the Sam–Alex snapshot is `0 → 0`. The closest honest label for these figures is
-“Suggested payment between you and Sam”, not a claim about their underlying Debt.
+The figures use the same pair ledger as Balances' “Before simplifying” view, not
+Suggested payments. With Sam owing Alex €20 and Alex owing Priya €20, Sam paying
+Alex €20 gives `-2000 → 0` for Sam–Alex. Sam instead paying Priya €20 gives
+`0 → 2000` for Sam–Priya: the payment creates a receiving position in that pair,
+while the Group's simplified Debts become zero. These are pair figures, not the
+payer's overall balance across all members.
 
 `formatCrossCurrencySettlement(record, viewerId?: string): string` takes the stored
 cross-currency fields, `amountMinor`, `currency`, and optional `paidBy`, `paidByName`,

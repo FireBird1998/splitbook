@@ -1,10 +1,7 @@
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
-import {
-  calculateNetBalancesMinor,
-  simplifyDebtsMinor,
-  type BalanceSettlement,
-} from '@splitbook/shared/debt-simplifier';
+import type { BalanceSettlement } from '@splitbook/shared/debt-simplifier';
+import { calculateDebtsMinor } from '@splitbook/shared/debts-before-simplifying';
 import { assertStoredExpenseMoney, toMajorAmount } from '@splitbook/shared/exact-money';
 
 /** Called inside the Settlement's Group mutation, before insertion, in the same snapshot. */
@@ -35,10 +32,10 @@ export async function settlementDebtSnapshot(
     paidTo: String(row.paidTo),
   }));
   const pair = (rows: BalanceSettlement[]) => {
-    const debts = simplifyDebtsMinor(calculateNetBalancesMinor(expenseMoney, rows, currency));
+    const debts = calculateDebtsMinor(expenseMoney, rows, currency);
     const outgoing = debts.find((debt) => debt.from === paidBy && debt.to === paidTo);
     const incoming = debts.find((debt) => debt.from === paidTo && debt.to === paidBy);
-    // Zero means no direct edge in this simplified plan, not no underlying pairwise Debt.
+    // The pair ledger includes this payment even when Suggested payments route via others.
     return outgoing ? -outgoing.amountMinor : (incoming?.amountMinor ?? 0);
   };
   const pairDebtBeforeMinor = pair(settlementMoney);
