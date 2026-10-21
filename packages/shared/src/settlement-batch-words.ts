@@ -44,8 +44,9 @@ function clearedMinor(meta: Readonly<Record<string, unknown>>) {
 }
 
 /**
- * The words of a batch's row. `events` are the batch's events loaded so far, in feed order;
- * `batchSize` is how many it has in all, so a batch a page boundary split says what it has.
+ * The words of a batch's row. `events` are the batch's events loaded so far, in the order they
+ * were recorded, as `groupSettlementBatches` gives them; `batchSize` is how many it has in all,
+ * so a batch a page boundary split says what it has.
  */
 export function settlementBatchWords(
   events: readonly SettlementBatchWordsEvent[],

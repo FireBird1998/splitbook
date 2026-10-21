@@ -184,7 +184,7 @@ const ActivityRow = memo(
     onSelect,
   }: {
     event: ActivityEvent;
-    /** A settle-up's Settlements, of which `event` is the first: one row for all (#734). */
+    /** A settle-up's Settlements, of which `event` is the newest in the feed: one row (#734). */
     batch?: Batch;
     currentUserId: string;
     currency: string;
@@ -273,15 +273,18 @@ function ActivityList({
     selecting.current = onSelect;
   });
   const select = useCallback((id: string) => selecting.current(id), []);
-  // A settle-up's Settlements are one row, where its first event is; a batch a page boundary
-  // split joins once the older page loads, as the loaded events are grouped together (#734).
+  // A settle-up's Settlements are one row, where its newest event is in the feed, so the row
+  // stays put as a batch a page boundary split joins once the older page loads; its words read
+  // in the order they were recorded (#734).
   const { rows, batches } = useMemo(() => {
-    const grouped = groupSettlementBatches(state.events);
+    const placed = groupSettlementBatches(state.events).map((item) =>
+      item.kind === 'event'
+        ? { row: item.event }
+        : { row: state.events.find((event) => item.events.includes(event))!, batch: item },
+    );
     return {
-      rows: grouped.map((item) => (item.kind === 'event' ? item.event : item.events[0]!)),
-      batches: new Map(
-        grouped.flatMap((item) => (item.kind === 'batch' ? [[item.events[0]!._id, item]] : [])),
-      ),
+      rows: placed.map(({ row }) => row),
+      batches: new Map(placed.flatMap(({ row, batch }) => (batch ? [[row._id, batch]] : []))),
     };
   }, [state.events]);
   // When the window moves, events above the one on screen go or come: Load older past 5 pages
@@ -799,9 +802,9 @@ function ActivityDetail({
   const { batchId, batchSize = 1 } = event.type === 'settlement_recorded' ? event.metadata : {};
   const batch =
     batchId && batchSize > 1
-      ? state.events.filter(
-          (other) => other.type === 'settlement_recorded' && other.metadata.batchId === batchId,
-        )
+      ? groupSettlementBatches(state.events).find(
+          (item): item is Batch => item.kind === 'batch' && item.batchId === batchId,
+        )?.events
       : null;
   return (
     <View style={{ gap: 12 }}>
