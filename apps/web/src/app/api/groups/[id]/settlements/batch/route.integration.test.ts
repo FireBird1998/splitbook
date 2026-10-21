@@ -195,6 +195,7 @@ describe('Settlement batch HTTP contract (#734)', () => {
   it('never records a batch paid in a currency removed while the request is running', async () => {
     const adminCookie = await signIn('alex');
     const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const outcomes = new Set<string>();
     for (let round = 0; round < 12; round += 1) {
       // Yen is listed but unused until the batch pays both Debts in it.
       const id = await trip(40, ['EUR', 'INR']);
@@ -220,7 +221,9 @@ describe('Settlement batch HTTP contract (#734)', () => {
         ],
       };
       const [removal, paid] = await Promise.all([
-        pause(round % 3).then(() =>
+        // The removal starts later each round, so it lands both before and after the batch's
+        // currency check: a check moved outside the batch's own mutation fails one side.
+        pause(round * 5).then(() =>
           callRoute(currency.DELETE, {
             method: 'DELETE',
             path: `/api/groups/${id}/currencies/JPY`,
@@ -228,7 +231,7 @@ describe('Settlement batch HTTP contract (#734)', () => {
             cookie: adminCookie,
           }),
         ),
-        pause((round + 1) % 3).then(() => record(id, request)),
+        record(id, request),
       ]);
       const settings = await callRoute(currencies.GET, {
         method: 'GET',
@@ -238,6 +241,7 @@ describe('Settlement batch HTTP contract (#734)', () => {
       });
       const saved = await read(id);
       const label = `round ${round}: removal ${removal.status}, payment ${paid.status}`;
+      outcomes.add(paid.status === 201 ? 'paid first' : 'removed first');
       expect(settings.status, label).toBe(200);
       expect(saved.status, label).toBe(200);
       const listed = settings.body.data.extraCurrencies.some(
@@ -261,6 +265,8 @@ describe('Settlement batch HTTP contract (#734)', () => {
         expect(await events(id), label).toEqual([]);
       }
     }
+    // Both orders happened, so the test reaches the race and not one side of it.
+    expect([...outcomes].sort()).toEqual(['paid first', 'removed first']);
   });
   it('records two currencies atomically with immutable pair figures and one Activity event each', async () => {
     const id = await trip();

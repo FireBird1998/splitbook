@@ -36,6 +36,21 @@ describe('groupSettlementBatches (#734)', () => {
     ]);
   });
 
+  // A newer event shifts the pages, so one event can arrive on both: it counts once.
+  it('counts an event repeated across shifted pages once, so its batch completes', () => {
+    const pageOne = [first, a1, middle];
+    const pageTwo = [middle, a2, last];
+    expect(groupSettlementBatches([...pageOne, ...pageTwo])).toEqual([
+      { kind: 'event', event: first, complete: true },
+      { kind: 'batch', batchId: 'batch-a', batchSize: 2, events: [a1, a2], complete: true },
+      { kind: 'event', event: middle, complete: true },
+      { kind: 'event', event: last, complete: true },
+    ]);
+    expect(groupSettlementBatches([a2, a1, a1])).toEqual([
+      { kind: 'batch', batchId: 'batch-a', batchSize: 2, events: [a2, a1], complete: true },
+    ]);
+  });
+
   it('marks a page-split batch incomplete', () => {
     expect(groupSettlementBatches([a1, middle])).toEqual([
       { kind: 'batch', batchId: 'batch-a', batchSize: 2, events: [a1], complete: false },
