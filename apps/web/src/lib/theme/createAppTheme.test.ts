@@ -20,6 +20,35 @@ function hue(color: string): number {
 }
 
 describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
+  it('rings a button, toggle button or clickable chip focused from the keyboard, as everything else; a menu or list item keeps its highlight (#830)', () => {
+    const theme = createAppTheme(mode);
+    const baseline = theme.components?.MuiCssBaseline?.styleOverrides;
+    const rules = (typeof baseline === 'function' ? baseline(theme) : baseline) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const root = (name: string) => {
+      const overrides = (
+        theme.components as Record<string, { styleOverrides?: { root?: unknown } }>
+      )[name]?.styleOverrides?.root;
+      return (typeof overrides === 'function' ? overrides({ theme }) : (overrides ?? {})) as Record<
+        string,
+        unknown
+      >;
+    };
+    // ButtonBase's outline: 0 and disableElevation's box-shadow: none hide the global ring.
+    expect(root('MuiButton')['&.Mui-focusVisible']).toEqual(rules[':focus-visible']);
+    expect(root('MuiToggleButton')['&.Mui-focusVisible']).toEqual(rules[':focus-visible']);
+    expect(root('MuiChip')['&.MuiChip-clickable.Mui-focusVisible']).toEqual(
+      rules[':focus-visible'],
+    );
+    for (const name of ['MuiMenuItem', 'MuiListItemButton'])
+      expect(
+        Object.keys(root(name)).filter((selector) => selector.includes('focusVisible')),
+        name,
+      ).toEqual([]);
+  });
+
   it('lets a bordered text field’s own border show its focus, with no second ring; a button keeps the ring (#823)', () => {
     const theme = createAppTheme(mode);
     const baseline = theme.components?.MuiCssBaseline?.styleOverrides;

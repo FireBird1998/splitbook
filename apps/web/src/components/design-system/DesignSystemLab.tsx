@@ -6,6 +6,7 @@ import Alert from '@mui/material/Alert';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Link from '@mui/material/Link';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
@@ -22,6 +23,7 @@ import { getSemanticTokens, RADIUS } from '@/lib/theme/tokens';
 
 export default function DesignSystemLab() {
   const [recovered, setRecovered] = useState(false);
+  const [filtered, setFiltered] = useState(false);
   const { mode, toggleTheme } = useThemeMode();
   const tokens = getSemanticTokens(mode);
   return (
@@ -175,6 +177,27 @@ export default function DesignSystemLab() {
               >
                 <DarkModeIcon />
               </IconButton>
+            </Stack>
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+              {/* Record's tonal look: the brand tint, in the primary colour. */}
+              <Button
+                variant="contained"
+                sx={{
+                  bgcolor: 'tint.brand',
+                  color: 'primary.main',
+                  '&:hover': { bgcolor: 'tint.brand' },
+                }}
+              >
+                Sample tonal action
+              </Button>
+              <Button>Sample text action</Button>
+              <Chip
+                label="Sample filter"
+                variant={filtered ? 'filled' : 'outlined'}
+                color={filtered ? 'primary' : 'default'}
+                aria-pressed={filtered}
+                onClick={() => setFiltered((on) => !on)}
+              />
             </Stack>
             <Typography variant="body2" color="text.secondary">
               Use Tab to inspect focus. Buttons keep their existing touch sizing. Motion follows
