@@ -72,6 +72,30 @@ export function UnlistedCurrencySheet({
 }) {
   const fix = unlistedCurrencyFix(group, item.currency, item.amount);
   const busy = adding.status === 'adding';
+  // No listed currency can keep the amount, and adding this one wouldn't either: only the guided
+  // review, where the amount changes too, can fix it, so it comes first (the Designer's #733 order).
+  const stuck =
+    item.amount !== undefined &&
+    !groupCurrencies(group).some((code) => keepsAmount(item.amount, code)) &&
+    !(fix.add && keepsAmount(item.amount, item.currency));
+  const review = (
+    <>
+      <CompactButton
+        label="Review it with every detail"
+        icon="open-outline"
+        variant={stuck ? 'primary' : 'tonal'}
+        block
+        disabled={offline || disabled || busy}
+        hint={offline ? reviewNeedsConnection : undefined}
+        onPress={onReview}
+      />
+      {offline ? (
+        <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+          {reviewNeedsConnection}
+        </CompactText>
+      ) : null}
+    </>
+  );
   return (
     <BottomSheet visible title={item.description} doneLabel="Close" onDone={onClose}>
       {/* Both fixes wait for a connection: said once, above them, as well as under each. */}
@@ -89,10 +113,14 @@ export function UnlistedCurrencySheet({
           <Money>{formatCurrencyAsEntered(item.amount, item.currency)}</Money>
         ) : null}
       </View>
-      <Banner tone="warning" message={`${fix.notListed} ${fix.ask}`} />
+      <Banner
+        tone="warning"
+        message={`${fix.notListed} ${stuck ? 'Review it to fix the amount and the currency.' : fix.ask}`}
+      />
       {item.alsoNeeds.length ? (
         <CompactText variant="small">{`It also needs ${item.alsoNeeds.join(', ')}.`}</CompactText>
       ) : null}
+      {stuck ? review : null}
       {adding.status === 'error' && adding.message ? (
         <Banner tone="error" message={adding.message} />
       ) : null}
@@ -100,6 +128,7 @@ export function UnlistedCurrencySheet({
         <CompactButton
           label={fix.add}
           icon="add"
+          variant={stuck ? 'tonal' : 'primary'}
           block
           disabled={offline || disabled || busy}
           busy={busy ? `Adding ${item.currency}…` : undefined}
@@ -114,31 +143,16 @@ export function UnlistedCurrencySheet({
         label="Change currency"
         variant="tonal"
         block
-        disabled={offline || disabled || busy}
+        disabled={offline || disabled || busy || stuck}
         hint={offline ? changeNeedsConnection : undefined}
         onPress={onChange}
       />
       <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-        {fix.changing}
+        {stuck && item.amount !== undefined
+          ? `No listed currency can keep ${formatCurrencyAsEntered(item.amount, item.currency)}.`
+          : fix.changing}
       </CompactText>
-      {item.alsoNeeds.length ? (
-        <>
-          <CompactButton
-            label="Review it with every detail"
-            icon="open-outline"
-            variant="tonal"
-            block
-            disabled={offline || disabled || busy}
-            hint={offline ? reviewNeedsConnection : undefined}
-            onPress={onReview}
-          />
-          {offline ? (
-            <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-              {reviewNeedsConnection}
-            </CompactText>
-          ) : null}
-        </>
-      ) : null}
+      {item.alsoNeeds.length && !stuck ? review : null}
     </BottomSheet>
   );
 }
