@@ -1,4 +1,8 @@
+import { formatActivityHeadline } from '@splitbook/shared/activity-timeline';
 import { assistantRuleLabel } from '@splitbook/shared/assistant-rule';
+import { readCrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
+import { minorMoney } from '@splitbook/shared/cross-currency-settlement';
+import { memberLabel } from '@splitbook/shared/member-label';
 import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST } from '@splitbook/shared/group-themes';
 import {
@@ -342,6 +346,25 @@ export function describeActivity(
       };
     }
     case 'settlement_recorded': {
+      // A Debt paid in another currency says both amounts and the rate (#728).
+      const cross = readCrossCurrencyRecord(meta);
+      if (cross) {
+        const amounts = `${minorMoney(cross.amountPaidMinor, cross.paidCurrency)} to clear ${minorMoney(cross.amountMinor, cross.currency)}`;
+        // The rate in the shared words, as the web's Activity says them, after the amounts.
+        const said = formatActivityHeadline(event, currentUserId);
+        const at = said.indexOf(`${amounts} `);
+        return {
+          actor: memberLabel(cross.paidBy, cross.paidByName, currentUserId) ?? 'Former member',
+          verb: 'paid',
+          subject:
+            cross.paidTo === currentUserId
+              ? 'you'
+              : memberLabel(cross.paidTo, cross.paidToName, currentUserId),
+          complement: amounts,
+          details: [{ text: at < 0 ? said : said.slice(at + amounts.length + 1) }],
+          changes: [],
+        };
+      }
       const paidBy = meta.paidBy === currentUserId ? 'You' : text(meta.paidByName);
       const paidTo = meta.paidTo === currentUserId ? 'You' : text(meta.paidToName);
       return line('recorded a payment', null, [

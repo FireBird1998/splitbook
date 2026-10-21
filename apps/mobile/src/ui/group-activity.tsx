@@ -2,6 +2,11 @@ import { ListDayHeader } from './list-day-header';
 import type { RowPlaces } from './return-scroll';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import {
+  paymentRecord,
+  readCrossCurrencyRecord,
+  type CrossCurrencyRecord,
+} from '@splitbook/shared/cross-currency-payment';
 import { activityExpenseId, type ActivityEvent, type ActivityState } from '../data/activity';
 import {
   activityDays,
@@ -12,6 +17,7 @@ import {
   type TextRun,
 } from './activity-format';
 import {
+  Badge,
   Banner,
   Card,
   CompactAvatar,
@@ -53,6 +59,8 @@ interface GroupActivityProps {
   /** Opens an event: its Expense's record when it names one, otherwise what was recorded. */
   onSelect: (id: string) => void;
   onClose: () => void;
+  /** Opens a link: a payment's second source's attribution (#728). */
+  onOpenLink?: (url: string) => void;
 }
 
 /** The Activity destination: this Group's changes, newest first, grouped by day. */
@@ -500,6 +508,179 @@ const recordCheck: Record<string, [current: string, saved: string]> = {
   error: ['Couldn’t check the Expense as it is now.', 'Couldn’t check the Expense as it is now.'],
 };
 
+/** One line of a payment's record: what it is, and its value at the end of the line. */
+function RecordRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        columnGap: 12,
+        rowGap: 2,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+      }}
+    >
+      <CompactText tone="secondary">{label}</CompactText>
+      <View
+        style={{
+          marginLeft: 'auto',
+          flexShrink: 1,
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: 6,
+        }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * A Debt paid in another currency, as recorded (#728, the board "The Settlement's record", the
+ * web's `PaymentRecordCard`): who paid whom, both amounts, the rate used beside the suggestion
+ * with its source, when and by whom, and what it changed. Every figure is the shared
+ * `paymentRecord`'s, from what was stored; nothing is looked up again.
+ */
+function PaymentRecord({
+  event,
+  record,
+  line,
+  currentUserId,
+  when,
+  onOpenLink,
+}: {
+  event: ActivityEvent;
+  record: CrossCurrencyRecord;
+  line: ActivityLine;
+  currentUserId: string;
+  when: string;
+  onOpenLink: (url: string) => void;
+}) {
+  const card = paymentRecord(record, currentUserId);
+  const mono = { fontFamily: fonts.mono, fontVariant: ['tabular-nums' as const] };
+  const recorder =
+    event.actor?._id === currentUserId ? 'you' : event.actor?.name || 'a former member';
+  return (
+    <>
+      <CompactText variant="title" accessibilityRole="header">
+        Payment
+      </CompactText>
+      <Card padded>
+        <View
+          accessible
+          accessibilityLabel={[line.actor, line.verb, line.subject, line.complement]
+            .filter(Boolean)
+            .join(' ')}
+          style={{ gap: 8 }}
+        >
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+            <CompactAvatar name={record.paidByName || card.payer} />
+            <CompactText weight="semibold">{card.payer}</CompactText>
+            <CompactText tone="secondary">→</CompactText>
+            <CompactAvatar name={record.paidToName || card.payee} />
+            <CompactText weight="semibold" style={{ flexShrink: 1 }}>
+              {card.payee}
+            </CompactText>
+          </View>
+          <View>
+            <CompactText variant="caption" tone="secondary">
+              Paid
+            </CompactText>
+            <CompactText style={{ ...mono, fontSize: 28, lineHeight: 34 }}>{card.paid}</CompactText>
+            <CompactText tone="secondary">{card.clears}</CompactText>
+          </View>
+        </View>
+      </Card>
+      <Card>
+        <RecordRow label="Rate used">
+          <CompactText style={mono}>{card.rateUsed}</CompactText>
+          <Badge label={card.badge} tone={card.badge === 'Suggested' ? 'positive' : 'warning'} />
+        </RecordRow>
+        {card.suggested ? (
+          <>
+            <Divider />
+            <RecordRow label="Suggested">
+              <CompactText style={mono}>{card.suggested.rate}</CompactText>
+            </RecordRow>
+            <View
+              style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: 6,
+                paddingHorizontal: 14,
+                paddingBottom: 12,
+                marginTop: -6,
+              }}
+            >
+              <CompactText variant="caption" tone="secondary">
+                {card.suggested.source}
+              </CompactText>
+              {card.suggested.attribution ? (
+                <Pressable
+                  accessibilityRole="link"
+                  accessibilityLabel={card.suggested.attribution.text}
+                  onPress={() => onOpenLink(card.suggested!.attribution!.url)}
+                  hitSlop={8}
+                >
+                  <CompactText
+                    variant="caption"
+                    tone="brand"
+                    weight="semibold"
+                    style={{ textDecorationLine: 'underline' }}
+                  >
+                    {card.suggested.attribution.text}
+                  </CompactText>
+                </Pressable>
+              ) : null}
+            </View>
+          </>
+        ) : null}
+        <Divider />
+        <RecordRow label="Amount cleared">
+          <CompactText style={mono}>{card.cleared}</CompactText>
+          <CompactText variant="caption" tone="secondary">
+            {record.currency}
+          </CompactText>
+        </RecordRow>
+        <Divider />
+        <RecordRow label="Amount paid">
+          <CompactText style={mono}>{card.paidAmount}</CompactText>
+          <CompactText variant="caption" tone="secondary">
+            {record.paidCurrency}
+          </CompactText>
+        </RecordRow>
+        <Divider />
+        <RecordRow label="Recorded">
+          <CompactText>{`${when} by ${recorder}`}</CompactText>
+        </RecordRow>
+      </Card>
+      <SectionHeader title="What it changed" />
+      <Card padded>
+        <View style={{ gap: 6 }}>
+          {card.pair ? (
+            <CompactText>
+              {card.pair.label}{' '}
+              <Text style={mono}>{`${card.pair.before} → ${card.pair.after}`}</Text>
+            </CompactText>
+          ) : null}
+          <CompactText variant="small" tone="secondary">
+            {card.unchanged}
+          </CompactText>
+        </View>
+      </Card>
+      <CompactText variant="small" tone="secondary">
+        {card.kept}
+      </CompactText>
+    </>
+  );
+}
+
 function ActivityDetail({
   state,
   event,
@@ -509,31 +690,46 @@ function ActivityDetail({
   offline,
   onSelect,
   onClose,
+  onOpenLink = () => undefined,
 }: GroupActivityProps & { event: ActivityEvent }) {
   const line = describeActivity(event, { currentUserId, currency, members });
   // "Mon 19 Oct 2026, 1:44 PM", day first on every phone (#640).
   const when = spellMoment(new Date(event.createdAt), { weekday: 'short', year: true });
   const check = recordCheck[state.target.status];
+  // A Debt paid in another currency opens its record (#728).
+  const payment =
+    event.type === 'settlement_recorded' ? readCrossCurrencyRecord(event.metadata) : null;
   return (
     <View style={{ gap: 12 }}>
-      <Card padded>
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <CompactAvatar name={event.actor?.name || 'Former member'} />
-          <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-            <Headline line={line} />
-            {/* Whole here, where the event is read in full (#751). */}
-            {line.credit ? (
-              <CompactText variant="caption" tone="secondary">
-                {line.credit}
-              </CompactText>
-            ) : null}
-            <Details
-              line={{ ...line, details: line.changes.length ? [] : line.details }}
-              time={when}
-            />
+      {payment ? (
+        <PaymentRecord
+          event={event}
+          record={payment}
+          line={line}
+          currentUserId={currentUserId}
+          when={when}
+          onOpenLink={onOpenLink}
+        />
+      ) : (
+        <Card padded>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <CompactAvatar name={event.actor?.name || 'Former member'} />
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <Headline line={line} />
+              {/* Whole here, where the event is read in full (#751). */}
+              {line.credit ? (
+                <CompactText variant="caption" tone="secondary">
+                  {line.credit}
+                </CompactText>
+              ) : null}
+              <Details
+                line={{ ...line, details: line.changes.length ? [] : line.details }}
+                time={when}
+              />
+            </View>
           </View>
-        </View>
-      </Card>
+        </Card>
+      )}
       {line.changes.length ? (
         <>
           <SectionHeader title="What changed" />
