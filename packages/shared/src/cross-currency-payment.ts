@@ -10,7 +10,7 @@ import { readAmountEntry } from './amount-entry';
 import { formatCurrency, getCurrency, getCurrencyPrecision } from './currency';
 import { toMajorAmount } from './exact-money';
 import { crossCurrencySettlementReadShape } from './validators/settlement';
-import { memberLabel } from './activity-timeline';
+import { memberLabel } from './member-label';
 import {
   calculateCrossCurrencySettlement,
   decimalMoney,

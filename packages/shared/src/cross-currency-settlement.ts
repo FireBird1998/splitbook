@@ -1,4 +1,4 @@
-import { memberLabel } from './activity-timeline';
+import { memberLabel } from './member-label';
 import { getCurrency, getCurrencyPrecision } from './currency';
 import { assertSafeMinorAmount, MoneyValidationError } from './exact-money';
 

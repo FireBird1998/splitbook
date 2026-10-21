@@ -1,5 +1,6 @@
 import { assistantRuleLabel } from './assistant-rule';
 import { formatCurrency } from './currency';
+import { memberLabel, recordedText } from './member-label';
 import { formatDate, formatDateTime } from './date';
 import { toMajorAmount } from './exact-money';
 import {
@@ -49,15 +50,9 @@ export function groupActivitiesByDay(activities: ActivityLike[]): ActivityDayGro
   return Array.from(groups.values());
 }
 
-const words = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
+const words = recordedText;
 
-/**
- * A member as an event names them: "You" when their id is the viewer's (#442), never matched by
- * name, since two members can share one; otherwise their recorded name, or null without one.
- */
-export function memberLabel(id: unknown, name: unknown, viewerId?: string): string | null {
-  return viewerId && id === viewerId ? 'You' : words(name);
-}
+export { memberLabel };
 
 /** A Group edit that changed only its extra currencies (#721): what it added and removed. */
 function currencyListChange(changes: unknown) {
