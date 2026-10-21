@@ -270,16 +270,26 @@ export default function ExportPreviewPanel({
                     <Typography component="h5" variant="subtitle1">
                       Payments ({bucket.currency})
                     </Typography>
-                    <PreviewTable
-                      label={`${bucket.currency} first payments`}
-                      headers={['Date', 'Payment', 'Note', 'Recorded by']}
+                    <Box
+                      component="ul"
+                      aria-label={`${bucket.currency} first payments`}
+                      sx={{ p: 0, m: 0, listStyle: 'none' }}
                     >
                       {bucket.payments.map((payment) => (
-                        <TableRow key={payment.id}>
-                          <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        <Box
+                          component="li"
+                          key={payment.id}
+                          sx={{
+                            py: 1.5,
+                            borderBottom: 1,
+                            borderColor: 'divider',
+                            overflowWrap: 'anywhere',
+                          }}
+                        >
+                          <Typography variant="body2" color="text.secondary">
                             {generatedTime(payment.at, data.timeZone)}
-                          </TableCell>
-                          <TableCell>
+                          </Typography>
+                          <Box sx={{ my: 0.5 }}>
                             {payment.description ? (
                               <ExportPaymentDescription
                                 description={payment.description}
@@ -296,12 +306,14 @@ export default function ExportPreviewPanel({
                                 />
                               </>
                             )}
-                          </TableCell>
-                          <TableCell>{payment.note}</TableCell>
-                          <TableCell>{name(payment.recordedById)}</TableCell>
-                        </TableRow>
+                          </Box>
+                          {payment.note && <Typography variant="body2">{payment.note}</Typography>}
+                          <Typography variant="caption" color="text.secondary">
+                            Recorded by {name(payment.recordedById)}
+                          </Typography>
+                        </Box>
                       ))}
-                    </PreviewTable>
+                    </Box>
                     {bucket.paymentCount > bucket.payments.length && (
                       <Typography color="text.secondary">
                         …and {bucket.paymentCount - bucket.payments.length} more payments

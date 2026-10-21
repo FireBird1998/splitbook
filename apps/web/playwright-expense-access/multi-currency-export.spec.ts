@@ -71,7 +71,10 @@ for (const size of ['desktop', 'phone'] as const) {
       ).toBeVisible();
       await expect(preview).toContainText('1850.00');
       await expect(preview).toContainText('92.5');
-      await page.screenshot({ path: testInfo.outputPath('csv-preview.png'), fullPage: true });
+      await page.screenshot({
+        path: testInfo.outputPath(`${size}-${mode}-csv-preview.png`),
+        fullPage: true,
+      });
       await page.getByLabel('Format', { exact: true }).selectOption('statement');
       for (const currency of ['EUR', 'INR', 'JPY'])
         await expect(
@@ -80,7 +83,10 @@ for (const size of ['desktop', 'phone'] as const) {
       await expect(preview).toContainText(
         'Sam Chen paid Alex Rivera ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
       );
-      await page.screenshot({ path: testInfo.outputPath('statement-preview.png'), fullPage: true });
+      await page.screenshot({
+        path: testInfo.outputPath(`${size}-${mode}-statement-preview.png`),
+        fullPage: true,
+      });
       await page.getByRole('link', { name: 'Open statement', exact: true }).click();
       await page.emulateMedia({ media: 'print' });
       for (const currency of ['EUR', 'INR', 'JPY'])
@@ -95,7 +101,10 @@ for (const size of ['desktop', 'phone'] as const) {
       await expect(preview).toContainText(
         '1 Payments, including both amounts, currencies and stored rates',
       );
-      await page.screenshot({ path: testInfo.outputPath('backup-preview.png'), fullPage: true });
+      await page.screenshot({
+        path: testInfo.outputPath(`${size}-${mode}-backup-preview.png`),
+        fullPage: true,
+      });
     });
   }
 }
