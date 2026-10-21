@@ -390,11 +390,11 @@ for (const [name, Field] of fields) {
   });
 
   it(`${name}: an Undo while not focused changes nothing`, async () => {
-    const { input, changed, edit } = await focused('EUR', '');
+    const { input, changed, edit, press } = await focused('EUR', '');
     for (const typed of ['1', '12']) await edit(typed);
     await act(async () => input().props.onBlur({}));
     changed.mockClear();
-    await edit('1', 1, 'historyUndo');
+    await press('z', { metaKey: true });
     expect(input().props.value).toBe('12.00');
     expect(changed).not.toHaveBeenCalled();
   });
@@ -430,8 +430,10 @@ for (const [name, Field] of fields) {
     // Other shortcuts are the browser's.
     const other = await press('z', { metaKey: true, altKey: true });
     const all = await press('a', { metaKey: true });
+    const plain = await press('z');
     expect(other.preventDefault).not.toHaveBeenCalled();
     expect(all.preventDefault).not.toHaveBeenCalled();
+    expect(plain.preventDefault).not.toHaveBeenCalled();
     expect(input().props.value).toBe('1,234');
   });
 
@@ -456,13 +458,26 @@ for (const [name, Field] of fields) {
   });
 
   it(`${name}: Undo takes back an IME's composition at once`, async () => {
-    const { input, compose, history } = await focused('EUR', '');
+    const { input, edit, compose, history } = await focused('EUR', '');
     for (const composing of ['1', '12', '123']) await compose(composing);
+    expect(input().props.value).toBe('123');
+    // What's typed after it is a step of its own.
+    await edit('1234');
+    await history('historyUndo');
     expect(input().props.value).toBe('123');
     await history('historyUndo');
     expect(input().props.value).toBe('');
     await history('historyRedo');
     expect(input().props.value).toBe('123');
+  });
+
+  it(`${name}: Undo after leaving the field and coming back starts from what focus showed`, async () => {
+    const { input, edit, history } = await focused('EUR', '');
+    for (const typed of ['1', '12']) await edit(typed);
+    await act(async () => input().props.onBlur({}));
+    await act(async () => input().props.onFocus({ target: input().props }));
+    await history('historyUndo');
+    expect(input().props.value).toBe('12.00');
   });
 
   it(`${name}: a whole yen amount regroups too, and INR groups as it does on blur`, async () => {

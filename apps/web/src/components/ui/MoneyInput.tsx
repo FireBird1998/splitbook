@@ -42,10 +42,19 @@ function changedUpTo(before: string, after: string): number {
   return to.length - tail;
 }
 
-const commas = (text: string) => text.split(',').length - 1;
-
 /** What the field shows, and the form's amount behind it. */
 type Entry = { text: string; value: string };
+
+/** Undo steps back and Redo forward; any other input is no step. */
+const historyStep = (inputType: string) =>
+  inputType === 'historyUndo' ? -1 : inputType === 'historyRedo' ? 1 : 0;
+
+/** Cmd or Ctrl with Z undoes and with Shift+Z or Y redoes; any other key is no step. */
+function shortcutStep({ key, metaKey, ctrlKey, shiftKey, altKey }: KeyboardEvent) {
+  if (!(metaKey || ctrlKey) || altKey) return 0;
+  if (key.toLowerCase() === 'z') return shiftKey ? 1 : -1;
+  return key.toLowerCase() === 'y' && !shiftKey ? 1 : 0;
+}
 
 /** Group only the display; focus and blur never edit the form's stored value. */
 function useMoneyEntry(
@@ -64,25 +73,32 @@ function useMoneyEntry(
   });
   // The field's own Undo and Redo since focus (#773). Regrouping writes the text from script,
   // which leaves the browser nothing to undo: its Undo only moved the caret to the start, so the
-  // next digit went in front.
-  const history = useRef<{ entries: Entry[]; at: number }>({ entries: [], at: 0 });
+  // next digit went in front. One composition is one step.
+  const history = useRef<{ entries: Entry[]; at: number; composing: boolean }>({
+    entries: [],
+    at: 0,
+    composing: false,
+  });
   const shown =
     editing === null
       ? formatAmountEntry(value, currency)
       : editing.value === value
         ? editing.text
         : ungroupAmountEntry(value);
-  const step = (by: -1 | 1) => {
-    const { entries, at } = history.current;
+  /** The history, begun again from the amount the form set itself, if it did since. */
+  const synced = () => {
+    if (history.current.entries[history.current.at]?.value !== value) {
+      history.current = { entries: [{ text: shown, value }], at: 0, composing: false };
+    }
+    return history.current;
+  };
+  const step = (by: number) => {
+    if (editing === null || by === 0) return;
+    const { entries, at } = synced();
     const from = entries[at];
     const to = entries[at + by];
-    if (editing === null || from === undefined || to === undefined) return;
-    // The form changed the amount itself since: what came before it is no longer the field's.
-    if (from.value !== value) {
-      history.current = { entries: [{ text: shown, value }], at: 0 };
-      return;
-    }
-    history.current.at = at + by;
+    if (from === undefined || to === undefined) return;
+    history.current = { entries, at: at + by, composing: false };
     caret.current = indexAfter(to.text, changedUpTo(from.text, to.text));
     setEditing(to);
     onValueChange(to.value);
@@ -90,15 +106,30 @@ function useMoneyEntry(
   useLayoutEffect(() => {
     const node = input.current;
     if (node === null) return;
-    const undoOrRedo = (event: InputEvent) => {
-      if (event.inputType !== 'historyUndo' && event.inputType !== 'historyRedo') return;
-      // One the browser won't let go of still arrives as a change, and steps there.
-      if (!event.cancelable) return;
+    // From the keyboard, whatever the browser's own Undo holds: Chromium redoes only what it
+    // undid itself.
+    const fromKeys = (event: KeyboardEvent) => {
+      const by = shortcutStep(event);
+      if (by === 0) return;
       event.preventDefault();
-      step(event.inputType === 'historyUndo' ? -1 : 1);
+      step(by);
     };
-    node.addEventListener('beforeinput', undoOrRedo);
-    return () => node.removeEventListener('beforeinput', undoOrRedo);
+    // From the browser's menu: taken before it acts, or heard after when it won't let go.
+    const beforeInput = (event: InputEvent) => {
+      const by = historyStep(event.inputType);
+      if (by === 0 || !event.cancelable) return;
+      event.preventDefault();
+      step(by);
+    };
+    const afterInput = (event: Event) => step(historyStep((event as InputEvent).inputType));
+    node.addEventListener('keydown', fromKeys);
+    node.addEventListener('beforeinput', beforeInput);
+    node.addEventListener('input', afterInput);
+    return () => {
+      node.removeEventListener('keydown', fromKeys);
+      node.removeEventListener('beforeinput', beforeInput);
+      node.removeEventListener('input', afterInput);
+    };
   });
   return {
     value: shown,
@@ -107,32 +138,24 @@ function useMoneyEntry(
     // caret. Keep the displayed text until the member edits it; blur still groups it.
     onFocus: () => {
       const entry = { text: formatAmountEntry(value, currency), value };
-      history.current = { entries: [entry], at: 0 };
+      history.current = { entries: [entry], at: 0, composing: false };
       setEditing(entry);
     },
     onBlur: () => setEditing(null),
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const typed = event.target.value;
       // Regroup as the member types (#773), the caret after as many characters as before. Only
-      // the browser's event says what an edit typed; a change a password manager, autofill or a
-      // test sends may carry none. An IME's composition stays as typed while it lasts.
+      // the browser's event says what an edit typed: nothing for a Backspace, Delete or Cut; a
+      // change a password manager, autofill or a test sends may not say. An IME's composition
+      // stays as typed while it lasts.
       const {
         inputType = '',
         isComposing = false,
         data = null,
       } = (event.nativeEvent as Partial<InputEvent> | undefined) ?? {};
-      if (inputType === 'historyUndo' || inputType === 'historyRedo') {
-        step(inputType === 'historyUndo' ? -1 : 1);
-        return;
-      }
-      // A Backspace, Delete or Cut types nothing; when a paste doesn't say what it typed, a
-      // comma it added shows in the count.
-      const typedText = inputType.startsWith('delete') ? '' : data;
-      const typedComma =
-        typedText === null ? commas(typed) > commas(shown) : typedText.includes(',');
-      const edit = typedComma
-        ? undefined
-        : { from: shown, typedDigits: typedText === null || /\d/.test(typedText) };
+      // The field's history answers Undo and Redo, as its listeners hear them.
+      if (historyStep(inputType) !== 0) return;
+      const edit = { from: shown, typed: inputType.startsWith('delete') ? '' : data };
       const regrouped = isComposing ? null : regroupAmountEntry(typed, currency, edit);
       // Not while unfocused, as autofill edits: the caret would wait for focus and undo Tab's
       // selection.
@@ -147,8 +170,17 @@ function useMoneyEntry(
         text: regrouped ?? typed,
         value: regrouped === null ? ungroupAmountEntry(typed) : regrouped.replaceAll(',', ''),
       };
-      const { entries, at } = history.current;
-      history.current = { entries: [...entries.slice(0, at + 1), next], at: at + 1 };
+      const { entries, at, composing } = synced();
+      const last = entries[at];
+      if (last === undefined || last.text !== next.text || last.value !== next.value) {
+        // A composition's updates replace each other.
+        const kept = composing && isComposing ? at : at + 1;
+        history.current = {
+          entries: [...entries.slice(0, kept), next],
+          at: kept,
+          composing: isComposing,
+        };
+      }
       setEditing((current) => (current === null ? null : next));
       onValueChange(next.value);
     },
