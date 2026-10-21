@@ -405,6 +405,20 @@ describe('Connected assistants on Android (#622)', () => {
     controller.dispose();
   });
 
+  it('doesn’t read again on the internet’s return when what it shows was read live', async () => {
+    const f = fixture();
+    const { controller, state } = await readOnline(f);
+    // The internet drops and returns before anything is read meanwhile.
+    f.connect(true, false);
+    await settle();
+    const sent = f.requests.length;
+    f.connect(true, true);
+    await settle();
+    expect(f.requests.slice(sent)).not.toContain(`GET ${connectionsPath}`);
+    expect(state().saved).toBe(false);
+    controller.dispose();
+  });
+
   it('shows no list once it says this phone keeps no copy', async () => {
     const f = fixture();
     const { controller, state } = await readOnline(f);

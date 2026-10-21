@@ -294,8 +294,16 @@ export function createAssistants(session: AssistantsSession) {
         );
         return;
       }
+      // Nothing of the list shows beside "not saved on this phone", not even what was read before.
       if (error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE')
-        return update({ status: 'ready', unsaved: true, message: notSavedAssistantsMessage });
+        return update({
+          status: 'ready',
+          assistants: null,
+          refreshedAt: null,
+          saved: false,
+          unsaved: true,
+          message: notSavedAssistantsMessage,
+        });
       update({ status: 'error', message: refreshFailedAssistantsMessage });
     }
   };

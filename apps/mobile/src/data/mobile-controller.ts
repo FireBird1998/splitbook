@@ -24,6 +24,7 @@ import { savedCopyRetirement } from './saved-copy-retirement';
 import { inScope, queryOwner, replaceScopedQueries } from './query-owner';
 import { readProvenance } from './read-provenance';
 import {
+  connectedAssistantsKey,
   groupKey,
   groupsKey,
   homeBalancesKey,
@@ -1285,8 +1286,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   });
   const listening = [
     // The internet's return, which the online manager doesn't follow, reaches the screen shown
-    // too: a Group's view (#678), its Activity, an Expense record, Members (#681) and the Record
-    // payment sheet (#685).
+    // too: a Group's view (#678), its Activity, an Expense record, Members (#681), the Record
+    // payment sheet (#685) and Connected assistants (#622).
     homeQueries.listen(focusManager, onlineManager, dependencies.netInfo, () => {
       groupQueries.recover();
       activityQueries.recover();
@@ -1342,7 +1343,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ]
         : next.screen === 'expense'
           ? expenseQueries.shownKeys(next)
-          : [...groupQueries.shownKeys(next), ...activityQueries.shownKeys(next)];
+          : next.screen === 'assistants'
+            ? // Its Saved copy shown, or none kept out of reach, is offline as anywhere else (#622).
+              [connectedAssistantsKey({ environment: apiBase, accountId: next.auth.user!.id })]
+            : [...groupQueries.shownKeys(next), ...activityQueries.shownKeys(next)];
     return provenance.project(next, keys, offlineSession);
   };
   const publishReadFreshness = ({ onlyChanges = false } = {}) => {
@@ -6255,6 +6259,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * copy, which keeps the banner until then.
    */
   const recoveryRead = (view: Route) => {
+    // Connected assistants reads itself again while it shows offline (#622).
+    if (view.screen === 'assistants') return bannerShown() ? () => assistantsData.read() : null;
     if (view.screen === 'expense') {
       // An Expense that couldn't open offline, with nothing of it on this phone, opens again as Try
       // again opens it (#694). One that shows reads itself again (expense-queries, #681).
@@ -6293,8 +6299,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const recoverShown = async () => {
     const view = route,
       owner = generation;
-    if (!['members', 'settlement', 'expense'].includes(view.screen) || !('groupId' in view)) return;
-    const key = groupKey(account(), view.groupId);
+    const key =
+      view.screen === 'assistants'
+        ? connectedAssistantsKey(account())
+        : ['members', 'settlement', 'expense'].includes(view.screen) && 'groupId' in view
+          ? groupKey(account(), view.groupId)
+          : null;
+    if (!key) return;
     // One recovery per visit: a return heard while it runs is counted, and handled after its read.
     // A second would only repeat it: it waits for the same reads, then its re-read joins this
     // one's (the session check is shared, as is a read of the Group in flight), and the sheet's
