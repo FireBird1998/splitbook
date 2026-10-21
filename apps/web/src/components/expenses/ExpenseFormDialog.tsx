@@ -18,10 +18,16 @@ import CloseIcon from '@mui/icons-material/Close';
 import { toDateParam } from '@splitbook/shared/date';
 import { formatCurrency } from '@splitbook/shared/currency';
 import {
+  MAX_EXTRA_CURRENCIES,
   expenseCurrencyChoices,
   groupCurrencies,
+  normaliseExtraCurrencies,
   startingExpenseCurrency,
 } from '@splitbook/shared/group-currencies';
+import { useSWRConfig } from 'swr';
+import { groupCurrenciesPath } from '@splitbook/shared/api-paths';
+import AddCurrencyDialog, { answerOf } from '@/components/groups/AddCurrencyDialog';
+import { isWebGroupsRead } from '@/lib/web-query-keys';
 import { readAmountEntry } from '@splitbook/shared/amount-entry';
 import {
   ExpenseDraft,
@@ -174,7 +180,45 @@ function ExpenseDraftDialog({
     onClose();
   };
 
-  const currencyChoices = expenseCurrencyChoices(group, group.latestExpenseCurrency, currency);
+  // "Add a currency…" (#722): the Group's own Add a currency dialog, then the Expense is in the one
+  // added. It shows as one of the Group's currencies at once, before the Group is read again.
+  const { mutate: refreshReads } = useSWRConfig();
+  const [added, setAdded] = useState<string[]>([]);
+  const [addingCurrency, setAddingCurrency] = useState(false);
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState('');
+  const extras = normaliseExtraCurrencies(group.defaultCurrency, [
+    ...(group.alternateCurrencies ?? []),
+    ...added,
+  ]);
+  const listing = { ...group, alternateCurrencies: extras };
+  const addCurrency = async (code: string) => {
+    setAddBusy(true);
+    setAddError('');
+    try {
+      const answer = await answerOf(
+        await apiFetch(groupCurrenciesPath(groupId), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currency: code }),
+        }),
+      );
+      if (!answer.settings) {
+        setAddError(answer.message);
+        return;
+      }
+      setAdded((current) => [...current, code]);
+      edit({ currency: code });
+      setAddingCurrency(false);
+      // The Group's reads, which the form and the rest of the page take its currencies from.
+      void refreshReads(isWebGroupsRead);
+    } catch {
+      setAddError('Couldn’t add the currency. Check your connection and try again.');
+    } finally {
+      setAddBusy(false);
+    }
+  };
+  const currencyChoices = expenseCurrencyChoices(listing, group.latestExpenseCurrency, currency);
   const currencyHint =
     !isEditMode &&
     !initialDraft &&
@@ -297,6 +341,17 @@ function ExpenseDraftDialog({
             previewAmount={previewAmount}
             currencyChoices={currencyChoices}
             currencyHint={currencyHint}
+            addCurrency={
+              extras.length < MAX_EXTRA_CURRENCIES
+                ? {
+                    note: `Adds it to ${group.name} for everyone`,
+                    onAdd: () => {
+                      setAddError('');
+                      setAddingCurrency(true);
+                    },
+                  }
+                : undefined
+            }
           />
         </Stack>
       </DialogContent>
@@ -350,6 +405,17 @@ function ExpenseDraftDialog({
   return (
     <>
       {form}
+      {addingCurrency && (
+        <AddCurrencyDialog
+          groupName={group.name}
+          listed={groupCurrencies(listing)}
+          extraCount={extras.length}
+          busy={addBusy}
+          error={addError}
+          onCancel={() => setAddingCurrency(false)}
+          onAdd={(code) => void addCurrency(code)}
+        />
+      )}
       <Dialog
         open={closing}
         onClose={() => {
