@@ -2,11 +2,7 @@ import 'server-only';
 import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
 import { isPossibleExpenseDuplicate } from '@splitbook/shared/expense-duplicate';
 import mongoose from 'mongoose';
-import {
-  cleanAssistantName,
-  draftAttributionSchema,
-  type DraftAttribution,
-} from '@splitbook/shared/draft-attribution';
+import { draftAttributionSchema, type DraftAttribution } from '@splitbook/shared/draft-attribution';
 import Group, { type IGroupDocument } from '@/lib/models/Group';
 import type { ToReviewRead } from '@splitbook/shared/to-review-read';
 import Expense from '@/lib/models/Expense';
@@ -60,7 +56,10 @@ interface DraftRecord {
 export interface DraftActor {
   /** Trusted session/token subject, never taken from submitted tool or HTTP arguments. */
   id: string;
-  /** Set only by the MCP boundary from authenticated client metadata. */
+  /**
+   * Set only by the MCP boundary: the name the approval page shows, already cleaned. A host is kept
+   * whole, so a long one's real domain is never cut off (#745).
+   */
   assistant?: { name: string };
   /** Recheck a connected assistant at each write authorization. */
   authorize?: () => Promise<void>;
@@ -70,7 +69,7 @@ export interface DraftActor {
 
 function attribution(actor: DraftActor): DraftAttribution {
   return actor.assistant
-    ? { kind: 'assistant', name: cleanAssistantName(actor.assistant.name) }
+    ? { kind: 'assistant', name: actor.assistant.name.trim() || 'Assistant' }
     : { kind: 'member' };
 }
 
