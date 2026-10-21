@@ -7,7 +7,7 @@ test('public visitors can read the guide without granting access', async ({ page
   await page.goto('/connect/chatgpt');
   await expect(page.getByRole('heading', { name: 'Connect ChatGPT', exact: true })).toBeVisible();
   await expect(
-    page.getByText('All current and future Groups', { exact: false }).first(),
+    page.getByText('You choose which Groups ChatGPT reaches when you approve', { exact: false }),
   ).toBeVisible();
   if (process.env.MCP_GUIDE_TEST_MODE !== 'invalid')
     await expect(
@@ -25,15 +25,77 @@ test('public visitors can read the guide without granting access', async ({ page
   await expect(page.getByRole('button', { name: 'Copy server URL' })).toHaveCount(0);
 });
 
-test('members can find the public guide in Settings', async ({ page }) => {
+test('members open the assistant picker from Settings (#619)', async ({ page }) => {
   test.skip(
     process.env.MCP_GUIDE_TEST_MODE === 'invalid',
     'Invalid backend config disables auth too',
   );
   await enterAsPersona(page, 'alex');
   await page.goto('/settings');
-  await page.getByRole('link', { name: 'Connect ChatGPT', exact: true }).click();
-  await expect(page).toHaveURL(/\/connect\/chatgpt$/);
+  await page.getByRole('link', { name: 'Connect an assistant', exact: true }).click();
+  await expect(page).toHaveURL(/\/connect$/);
+  await expect(page.getByRole('heading', { name: 'Connect an assistant', level: 1 })).toBeVisible();
+});
+
+test('Connect offers four assistants, each opening its setup (#619)', async ({ page }) => {
+  await page.goto('/connect');
+  const picker = page.getByRole('navigation', { name: 'Your assistant' });
+  for (const [choice, step] of [
+    ['Claude', 'Add Splitbook to Claude as a custom connector'],
+    ['ChatGPT', 'Open ChatGPT Plugins'],
+    ['Claude Code', 'Add Splitbook to Claude Code'],
+    ['Other MCP client', 'Add Splitbook to your MCP client'],
+  ]) {
+    await picker.getByRole('link', { name: choice, exact: true }).click();
+    await expect(picker.getByRole('link', { name: choice, exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    if (enabled) await expect(page.getByText(step, { exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole('heading', { name: 'What an assistant can do' })).toBeVisible();
+  if (enabled) {
+    await page.goto('/connect?assistant=claude-code');
+    await expect(
+      page.getByText(
+        'claude mcp add --transport http splitbook https://mcp.staging.example.test/api/mcp',
+        {
+          exact: true,
+        },
+      ),
+    ).toBeVisible();
+  } else
+    await expect(
+      page.getByText('Not available in this environment', { exact: true }),
+    ).toBeVisible();
+});
+
+test('the Claude setup checks Claude’s own authorization (#619)', async ({ page }) => {
+  test.skip(!enabled, 'Requires enabled deployment');
+  await enterAsPersona(page, 'alex');
+  await page.route('**/api/auth/mcp/connections*', (route) =>
+    route.fulfill({
+      json: {
+        connections: [
+          {
+            id: 'chatgpt',
+            clientId: 'https://chatgpt.com/oauth/client.json',
+            scopes: ['ledger:read'],
+          },
+          {
+            id: 'claude',
+            clientId: 'https://claude.ai/oauth/mcp-oauth-client-metadata',
+            scopes: ['ledger:read', 'offline_access'],
+          },
+        ],
+        nextOffset: null,
+      },
+    }),
+  );
+  await page.goto('/connect?assistant=claude');
+  await expect(page.getByText('Claude authorized', { exact: true })).toBeVisible();
+  await expect(page.getByText('Authorization 1', { exact: true })).toBeVisible();
+  await expect(page.getByText('Authorization 2', { exact: true })).toHaveCount(0);
 });
 
 test('copy controls, keyboard details and external navigation never claim success', async ({

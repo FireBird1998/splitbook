@@ -33,8 +33,10 @@ describe('the Connect ChatGPT guide', () => {
   it('says read-only access can’t see To review, in the Glossary’s words (#579)', () => {
     const shown = guide();
     expect(shown).toContain(
-      'All current and future Groups you belong to are included. Read-only ledger access cannot save Expenses or see what’s in your To review.',
+      'You choose which Groups ChatGPT reaches when you approve, and Groups you join later are included. Read-only ledger access cannot save Expenses or see what’s in your To review.',
     );
     expect(shown).not.toMatch(/private Drafts?/i);
+    // Members choose the Groups since Excluded Groups (#617).
+    expect(shown).not.toContain('All current and future Groups');
   });
 });
