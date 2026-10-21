@@ -83,6 +83,96 @@ See [`auth.md`](auth.md).
 
 ---
 
+## Suggested exchange rates
+
+### GET /api/groups/[id]/rates?from=EUR&to=INR
+
+Requires the app session and current Group membership. An MCP bearer token alone is not an
+app session. Anonymous requests answer **401**; non-members (including nonexistent Groups)
+answer **403**. Invalid path ids answer **400**; missing or unsupported currency codes answer
+**422** `VALIDATION_ERROR`. Both codes must be in the supported 30-currency registry.
+
+The server reads its daily cache only; this request never calls a provider. Rates are units
+of `to` per one unit of `from`, as a decimal string rounded half up to 12 decimal places.
+No ledger amount is converted or changed. Example:
+
+```json
+{
+  "data": {
+    "suggestion": {
+      "from": "EUR",
+      "to": "INR",
+      "rate": "112.5",
+      "source": "mixed",
+      "asOf": "2026-10-20",
+      "fetchedAt": "2026-10-21T18:00:00.000Z",
+      "ageDays": 1,
+      "attributionRequired": true,
+      "attribution": {
+        "text": "Rates By Exchange Rate API",
+        "url": "https://www.exchangerate-api.com"
+      },
+      "components": [
+        {
+          "currency": "EUR",
+          "source": "frankfurter",
+          "asOf": "2026-10-20",
+          "fetchedAt": "2026-10-21T18:00:00.000Z"
+        },
+        {
+          "currency": "INR",
+          "source": "exchange-rate-api",
+          "asOf": "2026-10-21",
+          "fetchedAt": "2026-10-21T18:00:00.000Z"
+        }
+      ]
+    }
+  },
+  "status": 200
+}
+```
+
+`source` is `frankfurter`, `exchange-rate-api`, or `mixed`. Headline dates are the oldest of
+the legs used; `ageDays` counts UTC calendar days since `asOf`. USD is the common base, so
+USD pairs have only one component. A primary-only rate has `attributionRequired: false`
+and `attribution: null`. If either leg is fallback, the client must display the returned
+attribution text and link wherever the suggested rate appears. These rates must never be
+passed to an assistant or exposed by another rate read.
+
+No suggestion is a normal **200**, for example:
+
+```json
+{ "data": { "suggestion": null, "reason": "unavailable" }, "status": 200 }
+```
+
+Reasons: `unavailable` (no usable table or unrepresentable cross rate),
+`currency_unavailable` (a supported currency has no quote), `stale` (a required cached quote
+is older than three UTC days or invalid), or `same_currency` (no exchange is needed).
+Exactly three days old is usable. A provider outage preserves the previous table without
+changing its source or timestamps, but age is checked on every read. Responses, including
+refusals, use `Cache-Control: private, no-store`.
+
+### GET /api/cron/exchange-rates
+
+A server job, **not a member API**. Requires `Authorization: Bearer <CRON_SECRET>`; a missing
+server setting or incorrect/missing header answers **401**. It fetches one primary USD table
+and, only when needed, one fallback table. A Mongo day claim deduplicates concurrent runs.
+The **200** reply contains `data.refreshed` (whether this invocation obtained fresh provider
+quotes), and, when true, `data.availableCurrencies` (usable cached non-USD
+quotes). A previously claimed day answers **200** with `data.refreshed: false` without fetching.
+If neither provider supplies any fresh supported quotes, the attempt answers **502** with
+`data: { refreshed: false, reason: "providers_unavailable", availableCurrencies }`. The job logs
+zero fresh currencies and the count of usable saved currencies, never rates. Saved suggestions
+keep their source and timestamps and remain readable within the freshness limit. The day stays
+claimed; the next daily invocation retries. Database faults answer **500**. All cron responses
+use `Cache-Control: no-store` and never return rates.
+
+The schedule is `0 18 * * *` UTC in `apps/web/vercel.json`. Production needs the owner to set
+`CRON_SECRET` and deploy that configuration. Provider keys are not needed. See
+[ADR 0010](adr/0010-exchange-rate-suggestions.md) for source terms, freshness and isolation.
+
+---
+
 ## User
 
 | Method | Path                 | Description                      |

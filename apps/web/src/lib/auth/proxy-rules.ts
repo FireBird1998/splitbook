@@ -34,10 +34,11 @@ export function resolveProxyResponse({
   const isJoinPreview = pathname.startsWith('/api/join/') && method === 'GET';
   const isApi = pathname.startsWith('/api');
 
-  // 1. Better Auth's own routes (sign-in, callback, session, sign-out) are always reachable.
+  // 1. These routes verify their own credentials. The cron exception is one exact GET.
   if (
     isApiAuth ||
     pathname === '/api/mcp' ||
+    (pathname === '/api/cron/exchange-rates' && method === 'GET') ||
     pathname.startsWith('/.well-known/') ||
     pathname.startsWith('/mcp/')
   )
