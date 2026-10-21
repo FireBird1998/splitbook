@@ -18,6 +18,9 @@ import { progressHeight, sweepTrack } from './ui/compact';
 import { savedQueriesIn } from './test-utils/saved-queries';
 import { mockDeviceLocale } from './test-utils/device-locale';
 
+/** The phone's zone as the app reads it, so these paths hold in every zone CI runs (#730). */
+const PHONE_ZONE = encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+
 // #127: the App's loading, refreshing, offline and cold-start states, rendered through the real
 // App tree and controller. Only native modules are replaced.
 // What the mocked `./runtime` serves: the controller under test and the appearance.
@@ -147,6 +150,11 @@ function device() {
      * Alex ¥8,400, besides the ₹30.00.
      */
     currencies: false,
+    /**
+     * Lisbon Offsite is a Trip in rupees, euros and yen (#730), with 3, 11 and 24 Expenses in
+     * them, and answers its Trip summary in each.
+     */
+    trip: false,
   };
   /**
    * The saved copies can't be removed, as on a full or read-only disk; or the drafts can't be
@@ -182,7 +190,13 @@ function device() {
       return network.session === 200
         ? json({ user: alex, session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' } })
         : json({}, network.session);
-    if (path === '/api/groups') return json({ data: network.noGroups ? [] : groups, status: 200 });
+    /** Lisbon Offsite as a Trip in three currencies, while `trip` is set. */
+    const asTrip = (group: (typeof groups)[number]) =>
+      network.trip && group._id === lisbon
+        ? { ...group, category: 'trip', alternateCurrencies: ['EUR', 'JPY'] }
+        : group;
+    if (path === '/api/groups')
+      return json({ data: network.noGroups ? [] : groups.map(asTrip), status: 200 });
     if (path === '/api/user/balances')
       return json({
         data: {
@@ -227,10 +241,51 @@ function device() {
         data: network.removed.includes(found._id)
           ? { ...found, members: found.members.filter(({ user }) => user.name !== alex.name) }
           : extra
-            ? { ...found, alternateCurrencies: ['EUR', 'JPY'] }
-            : found,
+            ? { ...asTrip(found), alternateCurrencies: ['EUR', 'JPY'] }
+            : asTrip(found),
         status: 200,
       });
+    if (path.startsWith(`/api/groups/${id}/trip-summary?`)) {
+      const asked = new URL(path, 'http://local').searchParams.get('currency');
+      const spent: Record<string, [count: number, minor: number, share: number, paid: number]> = {
+        INR: [3, 4_860_000, 1_620_000, 2_000_000],
+        EUR: [11, 124_000, 40_000, 60_000],
+        JPY: [24, 186_000, 62_000, 70_400],
+      };
+      const currency = asked ?? 'JPY';
+      const [count, minor, share, paid] = spent[currency]!;
+      return json({
+        status: 200,
+        data: {
+          timeZone: 'UTC',
+          currency,
+          tripDates: { start: null, end: null },
+          window: null,
+          dayCount: 0,
+          tooManyDays: false,
+          spentMinor: minor,
+          expenseCount: count,
+          yourShareMinor: share,
+          youPaidMinor: paid,
+          yourExpenseCount: 1,
+          peopleCount: 2,
+          perPersonPerDayMinor: null,
+          days: [],
+          dailyAverageMinor: null,
+          beforeTrip: null,
+          afterTrip: null,
+          byTag: [],
+          suggestedPayments: [],
+          otherCurrencies: [],
+          hasExpenses: true,
+          currencies: Object.entries(spent).map(([code, [expenseCount, spentMinor]]) => ({
+            currency: code,
+            expenseCount,
+            spentMinor,
+          })),
+        },
+      });
+    }
     if (path === `/api/groups/${maple}/expenses/${expenseId}`)
       return json({ data: expense, status: 200 });
     if (path === `/api/groups/${id}/expenses` && method === 'POST')
@@ -2402,6 +2457,45 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(tabs()[0]).toEqual(['INR, main currency, you’re settled up', true]);
     expect(seen()).toContain('All-time balance · INR');
     expect(seen()).toContain('Settled up');
+  });
+
+  // #730: a Trip's All time card, one currency at a time, through the real App and controller.
+  it('shows a Trip’s spending one currency at a time, and reads the one chosen (#730)', async () => {
+    const phone = device();
+    phone.network.trip = true;
+    await signedIn(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press('Open Lisbon Offsite, Trip · 2 members');
+    const tabs = () =>
+      app
+        .hosts((p) => p.accessibilityRole === 'tablist' && p.accessibilityLabel === 'Spending in')
+        .flatMap((list) =>
+          list.findAll(
+            (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'tab',
+          ),
+        )
+        .map((tab) => [tab.props.accessibilityLabel, tab.props.accessibilityState?.selected]);
+    expect(tabs()).toEqual([
+      ['INR, main currency, ₹48,600.00 spent in 3 Expenses', false],
+      ['EUR, €1,240.00 spent in 11 Expenses', false],
+      ['JPY, ¥186,000 spent in 24 Expenses', true],
+    ]);
+    expect(app.hosts((p) => p.accessibilityLabel === 'Spent: ¥186,000')).toHaveLength(1);
+    expect(seen()).toContain(
+      'Opened on JPY, the currency with the most Expenses (24). Each currency is shown on its own.',
+    );
+    // Its strip lists the Trip's currencies too.
+    expect(seen()).toContain('INR · EUR · JPY');
+
+    await app.press('EUR, €1,240.00 spent in 11 Expenses');
+    expect(phone.sent).toContain(
+      `GET /api/groups/${lisbon}/trip-summary?tz=${PHONE_ZONE}&currency=EUR`,
+    );
+    expect(app.hosts((p) => p.accessibilityLabel === 'Spent: €1,240.00')).toHaveLength(1);
+    expect(app.hosts((p) => p.accessibilityLabel === 'Spent: ¥186,000')).toHaveLength(0);
+    expect(seen()).toContain('Each currency is shown on its own.');
+    expect(seen()).not.toContain('Opened on');
   });
 
   it('keeps local Month labels on the controller clock across midnight', async () => {

@@ -1146,6 +1146,10 @@ function GroupScreen() {
     [],
   );
   const selectMonth = useCallback((month: string | null) => void controller.selectMonth(month), []);
+  const chooseTripCurrency = useCallback(
+    (currency: string) => void controller.chooseTripCurrency(currency),
+    [],
+  );
   const refreshExpenses = useCallback(() => void controller.refreshExpenses(), []);
   const loadMoreExpenses = useCallback(() => void controller.loadMoreExpenses(), []);
   const loadNewerExpenses = useCallback(() => void controller.loadNewerExpenses(), []);
@@ -1418,6 +1422,7 @@ function GroupScreen() {
                 onOpenExpense={openListedExpense}
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}
+                onChooseTripCurrency={chooseTripCurrency}
               />
             </>
           )}

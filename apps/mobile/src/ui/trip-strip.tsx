@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { groupCurrencies } from '@splitbook/shared/group-currencies';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { deriveTripCodes } from '@splitbook/shared/trip-codes';
 import type { MobileGroup } from '../data/types';
@@ -34,6 +35,10 @@ function tripDates({ startDate: start, endDate: end }: MobileGroup) {
     spoken: `${start.getUTCDate()} to ${day(end, 'long')}`,
   };
 }
+
+/** "INR, EUR and JPY", as the strip says its currencies. */
+const spokenList = (codes: string[]) =>
+  codes.length > 1 ? `${codes.slice(0, -1).join(', ')} and ${codes.at(-1)}` : (codes[0] ?? '');
 
 const DASH = 4;
 const DASH_GAP = 3;
@@ -71,7 +76,8 @@ function Dashes({ vertical = false, style }: { vertical?: boolean; style?: ViewS
 
 /**
  * The Trip Theme's slim boarding-pass strip at the top of Expenses: route codes from the
- * Trip's name, a perforation, then its dates and member count. Read as one image.
+ * Trip's name, a perforation, then its dates, member count and, for a Trip in more than one
+ * currency, its currencies, main first (#730), as the web's strip lists them. Read as one image.
  * `strip.muted` drops below 4.5:1 at the gradient's light end, so it draws only the dashes.
  * Its height follows its text; at large text the dates move below the route.
  */
@@ -82,6 +88,8 @@ export function TripStrip({ group }: { group: MobileGroup }) {
   const dates = tripDates(group);
   const count = group.members.length;
   const members = `${count} ${count === 1 ? 'member' : 'members'}`;
+  const currencies = groupCurrencies(group);
+  const several = currencies.length > 1;
   const code = {
     fontFamily: fonts.mono,
     fontSize: 22,
@@ -97,6 +105,7 @@ export function TripStrip({ group }: { group: MobileGroup }) {
         `${getGroupTheme(group.category).label} from ${from} to ${to}`,
         dates?.spoken,
         members,
+        several ? `currencies ${spokenList(currencies)}` : null,
       ]
         .filter(Boolean)
         .join(', ')}
@@ -157,6 +166,14 @@ export function TripStrip({ group }: { group: MobileGroup }) {
           >
             {members.toUpperCase()}
           </CompactText>
+          {several ? (
+            <CompactText
+              variant="small"
+              style={{ fontFamily: fonts.mono, color: theme.strip.text }}
+            >
+              {currencies.join(' · ')}
+            </CompactText>
+          ) : null}
         </View>
       </LinearGradient>
     </View>
