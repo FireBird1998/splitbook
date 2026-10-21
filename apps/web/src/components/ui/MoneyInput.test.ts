@@ -253,6 +253,18 @@ for (const [name, Field] of fields) {
     expect(readAmountEntry(changed.mock.lastCall![0], 'EUR').status).toBe('invalid');
   });
 
+  it(`${name}: an IME's composition stays as typed while it lasts`, async () => {
+    const { input, changed } = await focused('JPY', '');
+    await act(async () =>
+      input().props.onChange({
+        target: { value: '1842', selectionStart: 4, selectionEnd: 4 },
+        nativeEvent: { inputType: 'insertCompositionText', isComposing: true },
+      }),
+    );
+    expect(input().props.value).toBe('1842');
+    expect(changed).toHaveBeenLastCalledWith('1842');
+  });
+
   it(`${name}: an amount the currency refuses stays as typed, as blur leaves it`, async () => {
     const euros = await focused('EUR', '');
     await euros.edit('1200.001');

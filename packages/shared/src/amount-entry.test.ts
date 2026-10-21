@@ -151,6 +151,9 @@ describe('grouped amount display (#773)', () => {
     ['10.5,055', 'EUR', undefined],
     ['1.5,000', 'EUR', undefined],
     ['1,842.50,000', 'EUR', undefined],
+    // A comma typed first groups nothing, so it may be a decimal comma too.
+    [',842', 'EUR', undefined],
+    [',842.50', 'EUR', undefined],
     // Typing a 5 over 842 is no deletion, and deleting from a refused "10,55" is no deletion
     // from grouped text, so the comma may still be a decimal comma.
     ['1,5', 'EUR', undefined],
