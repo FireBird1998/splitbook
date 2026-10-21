@@ -6,10 +6,11 @@ const event = (_id: string, metadata: Record<string, unknown> = {}) => ({
   type: 'settlement_recorded',
   metadata,
 });
-const a1 = event('a1', { batchId: 'batch-a', batchSize: 2 });
-const a2 = event('a2', { batchId: 'batch-a', batchSize: 2 });
-const b1 = event('b1', { batchId: 'batch-b', batchSize: 2 });
-const b2 = event('b2', { batchId: 'batch-b', batchSize: 2 });
+// Settlement ids are made in the request's order, so f1 was recorded before f2.
+const a1 = event('a1', { batchId: 'batch-a', batchSize: 2, settlementId: 'f1' });
+const a2 = event('a2', { batchId: 'batch-a', batchSize: 2, settlementId: 'f2' });
+const b1 = event('b1', { batchId: 'batch-b', batchSize: 2, settlementId: 'f3' });
+const b2 = event('b2', { batchId: 'batch-b', batchSize: 2, settlementId: 'f4' });
 const first = event('first');
 const middle = { ...event('middle'), type: 'expense_added' };
 const last = event('last');
@@ -26,10 +27,10 @@ describe('groupSettlementBatches (#734)', () => {
     expect(groupSettlementBatches([])).toEqual([]);
   });
 
-  it('collects non-adjacent batches at their first event and keeps member order', () => {
+  it('collects non-adjacent batches at their first event, each in the order it was recorded', () => {
     expect(groupSettlementBatches([first, a2, b1, middle, a1, b2, last])).toEqual([
       { kind: 'event', event: first, complete: true },
-      { kind: 'batch', batchId: 'batch-a', batchSize: 2, events: [a2, a1], complete: true },
+      { kind: 'batch', batchId: 'batch-a', batchSize: 2, events: [a1, a2], complete: true },
       { kind: 'batch', batchId: 'batch-b', batchSize: 2, events: [b1, b2], complete: true },
       { kind: 'event', event: middle, complete: true },
       { kind: 'event', event: last, complete: true },
@@ -47,8 +48,21 @@ describe('groupSettlementBatches (#734)', () => {
       { kind: 'event', event: last, complete: true },
     ]);
     expect(groupSettlementBatches([a2, a1, a1])).toEqual([
-      { kind: 'batch', batchId: 'batch-a', batchSize: 2, events: [a2, a1], complete: true },
+      { kind: 'batch', batchId: 'batch-a', batchSize: 2, events: [a1, a2], complete: true },
     ]);
+  });
+
+  // The feed is newest first and a batch's events share one time, so they arrive in reverse; the
+  // row names its Debts as they were recorded ("₹1,480.00 and €20.00", not the reverse).
+  it('gives a batch newest first in the order its Settlements were recorded', () => {
+    const [batch] = groupSettlementBatches([a2, a1]);
+    expect(batch).toEqual({
+      kind: 'batch',
+      batchId: 'batch-a',
+      batchSize: 2,
+      events: [a1, a2],
+      complete: true,
+    });
   });
 
   it('marks a page-split batch incomplete', () => {
