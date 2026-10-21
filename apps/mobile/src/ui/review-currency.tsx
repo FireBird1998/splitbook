@@ -21,10 +21,13 @@ export interface UnlistedItem {
   detail: string;
   amount: number | undefined;
   currency: string;
+  /** What else it needs, as its Needs line says it: "an amount with at most 2 decimal places". */
+  alsoNeeds: string[];
 }
 
 export const addNeedsConnection = 'Adding a currency needs a connection.';
 const changeNeedsConnection = 'Changing the currency needs a connection.';
+const reviewNeedsConnection = 'Reviewing it needs a connection.';
 
 /** Whether a currency keeps the amount as it is: yen has no smaller unit to keep 86.50's 50 in. */
 function keepsAmount(amount: number | undefined, currency: string) {
@@ -40,7 +43,9 @@ function keepsAmount(amount: number | undefined, currency: string) {
 /**
  * A To review item in a currency its Group doesn't list (#733, board "To review: unlisted
  * currency"): what's wrong, and the web's two fixes in the shared words (#732): add the currency
- * to the Group, which needs a connection, or change the item's currency and keep its amount.
+ * to the Group, which needs a connection, or change the item's currency and keep its amount. An
+ * item that needs more than a currency, such as an amount with fewer decimals, also opens in the
+ * guided review, where every detail can be fixed.
  */
 export function UnlistedCurrencySheet({
   item,
@@ -50,6 +55,7 @@ export function UnlistedCurrencySheet({
   adding,
   onAdd,
   onChange,
+  onReview,
   onClose,
 }: {
   item: UnlistedItem;
@@ -60,6 +66,8 @@ export function UnlistedCurrencySheet({
   adding: CurrencyAddState;
   onAdd: () => void;
   onChange: () => void;
+  /** Opens the item in the guided review. */
+  onReview: () => void;
   onClose: () => void;
 }) {
   const fix = unlistedCurrencyFix(group, item.currency, item.amount);
@@ -82,6 +90,9 @@ export function UnlistedCurrencySheet({
         ) : null}
       </View>
       <Banner tone="warning" message={`${fix.notListed} ${fix.ask}`} />
+      {item.alsoNeeds.length ? (
+        <CompactText variant="small">{`It also needs ${item.alsoNeeds.join(', ')}.`}</CompactText>
+      ) : null}
       {adding.status === 'error' && adding.message ? (
         <Banner tone="error" message={adding.message} />
       ) : null}
@@ -110,6 +121,24 @@ export function UnlistedCurrencySheet({
       <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
         {fix.changing}
       </CompactText>
+      {item.alsoNeeds.length ? (
+        <>
+          <CompactButton
+            label="Review it with every detail"
+            icon="open-outline"
+            variant="tonal"
+            block
+            disabled={offline || disabled || busy}
+            hint={offline ? reviewNeedsConnection : undefined}
+            onPress={onReview}
+          />
+          {offline ? (
+            <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+              {reviewNeedsConnection}
+            </CompactText>
+          ) : null}
+        </>
+      ) : null}
     </BottomSheet>
   );
 }

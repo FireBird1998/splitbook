@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import {
   memberProblems,
+  reviewNeedWords,
   summarizeReviewRun,
   type ReviewItemModel,
 } from '@splitbook/shared/to-review';
@@ -84,6 +85,13 @@ function unlistedItem(item: ReviewItemModel, currency: string): UnlistedItem {
     detail: [sourceLabel(item), date].filter(Boolean).join(' · '),
     amount: values?.amount,
     currency,
+    alsoNeeds: [
+      ...new Set(
+        item.needs
+          .filter((need) => need.reason !== 'currency-not-listed')
+          .map((need) => reviewNeedWords(need, item.theme)),
+      ),
+    ],
   };
 }
 function sourceLabel(item: ReviewItemModel) {
@@ -797,7 +805,7 @@ export function ToReviewList({
     own?.groupName ?? (state.detail.id === groupId ? state.detail.data?.name : null) ?? 'Group';
   const disabled = collection.busy || collection.pending || state.offline || unavailable;
   // An item in a currency the Group doesn't list opens its fix (#733); any other, the guided
-  // review, with Add expense's fields and pickers (#435).
+  // review, with Add expense's fields and pickers (#435). More's Open is always the guided review.
   const [fixing, setFixing] = useState<{
     id: string;
     changing: boolean;
@@ -881,6 +889,9 @@ export function ToReviewList({
       [],
   };
   const fixingDraft = fixingNow?.accountItem?.draft ?? fixing?.draft;
+  // As it is now, when it changed elsewhere meanwhile: the amount a change keeps is this one.
+  const fixingCurrency = fixingNow && unlistedCurrency(fixingNow);
+  const fixingItem = fixingCurrency ? unlistedItem(fixingNow, fixingCurrency) : fixing?.item;
   const name = (id: string) =>
     id === state.auth.user?.id
       ? 'You'
@@ -1120,10 +1131,10 @@ export function ToReviewList({
             </>
           )}
         </ScrollView>
-        {fixing && !settled && fixingDraft ? (
+        {fixing && !settled && fixingDraft && fixingItem ? (
           fixing.changing ? (
             <ChangeCurrencySheet
-              item={fixing.item}
+              item={fixingItem}
               group={fixingGroup}
               disabled={disabled}
               onUse={(currency) =>
@@ -1133,7 +1144,7 @@ export function ToReviewList({
             />
           ) : (
             <UnlistedCurrencySheet
-              item={fixing.item}
+              item={fixingItem}
               group={fixingGroup}
               offline={state.offline}
               disabled={collection.busy || collection.pending || unavailable}
@@ -1142,8 +1153,12 @@ export function ToReviewList({
                   ? currencyAdd
                   : { groupId, status: 'idle', message: null }
               }
-              onAdd={() => void controller.addGroupCurrency(fixing.item.currency)}
+              onAdd={() => void controller.addGroupCurrency(fixingItem.currency)}
               onChange={() => setFixing({ ...fixing, changing: true })}
+              onReview={() => {
+                setFixing(null);
+                void controller.startReviewRun(groupId, fixingDraft.id);
+              }}
               onClose={() => setFixing(null)}
             />
           )
@@ -1241,9 +1256,9 @@ export function ToReviewList({
                   title="Open"
                   meta="Review it with every detail"
                   onPress={() => {
-                    const item = menu.item;
+                    const draft = menu.item.accountItem?.draft;
                     setMenu(null);
-                    openItem(item);
+                    if (draft) void controller.startReviewRun(groupId, draft.id);
                   }}
                 />
                 <Divider inset={rowInset} />
