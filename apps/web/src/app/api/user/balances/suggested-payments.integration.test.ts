@@ -16,6 +16,7 @@ import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import ProductSwitch from '@/lib/models/ProductSwitch';
 import RecurringExpense from '@/lib/models/RecurringExpense';
+import Settlement from '@/lib/models/Settlement';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { settlementService } from '@/lib/services/settlement.service';
@@ -343,6 +344,32 @@ describe('an Expense in a currency Splitbook no longer supports (#812)', () => {
     const homeAfter = await home(alice);
     expect(homeAfter).toEqual(homeBefore);
     expect(JSON.stringify(homeAfter)).not.toContain('DEM');
+    expect(await balanceService.getMemberOpenBalances(goa, alice)).toEqual(openBefore);
+  });
+
+  it('leaves a Settlement in such a currency out too', async () => {
+    const goa = await createGroup('Goa Trip', 'trip', 'INR', [bob]);
+    await addExpense(goa, bob, 100, [alice, bob]);
+    const groupBefore = await groupBalances(goa, alice);
+    const homeBefore = await home(alice);
+    const openBefore = await balanceService.getMemberOpenBalances(goa, alice);
+    // A legacy payment in Deutsche Marks: Bob paid Alice DM 10.
+    await Settlement.collection.insertOne({
+      group: new mongoose.Types.ObjectId(goa),
+      paidBy: new mongoose.Types.ObjectId(bob),
+      paidTo: new mongoose.Types.ObjectId(alice),
+      amount: 10,
+      amountMinor: 1000,
+      moneyVersion: 1,
+      currency: 'DEM',
+      createdBy: new mongoose.Types.ObjectId(bob),
+      createdAt: new Date(2026, 8, 16, 12),
+      updatedAt: new Date(2026, 8, 16, 12),
+    });
+    const groupAfter = await groupBalances(goa, alice);
+    expect(groupAfter.status).toBe(200);
+    expect(groupAfter.body).toEqual(groupBefore.body);
+    expect(await home(alice)).toEqual(homeBefore);
     expect(await balanceService.getMemberOpenBalances(goa, alice)).toEqual(openBefore);
   });
 });
