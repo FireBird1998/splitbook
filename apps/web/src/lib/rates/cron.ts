@@ -13,10 +13,16 @@ export function createRefreshHandler(providers: RateProviders, now = () => new D
     if (!secret || supplied.length !== expected.length || !timingSafeEqual(supplied, expected))
       return Response.json({ error: 'Unauthorized', status: 401 }, { status: 401, headers });
     try {
-      return Response.json(
-        { data: await refreshRates(providers, now()), status: 200 },
-        { headers },
-      );
+      const data = await refreshRates(providers, now());
+      const status = data.reason === 'providers_unavailable' ? 502 : 200;
+      if (status === 502) {
+        // Counts only: never log credentials, provider replies or rate data.
+        console.warn('Rate refresh: providers unavailable', {
+          freshCurrencies: 0,
+          availableCurrencies: data.availableCurrencies,
+        });
+      }
+      return Response.json({ data, status }, { status, headers });
     } catch {
       // Do not log credentials, provider replies or rate data.
       return Response.json({ error: 'Rate refresh failed', status: 500 }, { status: 500, headers });

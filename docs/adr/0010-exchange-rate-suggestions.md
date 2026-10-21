@@ -56,8 +56,11 @@ the primary rate. A stale fallback is also refused. USD is the common unit, not 
 quote. Only the 30 supported currencies are retained.
 
 If neither source supplies a usable replacement, a previously stored quote keeps its real
-source and timestamps. Reads check age again, so a missed job cannot serve old rates
-indefinitely. An empty cache, missing currency or stale pair yields no suggestion with a
+source and timestamps. If a whole refresh gets zero fresh supported quotes from both
+providers, cron answers **502** with `refreshed: false` and `reason: providers_unavailable`,
+and logs the fresh and usable-saved currency counts without rate data. The day remains
+claimed, so retries wait until the next daily invocation. Reads check age again, so a missed
+job cannot serve old rates indefinitely. An empty cache, missing currency or stale pair yields no suggestion with a
 reason. No outage blocks the future member-entered-rate flow.
 
 Cross rates divide the two USD legs from this one table, using decimal integer arithmetic

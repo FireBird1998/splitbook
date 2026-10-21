@@ -157,10 +157,15 @@ refusals, use `Cache-Control: private, no-store`.
 A server job, **not a member API**. Requires `Authorization: Bearer <CRON_SECRET>`; a missing
 server setting or incorrect/missing header answers **401**. It fetches one primary USD table
 and, only when needed, one fallback table. A Mongo day claim deduplicates concurrent runs.
-The **200** reply contains `data.refreshed` (whether this invocation performed the daily
-attempt), and, when true, `data.availableCurrencies` (usable cached non-USD quotes). It never
-returns rates. Database faults answer **500**. Provider failures are handled by per-currency
-fallback or the previous cache. All cron responses use `Cache-Control: no-store`.
+The **200** reply contains `data.refreshed` (whether this invocation obtained fresh provider
+quotes), and, when true, `data.availableCurrencies` (usable cached non-USD
+quotes). A previously claimed day answers **200** with `data.refreshed: false` without fetching.
+If neither provider supplies any fresh supported quotes, the attempt answers **502** with
+`data: { refreshed: false, reason: "providers_unavailable", availableCurrencies }`. The job logs
+zero fresh currencies and the count of usable saved currencies, never rates. Saved suggestions
+keep their source and timestamps and remain readable within the freshness limit. The day stays
+claimed; the next daily invocation retries. Database faults answer **500**. All cron responses
+use `Cache-Control: no-store` and never return rates.
 
 The schedule is `0 18 * * *` UTC in `apps/web/vercel.json`. Production needs the owner to set
 `CRON_SECRET` and deploy that configuration. Provider keys are not needed. See

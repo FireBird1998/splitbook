@@ -89,6 +89,23 @@ describe('Group suggested rate read', () => {
     });
     expect((await read(await signIn('alex'), 'EUR', 'JPY')).body.data.suggestion.rate).toBe('200');
   });
+  it('rounds a cross rate half up at the thirteenth decimal', async () => {
+    await refreshRates(
+      {
+        primary: {
+          ...primary,
+          fetchTable: async () => [
+            { currency: 'EUR', rate: '2', asOf: '2026-10-21' },
+            { currency: 'INR', rate: '2.000000000001', asOf: '2026-10-21' },
+          ],
+        },
+        fallback,
+      },
+      now,
+    );
+    // 2.000000000001 / 2 = 1.0000000000005: an exact half rounds up, not down or to even.
+    expect((await read(await signIn('alex'))).body.data.suggestion.rate).toBe('1.000000000001');
+  });
   it('refuses anonymous callers and signed-in non-members', async () => {
     await refreshRates({ primary, fallback }, now);
     expect((await read('')).status).toBe(401);

@@ -72,16 +72,21 @@ export async function refreshRates(providers: RateProviders, now = new Date()) {
   const fallback = codes.some((code) => !find(primary, code))
     ? await fetch(providers.fallback)
     : [];
+  let freshCurrencies = 0;
   const entries = codes.flatMap((code) => {
-    const row =
-      find(primary, code) ??
-      find(fallback, code) ??
-      previous?.entries.find((row) => row.currency === code);
+    const fresh = find(primary, code) ?? find(fallback, code);
+    if (fresh) freshCurrencies++;
+    const row = fresh ?? previous.entries.find((row) => row.currency === code);
     return row ? [row] : [];
   });
+  const availableCurrencies = entries.filter((row) => usable(row, now)).length;
+  // Saved quotes keep member reads working, but do not turn a failed provider fetch into success.
+  // Retain the daily claim and the existing table; the next day's cron can try again.
+  if (freshCurrencies === 0)
+    return { refreshed: false, reason: 'providers_unavailable' as const, availableCurrencies };
   // An earlier day's slow job cannot replace a newer day's table.
   await RateTable.updateOne({ _id: 'daily', attemptedOn: day }, { $set: { entries } });
-  return { refreshed: true, availableCurrencies: entries.filter((row) => usable(row, now)).length };
+  return { refreshed: true, availableCurrencies };
 }
 
 /** App-only read. No assistant operation imports the rate cache. Never calls a provider. */
