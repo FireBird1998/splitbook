@@ -866,3 +866,21 @@ it.each([
     });
   }
 });
+
+it.each(['Lunch 450 rupees', 'Dinner rs 20'])(
+  'reports INR unlisted for rupee shorthand in a EUR Group: %s (#732)',
+  (text) => {
+    expect(read(text, { currency: 'EUR' })).toMatchObject({
+      currency: 'INR',
+      currencyListed: false,
+      amountMinor: null,
+      problems: [
+        expect.objectContaining({
+          code: 'amount-currency',
+          message:
+            'INR is not one of this Group’s currencies. Add it to the Group or choose a listed currency.',
+        }),
+      ],
+    });
+  },
+);
