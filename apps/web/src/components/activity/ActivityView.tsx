@@ -66,7 +66,11 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
   }) as ActivityLike[];
   const lastPage = data?.at(-1)?.data.pagination;
   const hasOlder = Boolean(lastPage && lastPage.page < lastPage.totalPages);
-  const loadingOlder = isValidating && Boolean(data && size > data.length);
+  // Asked for more pages than are loaded: an older page is on its way, or its read failed. A
+  // failed refresh of the pages shown is not that, and says nothing: the events stay.
+  const askedOlder = Boolean(data && size > data.length);
+  const loadingOlder = isValidating && askedOlder;
+  const olderFailed = Boolean(error) && askedOlder;
   const groups = groupActivitiesByDay(activities);
 
   if (isLoading) {
@@ -203,7 +207,7 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
           </Stack>
         </Box>
       ))}
-      {error && (
+      {olderFailed && (
         <Typography
           role="alert"
           variant="body2"
@@ -212,16 +216,16 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
           Couldn’t load older activity. The events shown are still here.
         </Typography>
       )}
-      {(hasOlder || error) && (
+      {hasOlder && (
         <Button
           variant="text"
           disabled={loadingOlder}
-          onClick={() => void setSize((data?.length ?? 0) + (hasOlder ? 1 : 0))}
+          onClick={() => void setSize((data?.length ?? 0) + 1)}
           sx={{ alignSelf: 'center' }}
         >
           {loadingOlder
             ? 'Loading older activity…'
-            : error
+            : olderFailed
               ? 'Try loading older activity'
               : 'Load older activity'}
         </Button>
