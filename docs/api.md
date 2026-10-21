@@ -1233,6 +1233,89 @@ archive is still confirmed.
 Settlements have `createdAt` but **no `date` field**, so they cannot be
 back-dated or attributed to a past month.
 
+### Cross-currency Settlements (#727)
+
+`amount` (major units), canonical `amountMinor`, and `currency` always mean the
+**amount cleared**, in the Debt's currency. Balances, Debts and Suggested payments
+use only that side. `POST` accepts the existing `amount` field; clients must not
+replace it with the amount paid. A same-currency payment omits all fields below.
+
+For a Cross-currency Settlement, send these fields with the existing body:
+
+```json
+{
+  "paidBy": "userId1",
+  "paidTo": "userId2",
+  "amount": 20,
+  "currency": "EUR",
+  "amountPaidMinor": 185000,
+  "paidCurrency": "INR",
+  "appliedRate": "92.5",
+  "suggestedRate": "92.1",
+  "rateSource": "frankfurter",
+  "rateAsOf": "2026-10-21",
+  "rateFetchedAt": "2026-10-21T00:15:00.000Z",
+  "rateKind": "custom"
+}
+```
+
+- `amountPaidMinor`: a positive safe integer, in the paying currency's minor units
+  (JPY and KRW use whole units).
+- `paidCurrency`: a supported main or listed extra currency, different from
+  `currency`. An unlisted currency on either side is **422** `CURRENCY_MISMATCH`.
+- `appliedRate`: a positive decimal string meaning **1 cleared = X paid** in major
+  units. It must equal the rate derived from the two stored amounts, rounded half
+  up to 18 decimal places. Trailing zeroes do not change its meaning.
+- `rateKind`: `suggested`, `custom`, or `entered`. The first two require all of
+  `suggestedRate`, `rateSource`, `rateAsOf` and `rateFetchedAt`; `entered` omits all
+  four and means no suggestion was available. `suggested` also requires that the
+  suggested rate produces the recorded paid amount after rounding. `custom` keeps
+  the original suggestion beside the member's chosen rate.
+- `suggestedRate`: a positive decimal string. Rates accept up to 18 integer and
+  18 fractional digits, without exponent notation.
+- `rateSource`: `frankfurter`, `exchange-rate-api`, or `mixed`, as returned by the
+  Group's rate read. `rateAsOf` is the provider's `YYYY-MM-DD` calendar date;
+  `rateFetchedAt` is an ISO timestamp with an offset.
+
+The paid side and rate provenance are immutable snapshots of what the member
+records, not a new lookup or a server certification of a provider quote. The
+current cache never changes a saved payment or its retry. All supplied fields
+participate in `Idempotency-Key` comparison: the same body returns the same record;
+a changed paid amount or rate with the same key is **409** `IDEMPOTENCY_CONFLICT`.
+Incomplete or inconsistent cross-currency fields are **422** validation errors.
+Partial payments and paying more than the Debt retain the existing rules.
+
+`POST` and `GET /api/groups/[id]/settlements` return these fields unchanged.
+`settlement_recorded` metadata in both Group Activity and Home's latest Activity
+also carries `amountMinor`, `currency`, and all supplied cross-currency fields.
+The member-facing reads retain fallback provenance; assistant reads continue to
+expose only ledger amounts, never the rate snapshot.
+
+The shared module `@splitbook/shared/cross-currency-settlement` exports:
+
+```ts
+calculateCrossCurrencySettlement(
+  input: CrossCurrencyCalculation,
+): CrossCurrencyAmounts;
+```
+
+`CrossCurrencyCalculation` has `currency` and `paidCurrency`, plus **exactly two**
+of `amountClearedMinor`, `amountPaidMinor`, and `rate`. Both amounts are minor-unit
+integers. The result has `amountClearedMinor`, `amountPaidMinor`, and `appliedRate`.
+The missing amount rounds half up in its own currency (including an inferred
+cleared amount); the result's rate is always derived from the resulting amounts,
+not copied from the entered rate. Zero or unsafe results are refused. No floating
+point multiplication or division is used. Callers retain the user's rate separately
+while editing and send the helper's `appliedRate` with the two resulting amounts.
+
+`formatCrossCurrencySettlement(record)` takes the stored cross-currency fields,
+`paidByName`, `amountMinor`, and `currency`. It formats both amounts and the stored
+rate, for example: “Sam paid ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested
+₹92.10 (21 Oct)”. With `entered`, it says “no rate suggested”. For
+`exchange-rate-api` or `mixed`, it appends “Rates By Exchange Rate API”; callers
+must link that text to `EXCHANGE_RATE_API_ATTRIBUTION.url` from the same module.
+It never recomputes or looks up the historical amounts or rate.
+
 ---
 
 ## Balances

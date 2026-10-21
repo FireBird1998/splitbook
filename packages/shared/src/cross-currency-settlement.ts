@@ -1,4 +1,4 @@
-import { getCurrencyPrecision } from './currency';
+import { getCurrency, getCurrencyPrecision } from './currency';
 import { assertSafeMinorAmount, MoneyValidationError } from './exact-money';
 
 /** Exactly two entered values. Amounts are integer minor units of their named currency. */
@@ -93,4 +93,73 @@ export interface CrossCurrencySettlementFields {
   rateSource?: 'frankfurter' | 'exchange-rate-api' | 'mixed';
   rateAsOf?: string;
   rateFetchedAt?: string;
+}
+
+export const EXCHANGE_RATE_API_ATTRIBUTION = {
+  text: 'Rates By Exchange Rate API',
+  url: 'https://www.exchangerate-api.com',
+} as const;
+
+/** Format decimal digits directly: Intl supplies grouping and the currency's symbol placement. */
+function decimalMoney(decimal: string, currency: string): string {
+  const [whole, fraction = ''] = decimal.split('.');
+  const digits = fraction.padEnd(getCurrencyPrecision(currency), '0');
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: digits.length,
+    maximumFractionDigits: digits.length,
+  })
+    .formatToParts(BigInt(whole))
+    .map((part) => (part.type === 'fraction' ? digits : part.value))
+    .join('');
+}
+function minorMoney(minor: number, currency: string): string {
+  positiveMinor(minor);
+  const places = getCurrencyPrecision(currency);
+  const scale = BigInt(10) ** BigInt(places);
+  const units = BigInt(minor);
+  return decimalMoney(
+    `${units / scale}${places ? `.${(units % scale).toString().padStart(places, '0')}` : ''}`,
+    currency,
+  );
+}
+
+/**
+ * Shared Activity/record wording from the immutable stored fields, with no rate lookup or
+ * conversion. A caller showing fallback provenance must link the attribution text using
+ * EXCHANGE_RATE_API_ATTRIBUTION.url (both exchange-rate-api and mixed sources require it).
+ */
+export function formatCrossCurrencySettlement(
+  record: CrossCurrencySettlementFields & {
+    paidByName: string;
+    amountMinor: number;
+    currency: string;
+  },
+): string {
+  rateFraction(record.appliedRate);
+  const clearedSymbol = getCurrency(record.currency)?.symbol ?? record.currency;
+  let text = `${record.paidByName} paid ${minorMoney(record.amountPaidMinor, record.paidCurrency)} to clear ${minorMoney(record.amountMinor, record.currency)} at ${decimalMoney(record.appliedRate, record.paidCurrency)} per ${clearedSymbol}`;
+  if (record.suggestedRate && record.rateAsOf) {
+    rateFraction(record.suggestedRate);
+    const [, month, day] = record.rateAsOf.split('-');
+    const monthName = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ][Number(month) - 1];
+    text += `, suggested ${decimalMoney(record.suggestedRate, record.paidCurrency)} (${Number(day)} ${monthName})`;
+  } else text += '; no rate suggested';
+  if (record.rateSource === 'exchange-rate-api' || record.rateSource === 'mixed')
+    text += ` · ${EXCHANGE_RATE_API_ATTRIBUTION.text}`;
+  return text;
 }
