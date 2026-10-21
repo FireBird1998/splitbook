@@ -165,8 +165,9 @@ Settlement keeps the amount cleared, amount paid and applied rate, together with
 any Suggested rate and its source and dates. Only the amount cleared changes
 balances, Debts and Suggested payments; the paid side is an immutable record.
 See [Cross-currency Settlements](../api.md#cross-currency-settlements-727) for the
-fields and rate rules. Android's corresponding payment sheet is separate work
-(#728).
+fields and rate rules. Android's Record payment sheet does the same (#728), on
+every Balances tab, with the shared rate rules and words; recording waits for a
+connection.
 
 ## Currency in Spending
 

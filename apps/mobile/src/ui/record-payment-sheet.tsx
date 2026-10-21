@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import { formatCurrency } from '@splitbook/shared/currency';
+import { readAmountEntry } from '@splitbook/shared/amount-entry';
+import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
+import {
+  crossCurrencyRateKind,
+  crossCurrencySummary,
+  rateText,
+  readCrossCurrencyEntry,
+  type CrossCurrencyField,
+} from '@splitbook/shared/cross-currency-payment';
+import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import { groupCurrencies } from '@splitbook/shared/group-currencies';
 import { acceptsNumericText, visibleFieldErrors } from '../data/field-feedback';
 import {
+  enterRateOrPaid,
+  recordNeedsConnection,
+  recordWaitsForRate,
   settlementFields,
   type SettlementDraft,
   type SettlementField,
@@ -13,6 +26,7 @@ import {
   Banner,
   BottomSheet,
   Card,
+  Chip,
   CompactAvatar,
   CompactButton,
   CompactText,
@@ -24,6 +38,7 @@ import {
   radius,
   useLargestText,
 } from './compact';
+import { CrossCurrencyFields } from './cross-currency-fields';
 import { inPlace } from './financial-views';
 import { Field, FieldError } from './group-workflows';
 import { Icon } from './primitives';
@@ -135,6 +150,11 @@ export function RecordPaymentSheet({
   onRetry,
   onClose,
   onDiscard,
+  now = new Date(),
+  onChoosePaidCurrency = () => undefined,
+  onEditCrossCurrency = () => undefined,
+  onUseSuggestedRate = () => undefined,
+  onOpenLink = () => undefined,
 }: {
   visible: boolean;
   state: SettlementState;
@@ -150,6 +170,16 @@ export function RecordPaymentSheet({
   onClose: () => void;
   /** Confirm before removing a lost Group’s payment that may already be recorded. */
   onDiscard?: () => void;
+  /** The time, for how long ago a suggested rate was fetched (#728). */
+  now?: Date;
+  /** Pay in: the Debt's own currency, or another of the Group's (#728). */
+  onChoosePaidCurrency?: (currency: string) => void;
+  /** The amount cleared, the rate or the amount paid changed. */
+  onEditCrossCurrency?: (field: CrossCurrencyField, text: string) => void;
+  /** Use ₹92.10: the suggested rate again, beside the member's own. */
+  onUseSuggestedRate?: () => void;
+  /** Opens a link: the second source's attribution. */
+  onOpenLink?: (url: string) => void;
 }) {
   const theme = useTheme();
   const { draft, status, chosen } = state;
@@ -196,7 +226,70 @@ export function RecordPaymentSheet({
       : state.known[id]) ?? 'Former member';
   const name = (id: string) => (id === currentUserId ? 'You' : fullName(id));
   const editable = Boolean(draft) && ['editing', 'review'].includes(status) && !state.attempt;
-  const extra = draft ? overpayment(state, currentUserId, name(draft.paidBy)) : null;
+  // The currencies the Debt can be paid in: its own first, then the Group's others (#728).
+  const payCurrencies =
+    figures && state.group
+      ? [
+          figures.currency,
+          ...groupCurrencies(state.group).filter((code) => code !== figures.currency),
+        ]
+      : [];
+  const payable = payCurrencies.length > 1;
+  const debtWord = payable ? 'Debt' : 'Suggested';
+  // Paid in another currency: the three linked fields, read by the shared rules.
+  const cross = draft && !state.attempt ? state.crossCurrency : null;
+  const pair =
+    cross && draft ? { currency: draft.currency, paidCurrency: cross.paidCurrency } : null;
+  const reading = cross && pair ? readCrossCurrencyEntry(cross.entry, pair) : null;
+  const suggestion = cross?.rate.status === 'ready' ? cross.rate.suggestion : null;
+  const kind =
+    pair && reading?.status === 'valid'
+      ? crossCurrencyRateKind(pair, reading.amounts, suggestion)
+      : suggestion
+        ? 'suggested'
+        : 'entered';
+  const debtMinor =
+    draft && state.suggested !== null ? minor(state.suggested, draft.currency) : null;
+  const clearedRead = cross && draft ? readAmountEntry(cross.entry.cleared, draft.currency) : null;
+  const summary =
+    cross && draft && debtMinor && clearedRead?.status === 'valid'
+      ? crossCurrencySummary({
+          clearedMinor: clearedRead.amountMinor,
+          debtMinor,
+          paidMinor: reading?.status === 'valid' ? reading.amounts.amountPaidMinor : null,
+          currency: draft.currency,
+          paidCurrency: cross.paidCurrency,
+          payer: { isViewer: draft.paidBy === currentUserId, name: fullName(draft.paidBy) },
+          payee: { isViewer: draft.paidTo === currentUserId, name: fullName(draft.paidTo) },
+        })
+      : null;
+  // What Record waits for while a payment in another currency is entered.
+  const crossWaiting = !cross
+    ? null
+    : cross.rate.status === 'loading'
+      ? recordWaitsForRate
+      : cross.rate.status === 'unreachable'
+        ? recordNeedsConnection
+        : reading?.status === 'incomplete'
+          ? enterRateOrPaid
+          : reading?.status === 'invalid'
+            ? reading.message
+            : null;
+  // An unconfirmed payment in another currency resends what it paid, at its rate.
+  const paidAs =
+    draft?.paid && state.attempt
+      ? `Paid as ${minorMoney(draft.paid.amountPaidMinor, draft.paid.paidCurrency)} at ${decimalMoney(
+          rateText(draft.paid.appliedRate),
+          draft.paid.paidCurrency,
+        )} per ${getCurrency(draft.currency)?.symbol ?? draft.currency}`
+      : null;
+  // An unconfirmed payment in another currency names its amount as the amount cleared.
+  const amountTitle = paidAs ? 'Amount cleared' : 'Amount paid';
+  const extra = draft
+    ? cross
+      ? (summary?.overpaid ?? null)
+      : overpayment(state, currentUserId, name(draft.paidBy))
+    : null;
   // The payer says what they meant; the member being paid confirms what the payer paid (#640).
   const tick =
     !draft || draft.paidBy === currentUserId
@@ -231,21 +324,20 @@ export function RecordPaymentSheet({
         ) : status !== 'blocked' ? (
           <CompactButton
             label={retrying ? 'Retry payment' : 'Record payment'}
-            amount={retrying ? undefined : amountLabel}
+            // Paid in another currency, the summary says what it records.
+            amount={retrying || cross || paidAs ? undefined : amountLabel}
             // From 150% the amount goes under the words: beside them at 200% on a 360dp phone,
             // "Record payment ₹1,000.00" ran past both edges (#639).
             amountBelow={largest}
             busy={status === 'saving' ? 'Recording payment…' : undefined}
             block
-            disabled={checking || waitingForTick}
+            disabled={checking || waitingForTick || crossWaiting !== null}
             hint={
               checking
                 ? retrying
                   ? retryWaitsForCheck
                   : recordWaitsForCheck
-                : waitingForTick
-                  ? `Tick “${tick}” first.`
-                  : undefined
+                : (crossWaiting ?? (waitingForTick ? `Tick “${tick}” first.` : undefined))
             }
             onPress={onRecord}
           />
@@ -260,7 +352,7 @@ export function RecordPaymentSheet({
           children: (
             <View style={{ alignSelf: 'stretch' }}>
               <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-                {checking ? checkingBalances : recordPaymentFootnote}
+                {checking ? checkingBalances : (crossWaiting ?? recordPaymentFootnote)}
               </CompactText>
             </View>
           ),
@@ -310,7 +402,9 @@ export function RecordPaymentSheet({
                 ? `You pay ${fullName(figures.paidTo)}`
                 : `${fullName(figures.paidBy)} pays ${figures.paidTo === currentUserId ? 'you' : fullName(figures.paidTo)}`
             }.${
-              suggested === null ? '' : ` Suggested ${formatCurrency(suggested, figures.currency)}.`
+              suggested === null
+                ? ''
+                : ` ${debtWord} ${formatCurrency(suggested, figures.currency)}.`
             }`}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
           >
@@ -323,88 +417,141 @@ export function RecordPaymentSheet({
             </CompactText>
             {suggested !== null ? (
               <CompactText variant="caption" tone="secondary" style={{ marginLeft: 'auto' }}>
-                Suggested{' '}
+                {debtWord}{' '}
                 <CompactText variant="caption" tone="secondary" style={{ fontFamily: fonts.mono }}>
                   {formatCurrency(suggested, figures.currency)}
                 </CompactText>
               </CompactText>
             ) : null}
           </View>
-          <Card state={errors.amount ? 'error' : editable ? 'default' : 'locked'} padded>
+          {payable && draft && !state.attempt ? (
             <View style={{ gap: 6 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <CompactText
-                  variant="caption"
-                  tone={errors.amount ? 'negative' : 'secondary'}
-                  weight="medium"
-                >
-                  Amount paid
-                </CompactText>
-                <FieldMarker kind="required" />
-              </View>
-              {/* As on the Expense form: a transparent border keeps blur from shifting layout. */}
+              <CompactText variant="caption" tone="secondary" weight="medium">
+                Pay in
+              </CompactText>
               <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 10,
-                  marginHorizontal: -10,
-                  paddingHorizontal: 8,
-                  paddingVertical: 2,
-                  borderWidth: 2,
-                  borderRadius: radius.tile,
-                  borderColor: amountFocused && editable ? theme.focus : 'transparent',
-                }}
+                accessibilityRole="radiogroup"
+                accessibilityLabel="Pay in"
+                style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}
               >
+                {payCurrencies.map((code) => (
+                  <Chip
+                    key={code}
+                    role="radio"
+                    label={code}
+                    selected={code === (cross?.paidCurrency ?? draft.currency)}
+                    disabled={!editable}
+                    onPress={() => onChoosePaidCurrency(code)}
+                  />
+                ))}
+              </View>
+              <CompactText variant="caption" tone="secondary">
+                {state.group?.defaultCurrency === draft.currency
+                  ? `${draft.currency} is the Debt’s own currency and the main currency.`
+                  : `${draft.currency} is the Debt’s own currency; ${state.group?.defaultCurrency} is the main currency.`}
+              </CompactText>
+            </View>
+          ) : null}
+          {cross && pair && reading ? (
+            <CrossCurrencyFields
+              currencies={pair}
+              debtMinor={debtMinor}
+              entry={cross.entry}
+              reading={reading}
+              kind={kind}
+              rate={cross.rate}
+              now={now}
+              editable={editable}
+              onEdit={onEditCrossCurrency}
+              onUseSuggestion={onUseSuggestedRate}
+              onOpenLink={onOpenLink}
+            />
+          ) : (
+            <Card state={errors.amount ? 'error' : editable ? 'default' : 'locked'} padded>
+              <View style={{ gap: 6 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <CompactText
+                    variant="caption"
+                    tone={errors.amount ? 'negative' : 'secondary'}
+                    weight="medium"
+                  >
+                    {amountTitle}
+                  </CompactText>
+                  <FieldMarker kind="required" />
+                </View>
+                {/* As on the Expense form: a transparent border keeps blur from shifting layout. */}
                 <View
-                  accessible
-                  accessibilityLabel={`Currency ${figures.currency}, the Group’s currency`}
                   style={{
-                    paddingVertical: 6,
-                    paddingHorizontal: 10,
-                    borderRadius: 10,
-                    backgroundColor: theme.surfaceMuted,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    marginHorizontal: -10,
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderWidth: 2,
+                    borderRadius: radius.tile,
+                    borderColor: amountFocused && editable ? theme.focus : 'transparent',
                   }}
                 >
-                  <CompactText tone="secondary" style={{ fontFamily: fonts.mono, fontSize: 15 }}>
-                    {figures.currency}
-                  </CompactText>
+                  <View
+                    accessible
+                    accessibilityLabel={`Currency ${figures.currency}, the ${
+                      payable && state.group?.defaultCurrency !== figures.currency
+                        ? 'Debt'
+                        : 'Group'
+                    }’s currency`}
+                    style={{
+                      paddingVertical: 6,
+                      paddingHorizontal: 10,
+                      borderRadius: 10,
+                      backgroundColor: theme.surfaceMuted,
+                    }}
+                  >
+                    <CompactText tone="secondary" style={{ fontFamily: fonts.mono, fontSize: 15 }}>
+                      {figures.currency}
+                    </CompactText>
+                  </View>
+                  <TextInput
+                    ref={amountInput}
+                    value={figures.amount}
+                    maxLength={40}
+                    keyboardType="decimal-pad"
+                    editable={editable}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.textMuted}
+                    selectionColor={theme.brand.main}
+                    accessibilityLabel={`${amountTitle}, required`}
+                    accessibilityHint={errors.amount}
+                    onChangeText={(amount) => {
+                      // A refused edit leaves the field showing the draft's amount.
+                      if (amount !== figures.amount && acceptsNumericText(amount, figures.amount))
+                        onChange({ amount });
+                    }}
+                    onFocus={() => setAmountFocused(true)}
+                    onBlur={() => {
+                      setAmountFocused(false);
+                      onLeaveField('amount');
+                    }}
+                    style={{
+                      flex: 1,
+                      minHeight: 48,
+                      color: theme.text,
+                      fontFamily: fonts.mono,
+                      fontSize: 32,
+                      lineHeight: 38,
+                      padding: 0,
+                    }}
+                  />
                 </View>
-                <TextInput
-                  ref={amountInput}
-                  value={figures.amount}
-                  maxLength={40}
-                  keyboardType="decimal-pad"
-                  editable={editable}
-                  placeholder="0.00"
-                  placeholderTextColor={theme.textMuted}
-                  selectionColor={theme.brand.main}
-                  accessibilityLabel="Amount paid, required"
-                  accessibilityHint={errors.amount}
-                  onChangeText={(amount) => {
-                    // A refused edit leaves the field showing the draft's amount.
-                    if (amount !== figures.amount && acceptsNumericText(amount, figures.amount))
-                      onChange({ amount });
-                  }}
-                  onFocus={() => setAmountFocused(true)}
-                  onBlur={() => {
-                    setAmountFocused(false);
-                    onLeaveField('amount');
-                  }}
-                  style={{
-                    flex: 1,
-                    minHeight: 48,
-                    color: theme.text,
-                    fontFamily: fonts.mono,
-                    fontSize: 32,
-                    lineHeight: 38,
-                    padding: 0,
-                  }}
-                />
+                {paidAs ? (
+                  <CompactText variant="small" tone="secondary">
+                    {paidAs}
+                  </CompactText>
+                ) : null}
+                <FieldError message={errors.amount} />
               </View>
-              <FieldError message={errors.amount} />
-            </View>
-          </Card>
+            </Card>
+          )}
           {extra && editable ? (
             <View
               style={{
@@ -433,6 +580,20 @@ export function RecordPaymentSheet({
                   onPress={() => onAcknowledge(!state.acknowledged)}
                 />
               </View>
+            </View>
+          ) : null}
+          {summary ? (
+            <View
+              accessible
+              accessibilityLiveRegion="polite"
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                borderRadius: radius.tile,
+                backgroundColor: theme.surfaceMuted,
+              }}
+            >
+              <CompactText variant="small">{summary.clears}</CompactText>
             </View>
           ) : null}
           <TileGrid>

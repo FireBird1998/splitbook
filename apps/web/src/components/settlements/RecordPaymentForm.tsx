@@ -21,6 +21,7 @@ import { suggestedSettlementMinor } from '@splitbook/shared/settlement-preview';
 import {
   crossCurrencyPaymentFields,
   crossCurrencyRateKind,
+  crossCurrencySummary,
   editCrossCurrencyEntry,
   rateText,
   readCrossCurrencyEntry,
@@ -46,7 +47,6 @@ import {
   RECORD_PAYMENT_FOOTNOTE,
   amountInputText,
   checkNewPayment,
-  crossCurrencySummary,
   currencyLabel,
   money,
   standing,

@@ -10,8 +10,10 @@ import InputBase from '@mui/material/InputBase';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
 import type { Theme } from '@mui/material/styles';
-import { getCurrency, getCurrencyPrecision, wholeUnit } from '@splitbook/shared/currency';
+import { getCurrency } from '@splitbook/shared/currency';
 import {
+  clearedPart,
+  paidRounding,
   rateBadge,
   rateNote,
   rateText,
@@ -26,22 +28,6 @@ import {
   type CrossCurrencySettlementFields,
 } from '@splitbook/shared/cross-currency-settlement';
 import type { RateSuggestionState } from '@/lib/hooks/use-rate-suggestion';
-import { money } from './record-payment';
-
-/** "rounded to the paisa", "in whole yen": how the amount paid is rounded. */
-function roundedTo(currency: string): string {
-  if (getCurrencyPrecision(currency) === 0) return `in whole ${wholeUnit(currency) ?? currency}`;
-  if (currency === 'INR') return 'rounded to the paisa';
-  return `rounded to ${money(1, currency)}`;
-}
-
-/** What the amount cleared is of the Debt: all of it, part of it, or more. */
-function clearedQualifier(clearedMinor: number | null, debtMinor: number | null, currency: string) {
-  if (debtMinor === null || debtMinor <= 0) return null;
-  if (clearedMinor === null || clearedMinor === debtMinor) return 'the whole Debt';
-  if (clearedMinor < debtMinor) return `part of ${money(debtMinor, currency)}`;
-  return `more than the ${money(debtMinor, currency)} Debt`;
-}
 
 const symbol = (currency: string) => getCurrency(currency)?.symbol ?? currency;
 
@@ -162,7 +148,7 @@ export default function CrossCurrencyFields({
     </Box>
   );
 
-  const qualifier = clearedQualifier(clearedMinor, debtMinor, currency);
+  const qualifier = clearedPart(clearedMinor, debtMinor, currency);
   const badge = rateBadge(kind, suggestion);
 
   return (
@@ -287,7 +273,7 @@ export default function CrossCurrencyFields({
             'Amount paid',
             <>
               <Box component="span" sx={qualifierSx}>
-                {roundedTo(paidCurrency)}
+                {paidRounding(paidCurrency)}
               </Box>
               <CodeChip code={paidCurrency} />
             </>,

@@ -93,6 +93,9 @@ import { PRODUCT_NAME } from './src/product';
 
 void SplashScreen.preventAutoHideAsync();
 
+/** A link out of the app, such as a rate source's attribution (#728); one that can't open does nothing. */
+const openOutside = (url: string) => void Linking.openURL(url).catch(() => undefined);
+
 /**
  * Each controller's start, its session restored once per controller rather than once per mount,
  * and the last link it handled. Android recreates the activity on a change it doesn't hand to
@@ -1221,6 +1224,7 @@ function GroupScreen() {
       onRowsLayout={activityState.selected ? undefined : onRowsLayout}
       onSelect={selectActivity}
       onClose={controller.closeActivityDetail}
+      onOpenLink={openOutside}
     />
   );
   // Where the Group shows its destination, an open event shows over Activity's list, with what is
@@ -1439,6 +1443,10 @@ function GroupScreen() {
           onAcknowledge={controller.acknowledgeSettlement}
           onRecord={() => void controller.recordSettlement()}
           onRetry={() => void controller.retrySettlementCheck()}
+          onChoosePaidCurrency={(currency) => void controller.choosePaidCurrency(currency)}
+          onEditCrossCurrency={controller.editCrossCurrency}
+          onUseSuggestedRate={controller.restoreSuggestedRate}
+          onOpenLink={openOutside}
           onDiscard={() =>
             Alert.alert(
               'Discard this unconfirmed payment?',

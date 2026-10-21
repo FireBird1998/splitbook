@@ -4,7 +4,7 @@ import { balanceCurrencies, openingBalanceCurrency } from '@splitbook/shared/bal
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
-import type { PendingPayment } from '../data/settlement';
+import { recordNeedsConnection, type PendingPayment } from '../data/settlement';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
 import {
   Banner,
@@ -31,7 +31,8 @@ import { Icon } from './primitives';
 import { CurrencyTabs } from './currency-tabs';
 import { useTheme } from './theme';
 
-export const recordNeedsConnection = 'Recording a payment needs a connection.';
+/** Record's reason offline, here and on the Record payment sheet (#728). */
+export { recordNeedsConnection };
 /** Balances not yet read again after a change: their payments wait for the read (#219). */
 export const recordWaitsForBalances = 'Record is available once these balances are updated.';
 /** Above the suggested payments: when to record one. */
@@ -49,14 +50,10 @@ export const recordWaitsForDetails = (name: string) =>
 export const settledIn = (balances: { balance: number }[] | undefined) =>
   balances !== undefined && balances.every(({ balance }) => getMoneyTone(balance) === 'neutral');
 
-/** Where payments in a currency other than the main one go, until #727 records them. */
-export const recordedInMain = (main: string) =>
-  `Payments are recorded in ${main}, the main currency.`;
-
 /**
  * Suggested payments the member can record in `currency`, the Group's own by default: they pay or
- * receive it, and both are still members (the existing Settlement rules). Record is offered on
- * those in the Group's currency.
+ * receive it, and both are still members (the existing Settlement rules). Each is recorded in its
+ * Debt's own currency, on that currency's tab (#728).
  */
 export function recordablePayments(
   balances: GroupCurrencyBalance[],
@@ -317,7 +314,6 @@ function SuggestedPayments({
   offline,
   locked,
   unavailable,
-  recordedIn,
   onRecord,
 }: {
   title: string;
@@ -328,18 +324,9 @@ function SuggestedPayments({
   locked: boolean;
   /** Why Record can't be used here, said under the payments too; null when it can. */
   unavailable: string | null;
-  /**
-   * The main currency, for payments in another one: they're listed without Record, which waits
-   * for #727, and say where payments go. Null in the main currency.
-   */
-  recordedIn: string | null;
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
 }) {
-  const reason = recordedIn
-    ? recordedInMain(recordedIn)
-    : offline
-      ? recordNeedsConnection
-      : unavailable;
+  const reason = offline ? recordNeedsConnection : unavailable;
   const theme = useTheme();
   // A drag that starts on Record never opens Record payment (#684).
   const recordTap = useTap();
@@ -351,41 +338,39 @@ function SuggestedPayments({
       <SectionHeader
         title={title}
         trailing={
-          recordedIn ? undefined : (
-            // The caption takes the room the title leaves, wrapping there rather than running past
-            // the screen's edge at large text. While a change keeps Record waiting, its reason
-            // takes the caption's place at once, in a box the caption holds, so nothing moves
-            // (#219); the full reason is Record's hint. At large text it keeps room for its
-            // longest word, "Record", four of its em: with less beside the title, as at 200%, it
-            // goes on a line of its own under it, where it was a column a letter wide (#639).
-            <View
-              style={{
-                flex: 1,
-                minWidth: column
-                  ? 4 * scaledSp(textVariants.caption.fontSize as number, fontScale)
-                  : 0,
-              }}
-            >
-              {inPlace({
-                holds:
-                  locked && !offline ? (
-                    <CompactText variant="caption" tone="muted" style={{ textAlign: 'right' }}>
-                      {recordCaption}
-                    </CompactText>
-                  ) : null,
-                children: (
-                  <StatusText
-                    variant="caption"
-                    tone="muted"
-                    instant={locked && !offline}
-                    style={{ textAlign: 'right' }}
-                  >
-                    {locked && !offline ? recordWaitsShort : recordCaption}
-                  </StatusText>
-                ),
-              })}
-            </View>
-          )
+          // The caption takes the room the title leaves, wrapping there rather than running past
+          // the screen's edge at large text. While a change keeps Record waiting, its reason
+          // takes the caption's place at once, in a box the caption holds, so nothing moves
+          // (#219); the full reason is Record's hint. At large text it keeps room for its
+          // longest word, "Record", four of its em: with less beside the title, as at 200%, it
+          // goes on a line of its own under it, where it was a column a letter wide (#639).
+          <View
+            style={{
+              flex: 1,
+              minWidth: column
+                ? 4 * scaledSp(textVariants.caption.fontSize as number, fontScale)
+                : 0,
+            }}
+          >
+            {inPlace({
+              holds:
+                locked && !offline ? (
+                  <CompactText variant="caption" tone="muted" style={{ textAlign: 'right' }}>
+                    {recordCaption}
+                  </CompactText>
+                ) : null,
+              children: (
+                <StatusText
+                  variant="caption"
+                  tone="muted"
+                  instant={locked && !offline}
+                  style={{ textAlign: 'right' }}
+                >
+                  {locked && !offline ? recordWaitsShort : recordCaption}
+                </StatusText>
+              ),
+            })}
+          </View>
         }
       />
       <Card>
@@ -429,30 +414,28 @@ function SuggestedPayments({
                   </CompactText>
                   <Money>{amount}</Money>
                 </View>
-                {recordedIn ? null : (
-                  <Trailing column={column}>
-                    <CompactButton
-                      label="Record"
-                      variant="tonal"
-                      dense
-                      disabled={offline || locked || unavailable !== null}
-                      hint={
-                        offline
-                          ? recordNeedsConnection
-                          : locked
-                            ? recordWaitsForBalances
-                            : (unavailable ?? undefined)
-                      }
-                      accessibilityLabel={
-                        youPay
-                          ? `Record your payment to ${payment.recipient}`
-                          : `Record ${payment.payer}’s payment to you`
-                      }
-                      onPress={() => onRecord(payment.paidBy, payment.paidTo, payment.currency)}
-                      tap={recordTap}
-                    />
-                  </Trailing>
-                )}
+                <Trailing column={column}>
+                  <CompactButton
+                    label="Record"
+                    variant="tonal"
+                    dense
+                    disabled={offline || locked || unavailable !== null}
+                    hint={
+                      offline
+                        ? recordNeedsConnection
+                        : locked
+                          ? recordWaitsForBalances
+                          : (unavailable ?? undefined)
+                    }
+                    accessibilityLabel={
+                      youPay
+                        ? `Record your payment to ${payment.recipient}`
+                        : `Record ${payment.payer}’s payment to you`
+                    }
+                    onPress={() => onRecord(payment.paidBy, payment.paidTo, payment.currency)}
+                    tap={recordTap}
+                  />
+                </Trailing>
               </View>
             </View>
           );
@@ -763,7 +746,6 @@ export function GroupBalancesView({
           offline={offline}
           locked={balances.changed === true}
           unavailable={recordUnavailable}
-          recordedIn={currency === group.defaultCurrency ? null : group.defaultCurrency}
           onRecord={onRecord}
         />
       ) : null}
