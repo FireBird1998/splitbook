@@ -20,8 +20,11 @@ const thousandsGrouped = /^\d{1,3}(?:,\d{3})+(?:\.\d*)?$/;
 /** Digits, with a point and any decimals: "1060.5", ".5", "1060.". */
 const plainAmount = /^(?:\d+(?:\.\d*)?|\.\d+)$/;
 
-/** A comma that may be a decimal comma: fewer than three digits after it, or among the decimals. */
-const decimalComma = /,\d{0,2}(?!\d)|\..*,/;
+/**
+ * A comma that may be a decimal comma: first, with fewer than three digits after it, or among the
+ * decimals.
+ */
+const decimalComma = /^,|,\d{0,2}(?!\d)|\..*,/;
 
 /** "1842" grouped in threes: "1,842". */
 const groupInThrees = (whole: string) => whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -106,7 +109,7 @@ export function ungroupAmountEntry(text: string): string {
  * after "1," gives "15,842.50".
  *
  * Null where the text stays as typed, as blur leaves it: not an amount the currency takes even
- * without its commas, or with a comma that may be a decimal comma ("10,5", "10,50.", "1.5,00"),
+ * without its commas, or with a comma that may be a decimal comma ("10,5", "10,50.", ",842", "1.5,00"),
  * so "10,5" is refused rather than read as 105. `deletedFrom` is the text a Backspace, Delete or
  * Cut took characters from: only when that was grouped is such a comma the field's own, as in
  * "1,842" less its 8, "1,42", which reads 142.

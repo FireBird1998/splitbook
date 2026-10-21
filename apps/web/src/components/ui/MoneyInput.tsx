@@ -58,11 +58,13 @@ function useMoneyEntry(
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const typed = event.target.value;
       // Regroup as the member types (#773), the caret after as many characters as before. Only
-      // the input type tells Backspace, Delete or Cut from typing over a selection; an input
-      // event a password manager or autofill sends may have none.
-      const inputType = (event.nativeEvent as Partial<InputEvent>).inputType ?? '';
+      // the input type tells Backspace, Delete or Cut from typing over a selection; a change a
+      // password manager, autofill or a test sends may carry none. An IME's composition stays
+      // as typed while it lasts.
+      const { inputType = '', isComposing = false } =
+        (event.nativeEvent as Partial<InputEvent> | undefined) ?? {};
       const deletedFrom = inputType.startsWith('delete') ? shown : undefined;
-      const regrouped = regroupAmountEntry(typed, currency, deletedFrom);
+      const regrouped = isComposing ? null : regroupAmountEntry(typed, currency, deletedFrom);
       // Not while unfocused, as autofill edits: the caret would wait for focus and undo Tab's
       // selection.
       if (editing !== null && regrouped !== null && regrouped !== typed) {

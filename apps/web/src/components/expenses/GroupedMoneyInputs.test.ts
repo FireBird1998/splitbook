@@ -18,9 +18,11 @@ afterEach(async () => {
 });
 
 it.each(['INR', 'EUR', 'JPY'])(
-  'groups the Expense, payer and share in %s only after blur, preserving the draft',
+  'groups the Expense, payer and share in %s as typed, padding them only on blur, preserving the draft',
   async (currency) => {
     const initial = currency === 'JPY' ? '1842' : '1842.5';
+    // Grouped as it is typed since the Designer's #773 gap; blur adds the decimal places.
+    const typed = currency === 'JPY' ? '1,842' : '1,842.5';
     const shown = currency === 'JPY' ? '1,842' : '1,842.50';
     const draft = ExpenseDraft.open({
       groupId: 'g',
@@ -74,7 +76,7 @@ it.each(['INR', 'EUR', 'JPY'])(
       expect(field(kind).props.inputMode).toBe(currency === 'JPY' ? 'numeric' : 'decimal');
       await act(async () => field(kind).props.onFocus?.({}));
       await act(async () => field(kind).props.onChange({ target: { value: initial } }));
-      expect(field(kind).props.value).toBe(initial);
+      expect(field(kind).props.value).toBe(typed);
       await act(async () => field(kind).props.onBlur?.({}));
       expect(field(kind).props.value).toBe(shown);
       const stored = () =>
