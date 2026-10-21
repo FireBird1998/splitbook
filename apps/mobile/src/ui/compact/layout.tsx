@@ -441,6 +441,9 @@ export const ListRow = memo(function ListRow({
   const style = {
     ...listRow,
     ...(column ? largeRow : undefined),
+    // At large text a row with a note grows many lines tall: its leading icon keeps to the
+    // title, at the top, rather than the middle, beside the note (#770).
+    ...(column && note ? { alignItems: 'flex-start' as const } : undefined),
     backgroundColor: highlighted ? theme.brand.bg : undefined,
   };
   if (!onPress)
