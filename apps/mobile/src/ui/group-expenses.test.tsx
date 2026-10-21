@@ -24,7 +24,9 @@ import {
   hairSpace,
   labelRuns,
   largeTextWindows,
+  layoutHeight,
   middleCutEnd,
+  tailCutOverrun,
   unreadText,
 } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
@@ -1348,3 +1350,53 @@ describe.each(['light', 'dark'] as const)(
     });
   },
 );
+
+// #785, seen on the emulator at 360dp: an Expense row's title cut at its tail lost its "…"'s last
+// dot, "and the .." at 130%. It draws its "…" inside the row at large text, light and dark.
+describe.each(['light', 'dark'] as const)('an Expense row’s cut title in %s (#785)', (mode) => {
+  const long = 'Parasailing, jet ski and the banana boat ride at Calangute beach';
+  const render = (expense: MobileExpense) =>
+    act(() => {
+      screen = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <GroupExpensesView
+            group={group()}
+            currentUserId={you}
+            state={financial({
+              data: [expense],
+              pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+            })}
+            kept={null}
+            savedExpenseId={null}
+            now={now}
+            onSelectMonth={vi.fn()}
+            onRefreshExpenses={vi.fn()}
+            onLoadMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onOpenExpense={vi.fn()}
+            onResumeDraft={vi.fn()}
+            onDiscardDraft={vi.fn()}
+          />
+        </ThemeContext.Provider>,
+      );
+    });
+  it.each([1.3, 1.45])('draws its "…" inside the row at %s× text, 360dp', (fontScale) => {
+    setWindow({ width: 360, height: 640, fontScale });
+    render({ ...groceries, description: long });
+    const [row] = findHosts(
+      screen!.toJSON() as ReactTestRendererJSON,
+      (props, type) => type === 'Pressable' && flatten(props.style).minHeight === 60,
+    );
+    // The row lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
+    expect(tailCutOverrun(row!, fontScale, 360 - 34, long)).toBeLessThanOrEqual(0);
+    // As tall as a row whose title fits: the cut changes no line's height.
+    const cutRow = layoutHeight(row!, fontScale, 360 - 34);
+    act(() => screen?.unmount());
+    render(groceries);
+    const [short] = findHosts(
+      screen!.toJSON() as ReactTestRendererJSON,
+      (props, type) => type === 'Pressable' && flatten(props.style).minHeight === 60,
+    );
+    expect(cutRow).toBe(layoutHeight(short!, fontScale, 360 - 34));
+  });
+});
