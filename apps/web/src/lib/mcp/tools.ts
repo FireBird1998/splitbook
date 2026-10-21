@@ -52,7 +52,8 @@ export function registerSplitbookTools(
   server.registerTool(
     'list_groups',
     {
-      description: 'List your current Groups. Pass next as after to continue.',
+      description:
+        'List your current Groups with their main currency (currency) and extra currencies (alternateCurrencies). Pass next as after to continue.',
       inputSchema: z.object({ after: draftObjectId.optional() }).strict(),
       annotations: read,
     },
@@ -62,7 +63,7 @@ export function registerSplitbookTools(
     'group_context',
     {
       description:
-        'Read current member identities, active Tags, the Category choices and currency. The member you are helping is marked you: true, so "I" and "me" are that member. Ask the member to resolve ambiguous names; never guess missing expense facts.',
+        'Read current member identities, active Tags, the Category choices, main currency (currency) and extra currencies (alternateCurrencies). The member you are helping is marked you: true, so "I" and "me" are that member. Ask the member to resolve ambiguous names; never guess missing expense facts.',
       inputSchema: z.object({ groupId: draftObjectId }).strict(),
       annotations: read,
     },
