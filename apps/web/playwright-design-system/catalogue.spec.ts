@@ -103,3 +103,41 @@ test('catalogue demonstrates money, controls, empty and loading states in either
     initial === 'dark' ? 'light' : 'dark',
   );
 });
+
+test('a text field focused by click or Tab draws only its own border, an errored one a ring around it; an icon button keeps the ring (#823)', async ({
+  page,
+}) => {
+  await page.goto('/dev/design-system');
+  const field = page.getByLabel('Sample expense name');
+  await field.click();
+  await expect(field).toBeFocused();
+  // In Chromium a clicked text field matches :focus-visible too, so the ring showed on a click.
+  expect(await field.evaluate((input) => input.matches(':focus-visible'))).toBe(true);
+  await expect(field).toHaveCSS('box-shadow', 'none');
+  // From the keyboard: back out to the field before it, and Tab in again.
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(field).toBeFocused();
+  await expect(field).toHaveCSS('box-shadow', 'none');
+  // The field itself draws no ring either: its focused border shows focus.
+  const fieldRoot = field.locator(
+    'xpath=ancestor::div[contains(@class,"MuiOutlinedInput-root")][1]',
+  );
+  await expect(fieldRoot).toHaveCSS('box-shadow', 'none');
+  // An errored field's border is red already, so the ring goes around the whole field.
+  const errored = page.getByLabel('Amount with an error');
+  await page.keyboard.press('Tab');
+  await expect(errored).toBeFocused();
+  await expect(errored).toHaveCSS('box-shadow', 'none');
+  await expect(
+    errored.locator('xpath=ancestor::div[contains(@class,"MuiOutlinedInput-root")][1]'),
+  ).toHaveCSS('box-shadow', /4px/);
+  // On to the icon button, which keeps the theme's ring.
+  const iconButton = page.getByRole('button', { name: /^Switch to (light|dark) mode using icon$/ });
+  for (let press = 0; press < 8; press++) {
+    if (await iconButton.evaluate((button) => button === document.activeElement)) break;
+    await page.keyboard.press('Tab');
+  }
+  await expect(iconButton).toBeFocused();
+  await expect(iconButton).toHaveCSS('box-shadow', /4px/);
+});

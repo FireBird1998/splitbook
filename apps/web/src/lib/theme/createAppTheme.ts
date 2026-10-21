@@ -223,6 +223,18 @@ export function createAppTheme(mode: ThemeMode): Theme {
             outlineOffset: 2,
             boxShadow: `0 0 0 4px ${(theme.vars ?? theme).palette.focus.ring}`,
           },
+          // An outlined or filled field's focused border shows its focus; the ring would draw a
+          // second one around its input alone, inside that border (#823).
+          '.MuiOutlinedInput-input:focus-visible': { boxShadow: 'none' },
+          '.MuiFilledInput-input:focus-visible': { boxShadow: 'none' },
+          // An errored field's border is red already, so focus can't change its colour: the ring
+          // goes around the whole field instead.
+          '.MuiOutlinedInput-root.Mui-error.Mui-focused': {
+            boxShadow: `0 0 0 4px ${(theme.vars ?? theme).palette.focus.ring}`,
+          },
+          '.MuiFilledInput-root.Mui-error.Mui-focused': {
+            boxShadow: `0 0 0 4px ${(theme.vars ?? theme).palette.focus.ring}`,
+          },
           '@media (prefers-reduced-motion: reduce)': {
             '*, *::before, *::after': {
               animationDuration: '0.01ms !important',
