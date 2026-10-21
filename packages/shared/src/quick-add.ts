@@ -452,10 +452,14 @@ type Mark = 'none' | string[];
 function markOf(text: string, marks: Marks): Mark | null {
   if (!text) return 'none';
   const value = fold(text);
-  // Unlisted codes must be uppercase: “rub” and “try” remain description words.
+  // Recognise codes without changing case; ambiguous words “rub” and “try” require capitals.
   const code =
     marks.listed.find((code) => code.toLowerCase() === value) ??
-    CURRENCIES.find((currency) => currency.code === text)?.code;
+    CURRENCIES.find(
+      (currency) =>
+        currency.code === text ||
+        (!['rub', 'try'].includes(value) && currency.code.toLowerCase() === value),
+    )?.code;
   if (code) return [code];
   const matches = marks.symbols.get(value);
   if (!matches) return null;
@@ -465,6 +469,7 @@ function markOf(text: string, marks: Marks): Mark | null {
   if (
     !listed.length &&
     !/[^\p{L}]/u.test(text) &&
+    !['rs', 'rupee', 'rupees'].includes(value) &&
     !CURRENCIES.some((currency) => currency.symbol === text)
   )
     return null;

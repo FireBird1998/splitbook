@@ -122,7 +122,6 @@ function assistantGroup(group: {
     id: String(group._id),
     name: group.name,
     currency: group.defaultCurrency,
-    alternateCurrencies: normaliseExtraCurrencies(group.defaultCurrency, group.alternateCurrencies),
     theme: group.category,
     archived: group.isArchived,
   };
