@@ -24,6 +24,7 @@ import {
   hairSpace,
   labelRuns,
   largeTextWindows,
+  middleCutEnd,
   unreadText,
 } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
@@ -906,4 +907,82 @@ describe.each(['light', 'dark'] as const)('Expense rows at large text in %s (#63
         }),
       ).toEqual([]);
   });
+});
+
+// #751: an assistant's credit names its host in full, and a long host was cut at its end in the
+// row's one-line caption, hiding the domain that tells members who the assistant really is.
+describe('an assistant’s credit on an Expense row (#751)', () => {
+  const host = 'chatgpt.com.secure-assistant-connector.evil.example.test';
+  const prepared: MobileExpense = { ...groceries, preparedBy: { kind: 'assistant', name: host } };
+  const credit = (root: ReactTestInstance) =>
+    root.find(
+      (node) =>
+        isHost(node, 'Text') &&
+        node.children.filter((child) => typeof child === 'string').join('') ===
+          `prepared by ${host}`,
+    );
+  /** The issue's second host, 120 characters, ending in the same domain. */
+  const long =
+    'claude.ai.household-ledger-reconciliation-assistant-for-shared-expenses.connectorgateway.region-euwest.evil.example.test';
+  const preparedView = (name = host) =>
+    view({
+      state: financial({
+        data: [{ ...prepared, preparedBy: { kind: 'assistant', name } }],
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+      }),
+    });
+
+  it('takes a line of its own, cut in the middle so the domain stays, with the whole name read aloud', () => {
+    const { root } = preparedView();
+    expect(credit(root).props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'middle' });
+    expect(text(root)).toContain('You paid · Groceries');
+    expect(text(root)).not.toContain('You paid · prepared by');
+    expect(buttons(root)).toContain(
+      `Weekly groceries, ₹1,249.50, You paid, prepared by ${host}, Groceries, you lent ₹833.00`,
+    );
+  });
+
+  it('wraps in full at the largest text', () => {
+    setWindow({ fontScale: 2 });
+    const { root } = preparedView();
+    expect(credit(root).props.numberOfLines).toBe(0);
+  });
+
+  // On the emulator, beside the amount it read "prepared by …xample.test" on a 360dp phone.
+  it.each([
+    [1, host],
+    [1.3, host],
+    [1, long],
+    [1.3, long],
+  ])('keeps the domain readable on a 360dp phone at %s× text: %s', (fontScale, name) => {
+    setWindow({ width: 360, height: 640, fontScale });
+    preparedView(name);
+    const [row] = findHosts(
+      screen!.toJSON(),
+      (props, type) => type === 'Pressable' && flatten(props.style).minHeight === 60,
+    );
+    // The row lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
+    expect(middleCutEnd(row!, fontScale, 360 - 34, `prepared by ${name}`)).toContain(
+      'evil.example.test',
+    );
+  });
+
+  // The rest of the row reads in full, as every Expense row does (#639). The host is one word as
+  // wide as a line or more, cut in the middle or broken as it wraps.
+  it.each(largeTextWindows)(
+    'leaves the rest of its row in full, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      preparedView();
+      const [row] = findHosts(
+        screen!.toJSON(),
+        (props, type) => type === 'Pressable' && flatten(props.style).minHeight === 60,
+      );
+      expect(
+        unreadText(row!, size.fontScale, size.width - 34, { cutOnce: size.fontScale < 1.5 }).filter(
+          (finding) => !finding.startsWith('"prepared by '),
+        ),
+      ).toEqual([]);
+    },
+  );
 });

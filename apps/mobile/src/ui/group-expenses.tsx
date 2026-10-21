@@ -114,9 +114,9 @@ const ExpenseRow = memo(function ExpenseRow({
     <ListRow
       leading={<IconTile icon={categoryIcons[expense.category] ?? 'receipt-outline'} />}
       title={expense.description}
-      meta={[paid, expense.preparedBy && `prepared by ${expense.preparedBy.name}`, expense.tag]
-        .filter(Boolean)
-        .join(' · ')}
+      meta={[paid, expense.tag].filter(Boolean).join(' · ')}
+      // On its own line, so a long host keeps its domain readable (#751).
+      note={expense.preparedBy && `prepared by ${expense.preparedBy.name}`}
       trailing={
         <RowAmount
           amount={total}

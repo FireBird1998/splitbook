@@ -189,6 +189,24 @@ describe('what an assistant left to the member, in the web To review panel (#683
     );
     expect(shown).toContain('Claude didn’t know who paid, so it left that to you.');
   });
+
+  // #751: a long host with no hyphens can't wrap at its dots, and these two lines name it where
+  // the member decides whether to save its Draft; they wrap anywhere, so its domain stays inside.
+  it('wraps a long assistant host anywhere, in its source line and in what it didn’t know', () => {
+    const host = 'chatgpt.com.secureassistantconnectorportal.evil.example';
+    const html = markup(
+      [],
+      { description: 'Station dinner', amount: 30, currency: 'INR', date: '2026-10-16' },
+      ['paidBy'],
+      undefined,
+      { kind: 'assistant', name: host },
+    );
+    const wrapping = [
+      ...html.matchAll(/<p[^>]*style="overflow-wrap:anywhere"[^>]*>(.*?)<\/p>/g),
+    ].map(([, inner]) => inner.replace(/<[^>]+>/g, ''));
+    expect(wrapping.some((line) => line.includes(`From ${host}`))).toBe(true);
+    expect(wrapping.some((line) => line.includes(`${host} didn’t know who paid`))).toBe(true);
+  });
 });
 
 describe('the currency of an item in the web To review panel (#512)', () => {

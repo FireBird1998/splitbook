@@ -310,6 +310,8 @@ const largeRow = {
   alignContent: 'center' as const,
   rowGap: 4,
 };
+/** A list row's text and trailing value, above its note. */
+const noteRow = { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12 };
 /** Where a list row's trailing value sits, and its skeleton: an amount over its caption. */
 const trailingBox = { alignItems: 'flex-end' as const, gap: 1 };
 
@@ -343,6 +345,7 @@ export const ListRow = memo(function ListRow({
   meta,
   metaTone = 'secondary',
   metaLines = 1,
+  note,
   trailing,
   trailingLoading = false,
   trailingWidth,
@@ -361,6 +364,12 @@ export const ListRow = memo(function ListRow({
   metaTone?: TextTone;
   /** Lines the meta may take: more where it explains a choice, as in a sheet's options. */
   metaLines?: number;
+  /**
+   * A caption that must keep its end readable, as an assistant's credit does its domain (#751):
+   * the row's last line, under the trailing value too, cut in the middle, whole at the largest
+   * text.
+   */
+  note?: string;
   trailing?: ReactNode;
   trailingLoading?: boolean;
   trailingWidth?: number;
@@ -379,9 +388,8 @@ export const ListRow = memo(function ListRow({
   const whole = useLargestText();
   const tap = useTap();
   const after = trailingLoading ? <TrailingSkeleton /> : trailing;
-  const content = (
+  const main = (
     <>
-      {leading}
       <View style={{ flex: 1, minWidth: column ?? 0, gap: 1 }}>
         <CompactText weight="semibold" numberOfLines={whole ? 0 : titleLines}>
           {title}
@@ -407,6 +415,29 @@ export const ListRow = memo(function ListRow({
       ) : null}
     </>
   );
+  // The note is the row's last line, under the trailing value too, so as much of its end shows
+  // as the row's width allows, whether or not the value has a line of its own.
+  const content = note ? (
+    <>
+      {leading}
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <View style={{ ...noteRow, ...(column ? largeRow : undefined) }}>{main}</View>
+        <CompactText
+          variant="caption"
+          tone="secondary"
+          numberOfLines={whole ? 0 : 1}
+          ellipsizeMode="middle"
+        >
+          {note}
+        </CompactText>
+      </View>
+    </>
+  ) : (
+    <>
+      {leading}
+      {main}
+    </>
+  );
   const style = {
     ...listRow,
     ...(column ? largeRow : undefined),
@@ -427,7 +458,7 @@ export const ListRow = memo(function ListRow({
     <Pressable
       ref={rowRef}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? [title, meta].filter(Boolean).join(', ')}
+      accessibilityLabel={accessibilityLabel ?? [title, meta, note].filter(Boolean).join(', ')}
       accessibilityState={disabled ? { disabled } : undefined}
       disabled={disabled}
       {...tap.on(onPress)}

@@ -437,3 +437,27 @@ describe('Group edits in plain language', () => {
     });
   });
 });
+
+// #751: an assistant's credit is its own part of the line, so a row can give it a line of its
+// own, cut where the domain stays readable; the screen reader still hears it whole.
+describe('an assistant’s credit in an Activity line (#751)', () => {
+  const context = { currentUserId: 'a00000000000000000000009', currency: 'INR' };
+  const host = 'chatgpt.com.secure-assistant-connector.evil.example.test';
+
+  it('is the line’s credit, not one of its details, and is read aloud whole', () => {
+    const line = describeActivity(
+      event({
+        metadata: {
+          description: 'Weekly groceries',
+          amount: 1249.5,
+          currency: 'INR',
+          preparedBy: { kind: 'assistant', name: host },
+        },
+      }),
+      context,
+    );
+    expect(line.credit).toBe(`prepared by ${host}`);
+    expect(line.details.map((detail) => detail.text).join(' ')).not.toContain('prepared by');
+    expect(spokenActivity(line, '10:42')).toContain(`prepared by ${host}`);
+  });
+});

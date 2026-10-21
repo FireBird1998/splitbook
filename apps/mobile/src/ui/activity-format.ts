@@ -24,6 +24,11 @@ export interface ActivityLine {
   complement?: string;
   /** Short details shown under the headline, e.g. the amount or what an edit changed. */
   details: ActivityDetail[];
+  /**
+   * "prepared by <assistant>": its own line, so a long host keeps its end, the domain, readable
+   * (#751).
+   */
+  credit?: string;
   /** Every change an edit made, for the event's detail view. */
   changes: ActivityDetail[];
 }
@@ -310,11 +315,15 @@ export function describeActivity(
   });
   switch (event.type) {
     case 'expense_added':
-      return line('added', subject ?? 'an Expense', [
-        meta.preparedBy?.kind === 'assistant' ? `prepared by ${meta.preparedBy.name}` : null,
-        meta.recurring === true ? 'Recurring' : null,
-        amount,
-      ]);
+      return {
+        ...line('added', subject ?? 'an Expense', [
+          meta.recurring === true ? 'Recurring' : null,
+          amount,
+        ]),
+        ...(meta.preparedBy?.kind === 'assistant'
+          ? { credit: `prepared by ${meta.preparedBy.name}` }
+          : {}),
+      };
     case 'expense_deleted':
       return line('deleted', subject ?? 'an Expense', [amount]);
     case 'expense_updated': {
@@ -380,5 +389,7 @@ export function describeActivity(
 /** The whole row as one sentence for screen readers. */
 export function spokenActivity(line: ActivityLine, time: string) {
   const headline = [line.actor, line.verb, line.subject, line.complement].filter(Boolean).join(' ');
-  return [headline, ...line.details.map((detail) => detail.text), time].join(', ');
+  return [headline, line.credit, ...line.details.map((detail) => detail.text), time]
+    .filter(Boolean)
+    .join(', ');
 }

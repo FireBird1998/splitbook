@@ -13,7 +13,7 @@ import {
   type ActivityEvent,
   type ActivityState,
 } from '../data/activity';
-import { flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
+import { flatten, layoutHeight, layoutWidth, middleCutEnd } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { GroupActivity } from './group-activity';
@@ -597,5 +597,64 @@ describe('an older removal from the Group’s currencies, as read from the serve
     });
 
     expect(buttons(root)).toContain('You removed GBP from the Group’s currencies, 11:00 AM');
+  });
+});
+
+// #751: a long assistant host in an event's details was cut at its end after two lines.
+describe('an assistant’s credit in an Activity row (#751)', () => {
+  const host = 'chatgpt.com.secure-assistant-connector.evil.example.test';
+  const prepared: ActivityEvent = {
+    ...event(1),
+    metadata: { ...event(1).metadata, preparedBy: { kind: 'assistant', name: host } },
+  };
+  /** The issue's second host, 120 characters, ending in the same domain. */
+  const long =
+    'claude.ai.household-ledger-reconciliation-assistant-for-shared-expenses.connectorgateway.region-euwest.evil.example.test';
+  const preparedBy = (name: string): ActivityEvent => ({
+    ...event(1),
+    metadata: { ...event(1).metadata, preparedBy: { kind: 'assistant', name } },
+  });
+  const credit = (root: ReactTestInstance) =>
+    root.find(
+      (node) =>
+        isHost(node, 'Text') &&
+        node.children.filter((child) => typeof child === 'string').join('') ===
+          `prepared by ${host}`,
+    );
+
+  it('takes a line of its own, cut in the middle so the domain stays, with the whole name read aloud', () => {
+    const { root } = render({ state: activity({ events: [prepared] }) });
+    expect(credit(root).props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'middle' });
+    expect(buttons(root).some((label) => label?.includes(`prepared by ${host}`))).toBe(true);
+  });
+
+  it('wraps in full at the largest text', () => {
+    setWindow({ fontScale: 2 });
+    const { root } = render({ state: activity({ events: [prepared] }) });
+    expect(credit(root).props.numberOfLines).toBe(0);
+  });
+
+  it('shows whole in the event’s details', () => {
+    const { root } = render({ state: activity({ selected: prepared }) });
+    expect(credit(root).props.numberOfLines ?? 0).toBe(0);
+  });
+
+  it.each([
+    [1, host],
+    [1.3, host],
+    [1, long],
+    [1.3, long],
+  ])('keeps the domain readable on a 360dp phone at %s× text: %s', (fontScale, name) => {
+    setWindow({ width: 360, height: 640, fontScale });
+    render({ state: activity({ events: [preparedBy(name)] }) });
+    // The list lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
+    expect(
+      middleCutEnd(
+        screen!.toJSON() as ReactTestRendererJSON,
+        fontScale,
+        360 - 34,
+        `prepared by ${name}`,
+      ),
+    ).toContain('evil.example.test');
   });
 });

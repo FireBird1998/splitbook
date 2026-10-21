@@ -20,6 +20,7 @@ import {
   Divider,
   LinearProgress,
   SectionHeader,
+  useLargestText,
   useTap,
 } from './compact';
 import { readTime } from './financial-views';
@@ -128,11 +129,24 @@ const EventContent = memo(function EventContent({
   name: string;
   time: string;
 }) {
+  // An assistant's credit has a line of its own, cut in the middle so the start and the domain
+  // at the end both show, and whole at the largest text (#751).
+  const whole = useLargestText();
   return (
     <>
       <CompactAvatar name={name} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Headline line={line} numberOfLines={2} />
+        {line.credit ? (
+          <CompactText
+            variant="caption"
+            tone="secondary"
+            numberOfLines={whole ? 0 : 1}
+            ellipsizeMode="middle"
+          >
+            {line.credit}
+          </CompactText>
+        ) : null}
         <Details line={line} time={time} />
       </View>
     </>
@@ -507,6 +521,12 @@ function ActivityDetail({
           <CompactAvatar name={event.actor?.name || 'Former member'} />
           <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
             <Headline line={line} />
+            {/* Whole here, where the event is read in full (#751). */}
+            {line.credit ? (
+              <CompactText variant="caption" tone="secondary">
+                {line.credit}
+              </CompactText>
+            ) : null}
             <Details
               line={{ ...line, details: line.changes.length ? [] : line.details }}
               time={when}
