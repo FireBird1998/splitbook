@@ -254,12 +254,19 @@ describe('the consent screen', () => {
     },
   );
 
-  it('shows who is signed in, by name and email, on every approval (#614)', () => {
+  it('shows who is signed in and offers Not you beside the account (#735)', () => {
     const shown = render(createElement(OAuthFlow, { query: '', consent: true, account }));
     expect(shown).toContain('Signed in as');
     expect(shown).toContain('Alex Rivera');
     expect(shown).toContain('alex.rivera@example.com');
-    expect(shown).not.toContain('Not you?');
+    expect(shown).toContain('Not you?');
+  });
+
+  it('names Not you as signing in with another account for assistive technology (#735)', () => {
+    const html = markup(createElement(OAuthFlow, { query: '', consent: true, account }));
+    expect(html).toMatch(
+      /<button[^>]*aria-label="Not you\? Sign in with another account"[^>]*>Not you\?<\/button>/,
+    );
   });
 
   it('says Splitbook checks the member’s access on every request (#614)', () => {

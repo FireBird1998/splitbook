@@ -37,3 +37,19 @@ This dated update supersedes conflicting proposals above without rewriting the 1
 - Production waits for Excluded Groups, the Assistant rule, approval, Settings controls and idle expiry, with staging acceptance and owner approval. ChatGPT/Claude/Other setup, help and Android connection-management scope follow #603; Claude/Other setup, help and the Android screen may follow production. The 4 October insight tools, tool switches, call log and approvals queue are not in this scope.
 
 **Implementation status, 21 October 2026 (#615/#618):** OAuth/metadata support, ledger reads, optional Draft tools and live revocation checks exist. Settings lists assistant names, addresses, server-reported access and last use, and requires confirmation before Disconnect. Last use is recorded on authorized calls at most once a minute; a failed timestamp write logs and retries on the next call without denying authorized access. Server-enforced 90-day inactivity expiry applies to MCP calls, token issuance and the Settings list. Five-minute access tokens retain live checks; refresh tokens roll forward for 91 days so their lifetime cannot shorten the idle window. A staging-only timeout has a 120-second floor, is ignored on the production deployment and, if malformed, logs once per server instance and disables only MCP (503) at initialization, leaving normal sign-in and app pages available. An unset or empty timeout keeps 90 days. Group access remains membership-only in these tickets; approval and Group controls are separate work. Current assistant reads do not materialize recurring Expenses. Production readiness still requires the remaining controls and hosted acceptance. See [implementation evidence](../connected-assistants/research.md) and the [connection runbook](../runbooks/mcp-connections.md).
+
+## Update: account switching at approval (21 October 2026, #735)
+
+The approval page's **Not you?** action signs out only the current session and returns
+through the deployment's usual Google or demo sign-in to the same pending consent page.
+It carries the provider's signed query unchanged, including its original expiry, client,
+scopes, state and PKCE challenge. No consent or token is issued by switching; the newly
+signed-in member must explicitly approve, with optional To review permission unticked.
+
+A dedicated, session- and origin-checked HTTP endpoint verifies the pending request and
+confirms session deletion before clearing cookies. It builds the local return address;
+it accepts no caller-supplied destination. The existing login return-path validation
+applies too. If the request expires during sign-in, both the details read and consent
+submission reject it, and the page asks the member to restart from the assistant. Other
+sessions and existing connections are unchanged. This uses Better Auth's signed requests
+and consent endpoints rather than introducing a second authorization flow.

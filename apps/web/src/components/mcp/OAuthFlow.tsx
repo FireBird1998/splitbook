@@ -1,6 +1,15 @@
 'use client';
 
-import { apiFetch } from '@/lib/utils/api-fetch';
+import {
+  apiFetch,
+  leaveExpectedAccount,
+  reloadForAccountChange,
+  stayInExpectedAccount,
+} from '@/lib/utils/api-fetch';
+import { authClient } from '@/lib/auth-client';
+import { resolveCallbackUrl } from '@/lib/auth/callback-url';
+import { forgetBrowserSettlementAttempts } from '@/lib/settlement-attempts';
+import { forgetBrowserTagActions } from '@/lib/tag-actions';
 import { useEffect, useState, type ReactNode } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -11,7 +20,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { PersonAvatar } from '@/components/balances/TabCard';
-import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
+import { ACCOUNT_CHANGED_STATUS, EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import { ASSISTANT_CANNOT } from '@/lib/mcp/assistant-limits';
 import type { AssistantDisplay } from '@/lib/mcp/assistant-name';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
@@ -149,7 +158,15 @@ export function consentRequest({
 }
 
 /** Who is approving: the signed-in member, by name and email (#614). */
-function SignedInAs({ account }: { account: SignedInAccount }) {
+function SignedInAs({
+  account,
+  busy,
+  onSwitch,
+}: {
+  account: SignedInAccount;
+  busy: boolean;
+  onSwitch: () => void;
+}) {
   return (
     <Box
       sx={{
@@ -181,6 +198,15 @@ function SignedInAs({ account }: { account: SignedInAccount }) {
           {account.email}
         </Typography>
       </Box>
+      <Button
+        size="small"
+        aria-label="Not you? Sign in with another account"
+        disabled={busy}
+        onClick={onSwitch}
+        sx={{ ml: 'auto', flexShrink: 0 }}
+      >
+        Not you?
+      </Button>
     </Box>
   );
 }
@@ -265,6 +291,41 @@ export default function OAuthFlow({
     return () => controller.abort();
   }, [query, consent, account.id]);
 
+  async function switchAccount() {
+    setBusy(true);
+    setError('');
+    leaveExpectedAccount();
+    try {
+      // This auth request owns sign-out navigation, including a raced account change.
+      const result = await authClient.$fetch<{ url: string }>('/mcp/switch-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', [EXPECTED_ACCOUNT_HEADER]: account.id },
+        body: { oauth_query: query },
+      });
+      if (result.error?.status === ACCOUNT_CHANGED_STATUS) {
+        stayInExpectedAccount();
+        reloadForAccountChange();
+        return;
+      }
+      if (result.error)
+        throw new Error(
+          result.error.status === 400
+            ? 'This connection request is invalid or expired. Restart from your assistant.'
+            : 'Your session could not be ended. Try switching accounts again.',
+        );
+      const destination = resolveCallbackUrl(result.data?.url, '');
+      if (!destination) throw new Error('Sign-in could not continue. Restart from your assistant.');
+      forgetBrowserSettlementAttempts();
+      forgetBrowserTagActions();
+      // A fresh document drops all state belonging to the previous account.
+      window.location.assign(destination);
+    } catch (reason) {
+      stayInExpectedAccount();
+      setError(reason instanceof Error ? reason.message : 'Sign-in could not continue. Try again.');
+      setBusy(false);
+    }
+  }
+
   async function submit(accept = true) {
     setBusy(true);
     setError('');
@@ -308,7 +369,7 @@ export default function OAuthFlow({
           {error && <Alert severity="error">{error}</Alert>}
           {consent ? (
             <>
-              <SignedInAs account={account} />
+              <SignedInAs account={account} busy={busy} onSwitch={() => void switchAccount()} />
               {details && (
                 <ConsentPermissions
                   details={details}
