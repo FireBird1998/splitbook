@@ -17,6 +17,7 @@ describe('the Connect ChatGPT authorization check', () => {
           ThemeProvider,
           { theme: createAppTheme('light') },
           createElement(AuthorizedConnections, {
+            name: 'ChatGPT',
             connections: [
               {
                 id: 'c1',
@@ -29,11 +30,35 @@ describe('the Connect ChatGPT authorization check', () => {
       ),
     );
     expect(shown).toContain(
-      'Authorization 1 · All current and future Groups Read Groups, Balances and spending To review access, including permanent deletion Continued access between visits (refresh tokens)',
+      'ChatGPT authorized Authorization 1 Read Groups, Balances and spending To review access, including permanent deletion Continued access between visits (refresh tokens)',
     );
     expect(shown).toContain(
       'This connection has broader access than this read-only guide. To change it, disconnect in Settings and reconnect without To review access.',
     );
     expect(shown).not.toMatch(/\bDrafts?\b/);
+  });
+
+  it('names the assistant it checks, so Claude has the same check (#619)', () => {
+    const shown = text(
+      renderToStaticMarkup(
+        createElement(
+          ThemeProvider,
+          { theme: createAppTheme('light') },
+          createElement(AuthorizedConnections, {
+            name: 'Claude',
+            connections: [
+              {
+                id: 'c1',
+                clientId: 'https://claude.ai/oauth/mcp-oauth-client-metadata',
+                scopes: [MCP_LEDGER_SCOPE, 'offline_access'],
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+    expect(shown).toContain('Claude authorized');
+    expect(shown).toContain('Run the test prompt in Claude to check the connection.');
+    expect(shown).not.toContain('ChatGPT');
   });
 });

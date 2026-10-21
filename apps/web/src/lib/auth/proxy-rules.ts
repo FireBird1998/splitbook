@@ -28,7 +28,10 @@ export function resolveProxyResponse({
 }: ProxyDecisionInput): NextResponse {
   const isAuthPage = pathname.startsWith('/login');
   const isPublicPage =
-    pathname === '/' || pathname === '/connect/chatgpt' || pathname.startsWith('/join');
+    pathname === '/' ||
+    pathname === '/connect' ||
+    pathname === '/connect/chatgpt' ||
+    pathname.startsWith('/join');
   const isApiAuth = pathname.startsWith('/api/auth');
   // GET /api/join/[code] is intentionally auth-free (invite preview); POST joins and stays protected
   const isJoinPreview = pathname.startsWith('/api/join/') && method === 'GET';

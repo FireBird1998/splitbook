@@ -8,13 +8,13 @@ import ConnectChatGPT from './ConnectChatGPT';
 
 /* The Connect ChatGPT guide, rendered to static markup. */
 
-const guide = () =>
+const guide = (canPrepare = true) =>
   text(
     renderToStaticMarkup(
       createElement(
         ThemeProvider,
         { theme: createAppTheme('light') },
-        createElement(ConnectChatGPT, { resource: 'https://splitbook.example/mcp' }),
+        createElement(ConnectChatGPT, { resource: 'https://splitbook.example/mcp', canPrepare }),
       ),
     ),
   );
@@ -33,8 +33,16 @@ describe('the Connect ChatGPT guide', () => {
   it('says read-only access can’t see To review, in the Glossary’s words (#579)', () => {
     const shown = guide();
     expect(shown).toContain(
-      'All current and future Groups you belong to are included. Read-only ledger access cannot save Expenses or see what’s in your To review.',
+      'You choose which Groups ChatGPT reaches when you approve, and Groups you join later are included. Read-only ledger access cannot save Expenses or see what’s in your To review.',
     );
     expect(shown).not.toMatch(/private Drafts?/i);
+    // Members choose the Groups since Excluded Groups (#617).
+    expect(shown).not.toContain('All current and future Groups');
+  });
+
+  it('calls it To review access where it is offered, in the Glossary’s words (#619)', () => {
+    expect(guide()).toContain('leave To review access off');
+    expect(guide()).not.toMatch(/Draft access/);
+    expect(guide(false)).not.toContain('To review access');
   });
 });
