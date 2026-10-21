@@ -220,3 +220,49 @@ describe('Trip strip', () => {
     for (const dash of dashes) expect(flat(dash.props.style).backgroundColor).toBe(strip.muted);
   });
 });
+
+// #730, board "Trip strip and summary by currency": a Trip in more than one currency lists them
+// on its stub, main currency first, as the web's strip does (#729), and says them.
+describe('the Trip strip’s currencies (#730)', () => {
+  it('lists the Group’s currencies under its members, main first, and says them', () => {
+    const root = render(trip({ alternateCurrencies: ['EUR', 'JPY'] }));
+    expect(image(root).props.accessibilityLabel).toBe(
+      'Trip from GOA to TRI, 17 to 20 September, 3 members, currencies INR, EUR and JPY',
+    );
+    expect(texts(root).map((node) => node.shown)).toEqual([
+      'GOA',
+      'TRI',
+      '17–20 Sep',
+      '3 MEMBERS',
+      'INR · EUR · JPY',
+    ]);
+    expect(shown(root, 'INR · EUR · JPY').fontFamily).toBe(fonts.mono);
+    // On the stub, with the dates and members.
+    expect(holder(root, 'INR · EUR · JPY')).toEqual(holder(root, '17–20 Sep'));
+  });
+
+  it('says two currencies with “and”, and lists one currency nowhere', () => {
+    const two = render(trip({ alternateCurrencies: ['USD'] }));
+    expect(image(two).props.accessibilityLabel).toBe(
+      'Trip from GOA to TRI, 17 to 20 September, 3 members, currencies INR and USD',
+    );
+    shown(two, 'INR · USD');
+    act(() => screen?.unmount());
+    const one = render(trip());
+    expect(image(one).props.accessibilityLabel).toBe(
+      'Trip from GOA to TRI, 17 to 20 September, 3 members',
+    );
+  });
+
+  it.each(['light', 'dark'] as const)('sets them in the strip’s text colour in %s', (mode) => {
+    const root = render(trip({ alternateCurrencies: ['EUR', 'JPY'] }), mode);
+    expect(shown(root, 'INR · EUR · JPY').color).toBe(getSemanticTokens(mode).strip.text);
+  });
+
+  it('keeps them on the stub below the route at large text', () => {
+    setWindow({ fontScale: 1.3 });
+    const root = render(trip({ alternateCurrencies: ['EUR', 'JPY'] }));
+    expect(holder(root, 'INR · EUR · JPY')).toEqual(holder(root, '17–20 Sep'));
+    expect(holder(root, 'INR · EUR · JPY')).toMatchObject({ flexWrap: 'wrap' });
+  });
+});
