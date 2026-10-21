@@ -23,6 +23,7 @@ import { expenseRecordPath } from '@splitbook/shared/api-paths';
 import {
   expensePageKey,
   expenseRecordKey,
+  queryKeyPath,
   recurringExpensesKey,
 } from '@splitbook/shared/query-keys';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
@@ -40,6 +41,9 @@ import ExpenseCard from './ExpenseCard';
 import ExpenseDetails, { type ExpenseDetailsRecord } from './ExpenseDetails';
 import ExpenseFormDialog from './ExpenseFormDialog';
 import ExpensePanel, { type ExpensePanelState, type PanelExpense } from './ExpensePanel';
+import ExpenseSelectionPanel, { tagChangeSummary } from './ExpenseSelectionPanel';
+import { useExpenseSelection } from './expense-selection';
+import { changeExpenseTags } from './expense-tag-change';
 import DeleteExpenseDialog from './DeleteExpenseDialog';
 import ExpenseStats, { StatCount } from './ExpenseStats';
 import ExpenseTable from './ExpenseTable';
@@ -200,6 +204,12 @@ export default function ExpenseListView({
 
   const filters = activeFilterCount(query);
   const expenses = data?.expenses ?? [];
+  /**
+   * The Expenses ticked on a computer, to move to one Tag (#610). They belong to this page of
+   * this list: another Month, filter, sort or page clears them.
+   */
+  const selection = useExpenseSelection(path ? queryKeyPath(path) : '', onComputer ? expenses : []);
+  const selected = expenses.filter((expense) => selection.selected.has(expense._id));
   const pagination = data?.pagination;
   const nouns = getGroupTheme(group.category).nouns;
 
@@ -366,6 +376,32 @@ export default function ExpenseListView({
     setSnackbar({ open: false, message: '' });
   };
 
+  /**
+   * Move the selected Expenses to a Tag, in one request the member started. What changed leaves
+   * the selection; what didn't stays selected, to open or try again. When all changed, the
+   * snackbar says so.
+   */
+  const changeTag = async (tagId: string) => {
+    const reply = await changeExpenseTags(groupId, tagId, selected);
+    void mutate();
+    if (openId) void record.mutate();
+    const kept = reply.results
+      .filter(({ outcome }) => outcome !== 'changed' && outcome !== 'unchanged')
+      .map(({ expenseId }) => expenseId);
+    selection.set(kept);
+    if (!kept.length) {
+      const tag = group.tags.find(({ _id }) => _id === tagId)?.name ?? 'the Tag';
+      setSnackbar({ open: true, message: tagChangeSummary(reply.results, tag) });
+    }
+    return reply;
+  };
+  /** Open one of the Expenses a change left as it was, in place of the selection. */
+  const openFromSelection = (expenseId: string) => {
+    selection.clear();
+    setLostId(null);
+    showOpen(expenseId, 'push');
+  };
+
   // What the open Expense shows: its own read once it arrives, the list's row until then.
   const shown = (loaded ?? listed ?? null) as PanelExpense | null;
   const act = (start: (expense: Record<string, unknown>) => void) =>
@@ -513,6 +549,7 @@ export default function ExpenseListView({
       stale={changing}
       dayHeadings={dayHeadings}
       onEdit={editRow}
+      selection={selection}
     />
   ) : (
     <ExpenseCards
@@ -552,7 +589,8 @@ export default function ExpenseListView({
   );
 
   // The panel sits beside the list unless the list is empty with nothing open.
-  const showPanel = Boolean(openId || lostId) || expenses.length > 0 || (!data && !error);
+  const showPanel =
+    selected.length > 0 || Boolean(openId || lostId) || expenses.length > 0 || (!data && !error);
 
   return (
     <Stack spacing={2}>
@@ -613,17 +651,28 @@ export default function ExpenseListView({
                 borderRadius: `${RADIUS.lg}px`,
               }}
             >
-              <ExpensePanel
-                id={EXPENSE_PANEL_ID}
-                state={panelState}
-                userId={userId}
-                names={names}
-                onClose={closePanel}
-                onRetry={() => void record.mutate()}
-                onEdit={act(setEditing)}
-                onDuplicate={act(duplicate)}
-                onDelete={act(setDeleting)}
-              />
+              {selected.length > 0 ? (
+                <ExpenseSelectionPanel
+                  expenses={selected}
+                  userId={userId}
+                  tags={group.tags}
+                  onClear={selection.clear}
+                  onChangeTag={changeTag}
+                  onOpen={openFromSelection}
+                />
+              ) : (
+                <ExpensePanel
+                  id={EXPENSE_PANEL_ID}
+                  state={panelState}
+                  userId={userId}
+                  names={names}
+                  onClose={closePanel}
+                  onRetry={() => void record.mutate()}
+                  onEdit={act(setEditing)}
+                  onDuplicate={act(duplicate)}
+                  onDelete={act(setDeleting)}
+                />
+              )}
             </Box>
           )}
         </Box>

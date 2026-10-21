@@ -47,6 +47,8 @@ export function connectionTests(mongo = false) {
   let clientId: string;
   let cookie: string;
   let exposeTools = false;
+  // What the approval page was last told about the assistant (#614).
+  let approvalShown: unknown;
 
   const env: AuthEnv = {
     AUTH_SECRET: 'synthetic-mcp-connection-test-secret-32-characters',
@@ -119,6 +121,7 @@ export function connectionTests(mongo = false) {
       { headers: { cookie } },
     );
     expect(details.status).toBe(200);
+    approvalShown = await details.json();
     const consent = await post(
       '/oauth2/consent',
       {
@@ -561,6 +564,11 @@ export function connectionTests(mongo = false) {
       const issuer = await as.json();
       expect(issuer.client_id_metadata_document_supported).toBe(true);
       expect(issuer.registration_endpoint).toContain('/oauth2/register');
+    });
+
+    it('names the assistant on the approval page by the name it registered, never by its client id (#614)', async () => {
+      await authorizeClient();
+      expect(approvalShown).toMatchObject({ name: 'Synthetic MCP Client', address: null });
     });
 
     it('preserves the signed login request and keeps Draft permission opt-in', async () => {
@@ -1103,6 +1111,8 @@ export function connectionTests(mongo = false) {
           update: { name: '  Synthetic\n Assistant\u0000  ' },
         });
         const grant = await authorizeClient(true, true);
+        // The approval page cleans the published name the way Draft attribution does (#614).
+        expect(approvalShown).toMatchObject({ name: 'Synthetic Assistant', address: null });
         const client = new Client({ name: 'to-review-test', version: '1' });
         const payload = (result: Awaited<ReturnType<Client['callTool']>>) =>
           JSON.parse((result.content as Array<{ text: string }>)[0].text);

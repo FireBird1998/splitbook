@@ -186,7 +186,15 @@ test('computers get the table, with exact positions; phones keep the cards', asy
     await expect(villa).toContainText('You paid · Equally · 3');
   } else {
     const table = list(page).getByRole('table');
+    // The first column ticks Expenses, and its header every one shown (#610).
+    await expect(
+      table
+        .getByRole('columnheader')
+        .first()
+        .getByRole('checkbox', { name: /^Select all \d+ Expenses$/ }),
+    ).toBeVisible();
     await expect(table.getByRole('columnheader')).toHaveText([
+      '',
       'Date',
       'Description',
       'Paid by',
@@ -195,6 +203,7 @@ test('computers get the table, with exact positions; phones keep the cards', asy
       'You',
     ]);
     await expect(seafood.getByRole('cell')).toHaveText([
+      '',
       /^\w{3} \d{1,2} \w{3}/,
       'Seafood dinner at AnjunaFood',
       'PSPriya Shah',

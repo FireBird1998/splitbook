@@ -83,6 +83,9 @@ export const expensePagePath = (groupId: string, filters: ExpenseFilters = {}) =
 export const expenseRecordPath = (groupId: string, expenseId: string) =>
   `${group(groupId)}/expenses/${segment(expenseId)}`;
 
+/** Several of a Group's Expenses moved to one Tag in one request (#610). */
+export const expenseTagChangePath = (groupId: string) => `${group(groupId)}/expenses/tag-change`;
+
 export interface ActivityPageQuery {
   page: number;
   limit: number;

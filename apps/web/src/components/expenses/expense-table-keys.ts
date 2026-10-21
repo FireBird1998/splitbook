@@ -10,17 +10,20 @@ const ROW_BUTTON = 'button[aria-expanded]';
 
 /**
  * The Expense table's own shortcuts (#322), while it has focus: J and K move focus to the next
- * and previous Expense's button, and E edits the Expense whose row has focus (else the open
- * one). Enter is the focused button's own: it opens that Expense in the side panel. Every row
+ * and previous Expense's button, E edits the Expense whose row has focus (else the open one), and
+ * X ticks or unticks that row's Expense (#610). Enter is the focused button's own: it opens that
+ * Expense in the side panel. Every row
  * keeps its button in the Tab order, so no Expense is reachable only with J and K, and they
  * work only while single-key shortcuts are on.
  */
 export function useExpenseTableKeys({
   openId,
   onEdit,
+  onSelect,
 }: {
   openId: string | null;
   onEdit?: (expenseId: string) => void;
+  onSelect?: (expenseId: string) => void;
 }) {
   const { singleKeys } = useShortcutSetting();
 
@@ -34,6 +37,14 @@ export function useExpenseTableKeys({
     });
     if (!match) return;
     const row = target?.closest<HTMLElement>(ROW) ?? null;
+
+    if (match.id === 'select-expense') {
+      const expenseId = row?.dataset.expenseId;
+      if (!expenseId || !onSelect) return;
+      event.preventDefault();
+      onSelect(expenseId);
+      return;
+    }
 
     if (match.id === 'edit-expense') {
       const expenseId = row?.dataset.expenseId ?? openId;

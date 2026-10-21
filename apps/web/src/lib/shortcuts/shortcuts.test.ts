@@ -56,6 +56,7 @@ describe('the shortcut table', () => {
       ['previous-expense', 'K', 'table'],
       ['open-expense', 'Enter', 'table'],
       ['edit-expense', 'E', 'table'],
+      ['select-expense', 'X', 'table'],
       ['add-expense', 'N', 'page'],
       ['search-group', '/', 'page'],
       ['search', 'Ctrl K', 'page'],
@@ -64,9 +65,10 @@ describe('the shortcut table', () => {
     expect(shortcut('search').aria).toEqual({ apple: 'Meta+K', other: 'Control+K' });
   });
 
-  it('has no X: the table has no row selection while bulk actions are deferred', () => {
-    expect(SHORTCUTS.flatMap(({ keys }) => keys.other)).not.toContain('X');
-    expect(run(press('x'), 'table')).toBeNull();
+  it('X selects the focused Expense, in the table only, in either case of the letter (#610)', () => {
+    expect(run(press('x'), 'table')).toBe('select-expense');
+    expect(run(press('X', { shiftKey: true }), 'table')).toBe('select-expense');
+    expect(run(press('x'))).toBeNull();
   });
 
   it('marks the single keys, which the switch turns off, and leaves Enter to the row’s button', () => {
@@ -74,6 +76,7 @@ describe('the shortcut table', () => {
       'next-expense',
       'previous-expense',
       'edit-expense',
+      'select-expense',
       'add-expense',
       'search-group',
     ]);
@@ -86,6 +89,7 @@ describe('the shortcut table', () => {
       { keys: ['J', 'K'], hint: 'Move' },
       { keys: ['Enter'], hint: 'Open' },
       { keys: ['E'], hint: 'Edit' },
+      { keys: ['X'], hint: 'Select' },
       { keys: ['N'], hint: 'New expense' },
       { keys: ['/'], hint: 'Search' },
     ]);
@@ -120,7 +124,7 @@ describe('the page’s shortcuts', () => {
   });
 
   it('leaves the table’s keys to the table', () => {
-    for (const key of ['j', 'k', 'e', 'Enter']) expect(run(press(key))).toBeNull();
+    for (const key of ['j', 'k', 'e', 'x', 'Enter']) expect(run(press(key))).toBeNull();
     expect(run(press('n'), 'table')).toBeNull();
     expect(run(press('/'), 'table')).toBeNull();
   });

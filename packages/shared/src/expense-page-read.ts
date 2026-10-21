@@ -44,6 +44,8 @@ const expense = z.looseObject({
   splitMethod,
   /** The recurring Expense that added it, if one did. */
   recurringExpense: identity.nullish(),
+  /** What a change sends back, so one made since is never overwritten (#610). Older rows have none. */
+  revision: z.number().int().nonnegative().optional(),
 });
 const summary = z.looseObject({
   count: z.number().int().nonnegative(),

@@ -37,9 +37,9 @@ export default function ShortcutsSetting() {
           sx={{ alignSelf: 'flex-start' }}
         />
         <Typography id={descriptionId} variant="body2" color="text.secondary">
-          N adds an Expense, / searches the Group, and J, K and E move through and edit the Expenses
-          table. Turn them off if they get in the way of a screen reader or voice control. ⌘K
-          (Ctrl+K) search keeps working. This applies to you on this device.
+          N adds an Expense, / searches the Group, and J, K, E and X move through, edit and select
+          in the Expenses table. Turn them off if they get in the way of a screen reader or voice
+          control. ⌘K (Ctrl+K) search keeps working. This applies to you on this device.
         </Typography>
       </Stack>
     </Paper>
