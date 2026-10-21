@@ -18,6 +18,7 @@ import {
   middleCutEnd,
   unreadText,
 } from '../../test-utils/layout';
+import { outfitRegularWidth } from '../../test-utils/app-font';
 import { activateWithScreenReader, setWindow, touchAlong } from '../../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -45,6 +46,7 @@ const {
   SummaryStats,
   TileGrid,
   TopBar,
+  scaledSp,
 } = await import('./index');
 const { ThemeContext } = await import('../theme');
 
@@ -899,5 +901,86 @@ describe('a line cut in the middle keeps its end inside its box (#766)', () => {
       </CompactText>,
     );
     expect((renderer!.toJSON() as ReactTestRendererJSON).children).toEqual([credit]);
+  });
+});
+
+// #770, from the Designer's #751 check: Android's cut landed beside a dot, "chat….evil" or
+// "claude.ai.…west", which reads as a fourth dot. Once a line cut in the middle knows its width,
+// the app cuts it itself, as Android would, with no dot beside the "…", and short enough to fit
+// with its room (#766) by the font's own widths and kerning, so Android doesn't cut it again.
+describe('a line the app cuts in the middle (#770)', () => {
+  const credits = [
+    'prepared by chatgpt.com.secure-assistant-connector.evil.example.test',
+    'prepared by claude.ai.household-ledger-reconciliation-assistant-for-shared-expenses.connectorgateway.region-euwest.evil.example.test',
+  ];
+  const line = () => one(hosts(renderer!.root, (props) => props.numberOfLines === 1));
+  const layOut = (width: number) =>
+    act(() => {
+      line().props.onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width, height: 16 } } });
+    });
+  const shown = () =>
+    line()
+      .children.filter((child) => typeof child === 'string')
+      .join('');
+
+  it.each([1, 1.15, 1.3, 1.45])(
+    'keeps its start and end, with no dot beside the "…", and fits, at %s× text',
+    (fontScale) => {
+      setWindow({ width: 360, height: 640, fontScale });
+      const size = scaledSp(12, fontScale);
+      for (const credit of credits) {
+        render(
+          <CompactText variant="caption" tone="secondary" numberOfLines={1} ellipsizeMode="middle">
+            {credit}
+          </CompactText>,
+        );
+        for (let width = 180; width <= 330; width++) {
+          layOut(width);
+          const [start, end, ...more] = shown().split('…');
+          expect(more, `${width}dp: ${shown()}`).toEqual([]);
+          expect(end, `${width}dp: ${shown()}`).toBeDefined();
+          expect(credit.startsWith(start!) && credit.endsWith(end!.trimEnd()), shown()).toBe(true);
+          expect(start!.endsWith('.') || end!.startsWith('.'), shown()).toBe(false);
+          // With a dp to spare, as Android rounds the line's box to whole pixels.
+          expect(outfitRegularWidth(shown()) * size, shown()).toBeLessThanOrEqual(width - 1);
+        }
+        act(() => renderer?.unmount());
+      }
+    },
+  );
+
+  it('never cuts again a line its cut made narrower, and lays a new text out whole first', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1.3 });
+    const cut = (text: string) => (
+      <CompactText variant="caption" tone="secondary" numberOfLines={1} ellipsizeMode="middle">
+        {text}
+      </CompactText>
+    );
+    render(cut(credits[0]!));
+    layOut(250);
+    const first = shown();
+    expect(first).toContain('…');
+    // A line as wide as its words would be laid out narrower after its cut.
+    layOut(150);
+    expect(shown()).toBe(first);
+    // A wider line is cut again, longer.
+    layOut(300);
+    expect(shown().length).toBeGreaterThan(first.length);
+    act(() => renderer!.update(cut(credits[1]!)));
+    expect(shown().trimEnd()).toBe(credits[1]);
+  });
+
+  it('keeps a line that fits whole, and gives the screen reader the whole text', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1.3 });
+    render(
+      <CompactText variant="caption" tone="secondary" numberOfLines={1} ellipsizeMode="middle">
+        {credits[0]}
+      </CompactText>,
+    );
+    layOut(250);
+    expect(shown()).toContain('…');
+    expect(line().props.accessibilityLabel).toBe(credits[0]);
+    layOut(2000);
+    expect(shown().trimEnd()).toBe(credits[0]);
   });
 });

@@ -1285,3 +1285,66 @@ describe.each(['light', 'dark'] as const)(
     });
   },
 );
+
+// #770, from the Designer's #751 check: a credit cut beside a dot read "chat….evil". Once the
+// credit's line knows its width, the app cuts it, with no dot beside the "…"; at the largest
+// text it reads in full.
+describe.each(['light', 'dark'] as const)(
+  'an Expense row’s credit cut by the app in %s (#770)',
+  (mode) => {
+    const host = 'chatgpt.com.secure-assistant-connector.evil.example.test';
+    const credit = () =>
+      screen!.root.find(
+        (node) =>
+          isHost(node, 'Text') &&
+          node.children
+            .filter((child) => typeof child === 'string')
+            .join('')
+            .startsWith('prepared by'),
+      );
+    it.each([1.3, 2])('at %s× text, 360dp', (fontScale) => {
+      setWindow({ width: 360, height: 640, fontScale });
+      act(() => {
+        screen = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <GroupExpensesView
+              group={group()}
+              currentUserId={you}
+              state={financial({
+                data: [{ ...groceries, preparedBy: { kind: 'assistant', name: host } }],
+                pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+              })}
+              kept={null}
+              savedExpenseId={null}
+              now={now}
+              onSelectMonth={vi.fn()}
+              onRefreshExpenses={vi.fn()}
+              onLoadMore={vi.fn()}
+              onLoadNewer={vi.fn()}
+              onOpenExpense={vi.fn()}
+              onResumeDraft={vi.fn()}
+              onDiscardDraft={vi.fn()}
+            />
+          </ThemeContext.Provider>,
+        );
+      });
+      // The row lies in a Card 16dp in, inside its 1dp border; the row's 14dp padding, a 40dp
+      // icon and a 12dp gap leave its note's line 246dp.
+      act(() => {
+        credit().props.onLayout?.({
+          nativeEvent: { layout: { x: 0, y: 0, width: 246, height: 16 } },
+        });
+      });
+      const shown = credit()
+        .children.filter((child) => typeof child === 'string')
+        .join('')
+        .trimEnd();
+      if (fontScale < 1.5) {
+        expect(shown).toMatch(/^prepared by [^…]*[^.]…[^.][^…]*example\.test$/);
+      } else {
+        expect(credit().props.numberOfLines).toBe(0);
+        expect(shown).toBe(`prepared by ${host}`);
+      }
+    });
+  },
+);
