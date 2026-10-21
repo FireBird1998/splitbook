@@ -156,6 +156,8 @@ export class ExportService {
     const plan = planExportFiles(
       ordered.map((group) => group.name),
       request,
+      // Selected Expenses are named for the day the member exports them, in their own zone.
+      { today: zonedDay(new Date(), request.timeZone) },
     );
     const tables = plan.files.map((file) => {
       const group = ordered[file.group];
@@ -288,6 +290,9 @@ export class ExportService {
 
     const expenseFilter: Record<string, unknown> = { group: { $in: groupIds } };
     if (!include.has('deleted')) expenseFilter.isDeleted = false;
+    // Just these Expenses (#613): one that isn't the Group's, or is deleted, is left out.
+    if (request.expenseIds)
+      expenseFilter._id = { $in: request.expenseIds.map((id) => new Types.ObjectId(id)) };
     if (request.from && request.to)
       expenseFilter.date = {
         $gte: utcMidnight(request.from),

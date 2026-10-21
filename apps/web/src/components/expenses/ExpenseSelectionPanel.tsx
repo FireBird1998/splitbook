@@ -99,7 +99,8 @@ function positions(expenses: readonly ExpenseRead[], userId: string) {
  * The selected Expenses, in place of the open one (#610, design canvas "GroupExpenses"): how
  * many, their total, each one, and the member's position on them, with Change Tag. Change Tag
  * offers the Group's active Tags; picking one moves every selected Expense to it in one request.
- * What didn't change is listed with why, each with Open. There is no bulk Delete.
+ * What didn't change is listed with why, each with Open. Export selected downloads them as a CSV
+ * with each member's share (#613). There is no bulk Delete.
  */
 export default function ExpenseSelectionPanel({
   expenses,
@@ -108,6 +109,7 @@ export default function ExpenseSelectionPanel({
   onClear,
   onChangeTag,
   onOpen,
+  onExport,
 }: {
   /** The selected Expenses, in the list's order. */
   expenses: readonly ExpenseRead[];
@@ -118,11 +120,19 @@ export default function ExpenseSelectionPanel({
   /** Send the change; rejects with what to tell the member when the request changed nothing. */
   onChangeTag: (tagId: string) => Promise<ExpenseTagChangeReply>;
   onOpen: (expenseId: string) => void;
+  /** Download them as a CSV; resolves with the file's name, rejects with what to tell the member. */
+  onExport?: () => Promise<string>;
 }) {
   const [step, setStep] = useState<'idle' | 'choosing' | 'sending'>('idle');
   const [sendingTo, setSendingTo] = useState('');
   const [outcome, setOutcome] = useState<{ summary: string; misses: Miss[] } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [exported, setExported] = useState<
+    | { status: 'preparing' }
+    | { status: 'done'; fileName: string }
+    | { status: 'failed'; message: string }
+    | null
+  >(null);
   const active = tags.filter(
     (tag): tag is PanelTag & { _id: string } =>
       Boolean(tag._id) && !tag.isArchived && !tag.isDeleted,
@@ -151,6 +161,19 @@ export default function ExpenseSelectionPanel({
       );
     } finally {
       setStep('idle');
+    }
+  };
+
+  const exportThem = async () => {
+    if (!onExport || exported?.status === 'preparing') return;
+    setExported({ status: 'preparing' });
+    try {
+      setExported({ status: 'done', fileName: await onExport() });
+    } catch (error) {
+      setExported({
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'The export couldn’t be prepared.',
+      });
     }
   };
 
@@ -241,7 +264,33 @@ export default function ExpenseSelectionPanel({
         >
           Change Tag
         </Button>
+        {onExport && (
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={exported?.status === 'preparing'}
+            onClick={() => void exportThem()}
+          >
+            Export selected
+          </Button>
+        )}
       </Stack>
+
+      {exported?.status === 'preparing' && (
+        <Typography role="status" variant="body2" sx={{ mt: 1.5 }}>
+          Preparing the export…
+        </Typography>
+      )}
+      {exported?.status === 'done' && (
+        <Typography role="status" variant="body2" sx={{ mt: 1.5, overflowWrap: 'anywhere' }}>
+          {exported.fileName} is downloading.
+        </Typography>
+      )}
+      {exported?.status === 'failed' && (
+        <Typography role="alert" variant="body2" color="error" sx={{ mt: 1.5 }}>
+          {exported.message}
+        </Typography>
+      )}
 
       {step === 'choosing' && (
         <Box

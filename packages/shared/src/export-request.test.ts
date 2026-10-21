@@ -285,7 +285,7 @@ describe('just these Expenses (#613)', () => {
       { groups: MAPLE, expenses: WATER, format: 'json' },
       { groups: MAPLE, expenses: 'not-an-expense' },
       { groups: MAPLE, expenses: many.join(',') },
-    ])
+    ] as Record<string, string>[])
       expect(parseExportQuery(values(query)).success, JSON.stringify(query)).toBe(false);
     expect(
       parseExportQuery(values({ groups: MAPLE, expenses: many.slice(1).join(',') })).success,

@@ -1492,19 +1492,29 @@ there are several, or with `format=json` one JSON backup of every chosen Group
 
 **Query params:**
 
-| Param     | Required | Value                                                                                                 |
-| --------- | -------- | ----------------------------------------------------------------------------------------------------- |
-| `groups`  | yes      | Group ids joined by commas, 1–50; repeats are ignored and the files follow this order                 |
-| `from`    | no       | First day of the window, `YYYY-MM-DD`, inclusive                                                      |
-| `to`      | no       | Last day of the window, `YYYY-MM-DD`, inclusive. Give both `from` and `to`, or neither for all time   |
-| `include` | no       | Any of `payments`, `shares`, `deleted`, `history`, joined by commas                                   |
-| `format`  | no       | `csv` (default), `json` (all-time backup), or `statement` (one Group, preview only)                   |
-| `preview` | no       | `1` returns a bounded JSON preview instead of an attachment                                           |
-| `tz`      | no       | The viewer's IANA time zone, `UTC` by default: the calendar payments, edits and deletions are read in |
+| Param      | Required | Value                                                                                                 |
+| ---------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `groups`   | yes      | Group ids joined by commas, 1–50; repeats are ignored and the files follow this order                 |
+| `from`     | no       | First day of the window, `YYYY-MM-DD`, inclusive                                                      |
+| `to`       | no       | Last day of the window, `YYYY-MM-DD`, inclusive. Give both `from` and `to`, or neither for all time   |
+| `include`  | no       | Any of `payments`, `shares`, `deleted`, `history`, joined by commas                                   |
+| `format`   | no       | `csv` (default), `json` (all-time backup), or `statement` (one Group, preview only)                   |
+| `preview`  | no       | `1` returns a bounded JSON preview instead of an attachment                                           |
+| `tz`       | no       | The viewer's IANA time zone, `UTC` by default: the calendar payments, edits and deletions are read in |
+| `expenses` | no       | Just these Expenses of the one Group, by id, joined by commas (#613)                                  |
 
 A query it can't read (no Groups, an id that isn't one, half a window, a window
 that ends before it starts, a day that doesn't exist, an unknown include, format
-or time zone, or a window with `format=json`) is a 422 validation error. The
+or time zone, or a window with `format=json`) is a 422 validation error.
+
+**Just these Expenses (#613).** `expenses` names up to 100 Expenses
+(`EXPORT_MAX_SELECTED_EXPENSES`) of the one Group in `groups`. The answer is one
+Expenses CSV with each member's share, whatever `include` says, all time, with
+the same columns as the Group's own CSV with `shares`. It is named for the Group
+and the day in `tz`: `<group>-<YYYY-MM-DD>-selected-expenses.csv`. An Expense
+that is deleted, or isn't the Group's, is left out. With `expenses`, two Groups,
+a window, `format` other than `csv`, or an include other than `shares` is a 422
+validation error. The
 shared path builder is
 `exportPath`; `parseExportQuery` and `planExportFiles` are in
 `@splitbook/shared/export-request`, and the CSV builders in

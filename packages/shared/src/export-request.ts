@@ -27,6 +27,9 @@ export const EXPORT_MAX_GROUPS = 50;
  */
 export const EXPORT_MAX_ROWS = 50_000;
 
+/** The most Expenses "just these Expenses" may name: two pages of the web list (#613). */
+export const EXPORT_MAX_SELECTED_EXPENSES = 100;
+
 /** What the read is asked for, once read and checked. */
 export interface ExportRequest {
   /** The Groups to export, in the order asked, without repeats. */
@@ -40,6 +43,11 @@ export interface ExportRequest {
   timeZone: string;
   /** JSON preview instead of an attachment. */
   preview?: boolean;
+  /**
+   * Just these Expenses of the one Group (#613), in the order asked, without repeats: one CSV
+   * with each member's share, all time. One that is deleted or isn't the Group's is left out.
+   */
+  expenseIds?: string[];
 }
 
 const CALENDAR_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -102,7 +110,37 @@ const exportQuery = z
     format: z.enum(EXPORT_FORMATS).default('csv'),
     preview: z.literal('1').optional(),
     tz: z.string().refine(isTimeZone, { message: 'Unknown time zone' }).default('UTC'),
+    expenses: z
+      .string()
+      .optional()
+      .transform(list)
+      .pipe(
+        z
+          .array(identity, { message: 'Unknown Expense' })
+          .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))])
+          .pipe(
+            z.array(z.string()).max(EXPORT_MAX_SELECTED_EXPENSES, {
+              message: `Export at most ${EXPORT_MAX_SELECTED_EXPENSES} selected Expenses at once`,
+            }),
+          ),
+      ),
   })
+  .refine((query) => !query.expenses.length || query.groups.length === 1, {
+    message: 'Selected Expenses come from one Group',
+    path: ['groups'],
+  })
+  .refine(
+    (query) =>
+      !query.expenses.length ||
+      (query.format === 'csv' &&
+        !query.from &&
+        !query.to &&
+        query.include.every((name) => name === 'shares')),
+    {
+      message: 'Selected Expenses export as one CSV with each member’s share, with no period',
+      path: ['expenses'],
+    },
+  )
   .refine((query) => query.format !== 'statement' || query.preview === '1', {
     message: 'Open the printable statement, or request preview=1',
     path: ['format'],
@@ -143,13 +181,18 @@ export function parseExportQuery(values: QueryValues) {
     format: value('format') || undefined,
     tz: value('tz') || undefined,
     preview: value('preview'),
+    expenses: value('expenses'),
   });
   if (!parsed.success) return parsed;
-  const { groups, from, to, include, format, tz, preview } = parsed.data;
+  const { groups, from, to, include, format, tz, preview, expenses } = parsed.data;
   const request: ExportRequest = {
     groupIds: groups,
+    ...(expenses.length ? { expenseIds: expenses } : {}),
     ...(from && to ? { from, to } : {}),
-    include: EXPORT_INCLUDES.filter((name) => include.includes(name)),
+    // Selected Expenses always come with each member's share.
+    include: expenses.length
+      ? ['shares']
+      : EXPORT_INCLUDES.filter((name) => include.includes(name)),
     format,
     timeZone: tz,
     ...(preview ? { preview: true } : {}),
@@ -228,13 +271,16 @@ export interface ExportFilePlan {
  * and a payments CSV when payments are included: `<group>-<window>-expenses.csv`. One file
  * downloads as itself; several download as one zip, named after the Group, or
  * `splitbook-<n>-groups-<window>.zip` for several Groups. Two Groups with the same name are
- * told apart as `-2`, `-3`, in request order.
+ * told apart as `-2`, `-3`, in request order. Selected Expenses (#613) are one CSV named for the
+ * Group and `today`: `<group>-<today>-selected-expenses.csv`.
  */
 export function planExportFiles(
   groupNames: readonly string[],
-  { from, to, include }: Pick<ExportRequest, 'from' | 'to' | 'include'>,
+  { from, to, include, expenseIds }: Pick<ExportRequest, 'from' | 'to' | 'include' | 'expenseIds'>,
+  { today = localCalendarDay(new Date()) }: { today?: string } = {},
 ): ExportFilePlan {
-  const window = exportWindowSlug({ from, to });
+  const selected = Boolean(expenseIds?.length);
+  const window = selected ? `${today}-selected` : exportWindowSlug({ from, to });
   const used = new Set<string>();
   const slugs = groupNames.map((name) => {
     const base = exportSlug(name);
@@ -243,9 +289,8 @@ export function planExportFiles(
     used.add(slug);
     return slug;
   });
-  const kinds: ExportFileKind[] = include.includes('payments')
-    ? ['expenses', 'payments']
-    : ['expenses'];
+  const kinds: ExportFileKind[] =
+    !selected && include.includes('payments') ? ['expenses', 'payments'] : ['expenses'];
   const files = slugs.flatMap((slug, group) =>
     kinds.map((kind) => ({ group, kind, name: `${slug}-${window}-${kind}.csv` })),
   );
