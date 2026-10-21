@@ -14,15 +14,81 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
-import Link from 'next/link';
+import NextLink from 'next/link';
+import Link from '@mui/material/Link';
 import { PRODUCT_NAME } from '@/lib/product';
 import { assistantAddress } from '@/lib/mcp/assistant-name';
 import {
+  assistantGroupCount,
   connectedAssistantAccessLabel,
   type ConnectedAssistant,
   type ConnectedAssistantsPage,
 } from '@splitbook/shared/connected-assistant';
 import { lastUsedLabel } from './last-used';
+
+/** "2 of 3 Groups": the member's Groups an assistant reaches (#620). */
+function groupCountLabel(
+  groups: readonly { id: string; rule?: string }[],
+  excludedGroupIds?: readonly string[],
+) {
+  const { reached, of } = assistantGroupCount(groups, excludedGroupIds);
+  return `${reached} of ${of} ${of === 1 ? 'Group' : 'Groups'}`;
+}
+
+/**
+ * Settings' confirmation before Disconnect (#615), which an assistant's own page asks too (#620).
+ */
+export function DisconnectDialog({
+  name,
+  open,
+  busy,
+  error,
+  onCancel,
+  onConfirm,
+  onExited,
+}: {
+  name: string | null;
+  open: boolean;
+  busy: boolean;
+  error: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onExited?: () => void;
+}) {
+  return (
+    <Dialog
+      open={open}
+      slotProps={{ transition: { onExited } }}
+      onClose={() => {
+        if (!busy) onCancel();
+      }}
+      aria-labelledby="disconnect-assistant-title"
+      aria-describedby="disconnect-assistant-description"
+    >
+      <DialogTitle id="disconnect-assistant-title">Disconnect {name}?</DialogTitle>
+      <DialogContent>
+        <DialogContentText id="disconnect-assistant-description">
+          The assistant stops at once. Items already prepared stay in your To review. Previously
+          shared information may remain in your assistant.
+        </DialogContentText>
+        {error && <Alert severity="error">{error}</Alert>}
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={busy} onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          color="error"
+          sx={{ color: 'status.negative' }}
+          disabled={busy || !name}
+          onClick={onConfirm}
+        >
+          Disconnect
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
 
 /**
  * Settings' Connected assistants once they have loaded: the MCP URL to add, what assistants can
@@ -30,11 +96,14 @@ import { lastUsedLabel } from './last-used';
  */
 export function ConnectionsList({
   data,
+  groups,
   busy,
   onRevoke,
   onLoadMore,
 }: {
   data: ConnectedAssistantsPage;
+  /** The member's Groups, for "N of M Groups" (#620); none is shown before they load. */
+  groups?: readonly { id: string; rule?: string }[];
   busy: string | null;
   onRevoke: (id: string) => void;
   onLoadMore: () => void;
@@ -97,7 +166,21 @@ export function ConnectionsList({
                   <Typography variant="body2" color="text.secondary">
                     {lastUsedLabel(connection.lastUsedAt)}
                   </Typography>
+                  {groups && (
+                    <Typography variant="body2" color="text.secondary">
+                      {groupCountLabel(groups, connection.excludedGroupIds)}
+                    </Typography>
+                  )}
                 </Box>
+                <Link
+                  component={NextLink}
+                  href={`/settings/assistants/${connection.id}`}
+                  variant="body2"
+                  underline="hover"
+                  aria-label={`Manage ${connection.name}, ${address ?? lastUsedLabel(connection.lastUsedAt)}`}
+                >
+                  Manage
+                </Link>
                 {/* Compact and red, as Sign Out is. */}
                 <Button
                   variant="outlined"
@@ -137,6 +220,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
   const [attempt, setAttempt] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pending, setPending] = useState<ConnectedAssistant | null>(null);
+  const [groups, setGroups] = useState<readonly { id: string; rule?: string }[]>();
   useEffect(() => {
     if (!accountId) return;
     const controller = new AbortController();
@@ -156,6 +240,23 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
       .catch(() => {
         if (!controller.signal.aborted) setError('Could not load assistant connections.');
       });
+    return () => controller.abort();
+  }, [attempt, accountId]);
+  // The member's Groups, for each assistant's "N of M Groups" (#620). Without them, no count shows.
+  useEffect(() => {
+    if (!accountId) return;
+    const controller = new AbortController();
+    apiFetch('/api/user/assistant-groups', {
+      signal: controller.signal,
+      headers: { [EXPECTED_ACCOUNT_HEADER]: accountId },
+      cache: 'no-store',
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((value) => {
+        const listed = value?.data?.groups;
+        if (!controller.signal.aborted && Array.isArray(listed)) setGroups(listed);
+      })
+      .catch(() => {});
     return () => controller.abort();
   }, [attempt, accountId]);
   async function revoke(id: string) {
@@ -209,7 +310,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
         <Typography variant="subtitle1" component="h2" fontWeight={600}>
           Connected assistants
         </Typography>
-        <Button component={Link} href="/connect" sx={{ alignSelf: 'flex-start' }}>
+        <Button component={NextLink} href="/connect" sx={{ alignSelf: 'flex-start' }}>
           Connect an assistant
         </Button>
         {error && (
@@ -232,6 +333,7 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
         {data && (
           <ConnectionsList
             data={data}
+            groups={groups}
             busy={busy}
             onRevoke={(id) => {
               setPending(data.connections.find((item) => item.id === id) ?? null);
@@ -240,39 +342,17 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
             onLoadMore={() => void loadMore()}
           />
         )}
-        <Dialog
+        <DisconnectDialog
+          name={pending?.name ?? null}
           open={dialogOpen}
-          slotProps={{ transition: { onExited: () => setPending(null) } }}
-          onClose={() => {
-            if (!busy) setDialogOpen(false);
+          busy={busy !== null}
+          error={error}
+          onCancel={() => setDialogOpen(false)}
+          onConfirm={() => {
+            if (pending) void revoke(pending.id);
           }}
-          aria-labelledby="disconnect-assistant-title"
-          aria-describedby="disconnect-assistant-description"
-        >
-          <DialogTitle id="disconnect-assistant-title">Disconnect {pending?.name}?</DialogTitle>
-          <DialogContent>
-            <DialogContentText id="disconnect-assistant-description">
-              The assistant stops at once. Items already prepared stay in your To review. Previously
-              shared information may remain in your assistant.
-            </DialogContentText>
-            {error && <Alert severity="error">{error}</Alert>}
-          </DialogContent>
-          <DialogActions>
-            <Button disabled={busy !== null} onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              color="error"
-              sx={{ color: 'status.negative' }}
-              disabled={busy !== null || !pending}
-              onClick={() => {
-                if (pending) void revoke(pending.id);
-              }}
-            >
-              Disconnect
-            </Button>
-          </DialogActions>
-        </Dialog>
+          onExited={() => setPending(null)}
+        />
       </Stack>
     </Paper>
   );
