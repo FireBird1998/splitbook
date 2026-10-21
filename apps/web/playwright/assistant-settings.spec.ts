@@ -39,7 +39,13 @@ test('Settings names assistants and only a confirmed Disconnect revokes access',
     'The assistant stops at once. Items already prepared stay in your To review.',
   );
   expect(revocations).toBe(0);
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
   await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.locator('#disconnect-assistant-title')).toHaveText(
+    'Disconnect Fictional assistant?',
+  );
+  await page.clock.resume();
   await expect(confirmation).toBeHidden();
   expect(revocations).toBe(0);
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
