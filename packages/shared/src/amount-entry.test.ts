@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readAmountEntry } from './amount-entry';
+import { formatAmountEntry, ungroupAmountEntry, readAmountEntry } from './amount-entry';
 
 // One source for every amount field's rules and words: Record payment (#312, #514) and an
 // Expense's amount (#528).
@@ -88,5 +88,35 @@ describe('readAmountEntry: what an amount field reads, in its words', () => {
       status: 'invalid',
       message: 'Enter at most ₹10,000,000.00.',
     });
+  });
+});
+
+describe('grouped amount display (#773)', () => {
+  it.each([
+    ['INR', '1842.5', '1,842.50', 184250],
+    ['EUR', '1842.5', '1,842.50', 184250],
+    ['JPY', '1842', '1,842', 1842],
+    ['KRW', '1842', '1,842', 1842],
+  ])('formats %s on blur and reads the same exact minor units', (currency, typed, shown, minor) => {
+    expect(formatAmountEntry(typed, currency)).toBe(shown);
+    expect(readAmountEntry(shown, currency)).toEqual({ status: 'valid', amountMinor: minor });
+    expect(ungroupAmountEntry(shown)).toBe(
+      currency === 'JPY' || currency === 'KRW' ? '1842' : '1842.50',
+    );
+  });
+
+  it('preserves empty, malformed and too-precise entries rather than repairing or rounding them', () => {
+    for (const typed of ['', '1,84,2', '1e3', '-5', '1.234']) {
+      expect(formatAmountEntry(typed, 'EUR')).toBe(typed);
+    }
+    expect(ungroupAmountEntry('1,84,2')).toBe('1,84,2');
+    expect(readAmountEntry('1,84,2', 'EUR').status).toBe('invalid');
+    expect(formatAmountEntry('1842.5', 'JPY')).toBe('1842.5');
+  });
+
+  it('shows zero shares and large exact values without float rounding', () => {
+    expect(formatAmountEntry('0', 'EUR')).toBe('0.00');
+    expect(formatAmountEntry('0001842.50', 'EUR')).toBe('1,842.50');
+    expect(formatAmountEntry('9999999.99', 'EUR')).toBe('9,999,999.99');
   });
 });
