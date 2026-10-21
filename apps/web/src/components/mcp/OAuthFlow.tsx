@@ -131,8 +131,8 @@ function groupMeta(group: ApprovalGroup) {
     .join(' · ');
 }
 
-/** Why a Group can't be ticked: who stopped assistants there (#621). */
-function stoppedBy(group: ApprovalGroup, viewerId: string) {
+/** Why a Not allowed Group can't be ticked: which admin doesn't allow assistants there (#621). */
+function notAllowedBy(group: ApprovalGroup, viewerId: string) {
   if (!group.ruleSetBy) return 'This Group’s admins don’t allow assistants';
   return group.ruleSetBy.id === viewerId
     ? 'You don’t allow assistants in this Group'
@@ -147,8 +147,8 @@ export function leavesOutEveryGroup(
   groups: readonly Pick<ApprovalGroup, 'id' | 'rule'>[],
   excluded: readonly string[],
 ) {
-  const open = groups.filter((group) => group.rule !== 'not_allowed');
-  return open.length > 0 && open.every((group) => excluded.includes(group.id));
+  const allowing = groups.filter((group) => group.rule !== 'not_allowed');
+  return allowing.length > 0 && allowing.every((group) => excluded.includes(group.id));
 }
 
 /**
@@ -183,14 +183,14 @@ export function ConsentGroups({
       {groups.length > 0 && (
         <FormGroup>
           {groups.map((group) => {
-            const stopped = group.rule === 'not_allowed';
+            const notAllowed = group.rule === 'not_allowed';
             return (
               <FormControlLabel
                 key={group.id}
                 control={
                   <Checkbox
-                    checked={!stopped && !excluded.includes(group.id)}
-                    disabled={disabled || stopped}
+                    checked={!notAllowed && !excluded.includes(group.id)}
+                    disabled={disabled || notAllowed}
                     onChange={(event) =>
                       onExcludedChange(
                         event.target.checked
@@ -205,20 +205,20 @@ export function ConsentGroups({
                     <Typography
                       variant="body2"
                       fontWeight={500}
-                      color={stopped ? 'text.disabled' : undefined}
+                      color={notAllowed ? 'text.disabled' : undefined}
                     >
                       {group.name}
                     </Typography>
                     <Typography
                       variant="caption"
                       component="p"
-                      color={stopped ? 'text.disabled' : 'text.secondary'}
+                      color={notAllowed ? 'text.disabled' : 'text.secondary'}
                     >
                       {groupMeta(group)}
                     </Typography>
-                    {stopped && (
+                    {notAllowed && (
                       <Typography variant="caption" component="p" color="text.secondary">
-                        {stoppedBy(group, viewerId)}
+                        {notAllowedBy(group, viewerId)}
                       </Typography>
                     )}
                   </Box>

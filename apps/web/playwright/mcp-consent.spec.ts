@@ -7,17 +7,17 @@ import { enterAsPersona, expectThemeApplied, reviewScreenshot } from './fixtures
 test.skip(process.env.MCP_CONSENT_TEST !== 'true', 'Requires the MCP consent configuration');
 
 /** Alex's own Group, which Alex sets to Not allowed for a run and back afterwards (#621). */
-const STOPPED = 'Studio Lunch Club';
-let stoppedId: string | null = null;
+const NOT_ALLOWED = 'Studio Lunch Club';
+let notAllowedId: string | null = null;
 
 async function setAssistantRule(page: Page, rule: 'allowed' | 'not_allowed') {
-  if (!stoppedId) {
+  if (!notAllowedId) {
     const groups = await page.request.get('/api/groups');
     expect(groups.status()).toBe(200);
     const listed = (await groups.json()).data as { _id: string; name: string }[];
-    stoppedId = listed.find((group) => group.name === STOPPED)!._id;
+    notAllowedId = listed.find((group) => group.name === NOT_ALLOWED)!._id;
   }
-  const changed = await page.request.put(`/api/groups/${stoppedId}/assistant-rule`, {
+  const changed = await page.request.put(`/api/groups/${notAllowedId}/assistant-rule`, {
     data: { rule },
   });
   expect(changed.status()).toBe(200);
@@ -25,7 +25,7 @@ async function setAssistantRule(page: Page, rule: 'allowed' | 'not_allowed') {
 
 // The demo Group goes back to Allowed, as the seed left it.
 test.afterEach(async ({ page }) => {
-  if (stoppedId) await setAssistantRule(page, 'allowed');
+  if (notAllowedId) await setAssistantRule(page, 'allowed');
 });
 
 for (const allowPreparation of [false, true]) {
@@ -135,9 +135,9 @@ for (const allowPreparation of [false, true]) {
     const groupChoice = page.getByRole('group', { name: 'Which Groups' });
     const groupBoxes = groupChoice.getByRole('checkbox');
     expect(await groupBoxes.count()).toBeGreaterThan(2);
-    const stopped = groupChoice.getByRole('checkbox', { name: new RegExp(`^${STOPPED}`) });
-    await expect(stopped).toBeDisabled();
-    await expect(stopped).not.toBeChecked();
+    const notAllowed = groupChoice.getByRole('checkbox', { name: new RegExp(`^${NOT_ALLOWED}`) });
+    await expect(notAllowed).toBeDisabled();
+    await expect(notAllowed).not.toBeChecked();
     for (const box of await groupBoxes.all())
       if (await box.isEnabled()) await expect(box).toBeChecked();
     await expect(
@@ -221,7 +221,7 @@ for (const allowPreparation of [false, true]) {
     expect(listed.status()).toBe(200);
     const reply = await listed.text();
     expect(reply).toContain('Banyan Court Flat 4B');
-    expect(reply).not.toContain(STOPPED);
+    expect(reply).not.toContain(NOT_ALLOWED);
     if (allowPreparation) expect(reply).not.toContain('Kochi to Alleppey');
     else expect(reply).toContain('Kochi to Alleppey');
     // Asked to approve the same assistant again, the page starts from the choice in force,

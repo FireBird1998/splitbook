@@ -274,20 +274,21 @@ member's setting and one listener for the page's keys; components register a han
 
 ### Groups (`src/components/groups/`)
 
-| Component                  | Description                                           |
-| -------------------------- | ----------------------------------------------------- |
-| `GroupCard`                | Card with group name, theme, members, balance         |
-| `GroupsListView`           | Grid of GroupCards + create button                    |
-| `GroupDetailView`          | The Group page's layout: header, tabs, dialogs        |
-| `GroupPageHeader`          | Theme icon, name, members, currency, Invite, settings |
-| `GroupTabs`                | Tabs as links, each with its own address              |
-| `GroupMembersView`         | Read-only roster: names and roles, Invite             |
-| `GroupHeader`              | Neutral header for non-trip Group cards               |
-| `GroupSettingsView`        | Admin page: info, currency, members, tags, recurring  |
-| `MonthCycleBar`            | Household Month bar (`?month=YYYY-MM`) and figures    |
-| `MonthMemberTable`         | Per-member paid / share / net for the active month    |
-| `RecurringExpensesSection` | Household recurring templates: list, add, edit, pause |
-| `InviteDialog`             | Email invite + copy invite link                       |
+| Component                  | Description                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| `GroupCard`                | Card with group name, theme, members, balance                                         |
+| `GroupsListView`           | Grid of GroupCards + create button                                                    |
+| `GroupDetailView`          | The Group page's layout: header, tabs, dialogs                                        |
+| `GroupPageHeader`          | Theme icon, name, members, currency, Invite, settings                                 |
+| `GroupTabs`                | Tabs as links, each with its own address                                              |
+| `GroupMembersView`         | Read-only roster: names and roles, Invite                                             |
+| `GroupHeader`              | Neutral header for non-trip Group cards                                               |
+| `GroupSettingsView`        | Admin page: info, currency, members, tags, recurring, assistants                      |
+| `AssistantRuleSection`     | The Group's Assistant rule: admins change it and see who's connected; members read it |
+| `MonthCycleBar`            | Household Month bar (`?month=YYYY-MM`) and figures                                    |
+| `MonthMemberTable`         | Per-member paid / share / net for the active month                                    |
+| `RecurringExpensesSection` | Household recurring templates: list, add, edit, pause                                 |
+| `InviteDialog`             | Email invite + copy invite link                                                       |
 
 **The Group page (#305).** Each tab is its own route under the Group:
 `/groups/[id]/expenses`, `/balances`, `/activity` and `/members`, so reloading,

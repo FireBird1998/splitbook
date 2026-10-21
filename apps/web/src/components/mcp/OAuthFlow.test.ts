@@ -60,9 +60,8 @@ const groups = [
     ruleSetBy: null,
   },
 ] as const;
-type ListedGroup = ApprovalGroup;
 /** A Group whose admins don't allow assistants (#621). */
-const stopped = (ruleSetBy: ListedGroup['ruleSetBy']): ListedGroup => ({
+const notAllowed = (ruleSetBy: ApprovalGroup['ruleSetBy']): ApprovalGroup => ({
   id: 'b00000000000000000000004',
   name: 'Studio Lunch Club',
   theme: 'work',
@@ -73,7 +72,7 @@ const stopped = (ruleSetBy: ListedGroup['ruleSetBy']): ListedGroup => ({
   ruleSetBy,
 });
 const priya = { id: 'a00000000000000000000003', name: 'Priya Shah' };
-const groupChoice = (excluded: readonly string[], listed: readonly ListedGroup[] = groups) =>
+const groupChoice = (excluded: readonly string[], listed: readonly ApprovalGroup[] = groups) =>
   markup(
     createElement(ConsentGroups, {
       name: 'Fictional Assistant',
@@ -314,7 +313,7 @@ describe('the consent screen', () => {
   });
 
   it('greys out a Group whose admins don’t allow assistants, which can’t be ticked (#621)', () => {
-    const html = groupChoice([], [...groups, stopped(priya)]);
+    const html = groupChoice([], [...groups, notAllowed(priya)]);
     const boxes = html.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? [];
     expect(boxes.map((box) => [box.includes('checked=""'), box.includes('disabled=""')])).toEqual([
       [true, false],
@@ -329,10 +328,10 @@ describe('the consent screen', () => {
   });
 
   it('says the member stopped assistants themself, or that the Group’s admins did (#621)', () => {
-    expect(text(groupChoice([], [stopped({ id: account.id, name: account.name })]))).toContain(
+    expect(text(groupChoice([], [notAllowed({ id: account.id, name: account.name })]))).toContain(
       'You don’t allow assistants in this Group',
     );
-    expect(text(groupChoice([], [stopped(null)]))).toContain(
+    expect(text(groupChoice([], [notAllowed(null)]))).toContain(
       'This Group’s admins don’t allow assistants',
     );
   });
@@ -342,21 +341,21 @@ describe('the consent screen', () => {
   });
 
   it('names every currency a Group uses (#621)', () => {
-    expect(text(groupChoice([], [stopped(priya)]))).toContain('Work · INR, USD');
+    expect(text(groupChoice([], [notAllowed(priya)]))).toContain('Work · INR, USD');
   });
 
   it('asks for a Group only among those that allow assistants (#621)', () => {
     const allowedLeftOut = groupChoice(
       groups.map((group) => group.id),
-      [...groups, stopped(priya)],
+      [...groups, notAllowed(priya)],
     );
     expect(text(allowedLeftOut)).toContain('Pick at least one Group.');
     // Only Not allowed Groups: nothing to pick now, and Groups joined later are included.
-    expect(text(groupChoice([], [stopped(priya)]))).not.toContain('Pick at least one Group.');
-    expect(leavesOutEveryGroup([stopped(priya)], [])).toBe(false);
+    expect(text(groupChoice([], [notAllowed(priya)]))).not.toContain('Pick at least one Group.');
+    expect(leavesOutEveryGroup([notAllowed(priya)], [])).toBe(false);
     expect(
       leavesOutEveryGroup(
-        [...groups, stopped(priya)],
+        [...groups, notAllowed(priya)],
         groups.map((group) => group.id),
       ),
     ).toBe(true);

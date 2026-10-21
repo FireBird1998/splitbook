@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { SWRConfig } from 'swr';
 import { describe, expect, it } from 'vitest';
 import type { AssistantRule } from '@splitbook/shared/assistant-rule';
+import { text } from '@/lib/test-utils/markup';
 import AssistantRuleSection, { assistantRuleChange } from './AssistantRuleSection';
 
 /*
@@ -16,9 +17,9 @@ const ALEX = 'a00000000000000000000001';
 const SAM = 'a00000000000000000000002';
 const PRIYA = 'a00000000000000000000003';
 const MEMBERS = [
-  { user: { _id: ALEX, name: 'Alex Rivera' }, role: 'admin' as const },
-  { user: { _id: SAM, name: 'Sam Chen' }, role: 'member' as const },
-  { user: { _id: PRIYA, name: 'Priya Shah' }, role: 'admin' as const },
+  { user: { _id: ALEX, name: 'Alex Rivera', image: undefined }, role: 'admin' as const },
+  { user: { _id: SAM, name: 'Sam Chen', image: undefined }, role: 'member' as const },
+  { user: { _id: PRIYA, name: 'Priya Shah', image: undefined }, role: 'admin' as const },
 ];
 const REACH = `/api/groups/${GROUP}/assistant-reach`;
 
@@ -39,14 +40,6 @@ function section(viewerId: string, rule: AssistantRule, reach: unknown[] = []) {
     ),
   );
 }
-
-const text = (html: string) =>
-  html
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/g, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&#x27;|&#39;/g, '’')
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ');
 
 describe('a Group’s Assistant rule in its settings (#621)', () => {
   it('lets an admin choose the rule, naming who else may change it', () => {

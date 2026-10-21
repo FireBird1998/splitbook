@@ -148,7 +148,7 @@ function GroupSettingsContent({
 
   const currentUserMember = members.find((m) => m.user._id === userId);
   const isAdmin = currentUserMember?.role === 'admin';
-  const assistants = assistantsAvailable && (
+  const assistantSection = assistantsAvailable && (
     <AssistantRuleSection
       groupId={groupId}
       groupName={group.name}
@@ -176,7 +176,7 @@ function GroupSettingsContent({
             </Button>
           </Box>
           <TagManager groupId={groupId} accountId={userId} />
-          {assistants}
+          {assistantSection}
           <LeaveGroupSection
             groupId={groupId}
             groupName={group.name}
@@ -628,7 +628,7 @@ function GroupSettingsContent({
           </Menu>
         </Paper>
 
-        {assistants}
+        {assistantSection}
 
         {/* ─── Invite Link ─────────────────────────── */}
         <Paper variant="outlined" sx={{ p: 3 }}>

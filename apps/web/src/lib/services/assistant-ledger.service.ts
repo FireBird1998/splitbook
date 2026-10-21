@@ -168,7 +168,7 @@ export const assistantLedgerService = {
     })
       .sort({ name: 1, _id: 1 })
       .select(
-        'name defaultCurrency alternateCurrencies category isArchived assistantRule assistantRuleSetBy',
+        'name defaultCurrency alternateCurrencies category isArchived members assistantRule assistantRuleSetBy',
       )
       .populate<{ assistantRuleSetBy: { _id: unknown; name: string } | null }>(
         'assistantRuleSetBy',
@@ -179,11 +179,17 @@ export const assistantLedgerService = {
       // A Group stored before the rule is Allowed.
       const rule = group.assistantRule ?? 'allowed';
       const setBy = rule === 'not_allowed' ? group.assistantRuleSetBy : null;
+      // Named while they are still an admin here; otherwise the page names the Group's admins.
+      const admin =
+        setBy &&
+        group.members.some(
+          (member) => String(member.user) === String(setBy._id) && member.role === 'admin',
+        );
       return {
         ...assistantGroup(group),
         currencies: [group.defaultCurrency, ...(group.alternateCurrencies ?? [])],
         rule,
-        ruleSetBy: setBy ? { id: String(setBy._id), name: setBy.name } : null,
+        ruleSetBy: admin ? { id: String(setBy._id), name: setBy.name } : null,
       };
     });
   },

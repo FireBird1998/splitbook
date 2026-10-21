@@ -20,28 +20,26 @@ import {
   ASSISTANT_RULES,
   type AssistantRule,
 } from '@splitbook/shared/assistant-rule';
+import type { GroupReadMember } from '@splitbook/shared/group-read';
 import { lastUsedLabel } from '@/components/mcp/last-used';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { fetcher } from '@/lib/utils/fetcher';
 
-interface Member {
-  user: { _id: string; name?: string; image?: string | null };
-  role: 'admin' | 'member';
-}
+type Member = Pick<GroupReadMember, 'user' | 'role'>;
 
 interface AssistantRuleSectionProps {
   groupId: string;
   groupName: string;
   /** The Group's saved rule; a Group stored without one is Allowed. */
   rule: AssistantRule;
-  members: Member[];
+  members: readonly Member[];
   viewerId: string;
   /** After a save, so the Group's read shows the new rule. */
   onSaved: () => void;
   onNotify: (message: string) => void;
 }
 
-const reachRead = z.object({
+const reachResponse = z.object({
   data: z.object({
     reach: z.array(
       z.object({
@@ -52,9 +50,7 @@ const reachRead = z.object({
     ),
   }),
 });
-type Reach = z.infer<typeof reachRead>['data']['reach'];
-
-const fetchReach = async (path: string) => reachRead.parse(await fetcher(path)).data;
+const fetchReach = async (path: string) => reachResponse.parse(await fetcher(path)).data;
 
 /** What each rule means for the Group, as everyone reads it. */
 function ruleMeaning(rule: AssistantRule, groupName: string) {
@@ -76,7 +72,7 @@ export function assistantRuleChange(
 }
 
 /** "Only admins can change this: you and Priya Shah." */
-function whoDecides(members: Member[], viewerId: string) {
+function whoDecides(members: readonly Member[], viewerId: string) {
   const admins = members
     .filter((member) => member.role === 'admin')
     .sort((a, b) => Number(b.user._id === viewerId) - Number(a.user._id === viewerId))
@@ -93,7 +89,7 @@ function WhoIsConnected({
   viewerId,
 }: Pick<AssistantRuleSectionProps, 'groupId' | 'groupName' | 'rule' | 'members' | 'viewerId'>) {
   // A Not allowed Group is out of every assistant's reach, so there's nothing to read.
-  const read = useSWR(
+  const reachRead = useSWR(
     rule === 'allowed' ? `/api/groups/${groupId}/assistant-reach` : null,
     fetchReach,
   );
@@ -103,19 +99,19 @@ function WhoIsConnected({
         No assistant can reach {groupName} while assistants are Not allowed.
       </Typography>
     );
-  if (read.error)
+  if (reachRead.error)
     return (
       <Stack direction="row" alignItems="center" spacing={1}>
         <Typography variant="body2" color="text.secondary">
           Who’s connected couldn’t be loaded.
         </Typography>
-        <Button size="small" onClick={() => void read.mutate()}>
+        <Button size="small" onClick={() => void reachRead.mutate()}>
           Retry
         </Button>
       </Stack>
     );
-  if (!read.data) return <Skeleton variant="rounded" height={96} />;
-  const reach: Reach = read.data.reach;
+  if (!reachRead.data) return <Skeleton variant="rounded" height={96} />;
+  const { reach } = reachRead.data;
   return (
     <Stack component="ul" spacing={1.5} sx={{ m: 0, p: 0, listStyle: 'none' }}>
       {members.map((member) => {

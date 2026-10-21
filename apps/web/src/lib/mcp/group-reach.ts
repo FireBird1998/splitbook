@@ -24,6 +24,8 @@ export async function groupReach(
   groupId: string,
   members: { id: string; name: string }[],
 ): Promise<AssistantReach[]> {
+  // Stored exclusions are lower case; the route also accepts an id in capitals.
+  const id = groupId.toLowerCase();
   const names = new Map(members.map((member) => [member.id, member.name]));
   const reach: AssistantReach[] = [];
   for (let offset = 0; ; offset += PAGE) {
@@ -35,7 +37,7 @@ export async function groupReach(
       sortBy: { field: 'createdAt', direction: 'asc' },
     });
     for (const row of rows) {
-      if (row.excludedGroupIds?.includes(groupId)) continue;
+      if (row.excludedGroupIds?.includes(id)) continue;
       const live = await adapter.findOne<McpConsent>({
         model: 'oauthConsent',
         where: [
