@@ -432,6 +432,27 @@ function device() {
           activities: network.noActivity
             ? []
             : [
+                // Alex's euro payment, as the server records it in Activity (#728).
+                ...(network.eurosPaid && id === lisbon
+                  ? [
+                      {
+                        _id: 'd00000000000000000000009',
+                        group: id,
+                        actor: { _id: alex.id, name: alex.name },
+                        type: 'settlement_recorded',
+                        createdAt: iso,
+                        metadata: {
+                          ...paymentBodies.at(-1),
+                          settlementId: 'f00000000000000000000002',
+                          amountMinor: 2000,
+                          paidByName: alex.name,
+                          paidToName: sam.name,
+                          pairDebtBeforeMinor: -2000,
+                          pairDebtAfterMinor: 0,
+                        },
+                      },
+                    ]
+                  : []),
                 {
                   _id: 'd00000000000000000000001',
                   group: id,
@@ -3178,6 +3199,26 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     ]);
     expect(app.text()).toContain('Payment recorded');
     expect(sheet()).toBeNull();
+
+    // Activity says both amounts and the rate, and the payment's record what it changed.
+    await app.press('Activity');
+    const row =
+      'You paid Sam Chen ₹1,842.00 to clear €20.00, at ₹92.10 per €, suggested ₹92.10 (20 Oct)';
+    const [opens] = app.hosts(
+      (p) => p.accessibilityRole === 'button' && String(p.accessibilityLabel).startsWith(row),
+    );
+    expect(opens).toBeDefined();
+    await settle(Promise.resolve(opens!.props.onPress()));
+    for (const words of [
+      'Paid',
+      'to clear €20.00, a Debt in EUR',
+      'Rate used',
+      '₹92.10 per €',
+      'What it changed',
+      'You and Sam in EUR:',
+      'INR balances didn’t change. Only the Debt’s own currency moves.',
+    ])
+      expect(app.text()).toContain(words);
   });
 });
 
