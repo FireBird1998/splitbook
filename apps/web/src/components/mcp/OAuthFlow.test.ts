@@ -6,6 +6,7 @@ import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
 import OAuthFlow, {
+  ApprovalHeading,
   ConsentChoice,
   ConsentGroups,
   ConsentPermissions,
@@ -112,7 +113,11 @@ describe('the consent screen', () => {
   });
 
   it('names the assistant, with its address in small text, never as a raw client identity (#614)', () => {
-    const shown = permissions(['ledger:read']);
+    const shown = render(
+      createElement(ApprovalHeading, {
+        details: { name: 'Fictional Assistant', address: 'assistant.example.test/client.json' },
+      }),
+    );
     expect(shown).toContain('Fictional Assistant wants to use your Splitbook');
     expect(shown).toContain(
       'assistant.example.test/client.json · identified by its published details',
@@ -122,7 +127,9 @@ describe('the consent screen', () => {
   });
 
   it('says a registered client publishes no address (#614)', () => {
-    const shown = permissions(['ledger:read'], { name: 'Synthetic MCP Client', address: null });
+    const shown = render(
+      createElement(ApprovalHeading, { details: { name: 'Synthetic MCP Client', address: null } }),
+    );
     expect(shown).toContain('Synthetic MCP Client wants to use your Splitbook');
     expect(shown).not.toContain('identified by its published details');
     expect(shown).toContain('Registered by the assistant itself. Its address isn’t published.');
@@ -141,7 +148,14 @@ describe('the consent screen', () => {
         onDraftsChange: () => {},
       }),
     );
-    expect(html.match(/<bdi>Fictional Assistant<\/bdi>/g)).toHaveLength(3);
+    expect(html.match(/<bdi>Fictional Assistant<\/bdi>/g)).toHaveLength(2);
+    expect(
+      markup(
+        createElement(ApprovalHeading, {
+          details: { name: 'Fictional Assistant', address: 'assistant.example.test/client.json' },
+        }),
+      ),
+    ).toContain('<bdi>Fictional Assistant</bdi>');
     expect(
       markup(
         createElement(ConsentChoice, {
@@ -152,6 +166,41 @@ describe('the consent screen', () => {
         }),
       ),
     ).toContain('<bdi>Fictional Assistant</bdi>');
+  });
+
+  it('leads with the assistant’s name as the page’s heading, its address just under it (#617)', () => {
+    const html = markup(
+      createElement(ApprovalHeading, {
+        details: { name: 'Fictional Assistant', address: 'assistant.example.test/client.json' },
+      }),
+    );
+    expect(html).toMatch(
+      /<h1[^>]*><bdi>Fictional Assistant<\/bdi> wants to use your Splitbook<\/h1>/,
+    );
+    // The generic title is a label above it, no longer a heading.
+    expect(html).not.toMatch(/<h\d[^>]*>Connect an assistant/);
+    const shown = text(html);
+    expect(shown.indexOf('Connect an assistant')).toBeLessThan(shown.indexOf('wants to use'));
+    expect(shown.indexOf('wants to use')).toBeLessThan(
+      shown.indexOf('assistant.example.test/client.json · identified'),
+    );
+  });
+
+  it('pairs an outlined Deny with Allow at equal width (#617)', () => {
+    const html = markup(
+      createElement(ConsentChoice, {
+        name: 'Fictional Assistant',
+        disabled: false,
+        onAllow: () => {},
+        onDeny: () => {},
+      }),
+    );
+    const button = (label: string) =>
+      new RegExp(`<button[^>]*class="([^"]*)"[^>]*>${label}`).exec(html)?.[1] ?? '';
+    expect(button('Deny')).toContain('MuiButton-outlined');
+    expect(button('Allow connection')).toContain('MuiButton-contained');
+    for (const label of ['Deny', 'Allow connection'])
+      expect(button(label), label).toContain('MuiButton-fullWidth');
   });
 
   it.each([[['ledger:read']], [['ledger:read', MCP_DRAFT_SCOPE, 'offline_access']]])(
@@ -262,7 +311,10 @@ describe('the consent screen', () => {
 
   it('says nothing about To review when the assistant asks only to read the ledger', () => {
     const shown = permissions(['ledger:read']);
-    expect(shown).toContain('Ledger permission: read Group details, Balances and spending.');
+    expect(shown).toContain(
+      'Read only: answer questions about your Groups, balances, Expenses, payments and recent changes.',
+    );
+    expect(shown).not.toContain('Ledger permission');
     expect(shown).not.toContain('To review');
   });
 });

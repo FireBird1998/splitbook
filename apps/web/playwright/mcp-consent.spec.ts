@@ -47,8 +47,11 @@ for (const allowPreparation of [false, true]) {
     await expect(page).toHaveURL(/\/mcp\/consent\?/);
     // Named by the name it registered, with what it can't do (#614). A registered client
     // publishes no details, so the page says it has no published address.
+    // The name leads the page as its heading (#617).
     await expect(
-      page.getByText('Fictional consent test assistant wants to use your Splitbook', {
+      page.getByRole('heading', {
+        level: 1,
+        name: 'Fictional consent test assistant wants to use your Splitbook',
         exact: true,
       }),
     ).toBeVisible();
