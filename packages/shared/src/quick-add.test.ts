@@ -809,3 +809,20 @@ describe('Quick add keeps an unlisted or ambiguous currency explicit (#732)', ()
     });
   });
 });
+
+it('does not silently use the main currency for lowercase foreign codes or rupee shorthand (#732)', () => {
+  for (const text of ['Dinner 20 eur', 'Dinner usd20']) {
+    expect(read(text)).toMatchObject({
+      currencyListed: false,
+      amountMinor: null,
+      amountText: '20',
+      problems: [expect.objectContaining({ code: 'amount-currency' })],
+    });
+  }
+  expect(read('Dinner rs20', { currency: 'EUR' })).toMatchObject({
+    currency: 'INR',
+    currencyListed: false,
+    amountMinor: null,
+    amountText: '20',
+  });
+});
