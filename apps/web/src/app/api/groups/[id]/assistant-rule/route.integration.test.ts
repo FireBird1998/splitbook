@@ -171,6 +171,9 @@ describe('a Group’s Assistant rule', () => {
       ],
     });
 
+    // The same list for the Group's id in capitals, which the route accepts.
+    expect((await readReach(groupId.toUpperCase(), admin)).body.data).toEqual(listed.body.data);
+
     // Not allowed: no member's assistant reaches the Group.
     await setRule(groupId, admin, 'not_allowed');
     expect((await readReach(groupId, admin)).body.data).toEqual({ reach: [] });

@@ -53,6 +53,16 @@ describe('the approval page’s Groups', () => {
     ]);
   });
 
+  it('names no one once the admin who stopped assistants is no longer an admin (#621)', async () => {
+    const stopped = await createGroup('Maple House');
+    await groupService.setAssistantRule(stopped, 'not_allowed', alice);
+    await groupService.updateMemberRole(stopped, bob, 'admin', alice);
+    await groupService.updateMemberRole(stopped, alice, 'member', bob);
+
+    const [listed] = await assistantLedgerService.approvalGroups(bob);
+    expect(listed).toMatchObject({ name: 'Maple House', rule: 'not_allowed', ruleSetBy: null });
+  });
+
   it('reads a Group stored before the rule as Allowed (#621)', async () => {
     const legacy = await createGroup('Old Flat');
     await Group.collection.updateOne(
