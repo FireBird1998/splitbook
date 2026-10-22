@@ -1,3 +1,4 @@
+import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { test, expect, dataOf, openAddExpense } from './fixtures';
 
 test('a lost create response preserves the draft and retries the same submission exactly once', async ({
@@ -105,46 +106,83 @@ test('changing a draft after a lost committed response creates a distinct explic
   ).toHaveLength(2);
 });
 
-test('validation and cancelled duplicate confirmation retain the draft; advisory failure still permits a real save', async ({
-  page,
-  ledger,
-}) => {
-  await page.context().addCookies((await ledger.sam.storageState()).cookies);
-  await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${ledger.groupB}`);
-  await openAddExpense(page);
-  const dialog = page.getByRole('dialog');
-  const description = dialog.getByLabel('What was it for?');
-  const amount = dialog.getByLabel('Amount');
-  const save = dialog.getByRole('button', { name: 'Save expense', exact: true });
-  await description.fill('Private rent');
-  await amount.fill('1200.001');
-  // The field says why it won't take the amount, and Save waits for one it can read (#528),
-  // keeping what was typed.
-  await expect(dialog.getByText('Use at most 2 decimal places.', { exact: true })).toBeVisible();
-  await expect(amount).toHaveAttribute('aria-invalid', 'true');
-  await expect(save).toBeDisabled();
-  await expect(description).toHaveValue('Private rent');
-  await expect(amount).toHaveValue('1200.001');
-  await amount.fill('1200');
-  await expect(amount).toHaveAttribute('aria-invalid', 'false');
-  await expect(save).toBeEnabled();
-  const warning = page.waitForEvent('dialog');
-  const confirmSave = dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
-  await (await warning).dismiss();
-  await confirmSave;
-  await expect(description).toHaveValue('Private rent');
-  await expect(amount).toHaveValue('1,200.00');
-  await expect(dialog.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
-  await description.fill('After duplicate cancellation');
-  await page.route('**/expenses/check-duplicate?*', (route) =>
-    route.fulfill({ status: 503, json: { error: 'Advisory unavailable' } }),
-  );
-  await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
-  await expect(dialog).toBeHidden();
-  const result = await dataOf(await ledger.sam.get(`/api/groups/${ledger.groupB}/expenses`));
-  expect(
-    result.expenses.filter(
-      (row: { description: string }) => row.description === 'After duplicate cancellation',
-    ),
-  ).toHaveLength(1);
-});
+/** 00:30 in India on the day after UTC's today, when India's day is a day ahead of UTC's (#835). */
+function justAfterMidnightInIndia() {
+  const now = new Date();
+  const nextUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return new Date(nextUtcMidnight - 5 * 60 * 60 * 1000);
+}
+
+// The form dates an Expense on the browser's day; between 00:00 and 05:30 in India that day is
+// a day ahead of UTC's (#835).
+for (const timezoneId of ['UTC', 'Asia/Kolkata'] as const) {
+  test.describe(timezoneId, () => {
+    test.use({ timezoneId });
+
+    test('validation and cancelled duplicate confirmation retain the draft; advisory failure still permits a real save', async ({
+      page,
+      ledger,
+    }) => {
+      if (timezoneId === 'Asia/Kolkata') await page.clock.setFixedTime(justAfterMidnightInIndia());
+      await page.context().addCookies((await ledger.sam.storageState()).cookies);
+      await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${ledger.groupB}`);
+      await openAddExpense(page);
+      const dialog = page.getByRole('dialog');
+      const description = dialog.getByLabel('What was it for?');
+      const amount = dialog.getByLabel('Amount');
+      const save = dialog.getByRole('button', { name: 'Save expense', exact: true });
+      await description.fill('Private rent');
+      await amount.fill('1200.001');
+      // The field says why it won't take the amount, and Save waits for one it can read (#528),
+      // keeping what was typed.
+      await expect(
+        dialog.getByText('Use at most 2 decimal places.', { exact: true }),
+      ).toBeVisible();
+      await expect(amount).toHaveAttribute('aria-invalid', 'true');
+      await expect(save).toBeDisabled();
+      await expect(description).toHaveValue('Private rent');
+      await expect(amount).toHaveValue('1200.001');
+      await amount.fill('1200');
+      await expect(amount).toHaveAttribute('aria-invalid', 'false');
+      await expect(save).toBeEnabled();
+      // The duplicate the warning is about, on the day the form shows: the fixture's
+      // "Private rent" is dated by UTC's day, which isn't the browser's day everywhere (#835).
+      const day = await dialog.getByLabel('Date', { exact: true }).inputValue();
+      await dataOf(
+        await ledger.priya.post(`/api/groups/${ledger.groupB}/expenses`, {
+          data: {
+            description: 'Private rent',
+            amount: 1200,
+            currency: 'INR',
+            category: 'housing',
+            tag: 'Rent',
+            date: day,
+            paidBy: [{ user: DEMO_PERSONA_IDS.priya, amount: 1200 }],
+            splitMethod: 'equal',
+            splitBetween: [{ user: DEMO_PERSONA_IDS.priya }],
+          },
+        }),
+        201,
+      );
+      const warning = page.waitForEvent('dialog');
+      const confirmSave = dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+      await (await warning).dismiss();
+      await confirmSave;
+      await expect(description).toHaveValue('Private rent');
+      await expect(amount).toHaveValue('1,200.00');
+      await expect(dialog.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
+      await description.fill('After duplicate cancellation');
+      await page.route('**/expenses/check-duplicate?*', (route) =>
+        route.fulfill({ status: 503, json: { error: 'Advisory unavailable' } }),
+      );
+      await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+      await expect(dialog).toBeHidden();
+      const result = await dataOf(await ledger.sam.get(`/api/groups/${ledger.groupB}/expenses`));
+      expect(
+        result.expenses.filter(
+          (row: { description: string }) => row.description === 'After duplicate cancellation',
+        ),
+      ).toHaveLength(1);
+    });
+  });
+}
