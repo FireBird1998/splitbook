@@ -8,6 +8,9 @@
  * "Topology is closed", even once the database is back: Better Auth's client did, so one failed
  * connect left sign-in broken for the life of the instance. Now every connection, a sign-in's
  * included, goes through one explicit connect that is tried again after a failure.
+ *
+ * Last, the database stops answering new connections without refusing them: one is accepted
+ * and never answered. Opening it then gives up after 5 s, not the driver's 30 s.
  */
 
 import net from 'node:net';
@@ -34,14 +37,23 @@ const DATABASE = 'splitbook-test-mongodb-connection';
 const APP_URL = 'http://localhost:3000';
 const target = new URL(process.env.TEST_MONGODB_URI ?? 'mongodb://127.0.0.1:27017');
 
-/** A TCP proxy to the replica set: while cut, it closes every connection as it opens. */
+/**
+ * A TCP proxy to the replica set. While cut, it closes every connection as it opens; while
+ * silent, it holds each new one open and never answers.
+ */
 function proxy() {
-  let cut = true;
+  let mode: 'cut' | 'open' | 'silent' = 'cut';
   let attempts = 0;
   const sockets = new Set<net.Socket>();
   const server = net.createServer((socket) => {
     attempts += 1;
-    if (cut) return socket.destroy();
+    if (mode === 'cut') return socket.destroy();
+    if (mode === 'silent') {
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+      socket.on('error', () => {});
+      return;
+    }
     const upstream = net.connect(Number(target.port), target.hostname);
     for (const end of [socket, upstream]) {
       sockets.add(end);
@@ -59,7 +71,11 @@ function proxy() {
         server.listen(0, '127.0.0.1', () => resolve((server.address() as net.AddressInfo).port)),
       ),
     restore: () => {
-      cut = false;
+      mode = 'open';
+    },
+    /** Answer no new connection; those open stay as they are. */
+    silence: () => {
+      mode = 'silent';
     },
     close: () => {
       for (const socket of sockets) socket.destroy();
@@ -169,4 +185,20 @@ describe('the app’s one MongoDB client (#826)', () => {
     expect(adapterDatabases).toHaveLength(1);
     expect(adapterDatabases[0].client).toBe(mongoose.connection.getClient());
   });
+
+  it('when a new connection is accepted but never answered, a page’s read and a sign-in fail within about 10 s, to their caller', async () => {
+    database.silence();
+    // The pool's connections close once idle for 5 s, so the next call has to open a new one.
+    await new Promise((resolve) => setTimeout(resolve, 6_000));
+    const read = await timed(() => mongoose.connection.db!.collection('users').countDocuments());
+    const signedIn = await timed(signIn);
+    // A read gives up opening a connection after 5 s and tries once more: 10 s here, against
+    // 64.5 s on the driver's 30 s default. The sign-in after it took 14.5 s, against 60 s.
+    expect(read.error).toBeInstanceOf(Error);
+    expect(read.took).toBeLessThan(11_000);
+    expect(signedIn.value).not.toBe(200);
+    expect(signedIn.took).toBeLessThan(16_000);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(unhandled).not.toHaveBeenCalled();
+  }, 200_000);
 });

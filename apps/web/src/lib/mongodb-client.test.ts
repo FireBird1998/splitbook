@@ -35,6 +35,7 @@ describe('the MongoDB client (#826)', () => {
       serverSelectionTimeoutMS: 5_000,
       maxPoolSize: 10,
       maxIdleTimeMS: 5_000,
+      connectTimeoutMS: 5_000,
       directConnection: true,
     });
     expect(getAuthDb().databaseName).toBe('splitbook-unit');
@@ -57,6 +58,7 @@ describe('the MongoDB client (#826)', () => {
       serverSelectionTimeoutMS: 5_000,
       maxPoolSize: 10,
       maxIdleTimeMS: 5_000,
+      connectTimeoutMS: 5_000,
     });
     expect(getAuthDb().databaseName).toBe('splitbook');
   });
