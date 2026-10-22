@@ -55,10 +55,12 @@ export default function CurrencySwitch({
           borderRadius: 0,
           bgcolor: 'transparent',
           '& .MuiTabs-indicator': { display: 'none' },
-          // Room inside the Tabs, which clip, for a tab's focus ring; the margins keep the tabs
-          // where they were (#834).
-          m: '-6px',
-          '& .MuiTabs-flexContainer': { flexWrap: 'wrap', gap: 1, p: '6px' },
+          '& .MuiTabs-flexContainer': { flexWrap: 'wrap', gap: 1 },
+          // The tabs wrap and never scroll, so nothing needs the Tabs to clip: a tab's focus ring
+          // shows past their edge, taking no room from the tabs (#834). MUI writes the
+          // scroller's overflow: hidden inline, which only !important outranks.
+          overflow: 'visible',
+          '& .MuiTabs-scroller': { overflow: 'visible !important' },
         }}
       >
         {tabs.map((tab) => (

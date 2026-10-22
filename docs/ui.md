@@ -488,7 +488,8 @@ in a `HomeSlot` of its width.
 - A control built on a bare `ButtonBase` appends `keyboardFocusRing` to its `sx`, so it draws
   the same ring on keyboard focus only (#834). Where a parent clips with `overflow: hidden`, it
   takes `insetKeyboardFocusRing`: the outline inside its edge, without the halo, as an Expense
-  card's row does; or the parent gets room for the outer ring, as the currency tabs' Tabs do
+  card's row does; or the parent stops clipping, as the currency tabs' Tabs do, which wrap and
+  never scroll
 - Screen reader labels on icon-only buttons
 
 Enforced by `playwright/theme-a11y.spec.ts`, which runs **axe-core** across four
