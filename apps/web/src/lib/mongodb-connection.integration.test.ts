@@ -193,11 +193,13 @@ describe('the app’s one MongoDB client (#826)', () => {
     const read = await timed(() => mongoose.connection.db!.collection('users').countDocuments());
     const signedIn = await timed(signIn);
     // A read gives up opening a connection after 5 s and tries once more: 10 s here, against
-    // 64.5 s on the driver's 30 s default. The sign-in after it took 14.5 s, against 60 s.
+    // 64.5 s on the driver's 30 s default. The sign-in after it can first wait for the monitor's
+    // next 10 s heartbeat, then 5 s to select and 5 s to connect: 14.5 s locally, 19.5 s on CI's
+    // runners, against 60 s.
     expect(read.error).toBeInstanceOf(Error);
     expect(read.took).toBeLessThan(11_000);
     expect(signedIn.value).not.toBe(200);
-    expect(signedIn.took).toBeLessThan(16_000);
+    expect(signedIn.took).toBeLessThan(22_000);
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(unhandled).not.toHaveBeenCalled();
   }, 200_000);
