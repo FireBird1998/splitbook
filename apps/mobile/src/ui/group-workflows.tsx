@@ -1,3 +1,4 @@
+import type { ViewInstance, TextInputInstance } from 'react-native';
 import { memo, useEffect, useRef, useState, type Ref } from 'react';
 import { Modal, Pressable, ScrollView, TextInput, View, type TextInputProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,12 +48,12 @@ export interface GroupCreateFormProps {
   focus?: { field: GroupField; request: number } | null;
   onLeaveField?: (field: GroupField) => void;
   /** Scrolls a field into view within the screen's ScrollView. */
-  onReveal?: (section: View) => void;
+  onReveal?: (section: ViewInstance) => void;
   /**
    * Scrolls a note that appears under the actions, such as "Sending this Group…", just far
    * enough to show it whole within the screen's ScrollView.
    */
-  onShowStatus?: (note: View) => void;
+  onShowStatus?: (note: ViewInstance) => void;
 }
 
 /** A correction shown directly below the control it belongs to. */
@@ -61,7 +62,7 @@ export const FieldError = memo(function FieldError({
   ref,
 }: {
   message?: string | null;
-  ref?: Ref<View>;
+  ref?: Ref<ViewInstance>;
 }) {
   const theme = useTheme();
   if (!message) return null;
@@ -93,7 +94,7 @@ export function Field({
   hint?: string;
   required?: boolean;
   error?: string | null;
-  inputRef?: Ref<TextInput>;
+  inputRef?: Ref<TextInputInstance>;
 }) {
   const theme = useTheme();
   return (
@@ -154,13 +155,13 @@ export function GroupCreateForm({
   onShowStatus = () => undefined,
 }: GroupCreateFormProps) {
   const theme = useTheme();
-  const status = useRef<View>(null);
+  const status = useRef<ViewInstance>(null);
   useEffect(() => {
     // Create sits at the end of a long form: its note appears below it, maybe off screen.
     if (busy && status.current) onShowStatus(status.current);
   }, [busy]);
-  const sections = useRef<Partial<Record<GroupField, View | null>>>({});
-  const inputs = useRef<Partial<Record<GroupField, TextInput | null>>>({});
+  const sections = useRef<Partial<Record<GroupField, ViewInstance | null>>>({});
+  const inputs = useRef<Partial<Record<GroupField, TextInputInstance | null>>>({});
   useEffect(() => {
     // Each rejected create asks once for the first invalid field; later edits never move focus.
     if (!focus) return;
@@ -168,10 +169,10 @@ export function GroupCreateForm({
     if (section) onReveal(section);
     inputs.current[focus.field]?.focus();
   }, [focus?.request]);
-  const section = (field: GroupField) => (node: View | null) => {
+  const section = (field: GroupField) => (node: ViewInstance | null) => {
     sections.current[field] = node;
   };
-  const input = (field: GroupField) => (node: TextInput | null) => {
+  const input = (field: GroupField) => (node: TextInputInstance | null) => {
     inputs.current[field] = node;
   };
   const descriptor = getGroupTheme(draft.category);

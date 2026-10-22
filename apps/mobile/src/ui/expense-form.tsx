@@ -1,5 +1,6 @@
+import type { ViewInstance, TextInputInstance } from 'react-native';
 import { memo, useState, type ReactNode, type Ref } from 'react';
-import { Pressable, type TextInput, View, useWindowDimensions } from 'react-native';
+import { Pressable, View, useWindowDimensions } from 'react-native';
 import { EXPENSE_CATEGORIES, getCategory } from '@splitbook/shared/categories';
 import { formatCurrency, wholeUnit } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
@@ -42,7 +43,7 @@ import {
 import { useTheme } from './theme';
 
 type Allocation = ReturnType<typeof expenseMoney>;
-type SectionRef = (field: ExpenseField) => (node: View | null) => void;
+type SectionRef = (field: ExpenseField) => (node: ViewInstance | null) => void;
 
 const splitSummaries: Record<ExpenseDraft['splitMethod'], string> = {
   equal: 'Equally',
@@ -109,8 +110,8 @@ export const AmountDescriptionCard = memo(function AmountDescriptionCard({
   /** Shows the values as locked, as for a save that may already be recorded. */
   showLock?: boolean;
   errors: { amount?: string; description?: string };
-  amountRef: Ref<TextInput>;
-  descriptionRef: Ref<TextInput>;
+  amountRef: Ref<TextInputInstance>;
+  descriptionRef: Ref<TextInputInstance>;
   section: SectionRef;
   onChange: (patch: Partial<ExpenseDraft>) => void;
   onLeave: (field: ExpenseField) => void;
@@ -181,7 +182,7 @@ export const ExpenseTiles = memo(function ExpenseTiles({
     split: string;
     tag: string;
   };
-  correction: (field: ExpenseField) => Ref<View>;
+  correction: (field: ExpenseField) => Ref<ViewInstance>;
   section: SectionRef;
   onOpen: (tile: 'date' | 'payers' | 'split' | 'tag') => void;
 }) {
@@ -565,7 +566,7 @@ export function WhatsDifferent({
   note: string;
   onChoose?: (field: ExpenseMoneyField, keep: 'mine' | 'saved') => void;
   /** The heading, where the table is scrolled to and focused. */
-  ref?: Ref<View>;
+  ref?: Ref<ViewInstance>;
 } & VersionNames) {
   const theme = useTheme();
   // At large text sizes each version gets its own line instead of a column.

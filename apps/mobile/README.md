@@ -6,6 +6,15 @@ Local development uses Metro and fictional personas. The staging configuration s
 
 ## Run locally
 
+The app uses Expo SDK 58, React Native 0.88 and React 19.3. After upgrading from SDK 57,
+regenerate the ignored native projects and rebuild the development client; a JavaScript
+reload cannot upgrade its native modules. In a clean worktree, `pnpm mobile android` does
+both. For an existing generated project, run `pnpm mobile exec expo prebuild --clean --platform android`
+before rebuilding. Keep custom native configuration in `app.config.ts` and its plugins.
+
+React Native's strict TypeScript API is enabled. Refs use native instance types such as
+`ViewInstance`, `TextInputInstance` and `ScrollViewInstance`, rather than component types.
+
 Use Node 22.13+ and the root-pinned pnpm version. Install Android Studio with an SDK/emulator and a compatible JDK. The first Gradle build downloads its required SDK components using your installed SDK license records.
 
 From a clean checkout/worktree (do not copy a real web `.env.local`):

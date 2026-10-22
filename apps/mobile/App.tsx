@@ -1,3 +1,4 @@
+import type { ScrollViewInstance, ViewInstance } from 'react-native';
 import { TagManager } from './src/ui/tag-manager';
 import { GroupCurrencies } from './src/ui/group-currencies';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
@@ -488,10 +489,10 @@ function TaskScreen() {
   const theme = useTheme();
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
   const feedback = state.feedback;
-  const scroll = useRef<ScrollView>(null);
-  const scrollContent = useRef<View>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
+  const scrollContent = useRef<ViewInstance>(null);
   // Place a form section near the top, so it stays visible when the keyboard opens.
-  const reveal = useCallback((section: View) => {
+  const reveal = useCallback((section: ViewInstance) => {
     const content = scrollContent.current;
     if (!content) return;
     section.measureLayout(
@@ -507,7 +508,7 @@ function TaskScreen() {
     offset.current = 0;
   }, [state.screen]);
   // Scroll just far enough to show a note that appeared under the actions, whole.
-  const showWhole = useCallback((section: View) => {
+  const showWhole = useCallback((section: ViewInstance) => {
     const content = scrollContent.current;
     if (!content) return;
     section.measureLayout(
@@ -574,7 +575,7 @@ function TaskScreen() {
         <ScrollView
           key={state.screen}
           ref={scroll}
-          innerViewRef={scrollContent as RefObject<View>}
+          innerViewRef={scrollContent as RefObject<ViewInstance>}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           scrollEventThrottle={100}
@@ -1008,7 +1009,7 @@ function GroupScreen() {
   );
   const userId = state.auth.user!.id;
   const eventOpen = state.destination === 'activity' && state.activity.selected !== null;
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   // The destination's offset, recorded when an Expense opens so returning can restore it.
   const scrollY = useRef(0);
   const viewportHeight = useRef(0);
