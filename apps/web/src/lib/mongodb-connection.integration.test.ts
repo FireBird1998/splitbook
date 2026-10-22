@@ -18,6 +18,7 @@ import { MongoClient } from 'mongodb';
 import mongoose from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEMO_PERSONAS } from '@/lib/demo-personas';
+import { MODEL_INDEXES, modelIndexes } from '@/lib/test-utils/model-indexes';
 
 /** Every database Better Auth's adapter is given, as `@/lib/auth` loads. */
 const adapterDatabases = vi.hoisted(() => [] as Array<{ client: unknown }>);
@@ -77,6 +78,11 @@ function proxy() {
     silence: () => {
       mode = 'silent';
     },
+    /** Drop every open connection, and refuse each new one. */
+    cut: () => {
+      mode = 'cut';
+      for (const socket of sockets) socket.destroy();
+    },
     close: () => {
       for (const socket of sockets) socket.destroy();
       return new Promise((resolve) => server.close(resolve));
@@ -92,6 +98,7 @@ const direct = new MongoClient(`mongodb://${target.host}/${DATABASE}?directConne
 const unhandled = vi.fn();
 let auth: typeof import('@/lib/auth').auth;
 let connectDB: typeof import('@/lib/db').connectDB;
+let Invitation: typeof import('@/lib/models/Invitation').default;
 
 /** A demo persona sign-in through Better Auth's handler: its status, or what it threw. */
 async function signIn(): Promise<number | string> {
@@ -157,6 +164,21 @@ describe('the app’s one MongoDB client (#826)', () => {
     expect(read.took).toBeLessThan(8_000);
     expect(signedIn.value).not.toBe(200);
     expect(signedIn.took).toBeLessThan(8_000);
+    // A route that loads a model now: its call gives up within about 5 s too, not Mongoose's 10 s.
+    ({ default: Invitation } = await import('@/lib/models/Invitation'));
+    const counted = await timed(() => Invitation.countDocuments());
+    expect(counted.error).toBeInstanceOf(Error);
+    expect(counted.took).toBeLessThan(8_000);
+    // So does a write, which is dropped, never run later: checked once the database is back.
+    const written = await timed(() =>
+      Invitation.updateOne(
+        { token: 'fictional-buffered-write' },
+        { $set: { status: 'pending' } },
+        { upsert: true },
+      ),
+    );
+    expect(written.error).toBeInstanceOf(Error);
+    expect(written.took).toBeLessThan(8_000);
     // Anything left unhandled surfaces within a tick or two of the failure.
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(unhandled).not.toHaveBeenCalled();
@@ -179,6 +201,14 @@ describe('the app’s one MongoDB client (#826)', () => {
     expect(await signIn()).toBe(200);
     await connectDB();
     expect(await mongoose.connection.db!.collection('users').countDocuments()).toBe(3);
+    // The write that failed while the database was unreachable never ran (ADR 0004).
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(await Invitation.countDocuments({ token: 'fictional-buffered-write' })).toBe(0);
+    // The model loaded while the database was unreachable gets its schema indexes (#856).
+    await Invitation.init();
+    expect((await modelIndexes(mongoose.connection.db!)).invitations).toEqual(
+      MODEL_INDEXES.invitations,
+    );
   });
 
   it('Mongoose and Better Auth use that one client', () => {
@@ -203,4 +233,30 @@ describe('the app’s one MongoDB client (#826)', () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(unhandled).not.toHaveBeenCalled();
   }, 200_000);
+
+  // An opened model's call goes straight to the driver during an outage, which gives up within its
+  // 5 s (#856).
+  it('when the connection drops after it opened, a model’s call fails within about 5 s, from the driver', async () => {
+    database.cut();
+    const counted = await timed(() => Invitation.countDocuments());
+    expect(counted.error?.name).toMatch(/ServerSelectionError$/);
+    expect(counted.took).toBeLessThan(8_000);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(unhandled).not.toHaveBeenCalled();
+  }, 120_000);
+
+  it('a model loaded during that outage fails within about 5 s, and gets its schema indexes once the database is back', async () => {
+    expect(mongoose.modelNames()).not.toContain('Settlement');
+    const { default: Settlement } = await import('@/lib/models/Settlement');
+    const counted = await timed(() => Settlement.countDocuments());
+    expect(counted.error).toBeInstanceOf(Error);
+    expect(counted.took).toBeLessThan(8_000);
+    database.restore();
+    await connectDB();
+    await Settlement.init();
+    expect((await modelIndexes(mongoose.connection.db!)).settlements).toEqual(
+      MODEL_INDEXES.settlements,
+    );
+    expect(unhandled).not.toHaveBeenCalled();
+  }, 120_000);
 });
