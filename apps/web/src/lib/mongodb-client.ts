@@ -11,12 +11,15 @@ import mongoose from 'mongoose';
 /**
  * How the client connects, as the owner confirmed in #826's grilling (2026-10-22): a page waits
  * at most 5 s for a server, an instance keeps at most 10 connections, and an idle one closes
- * after 5 s.
+ * after 5 s. Opening a connection also gives up after 5 s, the connect half of the owner's 5 s:
+ * a database that accepts a connection and never answers it would otherwise hold a page for the
+ * driver's 30 s. Operations themselves have no time limit (no socketTimeoutMS or timeoutMS).
  */
 export const MONGO_CONNECTION_OPTIONS = {
   serverSelectionTimeoutMS: 5_000,
   maxPoolSize: 10,
   maxIdleTimeMS: 5_000,
+  connectTimeoutMS: 5_000,
 } as const;
 
 // A syntactically valid placeholder so an unconfigured build still constructs
