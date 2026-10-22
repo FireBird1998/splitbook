@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
-import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
+import { DEMO_PERSONA_IDS, DEMO_PERSONAS } from '../src/lib/demo-personas';
+import { SEARCH_LABEL } from '../src/components/search/search-label';
 import { test, expect, dataOf, joinGroup, openAddExpense, type Ledger } from './fixtures';
 
 // #834: controls built on a bare ButtonBase draw the theme's keyboard focus ring, and a mouse
-// click draws none. Where a parent clips, the ring is drawn inside the control instead.
+// click draws none. Where a parent clips, the ring is drawn inside the control instead, without
+// its halo.
+
+const SAM = DEMO_PERSONAS.find((persona) => persona.key === 'sam')!.name;
 
 /** A Group in euros and rupees where Alex owes Sam in one and Sam owes Alex in the other. */
 async function twoCurrencyGroup(ledger: Ledger) {
@@ -61,7 +65,7 @@ async function signIn(page: Page, ledger: Ledger, path: string) {
   await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}${path}`);
 }
 
-/** The first ancestor that cuts off the control's box grown by `reach` px, if any. */
+/** The first ancestor whose padding box cuts off the control's box grown by `reach` px, if any. */
 function clippedBy(control: Locator, reach: number) {
   return control.evaluate((element, reach) => {
     const box = element.getBoundingClientRect();
@@ -72,12 +76,14 @@ function clippedBy(control: Locator, reach: number) {
     ) {
       const style = getComputedStyle(node);
       if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
-      const clip = node.getBoundingClientRect();
+      const edge = node.getBoundingClientRect();
+      const top = edge.top + node.clientTop;
+      const left = edge.left + node.clientLeft;
       if (
-        box.top - reach < clip.top ||
-        box.left - reach < clip.left ||
-        box.right + reach > clip.right ||
-        box.bottom + reach > clip.bottom
+        box.top - reach < top ||
+        box.left - reach < left ||
+        box.right + reach > left + node.clientWidth ||
+        box.bottom + reach > top + node.clientHeight
       )
         return `${node.tagName.toLowerCase()}.${node.className}`;
     }
@@ -85,9 +91,22 @@ function clippedBy(control: Locator, reach: number) {
   }, reach);
 }
 
+/** The theme's focus.main, as the browser writes a colour. */
+async function focusMain(page: Page) {
+  return page.evaluate(() => {
+    const probe = document.createElement('i');
+    probe.style.color = 'var(--mui-palette-focus-main)';
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+}
+
 /**
  * Pressed with the mouse and let go elsewhere, so it takes focus without acting, the control
- * draws no ring; Tabbed back to, it draws the theme's ring, inside itself where a parent clips.
+ * draws no ring; Tabbed back to, it draws the theme's ring in focus.main: outside it with the
+ * halo, or inside it without, where a parent clips.
  */
 async function expectKeyboardRingOnly(page: Page, control: Locator, { inset = false } = {}) {
   await control.scrollIntoViewIfNeeded();
@@ -103,77 +122,89 @@ async function expectKeyboardRingOnly(page: Page, control: Locator, { inset = fa
   await expect(control).toBeFocused();
   await expect(control).toHaveCSS('outline-style', 'solid');
   await expect(control).toHaveCSS('outline-width', '2px');
+  await expect(control).toHaveCSS('outline-color', await focusMain(page));
   await expect(control).toHaveCSS('outline-offset', inset ? '-2px' : '2px');
-  // The outline reaches 4px past an outer ring; an inset one stays inside the control.
+  await expect(control).toHaveCSS('box-shadow', inset ? 'none' : /0px 0px 0px 4px/);
+  // An outer ring reaches 4px past the control; an inset one stays inside it.
   expect(await clippedBy(control, inset ? 0 : 4)).toBeNull();
 }
 
-test('the Expenses toolbar filter pills (#834)', async ({ page, ledger }) => {
-  await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}`);
-  const pills = page.getByRole('search', { name: /^Find Expenses in / }).getByRole('button');
-  await expect(pills.first()).toBeVisible();
-  for (const pill of await pills.all()) await expectKeyboardRingOnly(page, pill);
-});
+for (const colorScheme of ['light', 'dark'] as const) {
+  test.describe(colorScheme, () => {
+    test.use({ colorScheme });
 
-test('the search launcher (#834)', async ({ page, ledger }) => {
-  await signIn(page, ledger, '/dashboard');
-  const launcher = page
-    .getByRole('button', { name: /^Search Expenses, Groups and people/ })
-    .filter({ visible: true })
-    .first();
-  await expectKeyboardRingOnly(page, launcher);
-});
+    test('the Expenses toolbar filter pills (#834)', async ({ page, ledger }) => {
+      await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}`);
+      const pills = page.getByRole('search', { name: /^Find Expenses in / }).getByRole('button');
+      await expect(pills.first()).toBeVisible();
+      for (const pill of await pills.all()) await expectKeyboardRingOnly(page, pill);
+    });
 
-test('an Activity payment row (#834)', async ({ page, ledger }) => {
-  await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}?tab=activity`);
-  const row = page.locator('button[aria-expanded]').filter({ hasText: 'Sam Chen' }).first();
-  await expect(row).toBeVisible();
-  await expectKeyboardRingOnly(page, row);
-});
+    test('the search launcher (#834)', async ({ page, ledger }) => {
+      await signIn(page, ledger, '/dashboard');
+      const launcher = page
+        .getByRole('button', { name: SEARCH_LABEL })
+        .filter({ visible: true })
+        .first();
+      await expectKeyboardRingOnly(page, launcher);
+    });
 
-test('the Group chooser’s choices (#834)', async ({ page, ledger }) => {
-  await twoCurrencyGroup(ledger);
-  await signIn(page, ledger, '/dashboard');
-  await page
-    .getByRole('button', { name: /^Add expense/ })
-    .first()
-    .click();
-  const chooser = page.getByRole('dialog');
-  const choices = chooser.getByRole('listitem').getByRole('button');
-  await expect(choices.first()).toBeVisible();
-  await expectKeyboardRingOnly(page, choices.first());
-  await expectKeyboardRingOnly(page, choices.last());
-});
+    test('an Activity payment row (#834)', async ({ page, ledger }) => {
+      await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}?tab=activity`);
+      const row = page.locator('button[aria-expanded]').filter({ hasText: SAM }).first();
+      await expect(row).toBeVisible();
+      await expectKeyboardRingOnly(page, row);
+    });
 
-test('Quick add’s payer menu chip and split chip (#834)', async ({ page, ledger }) => {
-  await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}`);
-  await page.getByRole('textbox', { name: 'Quick add', exact: true }).fill('Lunch 24');
-  const read = page.getByRole('list', { name: 'How Splitbook reads it' });
-  await expectKeyboardRingOnly(page, read.locator('[aria-haspopup="menu"]').first());
-  await expectKeyboardRingOnly(page, read.locator('[aria-haspopup="dialog"]').first());
-});
+    test('the Group chooser’s choices (#834)', async ({ page, ledger }) => {
+      await twoCurrencyGroup(ledger);
+      await signIn(page, ledger, '/dashboard');
+      await page
+        .getByRole('button', { name: /^Add expense/ })
+        .first()
+        .click();
+      const choices = page.getByRole('dialog').getByRole('listitem').getByRole('button');
+      await expect(choices.first()).toBeVisible();
+      await expectKeyboardRingOnly(page, choices.first());
+      await expectKeyboardRingOnly(page, choices.last());
+    });
 
-test('the selected currency tab on Balances (#834)', async ({ page, ledger }) => {
-  await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}?tab=balances`);
-  const selected = page.getByRole('tab', { selected: true }).first();
-  await expect(selected).toBeVisible();
-  // The tabs' scroller clips, so the ring is drawn inside the tab, over its selected border.
-  await expectKeyboardRingOnly(page, selected, { inset: true });
-});
+    test('Quick add’s payer menu chip and split chip (#834)', async ({ page, ledger }) => {
+      await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}`);
+      await page.getByRole('textbox', { name: 'Quick add', exact: true }).fill('Lunch 24');
+      const read = page.getByRole('list', { name: 'How Splitbook reads it' });
+      await expectKeyboardRingOnly(page, read.locator('[aria-haspopup="menu"]').first());
+      await expectKeyboardRingOnly(page, read.locator('[aria-haspopup="dialog"]').first());
+    });
 
-test.describe('on a phone', () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+    test('the selected currency tab on Balances, its ring outside its selected border (#834)', async ({
+      page,
+      ledger,
+    }) => {
+      await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}?tab=balances`);
+      const selected = page
+        .getByRole('tablist', { name: 'Balances in' })
+        .getByRole('tab', { selected: true });
+      await expect(selected).toBeVisible();
+      // Its border is primary.main, as focus.main is in light, so the ring has to sit outside it.
+      await expectKeyboardRingOnly(page, selected);
+    });
 
-  test('an Expense card’s row, inside a Paper that clips (#834)', async ({ page, ledger }) => {
-    await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}`);
-    const row = page.locator('[data-expense-id] > button').first();
-    await expect(row).toBeVisible();
-    await expectKeyboardRingOnly(page, row, { inset: true });
+    test.describe('on a phone', () => {
+      test.use({ viewport: { width: 390, height: 844 } });
+
+      test('an Expense card’s row, inside a Paper that clips (#834)', async ({ page, ledger }) => {
+        await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}`);
+        const row = page.locator('[data-expense-id] > button').first();
+        await expect(row).toBeVisible();
+        await expectKeyboardRingOnly(page, row, { inset: true });
+      });
+    });
+
+    test('Quick pick, fixed by #830, keeps its ring whole (#834)', async ({ page, ledger }) => {
+      await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}`);
+      const dialog = await openAddExpense(page);
+      await expectKeyboardRingOnly(page, dialog.getByRole('button', { name: /Groceries/ }));
+    });
   });
-});
-
-test('Quick pick, fixed by #830, keeps its ring whole (#834)', async ({ page, ledger }) => {
-  await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}`);
-  const dialog = await openAddExpense(page);
-  await expectKeyboardRingOnly(page, dialog.getByRole('button', { name: /Groceries/ }));
-});
+}
