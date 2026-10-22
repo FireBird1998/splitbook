@@ -14,7 +14,9 @@ import { directConnectionFor } from '@/lib/mongodb-uri';
  * at most 5 s for a server, an instance keeps at most 10 connections, and an idle one closes
  * after 5 s. Opening a connection also gives up after 5 s, the connect half of the owner's 5 s:
  * a database that accepts a connection and never answers it would otherwise hold a page for the
- * driver's 30 s. Operations themselves have no time limit (no socketTimeoutMS or timeoutMS).
+ * driver's 30 s. So a page fails within about 5 s when MongoDB refuses, and about 15 s when a new
+ * connection hangs (driver 7.7 retries a timed-out handshake twice, #849). Operations themselves
+ * have no time limit (no socketTimeoutMS or timeoutMS).
  */
 export const MONGO_CONNECTION_OPTIONS = {
   serverSelectionTimeoutMS: 5_000,
@@ -39,7 +41,8 @@ interface SharedMongo {
 const globalWithMongo = global as typeof globalThis & { _splitbookMongo?: SharedMongo };
 
 function createClient(uri: string): MongoClient {
-  // Mongoose's own driver, as `setClient()` takes no other. The database is the URI's path.
+  // Mongoose's driver, which `setClient()` requires, is the app's own mongodb (#849). The
+  // database is the URI's path.
   const client = new mongoose.mongo.MongoClient(uri, {
     ...MONGO_CONNECTION_OPTIONS,
     ...directConnectionFor(uri),
@@ -93,13 +96,11 @@ export function connectMongo(): Promise<MongoClient> {
 }
 
 /**
- * The database MONGODB_URI names, on the shared client, for Better Auth's adapter. The adapter's
- * types come from the app's mongodb 7.1 and the client is Mongoose's 7.0 driver, hence the cast:
- * the adapter supports mongodb ^6 || ^7 and only calls `db.collection()` (and, for transactions,
- * which are off, `startSession()`), and both drivers use one bson, so its ids are one class.
+ * The database MONGODB_URI names, on the shared client, for Better Auth's adapter. Mongoose's
+ * driver is the app's own, one mongodb for both (#849).
  */
 export function getAuthDb(): Db {
-  return shared().client.db() as unknown as Db;
+  return shared().client.db();
 }
 
 type AuthAdapter = ReturnType<typeof mongodbAdapter>;

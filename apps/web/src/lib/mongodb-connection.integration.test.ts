@@ -216,20 +216,21 @@ describe('the app’s one MongoDB client (#826)', () => {
     expect(adapterDatabases[0].client).toBe(mongoose.connection.getClient());
   });
 
-  it('when a new connection is accepted but never answered, a page’s read and a sign-in fail within about 10 s, to their caller', async () => {
+  it('when a new connection is accepted but never answered, a page’s read and a sign-in fail within about 15 s, to their caller', async () => {
     database.silence();
     // The pool's connections close once idle for 5 s, so the next call has to open a new one.
     await new Promise((resolve) => setTimeout(resolve, 6_000));
     const read = await timed(() => mongoose.connection.db!.collection('users').countDocuments());
     const signedIn = await timed(signIn);
-    // A read gives up opening a connection after 5 s and tries once more: 10 s here, against
-    // 64.5 s on the driver's 30 s default. The sign-in after it can first wait for the monitor's
-    // next 10 s heartbeat, then 5 s to select and 5 s to connect: 14.5 s locally, 19.5 s on CI's
-    // runners, against 60 s.
+    // A connect gives up after 5 s. From driver 7.7 (#849), a timed-out handshake is labelled
+    // SystemOverloadedError and RetryableError, and retried twice with backoff (client
+    // backpressure): three 5 s attempts, 15.3 s here, against 64.5 s on the driver's 30 s
+    // connect default with one retry, or about 90 s with two. The sign-in after it can first wait
+    // for the monitor's next 10 s heartbeat as well: 15.4 s locally, up to about 25 s.
     expect(read.error).toBeInstanceOf(Error);
-    expect(read.took).toBeLessThan(11_000);
+    expect(read.took).toBeLessThan(18_000);
     expect(signedIn.value).not.toBe(200);
-    expect(signedIn.took).toBeLessThan(22_000);
+    expect(signedIn.took).toBeLessThan(32_000);
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(unhandled).not.toHaveBeenCalled();
   }, 200_000);

@@ -426,7 +426,8 @@ class ExpenseService {
 ### Database connection
 
 Each server instance holds one MongoDB client (`lib/mongodb-client.ts`), shared by Mongoose and
-Better Auth's adapter (#826). Its database is the one `MONGODB_URI`'s path names. A
+Better Auth's adapter (#826), on the one mongodb driver the whole workspace resolves (#849). Its
+database is the one `MONGODB_URI`'s path names. A
 `mongodb://` URI naming a single host connects directly, as a local Mongo and CI's one-node
 replica sets need; one naming several hosts connects as their replica set, a `mongodb+srv://`
 one never connects directly, and a URI that sets `directConnection` itself keeps it
@@ -435,7 +436,8 @@ one never connects directly, and a URI that sets `directConnection` itself keeps
 It waits at most 5 s for a server and 5 s to open a connection, keeps at most 10 connections and
 closes one that is idle for 5 s (`MONGO_CONNECTION_OPTIONS`, as the owner confirmed in #826's
 grilling). So a page fails within about 5 s when MongoDB refuses or is known down, and about
-10 s when a new connection hangs. Operations themselves have no time limit. On Vercel it is
+15 s when a new connection hangs (driver 7.7 retries a timed-out handshake twice, #849).
+Operations themselves have no time limit. On Vercel it is
 attached with `attachDatabasePool`, so an instance stays alive until its idle connections have
 closed.
 
