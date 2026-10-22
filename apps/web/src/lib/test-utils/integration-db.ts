@@ -11,7 +11,8 @@
  * hard-fails on lookalike names (anything containing "demo"/"prod").
  *
  * Connection string comes from TEST_MONGODB_URI (any database segment is
- * replaced with the per-file name) and defaults to local MongoDB.
+ * replaced with the per-file name) and defaults to local MongoDB. The client is
+ * named after the database too (`appName`), so a failpoint can target one file.
  */
 
 import mongoose from 'mongoose';
@@ -45,6 +46,7 @@ async function forceCheckpoint(db: mongoose.mongo.Db): Promise<void> {
 function withDatabaseName(baseUri: string, dbName: string): string {
   const url = new URL(baseUri);
   url.pathname = `/${dbName}`;
+  url.searchParams.set('appName', dbName);
   return url.toString();
 }
 

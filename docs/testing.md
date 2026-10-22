@@ -157,6 +157,8 @@ BSON into each test's empty database; reset/idempotency calls under test still r
 3. Each file drops its database on teardown, then forces a checkpoint (`fsync`).
 4. A guard refuses any name without the `splitbook-test-` prefix or one that resembles a demo or
    production database, so `splitbook-demo` is never touched.
+5. The file's client is named after its database (`appName`), so a `failCommand` failpoint can
+   fail one file's commands without touching the files running beside it.
 
 Each test database is about 35 files mongod keeps open, and a dropped database's files stay open
 until a checkpoint passes the drop and the drop leaves the snapshot history window. So for the

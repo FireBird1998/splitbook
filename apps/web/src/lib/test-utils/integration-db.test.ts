@@ -9,14 +9,14 @@ describe('integrationTestDb', () => {
     expect(db.uri).toContain('/splitbook-test-expense-ownership?');
   });
 
-  it('replaces any database segment in TEST_MONGODB_URI with the per-file name', () => {
+  it('replaces any database segment in TEST_MONGODB_URI with the per-file name, and names the client after it', () => {
     const previous = process.env.TEST_MONGODB_URI;
     process.env.TEST_MONGODB_URI = 'mongodb://mongo.internal:27017/anything?directConnection=true';
     try {
       const db = integrationTestDb('groups');
 
       expect(db.uri).toBe(
-        'mongodb://mongo.internal:27017/splitbook-test-groups?directConnection=true',
+        'mongodb://mongo.internal:27017/splitbook-test-groups?directConnection=true&appName=splitbook-test-groups',
       );
     } finally {
       if (previous === undefined) delete process.env.TEST_MONGODB_URI;
