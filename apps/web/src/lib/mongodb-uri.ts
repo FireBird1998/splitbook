@@ -1,5 +1,6 @@
-// Whether a MongoDB client connects directly to its server, decided once for the app's client and
-// the migration scripts (#850). No `server-only` here: the scripts run under plain Node.
+// Whether a MongoDB client connects directly to its server, and which database a URI names,
+// decided once for the app's client and the scripts (#850). No `server-only` here: the scripts
+// run under plain Node.
 
 import ConnectionString from 'mongodb-connection-string-url';
 
@@ -20,4 +21,16 @@ export function directConnectionFor(uri: string): { directConnection?: true } {
   return !parsed.isSRV && parsed.hosts.length === 1 && !saysItself
     ? { directConnection: true }
     : {};
+}
+
+/**
+ * The database `uri`'s path names, or null when it names none or isn't a MongoDB URI. The
+ * driver's parser reads a URI naming several hosts, which WHATWG `new URL()` refuses.
+ */
+export function databaseNameFor(uri: string): string | null {
+  try {
+    return decodeURIComponent(new ConnectionString(uri).pathname.slice(1)) || null;
+  } catch {
+    return null;
+  }
 }
