@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { directConnectionFor } from './mongodb-uri';
+import { databaseNameFor, directConnectionFor } from './mongodb-uri';
 
 /*
  * #850: whether a client connects directly to its server, decided once for the app's client and
@@ -32,6 +32,28 @@ describe('directConnectionFor (#850)', () => {
   });
 });
 
+describe('databaseNameFor (#850)', () => {
+  it.each([
+    ['a single host', 'mongodb://127.0.0.1:27017/splitbook?directConnection=true'],
+    [
+      'several hosts',
+      'mongodb://u:p@db-00.example.net:27017,db-01.example.net:27017,db-02.example.net:27017/splitbook?replicaSet=atlas-x1&tls=true',
+    ],
+    ['an IPv6 host', 'mongodb://[::1]:27017/splitbook'],
+    ['an srv URI', 'mongodb+srv://u:p@cluster0.example.mongodb.net/splitbook?retryWrites=true'],
+  ])('reads the database a URI with %s names', (_, uri) => {
+    expect(databaseNameFor(uri)).toBe('splitbook');
+  });
+
+  it.each([
+    ['no path', 'mongodb://127.0.0.1:27017'],
+    ['an empty path', 'mongodb://db-00.example.net,db-01.example.net/?replicaSet=rs0'],
+    ['no MongoDB URI at all', 'not a uri'],
+  ])('reads none from a URI with %s', (_, uri) => {
+    expect(databaseNameFor(uri)).toBeNull();
+  });
+});
+
 describe('every client decides it the same way', () => {
   const web = path.resolve(__dirname, '../..');
   const sources = ['src', 'scripts'].flatMap((folder) =>
@@ -45,9 +67,18 @@ describe('every client decides it the same way', () => {
     (script) => {
       const source = readFileSync(path.join(web, 'scripts', script), 'utf8');
       expect(source).toMatch(
-        /import \{ directConnectionFor \} from '\.\.\/src\/lib\/mongodb-uri';/,
+        /import \{[^}]*\bdirectConnectionFor\b[^}]*\} from '\.\.\/src\/lib\/mongodb-uri';/,
       );
       expect(source).toMatch(/\.\.\.directConnectionFor\(uri\)/);
+    },
+  );
+
+  it.each(['migrate-expense-dates.ts', 'migrate-ledger.ts', 'orphan-groups.ts'])(
+    'scripts/%s reads its database through the shared parser',
+    (script) => {
+      const source = readFileSync(path.join(web, 'scripts', script), 'utf8');
+      expect(source).toMatch(/databaseNameFor\(uri\)/);
+      expect(source).not.toMatch(/new URL\(uri\)/);
     },
   );
 

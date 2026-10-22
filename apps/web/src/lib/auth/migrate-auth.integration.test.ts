@@ -298,6 +298,13 @@ describe('CLI guards', () => {
     expect(databaseNameFromUri('mongodb+srv://u:p@cluster.example.net/splitbook')).toBe(
       'splitbook',
     );
+    // Atlas's standard connection string names every host of the replica set (#850).
+    expect(
+      databaseNameFromUri(
+        'mongodb://u:p@db-00.example.net:27017,db-01.example.net:27017,db-02.example.net:27017/splitbook?replicaSet=atlas-x1&tls=true',
+      ),
+    ).toBe('splitbook');
+    expect(databaseNameFromUri('mongodb://[::1]:27017/splitbook')).toBe('splitbook');
     expect(databaseNameFromUri('mongodb://localhost:27017/')).toBeNull();
     expect(databaseNameFromUri('not a uri')).toBeNull();
   });
