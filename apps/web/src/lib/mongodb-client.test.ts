@@ -1,6 +1,6 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { ObjectId, UUID } from 'mongodb';
+import { MongoClient, MongoServerError, ObjectId, UUID } from 'mongodb';
 import mongoose from 'mongoose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -101,25 +101,34 @@ describe('connecting directly, only to a single host (#850)', () => {
   });
 });
 
-// Better Auth's adapter types come from the app's mongodb 7.1, while the shared client is
-// Mongoose's own 7.0 driver. Ids cross that boundary as one class; driver errors don't.
-describe('across the two drivers', () => {
-  it('an id is one class, so Better Auth’s and the migrations’ `instanceof` checks still hold', () => {
+// One mongodb driver serves Mongoose, Better Auth's adapter and the app (#849), so its classes
+// are one set: a client, a driver error and an id are each the same class wherever they come from.
+describe('one driver', () => {
+  it('the workspace resolves one mongodb, one bson and one URI parser', () => {
+    const lockfile = readFileSync(path.resolve(__dirname, '../../../../pnpm-lock.yaml'), 'utf8');
+    const versions = (name: string) => [
+      ...new Set(
+        [...lockfile.matchAll(new RegExp(`^  ${name}@(\\d+\\.\\d+\\.\\d+):`, 'gm'))].map(
+          ([, version]) => version,
+        ),
+      ),
+    ];
+    expect(versions('mongodb')).toHaveLength(1);
+    expect(versions('mongodb-connection-string-url')).toHaveLength(1);
+    expect(versions('bson')).toEqual([expect.stringMatching(/^7\.3\./)]);
+  });
+
+  it('Mongoose’s client is the app’s', () => {
+    expect(mongoose.mongo.MongoClient).toBe(MongoClient);
+  });
+
+  it('a driver error is one class, so an `instanceof` check holds for each', () => {
+    expect(mongoose.mongo.MongoServerError).toBe(MongoServerError);
+  });
+
+  it('an id is one class, so Better Auth’s and the migrations’ `instanceof` checks hold', () => {
     expect(mongoose.mongo.ObjectId).toBe(ObjectId);
     expect(mongoose.Types.ObjectId).toBe(ObjectId);
     expect(mongoose.mongo.UUID).toBe(UUID);
-  });
-
-  it('no source checks a driver error by its class, only by its code or name', () => {
-    const source = path.resolve(__dirname, '..');
-    const files = readdirSync(source, { recursive: true, encoding: 'utf8' }).filter(
-      (file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file),
-    );
-    const byClass = files.filter((file) =>
-      /instanceof\s+(?:mongo(?:ose\.mongo)?\.)?Mongo\w*Error\b/.test(
-        readFileSync(path.join(source, file), 'utf8'),
-      ),
-    );
-    expect(byClass).toEqual([]);
   });
 });
