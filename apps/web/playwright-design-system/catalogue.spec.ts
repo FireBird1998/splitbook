@@ -141,3 +141,44 @@ test('a text field focused by click or Tab draws only its own border, an errored
   await expect(iconButton).toBeFocused();
   await expect(iconButton).toHaveCSS('box-shadow', /4px/);
 });
+
+test('a contained, icon, tonal and text button and a chip focused by Tab show the ring (#830)', async ({
+  page,
+}) => {
+  await page.goto('/dev/design-system');
+  await page.getByLabel('Amount with an error').click();
+  for (const name of [
+    'Reset feedback example',
+    /^Switch to (light|dark) mode using icon$/,
+    'Sample tonal action',
+    'Sample text action',
+    'Sample filter',
+  ]) {
+    const control = page.getByRole('button', { name, exact: true });
+    for (let press = 0; press < 10; press++) {
+      if (await control.evaluate((element) => element === document.activeElement)) break;
+      await page.keyboard.press('Tab');
+    }
+    await expect(control, String(name)).toBeFocused();
+    await expect(control, String(name)).toHaveCSS('outline-style', 'solid');
+    await expect(control, String(name)).toHaveCSS('outline-width', '2px');
+    await expect(control, String(name)).toHaveCSS('box-shadow', /4px/);
+  }
+});
+
+test('a mouse click on a button, toggle button or chip draws no ring; Tab does (#830)', async ({
+  page,
+}) => {
+  await page.goto('/dev/design-system');
+  for (const name of ['Reset feedback example', 'Sample toggle', 'Sample filter']) {
+    const control = page.getByRole('button', { name, exact: true });
+    await control.click();
+    await expect(control, name).toBeFocused();
+    await expect(control, name).toHaveCSS('outline-style', 'none');
+    // Out and back in from the keyboard, the same control draws the ring.
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(control, name).toBeFocused();
+    await expect(control, name).toHaveCSS('outline-style', 'solid');
+  }
+});

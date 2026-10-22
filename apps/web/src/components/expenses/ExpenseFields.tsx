@@ -304,7 +304,11 @@ export default function ExpenseFields({
             display: 'flex',
             gap: 1,
             overflowX: 'auto',
-            pb: 0.5,
+            // Room for a chip's focus ring, which the scroll row would clip (#830); the margins
+            // keep the row where it was, its 4px below included. "&&" outranks the Stack's own
+            // margin reset on its children.
+            p: '6px',
+            '&&': { m: '-6px', mb: '-2px' },
             '&::-webkit-scrollbar': {
               height: 4,
             },

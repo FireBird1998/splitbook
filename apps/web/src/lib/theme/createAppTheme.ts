@@ -101,6 +101,13 @@ declare module '@mui/material/Typography' {
   }
 }
 
+/** The keyboard focus ring: a focus.main outline and a soft focus.ring halo around it. */
+const focusRing = (theme: Omit<Theme, 'components'>) => ({
+  outline: `2px solid ${(theme.vars ?? theme).palette.focus.main}`,
+  outlineOffset: 2,
+  boxShadow: `0 0 0 4px ${(theme.vars ?? theme).palette.focus.ring}`,
+});
+
 /**
  * Build the MUI theme from the shared semantic tokens so light and dark
  * always set the same keys. Components must consume tokens, never hex.
@@ -218,11 +225,7 @@ export function createAppTheme(mode: ThemeMode): Theme {
             from: { opacity: 0.4 },
             to: { opacity: 1 },
           },
-          ':focus-visible': {
-            outline: `2px solid ${(theme.vars ?? theme).palette.focus.main}`,
-            outlineOffset: 2,
-            boxShadow: `0 0 0 4px ${(theme.vars ?? theme).palette.focus.ring}`,
-          },
+          ':focus-visible': focusRing(theme),
           // An outlined or filled field's focused border shows its focus; the ring would draw a
           // second one around its input alone, inside that border (#823).
           '.MuiOutlinedInput-input:focus-visible': { boxShadow: 'none' },
@@ -253,6 +256,9 @@ export function createAppTheme(mode: ThemeMode): Theme {
           root: ({ theme }) => ({
             borderRadius: RADIUS.sm,
             minHeight: 44,
+            // ButtonBase's outline: 0 and disableElevation's box-shadow: none would hide the ring
+            // (#830).
+            '&.Mui-focusVisible': focusRing(theme),
             variants: [
               {
                 props: { variant: 'contained', color: 'info' },
@@ -277,6 +283,8 @@ export function createAppTheme(mode: ThemeMode): Theme {
               minWidth: 44,
               minHeight: 44,
             },
+            // ButtonBase's outline: 0 left the halo alone, too faint to show focus (#830).
+            '&.Mui-focusVisible': focusRing(theme),
           }),
         },
       },
@@ -303,10 +311,13 @@ export function createAppTheme(mode: ThemeMode): Theme {
       },
       MuiChip: {
         styleOverrides: {
-          root: {
+          root: ({ theme }) => ({
             borderRadius: 999,
             fontWeight: 600,
-          },
+            // A chip takes focus only when it acts, clicked or deleted, and then the ring, not only
+            // its halo (#830).
+            '&.Mui-focusVisible': focusRing(theme),
+          }),
         },
       },
       MuiTabs: {
@@ -350,10 +361,12 @@ export function createAppTheme(mode: ThemeMode): Theme {
       },
       MuiToggleButton: {
         styleOverrides: {
-          root: {
+          root: ({ theme }) => ({
             textTransform: 'none',
             fontWeight: 600,
-          },
+            // ButtonBase's outline: 0 would hide the ring (#830).
+            '&.Mui-focusVisible': focusRing(theme),
+          }),
         },
       },
       MuiOutlinedInput: {
