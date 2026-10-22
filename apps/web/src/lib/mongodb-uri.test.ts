@@ -45,6 +45,10 @@ describe('databaseNameFor (#850)', () => {
     expect(databaseNameFor(uri)).toBe('splitbook');
   });
 
+  it('decodes the name, as the driver does', () => {
+    expect(databaseNameFor('mongodb://127.0.0.1:27017/qa%20850')).toBe('qa 850');
+  });
+
   it.each([
     ['no path', 'mongodb://127.0.0.1:27017'],
     ['an empty path', 'mongodb://db-00.example.net,db-01.example.net/?replicaSet=rs0'],
