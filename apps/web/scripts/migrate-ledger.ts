@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { MongoClient } from 'mongodb';
+import { directConnectionFor } from '../src/lib/mongodb-uri';
 import { z } from 'zod/v4';
 import { migrateLedger } from '../src/lib/migrations/ledger';
 
@@ -51,7 +52,7 @@ async function main() {
     throw new Error('MONGODB_URI must name an application database');
   console.log(`${apply ? 'Applying migration to' : 'Auditing'} database "${dbName}".`);
   const client = new MongoClient(uri, {
-    ...(uri.startsWith('mongodb+srv://') ? {} : { directConnection: true }),
+    ...directConnectionFor(uri),
     serverSelectionTimeoutMS: 10_000,
   });
   try {

@@ -20,7 +20,7 @@ A shared-expense ledger in one pnpm workspace: the Next.js web app (`apps/web`),
 ## Gotchas
 
 - Draft and To review saves use MongoDB transactions, so their integration and Playwright tests need a replica set. CI starts one per job (`EXPENSE_ACCESS_MONGO_PORT`, `pnpm swarm up --mongo-port`).
-- Give `directConnection: true` to local URIs only; on a `mongodb+srv://` URI it breaks every page (`apps/web/src/lib/mongodb-client.ts`).
+- Give `directConnection: true` to single-host `mongodb://` URIs only, through `directConnectionFor` (`apps/web/src/lib/mongodb-uri.ts`); on a `mongodb+srv://` or multi-host URI it breaks every page.
 - PR checks run lint, typecheck, the unit tests, the web integration suite and the Android verifiers; `pnpm swarm gate` skips the integration suite, so run it yourself for database changes (`docs/testing.md`). The Playwright suites and the time-zone matrix run nightly, or on a PR labelled `full-ci`: add it to any PR touching money, auth or data access.
 - Merging to `main` doesn't deploy production (`apps/web/vercel.json`); production deploys are the owner's. The Vercel project's Root Directory is `apps/web` (a dashboard setting), and a deploy's commit author needs access to the Vercel project.
 

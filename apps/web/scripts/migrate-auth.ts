@@ -13,6 +13,7 @@
 import { config } from 'dotenv';
 import { resolve } from 'path';
 import { MongoClient } from 'mongodb';
+import { directConnectionFor } from '../src/lib/mongodb-uri';
 import {
   databaseNameFromUri,
   migrateAuthData,
@@ -46,7 +47,7 @@ async function main() {
   );
 
   const client = new MongoClient(uri, {
-    ...(uri.startsWith('mongodb+srv://') ? {} : { directConnection: true }),
+    ...directConnectionFor(uri),
     serverSelectionTimeoutMS: 10_000,
   });
   await client.connect();
