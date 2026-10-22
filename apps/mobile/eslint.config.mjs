@@ -20,6 +20,15 @@ const noDynamicTanstack =
   "persisters see every import: financial writes stay in the controller's ledgerWrite, and " +
   'nothing is queued, resumed or replayed (ADR 0006).';
 
+// Hermes's Intl refuses a BigInt ("Cannot convert BigInt to number", #863), where Node's and the
+// browsers' take one, so a BigInt formatted by Intl crashes Android and passes every other test.
+// The test runs refuse it too (`test-support/hermes-intl.ts`); this catches the direct case.
+const noBigIntInIntl =
+  "Hermes's Intl can't format a BigInt (#863). Format a safe Number, or group a longer number's " +
+  'digits by hand, as decimalMoney does.';
+const bigIntIntoFormat =
+  "CallExpression[callee.property.name=/^format(?:ToParts|Range|RangeToParts)?$/] > :matches(CallExpression[callee.name='BigInt'], Literal[bigint])";
+
 export default defineConfig([
   globalIgnores(['node_modules/**', '.expo/**', 'android/**', 'ios/**', 'dist/**']),
   js.configs.recommended,
@@ -64,6 +73,7 @@ export default defineConfig([
       'no-restricted-syntax': [
         'error',
         { selector: 'ImportExpression[source.value=/^@tanstack\\//]', message: noDynamicTanstack },
+        { selector: bigIntIntoFormat, message: noBigIntInIntl },
       ],
     },
   },

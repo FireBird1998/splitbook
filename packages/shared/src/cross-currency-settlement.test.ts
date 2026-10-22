@@ -211,4 +211,22 @@ describe('shared cross-currency money text', () => {
     expect(minorMoney(3150, 'JPY')).toBe('¥3,150');
     expect(minorMoney(9007199254740991, 'INR')).toBe('₹90,071,992,547,409.91');
   });
+
+  // Hermes's Intl refuses a BigInt (#863): the same text, from a number or by hand.
+  it('formats a large amount and a long rate as before, on Hermes too', () => {
+    expect(minorMoney(9007199254740991, 'JPY')).toBe('¥9,007,199,254,740,991');
+    expect(minorMoney(123456789, 'KRW')).toBe('₩123,456,789');
+    expect(decimalMoney('1234567.89', 'INR')).toBe('₹1,234,567.89');
+    expect(decimalMoney('92.1', 'USD')).toBe('$92.10');
+    // Whole parts past Number.MAX_SAFE_INTEGER, such as an 18-digit rate.
+    expect(decimalMoney('123456789012345678.123456789012345678', 'INR')).toBe(
+      '₹123,456,789,012,345,678.123456789012345678',
+    );
+    expect(decimalMoney('9007199254740993.5', 'EUR')).toBe('€9,007,199,254,740,993.50');
+    expect(decimalMoney('012345678901234567.5', 'INR')).toBe('₹12,345,678,901,234,567.50');
+    expect(decimalMoney('123456789012345678', 'JPY')).toBe('¥123,456,789,012,345,678');
+    // A code Splitbook doesn't list keeps Intl's own form.
+    expect(decimalMoney('5', 'XTS')).toBe('XTS\u00a05.00');
+    expect(decimalMoney('12345678901234567.25', 'XTS')).toBe('XTS\u00a012,345,678,901,234,567.25');
+  });
 });
