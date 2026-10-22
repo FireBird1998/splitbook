@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
   // app to a temp directory and runs webpack there, where the package sits outside
   // the project root and is only compiled because it is listed here.
   transpilePackages: ['@splitbook/shared'],
+  // The MongoDB driver's URI parser (`lib/mongodb-uri.ts`, #850) loads under Node, as Next
+  // already loads `mongodb` and `mongoose`: bundled, its ESM wrapper's default export is lost.
+  serverExternalPackages: ['mongodb-connection-string-url'],
   // From 16.3, `next dev` run under an AI coding agent writes AGENTS.md and
   // CLAUDE.md into apps/web. Agent instructions live in the root AGENTS.md;
   // keep dev from adding untracked instruction files to every worktree.
