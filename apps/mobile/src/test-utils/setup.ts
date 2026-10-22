@@ -1,5 +1,6 @@
 import { afterEach, vi } from 'vitest';
 import { focusManager, onlineManager } from '@tanstack/query-core';
+import { rejectBigIntInIntl } from '@splitbook/shared/test-support/hermes-intl';
 import { cancelAnimationFrame, requestAnimationFrame, resetNative } from './native';
 import { followInjectedClock, releaseInjectedClock } from './query-clock';
 
@@ -13,6 +14,8 @@ vi.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: async () => undefined,
   hideAsync: async () => undefined,
 }));
+// Hermes's Intl refuses a BigInt, where Node's formats it (#863).
+rejectBigIntInIntl();
 // React Native's frames, which Node doesn't have: a test runs them with `nextFrame`.
 Object.assign(globalThis, { requestAnimationFrame, cancelAnimationFrame });
 

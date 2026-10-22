@@ -11,6 +11,15 @@ const noFrameworks =
 const noDom =
   '@splitbook/shared has no DOM (ADR 0002). Pass the value in from the app that reads it.';
 
+// Hermes's Intl refuses a BigInt ("Cannot convert BigInt to number", #863), where Node's and the
+// browsers' take one, so a BigInt formatted by Intl crashes Android and passes every other test.
+// The test runs refuse it too (`test-support/hermes-intl.ts`); this catches the direct case.
+const noBigIntInIntl =
+  "Hermes's Intl can't format a BigInt (#863). Format a safe Number, or group a longer number's " +
+  'digits by hand, as decimalMoney does.';
+const bigIntIntoFormat =
+  "CallExpression[callee.property.name=/^format(?:ToParts|Range|RangeToParts)?$/] > :matches(CallExpression[callee.name='BigInt'], Literal[bigint])";
+
 // Banned module names, as regex sources. Both the import rule and the
 // dynamic import() rule below use them.
 const frameworkModules = [
@@ -44,6 +53,7 @@ export default defineConfig([
           selector: `ImportExpression[source.value=/${regex.replaceAll('/', '\\/')}/]`,
           message: noFrameworks,
         })),
+        { selector: bigIntIntoFormat, message: noBigIntInIntl },
       ],
       // Typecheck stays the main DOM guard (tsconfig.json has no DOM lib): a DOM
       // name reached through globalThis gets past this rule but not past tsc.

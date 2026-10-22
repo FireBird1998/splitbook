@@ -108,19 +108,40 @@ export const EXCHANGE_RATE_API_ATTRIBUTION = {
 const displayPrecision = (currency: string) =>
   getCurrency(currency) ? getCurrencyPrecision(currency) : 2;
 
-/** Nonnegative plain decimals: Intl supplies grouping and the currency’s symbol placement. */
+/**
+ * Nonnegative plain decimals: Intl supplies grouping and the currency’s symbol placement. Hermes’s
+ * Intl refuses a BigInt (#863), so a whole part that is a safe integer is formatted as a number,
+ * exactly, and a longer one, such as an 18-digit rate’s, has its digits grouped by hand in place of
+ * a formatted zero’s. The fraction’s digits always replace Intl’s, as given.
+ */
 export function decimalMoney(decimal: string, currency: string): string {
   const [whole, fraction = ''] = decimal.split('.');
   const digits = fraction.padEnd(displayPrecision(currency), '0');
-  return new Intl.NumberFormat('en-US', {
+  const format = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
     minimumFractionDigits: digits.length,
     maximumFractionDigits: digits.length,
-  })
-    .formatToParts(BigInt(whole))
-    .map((part) => (part.type === 'fraction' ? digits : part.value))
-    .join('');
+  });
+  const value = Number(whole);
+  const parts = Number.isSafeInteger(value)
+    ? format.formatToParts(value)
+    : format
+        .formatToParts(0)
+        .flatMap((part) =>
+          part.type === 'integer' ? groupedInteger(BigInt(whole).toString(), format) : [part],
+        );
+  return parts.map((part) => (part.type === 'fraction' ? digits : part.value)).join('');
+}
+
+/** A nonnegative integer's digits in groups of three, with the format's own group separator. */
+function groupedInteger(integer: string, format: Intl.NumberFormat): Intl.NumberFormatPart[] {
+  const separator = format.formatToParts(1000).find((part) => part.type === 'group')?.value ?? ',';
+  const groups = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ' ').split(' ');
+  return groups.flatMap((value, index) => [
+    ...(index ? [{ type: 'group' as const, value: separator }] : []),
+    { type: 'integer' as const, value },
+  ]);
 }
 /** Format a positive safe integer minor amount without passing through floating point. */
 export function minorMoney(minor: number, currency: string): string {

@@ -7,6 +7,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Hermes's Intl, which refuses a BigInt (#863).
+    setupFiles: ['src/test-support/setup.ts'],
     env: { TZ: requestedTimeZone ?? 'UTC' },
     provide: { requestedTimeZone },
     // The money modules' branches, measured by `test:unit` (what CI and `pnpm swarm gate` run) with
