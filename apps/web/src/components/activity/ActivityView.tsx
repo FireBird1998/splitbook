@@ -24,6 +24,7 @@ import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
 import { newestEvent, type ActivityBatch } from './batch-words';
 import BatchPaymentCard from './BatchPaymentCard';
 import PaymentRecordCard from './PaymentRecordCard';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 
 type Batch = ActivityBatch<ActivityLike>;
 
@@ -221,17 +222,20 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
                   key={activity._id}
                   aria-expanded={Boolean(open)}
                   onClick={() => setOpenId(open ? null : activity._id)}
-                  sx={{
-                    ...rowSx,
-                    width: '100%',
-                    justifyContent: 'flex-start',
-                    textAlign: 'left',
-                    px: 1,
-                    mx: -1,
-                    borderRadius: '10px',
-                    bgcolor: open ? 'tint.brand' : undefined,
-                    '&:hover': { bgcolor: open ? 'tint.brand' : 'action.hover' },
-                  }}
+                  sx={[
+                    {
+                      ...rowSx,
+                      width: '100%',
+                      justifyContent: 'flex-start',
+                      textAlign: 'left',
+                      px: 1,
+                      mx: -1,
+                      borderRadius: '10px',
+                      bgcolor: open ? 'tint.brand' : undefined,
+                      '&:hover': { bgcolor: open ? 'tint.brand' : 'action.hover' },
+                    },
+                    keyboardFocusRing,
+                  ]}
                 >
                   {content}
                 </ButtonBase>

@@ -13,6 +13,7 @@ import SearchDialog from './SearchDialog';
 import { kbdSx } from './SearchPanel';
 import { SEARCH_LABEL } from './search-label';
 import { isApplePlatform, searchShortcutKeys, searchShortcutLabel } from './search-shortcut';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 
 const noSubscription = () => () => {};
 
@@ -91,27 +92,30 @@ export default function SearchLauncher() {
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-keyshortcuts={shortcut}
-        sx={{
-          display: { xs: 'none', md: 'flex' },
-          flex: '1 1 320px',
-          minWidth: 0,
-          maxWidth: 560,
-          minHeight: 44,
-          justifyContent: 'flex-start',
-          gap: 1.25,
-          pl: 1.75,
-          pr: 1,
-          borderRadius: '12px',
-          border: 1,
-          borderColor: 'transparent',
-          bgcolor: 'surface.muted',
-          color: 'text.secondary',
-          // A button keeps the browser's own font unless told to take the page's (Outfit).
-          fontFamily: 'inherit',
-          fontSize: '0.875rem',
-          textAlign: 'left',
-          '&:hover': { borderColor: 'border.strong' },
-        }}
+        sx={[
+          {
+            display: { xs: 'none', md: 'flex' },
+            flex: '1 1 320px',
+            minWidth: 0,
+            maxWidth: 560,
+            minHeight: 44,
+            justifyContent: 'flex-start',
+            gap: 1.25,
+            pl: 1.75,
+            pr: 1,
+            borderRadius: '12px',
+            border: 1,
+            borderColor: 'transparent',
+            bgcolor: 'surface.muted',
+            color: 'text.secondary',
+            // A button keeps the browser's own font unless told to take the page's (Outfit).
+            fontFamily: 'inherit',
+            fontSize: '0.875rem',
+            textAlign: 'left',
+            '&:hover': { borderColor: 'border.strong' },
+          },
+          keyboardFocusRing,
+        ]}
       >
         <SearchIcon aria-hidden sx={{ fontSize: 18, flex: 'none' }} />
         <Box

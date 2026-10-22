@@ -15,6 +15,7 @@ import {
   listedExpensePosition,
 } from '@splitbook/shared/expense-row';
 import { ExpenseTag, PositionText, RepeatsIcon } from './expense-row-parts';
+import { insetKeyboardFocusRing } from '@/lib/theme/focus-ring';
 
 interface ExpenseCardProps {
   expense: ExpenseRead;
@@ -60,18 +61,21 @@ export default function ExpenseCard({
         aria-expanded={isExpanded}
         // The details exist only while open, so they are named only then.
         aria-controls={isExpanded ? detailsId : undefined}
-        sx={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 1,
-          p: 1.5,
-          textAlign: 'left',
-          font: 'inherit',
-          color: 'text.primary',
-          '&:focus-visible': { outlineOffset: '-2px' },
-        }}
+        sx={[
+          {
+            width: '100%',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 1,
+            p: 1.5,
+            textAlign: 'left',
+            font: 'inherit',
+            color: 'text.primary',
+          },
+          // The Paper clips, so the ring goes inside the row.
+          insetKeyboardFocusRing,
+        ]}
       >
         <Box component="span" sx={{ display: 'flex', gap: 1, minWidth: 0, flex: 1 }}>
           <Box component="span" aria-hidden sx={{ fontSize: '1.25rem', lineHeight: 1.4 }}>

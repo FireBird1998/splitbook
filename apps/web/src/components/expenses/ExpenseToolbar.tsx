@@ -29,6 +29,7 @@ import {
   readAmount,
   type ExpenseListQuery,
 } from './expense-list-query';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 
 export interface ToolbarOption {
   id: string;
@@ -181,7 +182,7 @@ function Chip({
   id?: string;
 }) {
   return (
-    <ButtonBase {...props} sx={chipSx(active)}>
+    <ButtonBase {...props} sx={[chipSx(active), keyboardFocusRing]}>
       {children}
     </ButtonBase>
   );

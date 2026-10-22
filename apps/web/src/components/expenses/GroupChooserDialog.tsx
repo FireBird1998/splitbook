@@ -19,6 +19,7 @@ import { groupThemeIcon } from '@/components/layout/group-theme-icons';
 import { NEW_GROUP_HREF } from '@/components/layout/shell-nav';
 import { useGroups } from '@/lib/hooks/use-groups';
 import { activeGroups, groupChoiceDetail } from './add-expense';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 
 /** Sizes from the design canvas's Group rows (web.css: .g-a, .gi). */
 const ROW_RADIUS = '10px';
@@ -74,21 +75,24 @@ export function GroupChooser({ userId, onChoose, onCreateGroup }: GroupChooserPr
             <li key={group._id}>
               <ButtonBase
                 onClick={() => onChoose(group)}
-                sx={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  minHeight: 56,
-                  px: 1.25,
-                  py: 1,
-                  borderRadius: ROW_RADIUS,
-                  textAlign: 'left',
-                  // A <button> doesn't inherit the page's font by itself.
-                  fontFamily: 'inherit',
-                  color: 'text.primary',
-                  '&:hover': { bgcolor: 'surface.hover' },
-                }}
+                sx={[
+                  {
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    minHeight: 56,
+                    px: 1.25,
+                    py: 1,
+                    borderRadius: ROW_RADIUS,
+                    textAlign: 'left',
+                    // A <button> doesn't inherit the page's font by itself.
+                    fontFamily: 'inherit',
+                    color: 'text.primary',
+                    '&:hover': { bgcolor: 'surface.hover' },
+                  },
+                  keyboardFocusRing,
+                ]}
               >
                 <Box
                   data-group-theme={group.category}

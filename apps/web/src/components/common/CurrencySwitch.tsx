@@ -5,6 +5,7 @@ import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
+import { insetKeyboardFocusRing } from '@/lib/theme/focus-ring';
 
 export interface CurrencyTab {
   currency: string;
@@ -93,28 +94,32 @@ export default function CurrencySwitch({
                 {tab.figure}
               </>
             }
-            sx={{
-              minWidth: 150,
-              minHeight: 0,
-              px: 2,
-              py: 1.25,
-              gap: '1px',
-              alignItems: 'flex-start',
-              textAlign: 'left',
-              textTransform: 'none',
-              color: 'text.primary',
-              opacity: 1,
-              border: 1,
-              borderColor: 'border.strong',
-              borderRadius: '12px',
-              bgcolor: 'background.paper',
-              '&.Mui-selected': {
+            sx={[
+              {
+                minWidth: 150,
+                minHeight: 0,
+                px: 2,
+                py: 1.25,
+                gap: '1px',
+                alignItems: 'flex-start',
+                textAlign: 'left',
+                textTransform: 'none',
                 color: 'text.primary',
-                borderColor: 'primary.main',
-                bgcolor: 'tint.brand',
-                boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.primary.main}`,
+                opacity: 1,
+                border: 1,
+                borderColor: 'border.strong',
+                borderRadius: '12px',
+                bgcolor: 'background.paper',
+                '&.Mui-selected': {
+                  color: 'text.primary',
+                  borderColor: 'primary.main',
+                  bgcolor: 'tint.brand',
+                  boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.primary.main}`,
+                },
               },
-            }}
+              // The Tabs' scroller clips, so the ring goes inside the tab, over its selected border.
+              insetKeyboardFocusRing,
+            ]}
           />
         ))}
       </Tabs>
