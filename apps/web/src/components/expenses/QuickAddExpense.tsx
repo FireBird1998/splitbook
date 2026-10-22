@@ -43,6 +43,7 @@ import { findReferencedTag } from '@splitbook/shared/tag-identity';
 import { visuallyHidden } from '@/components/common/visually-hidden';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { fetchWebExpensePage } from '@/lib/web-read';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 import ExpenseFormDialog from './ExpenseFormDialog';
 import { quickAddModel, type QuickAddChip, type QuickAddModel } from './quick-add-view';
 import { useExpenseDraftSave } from './use-expense-draft-save';
@@ -750,7 +751,7 @@ function ReadChip({
         onClick={onClick}
         aria-label={chip.spoken}
         aria-haspopup="dialog"
-        sx={chipSx(chip.state)}
+        sx={[chipSx(chip.state), keyboardFocusRing]}
       >
         <ChipText chip={chip} money={money} />
       </ButtonBase>
@@ -842,7 +843,10 @@ function MenuChip({
         aria-expanded={Boolean(anchor)}
         aria-controls={anchor ? menuId : undefined}
         onClick={(event) => setAnchor(event.currentTarget)}
-        sx={{ ...chipSx(chip.state), flexDirection: 'row', alignItems: 'center', gap: 1 }}
+        sx={[
+          { ...chipSx(chip.state), flexDirection: 'row', alignItems: 'center', gap: 1 },
+          keyboardFocusRing,
+        ]}
       >
         <Box component="span" sx={{ display: 'inline-flex', flexDirection: 'column' }}>
           <ChipText chip={chip} />

@@ -4,6 +4,7 @@ import { linkClasses } from '@mui/material/Link';
 import { createTheme, darken, lighten, type Shadows, type Theme } from '@mui/material/styles';
 // Types only: lets the theme style the charts (MuiChartsGrid, MuiChartsXAxis, …).
 import type {} from '@mui/x-charts/themeAugmentation';
+import { focusRing } from './focus-ring';
 import { FONT_MONO, FONT_UI, RADIUS, getSemanticTokens, type ThemeMode } from './tokens';
 
 declare module '@mui/material/styles' {
@@ -100,13 +101,6 @@ declare module '@mui/material/Typography' {
     lead: true;
   }
 }
-
-/** The keyboard focus ring: a focus.main outline and a soft focus.ring halo around it. */
-const focusRing = (theme: Omit<Theme, 'components'>) => ({
-  outline: `2px solid ${(theme.vars ?? theme).palette.focus.main}`,
-  outlineOffset: 2,
-  boxShadow: `0 0 0 4px ${(theme.vars ?? theme).palette.focus.ring}`,
-});
 
 /**
  * Build the MUI theme from the shared semantic tokens so light and dark

@@ -16,6 +16,7 @@ import {
   type ActivityLike,
 } from '@splitbook/shared/activity-timeline';
 import { fetchWebActivity } from '@/lib/web-read';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 import { useState } from 'react';
 import ButtonBase from '@mui/material/ButtonBase';
 import { readCrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
@@ -221,17 +222,20 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
                   key={activity._id}
                   aria-expanded={Boolean(open)}
                   onClick={() => setOpenId(open ? null : activity._id)}
-                  sx={{
-                    ...rowSx,
-                    width: '100%',
-                    justifyContent: 'flex-start',
-                    textAlign: 'left',
-                    px: 1,
-                    mx: -1,
-                    borderRadius: '10px',
-                    bgcolor: open ? 'tint.brand' : undefined,
-                    '&:hover': { bgcolor: open ? 'tint.brand' : 'action.hover' },
-                  }}
+                  sx={[
+                    {
+                      ...rowSx,
+                      width: '100%',
+                      justifyContent: 'flex-start',
+                      textAlign: 'left',
+                      px: 1,
+                      mx: -1,
+                      borderRadius: '10px',
+                      bgcolor: open ? 'tint.brand' : undefined,
+                      '&:hover': { bgcolor: open ? 'tint.brand' : 'action.hover' },
+                    },
+                    keyboardFocusRing,
+                  ]}
                 >
                   {content}
                 </ButtonBase>

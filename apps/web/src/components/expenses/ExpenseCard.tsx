@@ -7,6 +7,7 @@ import ButtonBase from '@mui/material/ButtonBase';
 import Collapse from '@mui/material/Collapse';
 import Paper from '@mui/material/Paper';
 import MoneyText from '@/components/common/MoneyText';
+import { insetKeyboardFocusRing } from '@/lib/theme/focus-ring';
 import { getCategory } from '@splitbook/shared/categories';
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
 import {
@@ -60,18 +61,21 @@ export default function ExpenseCard({
         aria-expanded={isExpanded}
         // The details exist only while open, so they are named only then.
         aria-controls={isExpanded ? detailsId : undefined}
-        sx={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 1,
-          p: 1.5,
-          textAlign: 'left',
-          font: 'inherit',
-          color: 'text.primary',
-          '&:focus-visible': { outlineOffset: '-2px' },
-        }}
+        sx={[
+          {
+            width: '100%',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 1,
+            p: 1.5,
+            textAlign: 'left',
+            font: 'inherit',
+            color: 'text.primary',
+          },
+          // The Paper clips, so the ring goes inside the row.
+          insetKeyboardFocusRing,
+        ]}
       >
         <Box component="span" sx={{ display: 'flex', gap: 1, minWidth: 0, flex: 1 }}>
           <Box component="span" aria-hidden sx={{ fontSize: '1.25rem', lineHeight: 1.4 }}>

@@ -5,6 +5,7 @@ import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 
 export interface CurrencyTab {
   currency: string;
@@ -55,6 +56,11 @@ export default function CurrencySwitch({
           bgcolor: 'transparent',
           '& .MuiTabs-indicator': { display: 'none' },
           '& .MuiTabs-flexContainer': { flexWrap: 'wrap', gap: 1 },
+          // The tabs wrap and never scroll, so nothing needs the Tabs to clip: a tab's focus ring
+          // shows past their edge, taking no room from the tabs (#834). MUI writes the
+          // scroller's overflow: hidden inline, which only !important outranks.
+          overflow: 'visible',
+          '& .MuiTabs-scroller': { overflow: 'visible !important' },
         }}
       >
         {tabs.map((tab) => (
@@ -93,28 +99,32 @@ export default function CurrencySwitch({
                 {tab.figure}
               </>
             }
-            sx={{
-              minWidth: 150,
-              minHeight: 0,
-              px: 2,
-              py: 1.25,
-              gap: '1px',
-              alignItems: 'flex-start',
-              textAlign: 'left',
-              textTransform: 'none',
-              color: 'text.primary',
-              opacity: 1,
-              border: 1,
-              borderColor: 'border.strong',
-              borderRadius: '12px',
-              bgcolor: 'background.paper',
-              '&.Mui-selected': {
+            sx={[
+              {
+                minWidth: 150,
+                minHeight: 0,
+                px: 2,
+                py: 1.25,
+                gap: '1px',
+                alignItems: 'flex-start',
+                textAlign: 'left',
+                textTransform: 'none',
                 color: 'text.primary',
-                borderColor: 'primary.main',
-                bgcolor: 'tint.brand',
-                boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.primary.main}`,
+                opacity: 1,
+                border: 1,
+                borderColor: 'border.strong',
+                borderRadius: '12px',
+                bgcolor: 'background.paper',
+                '&.Mui-selected': {
+                  color: 'text.primary',
+                  borderColor: 'primary.main',
+                  bgcolor: 'tint.brand',
+                  boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.primary.main}`,
+                },
               },
-            }}
+              // Outside the tab: its selected border is primary.main, as focus.main is in light.
+              keyboardFocusRing,
+            ]}
           />
         ))}
       </Tabs>
