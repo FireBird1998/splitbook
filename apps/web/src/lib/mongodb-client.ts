@@ -17,10 +17,17 @@ import { directConnectionFor } from '@/lib/mongodb-uri';
  * driver's 30 s. So a page fails within about 5 s when MongoDB refuses, and about 15 s when a new
  * connection hangs (driver 7.7 retries a timed-out handshake twice, #849). Operations themselves
  * have no time limit (no socketTimeoutMS or timeoutMS).
+ *
+ * All of the pool's connections may be opened at once (`maxConnecting`, the owner's choice in
+ * #849). A retried handshake no longer clears the pool, so with the driver's default of 2 a
+ * page's parallel reads on a hung connection waited behind each other and settled at 40 s; opened
+ * together, they fail together, as one read does.
  */
+const MAX_POOL_SIZE = 10;
 export const MONGO_CONNECTION_OPTIONS = {
   serverSelectionTimeoutMS: 5_000,
-  maxPoolSize: 10,
+  maxPoolSize: MAX_POOL_SIZE,
+  maxConnecting: MAX_POOL_SIZE,
   maxIdleTimeMS: 5_000,
   connectTimeoutMS: 5_000,
 } as const;
