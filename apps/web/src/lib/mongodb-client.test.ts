@@ -41,6 +41,14 @@ describe('the MongoDB client (#826)', () => {
     expect(getAuthDb().databaseName).toBe('splitbook-unit');
   });
 
+  // A page's parallel calls open their connections together, not two at a time (#849).
+  it('may open all of its pool’s connections at once', async () => {
+    vi.stubEnv('MONGODB_URI', LOCAL);
+    const { getAuthDb } = await freshServer();
+    expect(getAuthDb().client.options.maxConnecting).toBe(10);
+    expect(getAuthDb().client.options.maxConnecting).toBe(getAuthDb().client.options.maxPoolSize);
+  });
+
   it('survives a reload of the module, as dev’s HMR reloads it, and joins Vercel’s pool once', async () => {
     vi.stubEnv('MONGODB_URI', LOCAL);
     const first = (await freshServer()).getAuthDb().client;

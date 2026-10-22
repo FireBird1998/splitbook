@@ -216,19 +216,28 @@ describe('the app’s one MongoDB client (#826)', () => {
     expect(adapterDatabases[0].client).toBe(mongoose.connection.getClient());
   });
 
-  it('when a new connection is accepted but never answered, a page’s read and a sign-in fail within about 15 s, to their caller', async () => {
+  it('when a new connection is accepted but never answered, a page’s reads fail within about 15 s, together, and so does a sign-in', async () => {
     database.silence();
-    // The pool's connections close once idle for 5 s, so the next call has to open a new one.
+    // The pool's connections close once idle for 5 s, so the next calls have to open new ones.
     await new Promise((resolve) => setTimeout(resolve, 6_000));
-    const read = await timed(() => mongoose.connection.db!.collection('users').countDocuments());
+    // A page such as Home sends its reads at once.
+    const reads = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        timed(() => mongoose.connection.db!.collection('users').countDocuments()),
+      ),
+    );
     const signedIn = await timed(signIn);
     // A connect gives up after 5 s. From driver 7.7 (#849), a timed-out handshake is labelled
     // SystemOverloadedError and RetryableError, and retried twice with backoff (client
-    // backpressure): three 5 s attempts, 15.3 s here, against 64.5 s on the driver's 30 s
-    // connect default with one retry, or about 90 s with two. The sign-in after it can first wait
-    // for the monitor's next 10 s heartbeat as well: 15.4 s locally, up to about 25 s.
-    expect(read.error).toBeInstanceOf(Error);
-    expect(read.took).toBeLessThan(18_000);
+    // backpressure): three 5 s attempts, 15.3 s for one read, against 64.5 s on the driver's 30 s
+    // connect default with one retry, or about 90 s with two. The page's reads open their
+    // connections together, not two at a time, so they fail together too: with at most 2
+    // connecting at once they settled from 15 s to 40 s. The sign-in after them can first wait
+    // for the monitor's next 10 s heartbeat as well: about 15 s locally, up to about 25 s.
+    const took = reads.map((read) => read.took);
+    for (const read of reads) expect(read.error).toBeInstanceOf(Error);
+    expect(Math.max(...took)).toBeLessThan(18_000);
+    expect(Math.max(...took) - Math.min(...took)).toBeLessThan(3_000);
     expect(signedIn.value).not.toBe(200);
     expect(signedIn.took).toBeLessThan(32_000);
     await new Promise((resolve) => setTimeout(resolve, 500));
