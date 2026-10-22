@@ -60,6 +60,48 @@ async function twoCurrencyGroup(ledger: Ledger) {
   return group;
 }
 
+/** A Trip in five currencies, each with a balance and spending, so its tabs fill a phone's row. */
+async function fiveCurrencyTrip(ledger: Ledger) {
+  const group = (
+    await dataOf(
+      await ledger.alex.post('/api/groups', {
+        data: {
+          name: `Five currencies ${randomUUID().slice(0, 8)}`,
+          category: 'trip',
+          defaultCurrency: 'EUR',
+          alternateCurrencies: ['INR', 'USD', 'GBP', 'JPY'],
+        },
+      }),
+      201,
+    )
+  )._id as string;
+  await joinGroup(ledger.alex, ledger.sam, group);
+  for (const [payer, owes, amount, currency] of [
+    ['sam', 'alex', 1842.5, 'EUR'],
+    ['alex', 'sam', 18425, 'INR'],
+    ['sam', 'alex', 1260.75, 'USD'],
+    ['alex', 'sam', 940.2, 'GBP'],
+    ['sam', 'alex', 184250, 'JPY'],
+  ] as const)
+    await dataOf(
+      await ledger[payer].post(`/api/groups/${group}/expenses`, {
+        data: {
+          description: `Hotel in ${currency}`,
+          amount,
+          currency,
+          category: 'housing',
+          tag: 'Stay',
+          date: new Date().toISOString(),
+          paidBy: [{ user: DEMO_PERSONA_IDS[payer], amount }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: DEMO_PERSONA_IDS[owes] }],
+        },
+      }),
+      201,
+    );
+  return group;
+}
+
 async function signIn(page: Page, ledger: Ledger, path: string) {
   await page.context().addCookies((await ledger.alex.storageState()).cookies);
   await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}${path}`);
@@ -89,6 +131,39 @@ function clippedBy(control: Locator, reach: number) {
     }
     return null;
   }, reach);
+}
+
+/**
+ * How the currency tabs sit in their switch: the rows they wrap to, the rows their widths allow
+ * across the switch's full width, the first tab's offset from the switch's edge, and how far the
+ * tablist's box reaches past its tabs. Room for the ring mustn't take any of that (#834).
+ */
+function tabLayout(tablist: Locator) {
+  return tablist.evaluate((list) => {
+    const tabs = [...list.querySelectorAll('[role="tab"]')].map((tab) =>
+      tab.getBoundingClientRect(),
+    );
+    const switchRow = list.closest('.MuiTabs-root')!.parentElement!;
+    const gap = parseFloat(getComputedStyle(list).columnGap) || 0;
+    let allowed = 1;
+    let used = 0;
+    for (const tab of tabs) {
+      if (used > 0 && used + gap + tab.width > switchRow.clientWidth) {
+        allowed += 1;
+        used = tab.width;
+      } else used += used > 0 ? gap + tab.width : tab.width;
+    }
+    const box = list.getBoundingClientRect();
+    return {
+      rows: new Set(tabs.map((tab) => Math.round(tab.top))).size,
+      allowed,
+      fromSwitchEdge: Math.round(tabs[0]!.left - switchRow.getBoundingClientRect().left),
+      tablistPastTabs: {
+        top: Math.round(tabs[0]!.top - box.top),
+        left: Math.round(tabs[0]!.left - box.left),
+      },
+    };
+  });
 }
 
 /** The theme's focus.main, as the browser writes a colour. */
@@ -206,5 +281,28 @@ for (const colorScheme of ['light', 'dark'] as const) {
       const dialog = await openAddExpense(page);
       await expectKeyboardRingOnly(page, dialog.getByRole('button', { name: /Groceries/ }));
     });
+  });
+}
+
+// The currency tabs keep main's place: the room for their ring takes no width, so they wrap as
+// the full row allows and the page below doesn't move (#834).
+for (const [width, tab, label] of [
+  [360, 'balances', 'Balances in'],
+  [340, 'insights', 'Spending in'],
+  [390, 'balances', 'Balances in'],
+] as const) {
+  test(`at ${width} px, the ${tab} currency tabs wrap as the full row allows, and ring (#834)`, async ({
+    page,
+    ledger,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await signIn(page, ledger, `/groups/${await fiveCurrencyTrip(ledger)}?tab=${tab}`);
+    const tablist = page.getByRole('tablist', { name: label });
+    await expect(tablist.getByRole('tab')).toHaveCount(5);
+    const layout = await tabLayout(tablist);
+    expect(layout.rows).toBe(layout.allowed);
+    expect(layout.fromSwitchEdge).toBe(0);
+    expect(layout.tablistPastTabs).toEqual({ top: 0, left: 0 });
+    await expectKeyboardRingOnly(page, tablist.getByRole('tab', { selected: true }));
   });
 }
