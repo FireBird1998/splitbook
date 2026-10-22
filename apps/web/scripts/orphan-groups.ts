@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 import { open, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { MongoClient } from 'mongodb';
+import { databaseNameFor } from '../src/lib/mongodb-uri';
 import { inventoryOrphanGroups } from '../src/lib/group-cleanup';
 
 config({ path: resolve(process.cwd(), '.env.local'), quiet: true });
@@ -56,7 +57,7 @@ async function main() {
     throw new Error('Specify --environment and an application --database');
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI is required');
-  const uriDatabase = decodeURIComponent(new URL(uri).pathname.slice(1));
+  const uriDatabase = databaseNameFor(uri);
   if (uriDatabase !== database)
     throw new Error('Explicit database does not match the connection target');
   // Reserve output before any database action. An existing report must never hide

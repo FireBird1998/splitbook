@@ -29,6 +29,7 @@
  */
 
 import { ObjectId, type Db } from 'mongodb';
+import { databaseNameFor } from '@/lib/mongodb-uri';
 import {
   ACCOUNTS_AUTHJS_BACKUP_COLLECTION,
   ACCOUNTS_BETTER_AUTH_BACKUP_COLLECTION,
@@ -310,11 +311,4 @@ export async function revertAuthMigration(
 /** Database names the CLI refuses, so a test database is never migrated by accident. */
 export const TEST_DATABASE_PATTERN = /^splitbook-test/i;
 
-export function databaseNameFromUri(uri: string): string | null {
-  try {
-    const name = new URL(uri).pathname.replace(/^\//, '');
-    return name || null;
-  } catch {
-    return null;
-  }
-}
+export const databaseNameFromUri = databaseNameFor;

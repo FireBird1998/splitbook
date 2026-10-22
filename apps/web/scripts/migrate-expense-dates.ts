@@ -2,6 +2,7 @@
 import { config } from 'dotenv';
 import { resolve } from 'node:path';
 import { MongoClient } from 'mongodb';
+import { databaseNameFor, directConnectionFor } from '../src/lib/mongodb-uri';
 import { migrateExpenseDates } from '../src/lib/migrations/expense-dates';
 
 config({ path: resolve(process.cwd(), '.env.local'), quiet: true });
@@ -24,12 +25,12 @@ async function main() {
   if (apply && dryRun) throw new Error('--apply and --dry-run are mutually exclusive');
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI must name the target database');
-  const dbName = decodeURIComponent(new URL(uri).pathname.slice(1));
+  const dbName = databaseNameFor(uri);
   if (!dbName || ['admin', 'config', 'local'].includes(dbName))
     throw new Error('MONGODB_URI must name an application database');
   console.log(`${apply ? 'Moving Expense dates in' : 'Auditing Expense dates in'} "${dbName}".`);
   const client = new MongoClient(uri, {
-    ...(uri.startsWith('mongodb+srv://') ? {} : { directConnection: true }),
+    ...directConnectionFor(uri),
     serverSelectionTimeoutMS: 10_000,
   });
   try {

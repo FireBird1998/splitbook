@@ -7,6 +7,7 @@ import { attachDatabasePool } from '@vercel/functions';
 import type { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import type { Db } from 'mongodb';
 import mongoose from 'mongoose';
+import { directConnectionFor } from '@/lib/mongodb-uri';
 
 /**
  * How the client connects, as the owner confirmed in #826's grilling (2026-10-22): a page waits
@@ -41,8 +42,7 @@ function createClient(uri: string): MongoClient {
   // Mongoose's own driver, as `setClient()` takes no other. The database is the URI's path.
   const client = new mongoose.mongo.MongoClient(uri, {
     ...MONGO_CONNECTION_OPTIONS,
-    // directConnection is needed for the local Docker Mongo but is rejected by mongodb+srv:// (Atlas)
-    ...(uri.startsWith('mongodb+srv://') ? {} : { directConnection: true }),
+    ...directConnectionFor(uri),
     // What Mongoose sets on a client it makes itself.
     driverInfo: { name: 'Mongoose', version: mongoose.version },
   });

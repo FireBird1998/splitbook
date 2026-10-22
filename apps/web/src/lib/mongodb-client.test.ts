@@ -72,6 +72,35 @@ describe('the MongoDB client (#826)', () => {
   });
 });
 
+// Atlas's standard connection string names every host of its replica set (#850).
+const ATLAS_STANDARD =
+  'mongodb://db-00.example.net:27017,db-01.example.net:27017,db-02.example.net:27017/splitbook?replicaSet=atlas-x1&tls=true';
+
+describe('connecting directly, only to a single host (#850)', () => {
+  it.each([
+    ['a single-host URI connects directly', 'mongodb://127.0.0.1:27017/splitbook', true],
+    ['so does a single IPv6 host', 'mongodb://[::1]:27017/splitbook', true],
+    ['a URI naming several hosts connects as their replica set', ATLAS_STANDARD, false],
+    [
+      'a URI that says how to connect is taken at its word',
+      'mongodb://127.0.0.1:27017/splitbook?directConnection=false',
+      false,
+    ],
+    ['Atlas’s srv URI never connects directly', ATLAS, false],
+  ])('%s', async (_, uri, direct) => {
+    vi.stubEnv('MONGODB_URI', uri);
+    const { getAuthDb } = await freshServer();
+    expect(getAuthDb().client.options.directConnection).toBe(direct);
+    expect(getAuthDb().databaseName).toBe('splitbook');
+  });
+
+  it('the build’s placeholder, with no MONGODB_URI, still connects directly', async () => {
+    vi.stubEnv('MONGODB_URI', '');
+    const { getAuthDb } = await freshServer();
+    expect(getAuthDb().client.options.directConnection).toBe(true);
+  });
+});
+
 // Better Auth's adapter types come from the app's mongodb 7.1, while the shared client is
 // Mongoose's own 7.0 driver. Ids cross that boundary as one class; driver errors don't.
 describe('across the two drivers', () => {
