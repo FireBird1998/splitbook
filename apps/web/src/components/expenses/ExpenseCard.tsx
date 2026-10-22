@@ -7,6 +7,7 @@ import ButtonBase from '@mui/material/ButtonBase';
 import Collapse from '@mui/material/Collapse';
 import Paper from '@mui/material/Paper';
 import MoneyText from '@/components/common/MoneyText';
+import { insetKeyboardFocusRing } from '@/lib/theme/focus-ring';
 import { getCategory } from '@splitbook/shared/categories';
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
 import {
@@ -15,7 +16,6 @@ import {
   listedExpensePosition,
 } from '@splitbook/shared/expense-row';
 import { ExpenseTag, PositionText, RepeatsIcon } from './expense-row-parts';
-import { insetKeyboardFocusRing } from '@/lib/theme/focus-ring';
 
 interface ExpenseCardProps {
   expense: ExpenseRead;

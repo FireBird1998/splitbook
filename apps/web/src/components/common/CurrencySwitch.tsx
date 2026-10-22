@@ -5,7 +5,7 @@ import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
-import { insetKeyboardFocusRing } from '@/lib/theme/focus-ring';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 
 export interface CurrencyTab {
   currency: string;
@@ -55,7 +55,10 @@ export default function CurrencySwitch({
           borderRadius: 0,
           bgcolor: 'transparent',
           '& .MuiTabs-indicator': { display: 'none' },
-          '& .MuiTabs-flexContainer': { flexWrap: 'wrap', gap: 1 },
+          // Room inside the Tabs, which clip, for a tab's focus ring; the margins keep the tabs
+          // where they were (#834).
+          m: '-6px',
+          '& .MuiTabs-flexContainer': { flexWrap: 'wrap', gap: 1, p: '6px' },
         }}
       >
         {tabs.map((tab) => (
@@ -117,8 +120,8 @@ export default function CurrencySwitch({
                   boxShadow: (theme) => `inset 0 0 0 1px ${theme.palette.primary.main}`,
                 },
               },
-              // The Tabs' scroller clips, so the ring goes inside the tab, over its selected border.
-              insetKeyboardFocusRing,
+              // Outside the tab: its selected border is primary.main, as focus.main is in light.
+              keyboardFocusRing,
             ]}
           />
         ))}

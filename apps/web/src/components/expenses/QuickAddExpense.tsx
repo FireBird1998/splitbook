@@ -43,10 +43,10 @@ import { findReferencedTag } from '@splitbook/shared/tag-identity';
 import { visuallyHidden } from '@/components/common/visually-hidden';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { fetchWebExpensePage } from '@/lib/web-read';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 import ExpenseFormDialog from './ExpenseFormDialog';
 import { quickAddModel, type QuickAddChip, type QuickAddModel } from './quick-add-view';
 import { useExpenseDraftSave } from './use-expense-draft-save';
-import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 
 /** What the design canvas puts in the empty field. */
 export const QUICK_ADD_PLACEHOLDER = 'Dinner 2400 paid by me';

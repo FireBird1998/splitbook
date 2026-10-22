@@ -37,6 +37,8 @@ This section covers the visual theme. For group themes see
   semantic key exists in both.
 - **`src/lib/theme/createAppTheme.ts`** — builds the MUI theme from a mode, and
   augments the MUI `Palette` interface with the app's extra groups.
+- **`src/lib/theme/focus-ring.ts`** — the keyboard focus ring, shared by the theme and by
+  controls built on a bare `ButtonBase`, and its inset form for a control whose parent clips.
 - **`src/providers/ThemeProvider.tsx`** — wires the theme and `CssBaseline` into
   the tree. It no longer defines the palette.
 
@@ -483,6 +485,10 @@ in a `HomeSlot` of its width.
 - Buttons, toggle buttons and chips focused from the keyboard draw the ring too (#830): the theme
   restores it over ButtonBase's `outline: 0` and `disableElevation`. Menu items and list item
   buttons show their highlight instead
+- A control built on a bare `ButtonBase` appends `keyboardFocusRing` to its `sx`, so it draws
+  the same ring on keyboard focus only (#834). Where a parent clips with `overflow: hidden`, it
+  takes `insetKeyboardFocusRing`: the outline inside its edge, without the halo, as an Expense
+  card's row does; or the parent gets room for the outer ring, as the currency tabs' Tabs do
 - Screen reader labels on icon-only buttons
 
 Enforced by `playwright/theme-a11y.spec.ts`, which runs **axe-core** across four

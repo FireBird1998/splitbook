@@ -18,8 +18,8 @@ import ErrorState from '@/components/common/ErrorState';
 import { groupThemeIcon } from '@/components/layout/group-theme-icons';
 import { NEW_GROUP_HREF } from '@/components/layout/shell-nav';
 import { useGroups } from '@/lib/hooks/use-groups';
-import { activeGroups, groupChoiceDetail } from './add-expense';
 import { keyboardFocusRing } from '@/lib/theme/focus-ring';
+import { activeGroups, groupChoiceDetail } from './add-expense';
 
 /** Sizes from the design canvas's Group rows (web.css: .g-a, .gi). */
 const ROW_RADIUS = '10px';

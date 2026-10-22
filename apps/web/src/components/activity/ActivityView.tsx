@@ -16,6 +16,7 @@ import {
   type ActivityLike,
 } from '@splitbook/shared/activity-timeline';
 import { fetchWebActivity } from '@/lib/web-read';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 import { useState } from 'react';
 import ButtonBase from '@mui/material/ButtonBase';
 import { readCrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
@@ -24,7 +25,6 @@ import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
 import { newestEvent, type ActivityBatch } from './batch-words';
 import BatchPaymentCard from './BatchPaymentCard';
 import PaymentRecordCard from './PaymentRecordCard';
-import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 
 type Batch = ActivityBatch<ActivityLike>;
 

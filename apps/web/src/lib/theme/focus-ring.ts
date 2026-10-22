@@ -12,11 +12,13 @@ export const focusRing = (theme: ThemeLike) => ({
 
 /**
  * The ring for a control whose parent clips with overflow: hidden: the outline alone, drawn
- * just inside the control's edge, where the parent can't cut it off (#834).
+ * just inside the control's edge, where the parent can't cut it off, and no halo, which would
+ * spill past it (#834).
  */
 export const insetFocusRing = (theme: ThemeLike) => ({
   outline: `2px solid ${(theme.vars ?? theme).palette.focus.main}`,
   outlineOffset: -2,
+  boxShadow: 'none',
 });
 
 /**

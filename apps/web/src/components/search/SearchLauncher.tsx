@@ -9,11 +9,11 @@ import SearchIcon from '@mui/icons-material/Search';
 import { groupTabFromPath, groupTabHref } from '@/components/groups/group-tabs';
 import { groupIdInPath } from '@/components/layout/shell-nav';
 import { useHandOnShortcut, useShortcut } from '@/lib/shortcuts/ShortcutsProvider';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 import SearchDialog from './SearchDialog';
 import { kbdSx } from './SearchPanel';
 import { SEARCH_LABEL } from './search-label';
 import { isApplePlatform, searchShortcutKeys, searchShortcutLabel } from './search-shortcut';
-import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 
 const noSubscription = () => () => {};
 

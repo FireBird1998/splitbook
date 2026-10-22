@@ -20,6 +20,7 @@ import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import { ShortcutHint, useShortcutAria } from '@/components/shortcuts/ShortcutHint';
 import { useShortcut } from '@/lib/shortcuts/ShortcutsProvider';
+import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 import {
   CLEARED_FILTERS,
   EXPENSE_DATE_WINDOWS,
@@ -29,7 +30,6 @@ import {
   readAmount,
   type ExpenseListQuery,
 } from './expense-list-query';
-import { keyboardFocusRing } from '@/lib/theme/focus-ring';
 
 export interface ToolbarOption {
   id: string;
