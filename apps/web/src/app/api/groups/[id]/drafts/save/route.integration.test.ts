@@ -7,6 +7,7 @@
  * The ledger is read back through the balances route.
  */
 
+import mongoose from 'mongoose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Group from '@/lib/models/Group';
 import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
@@ -181,6 +182,72 @@ describe('POST /api/groups/[id]/drafts/save', () => {
     expect(retried).toEqual(unconfirmed);
     expect(await debts(groupId, samCookie)).toEqual([{ from: alex, to: sam, amount: 500 }]);
   });
+
+  // #849: from mongodb 7.2, withTransaction gives up with a timeout error once its retries pass
+  // the deadline; a Group mutation's deadline is its 2 s budget.
+  it('a save whose transaction keeps failing until its time runs out keeps the Draft, and saves once when retried', async () => {
+    const samCookie = await signIn('sam');
+    const { groupId, draftId, saveCommand } = await tripWithSamsReviewedDinner(samCookie);
+    const store = mongoose.connection.db!;
+    const before = {
+      draft: await store
+        .collection('expensedrafts')
+        .findOne({ _id: new mongoose.Types.ObjectId(draftId) }),
+      group: await store
+        .collection('groups')
+        .findOne({ _id: new mongoose.Types.ObjectId(groupId) }),
+      activities: await store.collection('activities').countDocuments(),
+    };
+    // Every write of this file's client fails as a transient transaction error, so the
+    // transaction retries until its time runs out.
+    const admin = store.admin();
+    await admin.command({
+      configureFailPoint: 'failCommand',
+      mode: 'alwaysOn',
+      data: {
+        appName: db.dbName,
+        failCommands: ['update', 'insert'],
+        errorCode: 112,
+        errorLabels: ['TransientTransactionError'],
+      },
+    });
+    const started = Date.now();
+    let failed: Awaited<ReturnType<typeof saveDrafts>>;
+    try {
+      failed = await saveDrafts(groupId, samCookie, saveCommand);
+    } finally {
+      await admin.command({ configureFailPoint: 'failCommand', mode: 'off' });
+    }
+    const took = Date.now() - started;
+
+    expect(failed.status).toBe(200);
+    expect(failed.body.data).toEqual([
+      {
+        id: draftId,
+        status: 'unresolved',
+        message: 'Save not confirmed. Retry this same reviewed save.',
+      },
+    ]);
+    expect(took).toBeLessThan(5_000);
+    // Nothing is half-applied: the Draft, the Group's fence and the Activity feed are as they were.
+    expect({
+      draft: await store
+        .collection('expensedrafts')
+        .findOne({ _id: new mongoose.Types.ObjectId(draftId) }),
+      group: await store
+        .collection('groups')
+        .findOne({ _id: new mongoose.Types.ObjectId(groupId) }),
+      activities: await store.collection('activities').countDocuments(),
+    }).toEqual(before);
+    expect(await debts(groupId, samCookie)).toEqual([]);
+
+    // Retried as sent, it saves once.
+    const retried = await saveDrafts(groupId, samCookie, saveCommand);
+    expect(retried.body.data).toEqual([
+      { id: draftId, status: 'saved', expenseId: expect.any(String) },
+    ]);
+    expect(await debts(groupId, samCookie)).toEqual([{ from: alex, to: sam, amount: 500 }]);
+  }, 60_000);
 
   it('does not let Alex save the Draft Sam keeps', async () => {
     const samCookie = await signIn('sam');

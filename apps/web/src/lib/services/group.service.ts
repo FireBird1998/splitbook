@@ -337,7 +337,8 @@ export class GroupService {
     await connectDB();
     const admin = { members: { $elemMatch: { user: userId, role: 'admin' } } };
     // A Group stored without a rule is Allowed.
-    const otherRule = rule === 'allowed' ? 'not_allowed' : { $ne: 'not_allowed' };
+    const otherRule: AssistantRule | { $ne: AssistantRule } =
+      rule === 'allowed' ? 'not_allowed' : { $ne: 'not_allowed' };
     const changed = await withGroupMutation(groupId, async () => {
       const group = await Group.findOneAndUpdate(
         { _id: groupId, ...admin, assistantRule: otherRule },
