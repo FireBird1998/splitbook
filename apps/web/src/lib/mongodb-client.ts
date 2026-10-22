@@ -9,8 +9,9 @@ import type { Db } from 'mongodb';
 import mongoose from 'mongoose';
 
 /**
- * How the client connects. Provisional until the owner confirms them (#826): a page waits at most
- * 5 s for a server, an instance keeps at most 10 connections, and an idle one closes after 5 s.
+ * How the client connects, as the owner confirmed in #826's grilling (2026-10-22): a page waits
+ * at most 5 s for a server, an instance keeps at most 10 connections, and an idle one closes
+ * after 5 s.
  */
 export const MONGO_CONNECTION_OPTIONS = {
   serverSelectionTimeoutMS: 5_000,
