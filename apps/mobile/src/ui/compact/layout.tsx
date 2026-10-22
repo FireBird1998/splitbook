@@ -1,3 +1,4 @@
+import type { ViewInstance } from 'react-native';
 import { Children, memo, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import {
   Animated,
@@ -383,7 +384,7 @@ export const ListRow = memo(function ListRow({
   accessibilityLabel?: string;
   highlighted?: boolean;
   /** The row itself, to bring it into view or move the screen reader to it. */
-  rowRef?: Ref<View>;
+  rowRef?: Ref<ViewInstance>;
 }) {
   const theme = useTheme();
   const reveal = useReveal(trailingLoading);

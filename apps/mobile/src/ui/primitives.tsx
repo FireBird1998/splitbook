@@ -1,3 +1,4 @@
+import type { TextInstance } from 'react-native';
 import type { ComponentProps, ReactNode, Ref } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type TextProps } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -24,7 +25,7 @@ export function Icon({
     />
   );
 }
-export function Copy({ style, ...props }: TextProps & { ref?: Ref<Text> }) {
+export function Copy({ style, ...props }: TextProps & { ref?: Ref<TextInstance> }) {
   const theme = useTheme();
   return (
     <Text

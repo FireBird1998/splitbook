@@ -1,3 +1,4 @@
+import type { TextInputInstance, ViewInstance } from 'react-native';
 import { memo, useState, type Ref } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
@@ -13,9 +14,9 @@ export type ExpenseInputProps = {
   locked: boolean;
   showLock?: boolean;
   errors: { amount?: string; description?: string };
-  amountRef?: Ref<TextInput>;
-  descriptionRef?: Ref<TextInput>;
-  section: (field: ExpenseField) => Ref<View>;
+  amountRef?: Ref<TextInputInstance>;
+  descriptionRef?: Ref<TextInputInstance>;
+  section: (field: ExpenseField) => Ref<ViewInstance>;
   onChange: (patch: Partial<ExpenseDraft>) => void;
   onLeave: (field: ExpenseField) => void;
   onAmountDone?: () => void;

@@ -1,3 +1,4 @@
+import type { ViewInstance, ScrollViewInstance, TextInputInstance } from 'react-native';
 import { expenseRecoveryWords } from './expense-recovery-copy';
 import { FinishLater } from './finish-later';
 import type { MobileController } from '../data/mobile-controller';
@@ -25,7 +26,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
+import { AccessibilityInfo, ScrollView, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { expenseDifferences } from '@splitbook/shared/expense-review';
@@ -377,7 +378,7 @@ function ExpenseTask({
   /** Called when a field loses focus, so its correction can appear. */
   onLeaveField: (field: ExpenseField) => void;
   /** Told whenever a section is scrolled into view. */
-  onReveal?: (section: View) => void;
+  onReveal?: (section: ViewInstance) => void;
   onSave: () => void;
   onResume: () => void;
   onDiscard: () => void;
@@ -411,13 +412,13 @@ function ExpenseTask({
   const [sheet, setSheet] = useState<
     'date' | 'split' | 'tag' | 'currency' | 'add-currency' | 'options' | null
   >(null);
-  const scroll = useRef<ScrollView>(null);
-  const content = useRef<View>(null);
-  const sections = useRef<Partial<Record<ExpenseField, View | null>>>({});
-  const inputs = useRef<Partial<Record<ExpenseField, TextInput | null>>>({});
-  const corrections = useRef<Partial<Record<ExpenseField, View | null>>>({});
+  const scroll = useRef<ScrollViewInstance>(null);
+  const content = useRef<ViewInstance>(null);
+  const sections = useRef<Partial<Record<ExpenseField, ViewInstance | null>>>({});
+  const inputs = useRef<Partial<Record<ExpenseField, TextInputInstance | null>>>({});
+  const corrections = useRef<Partial<Record<ExpenseField, ViewInstance | null>>>({});
   /** Scroll a section near the top so it stays visible when the keyboard opens. */
-  const reveal = (section: View) => {
+  const reveal = (section: ViewInstance) => {
     const container = content.current;
     if (container && typeof section.measureLayout === 'function')
       section.measureLayout(
@@ -441,7 +442,7 @@ function ExpenseTask({
     // Each rejected save asks once for the first invalid field; later edits never move focus.
     if (focus) goTo(focus.field);
   }, [focus?.request]);
-  const review = useRef<View>(null);
+  const review = useRef<ViewInstance>(null);
   /** Brings the choices left in What’s different into view and to the screen reader. */
   const showReview = () => {
     const node = review.current;
@@ -469,13 +470,13 @@ function ExpenseTask({
         expenseFields.map((field) => [
           field,
           {
-            section: (node: View | null) => {
+            section: (node: ViewInstance | null) => {
               sections.current[field] = node;
             },
-            input: (node: TextInput | null) => {
+            input: (node: TextInputInstance | null) => {
               inputs.current[field] = node;
             },
-            correction: (node: View | null) => {
+            correction: (node: ViewInstance | null) => {
               corrections.current[field] = node;
             },
           },
@@ -584,7 +585,7 @@ function ExpenseTask({
       />
       <ScrollView
         ref={scroll}
-        innerViewRef={content as RefObject<View>}
+        innerViewRef={content as RefObject<ViewInstance>}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}

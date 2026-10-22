@@ -1,3 +1,4 @@
+import type { TextInstance, ViewInstance } from 'react-native';
 import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import {
   Animated,
@@ -121,7 +122,7 @@ function MiddleCutLine({
   const screen = `${window.width} ${window.fontScale}`;
   const [line, setLine] = useState<{ screen: string; width: number } | null>(null);
   const room = line?.screen === screen ? line.width : null;
-  const { fontFamily, fontSize, letterSpacing } = StyleSheet.flatten(look);
+  const { fontFamily, fontSize, letterSpacing } = StyleSheet.flatten(look) ?? {};
   const size = scaledSp(Number(fontSize), window.fontScale);
   // Only Outfit Regular's widths are known here.
   const measurable = fontFamily === fonts.regular && !letterSpacing;
@@ -187,7 +188,7 @@ function TailCutLine({
         {children}
       </Text>
     );
-  const { fontSize } = StyleSheet.flatten(look);
+  const { fontSize } = StyleSheet.flatten(look) ?? {};
   return (
     <Text {...props} style={[look, { fontSize: ellipsisPaintSize(Number(fontSize), fontScale) }]}>
       <Text style={{ fontSize }}>{children}</Text>
@@ -205,7 +206,7 @@ export function CompactText({
   ...props
 }: TextProps & {
   /** The text itself, as for a heading the screen reader is moved to. */
-  ref?: Ref<Text>;
+  ref?: Ref<TextInstance>;
   variant?: TextVariant;
   tone?: TextTone;
   weight?: 'regular' | 'medium' | 'semibold';
@@ -282,7 +283,7 @@ export function StatusText({
   const theme = useTheme();
   const change = useStatusFade(children, instant);
   const look = [textVariants[variant], { color: toneColor(theme, tone) }, style];
-  const line = useRef<View>(null);
+  const line = useRef<ViewInstance>(null);
   /** The edge of its row the line keeps when its text grows or shrinks, as last laid out. */
   const edge = useRef<Edge>('left');
   const read = () => {

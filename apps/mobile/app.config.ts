@@ -44,6 +44,8 @@ export default {
   plugins: [
     'expo-secure-store',
     'expo-font',
+    'expo-sqlite',
+    'expo-status-bar',
     ['expo-build-properties', { android: { usesCleartextTraffic: development } }],
     // Each image is the whole 288 dp splash icon canvas, padded for Android's circular mask.
     [

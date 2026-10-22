@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from 'react-native';
 import { useState, type ReactNode, type Ref } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -45,7 +46,7 @@ interface GroupShellProps {
   onRefresh: () => void;
   pull: { refreshing: boolean; onRefresh: () => void };
   /** The destination's scroll view, so returning from an Expense can restore its offset. */
-  scrollRef?: Ref<ScrollView>;
+  scrollRef?: Ref<ScrollViewInstance>;
   scroll?: Pick<
     ScrollViewProps,
     | 'scrollEventThrottle'

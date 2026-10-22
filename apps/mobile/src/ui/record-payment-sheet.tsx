@@ -1,3 +1,4 @@
+import type { TextInputInstance } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { readAmountEntry } from '@splitbook/shared/amount-entry';
@@ -221,8 +222,8 @@ function SinglePaymentSheet({
   const suggested = draft ? state.suggested : shown;
   const checking = status === 'loading';
   const errors = visibleFieldErrors(settlementFields, state.validation);
-  const amountInput = useRef<TextInput | null>(null);
-  const noteInput = useRef<TextInput | null>(null);
+  const amountInput = useRef<TextInputInstance | null>(null);
+  const noteInput = useRef<TextInputInstance | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [amountFocused, setAmountFocused] = useState(false);
   const focus = state.validation.focus;

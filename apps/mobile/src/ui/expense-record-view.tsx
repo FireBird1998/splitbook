@@ -1,3 +1,4 @@
+import type { ScrollViewInstance } from 'react-native';
 import { expenseRecoveryWords } from './expense-recovery-copy';
 import { monthLabel } from './group-expenses';
 import {
@@ -265,7 +266,7 @@ export function ExpenseRecordScreen({
   const [options, setOptions] = useState(false);
   // A drag that starts on an option never presses it (#684).
   const optionTap = useTap();
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   // Where the record was scrolled to, from where scrolling stopped as well as while it scrolls: a
   // throttled scroll event can miss the end of a drag or a fling (#219).
   const scrollY = useRef(0);

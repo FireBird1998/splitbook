@@ -1,3 +1,4 @@
+import type { TextInputInstance, ScrollViewInstance, ViewInstance } from 'react-native';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import {
   AccessibilityInfo,
@@ -111,7 +112,7 @@ function TagNameBox({
   name: string;
   editable: boolean;
   invalid: boolean;
-  inputRef: Ref<TextInput>;
+  inputRef: Ref<TextInputInstance>;
   onChangeText: (name: string) => void;
   /** The keyboard's Done: saves when the name can be saved. */
   onSubmit: () => void;
@@ -245,11 +246,11 @@ export function TagManager({
   /** The Tag whose options sheet is open. */
   const [selected, setSelected] = useState<string | null>(null);
   const [pulled, setPulled] = useState(false);
-  const nameBox = useRef<TextInput>(null);
-  const scroll = useRef<ScrollView>(null);
-  const content = useRef<View>(null);
+  const nameBox = useRef<TextInputInstance>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
+  const content = useRef<ViewInstance>(null);
   /** Each listed Tag's row, to bring back into view and to the screen reader after a change. */
-  const rows = useRef(new Map<string, View | null>());
+  const rows = useRef(new Map<string, ViewInstance | null>());
   /** The Tag a sheet was opened from, to return to when it closes. */
   const openedFrom = useRef<string | null>(null);
   /** The member just opened a name to type: a kept one, found on opening, waits for a tap. */
