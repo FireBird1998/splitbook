@@ -1,3 +1,4 @@
+import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { test, expect, dataOf, openAddExpense } from './fixtures';
 
 test('a lost create response preserves the draft and retries the same submission exactly once', async ({
@@ -144,6 +145,25 @@ for (const timezoneId of ['UTC', 'Asia/Kolkata'] as const) {
       await amount.fill('1200');
       await expect(amount).toHaveAttribute('aria-invalid', 'false');
       await expect(save).toBeEnabled();
+      // The duplicate the warning is about, on the day the form shows: the fixture's
+      // "Private rent" is dated by UTC's day, which isn't the browser's day everywhere (#835).
+      const day = await dialog.getByLabel('Date', { exact: true }).inputValue();
+      await dataOf(
+        await ledger.priya.post(`/api/groups/${ledger.groupB}/expenses`, {
+          data: {
+            description: 'Private rent',
+            amount: 1200,
+            currency: 'INR',
+            category: 'housing',
+            tag: 'Rent',
+            date: day,
+            paidBy: [{ user: DEMO_PERSONA_IDS.priya, amount: 1200 }],
+            splitMethod: 'equal',
+            splitBetween: [{ user: DEMO_PERSONA_IDS.priya }],
+          },
+        }),
+        201,
+      );
       const warning = page.waitForEvent('dialog');
       const confirmSave = dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
       await (await warning).dismiss();
