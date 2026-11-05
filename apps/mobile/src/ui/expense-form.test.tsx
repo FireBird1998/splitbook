@@ -1,9 +1,16 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { expenseMoney, type ExpenseDraft } from '../data/expense-draft';
 import { ThemeContext } from './theme';
 import { setWindow } from '../test-utils/native';
+import { findHosts, flatten, layoutHeight, unreadText, wordsOf } from '../test-utils/layout';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -246,5 +253,58 @@ describe('Amount focus ring', () => {
     const amount = card('light', true);
     amount.focus();
     expect(amount.ring()).toMatchObject({ borderColor: 'transparent' });
+  });
+});
+
+// #876: at 200% on a 360 dp phone, "WHO OWES WHAT · EUR" and its "✓ Adds up" badge stayed on one
+// line and the badge was cut at the card's edge. Where they can't share a line, the badge goes onto
+// a line of its own at the row's end, as a section's action does (#639).
+describe.each(['light', 'dark'] as const)('the Who owes what heading in %s (#876)', (mode) => {
+  const euros = { ...draft('2500.50', ids.slice(0, 3)), currency: 'EUR' };
+  function heading(fontScale: number) {
+    setWindow({ width: 360, height: 640, fontScale });
+    act(() => {
+      renderer = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <WhoOwesWhat
+            draft={euros}
+            allocation={expenseMoney(euros)}
+            problem=""
+            name={(id) => people[ids.indexOf(id)]}
+            currentUserId={ids[0]}
+            money={(minor) => `€${(minor / 100).toFixed(2)}`}
+          />
+        </ThemeContext.Provider>,
+      );
+    });
+    const tree = renderer!.toJSON() as ReactTestRendererJSON;
+    // The heading's row: the view that holds the heading and the badge.
+    const [row] = findHosts(
+      tree,
+      (props, type) =>
+        type === 'View' &&
+        flatten(props.style).paddingTop === 12 &&
+        flatten(props.style).paddingHorizontal === 14,
+    );
+    expect(wordsOf(row!)).toContain('Who owes what · EUR');
+    expect(wordsOf(row!)).toContain('Adds up');
+    return row!;
+  }
+  // The Card sits 16 dp in from the screen's edges, inside its 1 dp border.
+  const card = 360 - 32 - 2;
+
+  it.each([1.3, 2])('reads in full at %s× text, the badge wrapping', (fontScale) => {
+    const row = heading(fontScale);
+    expect(unreadText(row, fontScale, card)).toEqual([]);
+    expect(flatten(row.props.style)).toMatchObject({ flexWrap: 'wrap' });
+  });
+
+  it('keeps the badge beside the heading where they fit, at 100%', () => {
+    const row = heading(1);
+    expect(unreadText(row, 1, card)).toEqual([]);
+    // One line: as tall as the taller of the heading and the badge, under the row's 12 dp.
+    const [title, badge] = (row.children ?? []) as ReactTestRendererJSON[];
+    const one = Math.max(layoutHeight(title!, 1, card), layoutHeight(badge!, 1, card));
+    expect(layoutHeight(row, 1, card)).toBe(one + 12);
   });
 });

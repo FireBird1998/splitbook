@@ -360,18 +360,35 @@ const inputTop = (
 
 /** Native layout events measure content independently of the ScrollView's clamped offset. */
 async function measureForm(scale: number) {
+  // Each view is measured at the width it lays out in within the screen, as Android reports it:
+  // a heading that wraps inside a Card but not across the whole screen is as tall as it is there.
+  const widths = new Map<ReactTestRendererJSON, number>();
   const visit = (node: ReactTestRendererJSON | string | null) => {
     if (!node || typeof node === 'string') return;
     node.children?.forEach(visit);
+    const width = widths.get(node) ?? 360;
     if (typeof node.props.onLayout === 'function')
       node.props.onLayout({
-        nativeEvent: { layout: { x: 0, y: 0, width: 360, height: layoutHeight(node, scale, 360) } },
+        nativeEvent: { layout: { x: 0, y: 0, width, height: layoutHeight(node, scale, width) } },
       });
   };
   await act(async () => {
     const tree = screen!.toJSON();
-    if (Array.isArray(tree)) tree.forEach(visit);
-    else visit(tree);
+    const roots = Array.isArray(tree) ? tree : [tree];
+    const watch = { node: (node: ReactTestRendererJSON, width: number) => widths.set(node, width) };
+    for (const root of roots) {
+      layoutHeight(root, scale, 360, watch);
+      // A scroll view lays its content out in its content container's padding, as scrollExtent
+      // reads it.
+      for (const scroll of findHosts(root, (_props, type) => type === 'ScrollView'))
+        layoutHeight(
+          { ...scroll, type: 'View', props: { style: scroll.props.contentContainerStyle } },
+          scale,
+          widths.get(scroll) ?? 360,
+          watch,
+        );
+    }
+    roots.forEach(visit);
   });
 }
 

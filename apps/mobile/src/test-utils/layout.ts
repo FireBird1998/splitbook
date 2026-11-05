@@ -33,6 +33,7 @@ export function layoutHeight(
   if (node === null || typeof node === 'string') return 0;
   const style = flatten(node.props.style);
   if (style.display === 'none') return 0;
+  if (width !== undefined) watch?.node?.(node, width);
   const box = (content: number) => {
     const height =
       typeof style.height === 'number'
@@ -182,6 +183,8 @@ export function layoutWidth(node: Node | string | null, fontScale = 1, room = 0)
 
 /** What `layoutHeight` tells a watcher as it lays a tree out. */
 interface LayoutWatch {
+  /** Each view and text, and the width its box lays out in. */
+  node?: (node: Node, width: number) => void;
   /** A text, and the room inside its box it lays out in. */
   text?: (node: Node, room: number) => void;
   /** A row whose children run `by` dp past its edge, even after shrinking. */

@@ -37,6 +37,8 @@ import {
   Money,
   SelectorTile,
   TileGrid,
+  headingBeside,
+  headingLine,
   useLargeText,
   useTap,
 } from './compact';
@@ -249,17 +251,10 @@ const AllocationHeading = memo(function AllocationHeading({
   currency?: string;
 }) {
   return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-        paddingHorizontal: 14,
-        paddingTop: 12,
-      }}
-    >
-      <CompactText variant="overline" accessibilityRole="header">
+    // At large text the badge goes under the heading, at the row's end, where they can't share a
+    // line: at 200% on a 360 dp phone it was cut at the card's edge (#876).
+    <View style={{ ...headingLine, gap: 8, paddingHorizontal: 14, paddingTop: 12 }}>
+      <CompactText variant="overline" accessibilityRole="header" spare style={headingBeside}>
         {currency
           ? // "· whole yen" for a currency without a smaller unit, as the web says (#720).
             `Who owes what · ${currency}${wholeUnit(currency) ? ` · whole ${wholeUnit(currency)}` : ''}`
