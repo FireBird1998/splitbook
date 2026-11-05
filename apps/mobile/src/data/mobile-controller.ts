@@ -7513,12 +7513,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           if (
             error instanceof RequestError &&
             error.serverMessage &&
-            [
+            ([
               'DRAFT_GROUP_LIMIT',
               'STALE_REVISION',
               'REVISION_REQUIRED',
               'IDEMPOTENCY_CONFLICT',
-            ].includes(error.code ?? '')
+            ].includes(error.code ?? '') ||
+              // A save Splitbook couldn't confirm says so in a save's words (#861).
+              (path.endsWith('/save') && error.code === 'DRAFT_UNCONFIRMED'))
           )
             throw new RequestError(error.serverMessage, error.status, error.code);
           throw error;

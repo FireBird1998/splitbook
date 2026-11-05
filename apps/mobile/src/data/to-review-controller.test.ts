@@ -95,6 +95,8 @@ function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
   /** The Group's extra currencies (#721): an item in one it doesn't list needs another (#732). */
   let extras = options.extras ?? [];
   let adding: 'ok' | 'lost' = 'ok';
+  /** What Splitbook answers a save with instead of saving it, until it is cleared. */
+  let saveAnswer: { error: string; code: string; status: number } | null = null;
   let groupReadsFail = false;
   const posted: string[] = [];
   const listed = () => [group.defaultCurrency, ...extras];
@@ -194,6 +196,7 @@ function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
       return json({ data: items.filter((entry) => ids.includes(entry.draft.id)).map(reviewed) });
     }
     if (path.endsWith('/drafts/save')) {
+      if (saveAnswer) return json(saveAnswer, saveAnswer.status);
       const ids = (JSON.parse(String(init.body)).drafts as { id: string }[]).map(({ id }) => id);
       items = items.filter((entry) => !ids.includes(entry.draft.id));
       return json({
@@ -336,6 +339,10 @@ function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
           },
         },
       ];
+    },
+    /** Splitbook answers each save with `answer` and saves nothing, until it is `null` again. */
+    answerSaves: (answer: typeof saveAnswer) => {
+      saveAnswer = answer;
     },
     /** The phone sent the add, and Splitbook added it, but the reply never came back. */
     loseAddReply: () => {
@@ -619,6 +626,47 @@ describe("a Group's items in To review stay current (#436, #435)", () => {
     await settle();
     expect(ids()).toEqual([item(1).draft.id]);
   });
+
+  // #861: a save Splitbook answered but couldn't confirm reads as a save's, in Splitbook's words.
+  it.each([
+    [
+      'it couldn’t confirm',
+      'DRAFT_UNCONFIRMED',
+      'Save not confirmed. Everything is still in To review. Check again to finish saving.',
+    ],
+    [
+      'it couldn’t reach its database',
+      'DATABASE_UNAVAILABLE',
+      'Couldn’t reach Splitbook. Try again.',
+    ],
+  ])(
+    'a save Splitbook answers with 503 because %s keeps the save, says so in its words when Check again meets it too, and saves once after',
+    async (_, code, words) => {
+      const { f, items, ids } = await listed({ complete: true });
+      const [first] = ids();
+      f.answerSaves({ error: words, code, status: 503 });
+      await items.saveOne(f.controller.getSnapshot().toReview.read.groups[0].items[0]);
+      await settle();
+      expect(f.controller.getSnapshot().sharedDraftCollection).toMatchObject({
+        pending: true,
+        outcomes: [{ id: first, status: 'unresolved' }],
+      });
+      await items.retry();
+      await settle();
+      expect(f.controller.getSnapshot().sharedDraftCollection).toMatchObject({
+        pending: true,
+        message: words,
+      });
+      f.answerSaves(null);
+      await items.retry();
+      await settle();
+      expect(f.controller.getSnapshot().sharedDraftCollection).toMatchObject({
+        pending: false,
+        outcomes: [{ id: first, status: 'saved' }],
+      });
+      expect(ids()).not.toContain(first);
+    },
+  );
 
   it('deleting an item takes it off the list', async () => {
     const { f, items, ids } = await listed();

@@ -2,6 +2,8 @@ import { getCategory } from './categories';
 import type { GroupCategory } from './types';
 import { groupNounTitle } from './group-themes';
 import { GROUP_ARCHIVED_MESSAGE } from './group-archive';
+import { DATABASE_UNAVAILABLE_MESSAGE } from './database-unavailable';
+import { DRAFT_SAVE_UNCONFIRMED_MESSAGE } from './draft-responses';
 import type { PersistedExpenseDraft } from './validators/expense-draft';
 import { formatDate } from './date';
 import { expenseLocalDate } from './expense-day';
@@ -440,6 +442,9 @@ function problemPath(message: string) {
 }
 
 const memberMessages = [
+  // Splitbook's own words for a save it couldn't confirm, or a database it couldn't reach (#861).
+  DRAFT_SAVE_UNCONFIRMED_MESSAGE,
+  DATABASE_UNAVAILABLE_MESSAGE,
   'This item changed while you were looking. Review the latest version before saving.',
   'The possible matches changed. Check them before saving this expense.',
   'This item needs another look before saving. Check the details and any possible duplicate.',

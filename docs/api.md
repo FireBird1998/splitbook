@@ -70,6 +70,13 @@ same words with Try again; Android shows them as Splitbook's own error, never as
 being offline. `apps/web/src/app/api/database-unavailable.integration.test.ts`
 pins each against a database it interrupts.
 
+**A Draft request the server can't confirm answers `503` `DRAFT_UNCONFIRMED`, in
+its own words (#861).** A To review save (`POST /api/groups/[id]/drafts/save`)
+says "Save not confirmed. Everything is still in To review. Check again to finish
+saving."; a Draft's creation keeps its own "Draft request not confirmed. Reload
+before retrying; reuse the original creation request.". Either keeps the Drafts,
+and the same request sent again records once (ADR 0008).
+
 **An archived Group takes no more changes (#578).** Once an admin archives a
 Group (`DELETE /api/groups/[id]`), every write to its ledger answers **409**
 `GROUP_ARCHIVED` ("This Group was archived, so nothing more can be saved in

@@ -3,7 +3,15 @@ import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-
 import { isDatabaseUnreachable } from '@/lib/mongodb-client';
 import { databaseUnavailable, error, serverError, validationError } from '@/lib/utils/api-response';
 
-export function draftError(cause: unknown) {
+/**
+ * A Draft request the server couldn't confirm, in its own words (#861): a creation is retried with
+ * its original Idempotency-Key, and a save (`DRAFT_SAVE_UNCONFIRMED_MESSAGE`) with the same
+ * reviewed command, which records it once (ADR 0008). Either keeps the Drafts.
+ */
+export const DRAFT_CREATION_UNCONFIRMED =
+  'Draft request not confirmed. Reload before retrying; reuse the original creation request.';
+
+export function draftError(cause: unknown, unconfirmed = DRAFT_CREATION_UNCONFIRMED) {
   if (cause instanceof ZodError) return validationError(cause);
   if (cause instanceof SyntaxError) return error('Invalid JSON body', 400, 'INVALID_JSON');
   if (cause instanceof Error) {
@@ -32,11 +40,7 @@ export function draftError(cause: unknown) {
   // An unreachable database's errors carry no submitted values, so they are logged as such.
   if (isDatabaseUnreachable(cause)) return databaseUnavailable(cause);
   // Other database errors may embed submitted values. Never log them at this private boundary.
-  return error(
-    'Draft request not confirmed. Reload before retrying; reuse the original creation request.',
-    503,
-    'DRAFT_UNCONFIRMED',
-  );
+  return error(unconfirmed, 503, 'DRAFT_UNCONFIRMED');
 }
 
 export function privateDraftResponse<T extends Response>(response: T): T {

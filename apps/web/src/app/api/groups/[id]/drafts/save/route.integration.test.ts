@@ -249,6 +249,89 @@ describe('POST /api/groups/[id]/drafts/save', () => {
     expect(await debts(groupId, samCookie)).toEqual([{ from: alex, to: sam, amount: 500 }]);
   }, 60_000);
 
+  // #861: it used to answer with the copy written for creating a Draft ("…reuse the original
+  // creation request").
+  it('a save whose database session fails answers 503 in a Draft save’s words, keeps the Draft, and saves once when retried', async () => {
+    const samCookie = await signIn('sam');
+    const { groupId, draftId, saveCommand } = await tripWithSamsReviewedDinner(samCookie);
+    const store = mongoose.connection.db!;
+    const admin = store.admin();
+    // The save's first read of this file's client fails as a session that is gone, once.
+    await admin.command({
+      configureFailPoint: 'failCommand',
+      mode: { times: 1 },
+      data: { appName: db.dbName, failCommands: ['find'], errorCode: 206 },
+    });
+    let failed: Awaited<ReturnType<typeof saveDrafts>>;
+    try {
+      failed = await saveDrafts(groupId, samCookie, saveCommand);
+    } finally {
+      await admin.command({ configureFailPoint: 'failCommand', mode: 'off' });
+    }
+
+    expect(failed).toEqual({
+      status: 503,
+      body: {
+        error:
+          'Save not confirmed. Everything is still in To review. Check again to finish saving.',
+        code: 'DRAFT_UNCONFIRMED',
+        status: 503,
+      },
+    });
+    expect(JSON.stringify(failed.body)).not.toContain('creation request');
+    expect(
+      await store
+        .collection('expensedrafts')
+        .findOne({ _id: new mongoose.Types.ObjectId(draftId) }),
+    ).toMatchObject({ state: 'active', revision: 0 });
+    expect(await debts(groupId, samCookie)).toEqual([]);
+
+    const retried = await saveDrafts(groupId, samCookie, saveCommand);
+    expect(retried.body.data).toEqual([
+      { id: draftId, status: 'saved', expenseId: expect.any(String) },
+    ]);
+    expect(await debts(groupId, samCookie)).toEqual([{ from: alex, to: sam, amount: 500 }]);
+  }, 60_000);
+
+  // A Draft's creation keeps its own words (#861).
+  it('a Draft creation whose database session fails still answers 503 in a creation’s words', async () => {
+    const samCookie = await signIn('sam');
+    const group = await groupService.create(
+      { name: 'Hampi Trip', category: 'trip', defaultCurrency: 'INR', alternateCurrencies: [] },
+      alex,
+    );
+    const groupId = String(group._id);
+    await groupService.addMember(groupId, sam);
+    const admin = mongoose.connection.db!.admin();
+    await admin.command({
+      configureFailPoint: 'failCommand',
+      mode: { times: 1 },
+      data: { appName: db.dbName, failCommands: ['find'], errorCode: 206 },
+    });
+    let failed: Awaited<ReturnType<typeof callRoute>>;
+    try {
+      failed = await callRoute(drafts.POST, {
+        method: 'POST',
+        path: `/api/groups/${groupId}/drafts`,
+        params: { id: groupId },
+        cookie: samCookie,
+        body: { drafts: [{ description: 'Ferry' }] },
+        headers: { 'Idempotency-Key': 'draft-sam-ferry-0001' },
+      });
+    } finally {
+      await admin.command({ configureFailPoint: 'failCommand', mode: 'off' });
+    }
+    expect(failed).toEqual({
+      status: 503,
+      body: {
+        error:
+          'Draft request not confirmed. Reload before retrying; reuse the original creation request.',
+        code: 'DRAFT_UNCONFIRMED',
+        status: 503,
+      },
+    });
+  }, 60_000);
+
   it('does not let Alex save the Draft Sam keeps', async () => {
     const samCookie = await signIn('sam');
     const alexCookie = await signIn('alex');
