@@ -81,10 +81,10 @@ Shown in the navbar as a badge/bell icon, or on the dashboard.
 ┌──────────────────────────────────┐
 │           Splitbook              │
 │                                  │
-│ You've been invited to join:     │
+│ You've been invited to join      │
 │                                  │
-│ 🏠 "Europe Trip 2026"           │
-│ 3 members · Trip                 │
+│ [Trip tile] Europe Trip 2026     │
+│ Trip · 3 members                 │
 │                                  │
 │ [Join Group]                     │
 │                                  │
