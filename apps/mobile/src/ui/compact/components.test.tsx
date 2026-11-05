@@ -229,6 +229,60 @@ describe('Choice controls', () => {
     expect(onChange).toHaveBeenCalledWith('several');
   });
 
+  // #829: in dark mode the chosen segment's surface is darker than its track, so the choice read
+  // mostly by its text's tone. It carries a 1px border in the theme's border colour, in both
+  // modes, so it reads by its shape too; the others show none, and every text keeps its tone.
+  it.each(['light', 'dark'] as const)(
+    'segmented control outlines the chosen segment in the %s border colour (#829)',
+    (mode) => {
+      const tokens = getSemanticTokens(mode);
+      for (const stacked of [false, true]) {
+        const root = render(
+          <ThemeContext.Provider value={tokens}>
+            <SegmentedControl
+              label="Settle up view"
+              value="suggested"
+              onChange={vi.fn()}
+              stacked={stacked}
+              options={[
+                { value: 'suggested', label: 'Suggested' },
+                { value: 'before', label: 'Before simplifying' },
+              ]}
+            />
+          </ThemeContext.Provider>,
+        );
+        /** The segment's own box: the view its fill is drawn on. */
+        const box = (label: string) =>
+          flatten((one(byRole(root, 'radio', label)).children[0] as ReactTestInstance).props.style);
+        const chosen = box('Suggested');
+        expect(chosen, `stacked: ${stacked}`).toMatchObject({
+          borderWidth: 1,
+          borderColor: tokens.border,
+          backgroundColor: tokens.surface,
+        });
+        const other = box('Before simplifying');
+        // No border shows on it: none at all, or one as clear as its fill, kept so the labels
+        // of a stacked control line up.
+        expect(
+          !other.borderWidth || other.borderColor === 'transparent',
+          `stacked: ${stacked}`,
+        ).toBe(true);
+        expect(other.backgroundColor).toBe('transparent');
+        // The text tones are as they were.
+        const tone = (label: string) =>
+          flatten(
+            one(byRole(root, 'radio', label)).find(
+              (node) => isHost(node, 'Text') && text(node).startsWith(label),
+            ).props.style,
+          ).color;
+        expect(tone('Suggested')).toBe(tokens.text);
+        expect(tone('Before simplifying')).toBe(tokens.textSecondary);
+        act(() => renderer?.unmount());
+        renderer = undefined;
+      }
+    },
+  );
+
   it('chips report checked as radios and selected as shortcuts', () => {
     const root = render(
       <>
