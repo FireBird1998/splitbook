@@ -161,7 +161,9 @@ export function AmountField({
   const theme = useTheme();
   // Yen and won are whole (#720): the number keypad, and no decimal places to show.
   const places = getCurrencyPrecision(draft.currency);
-  const [amountFocused, setAmountFocused] = useState(false);
+  // The field is focused for the keypad it has; a new keypad is a new field, not focused yet.
+  const [focusedPlaces, setFocusedPlaces] = useState<number | null>(null);
+  const amountFocused = focusedPlaces === places;
   const input = {
     color: theme.text,
     paddingVertical: 4,
@@ -200,6 +202,9 @@ export function AmountField({
             <CurrencyBadge currency={draft.currency} recorded={!!draft.original} />
           )}
           <TextInput
+            // Android adds the decimal key when the keypad changes but never takes it away, so
+            // yen after rupees kept it (#866): a whole currency gets a field of its own.
+            key={places === 0 ? 'whole' : 'decimal'}
             ref={amountRef}
             value={draft.amount}
             maxLength={40}
@@ -218,9 +223,9 @@ export function AmountField({
               if (amount !== draft.amount && acceptsNumericText(amount, draft.amount))
                 onChange({ amount });
             }}
-            onFocus={() => setAmountFocused(true)}
+            onFocus={() => setFocusedPlaces(places)}
             onBlur={() => {
-              setAmountFocused(false);
+              setFocusedPlaces(null);
               onLeave('amount');
             }}
             onSubmitEditing={onAmountDone}

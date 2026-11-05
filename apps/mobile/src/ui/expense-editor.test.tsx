@@ -2002,6 +2002,38 @@ describe('the currency beside the amount (#720)', () => {
     expect(text(ui.root())).not.toContain('whole yen');
   });
 
+  // #866: Android adds the decimal key when the keypad changes, and never takes it away again. A
+  // field whose keypad changes is a new field, with the number typed so far.
+  it('gives the amount a new field when yen changes its keypad, keeping the number (#866)', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId), {
+      readGroup: async () =>
+        json({ status: 200, data: { ...travelling, latestExpenseCurrency: 'INR' } }),
+    });
+    const rupees = ui.input('Amount, Indian Rupee, required');
+    expect(rupees.props.keyboardType).toBe('decimal-pad');
+    await ui.enter('Amount, Indian Rupee, required');
+    await ui.type('Amount, Indian Rupee, required', '2500');
+    await ui.press('Currency, INR, Indian Rupee. Change currency');
+    await ui.press('JPY, Japanese Yen, whole amounts only');
+    const yen = ui.input('Amount, Japanese Yen, required');
+    expect(yen).not.toBe(rupees);
+    expect(yen.props).toMatchObject({ keyboardType: 'number-pad', value: '2500' });
+    // The new field isn't focused, so its focus ring isn't drawn either.
+    const ring = fieldOf(yen).find(
+      (node) => isHost(node, 'View') && flatten(node.props.style).borderWidth === 2,
+    );
+    expect(flatten(ring.props.style).borderColor).toBe('transparent');
+    await ui.press('Currency, JPY, Japanese Yen. Change currency');
+    await ui.press('EUR, Euro');
+    const euros = ui.input('Amount, Euro, required');
+    expect(euros).not.toBe(yen);
+    expect(euros.props).toMatchObject({ keyboardType: 'decimal-pad', value: '2500' });
+    // Euros and rupees share a keypad: the same field, as it was.
+    await ui.press('Currency, EUR, Euro. Change currency');
+    await ui.press('INR, Indian Rupee, main currency');
+    expect(ui.input('Amount, Indian Rupee, required')).toBe(euros);
+  });
+
   it('takes yen whole, saying so in the web’s words', async () => {
     const ui = await render((controller) => controller.openExpense(groupId), {
       readGroup: async () => json({ status: 200, data: travelling }),
