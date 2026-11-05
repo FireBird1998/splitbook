@@ -426,10 +426,10 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     await tap(home, 'Review 2, one at a time');
     const run = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     expect(text(run)).toContain('Maple House');
-    expect(text(run)).toContain('Review · 1 of 2 · across 2 Groups');
+    expect(text(run)).toContain('Review\u00a0· 1 of 2\u00a0· across 2 Groups');
     await tap(run, 'Skip for now');
     expect(text(run)).toContain('Goa Friends Trip');
-    expect(text(run)).toContain('Review · 2 of 2');
+    expect(text(run)).toContain('Review\u00a0· 2 of 2');
     await tap(run, 'Close review');
     expect(run.toJSON()).toBeNull();
     expect(f.controller.getSnapshot().screen).toBe('groups');
@@ -479,7 +479,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     expect(text(tree)).toContain('You set this aside');
-    expect(text(tree)).toContain('Finish later · today');
+    expect(text(tree)).toContain('Finish later\u00a0· today');
     expect(button(tree, 'Save expense').props.disabled).toBe(false);
     await tap(tree, 'Save expense');
     expect(
@@ -760,8 +760,9 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     ))
       expect(node.props.accessibilityLabel).toBeTruthy();
   });
-  it('preserves existing invalid payer guidance while blocking save (#712)', async () => {
+  it('says the same person is listed twice, not that Claude didn’t know who paid (#716)', async () => {
     const f = fixture({ one: true });
+    // ₹12.34 paid as ₹6.17 + ₹6.17, both by Alex.
     f.items()[0].draft.values!.paidBy = [
       { user: user.id, amount: 6.17 },
       { user: user.id, amount: 6.17 },
@@ -771,8 +772,13 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       await f.controller.startReviewRun();
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
-    expect(text(tree)).toContain('who paid');
-    expect(text(tree)).toContain('Claude didn’t know who paid');
+    expect(text(tree)).toContain('One thing left before you can save: who paid');
+    // Its tile asks for the payer as for a missing one, never "2 people" for one person twice.
+    expect(text(tree)).not.toContain('2 people');
+    expect(text(tree)).toContain('The same person is listed twice. Choose who paid.');
+    expect(text(tree)).not.toContain('didn’t know who paid');
+    // The tile still asks for the payer, and saving stays off until they're chosen.
+    expect(text(tree)).toContain('Who paid?\u00a0· Choose');
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
   });
   it('names a split that does not add up, not a missing amount (#506)', async () => {
@@ -831,6 +837,48 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(f.saves).toHaveLength(1);
     expect(tally(tree)).toContain('Saved 1');
   });
+  // #884: beside its chip, a currency's prefix shows only where it isn't the code the chip says:
+  // "PLN ▾ 60.00" and "CHF ▾ 86.00", never "PLN ▾ zł 60.00" or "CHF ▾ CHF 86.00"; "EUR ▾ € 18.40".
+  it.each([
+    ['PLN', 'Polish Zloty', 60, ''],
+    ['CHF', 'Swiss Franc', 86, ''],
+    ['EUR', 'Euro', 18.4, '€'],
+  ])(
+    'shows %s’s amount beside its chip with the prefix it lacks (#884)',
+    async (code, name, value, prefix) => {
+      const f = fixture({ one: true, extras: [code] });
+      const draft = f.items()[0].draft;
+      draft.values = {
+        ...draft.values,
+        amount: value,
+        currency: code,
+        paidBy: [{ user: user.id, amount: value }],
+      };
+      await signIn(f);
+      await act(async () => {
+        await f.controller.startReviewRun();
+      });
+      const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+      // The row the chip sits in, with the Amount: the chip, the prefix (or nothing), the amount.
+      let row = button(tree, `Currency, ${code}, ${name}. Change currency`);
+      while (
+        !row.findAll(
+          (node) =>
+            String(node.type) === 'TextInput' &&
+            String(node.props.accessibilityLabel).startsWith('Amount'),
+        ).length
+      )
+        row = row.parent!;
+      // TalkBack hears the currency with the chip and the amount, so the prefix is hidden from it.
+      const beside = row
+        .findAll(
+          (node) => String(node.type) === 'Text' && node.props.accessibilityElementsHidden === true,
+        )
+        .map((node) => node.children.join(''));
+      expect(beside).toEqual(prefix ? [prefix] : []);
+      expect(text(tree)).not.toContain('zł');
+    },
+  );
   // #874: Pasteis box, €18.40, in Maple House, which lists INR and EUR.
   it('shows an extra-currency item in its own currency, and changes it with Add expense’s picker (#874)', async () => {
     const f = fixture({ one: true, extras: ['EUR', 'JPY'] });

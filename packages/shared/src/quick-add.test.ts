@@ -252,6 +252,18 @@ describe('readQuickAdd: amounts', () => {
     expect(codes('Dinner ₹200 ₹300')).toEqual(['amount-several']);
   });
 
+  // #884: the example names the currency as its amounts do, "PLN 2400", never "zł2400".
+  it.each([
+    ['INR', 'Dinner ₹200 ₹300', '₹2400'],
+    ['EUR', 'Dinner €200 €300', '€2400'],
+    ['PLN', 'Dinner 200 PLN 300 PLN', 'PLN 2400'],
+    ['CZK', 'Dinner 200 CZK 300 CZK', 'CZK 2400'],
+  ])('asks for one amount in %s with an example it can read', (currency, text, example) => {
+    const message = read(text, { currency }).problems[0]?.message;
+    expect(message).toBe(`Keep one amount, like ${example}.`);
+    expect(read(`Dinner ${example}`, { currency })).toMatchObject({ amountMinor: 240000 });
+  });
+
   it('reads numbers joined to words as words', () => {
     expect(read('Flight 6E2341 4500')).toMatchObject({
       description: 'Flight 6E2341',

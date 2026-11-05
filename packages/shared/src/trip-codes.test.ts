@@ -28,4 +28,40 @@ describe('deriveTripCodes', () => {
   it('strips punctuation and keeps digits', () => {
     expect(deriveTripCodes('Goa 2026!')).toEqual({ from: 'GOA', to: '202' });
   });
+
+  // #885: "Kraków" split at its ó into KRAK and W, and read WXX.
+  it('reads an accented letter as its plain letter', () => {
+    expect(deriveTripCodes('Kraków')).toEqual({ from: 'KRA', to: 'KOW' });
+    expect(deriveTripCodes('São Paulo')).toEqual({ from: 'SAO', to: 'PAU' });
+    expect(deriveTripCodes('Zürich')).toEqual({ from: 'ZUR', to: 'ICH' });
+    expect(deriveTripCodes('Kraków and Gdańsk')).toEqual({ from: 'KRA', to: 'GDA' });
+  });
+
+  // The Designer's check of #885: letters with no accent to strip had still split names.
+  it('reads a letter that has no accent to strip as the plain letters it is written with', () => {
+    for (const [name, codes] of [
+      ['Wrocław', { from: 'WRO', to: 'LAW' }],
+      ['Łódź', { from: 'LOD', to: 'TRP' }],
+      ['Białystok', { from: 'BIA', to: 'TOK' }],
+      ['Ærø', { from: 'AER', to: 'TRP' }],
+      ['Tromsø', { from: 'TRO', to: 'MSO' }],
+      ['Großglockner', { from: 'GRO', to: 'NER' }],
+      ['Đà Nẵng', { from: 'DAN', to: 'NAN' }],
+      ['Þingvellir', { from: 'THI', to: 'LIR' }],
+      ['Reykjavík Œuvre', { from: 'REY', to: 'OEU' }],
+      ['Fjörð', { from: 'FJO', to: 'TRP' }],
+    ] as const)
+      expect(deriveTripCodes(name), name).toEqual(codes);
+  });
+
+  it('keeps the codes of names without accents', () => {
+    for (const [name, codes] of [
+      ['Goa Friends Trip', { from: 'GOA', to: 'TRI' }],
+      ['SF Layover', { from: 'SFL', to: 'LAY' }],
+      ['Weekend', { from: 'WEE', to: 'END' }],
+      ['Krakow and Gdansk', { from: 'KRA', to: 'GDA' }],
+      ['Goa 2026!', { from: 'GOA', to: '202' }],
+    ] as const)
+      expect(deriveTripCodes(name), name).toEqual(codes);
+  });
 });

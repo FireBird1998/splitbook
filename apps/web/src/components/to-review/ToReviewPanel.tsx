@@ -16,7 +16,12 @@ import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { type DraftContext } from '@splitbook/shared/persistent-draft-editor';
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
-import { memberProblems, type ReviewItemModel } from '@splitbook/shared/to-review';
+import {
+  memberProblems,
+  payerListedTwice,
+  PAYER_LISTED_TWICE,
+  type ReviewItemModel,
+} from '@splitbook/shared/to-review';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
 import { RADIUS } from '@/lib/theme/tokens';
 import { useReviewEditor } from './use-review-editor';
@@ -82,6 +87,9 @@ export default function ToReviewPanel({
   ]);
   const acknowledged = acknowledgedVersion === duplicateVersion;
   const incomplete = item.needs.length > 0 || item.accountItem!.problems.length > 0;
+  // The fields hold each payer once; those the kept item names twice are said so (#894).
+  const payerIds = (editor.draft.values?.paidBy ?? []).map((row) => row.user);
+  const listedTwice = [...new Set(payerIds.filter((id, index) => payerIds.indexOf(id) !== index))];
   const duplicate = item.accountItem!.duplicates.length > 0;
   const unsent = editor.status !== 'kept';
   const reason = !available
@@ -172,6 +180,10 @@ export default function ToReviewPanel({
               didn’t know {fact}, so it left that to you.
             </Typography>
           ))}
+        {/* Payers that name one member twice were there, just wrong (#716). */}
+        {payerListedTwice(item.needs) && (
+          <Typography variant="body2">{PAYER_LISTED_TWICE}</Typography>
+        )}
         <Box
           component="fieldset"
           disabled={blocked || !available}
@@ -181,6 +193,7 @@ export default function ToReviewPanel({
           <ReviewExpenseFields
             entries={editor.entries}
             context={context}
+            listedTwice={listedTwice}
             onChange={(changes) => {
               setAcknowledgedVersion(null);
               editor.change(changes);

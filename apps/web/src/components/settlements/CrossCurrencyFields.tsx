@@ -11,7 +11,7 @@ import { MoneyInputBase } from '@/components/ui/MoneyInput';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
 import type { Theme } from '@mui/material/styles';
-import { getCurrency } from '@splitbook/shared/currency';
+import { currencyPrefix } from '@splitbook/shared/currency';
 import {
   clearedPart,
   paidRounding,
@@ -30,7 +30,8 @@ import {
 } from '@splitbook/shared/cross-currency-settlement';
 import type { RateSuggestionState } from '@/lib/hooks/use-rate-suggestion';
 
-const symbol = (currency: string) => getCurrency(currency)?.symbol ?? currency;
+/** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#884). */
+const symbol = currencyPrefix;
 
 const fieldBox = (theme: Theme, invalid: boolean) => ({
   minHeight: 48,

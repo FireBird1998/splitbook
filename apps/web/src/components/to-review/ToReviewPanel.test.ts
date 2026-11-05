@@ -232,6 +232,37 @@ describe('what an assistant left to the member, in the web To review panel (#683
     expect(shown).toContain('Claude didn’t know who paid, so it left that to you.');
   });
 
+  it('says the same person is listed twice, not that Claude didn’t know who paid (#716)', () => {
+    const html = markup(
+      ['paidBy: Each person can appear only once'],
+      {
+        description: 'Station dinner',
+        amount: 12.34,
+        currency: 'INR',
+        date: '2026-10-16',
+        paidBy: [
+          { user: alex, amount: 6.17 },
+          { user: alex, amount: 6.17 },
+        ],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }, { user: sam }],
+        tag: 'Food',
+      },
+      ['paidBy'],
+      undefined,
+      { kind: 'assistant', name: 'Claude' },
+    );
+    const shown = text(html);
+    expect(shown.split('The same person is listed twice. Choose who paid.')).toHaveLength(2);
+    expect(shown).not.toContain('didn’t know who paid');
+    expect(shown).toContain('Still needs who paid.');
+    expect(saveDisabled(html)).toBe(true);
+    // #894: the payer shows once in the fields, which say the item lists them twice.
+    expect(shown).toContain('Alex is listed twice.');
+    expect(shown).toContain('Alex paid');
+    expect(shown).not.toContain('1 people paid');
+  });
+
   // #751: a long host with no hyphens can't wrap at its dots, and these two lines name it where
   // the member decides whether to save its Draft; they wrap anywhere, so its domain stays inside.
   it('wraps a long assistant host anywhere, in its source line and in what it didn’t know', () => {

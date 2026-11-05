@@ -13,6 +13,7 @@ import { PRODUCT_NAME } from '../product';
 import { Banner, BottomSheet, CompactButton, CompactText, Money, useTap } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** What the sheets need of an item: its name, and its amount and currency as prepared. */
 export interface UnlistedItem {
@@ -248,7 +249,7 @@ export function ChangeCurrencySheet({
                 </CompactText>
                 {notes.length ? (
                   <CompactText variant="caption" tone="secondary">
-                    {notes.join(' · ')}
+                    {notes.join(SEPARATOR)}
                   </CompactText>
                 ) : null}
               </View>

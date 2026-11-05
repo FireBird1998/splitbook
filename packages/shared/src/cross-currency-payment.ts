@@ -7,7 +7,7 @@
 import { format } from 'date-fns';
 import { z } from 'zod';
 import { readAmountEntry } from './amount-entry';
-import { formatCurrency, getCurrency, getCurrencyPrecision, wholeUnit } from './currency';
+import { formatCurrency, getCurrencyPrecision, wholeUnit } from './currency';
 import { toMajorAmount } from './exact-money';
 import { crossCurrencySettlementReadShape } from './validators/settlement';
 import { memberLabel } from './member-label';
@@ -16,6 +16,7 @@ import {
   decimalMoney,
   minorMoney,
   EXCHANGE_RATE_API_ATTRIBUTION,
+  perUnit,
   rateFraction,
   rateGivesPaid,
   rateText,
@@ -24,6 +25,7 @@ import {
   type CrossCurrencyAmounts,
   type CrossCurrencySettlementFields,
 } from './cross-currency-settlement';
+import { SEPARATOR } from './separator';
 
 export { rateText, roundedRate } from './cross-currency-settlement';
 
@@ -350,12 +352,12 @@ export function rateNote(
       attribution,
       useSuggestion: suggestion.rate,
     };
-  const lead = name ? `${name} · ${ratesOf}` : `R${ratesOf.slice(1)}`;
+  const lead = name ? `${name}${SEPARATOR}${ratesOf}` : `R${ratesOf.slice(1)}`;
   return {
     text:
       suggestion.ageDays > OLD_AFTER_DAYS
         ? `${lead}, ${suggestion.ageDays} days old. Today’s rates aren’t in yet.`
-        : `${lead} · fetched ${fetchedWhen(suggestion.fetchedAt, now)}`,
+        : `${lead}${SEPARATOR}fetched ${fetchedWhen(suggestion.fetchedAt, now)}`,
     attribution,
     useSuggestion: null,
   };
@@ -523,7 +525,8 @@ export function crossCurrencySummary({
  * Debt between the two before and after, and that nothing else moved.
  */
 export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
-  const per = `per ${getCurrency(record.currency)?.symbol ?? record.currency}`;
+  // As its amounts name it: "per €", or "per PLN" for the zloty (#884), kept on one line (#892).
+  const per = perUnit(record.currency);
   const payer = memberLabel(record.paidBy, record.paidByName, viewerId) ?? 'Former member';
   const payee = memberLabel(record.paidTo, record.paidToName, viewerId) ?? 'Former member';
   const short = (label: string, isViewer: boolean) => (isViewer ? label : firstName(label));
@@ -534,7 +537,7 @@ export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
     record.suggestedRate && record.rateSource && record.rateAsOf && record.rateFetchedAt
       ? {
           rate: `${decimalMoney(rateText(record.suggestedRate), record.paidCurrency)} ${per}`,
-          source: `${SOURCE_NAMES[record.rateSource] ? `${SOURCE_NAMES[record.rateSource]} · r` : 'R'}ates of ${calendarDay(record.rateAsOf)} · fetched ${format(new Date(record.rateFetchedAt), 'd MMM HH:mm')}`,
+          source: `${SOURCE_NAMES[record.rateSource] ? `${SOURCE_NAMES[record.rateSource]}${SEPARATOR}r` : 'R'}ates of ${calendarDay(record.rateAsOf)}${SEPARATOR}fetched ${format(new Date(record.rateFetchedAt), 'd MMM HH:mm')}`,
           attribution:
             record.rateSource === 'frankfurter' ? null : { ...EXCHANGE_RATE_API_ATTRIBUTION },
         }

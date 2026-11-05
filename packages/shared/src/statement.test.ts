@@ -330,7 +330,7 @@ it('keeps both payment amounts in the cleared-currency statement and its preview
   expect(statement.currencies.find((row) => row.currency === 'INR')?.paymentTotalMinor).toBe(0);
   expect(eur.payments[0]).toMatchObject({
     description:
-      'Bob paid Alice ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
+      'Bob paid Alice ₹1,850.00 to clear €20.00 at ₹92.50 per\u00a0€, suggested ₹92.10 (20\u00a0Oct)',
     amountPaidMinor: 185000,
     paidCurrency: 'INR',
     appliedRate: '92.5',
@@ -341,7 +341,7 @@ it('keeps both payment amounts in the cleared-currency statement and its preview
     payments: [
       expect.objectContaining({
         description:
-          'Bob paid Alice ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
+          'Bob paid Alice ₹1,850.00 to clear €20.00 at ₹92.50 per\u00a0€, suggested ₹92.10 (20\u00a0Oct)',
       }),
     ],
   });

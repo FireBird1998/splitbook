@@ -67,8 +67,8 @@ const frankfurter: RateSuggestion = {
 let renderer: ReactTestRenderer;
 const done = vi.fn();
 
-/** Record payment for Alex and Sam's euros, as Balances shows it. */
-const sheet = (ledger: SettlementLedger, amount: string) =>
+/** Record payment for Alex and Sam's euros (or another Debt's currency), as Balances shows it. */
+const sheet = (ledger: SettlementLedger, amount: string, currency = 'EUR') =>
   createElement(
     ThemeProvider,
     { theme: createAppTheme('light') },
@@ -76,8 +76,8 @@ const sheet = (ledger: SettlementLedger, amount: string) =>
       groupId: GROUP,
       groupName: 'Lisbon & Tokyo',
       accountId: YOU,
-      currency: 'EUR',
-      payCurrencies: ['EUR', 'INR', 'JPY'],
+      currency,
+      payCurrencies: [currency, 'INR', 'JPY'],
       mainCurrency: 'INR',
       members: [
         { id: YOU, name: 'Alex Rivera' },
@@ -90,10 +90,15 @@ const sheet = (ledger: SettlementLedger, amount: string) =>
     }),
   );
 
-async function open(state: RateSuggestionState, ledger = euros, amount = '20.00') {
+async function open(
+  state: RateSuggestionState,
+  ledger = euros,
+  amount = '20.00',
+  currency = 'EUR',
+) {
   rate.state = state;
   await act(async () => {
-    renderer = create(sheet(ledger, amount), {
+    renderer = create(sheet(ledger, amount, currency), {
       createNodeMock: () => ({ focus() {}, addEventListener() {}, removeEventListener() {} }),
     });
   });
@@ -218,6 +223,26 @@ describe('paying a euro Debt in rupees (#727)', () => {
 
     await press(button('Use ₹92.10'));
     expect(fields()).toEqual(['20.00', '92.10', '1,842.00']);
+  });
+
+  // #884: the zloty fields said "zł" where the amounts say "PLN 60.00".
+  it('names a currency without a symbol by its code, as its amounts are (#884)', async () => {
+    const zloty: SettlementLedger = {
+      balances: [
+        { userId: YOU, amountMinor: -6000 },
+        { userId: SAM, amountMinor: 6000 },
+      ],
+      suggestions: [{ from: YOU, to: SAM, amountMinor: 6000 }],
+    };
+    await open(
+      { status: 'ready', suggestion: { ...frankfurter, rate: '20.826267' } },
+      zloty,
+      '60.00',
+      'PLN',
+    );
+    expect(page()).toContain('Rate · ₹ for each PLN');
+    expect(page()).toContain('1 PLN =');
+    expect(page()).not.toContain('zł');
   });
 
   it('works the rate out from the amount paid', async () => {

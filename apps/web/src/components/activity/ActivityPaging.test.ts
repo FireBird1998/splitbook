@@ -339,7 +339,7 @@ it.each([false, true])(
       'You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00',
     );
     expect(textOf(paymentRows()[0])).toContain('₹1,480.00, same currency, no rate');
-    expect(textOf(paymentRows()[0])).toContain('€20.00 at ₹92.10 per €; no rate suggested');
+    expect(textOf(paymentRows()[0])).toContain('€20.00 at ₹92.10 per\u00a0€; no rate suggested');
     expect(paymentRows()[0].props['aria-expanded']).toBe(true);
     expect(textOf(renderer.root)).not.toContain('1 more Debt');
     expect(textOf(renderer.root)).not.toContain('The rest of this payment is in older Activity.');

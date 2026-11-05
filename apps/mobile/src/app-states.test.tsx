@@ -2595,7 +2595,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(phone.sent).toContain(`GET /api/groups/${lisbon}/currencies`);
     const shown = app.text();
     expect(shown).toContain('INRIndian RupeeLocked: money is already recorded in INR');
-    expect(shown).toContain('EUREuroNothing uses it · added by Sam Chen');
+    expect(shown).toContain('EUREuroNothing uses it\u00a0· added by Sam Chen');
     expect(shown).toContain('Removing a currency is on the web for now.');
     expect(app.button('Open on the web')).not.toBeNull();
     expect(app.button('Add a currency')).not.toBeNull();
@@ -3285,7 +3285,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(radio('INR').props.accessibilityState?.checked).toBe(true);
     // What it shows, and what a screen reader says of each field.
     expect(shown()).toContain('Change any one; the other two follow.');
-    expect(shown()).toContain('Frankfurter · rates of 20 Oct');
+    expect(shown()).toContain('Frankfurter\u00a0· rates of 20 Oct');
     expect(shown()).toContain('Clears your €20.00 Debt to Sam. Sam gets ₹1,842.00.');
     expect(inSheet('Amount cleared, EUR')[0]!.props.value).toBe('20.00');
     expect(inSheet('Rate, INR for each EUR')[0]!.props.value).toBe('92.10');
@@ -3317,7 +3317,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     // Activity says both amounts and the rate, and the payment's record what it changed.
     await app.press('Activity');
     const row =
-      'You paid Sam Chen ₹1,842.00 to clear €20.00, at the suggested ₹92.10 per € (20 Oct)';
+      'You paid Sam Chen ₹1,842.00 to clear €20.00, at the suggested ₹92.10 per\u00a0€ (20\u00a0Oct)';
     const [opens] = app.hosts(
       (p) => p.accessibilityRole === 'button' && String(p.accessibilityLabel).startsWith(row),
     );
@@ -3327,7 +3327,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
       'Paid',
       'to clear €20.00, a Debt in EUR',
       'Rate used',
-      '₹92.10 per €',
+      '₹92.10 per\u00a0€',
       'What it changed',
       'You and Sam in EUR:',
       'INR balances didn’t change. Only the Debt’s own currency moves.',

@@ -7,6 +7,7 @@ import {
   readCrossCurrencyRecord,
   type CrossCurrencyRecord,
 } from '@splitbook/shared/cross-currency-payment';
+import { prefixBesideChip } from '@splitbook/shared/currency';
 import {
   groupSettlementBatches,
   type SettlementBatchActivityItem,
@@ -42,6 +43,7 @@ import { spellMoment } from './day-format';
 import { NotAvailableOffline } from './offline-notice';
 import { fonts, useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 type Member = { id: string; name: string };
 /** A settle-up's events, as the shared groupSettlementBatches collects them (#734). */
@@ -121,7 +123,7 @@ function Parts({ parts }: { parts: ActivityLine['details'] }) {
     <>
       {parts.map((part, index) => (
         <Fragment key={index}>
-          {index > 0 ? ' · ' : ''}
+          {index > 0 ? SEPARATOR : ''}
           <Runs runs={part.runs ?? [part]} />
         </Fragment>
       ))}
@@ -170,7 +172,7 @@ function Details({
         <Parts parts={line.details} />
       </CompactText>
       <Text style={[textVariants.caption, { color: theme.textSecondary }]}>
-        {` · ${time}`}
+        {`${SEPARATOR}${time}`}
         {hairSpace}
       </Text>
     </View>
@@ -740,18 +742,23 @@ function PaymentRecord({
           </>
         ) : null}
         <Divider />
+        {/* The code beside an amount only where the amount doesn't already say it (#884). */}
         <RecordRow label="Amount cleared">
           <CompactText style={mono}>{card.cleared}</CompactText>
-          <CompactText variant="caption" tone="secondary">
-            {record.currency}
-          </CompactText>
+          {prefixBesideChip(record.currency) ? (
+            <CompactText variant="caption" tone="secondary">
+              {record.currency}
+            </CompactText>
+          ) : null}
         </RecordRow>
         <Divider />
         <RecordRow label="Amount paid">
           <CompactText style={mono}>{card.paidAmount}</CompactText>
-          <CompactText variant="caption" tone="secondary">
-            {record.paidCurrency}
-          </CompactText>
+          {prefixBesideChip(record.paidCurrency) ? (
+            <CompactText variant="caption" tone="secondary">
+              {record.paidCurrency}
+            </CompactText>
+          ) : null}
         </RecordRow>
         <Divider />
         <RecordRow label="Recorded">

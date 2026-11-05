@@ -16,10 +16,13 @@ export default function ReviewExpenseFields({
   entries,
   context,
   onChange,
+  listedTwice,
 }: {
   entries: DraftEntries;
   context: DraftContext;
   onChange: (changes: DraftEntries) => void;
+  /** Payers the item names more than once, which its entries hold once each (#894). */
+  listedTwice?: readonly string[];
 }) {
   const selected = (kind: string) =>
     Object.keys(entries)
@@ -112,6 +115,7 @@ export default function ReviewExpenseFields({
   return (
     <ExpenseFields
       review
+      listedTwice={listedTwice}
       values={values}
       edit={edit}
       isEditMode

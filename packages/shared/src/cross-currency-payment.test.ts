@@ -316,28 +316,28 @@ describe('what the sheet says about the rate (#727)', () => {
 
   it('names the source and when its rates are from, with the second source’s attribution', () => {
     expect(rateNote('suggested', frankfurter, 'INR', now)).toEqual({
-      text: 'Frankfurter · rates of 20 Oct · fetched today 06:00',
+      text: 'Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched today 06:00',
       attribution: null,
       useSuggestion: null,
     });
     expect(rateNote('suggested', secondSource, 'INR', now)).toEqual({
-      text: 'Rates of 21 Oct · fetched today 06:00',
+      text: 'Rates of 21 Oct\u00a0· fetched today 06:00',
       attribution: EXCHANGE_RATE_API_ATTRIBUTION,
       useSuggestion: null,
     });
     expect(rateNote('suggested', fiveDaysOld, 'INR', now)).toEqual({
-      text: 'Frankfurter · rates of 16 Oct, 5 days old. Today’s rates aren’t in yet.',
+      text: 'Frankfurter\u00a0· rates of 16 Oct, 5 days old. Today’s rates aren’t in yet.',
       attribution: null,
       useSuggestion: null,
     });
     expect(
       rateNote('suggested', { ...frankfurter, fetchedAt: local(20, 18).toISOString() }, 'INR', now)
         .text,
-    ).toBe('Frankfurter · rates of 20 Oct · fetched yesterday 18:00');
+    ).toBe('Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched yesterday 18:00');
     expect(
       rateNote('suggested', { ...frankfurter, fetchedAt: local(18, 18).toISOString() }, 'INR', now)
         .text,
-    ).toBe('Frankfurter · rates of 20 Oct · fetched 18 Oct 18:00');
+    ).toBe('Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched 18 Oct 18:00');
   });
 
   it('keeps the suggestion one click away from the member’s own rate', () => {
@@ -460,17 +460,39 @@ describe('a payment’s record, as its card shows it (#727)', () => {
     pairDebtAfterMinor: 0,
   };
 
+  // #884: "PLN 60.00 at ₹20.826267 per zł" named one currency two ways.
+  it('names a currency without a symbol by its code in its rates (#884)', () => {
+    const zloty = paymentRecord(
+      {
+        ...record,
+        currency: 'PLN',
+        amountMinor: 6000,
+        amountPaidMinor: 124958,
+        appliedRate: '20.826267',
+        suggestedRate: '20.826267',
+        rateKind: 'suggested',
+        pairDebtBeforeMinor: -6000,
+      },
+      alex,
+    );
+    expect(zloty).toMatchObject({
+      clears: 'to clear PLN\u00a060.00, a Debt in PLN',
+      rateUsed: '₹20.826267 per\u00a0PLN',
+      suggested: { rate: '₹20.826267 per\u00a0PLN' },
+    });
+    expect(JSON.stringify(zloty)).not.toContain('zł');
+  });
   it('shows both amounts, the rate used and the suggestion, and what moved', () => {
     expect(paymentRecord(record, alex)).toEqual({
       payer: 'You',
       payee: 'Sam Chen',
       paid: '₹1,850.00',
       clears: 'to clear €20.00, a Debt in EUR',
-      rateUsed: '₹92.50 per €',
+      rateUsed: '₹92.50 per\u00a0€',
       badge: 'Your rate',
       suggested: {
-        rate: '₹92.10 per €',
-        source: 'Frankfurter · rates of 20 Oct · fetched 21 Oct 06:00',
+        rate: '₹92.10 per\u00a0€',
+        source: 'Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched 21 Oct 06:00',
         attribution: null,
       },
       cleared: '€20.00',
@@ -491,16 +513,16 @@ describe('a payment’s record, as its card shows it (#727)', () => {
     };
     expect(paymentRecord(atSuggestion, alex)).toMatchObject({
       paid: '₹5,049.84',
-      rateUsed: '₹92.10 per €',
+      rateUsed: '₹92.10 per\u00a0€',
       badge: 'Suggested',
-      suggested: { rate: '₹92.10 per €' },
+      suggested: { rate: '₹92.10 per\u00a0€' },
     });
     expect(
       paymentRecord(
         { ...atSuggestion, amountPaidMinor: 501695, appliedRate: '91.5', rateKind: 'custom' },
         alex,
       ),
-    ).toMatchObject({ rateUsed: '₹91.50 per €', badge: 'Your rate' });
+    ).toMatchObject({ rateUsed: '₹91.50 per\u00a0€', badge: 'Your rate' });
   });
 
   it('reads an older record’s worked-out rate as the suggestion, when rounding explains the gap (#870)', () => {
@@ -512,7 +534,7 @@ describe('a payment’s record, as its card shows it (#727)', () => {
       rateKind: 'suggested' as const,
     };
     expect(paymentRecord(older, alex)).toMatchObject({
-      rateUsed: '₹92.10 per €',
+      rateUsed: '₹92.10 per\u00a0€',
       badge: 'Suggested',
     });
     // A rate of the member's own that rounding doesn't explain stays theirs.
@@ -526,7 +548,7 @@ describe('a payment’s record, as its card shows it (#727)', () => {
         },
         alex,
       ),
-    ).toMatchObject({ rateUsed: '₹91.500091 per €', badge: 'Your rate' });
+    ).toMatchObject({ rateUsed: '₹91.500091 per\u00a0€', badge: 'Your rate' });
   });
 
   it('names the second source, an entered rate, and leaves out what an older record didn’t keep', () => {
@@ -539,7 +561,7 @@ describe('a payment’s record, as its card shows it (#727)', () => {
       payee: 'You',
       badge: 'Suggested',
       suggested: {
-        source: 'Rates of 20 Oct · fetched 21 Oct 06:00',
+        source: 'Rates of 20 Oct\u00a0· fetched 21 Oct 06:00',
         attribution: EXCHANGE_RATE_API_ATTRIBUTION,
       },
       pair: { label: 'Alex and you in EUR:' },

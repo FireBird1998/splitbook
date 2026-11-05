@@ -417,7 +417,7 @@ async function main() {
       saved: 1,
       deleted: 0,
       left: 1,
-      label: 'Saved 1 · 1 left for later',
+      label: 'Saved 1\u00a0· 1 left for later',
     });
     const left = await reopened.list();
     assert.deepEqual(

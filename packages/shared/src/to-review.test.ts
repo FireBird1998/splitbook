@@ -5,6 +5,8 @@ import {
   reviewDate,
   memberProblems,
   needsAmount,
+  payerListedTwice,
+  PAYER_LISTED_TWICE,
   reviewProblem,
   reviewSplitMethod,
   summarizeReviewRun,
@@ -184,10 +186,22 @@ describe('To review model', () => {
     own.draft.values = {};
     own.draft.missingFields = ['paidBy'];
     const model = buildToReview(read([a, b, c, own]), [], now);
-    expect(model.sourceSummary).toBe('1 from ChatGPT · 2 from Claude · 1 needs details');
+    expect(model.sourceSummary).toBe('1 from ChatGPT\u00a0· 2 from Claude\u00a0· 1 needs details');
     expect(model.groups[0].bannerSummary).toBe(
-      '1 from ChatGPT today · 2 from Claude today · 1 needs details',
+      '1 from ChatGPT today\u00a0· 2 from Claude today\u00a0· 1 needs details',
     );
+  });
+  it('says “1 needs details” and “2 need details” (#877)', () => {
+    const summary = (count: number) => {
+      const items = Array.from({ length: count }, (_, index) => {
+        const row = item(index + 1);
+        row.draft.values = {};
+        row.draft.missingFields = ['paidBy'];
+        return row;
+      });
+      return buildToReview(read(items), [], now).sourceSummary;
+    };
+    expect([summary(1), summary(2)]).toEqual(['1 needs details', '2 need details']);
   });
   it('uses the local calendar day at midnight in every host timezone', () => {
     const a = item(1);
@@ -233,7 +247,12 @@ describe('To review model', () => {
         { id: '4', status: 'skipped' },
         { id: '5', status: 'unresolved' },
       ]),
-    ).toEqual({ saved: 2, deleted: 1, left: 2, label: 'Saved 2 · Deleted 1 · 2 left for later' });
+    ).toEqual({
+      saved: 2,
+      deleted: 1,
+      left: 2,
+      label: 'Saved 2\u00a0· Deleted 1\u00a0· 2 left for later',
+    });
     expect(summarizeReviewRun([{ id: '1', status: 'failed' }]).label).toBe('1 left for later');
     expect(summarizeReviewRun([]).label).toBe('');
     expect(buildToReview({ total: 0, groups: [] }, [], now).counts.total).toBe(0);
@@ -364,11 +383,11 @@ describe('changes while an item is open', () => {
     const { before, after } = changed();
     after.values!.splitBetween = [{ user: 'c00000000000000000000001' }];
     expect(describeDraftChange(before, after, names)).toContain(
-      'the split a moment ago: Split equally · Alex → Split equally · Sam',
+      'the split a moment ago: Split equally\u00a0· Alex → Split equally\u00a0· Sam',
     );
     after.values!.splitMethod = 'percentage';
     after.values!.splitBetween[0].percentage = 100;
-    expect(describeDraftChange(before, after, names)).toContain('percentage · Sam 100%');
+    expect(describeDraftChange(before, after, names)).toContain('percentage\u00a0· Sam 100%');
   });
   it('describes multiple changed facts and the member on another device', () => {
     const { before, after } = changed();
@@ -840,6 +859,88 @@ describe('a fact that is there but wrong (#506)', () => {
       'The amount can have at most 2 decimal places.',
       'The amount must be a whole number.',
     ]);
+  });
+});
+
+describe('payers that name the same person twice (#716)', () => {
+  /** ₹12.34 paid as ₹6.17 and ₹6.17 by one member, as a Draft review sends it. */
+  const doubled = (preparedBy: ToReviewItem['draft']['preparedBy']) => {
+    const base = item(1);
+    return buildToReview(
+      read([
+        {
+          ...base,
+          draft: {
+            ...base.draft,
+            preparedBy,
+            missingFields: ['paidBy'],
+            values: {
+              ...base.draft.values,
+              amount: 12.34,
+              currency: 'INR',
+              paidBy: [
+                { user: member, amount: 6.17 },
+                { user: member, amount: 6.17 },
+              ],
+            },
+          },
+          problems: ['paidBy: Each person can appear only once'],
+        },
+      ]),
+      [],
+      now,
+    ).items[0];
+  };
+
+  it('says the same person is listed twice, never that an assistant didn’t know who paid', () => {
+    const model = doubled({ kind: 'assistant', name: 'Claude' });
+
+    expect(model.state).toBe('needs-details');
+    expect(model.needs).toEqual([{ field: 'paidBy', reason: 'listed-twice' }]);
+    expect(payerListedTwice(model.needs)).toBe(true);
+    expect(PAYER_LISTED_TWICE).toBe('The same person is listed twice. Choose who paid.');
+    // It still needs who paid, but nothing was left out.
+    expect([model.missingFacts, model.unknownFacts]).toEqual([['who paid'], []]);
+    expect(model.label).toBe('Needs who paid');
+    // The Needs line already names the payer, so the problem isn't said again.
+    expect(memberProblems(model)).toEqual([]);
+  });
+
+  it('keeps “didn’t know who paid” for a payer that is really missing', () => {
+    const base = item(1);
+    const values = { ...base.draft.values };
+    delete values.paidBy;
+    const [model] = buildToReview(
+      read([
+        {
+          ...base,
+          draft: {
+            ...base.draft,
+            preparedBy: { kind: 'assistant', name: 'Claude' },
+            missingFields: ['paidBy'],
+            values,
+          },
+          problems: ['paidBy: Choose who paid.'],
+        },
+      ]),
+      [],
+      now,
+    ).items;
+
+    expect(model.needs).toEqual([{ field: 'paidBy', reason: 'missing' }]);
+    expect(model.unknownFacts).toEqual(['who paid']);
+    expect(payerListedTwice(model.needs)).toBe(false);
+  });
+
+  it('says it in the same words wherever the problem is shown alone', () => {
+    expect(
+      [
+        'paidBy: Each person can appear only once',
+        'Invalid Draft: paidBy: Each person can appear only once',
+        // Someone in the split twice keeps its own words.
+        'splitBetween: Each person can appear only once',
+      ].map((problem) => reviewProblem(problem)),
+    ).toEqual([PAYER_LISTED_TWICE, PAYER_LISTED_TWICE, 'Choose each member only once.']);
   });
 });
 

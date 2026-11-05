@@ -357,7 +357,6 @@ describe('Leave Group', () => {
 
   it.each([
     ['OPEN_BALANCE', 'balances'],
-    ['LAST_ADMIN', null],
     ['LEAVE_CONFLICT', null],
     // #257: a recurring Expense in its problem state still includes the member.
     ['RECURRING_EXPENSE_PROBLEM', null],
@@ -398,14 +397,48 @@ describe('Leave Group', () => {
     });
   });
 
-  it('uses its own words for a refusal the server doesn’t explain', async () => {
+  // #877: Android can't change roles, as Members already says, so the last admin is told where.
+  const lastAdmin =
+    'Make someone else an admin before you leave. Changing roles is done on the web for now.';
+
+  it.each([
+    ['with the server’s words', refusals.LAST_ADMIN],
+    ['when the server doesn’t explain', { status: 409, code: 'LAST_ADMIN' }],
+  ])('tells the last admin that roles are changed on the web, %s (#877)', async (_, body) => {
     const f = await onMembers();
-    f.answer(() => Response.json({ status: 409, code: 'LAST_ADMIN' }, { status: 409 }));
+    f.answer(() => Response.json(body, { status: 409 }));
     await f.controller.reviewLeaveGroup();
     await f.controller.leaveGroup();
     expect(f.controller.getSnapshot().leave).toMatchObject({
       status: 'refused',
-      message: 'Make someone else an admin before you leave.',
+      code: 'LAST_ADMIN',
+      message: lastAdmin,
+      check: null,
+    });
+  });
+
+  // #877: an admin is told to remove themselves from the recurring Expense, which Android can't
+  // edit; the server's words still name it.
+  it.each([
+    [
+      'Rent (recurring) still includes you. Remove yourself from it, then leave.',
+      'Rent (recurring) still includes you. Remove yourself from it on the web, then leave.',
+    ],
+    [
+      'Rent (recurring) and Wi-Fi (recurring) still include you. Remove yourself from them, then leave.',
+      'Rent (recurring) and Wi-Fi (recurring) still include you. Remove yourself from them on the web, then leave.',
+    ],
+  ])('tells an admin a recurring Expense is changed on the web: %s', async (error, message) => {
+    const f = await onMembers();
+    f.answer(() =>
+      Response.json({ ...refusals.RECURRING_EXPENSE_PROBLEM, error }, { status: 409 }),
+    );
+    await f.controller.reviewLeaveGroup();
+    await f.controller.leaveGroup();
+    expect(f.controller.getSnapshot().leave).toMatchObject({
+      status: 'refused',
+      code: 'RECURRING_EXPENSE_PROBLEM',
+      message,
     });
   });
 

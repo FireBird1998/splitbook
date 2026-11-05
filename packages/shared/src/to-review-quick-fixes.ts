@@ -1,6 +1,7 @@
 import { getCategory } from './categories';
 import { reviewNeedWords, reviewSplitMethod, type ReviewItemModel } from './to-review';
 import type { ExpenseDraftValues } from './validators/expense-draft';
+import { SEPARATOR } from './separator';
 
 /** Who is looking, and the Group's current members and active Tags. */
 export interface QuickFixContext {
@@ -129,7 +130,7 @@ function summarize(values: ExpenseDraftValues, context: QuickFixContext) {
   const category = values.category && values.category !== 'other' && !matches(tag, label);
   return [paid, reviewSplitMethod(values.splitMethod), tag, category ? label : '']
     .filter(Boolean)
-    .join(' · ');
+    .join(SEPARATOR);
 }
 
 /** The values a chip keeps: a lone payer (who then pays the whole Expense, #425) or a Tag identity. */

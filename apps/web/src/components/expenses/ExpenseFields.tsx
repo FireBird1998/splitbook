@@ -25,6 +25,7 @@ import {
   getCurrency,
   formatCurrency,
   getCurrencyPrecision,
+  prefixBesideChip,
   wholeUnit,
 } from '@splitbook/shared/currency';
 import { parseDecimalUnits, sumMinorAmounts, toMajorAmount } from '@splitbook/shared/exact-money';
@@ -84,6 +85,8 @@ export interface ExpenseFieldsProps {
   currentTag?: string | null;
   currentTagId?: string | null;
   previewAmount: (id: string) => string;
+  /** In review, payers the item names more than once: each shows once, and Paid by says so (#894). */
+  listedTwice?: readonly string[];
 }
 /** The Add expense fields, shared with To review. Persistence belongs to the caller. */
 export default function ExpenseFields({
@@ -104,6 +107,7 @@ export default function ExpenseFields({
   currencyChoices,
   currencyHint = null,
   addCurrency,
+  listedTwice = [],
 }: ExpenseFieldsProps) {
   const {
     description,
@@ -145,8 +149,9 @@ export default function ExpenseFields({
   const chosen = choices.find((choice) => choice.code === currency) ?? {
     code: currency,
     name: known?.name ?? currency,
-    symbol: known?.symbol ?? currency,
   };
+  // Beside the chip, the prefix only where it isn't the code the chip says (#884).
+  const prefix = prefixBesideChip(chosen.code);
   // A Group in one currency still opens the picker to add one (#722).
   const changeable = choices.length > 1 || !!addCurrency;
   const [currencyMenu, setCurrencyMenu] = useState<HTMLElement | null>(null);
@@ -212,9 +217,10 @@ export default function ExpenseFields({
 
   // ─── Summary Line ──────────────────────────────────
   const payerName = memberName(payers[0]?.user || userId);
+  // One payer is named even among several rows' mode, never "1 people paid" (#894).
   const payerSummary = !payers.length
     ? 'Who paid?'
-    : multiPayerMode
+    : multiPayerMode && payers.length > 1
       ? `${payers.length} people paid`
       : `${payerName} paid`;
 
@@ -400,16 +406,18 @@ export default function ExpenseFields({
                         >
                           {chosen.code}
                         </Button>
-                        <Box
-                          component="span"
-                          aria-hidden="true"
-                          sx={(theme) => ({
-                            ...(theme.typography.money as React.CSSProperties),
-                            color: 'text.secondary',
-                          })}
-                        >
-                          {chosen.symbol}
-                        </Box>
+                        {prefix && (
+                          <Box
+                            component="span"
+                            aria-hidden="true"
+                            sx={(theme) => ({
+                              ...(theme.typography.money as React.CSSProperties),
+                              color: 'text.secondary',
+                            })}
+                          >
+                            {prefix}
+                          </Box>
+                        )}
                       </InputAdornment>
                     ),
                   },
@@ -634,6 +642,11 @@ export default function ExpenseFields({
             >
               Paid by
             </Box>
+            {listedTwice.map((id) => (
+              <Box key={id} sx={{ fontSize: 12, color: 'status.negative', mb: 1 }}>
+                {memberName(id) === 'You' ? 'You are' : `${memberName(id)} is`} listed twice.
+              </Box>
+            ))}
             {!multiPayerMode ? (
               <Stack spacing={1}>
                 <TextField

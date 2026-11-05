@@ -6,6 +6,7 @@
 import { format } from 'date-fns';
 import { z } from 'zod';
 import { CURRENCIES, CURRENCY_CODES, wholeUnit } from './currency';
+import { SEPARATOR } from './separator';
 
 const identity = z.string().regex(/^[a-f\d]{24}$/i);
 const code = z.string().refine((value) => CURRENCY_CODES.includes(value));
@@ -79,7 +80,7 @@ export function extraCurrencyRow(
     const day = format(at, at.getFullYear() === now.getFullYear() ? 'd MMM' : 'd MMM yyyy');
     parts.push(`added by ${added.by._id === viewerId ? 'you' : added.by.name}, ${day}`);
   }
-  return { inUse, line: parts.filter(Boolean).join(' · ') };
+  return { inUse, line: parts.filter(Boolean).join(SEPARATOR) };
 }
 
 /** One thing a refused removal lists: what still uses the currency, and what to do about it. */

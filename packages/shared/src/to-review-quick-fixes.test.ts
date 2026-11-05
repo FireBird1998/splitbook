@@ -174,12 +174,18 @@ describe('To review quick fixes', () => {
         ],
       }),
     );
-    expect(toReviewQuickFixes(dinner, context).summary).toBe('You paid · Split equally · Food');
-    expect(toReviewQuickFixes(bill, context).summary).toBe(
-      'Priya Shah paid · Split equally · Utilities · Housing',
+    expect(toReviewQuickFixes(dinner, context).summary).toBe(
+      'You paid\u00a0· Split equally\u00a0· Food',
     );
-    expect(toReviewQuickFixes(other, context).summary).toBe('You paid · Split equally · General');
-    expect(toReviewQuickFixes(pair, context).summary).toBe('2 people paid · Split equally · Food');
+    expect(toReviewQuickFixes(bill, context).summary).toBe(
+      'Priya Shah paid\u00a0· Split equally\u00a0· Utilities\u00a0· Housing',
+    );
+    expect(toReviewQuickFixes(other, context).summary).toBe(
+      'You paid\u00a0· Split equally\u00a0· General',
+    );
+    expect(toReviewQuickFixes(pair, context).summary).toBe(
+      '2 people paid\u00a0· Split equally\u00a0· Food',
+    );
   });
 
   // #793: a needs-details item whose payer and split are known says what saving it records.
@@ -194,7 +200,9 @@ describe('To review quick fixes', () => {
       unlisted({ ...full, currency: 'CHF', splitBetween: undefined }, ['splitBetween']),
     );
     expect(francs.state).toBe('needs-details');
-    expect(toReviewQuickFixes(francs, context).summary).toBe('You paid · Split equally · Food');
+    expect(toReviewQuickFixes(francs, context).summary).toBe(
+      'You paid\u00a0· Split equally\u00a0· Food',
+    );
     expect(toReviewQuickFixes(unpaid, context).summary).toBeNull();
     expect(toReviewQuickFixes(unsplit, context).summary).toBeNull();
   });

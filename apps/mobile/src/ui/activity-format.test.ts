@@ -547,10 +547,10 @@ describe('a Debt paid in another currency (#728)', () => {
       complement: '₹1,850.00 to clear €20.00',
     });
     expect(line.details.map((detail) => detail.text)).toEqual([
-      'at ₹92.50 per €, suggested ₹92.10 (21 Oct)',
+      'at ₹92.50 per\u00a0€, suggested ₹92.10 (21\u00a0Oct)',
     ]);
     expect(spokenActivity(line, '10:20')).toBe(
-      'You paid Sam Chen ₹1,850.00 to clear €20.00, at ₹92.50 per €, suggested ₹92.10 (21 Oct), 10:20',
+      'You paid Sam Chen ₹1,850.00 to clear €20.00, at ₹92.50 per\u00a0€, suggested ₹92.10 (21\u00a0Oct), 10:20',
     );
   });
 
@@ -574,14 +574,14 @@ describe('a Debt paid in another currency (#728)', () => {
       complement: '₹1,848.00 to clear €20.00',
     });
     expect(entered.details.map((detail) => detail.text)).toEqual([
-      'at ₹92.40 per €; no rate suggested',
+      'at ₹92.40 per\u00a0€; no rate suggested',
     ]);
     const mixed = describeActivity(paid({ rateSource: 'mixed' }), {
       currentUserId: alex,
       currency: 'INR',
     });
     expect(mixed.details.map((detail) => detail.text)).toEqual([
-      'at ₹92.50 per €, suggested ₹92.10 (21 Oct) · Rates By Exchange Rate API',
+      'at ₹92.50 per\u00a0€, suggested ₹92.10 (21\u00a0Oct)\u00a0· Rates By Exchange Rate API',
     ]);
   });
 
@@ -748,10 +748,10 @@ describe('a payment that settled several Debts at once (#734)', () => {
     });
     expect(line.details.map((detail) => detail.text)).toEqual([
       '₹1,480.00, same currency, no rate',
-      '€20.00 at the suggested ₹92.10 per € (20 Oct)',
+      '€20.00 at the suggested ₹92.10 per\u00a0€ (20\u00a0Oct)',
     ]);
     expect(spokenActivity(line, '10:20')).toBe(
-      'You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00, ₹1,480.00, same currency, no rate, €20.00 at the suggested ₹92.10 per € (20 Oct), 10:20',
+      'You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00, ₹1,480.00, same currency, no rate, €20.00 at the suggested ₹92.10 per\u00a0€ (20\u00a0Oct), 10:20',
     );
   });
 

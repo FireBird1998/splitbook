@@ -89,6 +89,16 @@ export function currencyPrefix(currencyCode: string): string {
   }
 }
 
+/**
+ * What an amount beside a currency chip shows before it (#884): formatCurrency's prefix, or
+ * nothing where that is the code the chip already says. "EUR ▾ € 60.00", but "PLN ▾ 60.00" and
+ * "CHF ▾ 0.00", never "PLN ▾ zł 60.00" or "CHF ▾ CHF 0.00".
+ */
+export function prefixBesideChip(currencyCode: string): string {
+  const prefix = currencyPrefix(currencyCode);
+  return prefix === currencyCode ? '' : prefix;
+}
+
 /** Decimal places a number is written with: 10.555 has 3, 1.5e-7 has 8. */
 function decimalPlaces(value: number): number {
   const [mantissa, exponent = '0'] = String(Math.abs(value)).toLowerCase().split('e');

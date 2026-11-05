@@ -172,6 +172,29 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+// #884: a currency with no symbol of its own is named by its code, as its amounts are.
+describe('Settle up in a currency without a symbol (#884)', () => {
+  it('says “per PLN”, never “per zł”, in its rate and its field', async () => {
+    const zloty: SettleAllOffer = {
+      ...offer,
+      debts: [
+        { currency: 'INR', amountMinor: 148000 },
+        { currency: 'PLN', amountMinor: 6000 },
+      ],
+    };
+    rates.byPair = { 'PLN>INR': { status: 'ready', suggestion: suggestion('20.826267') } };
+    await mount({
+      offer: zloty,
+      payCurrencies: ['INR', 'PLN'],
+      recheck: async () => zloty.debts,
+    });
+    expect(rows()[2]).toMatch(/^PLN PLN 60\.00 ₹20\.826267 per PLN /);
+    await press('Change the rate for the PLN Debt');
+    expect(shown()).toContain('per PLN');
+    expect(shown()).not.toContain('zł');
+  });
+});
+
 describe('Settle up with Sam (#734)', () => {
   it('shows each Debt, its rate and what it pays, and records them as one payment', async () => {
     await mount();

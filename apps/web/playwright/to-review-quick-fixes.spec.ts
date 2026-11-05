@@ -45,7 +45,7 @@ test('a payer chip moves an item to Ready, and its row Save records it', async (
   await payers.getByRole('button', { name: 'You, suggested' }).click();
   const ready = region(page, 'Ready');
   await expect(ready).toContainText('Review meal 1');
-  await expect(ready).toContainText(/You paid · Split equally/);
+  await expect(ready).toContainText(/You paid\s· Split equally/);
   // The chip keeps a lone payer only; saving makes them pay the whole amount (#425).
   expect((await rows(page))[0].values.paidBy).toEqual([{ user: alex }]);
 

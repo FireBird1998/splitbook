@@ -1,6 +1,7 @@
 import { memberLabel } from './member-label';
-import { getCurrency, getCurrencyPrecision } from './currency';
+import { currencyPrefix, getCurrency, getCurrencyPrecision } from './currency';
 import { assertSafeMinorAmount, MoneyValidationError } from './exact-money';
+import { NO_BREAK_SPACE, SEPARATOR } from './separator';
 
 /** Exactly two entered values. Amounts are integer minor units of their named currency. */
 export type CrossCurrencyCalculation = { currency: string; paidCurrency: string } & (
@@ -200,6 +201,13 @@ function groupedInteger(integer: string, format: Intl.NumberFormat): Intl.Number
     { type: 'integer' as const, value },
   ]);
 }
+/**
+ * "per €" after a rate: the Debt's currency as formatCurrency names it before an amount, so the
+ * zloty is "per PLN", never "per zł" (#884), joined by a no-break space so a line never parts
+ * them (#892).
+ */
+export const perUnit = (currency: string) => `per${NO_BREAK_SPACE}${currencyPrefix(currency)}`;
+
 /** Format a positive safe integer minor amount without passing through floating point. */
 export function minorMoney(minor: number, currency: string): string {
   positiveMinor(minor);
@@ -257,8 +265,8 @@ export function formatCrossCurrencySettlement(
     : paidTo
       ? `Paid to ${recipient}`
       : 'Paid';
-  const clearedSymbol = getCurrency(record.currency)?.symbol ?? record.currency;
   const money = (rate: string) => decimalMoney(rateText(rate), record.paidCurrency);
+  const per = perUnit(record.currency);
   const used = rateUsed(record);
   const lead = `${people} ${minorMoney(record.amountPaidMinor, record.paidCurrency)} to clear ${minorMoney(record.amountMinor, record.currency)} at`;
   let text: string;
@@ -279,12 +287,12 @@ export function formatCrossCurrencySettlement(
       'Nov',
       'Dec',
     ][Number(month) - 1];
-    const dated = `(${Number(day)} ${monthName})`;
+    const dated = `(${Number(day)}${NO_BREAK_SPACE}${monthName})`;
     text = used.suggested
-      ? `${lead} the suggested ${money(used.rate)} per ${clearedSymbol} ${dated}`
-      : `${lead} ${money(used.rate)} per ${clearedSymbol}, suggested ${money(record.suggestedRate)} ${dated}`;
-  } else text = `${lead} ${money(used.rate)} per ${clearedSymbol}; no rate suggested`;
+      ? `${lead} the suggested ${money(used.rate)} ${per} ${dated}`
+      : `${lead} ${money(used.rate)} ${per}, suggested ${money(record.suggestedRate)} ${dated}`;
+  } else text = `${lead} ${money(used.rate)} ${per}; no rate suggested`;
   if (record.rateSource === 'exchange-rate-api' || record.rateSource === 'mixed')
-    text += ` · ${EXCHANGE_RATE_API_ATTRIBUTION.text}`;
+    text += `${SEPARATOR}${EXCHANGE_RATE_API_ATTRIBUTION.text}`;
   return text;
 }

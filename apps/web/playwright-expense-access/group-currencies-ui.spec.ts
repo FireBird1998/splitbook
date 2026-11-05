@@ -99,9 +99,9 @@ for (const scheme of ['light', 'dark'] as const) {
     ).toBeVisible();
     await expect(currencies(page).getByText('3 of 4', { exact: true })).toBeVisible();
     await expect(rows(page)).toHaveText([
-      /^EUR\s*Euro\s*In use\s*1 Expense · 1 Settlement · added by you, \d+ \w+\s*Remove$/,
-      /^JPY\s*Japanese Yen\s*In use\s*2 Expenses · 2 items in To review · whole amounts only · added by you, \d+ \w+\s*Remove$/,
-      /^GBP\s*British Pound\s*Nothing uses it · added by you, \d+ \w+\s*Remove$/,
+      /^EUR\s*Euro\s*In use\s*1 Expense\s· 1 Settlement\s· added by you, \d+ \w+\s*Remove$/,
+      /^JPY\s*Japanese Yen\s*In use\s*2 Expenses\s· 2 items in To review\s· whole amounts only\s· added by you, \d+ \w+\s*Remove$/,
+      /^GBP\s*British Pound\s*Nothing uses it\s· added by you, \d+ \w+\s*Remove$/,
     ]);
     await currencies(page).scrollIntoViewIfNeeded();
     await page.screenshot({
@@ -192,7 +192,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(dialog).toBeHidden();
 
     await expect(rows(page).last()).toHaveText(
-      /^CHF\s*Swiss Franc\s*Nothing uses it · added by you, \d+ \w+$/,
+      /^CHF\s*Swiss Franc\s*Nothing uses it\s· added by you, \d+ \w+$/,
     );
     await expect(currencies(page).getByText('4 of 4', { exact: true })).toBeVisible();
     await expect(currencies(page).getByRole('button', { name: /^Currency to add/ })).toHaveCount(0);

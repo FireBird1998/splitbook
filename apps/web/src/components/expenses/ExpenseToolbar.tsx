@@ -16,7 +16,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import SearchIcon from '@mui/icons-material/Search';
 import SortIcon from '@mui/icons-material/Sort';
-import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
+import { currencyPrefix, formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import { ShortcutHint, useShortcutAria } from '@/components/shortcuts/ShortcutHint';
 import { useShortcut } from '@/lib/shortcuts/ShortcutsProvider';
@@ -297,7 +297,8 @@ function AmountChip({
   const dialogId = useId();
   const titleId = useId();
   const active = min !== null || max !== null;
-  const symbol = getCurrency(currency)?.symbol ?? currency;
+  // As the range names the currency: "PLN 500.00", so "PLN", never "zł" (#884).
+  const symbol = currencyPrefix(currency);
 
   const open = (target: HTMLElement) => {
     setLow(min ?? '');

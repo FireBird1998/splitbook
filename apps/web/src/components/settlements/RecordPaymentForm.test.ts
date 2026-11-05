@@ -307,6 +307,23 @@ describe('a payment whose reply was lost', () => {
     expect(record(html)).toEqual({ text: 'Record payment ₹1,850.00', disabled: false });
   });
 
+  // #884: "per zł" named the zloty unlike its amounts, which say "PLN 60.00".
+  it('names a currency without a symbol by its code in what it paid as (#884)', () => {
+    stored.attempts = [
+      attempt({
+        amount: 60,
+        currency: 'PLN',
+        amountPaidMinor: 124958,
+        paidCurrency: 'INR',
+        appliedRate: '20.826267',
+        rateKind: 'custom',
+      }),
+    ];
+    const { text: shown } = render({ to: SAM }, { currency: 'PLN' });
+    expect(shown).toContain('Paid as ₹1,249.58 at ₹20.826267 per PLN');
+    expect(shown).not.toContain('zł');
+  });
+
   it('is shown read-only for its pair, and Record sends it again unchanged', () => {
     stored.attempts = [attempt()];
     const { html, text: shown } = render({ to: SAM, amount: '1060.00' });

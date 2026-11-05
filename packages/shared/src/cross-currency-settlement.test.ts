@@ -138,12 +138,12 @@ describe('cross-currency Settlement wording (#727)', () => {
       rateKind: 'suggested' as const,
     };
     expect(formatCrossCurrencySettlement(atSuggestion)).toBe(
-      'Sam paid Alex ₹1,842.00 to clear €20.00 at the suggested ₹92.10 per € (21 Oct)',
+      'Sam paid Alex ₹1,842.00 to clear €20.00 at the suggested ₹92.10 per\u00a0€ (21\u00a0Oct)',
     );
     expect(
       formatCrossCurrencySettlement({ ...atSuggestion, rateSource: 'exchange-rate-api' }),
     ).toBe(
-      'Sam paid Alex ₹1,842.00 to clear €20.00 at the suggested ₹92.10 per € (21 Oct) · Rates By Exchange Rate API',
+      'Sam paid Alex ₹1,842.00 to clear €20.00 at the suggested ₹92.10 per\u00a0€ (21\u00a0Oct)\u00a0· Rates By Exchange Rate API',
     );
     // An older record keeps a rate worked back from ₹5,049.84: rounding explains it.
     expect(
@@ -153,12 +153,14 @@ describe('cross-currency Settlement wording (#727)', () => {
         amountPaidMinor: 504984,
         appliedRate: '92.099945285427685574',
       }),
-    ).toBe('Sam paid Alex ₹5,049.84 to clear €54.83 at the suggested ₹92.10 per € (21 Oct)');
+    ).toBe(
+      'Sam paid Alex ₹5,049.84 to clear €54.83 at the suggested ₹92.10 per\u00a0€ (21\u00a0Oct)',
+    );
   });
 
   it('formats both stored amounts, the applied rate and the dated suggestion', () => {
     expect(formatCrossCurrencySettlement(record)).toBe(
-      'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct)',
+      'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per\u00a0€, suggested ₹92.10 (21\u00a0Oct)',
     );
   });
   it.each([
@@ -167,7 +169,7 @@ describe('cross-currency Settlement wording (#727)', () => {
     ['someone-else', 'Sam paid Alex'],
   ])('names both people with viewer %s as You', (viewerId, people) => {
     expect(formatCrossCurrencySettlement(record, viewerId)).toBe(
-      `${people} ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct)`,
+      `${people} ₹1,850.00 to clear €20.00 at ₹92.50 per\u00a0€, suggested ₹92.10 (21\u00a0Oct)`,
     );
   });
   it('falls back to Paid to when the payer name is missing, as Activity detail does', () => {
@@ -183,7 +185,7 @@ describe('cross-currency Settlement wording (#727)', () => {
   });
   it('dates the suggestion by rateAsOf even when it was fetched the next day', () => {
     expect(formatCrossCurrencySettlement({ ...record, rateAsOf: '2026-10-20' })).toContain(
-      'suggested ₹92.10 (20 Oct)',
+      'suggested ₹92.10 (20\u00a0Oct)',
     );
   });
   it('names an entered rate and retains required fallback attribution', () => {
@@ -200,12 +202,42 @@ describe('cross-currency Settlement wording (#727)', () => {
         appliedRate: '157.5',
         rateKind: 'entered',
       }),
-    ).toBe('Sam paid Alex ¥3,150 to clear €20.00 at ¥157.50 per €; no rate suggested');
+    ).toBe('Sam paid Alex ¥3,150 to clear €20.00 at ¥157.50 per\u00a0€; no rate suggested');
     expect(formatCrossCurrencySettlement({ ...record, rateSource: 'exchange-rate-api' })).toBe(
-      'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct) · Rates By Exchange Rate API',
+      'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per\u00a0€, suggested ₹92.10 (21\u00a0Oct)\u00a0· Rates By Exchange Rate API',
     );
     expect(formatCrossCurrencySettlement({ ...record, rateSource: 'mixed' })).toContain(
       'Rates By Exchange Rate API',
+    );
+  });
+  // #884: a currency with no symbol of its own in English is named by its code, as its amounts.
+  it('names a currency without a symbol by its code, as its amounts are (#884)', () => {
+    const zloty = {
+      paidBy: 'sam',
+      paidByName: 'Sam',
+      paidTo: 'alex',
+      paidToName: 'Alex',
+      currency: 'PLN',
+      amountMinor: 6000,
+      paidCurrency: 'INR',
+      amountPaidMinor: 124958,
+      appliedRate: '20.826267',
+      rateKind: 'entered' as const,
+    };
+    expect(formatCrossCurrencySettlement(zloty)).toBe(
+      'Sam paid Alex ₹1,249.58 to clear PLN\u00a060.00 at ₹20.826267 per\u00a0PLN; no rate suggested',
+    );
+    expect(
+      formatCrossCurrencySettlement({
+        ...zloty,
+        currency: 'EUR',
+        amountMinor: 2000,
+        paidCurrency: 'CZK',
+        amountPaidMinor: 50000,
+        appliedRate: '25',
+      }),
+    ).toBe(
+      'Sam paid Alex CZK\u00a0500.00 to clear €20.00 at CZK\u00a025.00 per\u00a0€; no rate suggested',
     );
   });
   it('formats stored decimal rates and large minor amounts without floating-point rounding', () => {
@@ -222,7 +254,7 @@ describe('cross-currency Settlement wording (#727)', () => {
         appliedRate: '0.166666666666666667',
         rateKind: 'entered',
       }),
-    ).toContain('at ₹0.166667 per €');
+    ).toContain('at ₹0.166667 per\u00a0€');
     expect(
       formatCrossCurrencySettlement({ ...record, amountPaidMinor: 9007199254740991 }),
     ).toContain('₹90,071,992,547,409.91');

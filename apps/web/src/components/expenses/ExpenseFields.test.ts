@@ -28,6 +28,7 @@ function render(
     currency?: string;
     currencyChoices?: ExpenseCurrencyChoice[];
     currencyHint?: string | null;
+    payers?: Array<{ user: string; amount: string }>;
   } = {},
 ) {
   const draft = ExpenseDraft.open({
@@ -41,7 +42,7 @@ function render(
     description: 'Chai',
     amount,
     multiPayerMode: mode.multiPayerMode ?? false,
-    payers: [{ user: YOU, amount }],
+    payers: mode.payers ?? [{ user: YOU, amount }],
   });
   return renderToStaticMarkup(
     createElement(
@@ -143,6 +144,34 @@ describe('the Expense’s currency, beside its amount (#719)', () => {
     expect(html).not.toMatch(/<label[^>]*>Currency</);
   });
 
+  // #884: "PLN ▾ 60.00" and "CHF ▾ 86.00", never "PLN ▾ zł 60.00" or "CHF ▾ CHF 86.00".
+  it.each([
+    ['PLN', null],
+    ['CHF', null],
+    ['EUR', '€'],
+  ])(
+    'shows %s’s prefix beside the chip only where it isn’t the code the chip says',
+    (code, prefix) => {
+      const html = render('60', {
+        currency: code,
+        currencyChoices: expenseCurrencyChoices(
+          { defaultCurrency: 'INR', alternateCurrencies: [code] },
+          code,
+          code,
+        ),
+      });
+      const button = currencyButton.exec(html)![0];
+      // What the amount's start shows after the chip: its prefix, or nothing.
+      const after = html.split(button)[1].split('</button>').slice(1).join('</button>');
+      const beside =
+        /^(?:<style[^>]*>[^<]*<\/style>)?<span[^>]*aria-hidden="true"[^>]*>([^<]*)<\/span>/.exec(
+          after,
+        )?.[1] ?? null;
+      expect(beside).toBe(prefix);
+      expect(html).not.toContain('zł');
+    },
+  );
+
   it('splits whole yen, and refuses part of a yen in the board’s words', () => {
     const choices = expenseCurrencyChoices(trip, null, 'JPY');
     expect(text(render('2500', { currency: 'JPY', currencyChoices: choices }))).toContain(
@@ -177,4 +206,20 @@ it('does not display a malformed money prefix as the payer total (#773)', () => 
   const shown = text(render('1,84,250', { isEditMode: true, multiPayerMode: true }));
   expect(shown).toContain('Enter an amount like 1,060.00.');
   expect(shown).not.toContain('Total: ₹1.00 / ₹1.00');
+});
+
+// #894: an Expense with one payer row among several read "1 people paid".
+describe('who paid, in the summary (#894)', () => {
+  it('names one payer, as with a single payer, and counts several', () => {
+    const summary = (payers: Array<{ user: string; amount: string }>) =>
+      text(render('100', { isEditMode: true, multiPayerMode: true, payers }));
+    expect(summary([{ user: SAM, amount: '40' }])).toContain('Sam Chen paid');
+    expect(summary([{ user: SAM, amount: '40' }])).not.toMatch(/\d (person|people) paid/);
+    expect(
+      summary([
+        { user: YOU, amount: '40' },
+        { user: SAM, amount: '60' },
+      ]),
+    ).toContain('2 people paid');
+  });
 });

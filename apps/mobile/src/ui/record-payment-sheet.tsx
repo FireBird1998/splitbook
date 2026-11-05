@@ -2,7 +2,7 @@ import type { TextInputInstance } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { readAmountEntry } from '@splitbook/shared/amount-entry';
-import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
+import { formatCurrency } from '@splitbook/shared/currency';
 import {
   crossCurrencyRateKind,
   crossCurrencySummary,
@@ -10,7 +10,7 @@ import {
   readCrossCurrencyEntry,
   type CrossCurrencyField,
 } from '@splitbook/shared/cross-currency-payment';
-import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
+import { decimalMoney, minorMoney, perUnit } from '@splitbook/shared/cross-currency-settlement';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
 import { acceptsNumericText, visibleFieldErrors } from '../data/field-feedback';
@@ -297,13 +297,14 @@ function SinglePaymentSheet({
           : reading?.status === 'invalid'
             ? reading.message
             : null;
-  // An unconfirmed payment in another currency resends what it paid, at its rate.
+  // An unconfirmed payment in another currency resends what it paid, at its rate, naming the
+  // Debt's currency as its amounts do: "per PLN", never "per zł" (#884).
   const paidAs =
     draft?.paid && state.attempt
       ? `Paid as ${minorMoney(draft.paid.amountPaidMinor, draft.paid.paidCurrency)} at ${decimalMoney(
           rateText(draft.paid.appliedRate),
           draft.paid.paidCurrency,
-        )} per ${getCurrency(draft.currency)?.symbol ?? draft.currency}`
+        )} ${perUnit(draft.currency)}`
       : null;
   // An unconfirmed payment in another currency names its amount as the amount cleared.
   const amountTitle = paidAs ? 'Amount cleared' : 'Amount paid';

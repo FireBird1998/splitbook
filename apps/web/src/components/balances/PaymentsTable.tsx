@@ -6,7 +6,12 @@ import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { rateText } from '@splitbook/shared/cross-currency-payment';
-import { decimalMoney, minorMoney, rateUsed } from '@splitbook/shared/cross-currency-settlement';
+import {
+  decimalMoney,
+  minorMoney,
+  perUnit,
+  rateUsed,
+} from '@splitbook/shared/cross-currency-settlement';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import ErrorState from '@/components/common/ErrorState';
 import { TabCard, PaysArrow, PersonAvatar, visuallyHidden } from './TabCard';
@@ -250,7 +255,7 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
                               payment.amountPaidMinor,
                               payment.paidCurrency,
                             )} at {decimalMoney(rateText(rateOf(payment)), payment.paidCurrency)}{' '}
-                            per {getCurrency(payment.currency)?.symbol ?? payment.currency}
+                            {perUnit(payment.currency)}
                           </Box>
                         )}
                     </Box>

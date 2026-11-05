@@ -17,6 +17,7 @@ import {
   type ExpenseDraftValues,
 } from './validators/expense-draft';
 import type { ToReviewItem, ToReviewRead } from './to-review-read';
+import { SEPARATOR } from './separator';
 
 export type ToReviewState = 'ready' | 'duplicate' | 'needs-details' | 'on-this-phone';
 /** Device recovery stays plain data; this model never uploads it or selects it for saving. */
@@ -56,6 +57,8 @@ export interface ReviewNeed {
     | 'split-total'
     | 'payer-total'
     | 'percentage-total'
+    /** Payers that name the same member twice (#716): there, but wrong, never left out. */
+    | 'listed-twice'
     | 'group-currency'
     | 'currency-not-listed'
     | 'unknown';
@@ -81,6 +84,11 @@ const labels: Record<ToReviewState, string> = {
   'needs-details': 'Needs details',
   'on-this-phone': 'On this phone',
 };
+/** What To review says when the payers name the same member twice (#716, the owner's words). */
+export const PAYER_LISTED_TWICE = 'The same person is listed twice. Choose who paid.';
+/** Whether the payers name the same member twice: not a payer an assistant didn't know (#716). */
+export const payerListedTwice = (needs: readonly ReviewNeed[]) =>
+  needs.some((need) => need.field === 'paidBy' && need.reason === 'listed-twice');
 /** Whether an item's missing facts ask for its amount: missing, or with too many decimals. */
 export const needsAmount = (needs: readonly ReviewNeed[]) =>
   needs.some((need) => need.field === 'amount');
@@ -112,6 +120,8 @@ function validationNeed(reason: string, path: readonly PropertyKey[]): ReviewNee
     return { field: 'paidBy', reason: 'payer-total' };
   if (reason === 'Percentages must add up to 100')
     return { field: 'splitBetween', reason: 'percentage-total' };
+  if (reason === 'Each person can appear only once' && field === 'paidBy')
+    return { field, reason: 'listed-twice' };
   const precision = reason.match(DECIMALS)?.[1];
   return {
     field,
@@ -132,6 +142,7 @@ function needSentence(need: ReviewNeed): string {
   if (need.reason === 'split-total') return 'The split must add up to the total.';
   if (need.reason === 'payer-total') return 'The amounts paid must add up to the total.';
   if (need.reason === 'percentage-total') return 'The percentages must add up to 100%.';
+  if (need.reason === 'listed-twice') return PAYER_LISTED_TWICE;
   const places = need.precision === 0 ? undefined : `at most ${need.precision} decimal places`;
   if (need.field === 'splitBetween')
     return places ? `Each share can have ${places}.` : 'Each share must be a whole number.';
@@ -188,6 +199,8 @@ function accountModel(
     accountItem: item,
   };
 }
+/** "needs details" after 1, "need details" after any other count (#877); plurals by hand. */
+export const needDetailsWords = (count: number) => (count === 1 ? 'needs details' : 'need details');
 export function toReviewSourceSummary(items: readonly ReviewItemModel[], now?: Date): string {
   const sources = new Map<string, { total: number; today: number }>();
   for (const item of items) {
@@ -205,8 +218,8 @@ export function toReviewSourceSummary(items: readonly ReviewItemModel[], now?: D
         `${count.total} from ${name}${now && count.today === count.total ? ' today' : ''}`,
     );
   const needs = items.filter((item) => item.state === 'needs-details').length;
-  if (needs) parts.push(`${needs} needs details`);
-  return parts.join(' · ');
+  if (needs) parts.push(`${needs} ${needDetailsWords(needs)}`);
+  return parts.join(SEPARATOR);
 }
 function counts(items: readonly ReviewItemModel[]) {
   return {
@@ -315,7 +328,7 @@ export function summarizeReviewRun(outcomes: readonly ReviewRunOutcome[]) {
     deleted ? `Deleted ${deleted}` : '',
     left ? `${left} left for later` : '',
   ].filter(Boolean);
-  return { saved, deleted, left, label: parts.join(' · ') };
+  return { saved, deleted, left, label: parts.join(SEPARATOR) };
 }
 
 /** A date-only Expense fact is a calendar day, not a UTC instant. */
@@ -357,7 +370,7 @@ export function describeDraftChange(
       })
       .join(', ') || 'not specified';
   const split = (values: ExpenseDraftValues) =>
-    `${reviewSplitMethod(values.splitMethod)} · ${people(values.splitBetween, values.currency)}`;
+    `${reviewSplitMethod(values.splitMethod)}${SEPARATOR}${people(values.splitBetween, values.currency)}`;
   const fields = [
     [
       'amount',

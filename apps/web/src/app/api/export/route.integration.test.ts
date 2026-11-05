@@ -1280,7 +1280,7 @@ describe('multi-currency exports (#731)', () => {
           paidCurrency: 'INR',
           appliedRate: '92.5',
           description:
-            'Bob Tester paid Alice Tester ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
+            'Bob Tester paid Alice Tester ₹1,850.00 to clear €20.00 at ₹92.50 per\u00a0€, suggested ₹92.10 (20\u00a0Oct)',
         },
       ],
     });

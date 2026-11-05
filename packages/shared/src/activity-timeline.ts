@@ -10,6 +10,7 @@ import {
 } from './group-currency-settings';
 import { readCrossCurrencyRecord } from './cross-currency-payment';
 import { formatCrossCurrencySettlement } from './cross-currency-settlement';
+import { SEPARATOR } from './separator';
 
 export interface ActivityLike {
   _id: string;
@@ -146,7 +147,7 @@ export function formatActivityDetail(activity: ActivityLike, viewerId?: string):
 
   if (activity.type === 'settlement_recorded') {
     const cross = readCrossCurrencyRecord(meta);
-    if (cross) return `Settlement · ${cross.currency} Debt paid in ${cross.paidCurrency}`;
+    if (cross) return `Settlement${SEPARATOR}${cross.currency} Debt paid in ${cross.paidCurrency}`;
     const paidTo = memberLabel(meta.paidTo, meta.paidToName, viewerId);
     const paidBy = memberLabel(meta.paidBy, meta.paidByName, viewerId);
     if (paidBy && paidTo) {

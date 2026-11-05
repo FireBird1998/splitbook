@@ -16,8 +16,8 @@ import {
   rateText,
   suggestedRateText,
 } from '@splitbook/shared/cross-currency-payment';
-import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
-import { getCurrency } from '@splitbook/shared/currency';
+import { decimalMoney, minorMoney, perUnit } from '@splitbook/shared/cross-currency-settlement';
+import { currencyPrefix } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { useRateSuggestion, type RateSuggestionState } from '@/lib/hooks/use-rate-suggestion';
 import {
@@ -73,10 +73,11 @@ export interface SettleAllDialogProps {
   onRefresh: () => void;
 }
 
-const symbolOf = (currency: string) => getCurrency(currency)?.symbol ?? currency;
+/** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#884). */
+const symbolOf = currencyPrefix;
 /** "₹92.10 per €": units of the paying currency for one unit of the Debt's. */
-const perUnit = (rate: string, paidCurrency: string, currency: string) =>
-  `${decimalMoney(rateText(rate), paidCurrency)} per ${symbolOf(currency)}`;
+const rateWords = (rate: string, paidCurrency: string, currency: string) =>
+  `${decimalMoney(rateText(rate), paidCurrency)} ${perUnit(currency)}`;
 
 /** Reads a Debt's suggested rate into the sheet: the hook, once per Debt and paying currency. */
 function RateReader({
@@ -548,7 +549,7 @@ function RateCell({
   if (fixed)
     return (
       <Box component="span" sx={{ display: 'flex', flexDirection: 'column' }}>
-        {line.rate && <span>{perUnit(line.rate, paidCurrency, line.currency)}</span>}
+        {line.rate && <span>{rateWords(line.rate, paidCurrency, line.currency)}</span>}
       </Box>
     );
   const editing = changing || state.status === 'none';
@@ -582,7 +583,7 @@ function RateCell({
             sx={{ flex: 1, fontFamily: FONT_MONO }}
           />
           <Box component="span" sx={small}>
-            per {symbolOf(line.currency)}
+            {perUnit(line.currency)}
           </Box>
         </Box>
         <Box component="span" sx={small}>
@@ -609,7 +610,7 @@ function RateCell({
   return (
     <Box component="span" sx={{ display: 'flex', flexDirection: 'column' }}>
       <Box component="span" sx={{ fontFamily: FONT_MONO }}>
-        {perUnit(line.rate, paidCurrency, line.currency)}
+        {rateWords(line.rate, paidCurrency, line.currency)}
       </Box>
       {/* The suggestion's source on one line; it's the suggested rate until Change. */}
       <Box component="span" data-rate-part="source" sx={small}>

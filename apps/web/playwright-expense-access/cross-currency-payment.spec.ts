@@ -222,13 +222,13 @@ for (const scheme of ['light', 'dark'] as const) {
     // Activity names both amounts and the rate, and opens the payment's card.
     await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${group}/activity`);
     const row = page.getByRole('button', {
-      name: /You paid Sam Chen ₹1,850\.00 to clear €20\.00 at ₹92\.50 per €, suggested ₹92\.10/,
+      name: /You paid Sam Chen ₹1,850\.00 to clear €20\.00 at ₹92\.50 per\s€, suggested ₹92\.10/,
     });
     await expect(row).toContainText('Settlement · EUR Debt paid in INR');
     await row.click();
     const card = page.getByRole('region', { name: 'Payment', exact: true });
     await expect(card).toContainText(/Paid\s*₹1,850\.00\s*to clear €20\.00, a Debt in EUR/);
-    await expect(card).toContainText(/Rate used\s*₹92\.50 per €\s*Your rate/);
+    await expect(card).toContainText(/Rate used\s*₹92\.50 per\s€\s*Your rate/);
     await expect(card).toContainText('You and Sam in EUR: −€20.00 → €0.00');
     await expect(card).toContainText(
       'INR balances didn’t change. Only the Debt’s own currency moves.',

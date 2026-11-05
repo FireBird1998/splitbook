@@ -4,6 +4,7 @@ import {
   formatCurrency,
   formatCurrencyAsEntered,
   inSupportedCurrencies,
+  prefixBesideChip,
 } from './currency';
 
 describe('money as entered (#537)', () => {
@@ -46,5 +47,20 @@ describe('currencyPrefix (#868)', () => {
     ]);
     for (const code of ['PLN', 'CZK', 'EUR'])
       expect(formatCurrency(60, code).startsWith(currencyPrefix(code)), code).toBe(true);
+  });
+});
+
+// #884: beside a chip that already says the code, the code isn't said twice.
+describe('prefixBesideChip (#884)', () => {
+  it('is formatCurrency’s prefix, or nothing where that is the code the chip shows', () => {
+    expect(['PLN', 'CZK', 'CHF', 'EUR', 'JPY', 'INR', 'USD'].map(prefixBesideChip)).toEqual([
+      '',
+      '',
+      '',
+      '€',
+      '¥',
+      '₹',
+      '$',
+    ]);
   });
 });

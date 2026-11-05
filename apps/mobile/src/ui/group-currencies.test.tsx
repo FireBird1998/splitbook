@@ -105,9 +105,9 @@ describe('a Group’s currencies (#722)', () => {
     expect(shown).toContain('INRIndian RupeeLocked: money is already recorded in INR');
     expect(shown).toContain('Extra currencies');
     expect(shown).toContain('2 of 4');
-    expect(shown).toContain('EUREuro11 Expenses · 1 Settlement · added by Sam, 1 Oct');
+    expect(shown).toContain('EUREuro11 Expenses\u00a0· 1 Settlement\u00a0· added by Sam, 1 Oct');
     expect(shown).toContain(
-      'JPYJapanese Yen24 Expenses · whole amounts only · added by Sam, 5 Oct',
+      'JPYJapanese Yen24 Expenses\u00a0· whole amounts only\u00a0· added by Sam, 5 Oct',
     );
     expect(shown).toContain('Anyone in the Group can add one. Activity shows who added it.');
     expect(shown).toContain('Removing a currency is on the web for now.');
