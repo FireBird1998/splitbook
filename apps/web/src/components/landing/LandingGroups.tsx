@@ -89,7 +89,9 @@ function HouseholdExtras() {
         component="dl"
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
+          // Tiles side by side from 600 px; rows again from 1200 px, where the card is a quarter
+          // of the 4-column grid and a tile is too narrow for its amount (#646).
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))', lg: '1fr' },
           gap: 1,
           m: 0,
         }}
@@ -102,11 +104,12 @@ function HouseholdExtras() {
               borderRadius: 1,
               p: 1.25,
               minWidth: 0,
-              // A row on a phone, so no amount wraps; a tile from 600 px up.
+              // A row on a phone and in the 4-column grid, so no amount wraps or spills; a tile
+              // between 600 and 1200 px.
               display: 'flex',
-              flexDirection: { xs: 'row', sm: 'column' },
+              flexDirection: { xs: 'row', sm: 'column', lg: 'row' },
               justifyContent: 'space-between',
-              alignItems: { xs: 'baseline', sm: 'flex-start' },
+              alignItems: { xs: 'baseline', sm: 'flex-start', lg: 'baseline' },
               gap: 0.5,
             }}
           >

@@ -676,6 +676,28 @@ describe('the content sections (#446)', () => {
     expect(columns(1200)).toBe('repeat(4, minmax(0, 1fr))');
   });
 
+  it('stack the Household month totals as rows in the 4-column grid, so no amount spills out of its tile (#646)', () => {
+    const groups = section(render('light', OFF), 'groups');
+    const months = /<dl\b[^>]*class="([^"]*)"/;
+    const tile = /<dl\b[^>]*>(?:<style\b[^>]*>[^<]*<\/style>)*<div\b[^>]*class="([^"]*)"/;
+    /** An element's rules from a breakpoint up, as its media rule sets them. */
+    const from = (element: RegExp, width: number) => {
+      const classes = element
+        .exec(groups)![1]
+        .split(' ')
+        .filter((name) => name.startsWith('css-'));
+      return new RegExp(
+        `@media \\(min-width:${width}px\\)\\{\\.(?:${classes.join('|')})\\{([^}]*)`,
+      ).exec(groups)?.[1];
+    };
+    // Tiles side by side from 600 px, where the card is a column of 2 or 1.
+    expect(from(months, 600)).toContain('grid-template-columns:repeat(3, minmax(0, 1fr))');
+    expect(from(tile, 600)).toContain('flex-direction:column');
+    // From 1200 px the card is a quarter of the grid: one row per month.
+    expect(from(months, 1200)).toContain('grid-template-columns:1fr');
+    expect(from(tile, 1200)).toContain('flex-direction:row');
+  });
+
   it('show the split methods as chips on the Groceries card, Shares picked, never as controls (#646)', () => {
     for (const mode of MODES) {
       const split = section(render(mode, OFF), 'how');
