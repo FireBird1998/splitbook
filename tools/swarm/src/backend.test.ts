@@ -711,6 +711,43 @@ describe('down', () => {
     },
   );
 
+  it('stops a production build whose start.mjs died, when its next-build runs in this worktree’s apps/web', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    const database = `${worktreePrefix(root)}recorded`;
+    world.databases.set(database, true);
+    recordBackend(root, { database, server: 'production' });
+    // next build retitles its process as next start does; its workers name this worktree.
+    world.members.set(4321, [
+      { pid: 4323, ppid: 1, command: 'next-build (v16.3.8)' },
+      {
+        pid: 4324,
+        ppid: 4323,
+        command: `node ${root}/apps/web/node_modules/next/dist/compiled/jest-worker/processChild.js`,
+      },
+    ]);
+    world.details.set(4323, { cwd: join(root, 'apps/web'), listening: [] });
+
+    const result = await downIn(world, { root });
+
+    expect(result.stopped).toBe(4321);
+    expect(world.stopped).toEqual([4321]);
+    expect(result.dropped).toEqual([database]);
+  });
+
+  it('leaves a lone next-build alone when it runs in another directory', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    recordBackend(root, { server: 'production' });
+    world.members.set(4321, [{ pid: 4323, ppid: 1, command: 'next-build (v16.3.8)' }]);
+    world.details.set(4323, { cwd: '/elsewhere/apps/web', listening: [] });
+
+    const result = await downIn(world, { root });
+
+    expect(result.stopped).toBeUndefined();
+    expect(world.stopped).toEqual([]);
+  });
+
   it('drops nothing and keeps the record while a process it can’t account for holds the recorded port', async () => {
     const root = fixtureWorktree();
     const world = fakeWorld();

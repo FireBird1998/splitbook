@@ -14,8 +14,8 @@
  *   starting or not answering is never torn down by another command;
  * - a process group is signalled only when its leader is this worktree's own start.mjs with
  *   the recorded start time, or, once that leader is gone, when every process left in it
- *   traces back to this worktree, or is a next-server on the recorded port or in this
- *   worktree's apps/web;
+ *   traces back to this worktree, or is a next-server on the recorded port or a Next server or
+ *   build in this worktree's apps/web;
  * - while a process the tool can't account for is left in that group and the recorded
  *   port is taken, `down` drops nothing and keeps the record;
  * - every drop goes through one check (names.ts): this worktree's prefix and the fictional
@@ -97,7 +97,7 @@ export interface Backend {
   readonly startedAt: string;
   /** The backend's start.mjs, leader of its process group; undefined while seeding. */
   readonly pid: number | undefined;
-  /** When that process started, as `ps -o lstart` prints it, to tell it from a reused pid. */
+  /** When that process started, as `ps -o lstart` prints it in UTC, to tell it from a reused pid. */
   readonly processStart: string | undefined;
   /** Seconds from start to the first answer; undefined until it answers. */
   readonly readySeconds: number | undefined;
@@ -321,14 +321,14 @@ function tracesToWorktree(member: GroupMember, members: readonly GroupMember[], 
 }
 
 /**
- * Whether a process is this worktree's Next server. `next start` retitles its process
- * `next-server (v…)`, so its command line names no path, and neither does `next dev`'s
- * next-server once its parents are gone. It counts only when it listens on the recorded
- * port or runs in this worktree's apps/web.
+ * Whether a process is this worktree's Next server or build. `next start` retitles its process
+ * `next-server (v…)` and `next build` its own `next-build (v…)`, so neither command line names
+ * a path, and neither does `next dev`'s next-server once its parents are gone. It counts only
+ * when it listens on the recorded port or runs in this worktree's apps/web.
  */
-const isOwnNextServer = (member: GroupMember, root: string, port: number | undefined) =>
+const isOwnNextProcess = (member: GroupMember, root: string, port: number | undefined) =>
   Effect.gen(function* () {
-    if (!/^next-server \(v[^)]*\)\s*$/.test(member.command)) return false;
+    if (!/^next-(?:server|build) \(v[^)]*\)\s*$/.test(member.command)) return false;
     const { cwd, listening } = yield* (yield* Processes).details(member.pid);
     return (port !== undefined && listening.includes(port)) || cwd === join(root, 'apps/web');
   });
@@ -338,7 +338,8 @@ const isOwnNextServer = (member: GroupMember, root: string, port: number | undef
  * - `ours`: its leader is this worktree's start.mjs, started when the record says;
  * - `orphaned`: the leader is gone (killed or out of memory), and every process left in
  *   the group traces back to this worktree, such as next-server under `next dev`, or is
- *   this worktree's Next server, such as `next start`'s next-server on the recorded port;
+ *   this worktree's Next server or build, such as `next start`'s next-server on the recorded
+ *   port;
  * - `foreign`: anything else, never signalled;
  * - `none`: no process is left.
  */
@@ -363,7 +364,7 @@ const groupState = (
     }
     for (const member of members) {
       if (tracesToWorktree(member, members, root)) continue;
-      if (yield* isOwnNextServer(member, root, port)) continue;
+      if (yield* isOwnNextProcess(member, root, port)) continue;
       return { kind: 'foreign' as const, members };
     }
     return { kind: 'orphaned' as const, members };
@@ -627,15 +628,18 @@ const launch = (options: UpOptions, target: Plan) =>
     );
   });
 
+/** What a backend serves, in words. A record from before production builds is dev. */
+const serving = (backend: Backend) =>
+  backend.server === 'production' ? 'a production build' : 'next dev';
+
 const announce = (backend: Backend, reused: boolean) =>
   Effect.gen(function* () {
     const output = yield* Output;
     const production = backend.server === 'production';
-    const serving = production ? 'a production build' : 'next dev';
     yield* output.line(
       reused
-        ? `This worktree's backend is already up at ${backend.origin}, serving ${serving}.`
-        : `The backend is ready at ${backend.origin} after ${backend.readySeconds} s${production ? ' (build included)' : ''}, serving ${serving}.`,
+        ? `This worktree's backend is already up at ${backend.origin}, serving ${serving(backend)}.`
+        : `The backend is ready at ${backend.origin} after ${backend.readySeconds} s${production ? ' (build included)' : ''}, serving ${serving(backend)}.`,
     );
     yield* output.line(`Log ${backend.log}`);
     yield* output.line(
@@ -724,22 +728,37 @@ export const up = (
   });
 
 /**
- * This worktree's backend for the length of a scope: the one `up` started, or a new one
- * that is stopped, with its database dropped, when the scope closes. The caller holds the
- * worktree lock.
+ * Refuses while this worktree's backend from `up` is running, whatever it serves, so the gate
+ * never tests a backend it didn't start for its run (#860): a production build, or a database
+ * an earlier run's verifiers have already changed. The caller holds the worktree lock.
+ */
+export const refuseRunningBackend = (root: string): Effect.Effect<void, Refused, Processes> =>
+  Effect.gen(function* () {
+    const record = yield* readRecord(root);
+    // A record that may not be acted on is refused, with its reason, where it is cleaned up.
+    if (!record || recordRefusal(record, root)) return;
+    const state = yield* groupState(root, record.pid, record.processStart, record.port);
+    if (state.kind !== 'ours' && state.kind !== 'orphaned') return;
+    return yield* refuse(
+      `This worktree's backend from pnpm swarm up is running at ${record.origin}, serving ${serving(record)}. The gate never reuses a backend: it starts its own, serving next dev on a freshly seeded database, and stops it after the verifiers. Run pnpm swarm down, then the gate again.`,
+    );
+  });
+
+/**
+ * A new backend for the length of a scope, stopped with its database dropped when the scope
+ * closes. It is refused while this worktree's backend from `up` is running; a record whose
+ * backend is gone is cleaned up first, as `down` would. The caller holds the worktree lock.
  */
 export const backendForScope = (
   options: UpOptions,
-): Effect.Effect<
-  { readonly backend: Backend; readonly startedHere: boolean },
-  SwarmError,
-  Processes | Databases | Network | Output | Scope.Scope
-> =>
+): Effect.Effect<Backend, SwarmError, Processes | Databases | Network | Output | Scope.Scope> =>
   Effect.gen(function* () {
     const target = plan(options);
     if (typeof target === 'string') return yield* refuse(target);
-    const existing = yield* reuseOrClean(options);
-    if (existing) return { backend: existing, startedHere: false };
+    yield* refuseRunningBackend(options.root);
+    if (yield* readRecord(options.root)) {
+      yield* downUnlocked({ root: options.root, mongoPort: options.mongoPort });
+    }
     const output = yield* Output;
     const backend = yield* Effect.acquireRelease(
       launch(options, target),
@@ -750,7 +769,7 @@ export const backendForScope = (
       // Starting can take minutes; an interruption must reach it. launch cleans up after itself.
       { interruptible: true },
     );
-    return { backend, startedHere: true };
+    return backend;
   });
 
 const downUnlocked = (

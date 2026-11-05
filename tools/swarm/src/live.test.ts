@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Effect, Fiber, Layer } from 'effect';
 import { afterEach, describe, expect, it } from 'vitest';
-import { fetchBlockedPorts, statePath, up } from './backend.ts';
+import { down, fetchBlockedPorts, statePath, up } from './backend.ts';
 import { gate, verdictPath, type Verdict } from './gate.ts';
 import { DatabasesLive, ProcessesLive, NetworkLive } from './live.ts';
 import { fictionalMarker, guardedDrop, worktreePrefix, type DatabaseHandle } from './names.ts';
@@ -23,6 +23,18 @@ function processesWith(marker: string): string[] {
   return execFileSync('ps', ['-A', '-o', 'pid=,command='], { encoding: 'utf8' })
     .split('\n')
     .filter((line) => line.includes(marker) && !line.includes('ps -A'));
+}
+
+/** Runs what follows in this time zone and locale, as a shell with TZ and LC_ALL set would; returns the undo. */
+function zone(TZ: string, LC_ALL: string) {
+  const before = { TZ: process.env.TZ, LC_ALL: process.env.LC_ALL };
+  Object.assign(process.env, { TZ, LC_ALL });
+  return () => {
+    for (const [name, value] of Object.entries(before)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  };
 }
 
 /** A backend start script that never answers and keeps a child running, like next dev. */
@@ -78,6 +90,94 @@ describe('on real processes', () => {
     expect(world.dropped).toEqual([]);
     expect(existsSync(statePath(root))).toBe(false);
   }, 20_000);
+
+  describe('a production backend, whose next start retitles its process next-server (#860)', () => {
+    /**
+     * As start.mjs with SPLITBOOK_NATIVE_SERVER=production: a child in apps/web that retitles
+     * itself as next start does, so its command line names no path, and answers on the port.
+     */
+    const productionBackend = `
+import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
+if (process.env.SPLITBOOK_NATIVE_SERVER !== 'production') process.exit(2);
+const server = [
+  "process.title = 'next-server (v0.0.0)';",
+  "require('node:http').createServer((_request, response) => response.end('ok'))",
+  ".listen(Number(process.env.SPLITBOOK_NATIVE_ORIGIN_PORT), '127.0.0.1');",
+  "setInterval(() => {}, 1000); // ${'.'.repeat(80)}",
+].join('');
+const child = spawn(process.execPath, ['-e', server], {
+  cwd: resolve(import.meta.dirname, '../../../web'),
+  stdio: 'ignore',
+});
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
+child.on('exit', (code) => process.exit(code ?? 1));
+`;
+
+    const groupOf = (pid: number) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* (yield* Processes).group(pid);
+        }).pipe(Effect.provide(ProcessesLive)),
+      );
+    const portFree = (port: number) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* (yield* Network).isPortFree(port);
+        }).pipe(Effect.provide(NetworkLive)),
+      );
+
+    it.each([
+      ['when up and down run in different time zones and locales', false],
+      ['when its start.mjs was killed', true],
+    ])(
+      'down stops it and frees its port %s',
+      async (_case, killLeader) => {
+        const root = fixtureWorktree({
+          'apps/mobile/scripts/dev-backend/start.mjs': productionBackend,
+          'apps/web/.keep': '',
+        });
+        const { world, provide } = realProcesses();
+        // As implementer 2 ran it for #849: TZ=UTC pnpm swarm up --server production.
+        let restore = zone('UTC', 'C');
+        let pid = -1;
+        try {
+          const { backend } = await Effect.runPromise(
+            up({ root, server: 'production', readyTimeout: '20 seconds' }).pipe(provide),
+          );
+          pid = backend.pid ?? -1;
+          expect((await groupOf(pid)).map((member) => member.command)).toContainEqual(
+            expect.stringMatching(/^next-server \(v0\.0\.0\)/),
+          );
+          if (killLeader) {
+            process.kill(pid, 'SIGKILL');
+            await until(() => !processesWith(`${root}/apps/mobile`).length, 10_000);
+          }
+          restore();
+          // Then pnpm swarm down from a shell in another zone, such as the machine's own.
+          restore = zone('Asia/Kolkata', 'en_US.UTF-8');
+
+          const result = await Effect.runPromise(down({ root }).pipe(provide));
+
+          expect(result.stopped).toBe(pid);
+          expect(await groupOf(pid)).toEqual([]);
+          expect(await portFree(backend.port)).toBe(true);
+          expect(existsSync(statePath(root))).toBe(false);
+          expect(world.lines.join('\n')).not.toMatch(/Left process group/);
+        } finally {
+          restore();
+          if (pid > 1) {
+            try {
+              process.kill(-pid, 'SIGKILL');
+            } catch {
+              // Already gone.
+            }
+          }
+        }
+      },
+      40_000,
+    );
+  });
 
   it("stops a running step's whole process group when the gate is interrupted", async () => {
     const marker = `swarm-test-${randomUUID()}`;
@@ -283,6 +383,35 @@ describe('the live services', () => {
     }
     await until(() => processesWith(marker).length === 0, 10_000);
   }, 30_000);
+
+  it('reads the same start time, in UTC, whatever time zone and locale the command runs in (#860)', async () => {
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      stdio: 'ignore',
+    });
+    const startTime = () =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          return yield* (yield* Processes).startTime(child.pid ?? -1);
+        }).pipe(Effect.provide(ProcessesLive)),
+      );
+    const readIn = async (TZ: string, LC_ALL: string) => {
+      const restore = zone(TZ, LC_ALL);
+      try {
+        return await startTime();
+      } finally {
+        restore();
+      }
+    };
+    try {
+      const utc = await readIn('UTC', 'C');
+      expect(utc).toMatch(/^\w{3} \w{3} \d{1,2} \d{2}:\d{2}:\d{2} \d{4}$/);
+      expect(Math.abs(Date.parse(`${utc} UTC`) - Date.now())).toBeLessThan(60_000);
+      expect(await readIn('Asia/Kolkata', 'de_DE.UTF-8')).toBe(utc);
+      expect(await readIn('Pacific/Kiritimati', 'fr_FR.UTF-8')).toBe(utc);
+    } finally {
+      child.kill('SIGKILL');
+    }
+  });
 
   it("reads a process's working directory and the port it listens on, as down needs for a lone next-server", async () => {
     const cwd = fixtureWorktree();

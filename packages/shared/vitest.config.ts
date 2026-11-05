@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    // Hermes's Intl, which refuses a BigInt (#863).
+    // Hermes's Intl, where it differs from Node's (#863, #869).
     setupFiles: ['src/test-support/setup.ts'],
     env: { TZ: requestedTimeZone ?? 'UTC' },
     provide: { requestedTimeZone },
