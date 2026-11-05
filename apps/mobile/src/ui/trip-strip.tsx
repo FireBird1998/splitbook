@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { View, type ViewStyle } from 'react-native';
+import { View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { deriveTripCodes } from '@splitbook/shared/trip-codes';
 import type { MobileGroup } from '../data/types';
-import { CompactText, useLargeText } from './compact';
+import { CompactText, isLargeText, scaledSp, space, textVariants } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 
@@ -43,6 +43,43 @@ const spokenList = (codes: string[]) =>
 const DASH = 4;
 const DASH_GAP = 3;
 
+/** The route's codes: IBM Plex Mono, whose every character is 0.6 of its size across. */
+const CODE = { size: 22, letterSpacing: 1 };
+const MEMBERS = { size: 11, letterSpacing: 1 };
+const SMALL = Number(textVariants.small.fontSize);
+const ROUTE_GAP = 10;
+const PLANE = 18;
+const PADDING = 16;
+/** The perforation between the route and the stub: a dash's width and its margins. */
+const PERFORATION = 1 + 2 * 14;
+
+/** How wide a line of IBM Plex Mono is at this text size: 0.6 of its size for each character. */
+const monoWidth = (text: string, size: number, fontScale: number, letterSpacing = 0) =>
+  [...text].length * scaledSp(0.6 * size + letterSpacing, fontScale);
+
+/**
+ * Whether the stub fits beside the route on a strip `width` wide: the route's codes, its plane
+ * and their gaps, the perforation, and the stub's widest line. Every text on the strip is set in
+ * IBM Plex Mono, so these widths are exact. A Trip in five currencies at 100% on a 360 dp phone
+ * didn't fit, and the route ran under the currencies (#886).
+ */
+function stubFitsBeside(
+  width: number,
+  fontScale: number,
+  route: { from: string; to: string },
+  stub: string[],
+  members: string,
+) {
+  const codes =
+    monoWidth(route.from, CODE.size, fontScale, CODE.letterSpacing) +
+    monoWidth(route.to, CODE.size, fontScale, CODE.letterSpacing);
+  const widest = Math.max(
+    monoWidth(members, MEMBERS.size, fontScale, MEMBERS.letterSpacing),
+    ...stub.map((line) => monoWidth(line, SMALL, fontScale)),
+  );
+  return codes + PLANE + 4 * ROUTE_GAP + PERFORATION + widest <= width - 2 * PADDING;
+}
+
 /**
  * A dashed rule drawn as short segments, as many as fit the length its caller gives it:
  * Android draws a one-sided dashed border solid.
@@ -79,22 +116,39 @@ function Dashes({ vertical = false, style }: { vertical?: boolean; style?: ViewS
  * Trip's name, a perforation, then its dates, member count and, for a Trip in more than one
  * currency, its currencies, main first (#730), as the web's strip lists them. Read as one image.
  * `strip.muted` drops below 4.5:1 at the gradient's light end, so it draws only the dashes.
- * Its height follows its text; at large text the dates move below the route.
+ * Its height follows its text. At large text, or where the stub doesn't fit beside the route,
+ * as a Trip in five currencies on a 360 dp phone doesn't (#886), the stub moves below the route.
  */
 export function TripStrip({ group }: { group: MobileGroup }) {
   const theme = useTheme();
-  const large = useLargeText();
+  const window = useWindowDimensions();
+  // The strip's width: the screen's less its gutters, until a layout says otherwise, so the strip
+  // that sits between the gutters draws once.
+  const guess = window.width - 2 * space.gutter;
+  const [laidOut, setLaidOut] = useState<number | null>(null);
+  const width = laidOut ?? guess;
   const { from, to } = deriveTripCodes(group.name);
   const dates = tripDates(group);
   const count = group.members.length;
   const members = `${count} ${count === 1 ? 'member' : 'members'}`;
   const currencies = groupCurrencies(group);
   const several = currencies.length > 1;
+  const list = currencies.join(' · ');
+  // At large text, or where the stub doesn't fit beside the route, it goes under the route.
+  const stacked =
+    isLargeText(window.fontScale) ||
+    !stubFitsBeside(
+      width,
+      window.fontScale,
+      { from, to },
+      [...(dates ? [dates.shown] : []), ...(several ? [list] : [])],
+      members.toUpperCase(),
+    );
   const code = {
     fontFamily: fonts.mono,
-    fontSize: 22,
+    fontSize: CODE.size,
     lineHeight: 28,
-    letterSpacing: 1,
+    letterSpacing: CODE.letterSpacing,
     color: theme.strip.text,
   };
   return (
@@ -115,28 +169,41 @@ export function TripStrip({ group }: { group: MobileGroup }) {
         colors={theme.strip.gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
+        onLayout={({ nativeEvent: { layout } }) =>
+          setLaidOut(Math.abs(layout.width - guess) < 0.5 ? null : layout.width)
+        }
         style={[
-          { minHeight: 72, justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-          large ? { gap: 10 } : { flexDirection: 'row', alignItems: 'center' },
+          {
+            minHeight: 72,
+            justifyContent: 'center',
+            paddingHorizontal: PADDING,
+            paddingVertical: 12,
+          },
+          stacked ? { gap: 10 } : { flexDirection: 'row', alignItems: 'center' },
         ]}
       >
         {/* Beside the stub, the route takes only the width the stub leaves. */}
         <View
-          style={[{ flexDirection: 'row', alignItems: 'center', gap: 10 }, !large && { flex: 1 }]}
+          style={[
+            { flexDirection: 'row', alignItems: 'center', gap: ROUTE_GAP },
+            !stacked && { flex: 1 },
+          ]}
         >
           <CompactText style={code}>{from}</CompactText>
           <Dashes style={{ flex: 1 }} />
-          <Icon name="airplane-outline" size={18} color={theme.strip.text} />
+          <Icon name="airplane-outline" size={PLANE} color={theme.strip.text} />
           <Dashes style={{ flex: 1 }} />
           <CompactText style={code}>{to}</CompactText>
         </View>
         <Dashes
-          vertical={!large}
-          style={large ? undefined : { alignSelf: 'stretch', marginHorizontal: 14 }}
+          vertical={!stacked}
+          style={
+            stacked ? undefined : { alignSelf: 'stretch', marginHorizontal: (PERFORATION - 1) / 2 }
+          }
         />
         <View
           style={
-            large
+            stacked
               ? {
                   flexDirection: 'row',
                   flexWrap: 'wrap',
@@ -158,9 +225,9 @@ export function TripStrip({ group }: { group: MobileGroup }) {
           <CompactText
             style={{
               fontFamily: fonts.mono,
-              fontSize: 11,
+              fontSize: MEMBERS.size,
               lineHeight: 15,
-              letterSpacing: 1,
+              letterSpacing: MEMBERS.letterSpacing,
               color: theme.strip.text,
             }}
           >
@@ -171,7 +238,7 @@ export function TripStrip({ group }: { group: MobileGroup }) {
               variant="small"
               style={{ fontFamily: fonts.mono, color: theme.strip.text }}
             >
-              {currencies.join(' · ')}
+              {list}
             </CompactText>
           ) : null}
         </View>
