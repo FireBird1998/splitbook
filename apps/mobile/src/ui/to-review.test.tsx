@@ -7,7 +7,7 @@ import {
 } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
-import { flatten, layoutHeight, unreadText, wordsOf } from '../test-utils/layout';
+import { findHosts, flatten, layoutHeight, unreadText, wordsOf } from '../test-utils/layout';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { onlineManager, focusManager } from '@tanstack/query-core';
 import { Alert } from 'react-native';
@@ -1847,3 +1847,79 @@ describe.each(['light', 'dark'] as const)('Home’s To review header in %s (#876
     expect(layoutHeight(row, 1, card)).toBe(Math.max(32, one + 10));
   });
 });
+
+// #891: at 200% on a 360 dp phone, an unfinished Expense on Home's To review card read "Descr /
+// iption n…" and "CHF 2,…": Continue kept its place beside the text, and the title was cut at two
+// lines. From 150% the title takes the lines it needs and Continue goes onto a line of its own, at
+// the row's end, so the title and the amount read in full; below 150% the row is as it was.
+describe.each(['light', 'dark'] as const)(
+  'Home’s unfinished Expense at large text in %s (#891)',
+  (mode) => {
+    async function unfinished(fontScale: number) {
+      const f = fixture({ empty: true });
+      await signIn(f);
+      await act(async () => {
+        await f.controller.openExpense(groupId);
+        await f.controller.updateExpenseDraft({
+          description: '',
+          amount: '2345.67',
+          currency: 'CHF',
+          tagId,
+        });
+        await f.controller.closeExpense(true);
+        await f.controller.back();
+        await f.controller.refreshToReview();
+      });
+      setWindow({ width: 360, height: 640, fontScale });
+      let tree!: ReactTestRenderer;
+      await act(async () => {
+        tree = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <ToReviewHomeCard controller={f.controller} />
+          </ThemeContext.Provider>,
+        );
+      });
+      trees.push(tree);
+      const row = findHosts(
+        tree.toJSON() as ReactTestRendererJSON,
+        (props, type) =>
+          type === 'Pressable' && props.accessibilityLabel === 'Continue unfinished expense',
+      )[0]!;
+      expect(wordsOf(row)).toContain('Description needed');
+      // A no-break space after the code (U+00A0).
+      expect(wordsOf(row)).toContain('CHF\u00a02,345.67');
+      const [title] = findHosts(row, (_props, type) => type === 'Text');
+      const [label] = findHosts(row, (_props, type) => type === 'View').filter((view) =>
+        (view.children ?? []).some(
+          (child) => typeof child !== 'string' && wordsOf(child) === 'Continue',
+        ),
+      );
+      return { row, title: title!, continueBox: label! };
+    }
+    // The card sits 16 dp in from the screen's edges, inside its 2 dp border.
+    const card = 360 - 32 - 4;
+
+    it.each([1.5, 2])(
+      'reads the title and the amount in full at %s× text, Continue on a line of its own',
+      async (fontScale) => {
+        const { row, title, continueBox } = await unfinished(fontScale);
+        expect(unreadText(row, fontScale, card)).toEqual([]);
+        expect(title.props.numberOfLines).toBe(0);
+        expect(flatten(row.props.style)).toMatchObject({ flexWrap: 'wrap' });
+        // As wide as the row, so it starts a line, and at its end.
+        expect(flatten(continueBox.props.style)).toMatchObject({
+          width: '100%',
+          alignItems: 'flex-end',
+        });
+      },
+    );
+
+    it.each([1, 1.3])('keeps Continue beside the text at %s× text', async (fontScale) => {
+      const { row, title, continueBox } = await unfinished(fontScale);
+      expect(unreadText(row, fontScale, card, { cutOnce: true })).toEqual([]);
+      expect(title.props.numberOfLines).toBe(2);
+      expect(flatten(row.props.style).flexWrap).toBeUndefined();
+      expect(flatten(continueBox.props.style)).toEqual({ alignItems: 'flex-end', gap: 1 });
+    });
+  },
+);
