@@ -87,6 +87,9 @@ export default function ToReviewPanel({
   ]);
   const acknowledged = acknowledgedVersion === duplicateVersion;
   const incomplete = item.needs.length > 0 || item.accountItem!.problems.length > 0;
+  // The fields hold each payer once; those the kept item names twice are said so (#894).
+  const payerIds = (editor.draft.values?.paidBy ?? []).map((row) => row.user);
+  const listedTwice = [...new Set(payerIds.filter((id, index) => payerIds.indexOf(id) !== index))];
   const duplicate = item.accountItem!.duplicates.length > 0;
   const unsent = editor.status !== 'kept';
   const reason = !available
@@ -190,6 +193,7 @@ export default function ToReviewPanel({
           <ReviewExpenseFields
             entries={editor.entries}
             context={context}
+            listedTwice={listedTwice}
             onChange={(changes) => {
               setAcknowledgedVersion(null);
               editor.change(changes);

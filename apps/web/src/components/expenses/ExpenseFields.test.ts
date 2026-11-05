@@ -28,6 +28,7 @@ function render(
     currency?: string;
     currencyChoices?: ExpenseCurrencyChoice[];
     currencyHint?: string | null;
+    payers?: Array<{ user: string; amount: string }>;
   } = {},
 ) {
   const draft = ExpenseDraft.open({
@@ -41,7 +42,7 @@ function render(
     description: 'Chai',
     amount,
     multiPayerMode: mode.multiPayerMode ?? false,
-    payers: [{ user: YOU, amount }],
+    payers: mode.payers ?? [{ user: YOU, amount }],
   });
   return renderToStaticMarkup(
     createElement(
@@ -205,4 +206,20 @@ it('does not display a malformed money prefix as the payer total (#773)', () => 
   const shown = text(render('1,84,250', { isEditMode: true, multiPayerMode: true }));
   expect(shown).toContain('Enter an amount like 1,060.00.');
   expect(shown).not.toContain('Total: ₹1.00 / ₹1.00');
+});
+
+// #894: an Expense with one payer row among several read "1 people paid".
+describe('who paid, in the summary (#894)', () => {
+  it('names one payer, as with a single payer, and counts several', () => {
+    const summary = (payers: Array<{ user: string; amount: string }>) =>
+      text(render('100', { isEditMode: true, multiPayerMode: true, payers }));
+    expect(summary([{ user: SAM, amount: '40' }])).toContain('Sam Chen paid');
+    expect(summary([{ user: SAM, amount: '40' }])).not.toMatch(/\d (person|people) paid/);
+    expect(
+      summary([
+        { user: YOU, amount: '40' },
+        { user: SAM, amount: '60' },
+      ]),
+    ).toContain('2 people paid');
+  });
 });

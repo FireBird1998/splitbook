@@ -85,6 +85,8 @@ export interface ExpenseFieldsProps {
   currentTag?: string | null;
   currentTagId?: string | null;
   previewAmount: (id: string) => string;
+  /** In review, payers the item names more than once: each shows once, and Paid by says so (#894). */
+  listedTwice?: readonly string[];
 }
 /** The Add expense fields, shared with To review. Persistence belongs to the caller. */
 export default function ExpenseFields({
@@ -105,6 +107,7 @@ export default function ExpenseFields({
   currencyChoices,
   currencyHint = null,
   addCurrency,
+  listedTwice = [],
 }: ExpenseFieldsProps) {
   const {
     description,
@@ -214,9 +217,10 @@ export default function ExpenseFields({
 
   // ─── Summary Line ──────────────────────────────────
   const payerName = memberName(payers[0]?.user || userId);
+  // One payer is named even among several rows' mode, never "1 people paid" (#894).
   const payerSummary = !payers.length
     ? 'Who paid?'
-    : multiPayerMode
+    : multiPayerMode && payers.length > 1
       ? `${payers.length} people paid`
       : `${payerName} paid`;
 
@@ -638,6 +642,11 @@ export default function ExpenseFields({
             >
               Paid by
             </Box>
+            {listedTwice.map((id) => (
+              <Box key={id} sx={{ fontSize: 12, color: 'status.negative', mb: 1 }}>
+                {memberName(id) === 'You' ? 'You are' : `${memberName(id)} is`} listed twice.
+              </Box>
+            ))}
             {!multiPayerMode ? (
               <Stack spacing={1}>
                 <TextField

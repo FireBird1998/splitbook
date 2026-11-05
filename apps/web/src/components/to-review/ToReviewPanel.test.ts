@@ -257,6 +257,10 @@ describe('what an assistant left to the member, in the web To review panel (#683
     expect(shown).not.toContain('didn’t know who paid');
     expect(shown).toContain('Still needs who paid.');
     expect(saveDisabled(html)).toBe(true);
+    // #894: the payer shows once in the fields, which say the item lists them twice.
+    expect(shown).toContain('Alex is listed twice.');
+    expect(shown).toContain('Alex paid');
+    expect(shown).not.toContain('1 people paid');
   });
 
   // #751: a long host with no hyphens can't wrap at its dots, and these two lines name it where
