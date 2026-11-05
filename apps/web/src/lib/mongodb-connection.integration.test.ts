@@ -13,11 +13,11 @@
  * and never answered. Opening it then gives up after 5 s, not the driver's 30 s.
  */
 
-import net from 'node:net';
 import { MongoClient } from 'mongodb';
 import mongoose from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEMO_PERSONAS } from '@/lib/demo-personas';
+import { databaseProxy, timed } from '@/lib/test-utils/database-proxy';
 import { MODEL_INDEXES, modelIndexes } from '@/lib/test-utils/model-indexes';
 
 /** Every database Better Auth's adapter is given, as `@/lib/auth` loads. */
@@ -38,59 +38,7 @@ const DATABASE = 'splitbook-test-mongodb-connection';
 const APP_URL = 'http://localhost:3000';
 const target = new URL(process.env.TEST_MONGODB_URI ?? 'mongodb://127.0.0.1:27017');
 
-/**
- * A TCP proxy to the replica set. While cut, it closes every connection as it opens; while
- * silent, it holds each new one open and never answers.
- */
-function proxy() {
-  let mode: 'cut' | 'open' | 'silent' = 'cut';
-  let attempts = 0;
-  const sockets = new Set<net.Socket>();
-  const server = net.createServer((socket) => {
-    attempts += 1;
-    if (mode === 'cut') return socket.destroy();
-    if (mode === 'silent') {
-      sockets.add(socket);
-      socket.on('close', () => sockets.delete(socket));
-      socket.on('error', () => {});
-      return;
-    }
-    const upstream = net.connect(Number(target.port), target.hostname);
-    for (const end of [socket, upstream]) {
-      sockets.add(end);
-      end.on('close', () => sockets.delete(end));
-      end.on('error', () => {});
-    }
-    socket.pipe(upstream).pipe(socket);
-  });
-  return {
-    server,
-    /** How many connections have been opened to it. */
-    attempts: () => attempts,
-    listen: () =>
-      new Promise<number>((resolve) =>
-        server.listen(0, '127.0.0.1', () => resolve((server.address() as net.AddressInfo).port)),
-      ),
-    restore: () => {
-      mode = 'open';
-    },
-    /** Answer no new connection; those open stay as they are. */
-    silence: () => {
-      mode = 'silent';
-    },
-    /** Drop every open connection, and refuse each new one. */
-    cut: () => {
-      mode = 'cut';
-      for (const socket of sockets) socket.destroy();
-    },
-    close: () => {
-      for (const socket of sockets) socket.destroy();
-      return new Promise((resolve) => server.close(resolve));
-    },
-  };
-}
-
-const database = proxy();
+const database = databaseProxy(target, 'cut');
 /** The replica set itself, past the proxy: for the personas and the cleanup. */
 const direct = new MongoClient(`mongodb://${target.host}/${DATABASE}?directConnection=true`, {
   serverSelectionTimeoutMS: 5_000,
@@ -114,18 +62,6 @@ async function signIn(): Promise<number | string> {
   } catch (error) {
     return (error as Error).name;
   }
-}
-
-/** How long `run` takes, in milliseconds, with what it settled to. */
-async function timed<T>(
-  run: () => Promise<T>,
-): Promise<{ value?: T; error?: Error; took: number }> {
-  const started = Date.now();
-  const settled = await run().then(
-    (value) => ({ value }),
-    (error: Error) => ({ error }),
-  );
-  return { ...settled, took: Date.now() - started };
 }
 
 beforeAll(async () => {
@@ -160,7 +96,9 @@ describe('the app’s one MongoDB client (#826)', () => {
     // Both fail first, so the client's first connect has failed whatever is asserted next.
     const read = await timed(() => connectDB());
     const signedIn = await timed(signIn);
-    expect(read.error?.name).toMatch(/ServerSelectionError$/);
+    // No server in 5 s leaves no time for the one retry (#862): its failure, caused by the driver's.
+    expect(read.error?.name).toBe('DatabaseUnavailableError');
+    expect((read.error?.cause as Error).name).toMatch(/ServerSelectionError$/);
     expect(read.took).toBeLessThan(8_000);
     expect(signedIn.value).not.toBe(200);
     expect(signedIn.took).toBeLessThan(8_000);

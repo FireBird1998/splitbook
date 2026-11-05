@@ -1,12 +1,21 @@
 // The app's one MongoDB client per server instance, shared by Mongoose (`lib/db.ts`) and Better
 // Auth's adapter (#826). Building it doesn't connect, so it is safe at import time (including
 // `next build`, where MONGODB_URI may be absent). Connecting goes through `connectMongo()`.
+//
+// It is also the app's one policy for a database it can't reach: the timeouts, the one retry,
+// and what counts as unreachable (`isDatabaseUnreachable`), which every API and page answers
+// with "Couldn't reach Splitbook. Try again." (#826, #858, #862).
 
 import 'server-only';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { attachDatabasePool } from '@vercel/functions';
 import type { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import type { Db } from 'mongodb';
 import mongoose from 'mongoose';
+import {
+  DATABASE_UNAVAILABLE,
+  DATABASE_UNAVAILABLE_MESSAGE,
+} from '@splitbook/shared/database-unavailable';
 import { directConnectionFor } from '@/lib/mongodb-uri';
 
 /**
@@ -32,6 +41,59 @@ export const MONGO_CONNECTION_OPTIONS = {
   connectTimeoutMS: 5_000,
 } as const;
 
+/**
+ * When the database briefly drops, a request tries once more; if that fails too, the member is
+ * told "Couldn't reach Splitbook. Try again." within about 5 s of the request's start (the owner's
+ * decision of 2026-11-05, for #826, #858 and #862). The second try waits 1 s, so a blip of about
+ * a second is ridden out, and is skipped when it couldn't finish within the 5 s.
+ */
+export const DATABASE_RETRY = {
+  afterMs: 1_000,
+  answerWithinMs: MONGO_CONNECTION_OPTIONS.serverSelectionTimeoutMS,
+} as const;
+
+/**
+ * The database couldn't be reached, even after the one retry. Every API answers it as 503
+ * DATABASE_UNAVAILABLE, and a server page's error boundary knows it by its digest, which Next.js
+ * keeps on an error a server component throws, where it hides the message (`app/error.tsx`).
+ */
+export class DatabaseUnavailableError extends Error {
+  readonly code = DATABASE_UNAVAILABLE;
+  readonly digest = DATABASE_UNAVAILABLE;
+  constructor(cause: unknown) {
+    super(DATABASE_UNAVAILABLE_MESSAGE, { cause });
+    this.name = 'DatabaseUnavailableError';
+  }
+}
+
+const { mongo } = mongoose;
+
+/**
+ * Whether an error, or one it was caused by, means the database couldn't be reached: no server
+ * to select, a connection that couldn't be opened or broke, a pool cleared after one did, a
+ * server shedding load, or a Mongoose call that waited out a connection. Nothing else is: a
+ * refusal, a duplicate key or a bug is still answered as itself.
+ */
+export function isDatabaseUnreachable(error: unknown): boolean {
+  let cause = error;
+  for (let depth = 0; cause instanceof Error && depth < 8; depth += 1) {
+    if (
+      cause instanceof DatabaseUnavailableError ||
+      cause instanceof mongo.MongoServerSelectionError ||
+      cause instanceof mongoose.Error.MongooseServerSelectionError ||
+      // A pool cleared because a connection failed is one too.
+      cause instanceof mongo.MongoNetworkError ||
+      cause instanceof mongo.MongoTopologyClosedError ||
+      (cause instanceof mongo.MongoError &&
+        cause.hasErrorLabel(mongo.MongoErrorLabel.SystemOverloadedError)) ||
+      (cause.name === 'MongooseError' && cause.message.includes('buffering timed out'))
+    )
+      return true;
+    cause = cause.cause;
+  }
+  return false;
+}
+
 // A syntactically valid placeholder so an unconfigured build still constructs
 // the auth instance; any database call would fail loudly at request time.
 const UNCONFIGURED_URI = 'mongodb://127.0.0.1:27017/splitbook-unconfigured';
@@ -42,6 +104,10 @@ interface SharedMongo {
   uri: string | undefined;
   client: MongoClient;
   connecting: Promise<MongoClient> | null;
+  /** When a connection last left the pool or came back to it; 0 for never, or since a clear. */
+  poolUsedAt: number;
+  /** The check that the database answers (`reachDatabase`), while one runs. */
+  reaching: Promise<MongoClient> | null;
 }
 
 // One per instance, kept across dev's HMR reloads so dev does not leak connections.
@@ -65,11 +131,22 @@ function createClient(uri: string): MongoClient {
 function shared(): SharedMongo {
   if (!globalWithMongo._splitbookMongo) {
     const uri = process.env.MONGODB_URI || undefined;
-    globalWithMongo._splitbookMongo = {
+    const state: SharedMongo = {
       uri,
       client: createClient(uri ?? UNCONFIGURED_URI),
       connecting: null,
+      poolUsedAt: 0,
+      reaching: null,
     };
+    const used = () => {
+      state.poolUsedAt = Date.now();
+    };
+    state.client.on('connectionCheckedOut', used);
+    state.client.on('connectionCheckedIn', used);
+    state.client.on('connectionPoolCleared', () => {
+      state.poolUsedAt = 0;
+    });
+    globalWithMongo._splitbookMongo = state;
   }
   return globalWithMongo._splitbookMongo;
 }
@@ -79,14 +156,7 @@ function shared(): SharedMongo {
  * is tried again on the next call: a client whose first connect failed keeps a closed topology,
  * and only an explicit connect replaces it.
  */
-export function connectMongo(): Promise<MongoClient> {
-  const state = shared();
-  if (!state.uri)
-    return Promise.reject(
-      new Error('Please define the MONGODB_URI environment variable in .env.local'),
-    );
-  if (state.uri !== process.env.MONGODB_URI)
-    return Promise.reject(new Error('MONGODB_URI changed after the database client was made'));
+function connectOnce(state: SharedMongo): Promise<MongoClient> {
   state.connecting ??= state.client
     .connect()
     .then((client) => {
@@ -103,6 +173,83 @@ export function connectMongo(): Promise<MongoClient> {
 }
 
 /**
+ * An idle connection closes after `maxIdleTimeMS`, so a pool unused for nearly that long may have
+ * none left, and the request's first call would have to open one.
+ */
+const POOL_WARM_FOR_MS = MONGO_CONNECTION_OPTIONS.maxIdleTimeMS - 1_000;
+
+function poolWarm(state: SharedMongo): boolean {
+  return Date.now() - state.poolUsedAt < POOL_WARM_FOR_MS;
+}
+
+/** Unreachable, or its own time ran out with no answer. */
+function noAnswer(error: unknown): boolean {
+  return isDatabaseUnreachable(error) || error instanceof mongo.MongoOperationTimeoutError;
+}
+
+/**
+ * The owner's one retry (`DATABASE_RETRY`): `attempt` runs, and if the database gave no answer,
+ * runs once more 1 s later, when that still leaves it time. It gets the deadline to finish by,
+ * about 5 s from the start. A second failure, or no time for one, is a `DatabaseUnavailableError`;
+ * any other error is the caller's, as it is, with no retry.
+ */
+export async function withDatabaseRetry<T>(attempt: (deadline: number) => Promise<T>): Promise<T> {
+  const deadline = Date.now() + DATABASE_RETRY.answerWithinMs;
+  try {
+    return await attempt(deadline);
+  } catch (first) {
+    if (!noAnswer(first)) throw first;
+    if (deadline - Date.now() <= DATABASE_RETRY.afterMs) throw new DatabaseUnavailableError(first);
+    await new Promise((resolve) => setTimeout(resolve, DATABASE_RETRY.afterMs));
+    try {
+      return await attempt(deadline);
+    } catch (second) {
+      throw noAnswer(second) ? new DatabaseUnavailableError(second) : second;
+    }
+  }
+}
+
+/**
+ * Before a request opens a connection, the database is checked with a ping, and the check takes
+ * the one retry (#862). Since mongodb 7.7 (#849), a connection the database refuses to open
+ * fails a call at once: the driver retries it within 0.6 s and fails again, so a 1 s blip failed
+ * the first request after the pool went idle. The ping writes nothing, so the request's own
+ * calls still run once, after the database answered: a save is never sent twice. A database that
+ * drops later, mid-request, fails that call within the driver's own 5 s, and
+ * `isDatabaseUnreachable` says so.
+ */
+function reachDatabase(state: SharedMongo): Promise<MongoClient> {
+  return withDatabaseRetry(async (deadline) => {
+    const client = await connectOnce(state);
+    if (!poolWarm(state))
+      await client
+        .db('admin')
+        .command({ ping: 1 }, { timeoutMS: Math.max(1, deadline - Date.now()) });
+    return client;
+  });
+}
+
+/**
+ * The shared client, connected, with a database that answers (`reachDatabase`). Every database
+ * call goes through here first: Mongoose's through `connectDB()`, Better Auth's through
+ * `connectedAuthAdapter`. Calls made together share one check.
+ */
+export function connectMongo(): Promise<MongoClient> {
+  const state = shared();
+  if (!state.uri)
+    return Promise.reject(
+      new Error('Please define the MONGODB_URI environment variable in .env.local'),
+    );
+  if (state.uri !== process.env.MONGODB_URI)
+    return Promise.reject(new Error('MONGODB_URI changed after the database client was made'));
+  if (state.connecting && poolWarm(state)) return state.connecting;
+  state.reaching ??= reachDatabase(state).finally(() => {
+    state.reaching = null;
+  });
+  return state.reaching;
+}
+
+/**
  * The database MONGODB_URI names, on the shared client, for Better Auth's adapter. Mongoose's
  * driver is the app's own, one mongodb for both (#849).
  */
@@ -111,6 +258,28 @@ export function getAuthDb(): Db {
 }
 
 type AuthAdapter = ReturnType<typeof mongodbAdapter>;
+
+/**
+ * Better Auth answers a failure of its adapter as its own 500, or throws its own "Failed to get
+ * session", and drops what caused it. A watch notes, for the work it runs, the first time the
+ * adapter met a database it couldn't reach, so its caller can still answer that as itself.
+ */
+export class AuthDatabaseWatch {
+  unreachable: unknown = undefined;
+
+  run<T>(work: () => Promise<T>): Promise<T> {
+    return authWatches.run(this, work);
+  }
+
+  /** What to throw for `error` from the work: the database's failure, when it met one. */
+  failure(error: unknown): unknown {
+    const cause = this.unreachable ?? (isDatabaseUnreachable(error) ? error : undefined);
+    if (cause === undefined) return error;
+    return cause instanceof DatabaseUnavailableError ? cause : new DatabaseUnavailableError(cause);
+  }
+}
+
+const authWatches = new AsyncLocalStorage<AuthDatabaseWatch>();
 
 /** Better Auth's adapter, connecting the shared client before each of its calls. */
 export function connectedAuthAdapter(adapter: AuthAdapter): AuthAdapter {
@@ -121,8 +290,15 @@ export function connectedAuthAdapter(adapter: AuthAdapter): AuthAdapter {
         key,
         typeof value === 'function'
           ? async (...args: unknown[]) => {
-              await connectMongo();
-              return Reflect.apply(value, base, args);
+              try {
+                await connectMongo();
+                return await Reflect.apply(value, base, args);
+              } catch (error) {
+                const watch = authWatches.getStore();
+                if (watch && watch.unreachable === undefined && isDatabaseUnreachable(error))
+                  watch.unreachable = error;
+                throw error;
+              }
             }
           : value,
       ]),

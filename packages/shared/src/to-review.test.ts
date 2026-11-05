@@ -390,6 +390,24 @@ describe('changes while an item is open', () => {
 });
 
 describe('review member wording', () => {
+  // #861: Splitbook's own words for a save it couldn't confirm reach the member as they are, as
+  // do its words for a database it couldn't reach (#826); other server prose never does.
+  it('says a save Splitbook couldn’t confirm, or couldn’t reach its database for, in its words', () => {
+    expect(
+      reviewProblem(
+        'Save not confirmed. Everything is still in To review. Check again to finish saving.',
+      ),
+    ).toBe('Save not confirmed. Everything is still in To review. Check again to finish saving.');
+    expect(reviewProblem('Couldn’t reach Splitbook. Try again.')).toBe(
+      'Couldn’t reach Splitbook. Try again.',
+    );
+    expect(
+      reviewProblem(
+        'Draft request not confirmed. Reload before retrying; reuse the original creation request.',
+      ),
+    ).toBe('Check the expense details and try again.');
+  });
+
   it('names missing facts and payer amounts without exposing validation paths', () => {
     const values = { paidBy: [{ user: member }] };
     expect(reviewProblem('paidBy: Choose who paid.')).toBe('Who paid?');

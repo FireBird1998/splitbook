@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } fr
 import { useSWRConfig } from 'swr';
 import type { ExpenseDraft } from '@splitbook/shared/expense-draft';
 import { matchWebGroupRead, webActivityPagesKey } from '@/lib/web-query-keys';
+import {
+  DATABASE_UNAVAILABLE,
+  DATABASE_UNAVAILABLE_MESSAGE,
+} from '@splitbook/shared/database-unavailable';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { buildDuplicateCheckUrl } from './expense-duplicate-check';
 
@@ -14,7 +18,10 @@ export type ExpenseSaveOutcome =
   /** Nothing went out: the draft was invalid, a save was already running, the duplicate
    * warning was declined, or the page went away. */
   | { status: 'not-sent' }
-  /** The server answered and refused it. Nothing was recorded. */
+  /**
+   * The server answered and refused it, or its duplicate check found the database unreachable,
+   * so it was never sent (#858). Nothing was recorded.
+   */
   | { status: 'refused'; message: string; httpStatus: number }
   /**
    * The reply never arrived, so it may or may not be recorded: an unconfirmed save. The draft
@@ -60,6 +67,18 @@ export function useExpenseDraftSave(setDraft: Dispatch<SetStateAction<ExpenseDra
               }),
             );
             if (!mounted.current) return { status: 'not-sent' };
+            const refusal =
+              response.status === 503 ? await response.json().catch(() => null) : null;
+            if (!mounted.current) return { status: 'not-sent' };
+            if (refusal?.code === DATABASE_UNAVAILABLE) {
+              // The check couldn't reach the database even after the server's one retry, so
+              // the save would only wait as long again for the same answer (#858). It isn't
+              // sent: the form keeps everything, and Save checks again.
+              const message =
+                typeof refusal.error === 'string' ? refusal.error : DATABASE_UNAVAILABLE_MESSAGE;
+              setDraft((current) => current.fail(submission, message));
+              return { status: 'refused', message, httpStatus: response.status };
+            }
             if (response.ok) {
               const duplicate = await response.json();
               if (!mounted.current) return { status: 'not-sent' };

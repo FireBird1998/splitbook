@@ -3340,6 +3340,57 @@ describe('a save that meets a gateway error (#231)', () => {
   );
 });
 
+// Splitbook answered, but its database couldn't be reached even after the server's one retry
+// (#826): the save may or may not be recorded, so it is kept, and sent again only on Retry.
+describe('a save that meets Splitbook’s 503 DATABASE_UNAVAILABLE', () => {
+  const header = (init: RequestInit, name: string) => new Headers(init.headers).get(name);
+
+  it('says so in the server’s words, keeps the save, and sends it again only on Retry', async () => {
+    let unavailable = true;
+    const posts: RequestInit[] = [];
+    const { controller, records } = setup((path, init) => {
+      if (path !== `/api/groups/${groupId}/expenses` || init.method !== 'POST') return;
+      posts.push(init);
+      return Promise.resolve(
+        unavailable
+          ? json(
+              {
+                error: 'Couldn’t reach Splitbook. Try again.',
+                status: 503,
+                code: 'DATABASE_UNAVAILABLE',
+              },
+              503,
+            )
+          : json({ data: { _id: expenseId, group: groupId }, status: 201 }, 201),
+      );
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+    await controller.saveExpense();
+    expect(posts).toHaveLength(1);
+    const expense = controller.getSnapshot().expense;
+    expect(expense.status).toBe('uncertain');
+    expect(expense.message).toBe(
+      'Couldn’t reach Splitbook. Try again. This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.',
+    );
+    expect(controller.getSnapshot().offline.active).toBe(false);
+    const attempt = { key: header(posts[0], 'Idempotency-Key'), body: posts[0].body };
+    expect(expense.attempt).toEqual(attempt);
+    expect([...records.values()]).toEqual([expect.objectContaining({ attempt })]);
+
+    unavailable = false;
+    await controller.refresh();
+    expect(posts).toHaveLength(1);
+
+    await controller.saveExpense();
+    expect(posts).toHaveLength(2);
+    expect({ key: header(posts[1], 'Idempotency-Key'), body: posts[1].body }).toEqual(attempt);
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+    expect(records.size).toBe(0);
+  });
+});
+
 describe('an edit that meets a newer saved Expense', () => {
   // Someone else changed the description, Category, notes and amount.
   const latest = {

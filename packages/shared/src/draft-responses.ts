@@ -9,6 +9,14 @@ const draftSchema = persistedExpenseDraftSchema
   .refine((draft) => draft.state !== 'active' || draft.values !== undefined)
   .refine((draft) => draft.state !== 'saved' || draft.expenseId !== undefined);
 
+/**
+ * What a member is told when Splitbook couldn't confirm a To review save (#861): the Drafts are
+ * kept, and Check again sends the same reviewed save, which records it once (ADR 0008). The save
+ * route answers 503 DRAFT_UNCONFIRMED with these words, never a Draft creation's.
+ */
+export const DRAFT_SAVE_UNCONFIRMED_MESSAGE =
+  'Save not confirmed. Everything is still in To review. Check again to finish saving.';
+
 function decode<T>(schema: z.ZodType<T>, response: unknown): T {
   const parsed = z.object({ data: schema }).safeParse(response);
   if (!parsed.success)
