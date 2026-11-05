@@ -647,6 +647,57 @@ describe('the content sections (#446)', () => {
     }
   });
 
+  it('size each section heading 28 to 40 px, leaving the closing call to action as it is (#646)', () => {
+    const html = render('light', OFF);
+    const h2 = /<h2\b[^>]*class="([^"]*)"/;
+    for (const id of ['groups', 'how'])
+      expect(rulesOf(section(html, id), h2)).toContain('font-size:clamp(1.75rem, 3vw, 2.5rem)');
+    const styles = [...html.matchAll(/<style[^>]*>[\s\S]*?<\/style>/g)].map((m) => m[0]).join('');
+    const closing = styles + html.slice(html.lastIndexOf('<section'));
+    expect(rulesOf(closing, h2)).toContain('font-size:clamp(2rem, 4vw, 3.25rem)');
+  });
+
+  it('lay the Themes out in 4 columns on a computer, 2 on a tablet and 1 on a phone (#646)', () => {
+    const groups = section(render('light', OFF), 'groups');
+    // The grid is the element whose first card is the Trip's.
+    const grid =
+      /<div\b[^>]*class="([^"]*)"[^>]*>(?:<style\b[^>]*>[^<]*<\/style>)*<div\b[^>]*data-group-theme="trip"/;
+    const classes = grid
+      .exec(groups)![1]
+      .split(' ')
+      .filter((name) => name.startsWith('css-'));
+    /** The grid's columns from a breakpoint up, as its media rule sets them. */
+    const columns = (width: number) =>
+      new RegExp(
+        `@media \\(min-width:${width}px\\)\\{\\.(?:${classes.join('|')})\\{[^}]*grid-template-columns:([^;}]+)`,
+      ).exec(groups)?.[1];
+    expect(rulesOf(groups, grid)).toContain('grid-template-columns:1fr');
+    expect(columns(900)).toBe('repeat(2, minmax(0, 1fr))');
+    expect(columns(1200)).toBe('repeat(4, minmax(0, 1fr))');
+  });
+
+  it('show the split methods as chips on the Groceries card, Shares picked, never as controls (#646)', () => {
+    for (const mode of MODES) {
+      const split = section(render(mode, OFF), 'how');
+      const at = split.indexOf('data-split-methods');
+      expect(at).toBeGreaterThan(-1);
+      const container = split.slice(split.lastIndexOf('<div', at), split.indexOf('>', at) + 1);
+      expect(container).toContain('aria-hidden="true"');
+      const chips = [
+        ...split.matchAll(/<div\b[^>]*class="([^"]*MuiChip-root[^"]*)"[^>]*>([\s\S]*?)<\/div>/g),
+      ];
+      expect(
+        chips.map(([, classes, inner]) => [text(inner), classes.includes('MuiChip-filled')]),
+      ).toEqual([
+        ['Equally', false],
+        ['Amounts', false],
+        ['Percentage', false],
+        ['Shares', true],
+      ]);
+      for (const [chip] of chips) expect(chip).not.toMatch(/<button\b|role="button"|tabindex=/);
+    }
+  });
+
   it('show the web card everywhere, and the Android card only with a Play listing', () => {
     const off = text(render('light', OFF));
     for (const sentence of [

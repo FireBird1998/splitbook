@@ -265,7 +265,6 @@ function GroupDetailContent({
             memberNames={members.map((member) =>
               member.user._id === userId ? 'You' : member.user.name.split(' ')[0],
             )}
-            inviteCode={group.inviteCode ?? null}
             balance={
               strip.balance === null ? null : { amount: strip.balance, currency: strip.currency }
             }

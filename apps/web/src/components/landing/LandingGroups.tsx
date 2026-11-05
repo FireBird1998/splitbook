@@ -143,7 +143,13 @@ export default function LandingGroups() {
         sx={{
           display: 'grid',
           gap: 2,
-          gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+          // 4 columns on a computer (#646): the Trip card, with its strip, takes a 2 by 2 block
+          // and the other four Themes fill the two columns beside it.
+          gridTemplateColumns: {
+            xs: '1fr',
+            md: 'repeat(2, minmax(0, 1fr))',
+            lg: 'repeat(4, minmax(0, 1fr))',
+          },
         }}
       >
         {GROUP_THEME_LIST.map((theme) => {
@@ -152,7 +158,13 @@ export default function LandingGroups() {
             <Box
               key={theme.id}
               data-group-theme={theme.id}
-              sx={{ ...landingCard, gridRow: theme.id === 'trip' ? { md: 'span 2' } : undefined }}
+              sx={{
+                ...landingCard,
+                ...(theme.id === 'trip' && {
+                  gridRow: { md: 'span 2' },
+                  gridColumn: { lg: 'span 2' },
+                }),
+              }}
             >
               <Stack spacing={1.5}>
                 <Stack direction="row" spacing={1.25} alignItems="center">

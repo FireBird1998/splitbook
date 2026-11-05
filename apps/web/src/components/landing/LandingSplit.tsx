@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import CallSplitOutlinedIcon from '@mui/icons-material/CallSplitOutlined';
@@ -39,6 +40,9 @@ const groceries = split('shares', GROCERIES, [
   { user: 'Sam', shares: 1 },
   { user: 'Alex', shares: 1 },
 ]);
+
+/** The split methods the Expense form offers, in its order. */
+const SPLIT_METHODS = ['Equally', 'Amounts', 'Percentage', 'Shares'] as const;
 
 const POINTS: { icon: typeof GroupOutlinedIcon; text: ReactNode }[] = [
   {
@@ -84,6 +88,19 @@ function GroceriesCard() {
           <Typography variant="body2" color="text.secondary">
             Paid by Sam{SEPARATOR}Split by shares
           </Typography>
+        </Box>
+        {/* The form's split methods, drawn, with Shares picked: a picture, not controls (#646).
+            The line above already says how it splits, so they're hidden from screen readers. */}
+        <Box aria-hidden data-split-methods="" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          {SPLIT_METHODS.map((method) => (
+            <Chip
+              key={method}
+              label={method}
+              size="small"
+              color={method === 'Shares' ? 'primary' : 'default'}
+              variant={method === 'Shares' ? 'filled' : 'outlined'}
+            />
+          ))}
         </Box>
         <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
           {groceries.map((row) => (

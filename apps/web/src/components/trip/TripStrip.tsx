@@ -23,14 +23,13 @@ interface TripStripProps {
   dateLabel?: string | null;
   memberCount?: number;
   memberNames?: string[];
-  inviteCode?: string | null;
   /** Signed personal balance; null/undefined or ~0 renders "Settled". */
   balance?: TripStripAmount | null;
   /** Data has not loaded; never describe an unknown balance as settled. */
   balanceUnavailable?: boolean;
   /** Trip-wide spend total shown on the full variant stub. */
   tripTotal?: TripStripAmount | null;
-  /** The Group's currencies, main first: the full strip lists them when there are several (#729). */
+  /** The Group's currencies, main first: the full strip lists them all (#729, #646). */
   currencies?: readonly string[];
   /** Square off the bottom corners when content sits directly below (trip cards). */
   joinedBottom?: boolean;
@@ -101,7 +100,6 @@ export default function TripStrip({
   dateLabel,
   memberCount,
   memberNames,
-  inviteCode,
   balance,
   balanceUnavailable = false,
   tripTotal,
@@ -110,6 +108,7 @@ export default function TripStrip({
 }: TripStripProps) {
   const { from, to } = deriveTripCodes(name);
   const isFull = variant === 'full';
+  const tripCurrencies = currencies && currencies.length > 0 ? currencies : [currency];
 
   const tone = balance ? getMoneyTone(balance.amount) : 'neutral';
   const signed = !balanceUnavailable && !!balance && tone !== 'neutral';
@@ -261,18 +260,29 @@ export default function TripStrip({
             color: 'strip.muted',
           }}
         >
-          <MetaItem
-            label={name}
-            value={[dateLabel, !isFull ? peopleLabel : null].filter(Boolean).join(SEPARATOR)}
-          />
-          {isFull && memberNames && memberNames.length > 0 && (
-            <MetaItem label="Members" value={memberNames.join(SEPARATOR)} />
+          {isFull ? (
+            // The Trip page's strip: Dates, Members and Currency, as the board has it (#646). The
+            // name is the page's heading, and the header's Invite button shares the invite.
+            <>
+              {dateLabel && <MetaItem label="Dates" value={dateLabel} />}
+              {memberNames && memberNames.length > 0 && (
+                <MetaItem label="Members" value={memberNames.join(SEPARATOR)} />
+              )}
+              <MetaItem
+                label={tripCurrencies.length > 1 ? 'Currencies' : 'Currency'}
+                value={tripCurrencies.join(SEPARATOR)}
+                mono
+              />
+            </>
+          ) : (
+            <>
+              <MetaItem
+                label={name}
+                value={[dateLabel, peopleLabel].filter(Boolean).join(SEPARATOR)}
+              />
+              <MetaItem label="Currency" value={currency} />
+            </>
           )}
-          {!isFull && <MetaItem label="Currency" value={currency} />}
-          {isFull && currencies && currencies.length > 1 && (
-            <MetaItem label="Currencies" value={currencies.join(SEPARATOR)} mono />
-          )}
-          {isFull && inviteCode && <MetaItem label="Invite" value={inviteCode} mono />}
         </Box>
       </Box>
 

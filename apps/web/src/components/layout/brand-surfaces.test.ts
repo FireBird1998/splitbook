@@ -217,7 +217,7 @@ describe('the invite page', () => {
     expect(html).toMatch(/<h1\b[^>]*>Join Group<\/h1>/);
   });
 
-  it('opens with a header holding the 32 px logo, linking home', () => {
+  it('opens with a header holding the 32 px logo, linking home, and loads with the 48 px mark', () => {
     for (const mode of MODES) {
       const html = render(
         mode,
@@ -226,7 +226,10 @@ describe('the invite page', () => {
       expect(html).toMatch(
         /^.*?<header\b[^>]*>(?:<style\b[^>]*>[^<]*<\/style>)*<a\b[^>]*href="\/"/,
       );
-      expect(brand(html)).toEqual([...logos('Splitbook home', '32px')]);
+      expect(brand(html)).toEqual([
+        ...logos('Splitbook home', '32px'),
+        ...marks('Splitbook', '48px'),
+      ]);
     }
   });
 });

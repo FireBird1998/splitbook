@@ -9,6 +9,12 @@ import { RADIUS } from '@/lib/theme/tokens';
 /** The landing page's side gutter, as its frame has it (#444). */
 export const LANDING_GUTTER = { px: { xs: 2, sm: 3 } } as const;
 
+/**
+ * A section heading: 28 px on a phone, up to 40 px (#646). The closing call to action keeps the
+ * larger `displaySmall` size, and the hero its own.
+ */
+export const LANDING_SECTION_TITLE_SIZE = 'clamp(1.75rem, 3vw, 2.5rem)';
+
 /** A card on the landing page: the elevated surface with the design system's border and radius. */
 export const landingCard = {
   bgcolor: 'background.paper',
@@ -73,7 +79,7 @@ export default function LandingSection({
             variant="displaySmall"
             component="h2"
             color="text.primary"
-            sx={{ m: 0, ...(hiddenTitle && visuallyHidden) }}
+            sx={{ m: 0, fontSize: LANDING_SECTION_TITLE_SIZE, ...(hiddenTitle && visuallyHidden) }}
           >
             {title}
           </Typography>

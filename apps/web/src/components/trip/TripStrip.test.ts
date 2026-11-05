@@ -8,7 +8,7 @@ import TripStrip from './TripStrip';
 
 /* The Trip strip's Currencies (#729), rendered to static markup. */
 
-const strip = (currencies?: string[]) =>
+const strip = (currencies?: string[], extra: Record<string, unknown> = {}) =>
   text(
     renderToStaticMarkup(
       createElement(
@@ -22,6 +22,7 @@ const strip = (currencies?: string[]) =>
           memberCount: 3,
           currencies,
           tripTotal: { amount: 2500, currency: 'JPY' },
+          ...extra,
         }),
       ),
     ),
@@ -35,5 +36,21 @@ describe('the Trip strip (#729)', () => {
 
   it('lists no currencies for a Group with one', () => {
     expect(strip(['INR'])).not.toContain('Currencies');
+  });
+});
+
+describe('the full Trip strip (#646)', () => {
+  it('shows Dates, Members and Currency, and never the invite code', () => {
+    const shown = strip(['JPY'], { memberNames: ['You', 'Sam', 'Priya'], inviteCode: 'SECRET42' });
+    expect(shown).toContain('Dates 2–12 Oct');
+    expect(shown).toContain('Members You · Sam · Priya');
+    expect(shown).toContain('Currency JPY');
+    expect(shown).not.toContain('Lisbon and Tokyo 2–12 Oct');
+    expect(shown).not.toContain('SECRET42');
+    expect(shown).not.toContain('Invite');
+  });
+
+  it('names the Currency even when the Group’s currencies weren’t given', () => {
+    expect(strip(undefined)).toContain('Currency JPY');
   });
 });

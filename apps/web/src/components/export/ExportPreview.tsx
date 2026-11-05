@@ -21,7 +21,7 @@ import TableCell from '@mui/material/TableCell';
 import type { ExportPreview } from '@splitbook/shared/export-preview';
 import { exportWindowSlug } from '@splitbook/shared/export-request';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
-import { SEPARATOR, counted } from '@splitbook/shared/separator';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export type PreviewState =
   | { status: 'idle'; message: string }
@@ -432,30 +432,50 @@ export default function ExportPreviewPanel({
             )}{' '}
             {data.sizeBytes >= 1_000_000 ? 'MB' : 'KB'}
           </Typography>
-          <Box component="ul" sx={{ pl: 2.5 }}>
-            {data.currencyGroups?.map((group, index) => (
-              <li key={index}>
-                {group.name}: {[group.currency, ...group.alternateCurrencies].join(', ')}
-              </li>
-            ))}
-            <li>{counted(data.counts.members, 'Member')}</li>
-            <li>
-              {counted(data.counts.expenses, 'Expense')}
-              {data.earliestMonth
-                ? ` since ${new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${data.earliestMonth}-15T12:00:00Z`))}`
-                : ''}
-              {data.historyIncluded ? ', each with its edit history' : ''}
-            </li>
-            {data.paymentsIncluded && (
-              <li>
-                {counted(data.counts.payments, 'Payment')}, including both amounts, currencies and
-                stored rates
-              </li>
-            )}
-            {data.deletedExpensesIncluded && (
-              <li>{counted(data.counts.deletedExpenses, 'Deleted Expense', 'Deleted Expenses')}</li>
-            )}
-          </Box>
+          <BackupCounts
+            tiles={[
+              { count: data.counts.members, one: 'Member', many: 'Members' },
+              {
+                count: data.counts.expenses,
+                one: 'Expense',
+                many: 'Expenses',
+                detail: sentence([
+                  data.earliestMonth
+                    ? `since ${new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${data.earliestMonth}-15T12:00:00Z`))}`
+                    : null,
+                  data.historyIncluded ? 'each with its edit history' : null,
+                ]),
+              },
+              ...(data.paymentsIncluded
+                ? [
+                    {
+                      count: data.counts.payments,
+                      one: 'Payment',
+                      many: 'Payments',
+                      detail: 'Both amounts, currencies and stored rates',
+                    },
+                  ]
+                : []),
+              ...(data.deletedExpensesIncluded
+                ? [
+                    {
+                      count: data.counts.deletedExpenses,
+                      one: 'Deleted Expense',
+                      many: 'Deleted Expenses',
+                    },
+                  ]
+                : []),
+            ]}
+          />
+          {data.currencyGroups?.length ? (
+            <Box component="ul" sx={{ pl: 2.5, my: 1.5 }}>
+              {data.currencyGroups.map((group, index) => (
+                <li key={index}>
+                  {group.name}: {[group.currency, ...group.alternateCurrencies].join(', ')}
+                </li>
+              ))}
+            </Box>
+          ) : null}
           <Typography variant="body2" color="text.secondary">
             Not included: recurring Expense templates and Activity history.
           </Typography>
@@ -553,6 +573,86 @@ export default function ExportPreviewPanel({
             )}
           </Box>
         ))}
+    </Box>
+  );
+}
+
+/** Parts of a tile's detail line as one sentence, capitalised: "Since April 2026, each with…". */
+function sentence(parts: (string | null)[]): string | undefined {
+  const line = parts.filter(Boolean).join(', ');
+  return line ? line[0].toUpperCase() + line.slice(1) : undefined;
+}
+
+interface BackupTile {
+  count: number;
+  one: string;
+  many: string;
+  detail?: string;
+}
+
+/**
+ * What a backup holds, as count tiles: each number above its label, as the stat cards draw
+ * figures (#646). A list, so a screen reader hears "3 Members" and how many tiles there are.
+ */
+function BackupCounts({ tiles }: { tiles: BackupTile[] }) {
+  return (
+    <Box
+      component="ul"
+      aria-label="What the backup holds"
+      sx={{
+        listStyle: 'none',
+        p: 0,
+        my: 2,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(min(140px, 100%), 1fr))',
+        gap: 1.5,
+      }}
+    >
+      {tiles.map((tile) => (
+        <Box
+          component="li"
+          key={tile.many}
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.25,
+            minWidth: 0,
+            p: '14px 16px',
+            bgcolor: 'background.paper',
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: `${RADIUS.lg}px`,
+          }}
+        >
+          <Typography
+            component="p"
+            sx={(theme) => ({
+              ...theme.typography.money,
+              m: 0,
+              fontSize: '1.5rem',
+              lineHeight: 1.1,
+              letterSpacing: '-0.03em',
+              color: 'text.primary',
+            })}
+          >
+            {tile.count}
+          </Typography>
+          <Typography
+            component="p"
+            sx={{ m: 0, fontSize: '0.8125rem', lineHeight: 1.4, color: 'text.secondary' }}
+          >
+            {tile.count === 1 ? tile.one : tile.many}
+          </Typography>
+          {tile.detail ? (
+            <Typography
+              component="p"
+              sx={{ m: 0, fontSize: '0.75rem', lineHeight: 1.35, color: 'text.secondary' }}
+            >
+              {tile.detail}
+            </Typography>
+          ) : null}
+        </Box>
+      ))}
     </Box>
   );
 }
