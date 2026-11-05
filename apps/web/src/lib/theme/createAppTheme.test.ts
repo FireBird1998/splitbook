@@ -4,6 +4,7 @@ import { Alert, Button, Link, Paper, Tabs, Tab, ThemeProvider } from '@mui/mater
 import { createTheme, getContrastRatio, getLuminance, hexToRgb } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { createAppTheme } from './createAppTheme';
+import { insetFocusRing } from './focus-ring';
 import ErrorState from '@/components/common/ErrorState';
 
 /** A `#rrggbb` colour's hue, in degrees. */
@@ -50,7 +51,7 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
       ).toEqual([]);
   });
 
-  it('rings a page number, checkbox, radio, switch or chart focused from the keyboard, and none on a click (#848)', () => {
+  it('rings a page number or chart focused from the keyboard, a checkbox, radio or switch inside its edge, and none on a click (#848)', () => {
     const theme = createAppTheme(mode);
     const baseline = theme.components?.MuiCssBaseline?.styleOverrides;
     const ring = (
@@ -67,12 +68,13 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
     };
     // Each keyed to MUI's keyboard focus class, which a mouse click doesn't set.
     expect(root('MuiPaginationItem')['&.Mui-focusVisible']).toEqual(ring);
-    expect(root('MuiCheckbox')['&.Mui-focusVisible']).toEqual(ring);
-    expect(root('MuiRadio')['&.Mui-focusVisible']).toEqual(ring);
-    // The switch's focus is on its small thumb button: the ring goes around the whole switch,
+    // A label sits right against these, so the ring is drawn inside their padding.
+    expect(root('MuiCheckbox')['&.Mui-focusVisible']).toEqual(insetFocusRing(theme));
+    expect(root('MuiRadio')['&.Mui-focusVisible']).toEqual(insetFocusRing(theme));
+    // The switch's focus is on its small thumb button: the ring goes inside the whole switch,
     // as round at its ends as the track.
     expect(root('MuiSwitch')['&:has(.Mui-focusVisible)']).toEqual({
-      ...ring,
+      ...insetFocusRing(theme),
       borderRadius: 999,
     });
     // The chart's svg turns its outline off on focus; the ring comes back for the keyboard.

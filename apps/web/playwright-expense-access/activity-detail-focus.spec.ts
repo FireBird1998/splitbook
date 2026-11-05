@@ -139,6 +139,15 @@ for (const [layout, options] of [
         const heading = card(page).getByRole('heading', { name: 'Payment' });
         await expect(heading).toBeFocused();
         await expect(heading).toBeInViewport();
+        // Its ring stays clear of the caption under it.
+        expect(
+          await heading.evaluate((element) => {
+            const style = getComputedStyle(element);
+            const reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+            const caption = element.nextElementSibling!.getBoundingClientRect();
+            return caption.top - (element.getBoundingClientRect().bottom + reach);
+          }),
+        ).toBeGreaterThanOrEqual(0);
         // The card's controls come next, from where focus is.
         await page.keyboard.press('Tab');
         const close = card(page).getByRole('button', { name: 'Close Payment' });

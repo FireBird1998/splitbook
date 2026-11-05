@@ -63,6 +63,8 @@ export default function PaymentRecordCard({
             tabIndex={-1}
             sx={{
               m: 0,
+              // Room for its focus ring above the caption.
+              mb: 0.5,
               width: 'fit-content',
               fontSize: '1rem',
               fontWeight: 600,

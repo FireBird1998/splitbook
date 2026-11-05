@@ -6,7 +6,8 @@ import { test, expect, dataOf, joinGroup, openAddExpense, type Ledger } from './
 
 // #834: controls built on a bare ButtonBase draw the theme's keyboard focus ring, and a mouse
 // click draws none. Where a parent clips, the ring is drawn inside the control instead, without
-// its halo. #848: the pager, checkboxes, switches and charts draw it too.
+// its halo. #848: the pager and charts draw it too; checkboxes, radios and switches draw it inside,
+// clear of the label beside them.
 
 const SAM = DEMO_PERSONAS.find((persona) => persona.key === 'sam')!.name;
 
@@ -234,6 +235,16 @@ function layoutAround(ring: Locator) {
   });
 }
 
+/** How far past the label's start the ring reaches, from its outline: 0 or less is clear of it. */
+function ringIntoLabel(ring: Locator) {
+  return ring.evaluate((element) => {
+    const label = element.closest('label')!.querySelector('.MuiFormControlLabel-label')!;
+    const style = getComputedStyle(element);
+    const reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+    return element.getBoundingClientRect().right + reach - label.getBoundingClientRect().left;
+  });
+}
+
 /**
  * Pressed with the mouse and let go elsewhere, so it takes focus without acting, the control
  * draws no ring; Tabbed back to, it draws the theme's ring in focus.main: outside it with the
@@ -362,7 +373,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       );
     });
 
-    test('an Expenses row’s checkbox and the select-all checkbox, around their round box (#848)', async ({
+    test('an Expenses row’s checkbox and the select-all checkbox, inside their round box (#848)', async ({
       page,
       ledger,
     }) => {
@@ -372,19 +383,24 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(rowBox).toBeVisible();
       const root = (checkbox: Locator) =>
         checkbox.locator('xpath=ancestor::span[contains(@class,"MuiCheckbox-root")][1]');
-      await expectKeyboardRingOnly(page, rowBox, { ring: root(rowBox) });
+      await expectKeyboardRingOnly(page, rowBox, { ring: root(rowBox), inset: true });
       await expect(rowBox).not.toBeChecked();
       const all = table.getByRole('checkbox', { name: /^Select all / });
-      await expectKeyboardRingOnly(page, all, { ring: root(all) });
+      await expectKeyboardRingOnly(page, all, { ring: root(all), inset: true });
       await expect(root(all)).toHaveCSS('border-radius', '50%');
     });
 
-    test('the Settings switch, around the whole switch (#848)', async ({ page, ledger }) => {
+    test('the Settings switch, inside the whole switch and clear of its label (#848)', async ({
+      page,
+      ledger,
+    }) => {
       await signIn(page, ledger, '/settings');
       const toggle = page.getByRole('switch', { name: 'Single-key shortcuts' });
       await expect(toggle).toBeEnabled();
       const whole = toggle.locator('xpath=ancestor::span[contains(@class,"MuiSwitch-root")][1]');
-      await expectKeyboardRingOnly(page, toggle, { ring: whole });
+      await expectKeyboardRingOnly(page, toggle, { ring: whole, inset: true });
+      expect(await ringIntoLabel(whole)).toBeLessThanOrEqual(0);
+      await expect(whole).toHaveCSS('border-radius', '999px');
       await expect(toggle).toBeChecked();
     });
 

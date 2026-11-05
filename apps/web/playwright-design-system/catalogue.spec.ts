@@ -183,7 +183,7 @@ test('a mouse click on a button, toggle button or chip draws no ring; Tab does (
   }
 });
 
-test('a radio clicked draws no ring; Tabbed to, the ring goes around its round box and nothing moves (#848)', async ({
+test('a radio clicked draws no ring; Tabbed to, the ring is inside its round box, clear of its label, and nothing moves (#848)', async ({
   page,
 }) => {
   await page.goto('/dev/design-system');
@@ -208,8 +208,17 @@ test('a radio clicked draws no ring; Tabbed to, the ring goes around its round b
   await expect(radio).toBeFocused();
   await expect(round).toHaveCSS('outline-style', 'solid');
   await expect(round).toHaveCSS('outline-width', '2px');
-  await expect(round).toHaveCSS('outline-offset', '2px');
-  await expect(round).toHaveCSS('box-shadow', /0px 0px 0px 4px/);
+  // Inside the box: drawn outside, it crossed the label's first letter.
+  await expect(round).toHaveCSS('outline-offset', '-2px');
+  await expect(round).toHaveCSS('box-shadow', 'none');
   await expect(round).toHaveCSS('border-radius', '50%');
+  expect(
+    await round.evaluate((element) => {
+      const label = element.closest('label')!.querySelector('.MuiFormControlLabel-label')!;
+      const style = getComputedStyle(element);
+      const reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+      return element.getBoundingClientRect().right + reach - label.getBoundingClientRect().left;
+    }),
+  ).toBeLessThanOrEqual(0);
   expect(await layout()).toEqual(before);
 });

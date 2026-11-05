@@ -4,7 +4,7 @@ import { linkClasses } from '@mui/material/Link';
 import { createTheme, darken, lighten, type Shadows, type Theme } from '@mui/material/styles';
 // Types only: lets the theme style the charts (MuiChartsGrid, MuiChartsXAxis, …).
 import type {} from '@mui/x-charts/themeAugmentation';
-import { focusRing } from './focus-ring';
+import { focusRing, insetFocusRing } from './focus-ring';
 import { FONT_MONO, FONT_UI, RADIUS, getSemanticTokens, type ThemeMode } from './tokens';
 
 declare module '@mui/material/styles' {
@@ -370,23 +370,25 @@ export function createAppTheme(mode: ThemeMode): Theme {
           root: ({ theme }) => ({ '&.Mui-focusVisible': focusRing(theme) }),
         },
       },
-      // Round, so the ring is a circle around the box or dot.
+      // A checkbox's, radio's or switch's label sits right against it, where a ring outside would
+      // cross its first letter: the ring goes inside, in the control's own padding. Round, so it
+      // is a circle around the box or dot.
       MuiCheckbox: {
         styleOverrides: {
-          root: ({ theme }) => ({ '&.Mui-focusVisible': focusRing(theme) }),
+          root: ({ theme }) => ({ '&.Mui-focusVisible': insetFocusRing(theme) }),
         },
       },
       MuiRadio: {
         styleOverrides: {
-          root: ({ theme }) => ({ '&.Mui-focusVisible': focusRing(theme) }),
+          root: ({ theme }) => ({ '&.Mui-focusVisible': insetFocusRing(theme) }),
         },
       },
       MuiSwitch: {
         styleOverrides: {
-          // Focus sits on the thumb's button, too small to ring: the ring goes around the whole
+          // Focus sits on the thumb's button, too small to ring: the ring goes inside the whole
           // switch instead, its ends as round as the track's.
           root: ({ theme }) => ({
-            '&:has(.Mui-focusVisible)': { ...focusRing(theme), borderRadius: 999 },
+            '&:has(.Mui-focusVisible)': { ...insetFocusRing(theme), borderRadius: 999 },
           }),
         },
       },
