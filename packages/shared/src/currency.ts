@@ -1,3 +1,5 @@
+import { numberFormat } from './number-format';
+
 export interface Currency {
   code: string;
   name: string;
@@ -61,7 +63,7 @@ export const inSupportedCurrencies = <T extends { currency: string }>(rows: read
 export function formatCurrency(amount: number, currencyCode: string): string {
   const precision = CURRENCY_CODES.includes(currencyCode) ? getCurrencyPrecision(currencyCode) : 2;
   try {
-    return new Intl.NumberFormat('en-US', {
+    return numberFormat('en-US', {
       style: 'currency',
       currency: currencyCode,
       minimumFractionDigits: precision,
@@ -79,7 +81,7 @@ export function formatCurrency(amount: number, currencyCode: string): string {
 export function currencyPrefix(currencyCode: string): string {
   try {
     return (
-      new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode })
+      numberFormat('en-US', { style: 'currency', currency: currencyCode })
         .formatToParts(0)
         .find((part) => part.type === 'currency')
         ?.value.trim() ?? currencyCode
@@ -112,7 +114,7 @@ function decimalPlaces(value: number): number {
 export function formatCurrencyAsEntered(amount: number, currencyCode: string): string {
   const places = placesAsEntered(amount, currencyCode);
   try {
-    return new Intl.NumberFormat('en-US', {
+    return numberFormat('en-US', {
       style: 'currency',
       currency: currencyCode,
       minimumFractionDigits: places,
@@ -126,7 +128,7 @@ export function formatCurrencyAsEntered(amount: number, currencyCode: string): s
 /** The amount alone as entered, without its currency: "86.00", "1,234.50", "10.555" (#732). */
 export function formatAmountAsEntered(amount: number, currencyCode: string): string {
   const places = placesAsEntered(amount, currencyCode);
-  return new Intl.NumberFormat('en-US', {
+  return numberFormat('en-US', {
     minimumFractionDigits: places,
     maximumFractionDigits: places,
   }).format(amount);
@@ -168,7 +170,7 @@ export function amountReadAloud(typed: string, currency: string): string {
   const places = CURRENCY_CODES.includes(currency) ? getCurrencyPrecision(currency) : 2;
   // The currency's name as it follows an amount: "Japanese yen", "euros", "Indian rupees".
   const name =
-    new Intl.NumberFormat('en', { style: 'currency', currency, currencyDisplay: 'name' })
+    numberFormat('en', { style: 'currency', currency, currencyDisplay: 'name' })
       .formatToParts(2)
       .find((part) => part.type === 'currency')?.value ?? currency;
   const plain = typed.trim().replaceAll(',', '');

@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { decimalMoney } from './cross-currency-settlement';
 import {
+  amountReadAloud,
   currencyPrefix,
   formatCurrency,
   formatCurrencyAsEntered,
@@ -62,5 +64,58 @@ describe('prefixBesideChip (#884)', () => {
       '₹',
       '$',
     ]);
+  });
+});
+
+// #373: Android builds every amount's formatter on Hermes, where each `new Intl.NumberFormat`
+// costs milliseconds. Returning to a Group after Save built 53 of them (100-235 ms of the
+// render, measured on the emulator), so one formatter serves each currency and precision.
+describe('one formatter per currency and precision (#373)', () => {
+  const constructions = () => {
+    const Original = Intl.NumberFormat;
+    const made: unknown[][] = [];
+    const counting = vi.spyOn(Intl, 'NumberFormat').mockImplementation(function (
+      ...args: ConstructorParameters<typeof Intl.NumberFormat>
+    ) {
+      made.push(args);
+      return new Original(...args);
+    } as unknown as typeof Intl.NumberFormat);
+    return { made, restore: () => counting.mockRestore() };
+  };
+
+  it('formats a list of amounts with one formatter per currency, as before', () => {
+    const counted = constructions();
+    try {
+      const rows = Array.from({ length: 20 }, (_, i) => formatCurrency(i * 10.5, 'INR'));
+      rows.push(formatCurrency(1060, 'JPY'), formatCurrency(5, 'JPY'));
+      rows.push(currencyPrefix('PLN'), currencyPrefix('PLN'), prefixBesideChip('EUR'));
+      rows.push(formatCurrencyAsEntered(10.555, 'INR'), formatCurrencyAsEntered(1.555, 'INR'));
+      rows.push(amountReadAloud('2500', 'JPY'), amountReadAloud('12', 'JPY'));
+      rows.push(decimalMoney('12.5', 'EUR'), decimalMoney('3.25', 'EUR'));
+      expect(rows.slice(0, 3)).toEqual(['₹0.00', '₹10.50', '₹21.00']);
+      expect(rows.slice(20)).toEqual([
+        '¥1,060',
+        '¥5',
+        'PLN',
+        'PLN',
+        '€',
+        '₹10.555',
+        '₹1.555',
+        '2,500 Japanese yen',
+        '12 Japanese yen',
+        '€12.50',
+        '€3.25',
+      ]);
+      // INR, JPY, PLN, EUR's prefix, INR with 3 places, yen's name and EUR with 2 places.
+      expect(counted.made.length).toBeLessThanOrEqual(7);
+    } finally {
+      counted.restore();
+    }
+  });
+
+  it('still writes an unknown currency by its code', () => {
+    expect(formatCurrency(12, 'XYZ1')).toBe('XYZ1 12.00');
+    expect(formatCurrency(12, 'XYZ1')).toBe('XYZ1 12.00');
+    expect(currencyPrefix('XYZ1')).toBe('XYZ1');
   });
 });
