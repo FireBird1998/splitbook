@@ -31,6 +31,7 @@ export interface Verdict {
   readonly startedAt: string;
   readonly seconds: number;
   readonly vitestWorkers: number;
+  /** The backend the verifiers ran against. The gate starts its own, so startedByGate is true (#860). */
   readonly backend:
     | { readonly origin: string; readonly database: string; readonly startedByGate: boolean }
     | undefined;

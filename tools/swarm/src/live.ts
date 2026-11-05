@@ -159,7 +159,10 @@ export const ProcessesLive = Layer.succeed(Processes, {
   startTime: (pid) =>
     Effect.callback<string | undefined>((resume) => {
       if (!Number.isInteger(pid) || pid <= 1) return resume(Effect.succeed(undefined));
-      execFile('ps', ['-o', 'lstart=', '-p', String(pid)], (error, stdout) =>
+      // ps prints the time in the caller's zone and locale, so `up` run with TZ=UTC and `down`
+      // run without it would read two times for one process (#860). Always read it in UTC.
+      const env = { PATH: process.env.PATH ?? '/bin:/usr/bin', TZ: 'UTC', LC_ALL: 'C' };
+      execFile('ps', ['-o', 'lstart=', '-p', String(pid)], { env }, (error, stdout) =>
         resume(Effect.succeed(error ? undefined : stdout.trim().replace(/\s+/g, ' ') || undefined)),
       );
     }),

@@ -5,17 +5,24 @@
  * 2. lint, typecheck and the format check (the root scripts CI runs);
  * 3. unit tests, never the web integration tests, with vitest workers capped;
  * 4. the ceiling comparison with the base commit, through #206's script;
- * 5. every `verify:*` script, one after another, against this worktree's backend.
+ * 5. every `verify:*` script, one after another, against a backend the gate starts for its run.
  *
  * A failing step does not stop the others, except the install check. Each step has a
  * timeout. A timeout, Ctrl-C or a signal stops the step's whole process group and the
  * backend the gate started. The gate holds the worktree lock while it runs, and no step
- * inherits credentials or another backend's variables.
+ * inherits credentials or another backend's variables. It never reuses the worktree's backend
+ * from `up`: while that one runs, the gate is refused before any step (#860).
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Duration, Effect } from 'effect';
-import { backendForScope, backendVariables, logTail, outDirectory } from './backend.ts';
+import {
+  backendForScope,
+  backendVariables,
+  logTail,
+  outDirectory,
+  refuseRunningBackend,
+} from './backend.ts';
 import { checkInstall } from './install.ts';
 import { withWorktreeLock } from './lock.ts';
 import {
@@ -142,13 +149,18 @@ const resolveBase = (root: string, ref: string | undefined) =>
 
 /**
  * Runs the gate in a worktree. Every outcome is in the verdict, which is printed and
- * written to tools/swarm/out/verdict.json. It fails only when it can't take the worktree
- * lock, because another swarm command is running there; then it writes no verdict.
+ * written to tools/swarm/out/verdict.json. It is refused, and writes no verdict, when it
+ * can't take the worktree lock, because another swarm command is running there, or while
+ * the worktree's backend from `up` is running: the gate tests only a backend it starts.
  */
 export const gate = (
   options: GateOptions,
 ): Effect.Effect<Verdict, Refused | ProcessFailed, Processes | Databases | Network | Output> =>
-  withWorktreeLock(options.root, 'gate', gateUnlocked(options));
+  withWorktreeLock(
+    options.root,
+    'gate',
+    Effect.andThen(refuseRunningBackend(options.root), gateUnlocked(options)),
+  );
 
 const gateUnlocked = (
   options: GateOptions,
@@ -346,18 +358,12 @@ const gateUnlocked = (
             });
             return yield* skip(verifiers, 'skipped: no backend');
           }
-          backend = {
-            origin: outcome.backend.origin,
-            database: outcome.backend.database,
-            startedByGate: outcome.startedHere,
-          };
+          backend = { origin: outcome.origin, database: outcome.database, startedByGate: true };
           yield* record({
             name: 'backend',
             status: 'pass',
             seconds: seconds(since),
-            detail: outcome.startedHere
-              ? `started at ${outcome.backend.origin}; stopped and dropped after the verifiers`
-              : `reused the backend from pnpm swarm up at ${outcome.backend.origin}`,
+            detail: `started at ${outcome.origin}; stopped and dropped after the verifiers`,
           });
           for (const name of verifiers) {
             yield* runCommand({
@@ -365,7 +371,7 @@ const gateUnlocked = (
               args: ['--dir', 'apps/mobile', 'run', name],
               timeout: timeouts.verifier,
               // This backend's variables, so a control.mjs run hits this worktree's database.
-              env: { ...backendVariables(outcome.backend), TZ: verifierTimeZone },
+              env: { ...backendVariables(outcome), TZ: verifierTimeZone },
             });
           }
         }),

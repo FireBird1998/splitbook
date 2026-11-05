@@ -67,9 +67,9 @@ export class Processes extends Context.Service<
       cwd: string,
     ) => Effect.Effect<string | undefined>;
     /**
-     * When a running process started, as `ps -o lstart` prints it, or undefined when there
-     * is no such process. With the pid, it tells one process from a later one that reuses
-     * the pid.
+     * When a running process started, as `ps -o lstart` prints it in UTC and the C locale,
+     * whatever the caller's TZ and LANG, or undefined when there is no such process. With the
+     * pid, it tells one process from a later one that reuses the pid.
      */
     readonly startTime: (pid: number) => Effect.Effect<string | undefined>;
     /** Every process in a process group, whether or not its leader is still running. */

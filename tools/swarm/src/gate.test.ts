@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Fiber } from 'effect';
 import { afterEach, describe, expect, it } from 'vitest';
-import { up } from './backend.ts';
+import { down, up } from './backend.ts';
 import { defaultVitestWorkers, gate, verdictPath, type Verdict } from './gate.ts';
 import { lockPath } from './lock.ts';
 import {
@@ -304,23 +304,69 @@ describe('gate', () => {
     });
   });
 
-  it("uses the worktree's backend when it is up, and leaves it running", async () => {
+  it.each([
+    ['next dev', undefined],
+    ['a production build', 'production'],
+  ])(
+    "never reuses the worktree's backend from pnpm swarm up, serving %s: it is refused before any step, and the backend is left running",
+    async (serving, server) => {
+      const root = worktree();
+      const fake = world();
+      const { backend } = await Effect.runPromise(
+        up({ root, server }).pipe(Effect.provide(fakeLayer(fake))),
+      );
+      const before = fake.launches.length;
+
+      const error = await Effect.runPromise(
+        Effect.flip(gate({ root })).pipe(Effect.provide(fakeLayer(fake))),
+      );
+
+      expect(error._tag).toBe('Refused');
+      expect(error.message).toContain(`running at ${backend.origin}, serving ${serving}`);
+      expect(error.message).toMatch(/never reuses a backend.*pnpm swarm down/s);
+      // Nothing ran, nothing was stopped or dropped, and no verdict was written.
+      expect(fake.launches.slice(before)).toEqual([]);
+      expect(fake.stopped).toEqual([]);
+      expect(fake.dropped).toEqual([]);
+      expect(fake.running.has(backend.pid ?? -1)).toBe(true);
+      expect(existsSync(verdictPath(root))).toBe(false);
+    },
+  );
+
+  it('starts its own backend once pnpm swarm down has stopped the one from up', async () => {
     const root = worktree();
     const fake = world();
-    const { backend } = await Effect.runPromise(up({ root }).pipe(Effect.provide(fakeLayer(fake))));
-    const before = fake.launches.length;
+    const { backend: fromUp } = await Effect.runPromise(
+      up({ root, server: 'production' }).pipe(Effect.provide(fakeLayer(fake))),
+    );
+    await Effect.runPromise(down({ root }).pipe(Effect.provide(fakeLayer(fake))));
 
     const verdict = await runGate(fake, { root });
 
-    expect(step(verdict, 'backend')?.detail).toMatch(/pnpm swarm up/);
-    expect(verdict.backend).toEqual({
-      origin: backend.origin,
-      database: backend.database,
-      startedByGate: false,
-    });
-    expect(commands(fake).slice(before)).not.toContainEqual(expect.stringMatching(/seed|start/));
-    expect(fake.stopped).toEqual([]);
-    expect(fake.running.has(backend.pid ?? -1)).toBe(true);
+    expect(verdict.verdict).toBe('pass');
+    expect(verdict.backend?.startedByGate).toBe(true);
+    expect(verdict.backend?.database).not.toBe(fromUp.database);
+    const started = fake.launches.filter((launch) =>
+      launch.args.some((arg) => arg.endsWith('/start.mjs')),
+    );
+    expect(started.at(-1)?.env.SPLITBOOK_NATIVE_SERVER).toBe('dev');
+  });
+
+  it('cleans up after a backend from up that is gone, then starts its own', async () => {
+    const root = worktree();
+    const fake = world();
+    const { backend: fromUp } = await Effect.runPromise(
+      up({ root }).pipe(Effect.provide(fakeLayer(fake))),
+    );
+    // It crashed: its process is gone, its database and record are left.
+    fake.running.delete(fromUp.pid ?? -1);
+    fake.listening.delete(fromUp.pid ?? -1);
+
+    const verdict = await runGate(fake, { root });
+
+    expect(verdict.verdict).toBe('pass');
+    expect(fake.dropped).toEqual([fromUp.database, verdict.backend?.database]);
+    expect(verdict.backend?.startedByGate).toBe(true);
   });
 
   it('stops the backend it started, and drops its database, when it ends', async () => {
