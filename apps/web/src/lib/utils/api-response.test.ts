@@ -84,6 +84,12 @@ describe('serverError', () => {
         } as never),
     ],
     ['a connection that broke', () => new mongoose.mongo.MongoNetworkError('read ECONNRESET')],
+    // A save's transaction whose connection kept dropping can run out of its 2 s before the
+    // driver gives up on the connection: the database still gave no answer.
+    [
+      'a transaction that ran out of time with no answer',
+      () => new mongoose.mongo.MongoOperationTimeoutError('Timed out during socket read (1ms)'),
+    ],
     [
       'the one retry’s failure',
       () => new DatabaseUnavailableError(new mongoose.mongo.MongoNetworkError('read ECONNRESET')),

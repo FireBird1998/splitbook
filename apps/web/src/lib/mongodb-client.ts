@@ -182,8 +182,12 @@ function poolWarm(state: SharedMongo): boolean {
   return Date.now() - state.poolUsedAt < POOL_WARM_FOR_MS;
 }
 
-/** Unreachable, or its own time ran out with no answer. */
-function noAnswer(error: unknown): boolean {
+/**
+ * The database gave no answer: unreachable, or an operation's own time ran out first, as a save's
+ * transaction can while its connection keeps dropping. Every API answers both as 503
+ * DATABASE_UNAVAILABLE (`serverError`).
+ */
+export function isDatabaseNoAnswer(error: unknown): boolean {
   return isDatabaseUnreachable(error) || error instanceof mongo.MongoOperationTimeoutError;
 }
 
@@ -198,13 +202,13 @@ export async function withDatabaseRetry<T>(attempt: (deadline: number) => Promis
   try {
     return await attempt(deadline);
   } catch (first) {
-    if (!noAnswer(first)) throw first;
+    if (!isDatabaseNoAnswer(first)) throw first;
     if (deadline - Date.now() <= DATABASE_RETRY.afterMs) throw new DatabaseUnavailableError(first);
     await new Promise((resolve) => setTimeout(resolve, DATABASE_RETRY.afterMs));
     try {
       return await attempt(deadline);
     } catch (second) {
-      throw noAnswer(second) ? new DatabaseUnavailableError(second) : second;
+      throw isDatabaseNoAnswer(second) ? new DatabaseUnavailableError(second) : second;
     }
   }
 }
