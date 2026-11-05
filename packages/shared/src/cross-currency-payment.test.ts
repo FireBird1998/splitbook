@@ -9,6 +9,7 @@ import {
   suggestedRateText,
   rateBadge,
   rateNote,
+  rateText,
   readCrossCurrencyEntry,
   startCrossCurrencyEntry,
   type RateSuggestion,
@@ -108,6 +109,16 @@ describe('the three linked fields: change any one and the others follow (#727)',
     expect(readCrossCurrencyEntry(entry, euroInRupees)).toMatchObject({
       amounts: { appliedRate: '33.333333333333333333' },
     });
+  });
+
+  it('shows a rate under 1 to six significant digits, where six places would cut it (#873)', () => {
+    expect(rateText('92.099945255334')).toBe('92.099945');
+    expect(rateText('92.1')).toBe('92.10');
+    expect(rateText('0.1')).toBe('0.10');
+    expect(rateText('0.550764119601')).toBe('0.550764');
+    expect(rateText('0.005980066445')).toBe('0.00598007');
+    expect(rateText('0.000056789012')).toBe('0.000056789');
+    expect(rateText('0.000000000000000001')).toBe('0.000000000000000001');
   });
 
   it('rounds the amount paid half up to its currency’s minor unit, and yen to whole yen', () => {
@@ -319,6 +330,49 @@ describe('the Group’s rate read, as the sheet reads it (#726, #727)', () => {
         data: { suggestion: { ...secondSource, from: 'EUR', to: 'INR', components: [] } },
       }).suggestion,
     ).toEqual(secondSource);
+  });
+
+  // #873: a suggestion shows, and pays, as every other rate shows, whichever source it's from.
+  it('rounds a suggestion as rates show, whichever source it comes from (#873)', () => {
+    const read = (rate: string, from: RateSuggestion = frankfurter) =>
+      parseRateSuggestionResponse({ data: { suggestion: { ...from, rate } } }).suggestion?.rate;
+    expect(read('20.826633165829', secondSource)).toBe('20.826633');
+    expect(read('0.550764119601')).toBe('0.550764');
+    expect(read('92.1')).toBe('92.1');
+    expect(read('92.10')).toBe('92.1');
+    expect(read('92')).toBe('92');
+    // Six places would leave a yen's rate in euros three digits: six significant ones stay.
+    expect(read('0.005980066445')).toBe('0.00598007');
+    expect(read('0.000056789012')).toBe('0.000056789');
+  });
+
+  it('pays what the rate shown gives, in the field and beside Use (#873)', () => {
+    const zlotyInRupees = { currency: 'PLN', paidCurrency: 'INR' };
+    const { suggestion } = parseRateSuggestionResponse({
+      data: { suggestion: { ...secondSource, rate: '20.826633165829' } },
+    });
+    const entry = startCrossCurrencyEntry(zlotyInRupees, '60.00', suggestion);
+    // 60 × 20.826633 = 1249.59798: ₹1,249.60, where the unrounded rate gave ₹1,249.60 too.
+    expect(fields(entry)).toEqual(['60.00', '20.826633', '1249.60']);
+    const reading = readCrossCurrencyEntry(entry, zlotyInRupees);
+    if (reading.status !== 'valid') throw new Error(reading.status);
+    expect(crossCurrencyRateKind(zlotyInRupees, reading.amounts, suggestion)).toBe('suggested');
+    const own = editCrossCurrencyEntry(entry, zlotyInRupees, 'rate', '21');
+    expect(rateNote('custom', suggestion, 'INR', now)).toMatchObject({
+      text: 'Your rate. Suggested ₹20.826633, rates of 21 Oct.',
+      useSuggestion: '20.826633',
+    });
+    expect(fields(own)).toEqual(['60.00', '21', '1260.00']);
+    // A yen Debt paid in euros: the field shows the rate as it reads, not twelve places.
+    const yenInEuros = { currency: 'JPY', paidCurrency: 'EUR' };
+    const yen = parseRateSuggestionResponse({
+      data: { suggestion: { ...frankfurter, rate: '0.005980066445' } },
+    }).suggestion;
+    expect(fields(startCrossCurrencyEntry(yenInEuros, '2200', yen))).toEqual([
+      '2200',
+      '0.00598007',
+      '13.16',
+    ]);
   });
 
   it('refuses a read it can’t trust', () => {

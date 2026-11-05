@@ -31,7 +31,10 @@ export interface PaymentCurrencies {
 
 /** A suggested rate, as the Group's rate read answers it (#726). */
 export interface RateSuggestion {
-  /** Units of the paid currency for one unit of the Debt's, as a decimal string. */
+  /**
+   * Units of the paid currency for one unit of the Debt's, as a decimal string, read rounded as
+   * rates show (`roundedRate`): the field, Use, the amount paid and the record all have this one.
+   */
   rate: string;
   source: 'frankfurter' | 'exchange-rate-api' | 'mixed';
   asOf: string;
@@ -57,8 +60,12 @@ export type CrossCurrencyReading =
 
 /** A suggestion older than this many days shows its age. */
 const OLD_AFTER_DAYS = 1;
-/** A worked-out rate shows at most this many places; the exact one is what is recorded. */
+/** A rate shows at most this many places, or more for a rate under 1 (`roundedRate`). */
 const RATE_PLACES = 6;
+/** A rate under 1 keeps this many significant digits, where six places would keep fewer. */
+const RATE_DIGITS = 6;
+/** The most places a rate can be recorded with. */
+const MAX_RATE_PLACES = 18;
 
 const FIELDS: CrossCurrencyField[] = ['cleared', 'rate', 'paid'];
 const TEN = BigInt(10);
@@ -73,19 +80,33 @@ function amountText(minor: number, currency: string): string {
     : units.toString();
 }
 
-/** A suggested rate as its field shows it: exactly as suggested, with at least two places. */
+/** A suggested rate as its field shows it: as read (already rounded), with at least two places. */
 export function suggestedRateText(rate: string): string {
   const [whole, fraction = ''] = rate.split('.');
   return `${whole}.${fraction.padEnd(2, '0')}`;
 }
 
-/** A rate as its field shows it: at least two places, at most six, rounded half up. */
-export function rateText(rate: string): string {
+/**
+ * A rate as rates show (#873), as a plain decimal: rounded half up to six places, or to six
+ * significant digits for a rate under 1 that six places would cut (0.005980066445 is 0.00598007,
+ * never 0.00598), with no trailing zeros. A suggestion is read this way, so it pays as it shows.
+ */
+export function roundedRate(rate: string): string {
   const { numerator, denominator } = rateFraction(rate);
-  const scale = TEN ** BigInt(RATE_PLACES);
+  // The zeros after the point before its first digit: 2 in 0.00598.
+  let zeros = 0;
+  while (zeros < MAX_RATE_PLACES && numerator * TEN ** BigInt(zeros + 1) < denominator) zeros++;
+  const places = Math.min(MAX_RATE_PLACES, Math.max(RATE_PLACES, zeros + RATE_DIGITS));
+  const scale = TEN ** BigInt(places);
   const units = (BigInt(2) * numerator * scale + denominator) / (BigInt(2) * denominator);
-  const fraction = (units % scale).toString().padStart(RATE_PLACES, '0').replace(/0+$/, '');
-  return `${units / scale}.${fraction.padEnd(2, '0')}`;
+  const fraction = (units % scale).toString().padStart(places, '0').replace(/0+$/, '');
+  return fraction ? `${units / scale}.${fraction}` : (units / scale).toString();
+}
+
+/** A rate as its field and every record show it: `roundedRate`, with at least two places. */
+export function rateText(rate: string): string {
+  const [whole, fraction = ''] = roundedRate(rate).split('.');
+  return `${whole}.${fraction.padEnd(2, '0')}`;
 }
 
 type RateReading =
@@ -205,7 +226,7 @@ export function startCrossCurrencyEntry(
   return follow(
     {
       cleared: clearedText,
-      // Exactly as suggested: the amount paid follows the suggestion itself, never a rounding.
+      // As suggested, and as read: the amount paid follows the rate the field shows (#873).
       rate: suggestion ? suggestedRateText(suggestion.rate) : '',
       paid: '',
       drivers: suggestion ? ['cleared', 'rate'] : ['cleared'],
@@ -369,13 +390,19 @@ const rateReadSchema = z.object({
   }),
 });
 
-/** The Group's rate read (#726): its suggestion, or none and why. */
+/**
+ * The Group's rate read (#726): its suggestion, or none and why. The suggestion's rate is read as
+ * rates show (#873), whichever source it's from, so the sheet's field, its Use link and the
+ * amount paid all follow the rate the member sees.
+ */
 export function parseRateSuggestionResponse(payload: unknown): {
   suggestion: RateSuggestion | null;
   reason: string | null;
 } {
   const { data } = rateReadSchema.parse(payload);
-  return { suggestion: data.suggestion, reason: data.suggestion ? null : (data.reason ?? null) };
+  return data.suggestion
+    ? { suggestion: { ...data.suggestion, rate: roundedRate(data.suggestion.rate) }, reason: null }
+    : { suggestion: null, reason: data.reason ?? null };
 }
 
 /** A recorded payment in another currency, as its Activity metadata and its read keep it. */

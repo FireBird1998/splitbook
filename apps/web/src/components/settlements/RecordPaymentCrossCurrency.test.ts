@@ -2,7 +2,10 @@ import { createElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { ThemeProvider } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RateSuggestion } from '@splitbook/shared/cross-currency-payment';
+import {
+  parseRateSuggestionResponse,
+  type RateSuggestion,
+} from '@splitbook/shared/cross-currency-payment';
 import { EXCHANGE_RATE_API_ATTRIBUTION } from '@splitbook/shared/cross-currency-settlement';
 import type { SettlementLedger } from '@splitbook/shared/settlement-preview';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
@@ -308,6 +311,36 @@ describe('paying a euro Debt in rupees (#727)', () => {
     expect(page()).toContain('Rates of 21 Oct · fetched today 06:00');
     const link = hosts('a').find((node) => textOf(node) === 'Rates By Exchange Rate API');
     expect(link?.props.href).toBe('https://www.exchangerate-api.com');
+  });
+
+  // #873: the second source sent twelve places, and the field showed them all.
+  it('shows and pays a second source’s twelve-place suggestion as rates show (#873)', async () => {
+    // As the rate read gives it to the form (useRateSuggestion parses it so).
+    const { suggestion } = parseRateSuggestionResponse({
+      data: {
+        suggestion: {
+          ...frankfurter,
+          rate: '92.099945255334',
+          source: 'exchange-rate-api',
+          asOf: '2026-10-21',
+          attributionRequired: true,
+          attribution: { ...EXCHANGE_RATE_API_ATTRIBUTION },
+        },
+      },
+    });
+    await open({ status: 'ready', suggestion: suggestion! });
+
+    // 20 × 92.099945 = 1841.9989: the amount paid follows the rate the field shows.
+    expect(fields()).toEqual(['20.00', '92.099945', '1,842.00']);
+    await submit();
+    expect(saved.payments[0]).toEqual(
+      expect.objectContaining({
+        amountPaidMinor: 184200,
+        rateKind: 'suggested',
+        suggestedRate: '92.099945',
+        rateSource: 'exchange-rate-api',
+      }),
+    );
   });
 
   it('shows how old an older suggestion is', async () => {

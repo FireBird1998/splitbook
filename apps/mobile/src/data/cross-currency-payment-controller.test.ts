@@ -495,6 +495,43 @@ describe('a Debt paid in another currency (#728)', () => {
     ]);
   });
 
+  // #873: the second source sent "20.826633165829"; the sheet showed all twelve places.
+  it('shows and pays a second source’s twelve-place suggestion as rates show (#873)', async () => {
+    const { controller, payments } = await opened(({ pathname }) =>
+      pathname.endsWith('/rates')
+        ? rates({
+            ...frankfurter('EUR', 'INR', '92.099945255334'),
+            source: 'exchange-rate-api',
+            asOf: '2026-10-21',
+            attributionRequired: true,
+            attribution: {
+              text: 'Rates By Exchange Rate API',
+              url: 'https://www.exchangerate-api.com',
+            },
+          })
+        : undefined,
+    );
+    await controller.choosePaidCurrency('INR');
+    // 20 × 92.099945 = 1841.9989: the amount paid follows the rate the field shows.
+    expect(controller.getSnapshot().settlement.crossCurrency).toMatchObject({
+      entry: { cleared: '20.00', rate: '92.099945', paid: '1842.00' },
+      rate: { status: 'ready', suggestion: { rate: '92.099945' } },
+    });
+    await controller.recordSettlement();
+    expect(payments).toEqual([
+      {
+        ...paidSide,
+        amountPaidMinor: 184200,
+        appliedRate: '92.1',
+        rateKind: 'suggested',
+        ...fromFrankfurter,
+        suggestedRate: '92.099945',
+        rateSource: 'exchange-rate-api',
+        rateAsOf: '2026-10-21',
+      },
+    ]);
+  });
+
   it('offline, waits for a connection rather than saying no rate is suggested, and records nothing', async () => {
     let down = true;
     const { controller, payments, connect } = await opened(({ pathname }) =>
