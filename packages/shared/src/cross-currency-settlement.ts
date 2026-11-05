@@ -1,6 +1,7 @@
 import { memberLabel } from './member-label';
 import { currencyPrefix, getCurrency, getCurrencyPrecision } from './currency';
 import { assertSafeMinorAmount, MoneyValidationError } from './exact-money';
+import { numberFormat } from './number-format';
 import { NO_BREAK_SPACE, SEPARATOR } from './separator';
 
 /** Exactly two entered values. Amounts are integer minor units of their named currency. */
@@ -175,7 +176,7 @@ const displayPrecision = (currency: string) =>
 export function decimalMoney(decimal: string, currency: string): string {
   const [whole, fraction = ''] = decimal.split('.');
   const digits = fraction.padEnd(displayPrecision(currency), '0');
-  const format = new Intl.NumberFormat('en-US', {
+  const format = numberFormat('en-US', {
     style: 'currency',
     currency,
     minimumFractionDigits: digits.length,

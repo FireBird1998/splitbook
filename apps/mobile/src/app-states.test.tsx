@@ -20,7 +20,14 @@ import {
   unreadText,
   wordsOf,
 } from './test-utils/layout';
-import { loop, setFileWindow, setReduceMotion, setWindow, timing } from './test-utils/native';
+import {
+  emitAppState,
+  loop,
+  setFileWindow,
+  setReduceMotion,
+  setWindow,
+  timing,
+} from './test-utils/native';
 import { progressHeight, sweepTrack } from './ui/compact';
 import { savedQueriesIn } from './test-utils/saved-queries';
 import { mockDeviceLocale } from './test-utils/device-locale';
@@ -2909,6 +2916,67 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(app.text()).not.toContain('Opening your draft…');
     expect(phone.sent.filter((request) => request === `GET /api/groups/${maple}`)).toHaveLength(
       before,
+    );
+  });
+
+  it('never sends an unconfirmed Expense again when the app returns, only when asked (#373)', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    await app.press('Add expense');
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
+    const posts = () =>
+      phone.sent.filter((request) => request === `POST /api/groups/${maple}/expenses`).length;
+    // The server records it, but its reply never arrives: the connection drops first.
+    const reply = phone.hold(`/api/groups/${maple}/expenses`);
+    const saving = controller().saveExpense();
+    await reply.reached;
+    phone.network.online = false;
+    reply.release();
+    await settle(saving);
+    expect(controller().getSnapshot().expense.status).toBe('uncertain');
+    expect(posts()).toBe(1);
+    expect(app.text()).toContain('We couldn’t confirm this save');
+    // Back online, the app returns to the foreground and reads again: it sends nothing.
+    phone.network.online = true;
+    await settle(Promise.resolve(emitAppState('active')));
+    await settle(controller().refresh('retry'));
+    expect(posts()).toBe(1);
+    expect(controller().getSnapshot().expense).toMatchObject({
+      status: 'uncertain',
+      draft: { description: 'Gas bill', amount: '12' },
+    });
+    // Only the member's own Save sends it again.
+    await settle(controller().saveExpense());
+    expect(posts()).toBe(2);
+    expect(controller().getSnapshot().expense.status).toBe('saved');
+  });
+
+  it('labels a new Expense opened offline over the saved Group, keeping Save for a connection (#373)', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    await app.press('Add expense');
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      contextCheck: { status: 'saved', saved: true },
+    });
+    expect(app.text()).toContain('Saved Group');
+    expect(app.text()).toContain(
+      'Using the saved Group. Connect to verify current financial choices before saving.',
+    );
+    expect(app.text()).not.toContain('Checking Group');
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12' }));
+    expect(app.disabled('Save expense')).toBe(true);
+    await settle(controller().saveExpense());
+    expect(phone.sent.filter((request) => request.startsWith(`POST /api/groups/${maple}`))).toEqual(
+      [],
     );
   });
 

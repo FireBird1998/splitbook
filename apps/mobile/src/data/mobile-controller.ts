@@ -4464,6 +4464,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         });
         return;
       }
+      // Save's live check found the Group lost: the form is blocked, with Discard, as when the
+      // check on opening finds it lost; leaving removes what this device kept for it (#373).
+      if (
+        snapshot.expense.accessLost &&
+        error instanceof RequestError &&
+        [403, 404].includes(error.status)
+      ) {
+        publish({
+          ...snapshot,
+          expense: { ...snapshot.expense, status: 'blocked', message: error.message },
+        });
+        return;
+      }
       const rejection = expenseRejectionMessage(error);
       // Only a first send's rejection frees the draft. A retry's first try may be recorded.
       if (attempt && !editor.attempt && rejection) {
