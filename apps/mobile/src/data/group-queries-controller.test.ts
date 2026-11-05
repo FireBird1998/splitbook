@@ -2073,7 +2073,7 @@ describe('Members shown offline reads its Group again once the internet returns 
 
 // #685, after #678 and #681 (owner decision, 2026-10-20). Record payment opens only over a view
 // read live, but its own reads can still end offline while Wi-Fi stays connected without the
-// internet: its check of the payment, which then shows "Could not reach Splitbook" and offers no
+// internet: its check of the payment, which then says the phone is offline (#868) and offers no
 // Record, or a pull whose Group falls back to this phone's copy, under the offline banner. When
 // only the internet returns, the sheet reads again once, as Try again or a pull does. A failure
 // Splitbook answered stays until Try again.
@@ -2090,7 +2090,7 @@ describe('the Record payment sheet shown offline reads again once the internet r
       settlement: {
         status: 'error',
         draft: null,
-        message: 'Could not reach Splitbook. Check your connection and try again.',
+        message: 'You’re offline. Recording a payment needs a connection.',
       },
     });
     const sent = f.calls.length;
@@ -2347,7 +2347,7 @@ describe('Members and the Record payment sheet shown offline read again on a ful
       settlement: {
         status: 'error',
         draft: null,
-        message: 'Could not reach Splitbook. Check your connection and try again.',
+        message: 'You’re offline. Recording a payment needs a connection.',
       },
     });
     const sent = f.calls.length;

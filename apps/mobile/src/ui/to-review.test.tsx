@@ -1485,6 +1485,16 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     expect(unreadText(list.toJSON() as ReactTestRendererJSON, fontScale, 360)).toEqual([]);
   });
 
+  // #868: at 130% "Add CHF to Maple House" wraps to three lines and sat tight to its edges.
+  it('gives a fix button that wraps 12 dp above and below its words (#868)', async () => {
+    const { list } = await opened();
+    await tap(list, 'Review Dinner in Zürich');
+    for (const label of ['Add CHF to Maple House', 'Change currency']) {
+      const style = button(list, label).props.style({ pressed: false });
+      expect(style.paddingVertical, label).toBeGreaterThanOrEqual(12);
+    }
+  });
+
   it('offline, adding says it needs a connection and sends nothing', async () => {
     const { f, list } = await opened();
     await tap(list, 'Review Dinner in Zürich');

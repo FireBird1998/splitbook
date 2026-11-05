@@ -18,6 +18,7 @@ import {
   enterRateOrPaid,
   recordNeedsConnection,
   recordWaitsForRate,
+  recordWhileOffline,
   settlementFields,
   type SettlementDraft,
   type SettlementField,
@@ -406,7 +407,10 @@ function SinglePaymentSheet({
           message={state.message ?? 'This payment may already be recorded.'}
         />
       ) : status === 'blocked' || status === 'error' ? (
-        <Banner tone="error" message={state.message ?? 'This payment can’t be recorded.'} />
+        <Banner
+          tone={state.message === recordWhileOffline ? 'offline' : 'error'}
+          message={state.message ?? 'This payment can’t be recorded.'}
+        />
       ) : message ? (
         <Banner tone={draft ? 'warning' : 'info'} message={message} />
       ) : null}

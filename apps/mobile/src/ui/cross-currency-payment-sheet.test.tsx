@@ -243,6 +243,30 @@ describe('a Debt paid in rupees (#728, board "Pay in rupees")', () => {
     expect(on.onEditCrossCurrency).toHaveBeenCalledTimes(3);
   });
 
+  // #868: the zloty field said "zł" where the summary and balances said "PLN 60.00".
+  it('names a currency without a symbol by its code, as its amounts are written (#868)', () => {
+    const zlotyPair = { currency: 'PLN', paidCurrency: 'INR' };
+    const suggestion = { ...frankfurter, rate: '20.83' };
+    const zloty: CrossCurrencyPayment = {
+      paidCurrency: 'INR',
+      rate: { status: 'ready', suggestion },
+      entry: startCrossCurrencyEntry(zlotyPair, '60.00', suggestion),
+    };
+    const { root } = render(
+      state(zloty, {
+        group: { ...group, alternateCurrencies: ['EUR', 'PLN'] },
+        balances: [{ ...eur, currency: 'PLN', debts: [{ ...eur.debts[0]!, amount: 60 }] }],
+        suggested: 60,
+        draft: { paidBy: you, paidTo: sam, currency: 'PLN', amount: '60.00', note: '' },
+      }),
+    );
+    const shown = text(root);
+    expect(shown).toContain('Rate · ₹ for each PLN');
+    expect(shown).toContain('1 PLN =');
+    expect(shown).toContain('PLN\u00a060.00');
+    expect(shown).not.toContain('zł');
+  });
+
   it('keeps the member’s own rate beside the suggestion, with a way back to it (board "Your own rate")', () => {
     const { root, on } = render(state(inRupees(undefined, ['rate', '92.50'])));
     const shown = text(root);

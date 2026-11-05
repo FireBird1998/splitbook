@@ -57,6 +57,8 @@ export interface SettlementDraft {
 }
 /** Record's reason, and the Balances', while the phone has no connection. */
 export const recordNeedsConnection = 'Recording a payment needs a connection.';
+/** The sheet's check couldn't reach Splitbook: said in the offline tone, as #807's rule has it (#868). */
+export const recordWhileOffline = `You’re offline. ${recordNeedsConnection}`;
 /** Record's reason while the sheet looks up a suggested rate (#728). */
 export const recordWaitsForRate = 'Record is available once a suggested rate is looked up.';
 /** Record's reason while a payment in another currency has a field left to enter (#728). */

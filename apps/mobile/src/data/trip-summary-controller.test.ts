@@ -362,6 +362,21 @@ describe('a Trip in several currencies reads its Trip summary (#730)', () => {
     });
   });
 
+  // #868: rupees were never read on this phone, so it never kept them to lose.
+  it('says a currency never read offline needs a connection, never that its copy is gone (#868)', async () => {
+    const made = fixture();
+    const controller = started(made);
+    await controller.signIn('alex');
+    await controller.openGroup(lisbonId);
+    made.server.offline = true;
+    await controller.chooseTripCurrency('INR');
+    expect(controller.getSnapshot().financial.trip).toMatchObject({
+      status: 'error',
+      chosen: 'INR',
+      message: 'Couldn’t load this trip’s figures in INR. Connect to see them.',
+    });
+  });
+
   it('reads no Trip summary for a Trip in one currency, nor for a Household', async () => {
     const made = fixture();
     const controller = started(made);

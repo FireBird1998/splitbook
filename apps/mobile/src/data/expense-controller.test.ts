@@ -1,5 +1,5 @@
 import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
 import { toDateParam } from '@splitbook/shared/date';
 import { gatewayReply, hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
@@ -1782,6 +1782,27 @@ describe('native Expense creation and editing', () => {
       expect(expense.validation.focus?.field).toBe(field);
     },
   );
+
+  // #868: with To review on, the notice above says "This item uses…"; the Save error says it too.
+  it('names a currency the Group no longer uses as the item’s, with To review on (#868)', async () => {
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
+    const { controller } = setup();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      description: 'Dinner',
+      amount: '10',
+      tagId,
+      currency: 'USD',
+    });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.validation.errors.amount).toBe(
+      'This item uses USD, but the Group now uses INR. Choose Use INR, then review the amount.',
+    );
+  });
 
   it.each([403, 409, 422, 500])(
     'keeps unknown or ambiguous HTTP %s failures immutable',

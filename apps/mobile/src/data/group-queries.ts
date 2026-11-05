@@ -1524,10 +1524,13 @@ export function createGroupQueries(session: GroupSession) {
         ...base,
         ...kept,
         status: 'error',
+        // A currency this phone never read is no copy lost: it waits for a connection (#868).
         message:
-          unreachable(error) && (figures ?? base.data) !== null
-            ? notKept.trip
-            : messageOf(error, 'Could not load this trip’s figures. Please try again.'),
+          unreachable(error) && !figures && financial.trip?.chosen
+            ? `Couldn’t load this trip’s figures in ${financial.trip.chosen}. Connect to see them.`
+            : unreachable(error) && (figures ?? base.data) !== null
+              ? notKept.trip
+              : messageOf(error, 'Could not load this trip’s figures. Please try again.'),
       });
     return same(base, {
       ...base,

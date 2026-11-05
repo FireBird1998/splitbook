@@ -64,6 +64,7 @@ import {
   settlementFields,
   settlementSuggestion,
   recordNeedsConnection,
+  recordWhileOffline,
   recordWaitsForRate,
   validateSettlementDraft,
   type PendingPayment,
@@ -4676,11 +4677,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           : snapshot.settlement.attempt
             ? 'uncertain'
             : 'error';
-      // Storage problems say so, rather than pointing at the connection.
+      // Storage problems say so, rather than pointing at the connection. With nothing stored, a
+      // phone that can't reach Splitbook is offline, and says so in the offline tone (#868).
       const reason =
-        error instanceof RequestError || error instanceof DeviceStorageError
-          ? error.message
-          : 'Couldn’t check the latest balances. Close this and try again when you’re connected.';
+        status === 'error' && error instanceof RequestError && error.networkFailure
+          ? recordWhileOffline
+          : error instanceof RequestError || error instanceof DeviceStorageError
+            ? error.message
+            : 'Couldn’t check the latest balances. Close this and try again when you’re connected.';
       publish({
         ...snapshot,
         settlement: {

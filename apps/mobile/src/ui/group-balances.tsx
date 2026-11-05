@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { View, useWindowDimensions } from 'react-native';
+import { Fragment, useState, type ReactNode } from 'react';
+import { Text, View, useWindowDimensions } from 'react-native';
 import { balanceCurrencies, openingBalanceCurrency } from '@splitbook/shared/balance-currencies';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
@@ -39,7 +39,7 @@ import { inPlace, ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
 import { CurrencyTabs } from './currency-tabs';
-import { useTheme } from './theme';
+import { fonts, useTheme } from './theme';
 
 /** Record's reason offline, here and on the Record payment sheet (#728). */
 export { recordNeedsConnection };
@@ -70,6 +70,20 @@ const fewerPayments = (payments: number, debts: number) =>
 /** "₹1,480.00 and €20.00", or "₹1,480.00, €20.00 and ¥8,400". */
 const andList = (words: string[]) =>
   words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : (words[0] ?? '');
+
+/** "€54.83 and ¥2,200", each amount in the money face, as every other amount is (#868). */
+function MoneyList({ amounts }: { amounts: string[] }) {
+  return (
+    <CompactText variant="caption" tone="secondary" accessibilityLabel={andList(amounts)}>
+      {amounts.map((amount, index) => (
+        <Fragment key={index}>
+          {index === 0 ? '' : index === amounts.length - 1 ? ' and ' : ', '}
+          <Text style={{ fontFamily: fonts.mono, fontVariant: ['tabular-nums'] }}>{amount}</Text>
+        </Fragment>
+      ))}
+    </CompactText>
+  );
+}
 
 /**
  * Settle up (#734): each person the member owes, or who owes the member, in two currencies or
@@ -137,9 +151,7 @@ function SettleUpOffer({
               ? `You owe ${offer.other} in ${count} currencies`
               : `${offer.other} owes you in ${count} currencies`}
           </CompactText>
-          <CompactText variant="caption" tone="secondary">
-            {andList(offer.debts)}
-          </CompactText>
+          <MoneyList amounts={offer.debts} />
         </View>
         <Trailing column={column}>
           <CompactButton

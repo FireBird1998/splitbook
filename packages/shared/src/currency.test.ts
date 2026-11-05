@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatCurrencyAsEntered, inSupportedCurrencies } from './currency';
+import {
+  currencyPrefix,
+  formatCurrency,
+  formatCurrencyAsEntered,
+  inSupportedCurrencies,
+} from './currency';
 
 describe('money as entered (#537)', () => {
   it('shows more decimals than its currency has as they are, never rounded', () => {
@@ -25,5 +30,21 @@ describe('inSupportedCurrencies (#820)', () => {
       { currency: 'FRF' },
     ];
     expect(inSupportedCurrencies(rows)).toEqual([{ currency: 'INR' }, { currency: 'JPY' }]);
+  });
+});
+
+// #868: a payment sheet's field said "zł" where its summary said "PLN 60.00".
+describe('currencyPrefix (#868)', () => {
+  it('is what formatCurrency prints before an amount: the code where it has no symbol', () => {
+    expect(['PLN', 'CZK', 'CHF', 'EUR', 'JPY', 'INR'].map(currencyPrefix)).toEqual([
+      'PLN',
+      'CZK',
+      'CHF',
+      '€',
+      '¥',
+      '₹',
+    ]);
+    for (const code of ['PLN', 'CZK', 'EUR'])
+      expect(formatCurrency(60, code).startsWith(currencyPrefix(code)), code).toBe(true);
   });
 });

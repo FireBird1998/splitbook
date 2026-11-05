@@ -72,6 +72,23 @@ export function formatCurrency(amount: number, currencyCode: string): string {
   }
 }
 
+/**
+ * What formatCurrency prints before an amount (#868): "€", "¥" and "₹", or the code where the
+ * currency has no symbol of its own in English, as "PLN 60.00" and "CZK 250.00" are written.
+ */
+export function currencyPrefix(currencyCode: string): string {
+  try {
+    return (
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode })
+        .formatToParts(0)
+        .find((part) => part.type === 'currency')
+        ?.value.trim() ?? currencyCode
+    );
+  } catch {
+    return currencyCode;
+  }
+}
+
 /** Decimal places a number is written with: 10.555 has 3, 1.5e-7 has 8. */
 function decimalPlaces(value: number): number {
   const [mantissa, exponent = '0'] = String(Math.abs(value)).toLowerCase().split('e');

@@ -122,6 +122,9 @@ export function CompactButton({
         alignSelf: block ? 'stretch' : 'flex-start',
         borderRadius: radius.tile,
         paddingHorizontal: variant === 'text' ? 12 : dense ? 14 : 18,
+        // Words that wrap keep 12 dp above and below them, never tight to the edges (#868); one
+        // line still sits in the 48 dp the button has at least.
+        paddingVertical: variant === 'text' || dense ? 0 : 12,
         // One line: the icon stays beside the words' first line. A row that wrapped its parts
         // tipped over on a fraction of a pixel and put "New Group"'s "+" above the words (#639).
         flexDirection: 'row',
