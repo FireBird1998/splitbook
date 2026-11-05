@@ -147,7 +147,7 @@ test('the keyboard path through the Expense table: J and K move, Enter opens, E 
   await page.keyboard.press('x');
   await expect(buttons.nth(2)).toBeFocused();
   await expect(box).toBeChecked();
-  await expect(main(page).getByRole('heading', { name: /^1 selected · / })).toBeVisible();
+  await expect(main(page).getByRole('heading', { name: /^1 selected\s· / })).toBeVisible();
   await page.keyboard.press('x');
   await expect(box).not.toBeChecked();
   await expect(main(page).getByRole('region', { name: `${names[1]} details` })).toBeVisible();

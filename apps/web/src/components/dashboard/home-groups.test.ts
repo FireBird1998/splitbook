@@ -445,7 +445,7 @@ describe('the Groups table’s wording', () => {
 
   it('gives a Trip its dates and every other Theme its name', () => {
     const dates = { startDate: '2026-09-17T00:00:00.000Z', endDate: '2026-09-20T00:00:00.000Z' };
-    expect(themeLine({ category: 'trip', ...dates }, NOW)).toBe('Trip · 17–20 Sep');
+    expect(themeLine({ category: 'trip', ...dates }, NOW)).toBe('Trip\u00a0· 17–20 Sep');
     expect(themeLine({ category: 'trip', startDate: null, endDate: null }, NOW)).toBe('Trip');
     expect(themeLine({ category: 'home', ...dates }, NOW)).toBe('Household');
   });

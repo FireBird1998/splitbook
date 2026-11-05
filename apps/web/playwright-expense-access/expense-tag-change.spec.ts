@@ -58,7 +58,7 @@ test('Sam ticks three Expenses and moves them to one Tag; one Priya changed mean
   // X ticks the row whose Expense has focus.
   await expenseButton(page, 'Plumber').focus();
   await page.keyboard.press('x');
-  const panel = page.getByRole('region', { name: / selected · / });
+  const panel = page.getByRole('region', { name: / selected\s· / });
   await expect(panel.getByRole('heading', { level: 2 })).toHaveText('3 selected · ₹1,586.00');
 
   // The list Sam sees stays as it is from here: its refresh never lands, so the change below

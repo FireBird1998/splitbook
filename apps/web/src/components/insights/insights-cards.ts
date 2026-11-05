@@ -18,6 +18,7 @@ import type {
 import type { ChangeDirection } from '@splitbook/shared/insights';
 import { monthLabel } from '@/components/dashboard/spending-chart';
 import { averageName, monthsSpan, signedPercent } from './group-insights';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** A card's state on the tab: the read's, or `failed` when the card's own data is malformed. */
 export type InsightsCardState = 'ready' | 'loading' | 'failed' | 'empty';
@@ -83,7 +84,9 @@ export function byTagModel(read: GroupInsightsRead, part: GroupInsightsByTagRead
     currency,
     monthName,
     averageName: name,
-    subtitle: against ? `${monthName} vs ${against}` : `${monthLong} · nothing earlier to compare`,
+    subtitle: against
+      ? `${monthName} vs ${against}`
+      : `${monthLong}${SEPARATOR}nothing earlier to compare`,
     caption: `Spending by Tag in ${monthLong}, in ${currency}, ${
       against ? `against ${against}` : 'with nothing earlier to compare'
     }`,
@@ -163,8 +166,8 @@ export function whoPaidModel(
     currency,
     monthLong,
     subtitle: equal
-      ? `${monthLong} · each share is ${money(only, currency)}`
-      : `${monthLong} · Paid against each member’s share`,
+      ? `${monthLong}${SEPARATOR}each share is ${money(only, currency)}`
+      : `${monthLong}${SEPARATOR}Paid against each member’s share`,
     caption: `What each member paid in ${monthLong} against their share, in ${currency}`,
     nothingSpent: part.members.every((member) => member.paidMinor === 0),
     rows: part.members.map((member) => {
@@ -256,7 +259,7 @@ export function recurringModel(
     currency,
     subtitle:
       addedInMonth.count > 0
-        ? `${money(addedInMonth.spentMinor, currency)} · ${addedInMonth.count} of ${count} ${
+        ? `${money(addedInMonth.spentMinor, currency)}${SEPARATOR}${addedInMonth.count} of ${count} ${
             count === 1 ? 'Expense' : 'Expenses'
           } in ${monthName}`
         : `None added in ${monthName}`,
@@ -271,7 +274,7 @@ export function recurringModel(
         payersOf(template.paidBy, userId),
       ]
         .filter(Boolean)
-        .join(' · '),
+        .join(SEPARATOR),
       added: template.addedOn ? `Added ${dayLabel(template.addedOn, year)}` : null,
       next: template.nextDate
         ? `Next ${dayLabel(template.nextDate, year)}`

@@ -1295,7 +1295,7 @@ describe('rendered edit history', () => {
       return `${date.getDate()} ${month} ${date.getFullYear()}, ${clock}`;
     };
     // The Expense's own date is a calendar day (#437); the rest are moments on this device.
-    expect(shown).toContain('Mon 28 Sep 2026 · food');
+    expect(shown).toContain('Mon 28 Sep 2026\u00a0· food');
     expect(shown).toContain(`Created ${moment(iso)}`);
     expect(shown).toContain(`Last updated ${moment(iso)}`);
     expect(shown).toContain(moment('2026-09-27T15:40:00.000Z'));
@@ -1471,7 +1471,7 @@ describe('compact Expense form', () => {
       .root()
       .findAll((node) => isHost(node, 'Text') && node.props.accessibilityRole === 'header');
     expect(text(headings[0])).toBe('Add expense');
-    expect(text(ui.root())).toContain('Shared home · INR');
+    expect(text(ui.root())).toContain('Shared home\u00a0· INR');
     await ui.type('Description, required', 'Milk');
     expect(
       ui
@@ -1580,7 +1580,7 @@ describe('compact Expense form', () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     expect(ui.tile('Date').props.accessibilityLabel).toMatch(/^Date: /);
     expect(ui.tile('Paid by').props.accessibilityLabel).toBe('Paid by: You');
-    expect(ui.tile('Split').props.accessibilityLabel).toBe('Split: Equally · 1');
+    expect(ui.tile('Split').props.accessibilityLabel).toBe('Split: Equally\u00a0· 1');
     expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Choose a Tag');
 
     await ui.press(ui.tile('Paid by').props.accessibilityLabel);
@@ -1962,7 +1962,7 @@ describe('the currency beside the amount (#720)', () => {
     await ui.type('Amount, Japanese Yen, required', '2500');
     await ui.press('Currency, JPY, Japanese Yen. Change currency');
     const sheet = visibleSheet(ui.root(), 'Currency')!;
-    expect(text(sheet)).toContain('Lisbon and Tokyo · 3 currencies');
+    expect(text(sheet)).toContain('Lisbon and Tokyo\u00a0· 3 currencies');
     expect(radios(sheet)).toEqual([
       {
         label: 'JPY, Japanese Yen, your latest Expense here, whole amounts only',
@@ -2012,10 +2012,10 @@ describe('the currency beside the amount (#720)', () => {
       readGroup: async () => json({ status: 200, data: travelling }),
     });
     await ui.type('Amount, Japanese Yen, required', '2500');
-    expect(text(ui.root())).toContain('Who owes what · JPY · whole yen');
+    expect(text(ui.root())).toContain('Who owes what\u00a0· JPY\u00a0· whole yen');
     await ui.press('Currency, JPY, Japanese Yen. Change currency');
     await ui.press('EUR, Euro');
-    expect(text(ui.root())).toContain('Who owes what · EUR');
+    expect(text(ui.root())).toContain('Who owes what\u00a0· EUR');
     expect(text(ui.root())).not.toContain('whole yen');
   });
 
@@ -2138,7 +2138,7 @@ describe('the currency beside the amount (#720)', () => {
     expect(add.props.accessibilityRole).toBe('button');
     await ui.press('Add a currency. Adds it to Lisbon and Tokyo for everyone');
     const sheet = visibleSheet(ui.root(), 'Add a currency')!;
-    expect(text(sheet)).toContain('Lisbon and Tokyo · 2 of 4 extra currencies');
+    expect(text(sheet)).toContain('Lisbon and Tokyo\u00a0· 2 of 4 extra currencies');
     expect(text(sheet)).toContain(
       'INR, EUR and JPY are already on the list, so they aren’t shown.',
     );

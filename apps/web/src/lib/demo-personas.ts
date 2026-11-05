@@ -3,6 +3,8 @@
  * Edge-safe — no Node-only imports.
  */
 
+import { SEPARATOR } from '@splitbook/shared/separator';
+
 export type DemoPersonaKey = 'alex' | 'sam' | 'priya';
 
 export interface DemoPersona {
@@ -49,7 +51,7 @@ export const DEMO_PERSONAS: readonly DemoPersona[] = [
     email: 'alex.demo@splitbook.local',
     image: null,
     role: 'organizer',
-    headline: 'Trip organizer · group admin',
+    headline: `Trip organizer${SEPARATOR}group admin`,
   },
   {
     key: 'sam',

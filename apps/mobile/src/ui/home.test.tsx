@@ -291,8 +291,8 @@ describe('Continue where you left off', () => {
       'Draft, No description, Lisbon Offsite',
     ]);
     const shown = text(root);
-    expect(shown).toContain('Save not confirmed · Goa Friends Trip');
-    expect(shown).toContain('Draft · Maple House');
+    expect(shown).toContain('Save not confirmed\u00a0· Goa Friends Trip');
+    expect(shown).toContain('Draft\u00a0· Maple House');
     act(() =>
       button(root, 'Save not confirmed, Airport taxi, ₹1,150.00, Goa Friends Trip').props.onPress(),
     );
@@ -321,32 +321,35 @@ describe('Home Groups', () => {
   it('says how many wait in To review on a Group’s row (#646)', () => {
     const { root } = view({}, { toReview: { [groupsList[0]!.id]: 3 } });
     expect(
-      button(root, 'Open Maple House, Household · 3 members · 3 to review, You owe ₹1,480.00'),
+      button(
+        root,
+        'Open Maple House, Household\u00a0· 3 members\u00a0· 3 to review, You owe ₹1,480.00',
+      ),
     ).toBeDefined();
-    expect(text(root)).toContain('Household · 3 members · 3 to review');
+    expect(text(root)).toContain('Household\u00a0· 3 members\u00a0· 3 to review');
   });
   it('shows the member’s balance in each Group, its first currency and +N, or Settled up', () => {
     const { root, onOpen } = view();
-    expect(headers(root)).toEqual(['Groups · 4\u200a']);
+    expect(headers(root)).toEqual(['Groups\u00a0· 4\u200a']);
     expect(buttons(root).map((row) => row.props.accessibilityLabel)).toEqual([
       'New Group',
-      'Open Maple House, Household · 3 members, You owe ₹1,480.00',
-      'Open Goa Friends Trip, Trip · 17–20 Sep · 3 members, Owed to you ₹620.00, plus 1 more currency',
+      'Open Maple House, Household\u00a0· 3 members, You owe ₹1,480.00',
+      'Open Goa Friends Trip, Trip\u00a0· 17–20 Sep\u00a0· 3 members, Owed to you ₹620.00, plus 1 more currency',
       // Not in the Home response, so nothing is claimed.
-      'Open Lisbon Offsite, Work · 4 members',
-      'Open Sunday Football, General · 8 members, Settled up',
+      'Open Lisbon Offsite, Work\u00a0· 4 members',
+      'Open Sunday Football, General\u00a0· 8 members, Settled up',
     ]);
     const shown = text(root);
     expect(shown).toContain('₹1,480.00you owe');
-    expect(shown).toContain('₹620.00owed to you · +1');
+    expect(shown).toContain('₹620.00owed to you\u00a0· +1');
     expect(shown).toContain('Settled up');
-    act(() => button(root, 'Open Lisbon Offsite, Work · 4 members').props.onPress());
+    act(() => button(root, 'Open Lisbon Offsite, Work\u00a0· 4 members').props.onPress());
     expect(onOpen).toHaveBeenCalledWith(lisbon);
   });
 
   it('opens a Group on a tap or a screen reader’s activate, never on a drag that starts on its row (#665)', () => {
     const { root, onOpen } = view();
-    const row = button(root, 'Open Lisbon Offsite, Work · 4 members');
+    const row = button(root, 'Open Lisbon Offsite, Work\u00a0· 4 members');
     const landed = { pageX: 180, pageY: 420 };
     act(() => touchAlong(row, [landed, { pageX: 180, pageY: 330 }, { pageX: 181, pageY: 170 }]));
     expect(onOpen).not.toHaveBeenCalled();
@@ -366,7 +369,7 @@ describe('Home Groups', () => {
 
   it('invites a first Group when there are none, and explains a failed read with a retry', () => {
     const empty = view({ data: [] });
-    expect(headers(empty.root)).toEqual(['Groups · 0\u200a']);
+    expect(headers(empty.root)).toEqual(['Groups\u00a0· 0\u200a']);
     expect(text(empty.root)).toContain('A shared space starts here.');
     act(() => button(empty.root, 'Refresh Groups').props.onPress());
     expect(empty.onRetry).toHaveBeenCalledTimes(1);
@@ -388,7 +391,7 @@ describe('Home Groups', () => {
 
     const again = view({ status: 'loading', data: [], loaded: true });
     expect(placeholders(again.root)).toHaveLength(0);
-    expect(headers(again.root)).toEqual(['Groups · 0\u200a']);
+    expect(headers(again.root)).toEqual(['Groups\u00a0· 0\u200a']);
     expect(text(again.root)).toContain('A shared space starts here.');
   });
 });
@@ -414,10 +417,37 @@ describe.each(['light', 'dark'] as const)('Home Groups at large text in %s (#639
           />
         </ThemeContext.Provider>,
       );
-      for (const label of ['Groups · 4', 'Settled up', 'you owe', 'New Group'])
+      for (const label of ['Groups\u00a0· 4', 'Settled up', 'you owe', 'New Group'])
         expect(labelRuns(root, label), label).toEqual([[label, hairSpace]]);
     },
   );
+});
+
+// #895: at 150% and 200% a line could start with "·". A line breaks only at an ordinary space,
+// and a no-break space keeps each dot with what comes before it: the balances' "you owe · +1",
+// the drafts' "Draft · Maple House", "Groups · 4" and each Group's "Trip · 17–20 Sep · 3 members".
+it.each([1.5, 2])('never starts a line with a dot at %s× text (#895)', (fontScale) => {
+  setWindow({ width: 360, height: 640, fontScale });
+  render(
+    <>
+      <HomeBalances state={home()} onRefresh={vi.fn()} />
+      <ContinueDrafts drafts={[draft({})]} onOpen={vi.fn()} />
+      <HomeGroups
+        groups={{ status: 'ready', data: groupsList, message: null, loaded: true }}
+        byGroup={home().byGroup}
+        newGroupLabel="New Group"
+        onNewGroup={vi.fn()}
+        onOpen={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    </>,
+  );
+  const lines = [renderer!.toJSON() as ReactTestRendererJSON | ReactTestRendererJSON[]]
+    .flat()
+    .flatMap(outerTexts)
+    .map(wordsOf);
+  expect(lines.filter((words) => words.includes('·')).length).toBeGreaterThanOrEqual(6);
+  for (const words of lines) expect(words, words).not.toMatch(/(^|[ \n])·/);
 });
 
 // #639: at 200% a Group's row read "QA Eu.." and "Genera.." beside its balance. A row's name and

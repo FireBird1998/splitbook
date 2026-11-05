@@ -557,7 +557,9 @@ describe('how a recurring Expense repeats', () => {
   };
 
   it('says the day of the month and the next date it adds an Expense', () => {
-    expect(repeatsLabel(wifi, { now })).toBe(`Monthly on the 28th · next ${day('2026-10', 28)}`);
+    expect(repeatsLabel(wifi, { now })).toBe(
+      `Monthly on the 28th\u00a0· next ${day('2026-10', 28)}`,
+    );
     expect(nextRecurringDate(wifi, now)?.toISOString()).toBe('2026-10-28T00:00:00.000Z');
   });
 
@@ -571,9 +573,11 @@ describe('how a recurring Expense repeats', () => {
   });
 
   it('says when it is paused or has ended', () => {
-    expect(repeatsLabel({ ...wifi, isPaused: true }, { now })).toBe('Monthly on the 28th · paused');
+    expect(repeatsLabel({ ...wifi, isPaused: true }, { now })).toBe(
+      'Monthly on the 28th\u00a0· paused',
+    );
     const ended = { ...wifi, endsOn: '2026-10-15T00:00:00.000Z' };
-    expect(repeatsLabel(ended, { now })).toBe('Monthly on the 28th · ended');
+    expect(repeatsLabel(ended, { now })).toBe('Monthly on the 28th\u00a0· ended');
   });
 
   it('says only Monthly while the schedule is unknown, and Stopped once it was deleted', () => {

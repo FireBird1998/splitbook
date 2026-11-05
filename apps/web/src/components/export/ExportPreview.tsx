@@ -21,6 +21,7 @@ import TableCell from '@mui/material/TableCell';
 import type { ExportPreview } from '@splitbook/shared/export-preview';
 import { exportWindowSlug } from '@splitbook/shared/export-request';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export type PreviewState =
   | { status: 'idle'; message: string }
@@ -126,13 +127,13 @@ export default function ExportPreviewPanel({
           noWrap
           title={
             data
-              ? `${data.groupNames.join(', ')} · ${previewPeriod(data)} · ${formats[data.format]}`
+              ? `${data.groupNames.join(', ')}${SEPARATOR}${previewPeriod(data)}${SEPARATOR}${formats[data.format]}`
               : undefined
           }
           sx={{ mb: 2 }}
         >
           {data
-            ? `${data.groupNames.join(', ')} · ${previewPeriod(data)} · ${formats[data.format]}`
+            ? `${data.groupNames.join(', ')}${SEPARATOR}${previewPeriod(data)}${SEPARATOR}${formats[data.format]}`
             : '\u00a0'}
         </Typography>
       }
@@ -158,10 +159,15 @@ export default function ExportPreviewPanel({
           }}
         >
           <Typography component="h3" variant="h6">
-            {data.statement.name} · Statement · {previewPeriod(data)}
+            {data.statement.name}
+            {SEPARATOR}Statement{SEPARATOR}
+            {previewPeriod(data)}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {getGroupTheme(data.statement.theme).label} · {data.statement.defaultCurrency} ·
+            {getGroupTheme(data.statement.theme).label}
+            {SEPARATOR}
+            {data.statement.defaultCurrency}
+            {SEPARATOR}
             Generated {generatedTime(data.generatedAt, data.timeZone)} ({data.timeZone})
           </Typography>
           {data.statement.currencies.map((bucket) => {
@@ -207,7 +213,10 @@ export default function ExportPreviewPanel({
                   </Box>
                   <Box>
                     <Typography variant="body2">Payments</Typography>
-                    <Typography component="span">{bucket.paymentCount} · </Typography>
+                    <Typography component="span">
+                      {bucket.paymentCount}
+                      {SEPARATOR}
+                    </Typography>
                     <MoneyText
                       amount={displayMajorAmount(bucket.paymentTotalMinor, bucket.currency)}
                       currency={bucket.currency}

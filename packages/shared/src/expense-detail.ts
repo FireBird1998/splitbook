@@ -22,6 +22,7 @@ import { SPLIT_LABELS } from './expense-row';
 import { expenseDateForPeriod, nextPeriod, toPeriod } from './recurring-due-periods';
 import type { ExpenseSplitMethod } from './split-calculation';
 import { expenseLocalDate } from './expense-day';
+import { SEPARATOR } from './separator';
 
 /** A payer or share row as the Expense reads return it. */
 export interface StoredAllocationRow {
@@ -625,7 +626,7 @@ export function repeatsLabel(
   if (deleted) return 'Stopped';
   if (!schedule) return 'Monthly';
   const monthly = `Monthly on the ${ordinal(schedule.dayOfMonth)}`;
-  if (schedule.isPaused) return `${monthly} · paused`;
+  if (schedule.isPaused) return `${monthly}${SEPARATOR}paused`;
   const next = nextRecurringDate(schedule, now);
-  return next ? `${monthly} · next ${shortDay(next)}` : `${monthly} · ended`;
+  return next ? `${monthly}${SEPARATOR}next ${shortDay(next)}` : `${monthly}${SEPARATOR}ended`;
 }

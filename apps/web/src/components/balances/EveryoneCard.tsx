@@ -18,6 +18,7 @@ import {
   type EveryoneRow,
   type PhrasePart,
 } from './everyone-chart';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /*
  * Balances' "Everyone" (#313, design canvas "Web portal", GroupBalances): each person's
@@ -80,7 +81,7 @@ export default function EveryoneCard({
     <TabCard
       headingId={HEADING_ID}
       title="Everyone"
-      subtitle={`All-time net · ${currency}`}
+      subtitle={`All-time net${SEPARATOR}${currency}`}
       aside={
         shown ? (
           <SegmentedControl
@@ -205,7 +206,9 @@ function BarTip({ row }: { row: EveryoneRow }) {
         <span>Settled up</span>
       ) : (
         <span>
-          <Phrase parts={[{ text: row.amount, money: true }]} /> · {row.position.toLowerCase()}
+          <Phrase parts={[{ text: row.amount, money: true }]} />
+          {SEPARATOR}
+          {row.position.toLowerCase()}
         </span>
       )}
       {row.settledBy.length ? (

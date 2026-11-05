@@ -4,6 +4,7 @@ import type { ExpenseCurrencyChoice } from '@splitbook/shared/group-currencies';
 import { Banner, BottomSheet, CompactText, radius, touch, useTap } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** "Your latest Expense here · whole amounts only": why a currency is offered, and its rule. */
 function choiceNotes(choice: ExpenseCurrencyChoice) {
@@ -59,7 +60,7 @@ export function CurrencySheet({
     <BottomSheet
       visible={visible}
       title="Currency"
-      subtitle={`${groupName} · ${listed} ${listed === 1 ? 'currency' : 'currencies'}`}
+      subtitle={`${groupName}${SEPARATOR}${listed} ${listed === 1 ? 'currency' : 'currencies'}`}
       onDone={onDone}
       footer={
         <CompactText variant="small" tone="secondary">
@@ -117,7 +118,7 @@ export function CurrencySheet({
                 <CompactText weight="semibold">{choice.name}</CompactText>
                 {notes.length ? (
                   <CompactText variant="small" tone="secondary">
-                    {notes.join(' · ')}
+                    {notes.join(SEPARATOR)}
                   </CompactText>
                 ) : null}
               </View>

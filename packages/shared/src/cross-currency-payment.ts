@@ -25,7 +25,7 @@ import {
   type CrossCurrencyAmounts,
   type CrossCurrencySettlementFields,
 } from './cross-currency-settlement';
-import { SEPARATOR } from './separator';
+import { NO_BREAK_SPACE, SEPARATOR } from './separator';
 
 export { rateText, roundedRate } from './cross-currency-settlement';
 
@@ -302,20 +302,29 @@ export function rateBadge(
   return suggestion.ageDays > OLD_AFTER_DAYS ? `${suggestion.ageDays} days old` : 'Suggested';
 }
 
-/** "20 Oct", from a provider's calendar date, read as that date wherever the viewer is. */
+/**
+ * "20 Oct", from a provider's calendar date, read as that date wherever the viewer is. A no-break
+ * space keeps it on one line (#895).
+ */
 function calendarDay(date: string): string {
   const [year, month, day] = date.split('-').map(Number);
-  return format(new Date(year, month - 1, day), 'd MMM');
+  return format(new Date(year, month - 1, day), `d${NO_BREAK_SPACE}MMM`);
 }
 
-/** "today 06:00", "yesterday 18:00" or "18 Oct 18:00", in the viewer's own time. */
+/** "5 Nov 17:44", in the viewer's own time, kept on one line with no-break spaces (#895). */
+const dayAndTime = (date: Date) => format(date, `d${NO_BREAK_SPACE}MMM${NO_BREAK_SPACE}HH:mm`);
+
+/**
+ * "today 06:00", "yesterday 18:00" or "18 Oct 18:00", in the viewer's own time, on one line
+ * (#895).
+ */
 function fetchedWhen(fetchedAt: string, now: Date): string {
   const fetched = new Date(fetchedAt);
   const day = (date: Date) =>
     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const daysAgo = Math.round((day(now) - day(fetched)) / 86_400_000);
-  const when = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : format(fetched, 'd MMM');
-  return `${when} ${format(fetched, 'HH:mm')}`;
+  const when = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : null;
+  return when ? `${when}${NO_BREAK_SPACE}${format(fetched, 'HH:mm')}` : dayAndTime(fetched);
 }
 
 const SOURCE_NAMES: Partial<Record<RateSuggestion['source'], string>> = {
@@ -345,7 +354,7 @@ export function rateNote(
     };
   const name = SOURCE_NAMES[suggestion.source];
   const attribution = suggestion.attributionRequired ? suggestion.attribution : null;
-  const ratesOf = `rates of ${calendarDay(suggestion.asOf)}`;
+  const ratesOf = `rates of${NO_BREAK_SPACE}${calendarDay(suggestion.asOf)}`;
   if (kind === 'custom')
     return {
       text: `Your rate. Suggested ${decimalMoney(rateText(suggestion.rate), paidCurrency)}${name ? ` from ${name}` : ''}, ${ratesOf}.`,
@@ -357,7 +366,7 @@ export function rateNote(
     text:
       suggestion.ageDays > OLD_AFTER_DAYS
         ? `${lead}, ${suggestion.ageDays} days old. Today’s rates aren’t in yet.`
-        : `${lead}${SEPARATOR}fetched ${fetchedWhen(suggestion.fetchedAt, now)}`,
+        : `${lead}${SEPARATOR}fetched${NO_BREAK_SPACE}${fetchedWhen(suggestion.fetchedAt, now)}`,
     attribution,
     useSuggestion: null,
   };
@@ -537,7 +546,7 @@ export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
     record.suggestedRate && record.rateSource && record.rateAsOf && record.rateFetchedAt
       ? {
           rate: `${decimalMoney(rateText(record.suggestedRate), record.paidCurrency)} ${per}`,
-          source: `${SOURCE_NAMES[record.rateSource] ? `${SOURCE_NAMES[record.rateSource]}${SEPARATOR}r` : 'R'}ates of ${calendarDay(record.rateAsOf)}${SEPARATOR}fetched ${format(new Date(record.rateFetchedAt), 'd MMM HH:mm')}`,
+          source: `${SOURCE_NAMES[record.rateSource] ? `${SOURCE_NAMES[record.rateSource]}${SEPARATOR}r` : 'R'}ates of${NO_BREAK_SPACE}${calendarDay(record.rateAsOf)}${SEPARATOR}fetched${NO_BREAK_SPACE}${dayAndTime(new Date(record.rateFetchedAt))}`,
           attribution:
             record.rateSource === 'frankfurter' ? null : { ...EXCHANGE_RATE_API_ATTRIBUTION },
         }

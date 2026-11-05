@@ -36,6 +36,7 @@ import { expensePosition, expenseRecordPosition } from '@splitbook/shared/expens
 import { expenseSplitSummary } from '@splitbook/shared/expense-row';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import ExpenseEditLines from './ExpenseEditLines';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** An Expense as the list or its own read returns it; history comes from its own read. */
 export interface PanelExpense extends StoredExpenseSplit {
@@ -344,7 +345,7 @@ function OpenExpense({
       )
     : null;
   const category = getCategory(expense.category);
-  const meta = [panelDay(expense.date), expense.tag].filter(Boolean).join(' · ');
+  const meta = [panelDay(expense.date), expense.tag].filter(Boolean).join(SEPARATOR);
 
   return (
     <Box component="section" id={id} aria-label={`${expense.description} details`} sx={card}>

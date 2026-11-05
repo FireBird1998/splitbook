@@ -11,6 +11,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { useGroups } from '@/lib/hooks/use-groups';
 import { lastAnswered, subscribeToAnswers } from '@/lib/utils/read-times';
 import { HOME_BALANCES_KEY } from './home-reads';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** "5 Groups · Updated 10:42 AM", leaving out what isn't known yet. */
 export function homeStatusLine(groupCount: number | null, updatedAt: number | null): string {
@@ -19,7 +20,7 @@ export function homeStatusLine(groupCount: number | null, updatedAt: number | nu
     updatedAt === null ? null : `Updated ${format(updatedAt, 'h:mm a')}`,
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(SEPARATOR);
 }
 
 interface HomeHeaderViewProps {

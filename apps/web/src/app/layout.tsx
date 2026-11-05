@@ -4,13 +4,14 @@ import './fonts.css';
 import './fonts';
 import ThemeProvider from '@/providers/ThemeProvider';
 import { PRODUCT_NAME, THEME_STORAGE_KEY } from '@/lib/product';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export const metadata: Metadata = {
   manifest: '/manifest.webmanifest',
   title: {
     default: `${PRODUCT_NAME} - Shared Expenses, Settled Fairly`,
     // A page that names itself reads "<page> · Splitbook", so a row of tabs tells them apart.
-    template: `%s · ${PRODUCT_NAME}`,
+    template: `%s${SEPARATOR}${PRODUCT_NAME}`,
   },
   description:
     'Track group expenses, settle debts with minimal transactions, and never argue about money again.',

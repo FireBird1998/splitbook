@@ -10,6 +10,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { memberLabel } from '@splitbook/shared/activity-timeline';
 import { RADIUS } from '@/lib/theme/tokens';
 import type { SettlementBatchWords } from '@splitbook/shared/settlement-batch-words';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface BatchPaymentCardProps {
   words: SettlementBatchWords;
@@ -73,7 +74,9 @@ export default function BatchPaymentCard({
             Payment
           </Typography>
           <Typography sx={{ m: 0, fontSize: '0.75rem', color: 'text.secondary' }}>
-            Recorded by {recorder === 'You' ? 'you' : recorder} · {when}
+            Recorded by {recorder === 'You' ? 'you' : recorder}
+            {SEPARATOR}
+            {when}
           </Typography>
         </Box>
         <IconButton aria-label="Close Payment" onClick={onClose} size="small">

@@ -287,7 +287,7 @@ describe.each(['light', 'dark'] as const)('the Who owes what heading in %s (#876
         flatten(props.style).paddingTop === 12 &&
         flatten(props.style).paddingHorizontal === 14,
     );
-    expect(wordsOf(row!)).toContain('Who owes what · EUR');
+    expect(wordsOf(row!)).toContain('Who owes what\u00a0· EUR');
     expect(wordsOf(row!)).toContain('Adds up');
     return row!;
   }

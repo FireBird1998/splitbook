@@ -831,7 +831,7 @@ describe('native Expense creation and editing', () => {
     expect(restarted.getSnapshot()).toMatchObject({
       screen: 'group',
       expense: { status: 'saved', mutation: null, draft: null, message: 'Expense deleted.' },
-      snackbar: { message: 'Expense deleted · Original dinner' },
+      snackbar: { message: 'Expense deleted\u00a0· Original dinner' },
     });
     expect(records.size).toBe(0);
     expect(writes).toBe(1);
@@ -1021,8 +1021,8 @@ describe('native Expense creation and editing', () => {
         snackbar: {
           message:
             kind === 'delete'
-              ? 'Expense deleted · Original dinner'
-              : 'Expense updated · Saved correction',
+              ? 'Expense deleted\u00a0· Original dinner'
+              : 'Expense updated\u00a0· Saved correction',
         },
       });
       expect(records.size).toBe(0);

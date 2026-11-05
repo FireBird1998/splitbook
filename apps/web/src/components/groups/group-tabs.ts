@@ -4,6 +4,8 @@
  * and the redirect for old links all read from here, so they always agree.
  */
 
+import { SEPARATOR } from '@splitbook/shared/separator';
+
 /** The tabs, in the order the design canvas ("Web portal") shows them. */
 export const GROUP_TABS = [
   { slug: 'expenses', label: 'Expenses' },
@@ -88,7 +90,7 @@ export function groupLandingHref(groupId: string, searchParams: SearchParamsReco
 /** "Household · 3 members · INR": the line under the Group's name. */
 export function groupSummaryLine(themeLabel: string, memberCount: number, currency: string) {
   return [themeLabel, `${memberCount} ${memberCount === 1 ? 'member' : 'members'}`, currency].join(
-    ' · ',
+    SEPARATOR,
   );
 }
 

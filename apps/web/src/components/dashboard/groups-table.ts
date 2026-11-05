@@ -19,6 +19,7 @@ import { initials } from '@/components/layout/AccountMenu';
 import { membersLabel, viewerFirst } from '@/components/groups/group-tabs';
 import type { CardRead, GroupBalanceAmounts } from './home-reads';
 import { monthLabel } from './spending-chart';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** A figure from a read: still loading, not known (the read failed or lacks it), or known. */
 export type Figure<T> =
@@ -115,7 +116,7 @@ export function themeLine(group: Pick<GroupRead, 'category' | 'startDate' | 'end
   const theme = getGroupTheme(group.category);
   const dates =
     theme.dates === 'bounded' ? tripDatesLabel(group.startDate, group.endDate, now) : null;
-  return dates ? `${theme.label} · ${dates}` : theme.label;
+  return dates ? `${theme.label}${SEPARATOR}${dates}` : theme.label;
 }
 
 /**

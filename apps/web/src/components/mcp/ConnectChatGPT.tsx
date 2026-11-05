@@ -14,6 +14,7 @@ import Typography from '@mui/material/Typography';
 import { CHATGPT, isStagingResource, TEST_PROMPT } from '@/lib/mcp/connect-choices';
 import { PRODUCT_NAME } from '@/lib/product';
 import { SetupStep, SetupSteps } from './SetupSteps';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** ChatGPT's setup steps, on its own guide and in Connect's picker (#619). */
 export function ChatGPTSetup({
@@ -97,7 +98,9 @@ export default function ConnectChatGPT({
         <Stack spacing={1}>
           <Box>
             <Chip label="Guided beta setup" size="small" />{' '}
-            {staging && <Chip label="Staging · test environment" color="warning" size="small" />}
+            {staging && (
+              <Chip label={`Staging${SEPARATOR}test environment`} color="warning" size="small" />
+            )}
           </Box>
           <Typography component="h1" variant="h3">
             Connect ChatGPT

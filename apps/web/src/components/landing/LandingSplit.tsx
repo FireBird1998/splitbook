@@ -17,6 +17,7 @@ import {
 import MoneyText from '@/components/common/MoneyText';
 import { PRODUCT_NAME } from '@/lib/product';
 import LandingSection, { landingCard } from './LandingSection';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 type Share = { user: string; shares?: number };
 
@@ -66,7 +67,7 @@ function GroceriesCard() {
       <Stack spacing={2}>
         <Box>
           <Typography variant="caption" color="text.secondary">
-            Goa Weekend · Food
+            Goa Weekend{SEPARATOR}Food
           </Typography>
           <Stack direction="row" justifyContent="space-between" alignItems="baseline" gap={2}>
             <Typography variant="h6" component="p" sx={{ m: 0 }}>
@@ -81,7 +82,7 @@ function GroceriesCard() {
             />
           </Stack>
           <Typography variant="body2" color="text.secondary">
-            Paid by Sam · Split by shares
+            Paid by Sam{SEPARATOR}Split by shares
           </Typography>
         </Box>
         <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>

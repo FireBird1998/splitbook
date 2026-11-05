@@ -18,6 +18,7 @@ import { groupTabHref } from '@/components/groups/group-tabs';
 import { writeExpenseListQuery } from '@/components/expenses/expense-list-query';
 import { recordPaymentHref } from '@/components/settlements/record-payment';
 import { tripDayLabel, tripDayName, tripDayShort } from './trip-days';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export const money = (minor: number, currency: string) =>
   formatCurrency(toMajorAmount(minor, currency), currency);
@@ -50,7 +51,7 @@ export function tripFigures(read: TripSummaryRead): TripFigures {
   const days = read.dayCount > 0 ? ` over ${plural(read.dayCount, 'day')}` : '';
   const difference = read.youPaidMinor - read.yourShareMinor;
   return {
-    heading: `Whole trip · ${currency}`,
+    heading: `Whole trip${SEPARATOR}${currency}`,
     spent: {
       text: money(read.spentMinor, currency),
       line: `${expenses(read.expenseCount)}${days}`,
@@ -81,7 +82,7 @@ export function tripFigures(read: TripSummaryRead): TripFigures {
       line:
         read.perPersonPerDayMinor === null
           ? 'Needs a day and someone sharing'
-          : `${plural(read.peopleCount, 'person', 'people')} · ${plural(read.dayCount, 'day')}`,
+          : `${plural(read.peopleCount, 'person', 'people')}${SEPARATOR}${plural(read.dayCount, 'day')}`,
     },
   };
 }
@@ -222,7 +223,7 @@ export function tripDayChart(
   return {
     currency,
     subtitle: read.window
-      ? `${currency} spent each day · ${span(read.window.from, read.window.to, thisYear)}`
+      ? `${currency} spent each day${SEPARATOR}${span(read.window.from, read.window.to, thisYear)}`
       : `${currency} spent each day`,
     rows,
     average:

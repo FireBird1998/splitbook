@@ -218,10 +218,12 @@ describe('a Debt paid in rupees (#728, board "Pay in rupees")', () => {
     expect(shown).toContain('Change any one; the other two follow.');
     expect(shown).toContain('Amount cleared');
     expect(shown).toContain('the whole Debt');
-    expect(shown).toContain('Rate · ₹ for each €');
+    expect(shown).toContain('Rate\u00a0· ₹ for each €');
     expect(shown).toContain('Suggested');
     expect(shown).toContain('1 € =');
-    expect(shown).toContain('Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched today 06:00');
+    expect(shown).toContain(
+      'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a0today\u00a006:00',
+    );
     expect(shown).toContain('rounded to the paisa');
     expect(shown).toContain('Clears your €20.00 Debt to Sam. Sam gets ₹1,842.00.');
     expect(shown).toContain(recordPaymentFootnote);
@@ -261,7 +263,7 @@ describe('a Debt paid in rupees (#728, board "Pay in rupees")', () => {
       }),
     );
     const shown = text(root);
-    expect(shown).toContain('Rate · ₹ for each PLN');
+    expect(shown).toContain('Rate\u00a0· ₹ for each PLN');
     expect(shown).toContain('1 PLN =');
     expect(shown).toContain('PLN\u00a060.00');
     expect(shown).not.toContain('zł');
@@ -271,7 +273,9 @@ describe('a Debt paid in rupees (#728, board "Pay in rupees")', () => {
     const { root, on } = render(state(inRupees(undefined, ['rate', '92.50'])));
     const shown = text(root);
     expect(shown).toContain('Your rate');
-    expect(shown).toContain('Your rate. Suggested ₹92.10 from Frankfurter, rates of 20 Oct.');
+    expect(shown).toContain(
+      'Your rate. Suggested ₹92.10 from Frankfurter, rates of\u00a020\u00a0Oct.',
+    );
     expect(shown).toContain('Clears your €20.00 Debt to Sam. Sam gets ₹1,850.00.');
     expect(one(root, 'Amount paid, INR').props.value).toBe('1850.00');
     act(() => one(root, 'Use ₹92.10').props.onPress());
@@ -347,7 +351,7 @@ describe('the rate when there is no suggestion (#728, boards "No rate suggested"
     };
     const { root, on } = render(state(inRupees({ status: 'ready', suggestion: mixed })));
     const shown = text(root);
-    expect(shown).toContain('Rates of 21 Oct\u00a0· fetched today 06:00');
+    expect(shown).toContain('Rates of\u00a021\u00a0Oct\u00a0· fetched\u00a0today\u00a006:00');
     expect(shown).toContain('Clears your €20.00 Debt to Sam. Sam gets ₹1,841.20.');
     const link = one(root, 'Rates By Exchange Rate API');
     expect(link.props.accessibilityRole).toBe('link');

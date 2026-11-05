@@ -113,8 +113,8 @@ describe('a link to the Group’s own address', () => {
 
 describe('the Group header’s words', () => {
   it('reads "Theme · N members · currency"', () => {
-    expect(groupSummaryLine('Household', 3, 'INR')).toBe('Household · 3 members · INR');
-    expect(groupSummaryLine('Trip', 1, 'EUR')).toBe('Trip · 1 member · EUR');
+    expect(groupSummaryLine('Household', 3, 'INR')).toBe('Household\u00a0· 3 members\u00a0· INR');
+    expect(groupSummaryLine('Trip', 1, 'EUR')).toBe('Trip\u00a0· 1 member\u00a0· EUR');
   });
 
   it('names the members behind the avatars, the viewer first as "you"', () => {

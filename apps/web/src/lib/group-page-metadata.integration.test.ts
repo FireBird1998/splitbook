@@ -44,7 +44,7 @@ it('Group and Join metadata fall back to generic titles when Mongo reads fail', 
   try {
     await expect(
       groupPageMetadata(Promise.resolve({ id: String(group._id) }), 'Balances'),
-    ).resolves.toEqual({ title: 'Group · Balances' });
+    ).resolves.toEqual({ title: 'Group\u00a0· Balances' });
     await expect(
       joinMetadata({ params: Promise.resolve({ code: 'unavailable' }) }),
     ).resolves.toEqual({ title: 'Join a Group' });

@@ -6,6 +6,7 @@ import FlightOutlinedIcon from '@mui/icons-material/FlightOutlined';
 import { deriveTripCodes } from '@splitbook/shared/trip-codes';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
 import { formatCurrency } from '@splitbook/shared/currency';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export interface TripStripAmount {
   amount: number;
@@ -263,14 +264,14 @@ export default function TripStrip({
         >
           <MetaItem
             label={name}
-            value={[dateLabel, !isFull ? peopleLabel : null].filter(Boolean).join(' · ')}
+            value={[dateLabel, !isFull ? peopleLabel : null].filter(Boolean).join(SEPARATOR)}
           />
           {isFull && memberNames && memberNames.length > 0 && (
-            <MetaItem label="Members" value={memberNames.join(' · ')} />
+            <MetaItem label="Members" value={memberNames.join(SEPARATOR)} />
           )}
           {!isFull && <MetaItem label="Currency" value={currency} />}
           {isFull && currencies && currencies.length > 1 && (
-            <MetaItem label="Currencies" value={currencies.join(' · ')} mono />
+            <MetaItem label="Currencies" value={currencies.join(SEPARATOR)} mono />
           )}
           {isFull && inviteCode && <MetaItem label="Invite" value={inviteCode} mono />}
         </Box>
@@ -334,7 +335,9 @@ export default function TripStrip({
               letterSpacing: '0.06em',
             })}
           >
-            {from} · {to}
+            {from}
+            {SEPARATOR}
+            {to}
           </Box>
         )}
       </Box>

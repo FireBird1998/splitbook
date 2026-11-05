@@ -27,6 +27,7 @@ import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 import { PRODUCT_NAME } from '@/lib/product';
 import type { ApprovalGroup } from '@/lib/services/assistant-ledger.service';
 import { AssistantGroupChecklist, leavesOutEveryGroup } from './AssistantGroupChecklist';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** A connection request as the approval page shows it: the assistant, and what it asks for. */
 type ConsentDetails = AssistantDisplay & {
@@ -53,7 +54,7 @@ export function ApprovalHeading({ details }: { details: AssistantDisplay }) {
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
         {details.address
-          ? `${details.address} · identified by its published details`
+          ? `${details.address}${SEPARATOR}identified by its published details`
           : 'Registered by the assistant itself. Its address isn’t published.'}
       </Typography>
     </Box>

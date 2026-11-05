@@ -22,6 +22,7 @@ import LandingSplit from './LandingSplit';
 import LandingSettleUp from './LandingSettleUp';
 import LandingTrust from './LandingTrust';
 import { LANDING_ACTION_HEIGHT, LANDING_HEADLINE, LANDING_PROMISE } from './landing-copy';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** A section of the page the top bar links to, such as `{ href: '#groups', label: 'Groups' }`. */
 export interface LandingSectionLink {
@@ -181,7 +182,7 @@ function Hero({ live }: LandingPageProps) {
               fontWeight: 600,
             }}
           >
-            {live.playStoreUrl ? 'Shared expenses · Android and web' : 'Shared expenses'}
+            {live.playStoreUrl ? `Shared expenses${SEPARATOR}Android and web` : 'Shared expenses'}
           </Typography>
           <Typography variant="display" component="h1" color="text.primary" sx={{ m: 0 }}>
             {LANDING_HEADLINE}
@@ -267,7 +268,8 @@ function LandingFooter({ live }: LandingPageProps) {
         <Stack direction="row" spacing={1.25} alignItems="center">
           <BrandMark size={24} />
           <Typography variant="body2" color="text.secondary">
-            {PRODUCT_NAME} · shared expenses, settled fairly.
+            {PRODUCT_NAME}
+            {SEPARATOR}shared expenses, settled fairly.
           </Typography>
         </Stack>
         {links.length > 0 && (

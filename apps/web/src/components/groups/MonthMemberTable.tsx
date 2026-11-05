@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography';
 import Avatar from '@mui/material/Avatar';
 import MoneyText from '@/components/common/MoneyText';
 import type { ExpenseMemberBreakdownRow } from '@splitbook/shared/types';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface MonthMemberTableProps {
   rows: ExpenseMemberBreakdownRow[];
@@ -43,7 +44,8 @@ export default function MonthMemberTable({
           mb: 1,
         }}
       >
-        Per member · {monthName}
+        Per member{SEPARATOR}
+        {monthName}
       </Typography>
 
       <Box

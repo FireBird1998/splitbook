@@ -40,6 +40,7 @@ import {
   retryWaitsForCheck,
 } from './payment-words';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#868). */
 const symbol = currencyPrefix;
@@ -83,11 +84,11 @@ function legWords(leg: Leg, paidCurrency: string) {
         : leg.rateState?.status === 'unreachable'
           ? 'A suggested rate needs a connection.'
           : leg.kind === 'custom' && suggestion
-            ? `Your rate · suggested ${decimalMoney(rateText(suggestion.rate), paidCurrency)}, ${sourceWords(suggestion)}`
+            ? `Your rate${SEPARATOR}suggested ${decimalMoney(rateText(suggestion.rate), paidCurrency)}, ${sourceWords(suggestion)}`
             : suggestion && (leg.kind === 'suggested' || leg.kind === null)
-              ? `Suggested · ${sourceWords(suggestion)}`
+              ? `Suggested${SEPARATOR}${sourceWords(suggestion)}`
               : leg.rateState
-                ? 'No rate suggested · Enter the rate you agreed'
+                ? `No rate suggested${SEPARATOR}Enter the rate you agreed`
                 : leg.kind === 'suggested'
                   ? 'Suggested'
                   : leg.kind === 'custom'

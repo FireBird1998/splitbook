@@ -594,7 +594,7 @@ describe('Returning from an Expense', () => {
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',
       destination: 'expenses',
-      snackbar: { message: 'Expense saved · Weekly groceries' },
+      snackbar: { message: 'Expense saved\u00a0· Weekly groceries' },
     });
   });
 
@@ -718,7 +718,7 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
       financial: { groupId: householdId, month: '2026-09' },
       snackbar: {
         groupId: householdId,
-        message: 'Expense updated · Electricity',
+        message: 'Expense updated\u00a0· Electricity',
         viewMonth: null,
         expenseId,
       },
@@ -761,7 +761,7 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',
       financial: { month: '2026-08' },
-      snackbar: { message: 'Expense updated · Electricity bill' },
+      snackbar: { message: 'Expense updated\u00a0· Electricity bill' },
     });
   });
 
@@ -794,7 +794,7 @@ describe('Saving an edit begun on an Expense’s record (#635)', () => {
       expect(controller.getSnapshot()).toMatchObject({
         screen: 'group',
         expense: { status: 'saved', message: 'Expense updated.' },
-        snackbar: { message: 'Expense updated · Electricity bill' },
+        snackbar: { message: 'Expense updated\u00a0· Electricity bill' },
         financial: { month: fromHome ? '2026-09' : '2026-08' },
       });
       // No record to offer a Month from: the Group's own Snackbar says what changed.
@@ -1215,7 +1215,7 @@ describe('Returning to an Expense beyond the first page', () => {
     await controller.saveExpense();
     shown = controller.getSnapshot();
     expect(shown.snackbar).toMatchObject({
-      message: 'Expense saved · Weekly groceries',
+      message: 'Expense saved\u00a0· Weekly groceries',
       viewMonth: null,
     });
     expect(shown.restoreScroll).toMatchObject({ y: 2150 });
@@ -1254,7 +1254,7 @@ describe('Returning to an Expense beyond the first page', () => {
     await Promise.all([saving, refreshing]);
 
     const { financial, snackbar, restoreScroll } = controller.getSnapshot();
-    expect(snackbar?.message).toBe('Expense saved · Weekly groceries');
+    expect(snackbar?.message).toBe('Expense saved\u00a0· Weekly groceries');
     expect(restoreScroll).toMatchObject({ y: 2200 });
     expect(financial.expenses.data).toHaveLength(26);
     expect(financial.expenses.data.map((row) => row.id)).toContain(last.id);
@@ -1370,7 +1370,7 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
     expect(shown).toMatchObject({
       restoreScroll: { y: 6100 },
       snackbar: {
-        message: 'Expense updated · Seeded, corrected',
+        message: 'Expense updated\u00a0· Seeded, corrected',
         expenseId: last.id,
       },
       financial: { expenses: { firstPage: 2, pagination: { page: 6 } } },
@@ -1393,7 +1393,7 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
     const saving = controller.saveExpense();
     await reread.reached;
     const shown = controller.getSnapshot();
-    expect(shown.snackbar?.message).toBe('Expense updated · Seeded, corrected');
+    expect(shown.snackbar?.message).toBe('Expense updated\u00a0· Seeded, corrected');
     // The row as it was before the edit is still listed, but it isn't the edited Expense yet.
     expect(shown.financial.expenses.data.find((row) => row.id === last.id)?.description).not.toBe(
       'Seeded, corrected',
@@ -1416,7 +1416,7 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
     await controller.saveExpense();
     const shown = controller.getSnapshot();
     expect(shown.snackbar?.message).toBe(
-      'Expense updated · Seeded, corrected. Expenses couldn’t be updated yet — pull to refresh.',
+      'Expense updated\u00a0· Seeded, corrected. Expenses couldn’t be updated yet — pull to refresh.',
     );
     // The row as it was before the edit stays listed, unhighlighted.
     expect(shown.financial.expenses.data.map((row) => row.id)).toContain(last.id);
@@ -1434,7 +1434,7 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
       firstPage: 2,
     });
     expect(shown.financial.expenses.data.map((row) => row.id)).not.toContain(last.id);
-    expect(shown.snackbar?.message).toMatch(/^Expense updated · /);
+    expect(shown.snackbar?.message).toMatch(/^Expense updated\u00a0· /);
     expect(shown.snackbar?.expenseId).toBeUndefined();
   });
   it('keeps the window after a delete, and reads its pages again', async () => {
@@ -1448,7 +1448,7 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
       restoreScroll: { y: 6100 },
       financial: { expenses: { firstPage: 2, pagination: { page: 6 } } },
     });
-    expect(shown.snackbar?.message).toMatch(/^Expense deleted · /);
+    expect(shown.snackbar?.message).toMatch(/^Expense deleted\u00a0· /);
     expect(shown.snackbar?.expenseId).toBeUndefined();
     expect(shown.financial.expenses.data.map((row) => row.id)).not.toContain(last.id);
     expect(server.pagesRead().slice(reads)).toEqual([2, 3, 4, 5, 6]);
@@ -1484,7 +1484,7 @@ describe('Saving into the same or another Month', () => {
       restoreScroll: { y: 48 },
       snackbar: {
         groupId: householdId,
-        message: 'Expense saved · Weekly groceries',
+        message: 'Expense saved\u00a0· Weekly groceries',
         viewMonth: null,
       },
     });
@@ -1505,7 +1505,7 @@ describe('Saving into the same or another Month', () => {
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',
       financial: { month: '2026-09' },
-      snackbar: { message: 'Expense saved · Weekly groceries', viewMonth: '2026-08' },
+      snackbar: { message: 'Expense saved\u00a0· Weekly groceries', viewMonth: '2026-08' },
     });
     expect(server.monthsRead().slice(reads)).toEqual(['2026-09']);
     expect(controller.getSnapshot().financial.expenses.data).toEqual([]);
@@ -1538,7 +1538,7 @@ describe('Saving into the same or another Month', () => {
     await controller.saveExpense();
     expect(controller.getSnapshot().snackbar).toMatchObject({
       groupId: tripId,
-      message: 'Expense saved · Ferry',
+      message: 'Expense saved\u00a0· Ferry',
       viewMonth: null,
     });
   });
@@ -1558,7 +1558,7 @@ describe('Saving into the same or another Month', () => {
     await controller.saveExpense();
     expect(controller.getSnapshot()).toMatchObject({
       financial: { month: '2026-08' },
-      snackbar: { message: 'Expense updated · Electricity', viewMonth: '2026-09' },
+      snackbar: { message: 'Expense updated\u00a0· Electricity', viewMonth: '2026-09' },
     });
     await controller.selectMonth('2026-07');
     expect(controller.getSnapshot().snackbar).toBeNull();
@@ -1657,7 +1657,7 @@ describe('Draft and save recovery', () => {
     expect(server.expensesIn(householdId)).toHaveLength(2);
     expect(restarted.getSnapshot()).toMatchObject({
       screen: 'group',
-      snackbar: { message: 'Expense saved · Weekly groceries', viewMonth: '2026-08' },
+      snackbar: { message: 'Expense saved\u00a0· Weekly groceries', viewMonth: '2026-08' },
     });
     // After a restart the origin is unknown, so the Group opens at its default Month.
     expect(restarted.getSnapshot().financial.month).toBe('2026-09');
@@ -1812,7 +1812,7 @@ describe('An edit or delete whose answer was lost (#232)', () => {
         screen: 'group',
         financial: { month: '2026-08' },
         expense: { status: 'saved', mutation: null, draft: null, message: 'Expense deleted.' },
-        snackbar: { message: 'Expense deleted · Electricity' },
+        snackbar: { message: 'Expense deleted\u00a0· Electricity' },
       });
       expect(controller.getSnapshot().financial.expenses.data).toEqual([]);
     },

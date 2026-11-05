@@ -93,7 +93,7 @@ describe('the root metadata', () => {
   it('keeps the home title, and titles other pages "<page> · Splitbook"', () => {
     expect(metadata.title).toEqual({
       default: 'Splitbook - Shared Expenses, Settled Fairly',
-      template: '%s · Splitbook',
+      template: '%s\u00a0· Splitbook',
     });
   });
 });

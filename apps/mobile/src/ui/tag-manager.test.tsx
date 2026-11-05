@@ -415,8 +415,8 @@ describe('Tags on a phone (#562)', () => {
 describe('A Tag’s options, in sheets over the list', () => {
   it('lists each Tag once, with its options a tap away instead of buttons under every Tag', async () => {
     await openManageTags();
-    expect(screenText()).toContain('Active · 1');
-    expect(screenText()).toContain('Archived · 1');
+    expect(screenText()).toContain('Active\u00a0· 1');
+    expect(screenText()).toContain('Archived\u00a0· 1');
     expect(offered(`Rename ${longName}`)).toBe(false);
     expect(offered(`Archive ${longName}`)).toBe(false);
     await pressRow(row);
@@ -474,7 +474,7 @@ describe('A Tag’s options, in sheets over the list', () => {
     expect(offered('Create Tag')).toBe(false);
     await press('Restore Old rent');
     expect(screenText()).toContain('Old rent restored');
-    expect(screenText()).toContain('Active · 2');
+    expect(screenText()).toContain('Active\u00a0· 2');
   });
 
   it('restores an archived Tag in one step, with nothing to type', async () => {
@@ -806,7 +806,7 @@ describe.each(['light', 'dark'] as const)('Tags at large text in %s (#639)', (mo
     'keeps each section’s count whole, $width dp at $fontScale× text',
     async (size) => {
       await showTagsAt(size, mode);
-      for (const label of ['Active · 1', 'Archived · 1', 'New Tag'])
+      for (const label of ['Active\u00a0· 1', 'Archived\u00a0· 1', 'New Tag'])
         expect(labelRuns(renderer!.root, label), label).toEqual([[label, hairSpace]]);
     },
   );
@@ -972,7 +972,7 @@ describe.each(['light', 'dark'] as const)(
       );
       expect(screenText()).toContain(longName);
       expect(screenText()).toContain('Old rent');
-      expect(screenText()).toContain('Harbour Flat · 1 active');
+      expect(screenText()).toContain('Harbour Flat\u00a0· 1 active');
       // This phone's copy says so, with its time, as every saved Group screen does.
       const status = screenText()
         .split('\n')
@@ -994,7 +994,7 @@ describe.each(['light', 'dark'] as const)(
       expect(layoutHeight(badge, 1.3, room)).toBe(layoutHeight(badge, 1.3));
       // The saved list keeps #639's layout: each section's count whole, and the long Tag's
       // name read in full in its row, inside its Card's border. Read only, a row is a View.
-      for (const label of ['Active · 1', 'Archived · 1'])
+      for (const label of ['Active\u00a0· 1', 'Archived\u00a0· 1'])
         expect(labelRuns(renderer!.root, label), label).toEqual([[label, hairSpace]]);
       const rows = findHosts(
         renderer!.toJSON(),

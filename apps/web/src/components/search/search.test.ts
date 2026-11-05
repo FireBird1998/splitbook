@@ -181,7 +181,7 @@ describe('the search dialog’s states', () => {
     expect(options).toEqual([
       {
         id: 'search-option-0',
-        name: 'Goa Friends Trip, Trip · 3 members',
+        name: 'Goa Friends Trip, Trip\u00a0· 3 members',
         selected: 'false',
         tabIndex: '-1',
       },
@@ -193,13 +193,13 @@ describe('the search dialog’s states', () => {
       },
       {
         id: 'search-option-2',
-        name: `Goa beach shack dinner &amp; drinks, Goa Friends Trip · ${shownDate(0)}, ₹2,400.50`,
+        name: `Goa beach shack dinner &amp; drinks, Goa Friends Trip\u00a0· ${shownDate(0)}, ₹2,400.50`,
         selected: 'false',
         tabIndex: '-1',
       },
       {
         id: 'search-option-3',
-        name: `Goa ferry, Goa Friends Trip · ${shownDate(1)}`,
+        name: `Goa ferry, Goa Friends Trip\u00a0· ${shownDate(1)}`,
         selected: 'false',
         tabIndex: '-1',
       },
@@ -303,7 +303,7 @@ describe('results and where they go', () => {
       groups: [{ ...READ.groups[0], memberCount: 1, category: 'unknown' }],
       people: [{ ...READ.people[0], groupCount: 1 }],
     });
-    expect(group.options[0].detail).toBe('General · 1 member');
+    expect(group.options[0].detail).toBe('General\u00a0· 1 member');
     expect(person.options[0].detail).toBe('In Banyan Court');
   });
 

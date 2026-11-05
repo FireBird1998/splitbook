@@ -919,7 +919,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       .find((modal) =>
         modal
           .findAll((node) => String(node.type) === 'Text')
-          .some((node) => node.children.join('') === 'Maple House · 3 currencies'),
+          .some((node) => node.children.join('') === 'Maple House\u00a0· 3 currencies'),
       );
     expect(sheet).toBeDefined();
     expect(

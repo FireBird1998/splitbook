@@ -104,10 +104,10 @@ test('search the seed with the keyboard and jump to a Group', async ({ page }, t
   const expenses = section(page, 'Expenses').getByRole('option');
   await expect(expenses).toHaveCount(2);
   await expect(expenses.nth(0)).toHaveAccessibleName(
-    /^Fort Kochi homestay \(2 nights\), Kochi to Alleppey · .+, ₹/,
+    /^Fort Kochi homestay \(2 nights\), Kochi to Alleppey\s· .+, ₹/,
   );
   await expect(expenses.nth(1)).toHaveAccessibleName(
-    /^Train to Kochi \(3 × AC 2-tier\), Kochi to Alleppey · .+, ₹/,
+    /^Train to Kochi \(3 × AC 2-tier\), Kochi to Alleppey\s· .+, ₹/,
   );
   await expect(dialog(page).getByRole('status')).toHaveText('1 Group and 2 Expenses');
   const options = results(page).getByRole('option');
@@ -144,7 +144,7 @@ test('jump to an Expense: it opens in its Group, with the Expense list searched 
   await openByClick(page);
   await field(page).pressSequentially('anjuna sea');
   const expense = section(page, 'Expenses').getByRole('option', {
-    name: /^Seafood dinner at Anjuna, Goa Friends Trip · .+, ₹[\d,]+\.\d{2}$/,
+    name: /^Seafood dinner at Anjuna, Goa Friends Trip\s· .+, ₹[\d,]+\.\d{2}$/,
   });
   await expect(expense).toBeVisible();
   await expect(results(page).getByRole('group')).toHaveCount(1);
@@ -230,6 +230,6 @@ test('a failed search says so, and Try again searches again', async ({ page }) =
   failing = false;
   await dialog(page).getByRole('button', { name: 'Try again' }).click();
   await expect(section(page, 'Groups').getByRole('option')).toHaveAccessibleName(
-    /^Goa Friends Trip, Trip · /,
+    /^Goa Friends Trip, Trip\s· /,
   );
 });

@@ -52,7 +52,7 @@ vi.mock('./runtime', () => ({
   },
   configurationReady: true,
   environment: {
-    label: 'Local development · fictional data',
+    label: 'Local development\u00a0· fictional data',
     apiOrigin: 'http://localhost:4138',
     webOrigin: 'http://localhost:4138',
   },
@@ -1062,7 +1062,7 @@ describe('App Members and Group details', () => {
     await app.press('Balances');
     await app.scrollTo(240);
     await openMembers(app);
-    expect(app.text()).toContain('Sam Chen · YouMember');
+    expect(app.text()).toContain('Sam Chen\u00a0· YouMember');
     expect(app.text()).toContain('Expenses shown byMonth');
     expect(() => app.pressable('Balances')).toThrow();
 
@@ -1109,7 +1109,7 @@ describe('App Members and Group details', () => {
     const app = await renderApp();
     await app.press('Open Maple House');
     await openMembers(app);
-    expect(app.text()).toContain('Sam Chen · YouMember');
+    expect(app.text()).toContain('Sam Chen\u00a0· YouMember');
     // An admin removed Sam on the web while Splitbook was in the background.
     app.use((path) =>
       path === `/api/groups/${groupId}`
@@ -1659,7 +1659,7 @@ describe('App return from an Expense', () => {
     await addExpense(app, ['Sunday 20 September 2026']);
     await app.press('Save expense');
 
-    expect(app.text()).toContain('Expense saved · Weekly groceries');
+    expect(app.text()).toContain('Expense saved\u00a0· Weekly groceries');
     expect(app.text()).toContain('September 2026');
     expect(() => app.pressable('View in')).toThrow();
   });
@@ -1671,7 +1671,7 @@ describe('App return from an Expense', () => {
     await addExpense(app, ['Previous month', 'Saturday 15 August 2026']);
     await app.press('Save expense');
 
-    expect(app.text()).toContain('Expense saved · Weekly groceries');
+    expect(app.text()).toContain('Expense saved\u00a0· Weekly groceries');
     expect(app.text()).toContain('September 2026');
     expect(app.text()).toContain('September groceries');
     await app.press('View in August');
@@ -2280,7 +2280,7 @@ describe('App invitation', () => {
     post.release(json({ data: { groupId: joinedId }, status: 201 }, 201));
     await settle();
     expect(app.text()).not.toContain('You’re invited');
-    expect(app.text()).toContain('Cedar FlatHousehold · 1 member · INR');
+    expect(app.text()).toContain('Cedar FlatHousehold\u00a0· 1 member\u00a0· INR');
   });
 });
 
@@ -2308,7 +2308,7 @@ describe('App Home', () => {
     );
     expect(await app.androidBack()).toBe(true);
     expect(app.pressable('Open Maple House').props.accessibilityLabel).toBe(
-      'Open Maple House, Household · 1 member, You owe ₹30.00',
+      'Open Maple House, Household\u00a0· 1 member, You owe ₹30.00',
     );
     expect(app.text()).toContain('Continue where you left off');
 
@@ -2569,7 +2569,7 @@ describe('Android Group Tag management', () => {
       { requestId: app.device.submissionKey, intent: { action: 'create', name: 'Villa' } },
     ]);
     expect(app.text()).toContain('Villa created');
-    expect(app.text()).toContain('Active · 2');
+    expect(app.text()).toContain('Active\u00a0· 2');
     expect(app.text()).not.toContain('Your change went through');
     app.controller.dispose();
   });
@@ -2764,10 +2764,10 @@ describe('Android Tag correction and close behavior', () => {
     act(() => buttons.find((button) => button.text === 'Discard')!.onPress!());
     await settle();
     // The sheet closed; Tags stays open until its own Close.
-    expect(app.text()).toContain('Active · 0');
+    expect(app.text()).toContain('Active\u00a0· 0');
     act(() => app.pressable('Close Tags').props.onPress());
     await settle();
-    expect(app.text()).not.toContain('Active · 0');
+    expect(app.text()).not.toContain('Active\u00a0· 0');
     act(() => app.pressable('Group options').props.onPress());
     act(() => app.pressable('Manage Tags').props.onPress());
     await settle();
@@ -3016,10 +3016,10 @@ describe('App after Android recreates the activity (#634)', () => {
         isDeleted: false,
       },
     ]);
-    expect(app.text()).toContain('Active · 1');
+    expect(app.text()).toContain('Active\u00a0· 1');
 
     await app.recreate();
-    expect(app.text()).toContain('Active · 1');
+    expect(app.text()).toContain('Active\u00a0· 1');
     act(() => app.pressable('Close Tags').props.onPress());
     await settle();
     expect(() => app.pressable('Close Tags')).toThrow();
@@ -3158,9 +3158,9 @@ describe('Account → Connected assistants (#622)', () => {
     await app.press('Account and settings');
     await app.press('Connected assistants');
     const shown = app.text();
-    expect(shown).toContain('Account · Sam Chen');
+    expect(shown).toContain('Account\u00a0· Sam Chen');
     expect(shown).toContain('Fictional Helper');
-    expect(shown).toContain('Read only · 1 of 1 Group');
+    expect(shown).toContain('Read only\u00a0· 1 of 1 Group');
     expect(app.pressable('Back to Settings')).toBeTruthy();
   });
 

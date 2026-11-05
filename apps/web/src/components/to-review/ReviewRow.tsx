@@ -15,6 +15,7 @@ import { reviewDate, reviewNeedWords, type ReviewItemModel } from '@splitbook/sh
 import type { ItemQuickFixes, QuickFixFact } from '@splitbook/shared/to-review-quick-fixes';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { reviewAmount, reviewSource } from './ReviewDetails';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 const chip = {
   minHeight: { xs: 44, md: 36 },
@@ -98,7 +99,7 @@ export default function ReviewRow({
   const title = values.description || 'Expense to review';
   const meta = [values.date && reviewDate(values.date), reviewSource(item.accountItem!)]
     .filter(Boolean)
-    .join(' · ');
+    .join(SEPARATOR);
   // The currency fix says what's wrong itself, so the Needs line leaves its need out.
   const currencyNeeds = new Set(
     currencyFix

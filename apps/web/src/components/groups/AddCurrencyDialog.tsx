@@ -17,6 +17,7 @@ import {
   groupCurrencySettingsSchema,
   type ExtraCurrencyUse,
 } from '@splitbook/shared/group-currency-settings';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** The API's answer to a write: its settings on success, otherwise its refusal. */
 export async function answerOf(res: Response) {
@@ -60,7 +61,9 @@ export default function AddCurrencyDialog({
       <DialogTitle sx={{ pb: 0.5 }}>Add a currency</DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {groupName} · {extraCount} of {MAX_EXTRA_CURRENCIES} extra currencies
+          {groupName}
+          {SEPARATOR}
+          {extraCount} of {MAX_EXTRA_CURRENCIES} extra currencies
         </Typography>
         <TextField
           label="Search currencies"

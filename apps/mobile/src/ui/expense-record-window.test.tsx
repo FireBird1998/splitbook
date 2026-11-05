@@ -353,14 +353,14 @@ describe('an Expense’s changes past 5 pages (#220, M7-2)', () => {
     });
     // The changes shown stay, with when they were read: in this session, so never "Saved".
     expect(text(screen!.root)).toContain('Note 21');
-    expect(text(history())).toContain(`Updated ${refreshedLabel(at)} · refreshing`);
+    expect(text(history())).toContain(`Updated ${refreshedLabel(at)}\u00a0· refreshing`);
     expect(text(screen!.root)).not.toContain('Saved');
   });
 
   it('keeps the time of this device’s saved pages while they are read again, and says it once', () => {
     // Restored after a restart, read again: their own time stays (ADR 0006).
     render(detail(windowOf(2, { status: 'loading', restored: true })));
-    expect(text(history())).toContain(`Saved ${refreshedLabel(at)} · refreshing`);
+    expect(text(history())).toContain(`Saved ${refreshedLabel(at)}\u00a0· refreshing`);
     act(() => screen!.unmount());
     // The record is read again too: the top bar says so, and History keeps only the time.
     render(

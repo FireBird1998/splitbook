@@ -11,6 +11,7 @@ import { apiFetch } from '@/lib/utils/api-fetch';
 import { RADIUS } from '@/lib/theme/tokens';
 import type { HomeInvitation } from './home-reads';
 import { homeRowSx } from './HomeCard';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface InvitationRowProps {
   invitation: HomeInvitation;
@@ -25,7 +26,7 @@ export function invitationDetail({ invitedByName, category }: HomeInvitation): s
     category ? getGroupTheme(category).label : null,
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(SEPARATOR);
 }
 
 /**

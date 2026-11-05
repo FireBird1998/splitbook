@@ -718,7 +718,7 @@ describe('one query of up to 5 pages per Month (#219, M1-3, M7-2)', () => {
       screen: 'group',
       destination: 'expenses',
       restoreScroll: { y: 0 },
-      snackbar: { message: 'Expense saved · Fresh groceries' },
+      snackbar: { message: 'Expense saved\u00a0· Fresh groceries' },
       financial: { expenses: { status: 'ready', firstPage: 1 } },
     });
     expect(state.financial.expenses.data[0]).toMatchObject({ description: 'Fresh groceries' });
@@ -1271,7 +1271,7 @@ describe('a confirmed write in the Group: its message at once, never beside figu
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',
       destination: 'expenses',
-      snackbar: { message: 'Expense saved · Fresh groceries' },
+      snackbar: { message: 'Expense saved\u00a0· Fresh groceries' },
       financial: { expenses: { status: 'loading' } },
     });
     expect(controller.getSnapshot().snackbar?.expenseId).toBeUndefined();
@@ -1279,7 +1279,7 @@ describe('a confirmed write in the Group: its message at once, never beside figu
     await save;
     const done = controller.getSnapshot();
     expect(done).toMatchObject({
-      snackbar: { message: 'Expense saved · Fresh groceries' },
+      snackbar: { message: 'Expense saved\u00a0· Fresh groceries' },
       financial: { expenses: { status: 'ready' } },
     });
     expect(done.snackbar?.expenseId).toBe(done.financial.expenses.data[0].id);
@@ -1309,7 +1309,7 @@ describe('a confirmed write in the Group: its message at once, never beside figu
       screen: 'group',
       snackbar: {
         message:
-          'Expense saved · Fresh groceries. Expenses couldn’t be updated yet — pull to refresh.',
+          'Expense saved\u00a0· Fresh groceries. Expenses couldn’t be updated yet — pull to refresh.',
       },
       financial: { balances: { changed: true } },
     });
@@ -1329,7 +1329,7 @@ describe('a confirmed write in the Group: its message at once, never beside figu
     await settle();
     const done = controller.getSnapshot();
     expect(done).toMatchObject({
-      snackbar: { message: `Expense saved · Fresh groceries.${failed}` },
+      snackbar: { message: `Expense saved\u00a0· Fresh groceries.${failed}` },
       financial: { expenses: { status: 'ready' }, balances: { changed: true } },
     });
     // The highlight follows the list alone, which was read after the save.
@@ -1371,11 +1371,11 @@ describe('a confirmed write in the Group: its message at once, never beside figu
     reread.release();
     await save;
     await settle();
-    expect(controller.getSnapshot().snackbar?.message).toBe('Expense saved · Fresh groceries');
+    expect(controller.getSnapshot().snackbar?.message).toBe('Expense saved\u00a0· Fresh groceries');
     await controller.selectDestination('expenses');
     await settle();
     expect(controller.getSnapshot()).toMatchObject({
-      snackbar: { message: 'Expense saved · Fresh groceries' },
+      snackbar: { message: 'Expense saved\u00a0· Fresh groceries' },
       financial: { expenses: { status: 'ready' } },
     });
     expect(listed(controller.getSnapshot())[0]).toBe('Fresh groceries');
@@ -1414,13 +1414,13 @@ describe('a confirmed write in the Group: its message at once, never beside figu
     await save;
     await settle();
     expect(controller.getSnapshot().snackbar?.message).toBe(
-      'Expense saved · Fresh groceries. Expenses couldn’t be updated yet — pull to refresh.',
+      'Expense saved\u00a0· Fresh groceries. Expenses couldn’t be updated yet — pull to refresh.',
     );
     f.connect(false);
     f.connect(true);
     await settle();
     expect(controller.getSnapshot()).toMatchObject({
-      snackbar: { message: 'Expense saved · Fresh groceries' },
+      snackbar: { message: 'Expense saved\u00a0· Fresh groceries' },
       financial: { expenses: { status: 'ready' } },
     });
     expect(listed(controller.getSnapshot())[0]).toBe('Fresh groceries');
@@ -1455,7 +1455,7 @@ describe('a confirmed write in the Group: its message at once, never beside figu
     f.server.failPage = 1;
     await controller.refreshExpenses();
     expect(controller.getSnapshot()).toMatchObject({
-      snackbar: { message: 'Expense saved · Fresh groceries', expenseId: saved },
+      snackbar: { message: 'Expense saved\u00a0· Fresh groceries', expenseId: saved },
       financial: { expenses: { status: 'error' } },
     });
   });
@@ -1828,7 +1828,7 @@ describe('a Group shown offline reads again once the internet returns (#678)', (
     const saving = f.calls.length;
     await controller.saveExpense();
     await settle();
-    expect(controller.getSnapshot().snackbar?.message).toBe('Expense saved · Fresh groceries');
+    expect(controller.getSnapshot().snackbar?.message).toBe('Expense saved\u00a0· Fresh groceries');
     expect(writes(f, saving)).toEqual([`POST ${maplePath}/expenses`]);
   });
 

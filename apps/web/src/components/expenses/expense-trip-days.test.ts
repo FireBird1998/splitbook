@@ -81,9 +81,9 @@ describe('trip day headings', () => {
   it('head each day’s first Expense with its trip day and the day’s total, exactly', () => {
     const headings = tripDayHeadings(EXPENSES, { ...TRIP, timeZone: 'UTC' });
     expect(headingsOf(headings)).toEqual([
-      ['Beach shack lunch', `Day 4 · ${tripDayLabel('2026-09-20', 2026)}`, [186000]],
-      ['Late dinner', `Day 2 · ${tripDayLabel('2026-09-18', 2026)}`, [327000]],
-      ['Airport cab', `Day 1 · ${tripDayLabel('2026-09-17', 2026)}`, [64000]],
+      ['Beach shack lunch', `Day 4\u00a0· ${tripDayLabel('2026-09-20', 2026)}`, [186000]],
+      ['Late dinner', `Day 2\u00a0· ${tripDayLabel('2026-09-18', 2026)}`, [327000]],
+      ['Airport cab', `Day 1\u00a0· ${tripDayLabel('2026-09-17', 2026)}`, [64000]],
     ]);
     expect([...headings.values()].map((heading) => heading.expenseCount)).toEqual([1, 3, 1]);
   });
@@ -104,8 +104,8 @@ describe('trip day headings', () => {
     expect(
       [...tripDayHeadings(outside, { ...TRIP, timeZone: 'UTC' }).values()].map((h) => h.label),
     ).toEqual([
-      `After the trip · ${tripDayLabel('2026-09-22', 2026)}`,
-      `Before the trip · ${tripDayLabel('2026-09-01', 2026)}`,
+      `After the trip\u00a0· ${tripDayLabel('2026-09-22', 2026)}`,
+      `Before the trip\u00a0· ${tripDayLabel('2026-09-01', 2026)}`,
     ]);
     expect(
       [

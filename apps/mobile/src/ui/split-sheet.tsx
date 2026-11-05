@@ -9,6 +9,7 @@ import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
 import { Badge, BottomSheet, Chip, CompactText, Money, Stepper, radius, useTap } from './compact';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 const choices: { id: SplitChoice; label: string; hint: string }[] = [
   { id: 'equal', label: 'Equal', hint: 'Everyone included pays the same share.' },
@@ -119,7 +120,9 @@ export function SplitSheet({
       subtitle={
         preview.total === null
           ? undefined
-          : moneyRuns(`Total ${money(preview.total)} · ${draft.currency}`, [money(preview.total)])
+          : moneyRuns(`Total ${money(preview.total)}${SEPARATOR}${draft.currency}`, [
+              money(preview.total),
+            ])
       }
       onDone={onDone}
       footer={
@@ -414,11 +417,11 @@ function SplitFooter({
   const allocated = `${amount} allocated`;
   const summary =
     draft.splitMethod === 'equal'
-      ? `${count} ${count === 1 ? 'person' : 'people'} · ${allocated}`
+      ? `${count} ${count === 1 ? 'person' : 'people'}${SEPARATOR}${allocated}`
       : draft.splitMethod === 'percentage'
-        ? `100% · ${allocated}`
+        ? `100%${SEPARATOR}${allocated}`
         : draft.splitMethod === 'shares'
-          ? `${shares} ${shares === 1 ? 'share' : 'shares'} · ${allocated}`
+          ? `${shares} ${shares === 1 ? 'share' : 'shares'}${SEPARATOR}${allocated}`
           : allocated;
   const note = status.leftover ? roundingNote(status.leftover, spoken, money) : null;
   return (

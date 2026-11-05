@@ -25,6 +25,7 @@ import {
   sidebarBalanceLine,
   type SidebarBalanceLine,
 } from './sidebar-balance';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** Shell sizes from the design canvas (web.css: .side-h, .g-a, .gi). */
 const ROW_RADIUS = '10px';
@@ -297,7 +298,9 @@ function BalanceLine({ balance }: { balance: RowBalance }) {
       {balance.text}
       {balance.more > 0 ? (
         <>
-          <span aria-hidden> · +{balance.more}</span>
+          <span aria-hidden>
+            {SEPARATOR}+{balance.more}
+          </span>
           <Box component="span" sx={visuallyHidden}>
             , {moreCurrenciesLabel(balance.more)}
           </Box>

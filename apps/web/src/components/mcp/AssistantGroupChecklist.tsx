@@ -6,12 +6,13 @@ import FormGroup from '@mui/material/FormGroup';
 import Typography from '@mui/material/Typography';
 import type { ApprovalGroup } from '@/lib/services/assistant-ledger.service';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** "Trip · INR, EUR", or "Work · EUR · Archived": what a Group is, beside its name. */
 function groupMeta(group: ApprovalGroup) {
   return [getGroupTheme(group.theme ?? 'other').label, group.currencies.join(', ')]
     .concat(group.archived ? ['Archived'] : [])
-    .join(' · ');
+    .join(SEPARATOR);
 }
 
 /** Why a Not allowed Group can't be ticked: which admin doesn't allow assistants there (#621). */

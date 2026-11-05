@@ -326,7 +326,7 @@ test.describe('google auth mode', () => {
     if (process.env.CI) {
       const catalogue = await page.request.get('/dev/design-system');
       expect(catalogue.status()).toBe(404);
-      expect(await catalogue.text()).not.toContain('Local examples · synthetic data');
+      expect(await catalogue.text()).not.toContain('Local examples');
     }
   });
 

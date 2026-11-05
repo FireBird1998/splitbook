@@ -72,7 +72,7 @@ vi.mock('./runtime', () => ({
     get isProduction() {
       return runtime.isProduction;
     },
-    label: 'Local development · fictional data',
+    label: 'Local development\u00a0· fictional data',
     apiOrigin: 'http://localhost:4138',
     webOrigin: 'http://localhost:4138',
   },
@@ -846,14 +846,14 @@ describe('cold start', () => {
     expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
     expect(app.text()).toContain('Maple House');
     expect(app.text()).not.toContain('Checking your session');
-    expect(app.button('Open Maple House, Household · 2 members')).toBeNull();
+    expect(app.button('Open Maple House, Household\u00a0· 2 members')).toBeNull();
     expect(app.disabled('Refresh Home')).toBe(true);
     expect(app.disabled('Account and settings')).toBe(true);
 
     check.release();
     await settle();
     expect(app.text()).not.toContain('Checking…');
-    expect(app.button('Open Maple House, Household · 2 members')).not.toBeNull();
+    expect(app.button('Open Maple House, Household\u00a0· 2 members')).not.toBeNull();
   });
 
   it('replaces the saved Home with sign-in when the session has ended', async () => {
@@ -1165,12 +1165,12 @@ describe('first load and refresh', () => {
     const app = await start(phone);
     await settle();
     const read = phone.hold(`/api/groups/${lisbon}`);
-    app.tap('Open Lisbon Offsite, Work · 2 members');
+    app.tap('Open Lisbon Offsite, Work\u00a0· 2 members');
     await read.reached;
     await settle();
 
     expect(app.headers()[0]).toBe('Lisbon Offsite');
-    expect(app.text()).toContain('Work · 2 members · INR');
+    expect(app.text()).toContain('Work\u00a0· 2 members\u00a0· INR');
     expect(app.disabled('Invite people')).toBe(false);
     expect(app.button('Group options')).not.toBeNull();
     expect(app.button('Add expense')).not.toBeNull();
@@ -1191,7 +1191,7 @@ describe('first load and refresh', () => {
     await usedBefore(phone);
     const app = await start(phone);
     await settle();
-    await app.press('Open Maple House, Household · 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2 members');
     await app.press('Balances');
     const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
     app.pull().onRefresh();
@@ -1218,7 +1218,7 @@ describe('first load and refresh', () => {
     await usedBefore(phone);
     const app = await start(phone);
     await settle();
-    await app.press('Open Maple House, Household · 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2 members');
     // Expenses and Balances keep when they were read; the progress bar says they're read (#219).
     const refresh = async (path: string, destination: string, cue = /Updated \d/) => {
       if (destination !== 'Expenses') await app.press(destination);
@@ -1274,7 +1274,7 @@ describe('first load and refresh', () => {
     await usedBefore(phone);
     const app = await start(phone);
     await settle();
-    await app.press('Open Maple House, Household · 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2 members');
     await app.press('Activity');
     expect(app.text()).toContain('No changes yet');
 
@@ -1296,7 +1296,7 @@ describe('first load and refresh', () => {
     await usedBefore(phone);
     const app = await start(phone);
     await settle();
-    await app.press('Open Maple House, Household · 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2 members');
     const read = phone.hold(`/api/groups/${maple}`);
     await app.press('Group options');
     app.tap('Refresh, Check for the latest changes');
@@ -1358,7 +1358,7 @@ describe('offline', () => {
     );
     expect(app.text()).toContain(saved);
 
-    await app.press('Open Maple House, Household · 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2 members');
     expect(app.text().match(/You’re offline/g)).toHaveLength(1);
     expect(app.text()).toContain(saved);
     expect(app.disabled('Invite people. Inviting needs a connection')).toBe(true);
@@ -1494,7 +1494,7 @@ describe('offline', () => {
     phone.network.online = false;
     const app = await start(phone);
     await settle();
-    await app.press('Open Lisbon Offsite, Work · 2 members');
+    await app.press('Open Lisbon Offsite, Work\u00a0· 2 members');
 
     expect(app.headers()).toEqual(
       expect.arrayContaining(['Lisbon Offsite', 'Not available offline']),
@@ -1517,7 +1517,7 @@ describe('offline', () => {
     phone.network.online = false;
     const app = await start(phone);
     await settle();
-    await app.press('Open Maple House, Household · 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2 members');
     await app.press('Previous month');
     expect(app.text()).toContain(
       'Expenses in August 2026 aren’t saved on this phone. Connect to load them.',
@@ -1544,7 +1544,7 @@ describe('offline', () => {
     phone.network.online = false;
     const app = await start(phone);
     await settle();
-    await app.press('Open Lisbon Offsite, Work · 2 members');
+    await app.press('Open Lisbon Offsite, Work\u00a0· 2 members');
     expect(app.text()).toContain('No expenses yet');
     await app.press('Activity');
     // True whether it was never saved here, removed or withheld (#280 item 2, #222).
@@ -1840,7 +1840,7 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.content().inside).toContain(saved);
     // Alex opens a Group, reconnects, pulls and saves an Expense, which removes that copy; the
     // connection drops before Home's figures are read again, and Alex goes back to Home.
-    await app.press('Open Maple House, Household · 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2 members');
     phone.network.online = true;
     await settle(controller().refresh('pull'));
     await settle(controller().openExpense(maple));
@@ -1876,7 +1876,7 @@ describe('Home says what is true, without jumps (#332)', () => {
       phone.storage.failRemoval = copy === 'withheld';
       phone.network.online = true;
       phone.network.refused.push(lisbon);
-      await app.press('Open Lisbon Offsite, Work · 2 members');
+      await app.press('Open Lisbon Offsite, Work\u00a0· 2 members');
       // The connection drops before Home is read again.
       phone.network.online = false;
       await settle(Promise.resolve(controller().back()));
@@ -2001,8 +2001,8 @@ describe('Home says what is true, without jumps (#332)', () => {
 describe('A Group says what is true, without jumps (#219)', () => {
   const controller = () => runtime.controller as MobileController;
   const open = {
-    [maple]: 'Open Maple House, Household · 2 members',
-    [lisbon]: 'Open Lisbon Offsite, Work · 2 members',
+    [maple]: 'Open Maple House, Household\u00a0· 2 members',
+    [lisbon]: 'Open Lisbon Offsite, Work\u00a0· 2 members',
   };
   /** Signed in once, with Home read: no Group's view has been opened on this phone. */
   async function signedIn(phone: ReturnType<typeof device>) {
@@ -2496,7 +2496,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
       await app.press('Balances');
       const readAt = refreshedLabel(phone.clock.now);
       const height = contentHeight(scale);
-      expect(seen()).toContain(`All-time balance · INRUpdated ${readAt}You owe₹30.00`);
+      expect(seen()).toContain(`All-time balance\u00a0· INRUpdated ${readAt}You owe₹30.00`);
       // A section's title keeps a hair space to spare (#639).
       expect(seen()).toContain('Settle up\u200aRecord one once it’s paid');
 
@@ -2511,7 +2511,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
       expect(app.text()).toContain('Payment recorded');
       // The old debt says it is being updated, where its time was, and Record says why it waits,
       // where its caption was: nothing moves.
-      expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
+      expect(seen()).toContain('All-time balance\u00a0· INRUpdating…You owe₹30.00');
       expect(seen()).toContain('Settle up\u200aRecord once updated');
       expect(seen()).not.toContain(`Updated ${readAt}`);
       expect(app.disabled('Record your payment to Sam Chen')).toBe(true);
@@ -2521,12 +2521,14 @@ describe('A Group says what is true, without jumps (#219)', () => {
       expenses.release();
       await balances.reached;
       await settle();
-      expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
+      expect(seen()).toContain('All-time balance\u00a0· INRUpdating…You owe₹30.00');
       expect(contentHeight(scale)).toBe(height);
       balances.release();
       await figures.reached;
       await settle();
-      expect(seen()).toContain(`All-time balance · INRUpdated ${refreshedLabel(phone.clock.now)}`);
+      expect(seen()).toContain(
+        `All-time balance\u00a0· INRUpdated ${refreshedLabel(phone.clock.now)}`,
+      );
       expect(seen()).toContain('Settled up');
       expect(seen()).not.toContain('Updating');
 
@@ -2570,7 +2572,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     const sent = phone.sent.slice(before);
     const since = sent.slice(sent.indexOf(`POST /api/groups/${maple}/settlements`) + 1);
     expect(since.filter((request) => /\/(expenses\?|balances$)/.test(request))).toEqual([]);
-    expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
+    expect(seen()).toContain('All-time balance\u00a0· INRUpdating…You owe₹30.00');
     expect(seen()).toContain('Settle up\u200aRecord once updated');
     // Nothing fades from the old time or caption into these: neither is drawn at any opacity
     // beside "Payment recorded".
@@ -2578,7 +2580,9 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(fading()).not.toContain('Record one once it’s paid');
     storage.release();
     await settle(recording);
-    expect(seen()).toContain(`All-time balance · INRUpdated ${refreshedLabel(phone.clock.now)}`);
+    expect(seen()).toContain(
+      `All-time balance\u00a0· INRUpdated ${refreshedLabel(phone.clock.now)}`,
+    );
   });
 
   // #725: Balances one currency at a time, through the real App and controller.
@@ -2623,14 +2627,14 @@ describe('A Group says what is true, without jumps (#219)', () => {
       ['EUR, you owe €20.00', false],
       ['JPY, you’re owed ¥8,400', false],
     ]);
-    expect(seen()).toContain('All-time balance · INR');
-    expect(seen()).toContain('Everyone · INR');
-    expect(seen()).not.toContain('All-time balance · EUR');
+    expect(seen()).toContain('All-time balance\u00a0· INR');
+    expect(seen()).toContain('Everyone\u00a0· INR');
+    expect(seen()).not.toContain('All-time balance\u00a0· EUR');
     expect(seen()).toContain('Each currency keeps its own balances. Nothing is converted.');
 
     await app.press('JPY, you’re owed ¥8,400');
-    expect(seen()).toContain('All-time balance · JPY');
-    expect(seen()).toContain('Settle up · JPY');
+    expect(seen()).toContain('All-time balance\u00a0· JPY');
+    expect(seen()).toContain('Settle up\u00a0· JPY');
     // Sam's yen Debt is recorded on its own tab (#728).
     expect(seen()).toContain('Record one once it’s paid');
     expect(app.button('Record Sam Chen’s payment to you')).not.toBeNull();
@@ -2642,7 +2646,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await settle(controller().recordSettlement());
     expect(app.text()).toContain('Payment recorded');
     expect(tabs()[0]).toEqual(['INR, main currency, you’re settled up', true]);
-    expect(seen()).toContain('All-time balance · INR');
+    expect(seen()).toContain('All-time balance\u00a0· INR');
     expect(seen()).toContain('Settled up');
   });
 
@@ -2653,7 +2657,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await signedIn(phone);
     const app = await start(phone);
     await settle();
-    await app.press('Open Lisbon Offsite, Trip · 2 members');
+    await app.press('Open Lisbon Offsite, Trip\u00a0· 2 members');
     const tabs = () =>
       app
         .hosts((p) => p.accessibilityRole === 'tablist' && p.accessibilityLabel === 'Spending in')
@@ -2673,7 +2677,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
       'Opened on JPY, the currency with the most Expenses (24). Each currency is shown on its own.',
     );
     // Its strip lists the Trip's currencies too.
-    expect(seen()).toContain('INR · EUR · JPY');
+    expect(seen()).toContain('INR\u00a0· EUR\u00a0· JPY');
 
     await app.press('EUR, €1,240.00 spent in 11 Expenses');
     expect(phone.sent).toContain(
@@ -2830,7 +2834,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
 
 describe('The Expense form and Record payment say what they are doing (#334)', () => {
   const controller = () => runtime.controller as MobileController;
-  const openMaple = 'Open Maple House, Household · 2 members';
+  const openMaple = 'Open Maple House, Household\u00a0· 2 members';
   const unreachable = 'Could not reach Splitbook. Check your connection and try again.';
   const footnote = 'Records a payment made outside Splitbook. No money moves.';
   /** Maple House on Balances, where Alex owes Sam ₹30.00. */
@@ -3272,7 +3276,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     first.dispose();
     const app = await start(phone);
     await settle();
-    await app.press('Open Lisbon Offsite, Work · 2 members');
+    await app.press('Open Lisbon Offsite, Work\u00a0· 2 members');
     await app.press('Balances');
     await app.press('EUR, you owe €20.00');
     await app.press('Record your payment to Sam Chen');
@@ -3285,7 +3289,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(radio('INR').props.accessibilityState?.checked).toBe(true);
     // What it shows, and what a screen reader says of each field.
     expect(shown()).toContain('Change any one; the other two follow.');
-    expect(shown()).toContain('Frankfurter\u00a0· rates of 20 Oct');
+    expect(shown()).toContain('Frankfurter\u00a0· rates of\u00a020\u00a0Oct');
     expect(shown()).toContain('Clears your €20.00 Debt to Sam. Sam gets ₹1,842.00.');
     expect(inSheet('Amount cleared, EUR')[0]!.props.value).toBe('20.00');
     expect(inSheet('Rate, INR for each EUR')[0]!.props.value).toBe('92.10');
@@ -3344,7 +3348,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     first.dispose();
     const app = await start(phone);
     await settle();
-    await app.press('Open Lisbon Offsite, Work · 2 members');
+    await app.press('Open Lisbon Offsite, Work\u00a0· 2 members');
     await app.press('Balances');
     expect(app.text()).toContain('You owe Sam Chen in 2 currencies');
     expect(app.hosts((p) => p.accessibilityLabel === '₹30.00 and €20.00')).toHaveLength(1);
@@ -3360,7 +3364,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(phone.sent).toContain(`GET /api/groups/${lisbon}/rates?from=EUR&to=INR`);
     const sheetText = words(settling());
     expect(sheetText).toContain('You owe Sam Chen in 2 currencies.');
-    expect(sheetText).toContain('Suggested · Frankfurter, 20 Oct');
+    expect(sheetText).toContain('Suggested\u00a0· Frankfurter, 20 Oct');
     expect(sheetText).toContain('₹1,872.00');
     expect(
       app.hosts(
@@ -3417,7 +3421,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
 // Group's other destinations do since #219.
 describe('Activity says what is true (#222)', () => {
   const controller = () => runtime.controller as MobileController;
-  const openMaple = 'Open Maple House, Household · 2 members';
+  const openMaple = 'Open Maple House, Household\u00a0· 2 members';
   const activityPage = `/api/groups/${maple}/activity?page=1&limit=20`;
 
   // #280 item 1: older events stayed on screen, labelled "Saved", after this device's own change.

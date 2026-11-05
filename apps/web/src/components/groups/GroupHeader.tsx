@@ -10,6 +10,7 @@ import AvatarGroup from '@mui/material/AvatarGroup';
 import MoneyText from '@/components/common/MoneyText';
 import { getMoneyTone } from '@splitbook/shared/money';
 import { formatCurrency } from '@splitbook/shared/currency';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export interface GroupHeaderAmount {
   amount: number;
@@ -178,7 +179,7 @@ export default function GroupHeader({
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
             {[themeLabel, currency, members.length ? peopleLabel : null, dateLabel]
               .filter(Boolean)
-              .join(' · ')}
+              .join(SEPARATOR)}
           </Typography>
         </Box>
         <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
@@ -259,7 +260,7 @@ export default function GroupHeader({
                 ))}
               </AvatarGroup>
               <Typography variant="body2" color="text.secondary" noWrap>
-                {memberNames.join(' · ')}
+                {memberNames.join(SEPARATOR)}
               </Typography>
             </Stack>
           )}

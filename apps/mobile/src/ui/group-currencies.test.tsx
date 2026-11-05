@@ -127,7 +127,7 @@ describe('a Group’s currencies (#722)', () => {
     const sheet = root
       .findAll((node) => isHost(node, 'Modal') && node.props.visible === true)
       .find((modal) => text(modal).includes('Add a currency'))!;
-    expect(text(sheet)).toContain('Lisbon & Tokyo · 2 of 4 extra currencies');
+    expect(text(sheet)).toContain('Lisbon & Tokyo\u00a0· 2 of 4 extra currencies');
     act(() => pressable(sheet, 'CHF, Swiss Franc').props.onPress());
     act(() => pressable(sheet, 'Add CHF').props.onPress());
     expect(onAdd).toHaveBeenCalledWith('CHF');

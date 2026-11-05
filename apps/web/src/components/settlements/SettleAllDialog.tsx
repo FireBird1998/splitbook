@@ -41,6 +41,7 @@ import {
   type SettleAllOffer,
   type SettleAllRateState,
 } from '@splitbook/shared/settle-all';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** A Debt gone from the Balances since the sheet opened ends the payment, as on Android. */
 const SUGGESTION_CHANGED =
@@ -590,7 +591,7 @@ function RateCell({
           {rateBadge(line.kind ?? (suggestion ? 'custom' : 'entered'), suggestion)}
           {suggestion && (
             <>
-              {' · '}
+              {SEPARATOR}
               <Button
                 variant="text"
                 size="small"

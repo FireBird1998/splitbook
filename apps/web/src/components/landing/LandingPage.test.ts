@@ -520,10 +520,10 @@ describe('the home page route', () => {
     const promise =
       'Trips, flats, couples and teams. Add what was paid, split it the way it happened, and Splitbook shows who owes whom, and the fewest payments that settle it.';
     expect(metadata).toMatchObject({
-      title: 'Splitbook · Every shared cost, worked out to the paisa',
+      title: 'Splitbook\u00a0· Every shared cost, worked out to the paisa',
       description: promise,
       openGraph: {
-        title: 'Splitbook · Every shared cost, worked out to the paisa',
+        title: 'Splitbook\u00a0· Every shared cost, worked out to the paisa',
         description: promise,
         // The light still of Fig 1, as the tour holds it under reduced motion.
         images: [

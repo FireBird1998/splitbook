@@ -26,8 +26,10 @@ import {
   largeTextWindows,
   layoutHeight,
   middleCutEnd,
+  outerTexts,
   tailCutOverrun,
   unreadText,
+  wordsOf,
 } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { ThemeContext } from './theme';
@@ -295,7 +297,7 @@ describe('Expenses summary', () => {
         }),
       }),
     });
-    expect(text(root)).toContain('Also €42.50 · DEM\u00a040.00 in other currencies');
+    expect(text(root)).toContain('Also €42.50\u00a0· DEM\u00a040.00 in other currencies');
   });
 
   it('keeps other currencies out of the member’s figures, and says so', () => {
@@ -415,7 +417,7 @@ describe('A Trip’s spending, one currency at a time (#730)', () => {
     for (const stat of ['Spent: ¥186,000', 'Your share: ¥62,000', 'You paid: ¥70,400'])
       expect(labelled(root, stat)).toHaveLength(1);
     const words = text(root).replaceAll(hairSpace, '');
-    expect(words).toContain('INR · main₹48,600.00EUR€1,240.00JPY¥186,000');
+    expect(words).toContain('INR\u00a0· main₹48,600.00EUR€1,240.00JPY¥186,000');
     expect(words).toContain(
       'Opened on JPY, the currency with the most Expenses (24). Each currency is shown on its own.',
     );
@@ -552,13 +554,39 @@ describe('A Trip’s spending, one currency at a time (#730)', () => {
   );
 });
 
+// #895: at 150% and 200% a line could start with "·". A line breaks only at an ordinary space,
+// and a no-break space keeps each dot with what comes before it: the day headings, each row's
+// "Sam Chen paid · Groceries" and the summary's other currencies.
+it.each([1.5, 2])('never starts a line with a dot at %s× text (#895)', (fontScale) => {
+  setWindow({ width: 360, height: 640, fontScale });
+  view({
+    state: financial({
+      summary: summary({
+        totalsByCurrency: [
+          { currency: 'INR', totalAmount: 18420 },
+          { currency: 'EUR', totalAmount: 42.5 },
+          { currency: 'JPY', totalAmount: 4200 },
+        ],
+      }),
+    }),
+  });
+  const lines = outerTexts(screen!.toJSON() as ReactTestRendererJSON).map(wordsOf);
+  // The day headings, the rows' details and the other currencies.
+  expect(lines.filter((words) => words.includes('·')).length).toBeGreaterThanOrEqual(5);
+  for (const words of lines) expect(words, words).not.toMatch(/(^|[ \n])·/);
+});
+
 describe('Expense rows', () => {
   it('sit under day headings and say what the member lent or owes', () => {
     // A US phone too: day first, and Yesterday named like Today (#640).
     mockDeviceLocale('en-US');
     const { root, onOpenExpense } = view();
     expect(headings(root)).toEqual(
-      expect.arrayContaining(['Today · Wed 30 Sep', 'Yesterday · Tue 29 Sep', 'Sun 27 Sep']),
+      expect.arrayContaining([
+        'Today\u00a0· Wed 30 Sep',
+        'Yesterday\u00a0· Tue 29 Sep',
+        'Sun 27 Sep',
+      ]),
     );
     expect(buttons(root)).toEqual(
       expect.arrayContaining([
@@ -570,7 +598,7 @@ describe('Expense rows', () => {
       ]),
     );
     const shown = text(root);
-    expect(shown).toContain('You paid · Groceries');
+    expect(shown).toContain('You paid\u00a0· Groceries');
     expect(shown).toContain('you lent ₹833.00');
     expect(shown).toContain('you owe ₹953.33');
     press(root, 'Electricity bill, ₹2,860.00, Sam Chen paid, Utilities, you owe ₹953.33');
@@ -1220,8 +1248,8 @@ describe('an assistant’s credit on an Expense row (#751)', () => {
   it('takes a line of its own, cut in the middle so the domain stays, with the whole name read aloud', () => {
     const { root } = preparedView();
     expect(credit(root).props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'middle' });
-    expect(text(root)).toContain('You paid · Groceries');
-    expect(text(root)).not.toContain('You paid · prepared by');
+    expect(text(root)).toContain('You paid\u00a0· Groceries');
+    expect(text(root)).not.toContain('You paid\u00a0· prepared by');
     expect(buttons(root)).toContain(
       `Weekly groceries, ₹1,249.50, You paid, prepared by ${host}, Groceries, you lent ₹833.00`,
     );

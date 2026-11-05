@@ -14,6 +14,7 @@ import SegmentedControl from '@/components/charts/SegmentedControl';
 import { HomeCard, HomeCardBody, HomeCardEmpty, HomeCardError, HomeCardLoading } from './HomeCard';
 import { spendingField, useHomeSpending, type CardRead } from './home-reads';
 import { thisMonthName, whereItWentModel, type WhereItWentModel } from './where-it-went';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /*
  * Home's "Where it went" (#308, design canvas "Web portal"): the member's share of this Month
@@ -63,7 +64,7 @@ export function WhereItWentView({
       id={CARD_ID}
       title="Where it went"
       width="narrow"
-      subtitle={`Your share by Category · ${month}${model ? ` · ${model.currency}` : ''}`}
+      subtitle={`Your share by Category${SEPARATOR}${month}${model ? `${SEPARATOR}${model.currency}` : ''}`}
       aside={
         model ? (
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">

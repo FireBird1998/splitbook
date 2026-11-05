@@ -191,6 +191,7 @@ import type {
   Route,
 } from './types';
 import { PRODUCT_NAME } from '../product';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 
@@ -3766,7 +3767,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     returnToGroup(to, {
       groupId,
-      message: `Expense updated · ${draft.description.trim()}`,
+      message: `Expense updated${SEPARATOR}${draft.description.trim()}`,
       viewMonth: null,
       expenseId: receiptId,
     });
@@ -3890,10 +3891,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     returnToGroup(
       savedReturn(groupId, kind),
       kind === 'delete'
-        ? ledgerSnackbar(groupId, `Expense deleted · ${original.description}`, context)
+        ? ledgerSnackbar(groupId, `Expense deleted${SEPARATOR}${original.description}`, context)
         : ledgerSnackbar(
             groupId,
-            `Expense updated · ${draft.description.trim()}`,
+            `Expense updated${SEPARATOR}${draft.description.trim()}`,
             context,
             draft.date,
           ),
@@ -4440,7 +4441,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           savedReturn(groupId, 'create'),
           ledgerSnackbar(
             groupId,
-            `Expense saved · ${draft.description.trim()}`,
+            `Expense saved${SEPARATOR}${draft.description.trim()}`,
             context,
             draft.date,
           ),

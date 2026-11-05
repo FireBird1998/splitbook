@@ -76,6 +76,7 @@ import { refreshedLabel } from './refresh-feedback';
 import { Copy, Icon, Label, Panel, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 const categoryIcons: Record<string, IconName> = {
   food: 'restaurant-outline',
@@ -126,7 +127,7 @@ function ReadTime({
   if (saved && offline) return <Badge label={`Saved ${time}`} />;
   return (
     <StatusText tone="muted" shrink numberOfLines={1} adjustsFontSizeToFit>
-      {`${saved ? 'Saved' : 'Updated'} ${time}${refreshing ? ' · refreshing' : ''}`}
+      {`${saved ? 'Saved' : 'Updated'} ${time}${refreshing ? `${SEPARATOR}refreshing` : ''}`}
     </StatusText>
   );
 }
@@ -408,7 +409,9 @@ export function ExpenseRecordScreen({
             </CompactText>
           )}
           <CompactText variant="small" tone="secondary" accessibilityLabel={`${date}, Tag ${tag}`}>
-            {date} · {tag}
+            {date}
+            {SEPARATOR}
+            {tag}
           </CompactText>
         </View>
       </View>
@@ -657,7 +660,7 @@ export interface RecordOutline {
  */
 const typicalRecord: RecordOutline = {
   description: 'Weekly groceries',
-  meta: 'Tue 29 Sep 2026 · Groceries',
+  meta: `Tue 29 Sep 2026${SEPARATOR}Groceries`,
   amount: '₹2,400.00',
   badge: { label: 'You lent Sam ₹1,200.00', tone: 'positive' },
   people: [
@@ -704,7 +707,7 @@ export function recordOutline(expense: MobileExpense, currentUserId?: string): R
     formatCurrency(toMajorAmount(minor, expense.currency), expense.currency);
   return {
     description: expense.description,
-    meta: `${recordDay(expense.date)} · ${expense.tag || 'Historical Tag'}`,
+    meta: `${recordDay(expense.date)}${SEPARATOR}${expense.tag || 'Historical Tag'}`,
     amount: money(expense.amountMinor),
     badge:
       position === null
@@ -1431,10 +1434,14 @@ export function ExpenseRecordView({
         {record.description}
       </Copy>
       <Copy style={{ fontFamily: fonts.mono }}>
-        {amount(money.amount)} · {record.currency}
+        {amount(money.amount)}
+        {SEPARATOR}
+        {record.currency}
       </Copy>
       <Copy>
-        {recordDay(record.date)} · {record.category}
+        {recordDay(record.date)}
+        {SEPARATOR}
+        {record.category}
       </Copy>
       <Copy>Tag: {record.tag || 'Historical Tag'}</Copy>
       {record.notes ? <Copy>Notes: {record.notes}</Copy> : null}
@@ -1442,15 +1449,22 @@ export function ExpenseRecordView({
       <Copy style={{ fontFamily: fonts.semibold }}>Paid by</Copy>
       {money.paidBy.map((row) => (
         <Copy key={row.user}>
-          {name(row.user)} · {amount(row.amount)}
+          {name(row.user)}
+          {SEPARATOR}
+          {amount(row.amount)}
         </Copy>
       ))}
-      <Copy style={{ fontFamily: fonts.semibold }}>Allocated · {record.splitMethod}</Copy>
+      <Copy style={{ fontFamily: fonts.semibold }}>
+        Allocated{SEPARATOR}
+        {record.splitMethod}
+      </Copy>
       {money.splitBetween.map((row) => (
         <Copy key={row.user}>
-          {name(row.user)} · {amount(row.amount)}
-          {row.percentage !== undefined ? ` · ${row.percentage}%` : ''}
-          {row.shares !== undefined ? ` · ${row.shares} shares` : ''}
+          {name(row.user)}
+          {SEPARATOR}
+          {amount(row.amount)}
+          {row.percentage !== undefined ? `${SEPARATOR}${row.percentage}%` : ''}
+          {row.shares !== undefined ? `${SEPARATOR}${row.shares} shares` : ''}
         </Copy>
       ))}
       <Copy>
@@ -1462,7 +1476,7 @@ export function ExpenseRecordView({
       {record.predefinedItem ? <Copy>Item: {record.predefinedItem}</Copy> : null}
       {record.receiptUrl ? <Copy>Receipt: {record.receiptUrl}</Copy> : null}
       {record.recurringExpense ? (
-        <Copy>Recurring Expense{record.period ? ` · ${record.period}` : ''}</Copy>
+        <Copy>Recurring Expense{record.period ? `${SEPARATOR}${record.period}` : ''}</Copy>
       ) : null}
       {record.deletedAt ? <Copy>Deleted {recordMoment(record.deletedAt)}</Copy> : null}
       <Copy>Revision {record.revision}</Copy>

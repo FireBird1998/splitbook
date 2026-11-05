@@ -48,6 +48,7 @@ import {
   type ExportPeriod,
   type PeriodOption,
 } from './export-form';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 const CARD_RADIUS = `${RADIUS.lg}px`;
 const CONTROL_RADIUS = `${RADIUS.md}px`;
@@ -645,9 +646,10 @@ function ExportForm(props: ExportPageViewProps) {
               'Pick at least one Group.'
             ) : plan ? (
               <>
-                <FileName>{plan.download}</FileName> ·{' '}
+                <FileName>{plan.download}</FileName>
+                {SEPARATOR}
                 {props.format === 'json'
-                  ? '1 JSON file · all time'
+                  ? `1 JSON file${SEPARATOR}all time`
                   : plan.zipped
                     ? `${plan.files.length} CSV files in a .zip`
                     : '1 CSV file'}

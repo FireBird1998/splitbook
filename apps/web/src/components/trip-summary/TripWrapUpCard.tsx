@@ -16,6 +16,7 @@ import {
   homeRowSx,
 } from '@/components/dashboard/HomeCard';
 import type { TripCardState, WrapUp, WrapUpRow } from './trip-summary';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /*
  * "Trip wrap-up" on a Trip's Insights tab (#316, design canvas "Web portal", Trip Group): the
@@ -96,7 +97,7 @@ function SuggestedPayments({ currency, model }: { currency: string | null; model
             color: 'text.secondary',
           }}
         >
-          Suggested payments{currency ? ` · ${currency}` : ''}
+          Suggested payments{currency ? `${SEPARATOR}${currency}` : ''}
         </Typography>
         <Typography component="p" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
           Record one once it’s paid

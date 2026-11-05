@@ -1,6 +1,7 @@
 import { Pressable, View } from 'react-native';
 import { CompactText, Money, hairSpace, useTap, type TextTone } from './compact';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** One currency a switch offers: its code, a figure in it, and how a screen reader names it. */
 export interface CurrencyTab {
@@ -82,7 +83,7 @@ export function CurrencyTabs({
                     tone={selected ? 'brand' : 'secondary'}
                     weight="medium"
                   >
-                    {' · main'}
+                    {`${SEPARATOR}main`}
                   </CompactText>
                 ) : null}
               </CompactText>

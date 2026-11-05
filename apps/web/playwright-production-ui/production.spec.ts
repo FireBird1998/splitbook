@@ -7,7 +7,7 @@ test('production catalogue is unavailable as HTML or a client-navigation payload
   for (const suffix of ['', '?enabled=true', '/']) {
     const response = await request.get(`/dev/design-system${suffix}`);
     expect(response.status()).toBe(404);
-    expect(await response.text()).not.toContain('Local examples · synthetic data');
+    expect(await response.text()).not.toContain('Local examples');
   }
   await page.goto('/dev/design-system');
   await expect(page.getByRole('heading', { name: 'Splitbook design system' })).toHaveCount(0);
@@ -15,7 +15,7 @@ test('production catalogue is unavailable as HTML or a client-navigation payload
   // App Router client navigation requests the RSC representation rather than HTML.
   const flight = await page.request.get('/dev/design-system', { headers: { RSC: '1' } });
   expect(flight.status()).toBe(404);
-  expect(await flight.text()).not.toContain('Local examples · synthetic data');
+  expect(await flight.text()).not.toContain('Local examples');
   const protectedPage = await request.get('/dev/design-system/private', { maxRedirects: 0 });
   expect([302, 307]).toContain(protectedPage.status());
   expect(protectedPage.headers().location).toContain('/login');

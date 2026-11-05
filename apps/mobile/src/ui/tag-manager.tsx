@@ -43,6 +43,7 @@ import {
 } from './compact';
 import { useStartWhileUnfocused } from './start-while-unfocused';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** What archiving does, a line each, so the member can see it at a glance before they confirm. */
 export const archiveEffects: { icon: IconName; text: string }[] = [
@@ -467,7 +468,7 @@ export function TagManager({
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <TopBar
           title="Tags"
-          subtitle={snapshot ? `${groupName} · ${active.length} active` : groupName}
+          subtitle={snapshot ? `${groupName}${SEPARATOR}${active.length} active` : groupName}
           leading={{ kind: 'close', label: 'Close Tags', onPress: close }}
         />
         <View style={{ height: progressHeight }}>
@@ -596,7 +597,7 @@ export function TagManager({
             {!notSaved && (
               <View style={{ gap: 6 }}>
                 <SectionHeader
-                  title={snapshot ? `Active · ${active.length}` : 'Active'}
+                  title={snapshot ? `Active${SEPARATOR}${active.length}` : 'Active'}
                   trailing={
                     canChange ? (
                       <CompactButton
@@ -632,7 +633,7 @@ export function TagManager({
             )}
             {archived.length > 0 && (
               <View style={{ gap: 6 }}>
-                <SectionHeader title={`Archived · ${archived.length}`} />
+                <SectionHeader title={`Archived${SEPARATOR}${archived.length}`} />
                 <Card>{archived.map(row)}</Card>
               </View>
             )}

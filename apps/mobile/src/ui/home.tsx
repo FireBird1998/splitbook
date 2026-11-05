@@ -40,6 +40,7 @@ import { NotAvailableOffline } from './offline-notice';
 import { fonts, useTheme } from './theme';
 import { brandLogo, brandLogoSize } from './brand-logo';
 import { groupThemeIcons } from './group-icon';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** Leading icon tile (40) plus the row's padding and gap, so dividers start under the text. */
 const rowInset = 66;
@@ -381,7 +382,7 @@ export const ContinueDrafts = memo(function ContinueDrafts({
                   )
                 }
                 title={description}
-                meta={`${status} · ${draft.groupName}`}
+                meta={`${status}${SEPARATOR}${draft.groupName}`}
                 metaTone={draft.unconfirmed ? 'warning' : 'secondary'}
                 trailing={amount ? <Money>{amount}</Money> : undefined}
                 accessibilityLabel={[status, description, amount, draft.groupName]
@@ -420,7 +421,7 @@ function groupPosition(balances: HomeGroupBalance[]) {
   return {
     amount,
     tone: owe ? ('negative' as const) : ('positive' as const),
-    caption: `${owe ? 'you owe' : 'owed to you'}${more ? ` · +${more}` : ''}`,
+    caption: `${owe ? 'you owe' : 'owed to you'}${more ? `${SEPARATOR}+${more}` : ''}`,
     spoken: `${owe ? 'You owe' : 'Owed to you'} ${amount}${more ? `, plus ${more} more ${more === 1 ? 'currency' : 'currencies'}` : ''}`,
   };
 }
@@ -466,7 +467,7 @@ const GroupRow = memo(function GroupRow({
     toReview ? `${toReview} to review` : null,
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(SEPARATOR);
   const position = balances && groupPosition(balances);
   return (
     <ListRow
@@ -553,7 +554,7 @@ export const HomeGroups = memo(function HomeGroups({
   return (
     <View style={{ gap: 6 }}>
       <SectionHeader
-        title={known ? `Groups · ${groups.data.length}` : 'Groups'}
+        title={known ? `Groups${SEPARATOR}${groups.data.length}` : 'Groups'}
         trailing={
           <CompactButton
             label={newGroupLabel}

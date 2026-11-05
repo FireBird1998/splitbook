@@ -288,9 +288,9 @@ describe('Needs you', () => {
   });
 
   it('describes an invitation with what the read sent', () => {
-    expect(invitationDetail(INVITATION)).toBe('Invitation from Priya Shah · General');
+    expect(invitationDetail(INVITATION)).toBe('Invitation from Priya Shah\u00a0· General');
     expect(invitationDetail({ ...INVITATION, category: 'home' })).toBe(
-      'Invitation from Priya Shah · Household',
+      'Invitation from Priya Shah\u00a0· Household',
     );
     expect(invitationDetail({ ...INVITATION, invitedByName: null, category: null })).toBe(
       'Invitation',

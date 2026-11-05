@@ -14,6 +14,7 @@ import { COMPARE_MONTHS, type ChangeDirection } from '@splitbook/shared/insights
 import { addMonths, isMonthKey } from '@splitbook/shared/zoned-calendar';
 import { monthLabel } from '@/components/dashboard/spending-chart';
 import { groupTabHref } from '@/components/groups/group-tabs';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export type CompareChoice = (typeof COMPARE_MONTHS.choices)[number];
 export const COMPARE_CHOICES: readonly CompareChoice[] = COMPARE_MONTHS.choices;
@@ -239,7 +240,7 @@ export function insightsStats(
           text: money(biggest.amountMinor, currency),
           line: [biggest.description, payersLine(biggest.paidBy, userId)]
             .filter(Boolean)
-            .join(' · '),
+            .join(SEPARATOR),
         }
       : null,
   };
@@ -345,7 +346,7 @@ export function monthlySpending(
   return {
     currency,
     rows,
-    subtitle: `${currency} · ${monthsSpan(read.months.map((entry) => entry.month))} · whole Group`,
+    subtitle: `${currency}${SEPARATOR}${monthsSpan(read.months.map((entry) => entry.month))}${SEPARATOR}whole Group`,
     average,
     explanation,
     focusComparison,

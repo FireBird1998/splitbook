@@ -21,6 +21,7 @@ import {
   type OutsideTrip,
   type Statement,
 } from '@splitbook/shared/statement';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 const light = getSemanticTokens('light');
 /** A whole trip's Expenses and Payments outside the Trip's dates. */
@@ -98,11 +99,15 @@ export default function StatementView({ statement }: { statement: Statement }) {
         }}
       />
       <Typography component="h1" variant="h4">
-        {statement.name} · Statement
+        {statement.name}
+        {SEPARATOR}Statement
       </Typography>
       <Typography color="text.secondary">
-        {statement.from && statement.to ? `${statement.from} – ${statement.to}` : 'All time'} ·{' '}
-        {statement.currencies.map((row) => row.currency).join(', ')} · {statement.timeZone}
+        {statement.from && statement.to ? `${statement.from} – ${statement.to}` : 'All time'}
+        {SEPARATOR}
+        {statement.currencies.map((row) => row.currency).join(', ')}
+        {SEPARATOR}
+        {statement.timeZone}
       </Typography>
       {statement.wholeTrip ? (
         <Typography>Whole trip, including Expenses before and after the Trip’s dates.</Typography>
@@ -155,13 +160,16 @@ function CurrencySection({
           const outside = part === 'before' ? bucket.beforeTrip : bucket.afterTrip;
           return outside ? (
             <Typography key={part} color="text.secondary">
-              {OUTSIDE_TRIP[part]}: {amount(outside.spentMinor)} · {expenses(outside.expenseCount)},
-              counted in Spent
+              {OUTSIDE_TRIP[part]}: {amount(outside.spentMinor)}
+              {SEPARATOR}
+              {expenses(outside.expenseCount)}, counted in Spent
             </Typography>
           ) : null;
         })}
         <Typography>
-          Payments: {bucket.payments.length} · {amount(bucket.paymentTotalMinor)}
+          Payments: {bucket.payments.length}
+          {SEPARATOR}
+          {amount(bucket.paymentTotalMinor)}
         </Typography>
       </Section>
       {inBalances ? null : (
@@ -239,7 +247,9 @@ function CurrencySection({
                 <TableCell component="th" scope="row">
                   {row.description}
                   <Typography variant="caption" component="div">
-                    {categoryLabel(row.category)} · {row.tag}
+                    {categoryLabel(row.category)}
+                    {SEPARATOR}
+                    {row.tag}
                   </Typography>
                 </TableCell>
                 <TableCell>

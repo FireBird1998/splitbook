@@ -1,6 +1,7 @@
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
 import { EXCHANGE_RATE_API_ATTRIBUTION } from '@splitbook/shared/cross-currency-settlement';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** The same stored-payment wording in the preview and printed statement. */
 export default function ExportPaymentDescription({
@@ -24,7 +25,8 @@ export default function ExportPaymentDescription({
         description
       )}
       <Typography component="div" variant="caption" color="text.secondary">
-        {currency} cleared · {paidCurrency} paid
+        {currency} cleared{SEPARATOR}
+        {paidCurrency} paid
       </Typography>
     </>
   );
