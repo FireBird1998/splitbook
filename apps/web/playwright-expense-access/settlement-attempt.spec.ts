@@ -1,5 +1,5 @@
 import type { APIRequestContext, BrowserContext, Page, Route } from '@playwright/test';
-import { test, expect, dataOf, joinGroup, type Ledger } from './fixtures';
+import { test, expect, dataOf, joinGroup, removeWithOpenBalance, type Ledger } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
 /*
@@ -475,8 +475,9 @@ test('a 4xx on a retry keeps the payment and shows why, and a later Record still
   await openBalancesAsSam(page, ledger);
   await loseFirstReply(page, '300');
 
-  // The server rechecks both parties before it looks for the replay.
-  await dataOf(await ledger.priya.delete(`/api/groups/${ledger.groupB}/members/${ALEX}`));
+  // The server rechecks both parties before it looks for the replay. Alex is still owed, so he
+  // is removed as removal allowed before #875.
+  await removeWithOpenBalance(ledger.groupB, ALEX);
   const { form, amount, save, recorded } = paymentForm(page);
   await save.click();
   await expect(form.getByRole('alert')).toContainText(
@@ -538,7 +539,8 @@ test('a 422 on the first send removes the payment and keeps the entries to corre
   await recordSettlement(page).click();
   await amount.fill('250.25');
   await note.fill('Paid in cash');
-  await dataOf(await ledger.priya.delete(`/api/groups/${ledger.groupB}/members/${ALEX}`));
+  // Alex is still owed, so he is removed as removal allowed before #875.
+  await removeWithOpenBalance(ledger.groupB, ALEX);
   await save.click();
   await expect(form.getByRole('alert')).toContainText(
     'Both payer and recipient must be group members',

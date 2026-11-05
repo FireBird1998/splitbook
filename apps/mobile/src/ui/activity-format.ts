@@ -375,10 +375,12 @@ export function describeActivity(
     }
     case 'member_joined':
       return line('joined the Group', null, []);
-    case 'member_left':
-      return meta.method === 'removed'
-        ? line('removed a member', null, [])
-        : line('left the Group', null, []);
+    case 'member_left': {
+      if (meta.method !== 'removed') return line('left the Group', null, []);
+      // The member an admin removed, by the name recorded then (#875); older removals had none.
+      const removed = meta.userId === currentUserId ? 'you' : text(meta.userName);
+      return removed ? line('removed', removed, []) : line('removed a member', null, []);
+    }
     case 'group_created':
       return line('created the Group', null, []);
     case 'group_updated': {

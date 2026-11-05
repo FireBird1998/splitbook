@@ -589,6 +589,31 @@ PATCH and DELETE are admin-only. **Body** for PATCH is `{ "role": "admin" | "mem
 Demoting or removing the last admin returns **409**; removing yourself returns
 **400** `You cannot remove yourself. Use leave group instead.`
 
+### DELETE /api/groups/[id]/members/[userId]
+
+An admin removes another member, with no body. The member is removed only when they
+could leave themselves (#875), so their Debts never stay in Balances with nobody able
+to record them:
+
+- **Settled up first.** The member's balance must be zero in every currency.
+  Otherwise **409** with `code: "OPEN_BALANCE"`, a readable `error` such as
+  `Priya Shah owes ₹300.00 in this Group. Settle up before removing them.`
+  (`is owed` for a positive balance; `Priya Shah owes €12.50 and is owed ₹600.00`
+  across currencies), and `balances` as for leaving.
+- **Due recurring Expenses count.** The recurring Expenses already due are added
+  first, as for leaving, so this month's Rent is part of the settle-up. If adding them
+  doesn't finish, **409** `code: "REMOVAL_CONFLICT"` with
+  `This Group changed while you were removing this member. Try again.`, and trying
+  again adds what is still missing. The same answer comes when the members change
+  while the removal is checked, such as the admin losing their role.
+
+**Response:** `{ "data": { "message": "Member removed" } }`. Activity records
+`member_left` with `{ userId, userName, method: "removed" }`: `userName` is the
+removed member's name at the time, which Activity shows ("Alex removed Priya Shah
+from the group"). A removal recorded before #875 has no `userName` and reads
+"removed a member". A member who isn't an admin, or someone outside the Group, gets
+**403**; a `userId` who isn't a member gets **404**.
+
 ### POST /api/groups/[id]/leave
 
 Any member may leave, with no body. The rules:
@@ -1903,10 +1928,10 @@ is cut to 50, and anything but a whole number of at least 1 is a 422
 validation error.
 
 People appear by name only: `actor` is `{ _id, name }`, or `null` when the
-account no longer exists, and a payment's sides are `paidByName` and
-`paidToName`. `metadata` carries only what the card uses; an Expense edit keeps
-only its money `changes` (`amount`, `amountMinor`, `currency`), before and
-after. `currency` is the currency of the event's amounts: the recorded one, or,
+account no longer exists, a payment's sides are `paidByName` and
+`paidToName`, and a member an admin removed is `userName` (#875). `metadata`
+carries only what the card uses; an Expense edit keeps only its money `changes`
+(`amount`, `amountMinor`, `currency`), before and after. `currency` is the currency of the event's amounts: the recorded one, or,
 for an edit, the Expense's currency at the time. The shared path, query key
 and decoder are `userActivityPath`, `userActivityKey` and
 `parseUserActivityResponse` (`@splitbook/shared/user-activity-read`).

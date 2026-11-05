@@ -134,6 +134,14 @@ Enforced today:
   are not generated for the departing member);
   the last admin must make someone else an admin first; the last member's leaving
   archives the Group
+- Removing a member (`DELETE /api/groups/[id]/members/[userId]`, web Group settings):
+  only when they could leave themselves (#875). They must be settled up in every
+  currency, counting the recurring Expenses already due, which are added first
+  (**409** `OPEN_BALANCE` names the member and what they owe or are owed, such as
+  "Priya Shah owes ₹300.00 in this Group. Settle up before removing them."; an
+  unfinished catch-up is **409** `REMOVAL_CONFLICT`). The refusal stays on the
+  Members card until dismissed, with Go to Balances. Activity names the member
+  removed ("Alex removed Priya Shah from the group")
 - Cannot demote or remove the last admin (**409** with the reason)
 - Cannot remove yourself (**400**, pointing to leaving instead)
 - An invite code resolves to at most one group (unique partial index)

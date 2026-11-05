@@ -19,6 +19,8 @@ const metadata = z.looseObject({
   amountMinor: z.number().int().safe().optional(),
   preparedBy: assistantAttributionSchema.optional(),
   userId: identity.optional(),
+  /** The member an admin removed, by name (#875). */
+  userName: z.string().optional(),
   method: z.string().optional(),
   expenseId: identity.optional(),
   settlementId: identity.optional(),

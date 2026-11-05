@@ -249,6 +249,51 @@ test('leaving waits until the member is settled up and another admin remains', a
   expect((await ledger.sam.get(`/api/groups/${ledger.groupA}`)).status()).toBe(403);
 });
 
+test('removing a member who still owes says why on the Members card, until it is dismissed (#875)', async ({
+  page,
+  ledger,
+}) => {
+  await joinGroup(ledger.alex, ledger.sam, ledger.groupA);
+  await dataOf(
+    await ledger.alex.post(`/api/groups/${ledger.groupA}/expenses`, {
+      data: {
+        description: 'Groceries',
+        amount: 300,
+        currency: 'INR',
+        category: 'food',
+        tag: 'Groceries',
+        date: new Date().toISOString(),
+        paidBy: [{ user: DEMO_PERSONA_IDS.alex, amount: 300 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: DEMO_PERSONA_IDS.alex }, { user: DEMO_PERSONA_IDS.sam }],
+      },
+    }),
+    201,
+  );
+  await enter(page, ledger.alex, `/groups/${ledger.groupA}/settings`);
+  await page.getByRole('button', { name: /^Actions for member Sam/ }).click();
+  await page.getByRole('menuitem', { name: 'Remove' }).click();
+
+  const refusal = page.getByRole('alert').filter({
+    hasText: /Sam Chen owes .*150\.00 in this Group\. Settle up before removing them\./,
+  });
+  await expect(refusal).toBeVisible();
+  await expect(refusal.getByRole('link', { name: 'Go to Balances' })).toHaveAttribute(
+    'href',
+    `/groups/${ledger.groupA}/balances`,
+  );
+  // Longer than the 3-second snackbar it replaced: a sentence like this needs reading time.
+  await page.waitForTimeout(4_000);
+  await expect(refusal).toBeVisible();
+  await expect(page.getByText('Member removed')).toHaveCount(0);
+  await refusal.getByRole('button', { name: 'Close' }).click();
+  await expect(refusal).toHaveCount(0);
+  expect(await memberRoles(ledger.alex, ledger.groupA)).toEqual({
+    [DEMO_PERSONA_IDS.alex]: 'admin',
+    [DEMO_PERSONA_IDS.sam]: 'member',
+  });
+});
+
 test('a sole member confirms cleanup, with safe refusal when deletion is unavailable', async ({
   page,
   ledger,

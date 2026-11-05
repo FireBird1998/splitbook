@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mongoose from 'mongoose';
 import Expense from '@/lib/models/Expense';
+import Group from '@/lib/models/Group';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
@@ -600,7 +601,8 @@ describe('who may read', () => {
 
   it('refuses a member who has left', async () => {
     const fixture = await household();
-    await groupService.removeMember(fixture.groupId, carol, alice);
+    // Removed with Debts still open, as removal allowed before #875: written directly.
+    await Group.updateOne({ _id: fixture.groupId }, { $pull: { members: { user: carol } } });
     session.userId = carol;
     expect((await read(fixture.groupId, `?involvesUser=${carol}`)).status).toBe(403);
   });

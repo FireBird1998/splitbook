@@ -10,7 +10,8 @@ import {
   readJson,
   routeIds,
 } from '@/lib/utils/api-response';
-import { groupService } from '@/lib/services/group.service';
+import { removalOpenBalance } from '@/lib/departure-refusals';
+import { groupService, RemovalBlockedError } from '@/lib/services/group.service';
 import { z } from 'zod/v4';
 
 const updateMemberSchema = z.object({
@@ -48,7 +49,8 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/groups/[id]/members/[userId] — Remove member from group
+// DELETE /api/groups/[id]/members/[userId] — Remove member from group. A member who owes or is
+// owed stays until they're settled up, as they would to leave (#875).
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string; userId: string }> },
@@ -69,6 +71,13 @@ export async function DELETE(
       return error('Cannot remove the last admin.', 409);
     if (err instanceof Error && err.message === 'SELF_REMOVE')
       return error('You cannot remove yourself. Use leave group instead.', 400);
+    if (err instanceof RemovalBlockedError) return removalOpenBalance(err.memberName, err.balances);
+    if (err instanceof Error && err.message === 'REMOVAL_CONFLICT')
+      return error(
+        'This Group changed while you were removing this member. Try again.',
+        409,
+        'REMOVAL_CONFLICT',
+      );
     return serverError(err);
   }
 }

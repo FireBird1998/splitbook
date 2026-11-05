@@ -64,6 +64,14 @@ function currencyListChange(changes: unknown) {
   return only ? extraCurrencyChange(changes) : null;
 }
 
+/**
+ * The member an admin removed, as "you" or by the name recorded then (#875). Null for a removal
+ * recorded before removals named the member.
+ */
+function removedMember(meta: Record<string, unknown>, viewerId?: string): string | null {
+  return viewerId && meta.userId === viewerId ? 'you' : words(meta.userName);
+}
+
 /** An event's headline, with the viewer as "You". */
 export function formatActivityHeadline(activity: ActivityLike, viewerId?: string): string {
   const actorName = memberLabel(activity.actor?._id, activity.actor?.name, viewerId) ?? 'Someone';
@@ -102,7 +110,7 @@ export function formatActivityHeadline(activity: ActivityLike, viewerId?: string
       return `${actorName} joined the group`;
     case 'member_left':
       return meta.method === 'removed'
-        ? `${actorName} removed a member from the group`
+        ? `${actorName} removed ${removedMember(meta, viewerId) ?? 'a member'} from the group`
         : `${actorName} left the group`;
     case 'group_created':
       return `${actorName} created the group`;
@@ -195,8 +203,11 @@ export function activityLineParts(activity: ActivityLike, viewerId?: string): Ac
       return line('recorded a payment');
     case 'member_joined':
       return line('joined the Group');
-    case 'member_left':
-      return line(meta.method === 'removed' ? 'removed a member' : 'left the Group');
+    case 'member_left': {
+      if (meta.method !== 'removed') return line('left the Group');
+      const removed = removedMember(meta, viewerId);
+      return removed ? line('removed', removed) : line('removed a member');
+    }
     case 'group_created':
       return line('created the Group');
     case 'group_updated': {

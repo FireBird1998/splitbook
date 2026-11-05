@@ -243,6 +243,37 @@ describe('Activity headlines', () => {
     });
   });
 
+  it('names the member an admin removed, as the server records them (#875)', () => {
+    const removal = (metadata: Record<string, unknown>) =>
+      parseActivityPage(
+        {
+          status: 200,
+          data: {
+            activities: [
+              event({
+                type: 'member_left',
+                actor: { _id: 'a00000000000000000000003', name: 'Alex Rivera' },
+                metadata: metadata as ActivityEvent['metadata'],
+              }),
+            ],
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          },
+        },
+        'b00000000000000000000001',
+        1,
+      ).events[0];
+    const sam = 'a00000000000000000000002';
+    expect(
+      describeActivity(removal({ userId: sam, userName: 'Sam Chen', method: 'removed' }), context),
+    ).toMatchObject({ actor: 'Alex Rivera', verb: 'removed', subject: 'Sam Chen', details: [] });
+    // Recorded before removals named the member.
+    expect(describeActivity(removal({ userId: sam, method: 'removed' }), context)).toMatchObject({
+      actor: 'Alex Rivera',
+      verb: 'removed a member',
+      subject: null,
+    });
+  });
+
   it('names the signed-in member "You" on either side of a payment, even beside a namesake (#434)', () => {
     const namesake = 'a00000000000000000000008';
     // As the server sends it: the payment's people by reference and by name.

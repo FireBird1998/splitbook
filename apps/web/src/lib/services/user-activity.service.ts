@@ -39,12 +39,22 @@ const scalar = (value: unknown) =>
 
 /** The metadata fields Home's line and amount use, and the money fields of an edit. */
 const IDS = ['expenseId', 'settlementId'];
-const TEXTS = ['description', 'currency', 'paidByName', 'paidToName', 'action', 'method', 'rule'];
+const TEXTS = [
+  'description',
+  'currency',
+  'paidByName',
+  'paidToName',
+  'userName',
+  'action',
+  'method',
+  'rule',
+];
 const MONEY_CHANGES = ['amount', 'amountMinor', 'currency'];
 
 /**
  * What the read sends of an event's metadata. People appear by name only (a payment's
- * `paidByName` and `paidToName`); member ids, emails and every other recorded field stay out.
+ * `paidByName` and `paidToName`, a removed member's `userName`); member ids, emails and every
+ * other recorded field stay out.
  * An Expense edit keeps only its money changes, before and after.
  */
 function publicMetadata(type: string, metadata: unknown): Fields {

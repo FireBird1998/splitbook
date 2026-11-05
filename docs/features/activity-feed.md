@@ -16,17 +16,17 @@ Every significant action in a group is logged as an activity. The activity feed 
 
 ## Activity Types
 
-| Type                     | Trigger                | Display Example                                                 |
-| ------------------------ | ---------------------- | --------------------------------------------------------------- |
-| `expense_added`          | New expense created    | "**John** added **Dinner at restaurant** — €120.00"             |
-| `expense_updated`        | Expense edited         | "**John** updated **Dinner at restaurant** — amount: €120→€130" |
-| `expense_deleted`        | Expense soft deleted   | "**John** deleted **Dinner at restaurant**"                     |
-| `settlement_recorded`    | Settlement recorded    | "**Jane** paid **John** €30.00"                                 |
-| `member_joined`          | New member joined      | "**Bob** joined the group via invite link"                      |
-| `member_left`            | Member left or removed | "**Bob** left the group"                                        |
-| `group_created`          | Group created          | "**John** created the group"                                    |
-| `group_updated`          | Group settings changed | "**John** updated group name to **Summer Trip**"                |
-| `assistant_rule_changed` | Assistant rule changed | "**Alex** set connected assistants to **Not allowed**"          |
+| Type                     | Trigger                | Display Example                                                     |
+| ------------------------ | ---------------------- | ------------------------------------------------------------------- |
+| `expense_added`          | New expense created    | "**John** added **Dinner at restaurant** — €120.00"                 |
+| `expense_updated`        | Expense edited         | "**John** updated **Dinner at restaurant** — amount: €120→€130"     |
+| `expense_deleted`        | Expense soft deleted   | "**John** deleted **Dinner at restaurant**"                         |
+| `settlement_recorded`    | Settlement recorded    | "**Jane** paid **John** €30.00"                                     |
+| `member_joined`          | New member joined      | "**Bob** joined the group via invite link"                          |
+| `member_left`            | Member left or removed | "**Bob** left the group", "**Alex** removed **Bob** from the group" |
+| `group_created`          | Group created          | "**John** created the group"                                        |
+| `group_updated`          | Group settings changed | "**John** updated group name to **Summer Trip**"                    |
+| `assistant_rule_changed` | Assistant rule changed | "**Alex** set connected assistants to **Not allowed**"              |
 
 ---
 
@@ -146,9 +146,10 @@ See [api.md](../api.md#activity-feed) for full documentation.
 - Expense and settlement metadata **is** denormalized (description, amount and
   currency are stored inline), so that text stays accurate even if the expense is
   later edited or deleted
-- Member events are **not** — `member_joined` / `member_left` store `userId` and
-  `method` only, with no `userName`. Display names come from populating `actor`
-  and from the group's member list
+- Member events mostly are **not** — `member_joined` and a member's own leave store
+  `userId` and `method` only. Display names come from populating `actor`. A removal
+  also stores the removed member's `userName` (#875), since they are no longer in the
+  group's member list to name them; removals recorded before that read "removed a member"
 - Logging is synchronous and on the critical path: every mutation awaits the
   activity write, and there are no transactions, so a failed log fails the
   request after the primary write has already committed

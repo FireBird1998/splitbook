@@ -102,6 +102,24 @@ describe('activity timeline helpers', () => {
   });
 
   it.each([
+    [undefined, 'Alex removed Sam Chen from the group'],
+    ['sam', 'Alex removed you from the group'],
+  ])('names the member a removal removed (#875), viewed by %s', (viewerId, expected) => {
+    expect(
+      formatActivityHeadline(
+        {
+          _id: 'membership',
+          type: 'member_left',
+          createdAt: '2026-11-05T12:00:00.000Z',
+          actor: { _id: 'alex', name: 'Alex' },
+          metadata: { userId: 'sam', userName: 'Sam Chen', method: 'removed' },
+        },
+        viewerId,
+      ),
+    ).toBe(expected);
+  });
+
+  it.each([
     ['not_allowed', 'Alex set connected assistants to Not allowed'],
     ['allowed', 'Alex set connected assistants to Allowed'],
   ])('names the admin and the Assistant rule they set (#621): %s', (rule, expected) => {
@@ -208,6 +226,7 @@ describe("Home's latest changes (#309)", () => {
     ['member_joined', { method: 'invite' }, 'joined the Group', null],
     ['member_left', { method: 'left' }, 'left the Group', null],
     ['member_left', { method: 'removed' }, 'removed a member', null],
+    ['member_left', { method: 'removed', userName: 'Sam Chen' }, 'removed', 'Sam Chen'],
     ['group_created', { groupName: 'Maple House' }, 'created the Group', null],
     ['group_updated', { changes: { name: {} } }, 'updated the Group', null],
     [

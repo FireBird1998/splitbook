@@ -2,7 +2,15 @@ import type { APIRequestContext } from '@playwright/test';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { groupBalancesPath, tripSummaryPath } from '@splitbook/shared/api-paths';
 import { parseTripSummaryResponse } from '@splitbook/shared/trip-summary-read';
-import { test, expect, dataOf, joinGroup, observeLedger, type Ledger } from './fixtures';
+import {
+  test,
+  expect,
+  dataOf,
+  joinGroup,
+  observeLedger,
+  removeWithOpenBalance,
+  type Ledger,
+} from './fixtures';
 
 /*
  * The Trip summary read (#316) through real HTTP: Better Auth sessions, the route, and MongoDB.
@@ -121,7 +129,8 @@ for (const scenario of ['outsider', 'removed', 'left', 'missing', 'anonymous'] a
     if (scenario === 'removed') {
       // Establish access, then revoke it while keeping the same session.
       await dataOf(await ledger.sam.get(summary(tripId)));
-      await dataOf(await ledger.priya.delete(`/api/groups/${tripId}/members/${SAM}`));
+      // Sam owes his share of the Trip: removed as removal allowed before #875.
+      await removeWithOpenBalance(tripId, SAM);
       expect((await (await ledger.sam.get('/api/auth/get-session')).json()).user.id).toBe(SAM);
       actor = ledger.sam;
     } else if (scenario === 'left') {
