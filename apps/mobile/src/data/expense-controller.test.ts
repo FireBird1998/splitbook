@@ -4950,3 +4950,178 @@ describe('an Expense in one of the Group’s currencies (#720)', () => {
     }
   });
 });
+
+describe('Add expense through account and membership changes (#373)', () => {
+  /** Sign-in answers for the persona asked for; `hold` holds the Group's own read. */
+  const journey = () => {
+    let signedIn = people[0];
+    let hold = false;
+    let reply: () => Promise<FetchResponse> = async () => json({ status: 200, data: group });
+    let release: () => void = () => undefined;
+    let held = false;
+    const posts: string[] = [];
+    const fixture = setup((path, init) => {
+      if (path.endsWith('/demo-persona/sign-in')) {
+        signedIn = JSON.parse(String(init.body)).personaId === 'sam' ? people[1] : people[0];
+        return Promise.resolve(
+          json(
+            { user: signedIn },
+            200,
+            'better-auth.session_token=fixture.signature; Max-Age=2592000',
+          ),
+        );
+      }
+      if (path.endsWith('/get-session'))
+        return Promise.resolve(
+          json({
+            user: signedIn,
+            session: { userId: signedIn.id, expiresAt: '2030-01-01T00:00:00Z' },
+          }),
+        );
+      if (path.endsWith('/expenses') && init.method === 'POST') {
+        posts.push(String(init.body));
+        return Promise.resolve(
+          json(
+            {
+              status: 201,
+              data: { ...savedExpense, _id: `b0000000000000000000000${posts.length}` },
+            },
+            201,
+          ),
+        );
+      }
+      if (hold && path === `/api/groups/${groupId}`) {
+        hold = false;
+        return new Promise((resolve) => {
+          held = true;
+          release = () => void reply().then(resolve);
+        });
+      }
+    });
+    return {
+      ...fixture,
+      posts,
+      hold(next?: () => Promise<FetchResponse>) {
+        hold = true;
+        held = false;
+        if (next) reply = next;
+      },
+      held: () => held,
+      release: () => release(),
+    };
+  };
+
+  it('sends nothing and shows none of the first account’s Expense after an account switch during the Save check', async () => {
+    const { controller, posts, records, ...fixture } = journey();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      description: 'Alex’s private dinner',
+      amount: '12',
+      tagId,
+    });
+    fixture.hold();
+    const saving = controller.saveExpense();
+    await vi.waitFor(() => expect(fixture.held()).toBe(true));
+    await controller.signOut();
+    await controller.signIn('sam');
+    fixture.release();
+    await saving;
+    const state = controller.getSnapshot();
+    expect(posts).toEqual([]);
+    expect(state.auth.user?.id).toBe(memberIds[1]);
+    expect(state.screen).not.toBe('expense');
+    expect(state.expense.draft).toBeNull();
+    expect(state.expense.attempt).toBeNull();
+    expect([...records.keys()].filter((key) => key.startsWith(memberIds[0]))).toEqual([]);
+    expect(JSON.stringify(state)).not.toContain('Alex’s private dinner');
+  });
+
+  it('drops a held opening check after an account switch, keeping the first account’s entries off screen', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const { controller, posts, records, ...fixture } = journey();
+    try {
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      vi.setSystemTime(Date.now() + 31_000);
+      fixture.hold();
+      const opening = controller.openExpense(groupId);
+      await vi.waitFor(() => expect(fixture.held()).toBe(true));
+      await controller.updateExpenseDraft({ description: 'Typed during the check', amount: '7' });
+      await controller.signOut();
+      await controller.signIn('sam');
+      fixture.release();
+      await opening;
+      const state = controller.getSnapshot();
+      expect(posts).toEqual([]);
+      expect(state.auth.user?.id).toBe(memberIds[1]);
+      expect(state.screen).not.toBe('expense');
+      expect(state.expense.draft).toBeNull();
+      expect([...records.keys()].filter((key) => key.startsWith(memberIds[0]))).toEqual([]);
+      expect(JSON.stringify(state)).not.toContain('Typed during the check');
+    } finally {
+      fixture.release();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([403, 404] as const)(
+    'blocks a new Expense whose Save check is refused (%s), sends nothing and removes it on close',
+    async (status) => {
+      const { controller, posts, records, ...fixture } = journey();
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Refused at Save', amount: '9', tagId });
+      fixture.hold(async () => json({ error: 'Group access lost', status }, status));
+      const saving = controller.saveExpense();
+      await vi.waitFor(() => expect(fixture.held()).toBe(true));
+      fixture.release();
+      await saving;
+      expect(posts).toEqual([]);
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'blocked',
+        accessLost: true,
+        attempt: null,
+        draft: { description: 'Refused at Save' },
+      });
+      await controller.saveExpense();
+      expect(posts).toEqual([]);
+      await controller.closeExpense();
+      expect(records.size).toBe(0);
+    },
+  );
+
+  it('asks for a correction when another member left between opening and Save, then saves the corrected split once', async () => {
+    const { controller, posts, ...fixture } = journey();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.draft?.participantIds).toEqual(memberIds);
+    await controller.updateExpenseDraft({ description: 'Before Priya left', amount: '30', tagId });
+    const left = { ...group, members: group.members.slice(0, 2) };
+    fixture.hold(async () => json({ status: 200, data: left }));
+    const saving = controller.saveExpense();
+    await vi.waitFor(() => expect(fixture.held()).toBe(true));
+    fixture.release();
+    await saving;
+    expect(posts).toEqual([]);
+    const editor = controller.getSnapshot().expense;
+    expect(editor.status).toBe('editing');
+    expect(editor.attempt).toBeNull();
+    expect(editor.draft).toMatchObject({ description: 'Before Priya left', amount: '30', tagId });
+    expect(Object.values(editor.validation.errors).join(' ')).toMatch(/no longer in this Group/i);
+    await controller.updateExpenseDraft({ participantIds: memberIds.slice(0, 2) });
+    fixture.hold(async () => json({ status: 200, data: left }));
+    const again = controller.saveExpense();
+    await vi.waitFor(() => expect(fixture.held()).toBe(true));
+    fixture.release();
+    await again;
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(posts[0]).splitBetween.map((s: { user: string }) => s.user)).toEqual(
+      memberIds.slice(0, 2),
+    );
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+  });
+});
