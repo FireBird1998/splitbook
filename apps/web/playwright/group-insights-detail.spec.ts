@@ -178,7 +178,7 @@ test('By Tag and Who paid show the Month against the read, and recurring Expense
       money(member.paidMinor, read.currency),
       money(member.shareMinor, read.currency),
       new RegExp(
-        `^${member.netMinor > 0 ? '\\+' : member.netMinor < 0 ? '−' : ''}${escape(
+        `^${member.netMinor > 0 ? '\\+\u2060' : member.netMinor < 0 ? '−\u2060' : ''}${escape(
           money(Math.abs(member.netMinor), read.currency),
         )} paid `,
       ),
