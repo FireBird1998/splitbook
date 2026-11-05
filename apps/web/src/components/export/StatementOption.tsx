@@ -8,7 +8,7 @@ export default function StatementOption({ request }: { request: ExportRequest | 
   const ready = request?.groupIds.length === 1;
   return (
     <>
-      <Typography color="text.secondary">
+      <Typography variant="body2" color="text.secondary">
         Pick one Group and a period. Open its statement, then print or save as PDF.
       </Typography>
       {ready ? (

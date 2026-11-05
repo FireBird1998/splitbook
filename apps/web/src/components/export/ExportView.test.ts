@@ -204,6 +204,20 @@ describe('the Export page', () => {
     expect(text(view({ selected: [id(1), id(2)] }))).not.toContain('These Groups use');
   });
 
+  it('sets the Printable statement explainer at body2, as the explainers beside it, not body1 (#646)', () => {
+    const html = view({ format: 'statement', onFormat: vi.fn() });
+    const explainer = /<p\b([^>]*)>Pick one Group and a period/.exec(html);
+    expect(explainer?.[1]).toMatch(/\bMuiTypography-body2\b/);
+    expect(explainer?.[1]).not.toMatch(/\bMuiTypography-body1\b/);
+  });
+
+  it('sets the Full backup explainer at body2, as the explainers beside it, not body1 (#646)', () => {
+    const html = view({ format: 'json', onFormat: vi.fn() });
+    const explainer = /<p\b([^>]*)>One JSON file holds all chosen Groups/.exec(html);
+    expect(explainer?.[1]).toMatch(/\bMuiTypography-body2\b/);
+    expect(explainer?.[1]).not.toMatch(/\bMuiTypography-body1\b/);
+  });
+
   it('shows the download preparing, then downloading, in one status region', () => {
     const preparing = view({
       download: { status: 'preparing', fileName: 'maple-house-2026-09.zip' },
