@@ -37,7 +37,10 @@ import {
   Money,
   SelectorTile,
   TileGrid,
+  headingBeside,
+  headingLine,
   useLargeText,
+  useLargestText,
   useTap,
 } from './compact';
 import { useTheme } from './theme';
@@ -249,17 +252,10 @@ const AllocationHeading = memo(function AllocationHeading({
   currency?: string;
 }) {
   return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-        paddingHorizontal: 14,
-        paddingTop: 12,
-      }}
-    >
-      <CompactText variant="overline" accessibilityRole="header">
+    // At large text the badge goes under the heading, at the row's end, where they can't share a
+    // line: at 200% on a 360 dp phone it was cut at the card's edge (#876).
+    <View style={{ ...headingLine, gap: 8, paddingHorizontal: 14, paddingTop: 12 }}>
+      <CompactText variant="overline" accessibilityRole="header" spare style={headingBeside}>
         {currency
           ? // "· whole yen" for a currency without a smaller unit, as the web says (#720).
             `Who owes what · ${currency}${wholeUnit(currency) ? ` · whole ${wholeUnit(currency)}` : ''}`
@@ -796,6 +792,9 @@ export function SaveBar({
   /** More under Save, in the bar itself, such as Finish later and what it does. */
   children?: ReactNode;
 }) {
+  // From 150% the amount goes under the words: beside "CHF 2,500.50" at 200% on a 360 dp phone,
+  // Save read "Save ex / pense" (#867), as Record payment's did (#639).
+  const largest = useLargestText();
   return (
     <ActionBar>
       {/* Above Save: the bar grows upward from the bottom of the screen, so Save stays put. */}
@@ -807,6 +806,7 @@ export function SaveBar({
       <CompactButton
         label={label}
         amount={amount}
+        amountBelow={largest}
         busy={busy}
         block
         disabled={blocked !== null}

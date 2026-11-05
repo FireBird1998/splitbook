@@ -159,6 +159,28 @@ export function Divider({ inset = 14 }: { inset?: number }) {
 }
 
 /**
+ * A heading's line with what follows it, such as a note, a badge or an action: one line while
+ * they fit; where they can't share it, what follows goes onto a line of its own at the row's end,
+ * as a row's balance does, and is never cut at the edge (#639, #876). The heading takes
+ * `headingBeside`.
+ */
+export const headingLine = {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  // One line is centred in the row's height, as without wrapping.
+  alignContent: 'center',
+  // A part on a line of its own keeps to the end.
+  justifyContent: 'flex-end',
+} as const;
+
+/**
+ * The heading in a `headingLine`: it gives up room and wraps where it must, and its margin takes
+ * what its line leaves, so what follows keeps to the end beside it.
+ */
+export const headingBeside = { flexShrink: 1, marginRight: 'auto' } as const;
+
+/**
  * An overline title with an optional trailing action or note. With `below`, the note goes under
  * the title, at every width and text size: never cut at the screen's edge beside a long title,
  * and in a line as tall as a badge, so nothing below moves as the note changes (#222). Without
@@ -175,14 +197,7 @@ export function SectionHeader({
   below?: boolean;
 }) {
   const heading = (
-    <CompactText
-      variant="overline"
-      accessibilityRole="header"
-      spare
-      // Its margin takes what its line leaves, so the trailing part keeps to the end beside it
-      // and on a line of its own (justifyContent puts a lone part at the end).
-      style={{ flexShrink: 1, marginRight: 'auto' }}
-    >
+    <CompactText variant="overline" accessibilityRole="header" spare style={headingBeside}>
       {title}
     </CompactText>
   );
@@ -194,19 +209,7 @@ export function SectionHeader({
       </View>
     );
   return (
-    <View
-      style={{
-        minHeight: 32,
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        // One line is centred in the header's height, as without wrapping.
-        alignContent: 'center',
-        justifyContent: 'flex-end',
-        gap: space.gap,
-        paddingHorizontal: 2,
-      }}
-    >
+    <View style={{ ...headingLine, minHeight: 32, gap: space.gap, paddingHorizontal: 2 }}>
       {heading}
       {trailing}
     </View>

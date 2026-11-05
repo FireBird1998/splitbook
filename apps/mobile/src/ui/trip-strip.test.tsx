@@ -1,10 +1,17 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import type { MobileGroup } from '../data/types';
 import { ThemeContext, fonts } from './theme';
 import { TripStrip } from './trip-strip';
 import { setWindow } from '../test-utils/native';
+import { unreadText } from '../test-utils/layout';
 
 // #117: the Trip Theme's slim boarding-pass strip, rendered.
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
@@ -264,5 +271,43 @@ describe('the Trip strip’s currencies (#730)', () => {
     const root = render(trip({ alternateCurrencies: ['EUR', 'JPY'] }));
     expect(holder(root, 'INR · EUR · JPY')).toEqual(holder(root, '17–20 Sep'));
     expect(holder(root, 'INR · EUR · JPY')).toMatchObject({ flexWrap: 'wrap' });
+  });
+});
+
+// #886: at 100% on a 360 dp phone, a Trip in five currencies drew its route's "TRI" under its
+// currency list: the stub kept its natural width and the route was squeezed past its codes. Where
+// the stub doesn't fit beside the route, it goes under it, as at large text, and nothing overlaps
+// at any text size.
+describe('the Trip strip in five currencies (#886)', () => {
+  const five = { alternateCurrencies: ['EUR', 'CHF', 'GBP', 'JPY'] };
+  const json = () => screen!.toJSON() as ReactTestRendererJSON;
+
+  it.each([1, 1.3, 2])('never runs the route under the currencies, 360 dp at %s× text', (scale) => {
+    setWindow({ width: 360, height: 640, fontScale: scale });
+    const root = render(trip(five));
+    expect(texts(root).map((node) => node.shown)).toContain('INR · EUR · CHF · GBP · JPY');
+    // The strip is inset 16 dp from the screen's edges.
+    expect(unreadText(json(), scale, 360 - 32)).toEqual([]);
+    // The currencies are under the route, on the stub's own line, which wraps.
+    expect(gradient(root)).not.toHaveProperty('flexDirection');
+    expect(holder(root, 'INR · EUR · CHF · GBP · JPY')).toMatchObject({ flexWrap: 'wrap' });
+    expect(flat(rules(root)[2].props.style)).toMatchObject({ height: 1, flexDirection: 'row' });
+  });
+
+  it('keeps three currencies on the stub beside the route, where they fit (#730)', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1 });
+    const root = render(trip({ alternateCurrencies: ['EUR', 'JPY'] }));
+    expect(gradient(root)).toMatchObject({ flexDirection: 'row' });
+    expect(unreadText(json(), 1, 360 - 32)).toEqual([]);
+  });
+
+  it('measures its own width: in a narrower place, five currencies go under the route', () => {
+    setWindow({ width: 412, height: 915, fontScale: 1 });
+    const root = render(trip({ alternateCurrencies: ['EUR', 'JPY', 'GBP'] }));
+    // Four fit beside the route on a 412 dp phone.
+    expect(gradient(root)).toMatchObject({ flexDirection: 'row' });
+    const strip = root.find((node) => isHost(node, 'LinearGradient'));
+    act(() => strip.props.onLayout({ nativeEvent: { layout: { width: 300, height: 72 } } }));
+    expect(gradient(root)).not.toHaveProperty('flexDirection');
   });
 });

@@ -38,6 +38,8 @@ import {
   SummaryStats,
   TopBar,
   denseHitSlop,
+  headingBeside,
+  headingLine,
   touch,
   useLargeText,
   useTap,
@@ -357,21 +359,21 @@ export function ToReviewHomeCard({
         overflow: 'hidden',
       }}
     >
+      {/* Where the note can't share the heading's line, it goes under it, at the row's end: at
+          200% on a 360 dp phone it was cut at the card's border (#876). */}
       <View
-        style={{
-          minHeight: 32,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          paddingTop: 10,
-          paddingHorizontal: 14,
-        }}
+        style={{ ...headingLine, minHeight: 32, gap: 8, paddingTop: 10, paddingHorizontal: 14 }}
       >
-        <CompactText variant="overline" tone="brand" accessibilityRole="header">
+        <CompactText
+          variant="overline"
+          tone="brand"
+          accessibilityRole="header"
+          spare
+          style={headingBeside}
+        >
           To review · {model.counts.total}
         </CompactText>
-        <CompactText variant="caption" tone="secondary">
+        <CompactText variant="caption" tone="secondary" spare>
           Only you see these
         </CompactText>
       </View>

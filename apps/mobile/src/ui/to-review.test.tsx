@@ -7,7 +7,7 @@ import {
 } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
-import { unreadText } from '../test-utils/layout';
+import { flatten, layoutHeight, unreadText, wordsOf } from '../test-utils/layout';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { onlineManager, focusManager } from '@tanstack/query-core';
 import { Alert } from 'react-native';
@@ -1795,5 +1795,55 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
       await new Promise((resolve) => setTimeout(resolve, 30));
     });
     expect(f.puts.at(-1)?.values).toMatchObject({ amount: 86.5, currency: 'EUR' });
+  });
+});
+
+// #876: at 200% on a 360 dp phone, Home's To review header read "TO REVIEW · 1 Only you see
+// thes|", cut at the card's border. Where the note can't share the heading's line, it goes onto a
+// line of its own at the row's end, as a section's action does (#639).
+describe.each(['light', 'dark'] as const)('Home’s To review header in %s (#876)', (mode) => {
+  async function header(fontScale: number) {
+    const f = fixture();
+    await signIn(f);
+    await act(async () => {
+      await f.controller.refreshToReview();
+    });
+    setWindow({ width: 360, height: 640, fontScale });
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <ToReviewHomeCard controller={f.controller} />
+        </ThemeContext.Provider>,
+      );
+    });
+    trees.push(tree);
+    const heading = tree.root.find(
+      (node) => String(node.type) === 'Text' && node.props.accessibilityRole === 'header',
+    );
+    let row = heading.parent;
+    while (row && String(row.type) !== 'View') row = row.parent;
+    const json = (tree.toJSON() as ReactTestRendererJSON).children!.find(
+      (child): child is ReactTestRendererJSON =>
+        typeof child !== 'string' && child.props.style === row!.props.style,
+    )!;
+    expect(wordsOf(json)).toContain('Only you see these');
+    return { row: json, style: flatten(row!.props.style) };
+  }
+  // The card sits 16 dp in from the screen's edges, inside its 2 dp border.
+  const card = 360 - 32 - 4;
+
+  it.each([1.3, 2])('reads in full at %s× text, the note wrapping', async (fontScale) => {
+    const { row, style } = await header(fontScale);
+    expect(unreadText(row, fontScale, card)).toEqual([]);
+    expect(style).toMatchObject({ flexWrap: 'wrap' });
+  });
+
+  it('keeps the note beside the heading where they fit, at 100%', async () => {
+    const { row } = await header(1);
+    expect(unreadText(row, 1, card)).toEqual([]);
+    const [title, note] = (row.children ?? []) as ReactTestRendererJSON[];
+    const one = Math.max(layoutHeight(title!, 1, card), layoutHeight(note!, 1, card));
+    expect(layoutHeight(row, 1, card)).toBe(Math.max(32, one + 10));
   });
 });

@@ -16,11 +16,13 @@ import {
 import {
   findHosts,
   flatten,
+  hairSpace,
   largeTextWindows,
   layoutHeight,
   layoutWidth,
   middleCutEnd,
   unreadText,
+  wordsOf,
 } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
@@ -853,15 +855,21 @@ describe.each(['light', 'dark'] as const)(
       1,
     ).events[0]!;
 
-    it('keeps a row in the list to two lines of details', () => {
-      setWindow({ width: 360, height: 640, fontScale: 2 });
+    // From 150% the list's row takes the lines it needs too (#871).
+    it.each([
+      { fontScale: 1.3, lines: 2 },
+      { fontScale: 2, lines: undefined },
+    ])('keeps a row in the list to  lines of details at × text', (size) => {
+      setWindow({ width: 360, height: 640, fontScale: size.fontScale });
       render({ state: activity({ events: [payment] }) }, mode);
       const details = screen!.root.findAll(
         (node) =>
           String(node.type) === 'Text' &&
           node.findAll((child) => child.props.children === '€20.00').length > 0,
       );
-      expect(details.map((node) => node.props.numberOfLines)).toContain(2);
+      expect(details.map((node) => node.props.numberOfLines)).toContain(size.lines);
+      if (size.lines === undefined)
+        expect(details.map((node) => node.props.numberOfLines)).not.toContain(2);
     });
 
     it.each(largeTextWindows)('reads in full, $width dp at $fontScale× text', (size) => {
@@ -1115,4 +1123,182 @@ describe.each(['light', 'dark'] as const)('an Activity row’s avatar in %s (#79
     expect(alignment('You added Fictional event 1')).toBe(size.detailed);
     expect(alignment('You joined the Group')).toBe('center');
   });
+});
+
+// #871, from the Designer's #864 check: at 200% a cross-currency payment's row read "You paid Sam
+// Chen ₹1,381.50 to clear …", hiding the amount it is about, and a currency change "You added GBP
+// to the Group's curr…". From 150% a row's headline and details take the lines they need, as
+// other rows' titles do (#639). Below it they keep their two-line cut, with a clean "…" (#785),
+// and the time still shows: a settle-all batch's Debts ran past two lines at 100% and took its
+// time with them (the Designer's #883 check).
+describe.each(['light', 'dark'] as const)('Activity rows at large text in %s (#871)', (mode) => {
+  const sam = 'a00000000000000000000002';
+  const recorded = new Date(2026, 9, 21, 15, 18).toISOString();
+  const rate = (appliedRate: string) => ({
+    appliedRate,
+    rateKind: 'suggested',
+    suggestedRate: appliedRate,
+    rateSource: 'frankfurter',
+    rateAsOf: '2026-10-20',
+    rateFetchedAt: new Date(2026, 9, 21, 6, 0).toISOString(),
+  });
+  const people = { paidBy: you, paidTo: sam, paidByName: 'Alex Rivera', paidToName: 'Sam Chen' };
+  const settlement = (number: number, metadata: Record<string, unknown>) => ({
+    _id: hex('e', number),
+    group: groupId,
+    type: 'settlement_recorded',
+    actor: { _id: you, name: 'Alex Rivera' },
+    createdAt: recorded,
+    metadata: { ...people, settlementId: hex('f', number), ...metadata },
+  });
+  const batch = { batchId: hex('f', 911), batchSize: 4 };
+  const page = parseActivityPage(
+    {
+      status: 200,
+      data: {
+        activities: [
+          // A settle-all batch of four Debts, newest first as the feed lists it.
+          settlement(914, {
+            ...batch,
+            amount: 10,
+            amountMinor: 1000,
+            currency: 'GBP',
+            amountPaidMinor: 110250,
+            paidCurrency: 'INR',
+            ...rate('110.25'),
+          }),
+          settlement(913, {
+            ...batch,
+            amount: 2500,
+            amountMinor: 2500,
+            currency: 'JPY',
+            amountPaidMinor: 137693,
+            paidCurrency: 'INR',
+            ...rate('0.550771'),
+          }),
+          settlement(912, {
+            ...batch,
+            amount: 15,
+            amountMinor: 1500,
+            currency: 'EUR',
+            amountPaidMinor: 138150,
+            paidCurrency: 'INR',
+            ...rate('92.1'),
+          }),
+          settlement(911, { ...batch, amount: 1480, amountMinor: 148000, currency: 'INR' }),
+          // A Debt in euros paid in rupees.
+          settlement(910, {
+            amount: 15,
+            amountMinor: 1500,
+            currency: 'EUR',
+            amountPaidMinor: 138150,
+            paidCurrency: 'INR',
+            ...rate('92.1'),
+          }),
+          {
+            _id: hex('e', 909),
+            group: groupId,
+            type: 'group_updated',
+            actor: { _id: you, name: 'Alex Rivera' },
+            createdAt: recorded,
+            metadata: {
+              changes: { alternateCurrencies: { old: ['EUR', 'JPY'], new: ['EUR', 'JPY', 'GBP'] } },
+              groupName: 'Riverside Apartment Shared Household Expenses',
+              currencies: ['INR', 'EUR', 'JPY', 'GBP'],
+            },
+          },
+        ],
+        pagination: { page: 1, limit: 20, total: 6, totalPages: 1 },
+      },
+    },
+    groupId,
+    1,
+  );
+  const rows = {
+    batch: 'You paid Sam Chen ₹5,340.93 to clear',
+    cross: 'You paid Sam Chen ₹1,381.50 to clear €15.00,',
+    currencies: 'You added GBP to the Group’s currencies',
+  };
+  /** The row whose spoken words start with `said`. */
+  const row = (said: string) => {
+    const [found] = findHosts(
+      screen!.toJSON() as ReactTestRendererJSON,
+      (props, type) =>
+        type === 'Pressable' &&
+        props.accessibilityRole === 'button' &&
+        String(props.accessibilityLabel).startsWith(said),
+    );
+    expect(found, said).toBeDefined();
+    return found!;
+  };
+  /** The texts of a row that aren't nested in another text, each with its words. */
+  const lines = (said: string) =>
+    findHosts(row(said), (_props, type) => type === 'Text')
+      .filter((text, _index, all) => !all.some((other) => other !== text && contains(other, text)))
+      .map((text) => ({ text, words: wordsOf(text) }));
+  const contains = (outer: ReactTestRendererJSON, inner: ReactTestRendererJSON): boolean =>
+    (outer.children ?? []).some(
+      (child) => typeof child !== 'string' && (child === inner || contains(child, inner)),
+    );
+  // The list lies in a Card 16 dp in, inside its 1 dp border; the row's 14 dp padding, a 32 dp
+  // avatar and a 12 dp gap leave its column 360 - 34 - 28 - 44 dp.
+  const column = 360 - 34 - 28 - 44;
+
+  it.each([1.5, 2])('shows each row whole at %s× text, 360 dp', (fontScale) => {
+    setWindow({ width: 360, height: 640, fontScale });
+    render({ state: activity({ events: page.events, pagination: page.pagination }) }, mode);
+    for (const said of Object.values(rows)) {
+      const shown = row(said);
+      // Nothing is cut: no line limit on the headline or the details, and every text reads in full.
+      for (const { text, words } of lines(said))
+        expect(Number(text.props.numberOfLines) || 0, words).toBe(0);
+      expect(unreadText(shown, fontScale, 360 - 34)).toEqual([]);
+      expect(wordsOf(shown)).toContain('3:18 PM');
+    }
+    // The batch's headline names every Debt it cleared, and its details each Debt's rate.
+    expect(wordsOf(row(rows.batch))).toContain('₹1,480.00, €15.00, ¥2,500 and £10.00');
+    expect(wordsOf(row(rows.batch))).toContain('£10.00 at the suggested ₹110.25 per £ (20 Oct)');
+  });
+
+  it.each([1, 1.3])(
+    'keeps the two-line cut with a clean "…", and the time, at %s× text, 360 dp',
+    (fontScale) => {
+      setWindow({ width: 360, height: 640, fontScale });
+      render({ state: activity({ events: page.events, pagination: page.pagination }) }, mode);
+      for (const said of Object.values(rows)) {
+        const texts = lines(said);
+        // The headline and the details each take two lines at most, cut at their tail with the
+        // paint sized for the "…" and the words nested inside (#785).
+        const cut = texts.filter(({ text }) => Number(text.props.numberOfLines) === 2);
+        expect(cut, said).toHaveLength(2);
+        for (const { text } of cut) {
+          const [words] = (text.children ?? []).filter(
+            (child): child is ReactTestRendererJSON => typeof child !== 'string',
+          );
+          expect(flatten(text.props.style).fontSize).toBeGreaterThan(
+            Number(flatten(words!.props.style).fontSize),
+          );
+        }
+        // Nothing runs past the row, and no word breaks in two.
+        expect(unreadText(row(said), fontScale, 360 - 34, { cutOnce: true })).toEqual([]);
+      }
+      // A batch's time is a text of its own after its Debts, never cut with them: its Debts run
+      // past two lines here, so the cut takes them, not the time.
+      const time = lines(rows.batch).find(({ words }) => words.includes('3:18 PM'));
+      expect(Number(time!.text.props.numberOfLines) || 0).toBe(0);
+      expect(time!.words.replaceAll(hairSpace, '')).toBe(' · 3:18 PM');
+      const debts = lines(rows.batch).find(
+        ({ text, words }) => Number(text.props.numberOfLines) === 2 && words.includes('at the'),
+      )!;
+      expect(debts.words).not.toContain('3:18 PM');
+      expect(unreadText(debts.text, fontScale, column).some((said) => said.includes('needs'))).toBe(
+        true,
+      );
+      // Other rows keep their time at the end of their details, as before.
+      for (const said of [rows.cross, rows.currencies]) {
+        const details = lines(said).find(({ words }) => words.includes('3:18 PM'))!;
+        expect(Number(details.text.props.numberOfLines)).toBe(2);
+      }
+    },
+  );
 });

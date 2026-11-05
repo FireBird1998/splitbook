@@ -31,7 +31,9 @@ import {
   SkeletonText,
   SummaryStats,
   type SummaryStat,
+  touch,
   useLargeText,
+  useTextColumn,
 } from './compact';
 import { ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -161,43 +163,61 @@ function MonthBar({
   opening?: boolean;
   onSelectMonth: (month: string | null) => void;
 }) {
+  // At large text the month keeps room for a long word between its arrows (`largeTextColumn`):
+  // squeezed beside All time at 200% on a 360 dp phone, it read "Oct / ober / 2026" (#867). Where
+  // that leaves All time no room, it goes onto a line of its own at the row's end. Yoga breaks a
+  // wrapping line by its parts' least widths, so the month's is set.
+  const column = useTextColumn();
   return (
     <View
       style={{
         minHeight: 56,
         flexDirection: 'row',
+        flexWrap: 'wrap',
         alignItems: 'center',
+        alignContent: 'center',
+        justifyContent: 'flex-end',
         paddingHorizontal: 4,
         paddingTop: 4,
       }}
     >
-      <IconButton
-        icon="chevron-back"
-        label="Previous month"
-        disabled={opening}
-        onPress={() => onSelectMonth(shiftMonthKey(month ?? current, -1))}
-      />
-      {opening ? (
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Skeleton width="45%" line="heading" />
-        </View>
-      ) : (
-        <CompactText
-          variant="heading"
-          weight="medium"
-          accessibilityRole="header"
-          accessibilityLiveRegion="polite"
-          style={{ flex: 1, textAlign: 'center' }}
-        >
-          {monthLabel(month)}
-        </CompactText>
-      )}
-      <IconButton
-        icon="chevron-forward"
-        label="Next month"
-        disabled={opening || month === null || month >= current}
-        onPress={() => onSelectMonth(shiftMonthKey(month ?? current, 1))}
-      />
+      <View
+        style={{
+          flexGrow: 1,
+          flexShrink: 1,
+          minWidth: column === undefined ? undefined : 2 * touch.min + column,
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}
+      >
+        <IconButton
+          icon="chevron-back"
+          label="Previous month"
+          disabled={opening}
+          onPress={() => onSelectMonth(shiftMonthKey(month ?? current, -1))}
+        />
+        {opening ? (
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Skeleton width="45%" line="heading" />
+          </View>
+        ) : (
+          <CompactText
+            variant="heading"
+            weight="medium"
+            accessibilityRole="header"
+            accessibilityLiveRegion="polite"
+            style={{ flexGrow: 1, flexShrink: 1, textAlign: 'center' }}
+          >
+            {monthLabel(month)}
+          </CompactText>
+        )}
+        <IconButton
+          icon="chevron-forward"
+          label="Next month"
+          disabled={opening || month === null || month >= current}
+          onPress={() => onSelectMonth(shiftMonthKey(month ?? current, 1))}
+        />
+      </View>
       {month === null && !opening ? (
         <CompactButton label="This month" variant="text" onPress={() => onSelectMonth(current)} />
       ) : (

@@ -343,6 +343,12 @@ export function SegmentedControl<T extends string>({
                 justifyContent: stacked ? 'flex-start' : 'center',
                 ...(stacked ? { flexDirection: 'row', gap: 6, paddingHorizontal: 14 } : {}),
                 backgroundColor: selected ? theme.surface : 'transparent',
+                // The chosen one is outlined, so it reads by its shape too: in dark mode its
+                // surface is darker than the track, and only its text's tone told it apart
+                // (#829). Every segment keeps the line's width, clear where it isn't chosen, so
+                // nothing moves when the choice does and stacked labels stay lined up.
+                borderWidth: 1,
+                borderColor: selected ? theme.border : 'transparent',
               }}
             >
               {stacked ? (

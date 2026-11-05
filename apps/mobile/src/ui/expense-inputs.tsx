@@ -1,11 +1,11 @@
 import type { TextInputInstance, ViewInstance } from 'react-native';
 import { memo, useState, type Ref } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, TextInput, View, useWindowDimensions } from 'react-native';
 import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import type { ExpenseDraft, ExpenseField } from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
 import { Field, FieldError } from './group-workflows';
-import { CompactText, FieldMarker, radius, useLargeText } from './compact';
+import { CompactText, FieldMarker, radius, scaledSp, useLargeText } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 import { useStartWhileUnfocused } from './start-while-unfocused';
@@ -129,6 +129,12 @@ export const CurrencyChip = memo(function CurrencyChip({
     </Pressable>
   );
 });
+/** The amount's size, and its symbol's, in IBM Plex Mono: every character 0.6 of the size across. */
+const AMOUNT_SIZE = 32;
+const SYMBOL_SIZE = 24;
+const LOCK_SIZE = 20;
+const AMOUNT_GAP = 10;
+
 /**
  * The currency's symbol beside the chip, as the board draws it; TalkBack already hears the
  * currency. Memoized with the chip, so typing an amount never renders it again.
@@ -139,12 +145,37 @@ export const CurrencySymbol = memo(function CurrencySymbol({ currency }: { curre
       tone="secondary"
       accessibilityElementsHidden
       importantForAccessibility="no"
-      style={{ fontFamily: fonts.mono, fontSize: 24 }}
+      style={{ fontFamily: fonts.mono, fontSize: SYMBOL_SIZE }}
     >
       {getCurrency(currency)?.symbol ?? ''}
     </CompactText>
   );
 });
+/**
+ * The least the amount's line keeps, with its symbol and lock, at this text size: its characters
+ * (or the placeholder's) in IBM Plex Mono, whose widths are exact, and room for the cursor. Beside
+ * the chip while that fits there, and under it otherwise: 2500.50 in Swiss francs at 200% on a
+ * 360 dp phone had shown "CHF 00.50" (#867). It never asks for more than a line under the chip
+ * has, `screen` less the form's 16 dp gutters, its card's 14 dp padding and 2 dp border at most,
+ * and the ring's 8 dp padding and 2 dp border beyond its -10 dp margins; a longer amount scrolls
+ * there.
+ */
+function amountLine(
+  shown: string,
+  symbol: string,
+  lock: boolean,
+  { width: screen, fontScale }: { width: number; fontScale: number },
+) {
+  const mono = (text: string, size: number) => [...text].length * 0.6 * scaledSp(size, fontScale);
+  const needed =
+    mono(shown, AMOUNT_SIZE) +
+    // The cursor after the last figure.
+    2 +
+    (symbol ? mono(symbol, SYMBOL_SIZE) + AMOUNT_GAP : 0) +
+    (lock ? LOCK_SIZE + AMOUNT_GAP : 0);
+  return Math.min(needed, screen - 2 * 16 - 2 * (14 + 2) - 2 * (8 + 2 - 10));
+}
+
 export function AmountField({
   draft,
   locked,
@@ -164,6 +195,9 @@ export function AmountField({
   // The field is focused for the keypad it has; a new keypad is a new field, not focused yet.
   const [focusedPlaces, setFocusedPlaces] = useState<number | null>(null);
   const amountFocused = focusedPlaces === places;
+  const window = useWindowDimensions();
+  const placeholder = places === 0 ? '0' : `0.${'0'.repeat(places)}`;
+  const symbol = onCurrency ? (getCurrency(draft.currency)?.symbol ?? '') : '';
   const input = {
     color: theme.text,
     paddingVertical: 4,
@@ -179,8 +213,11 @@ export function AmountField({
         <View
           style={{
             flexDirection: 'row',
+            // The amount goes under the chip where it doesn't fit beside it (#867).
+            flexWrap: 'wrap',
             alignItems: 'center',
-            gap: 10,
+            columnGap: AMOUNT_GAP,
+            rowGap: 4,
             marginHorizontal: -10,
             paddingHorizontal: 8,
             paddingVertical: 2,
@@ -190,59 +227,66 @@ export function AmountField({
           }}
         >
           {onCurrency ? (
-            <>
-              <CurrencyChip
-                currency={draft.currency}
-                locked={currencyLocked}
-                onPress={onCurrency}
-              />
-              <CurrencySymbol currency={draft.currency} />
-            </>
+            <CurrencyChip currency={draft.currency} locked={currencyLocked} onPress={onCurrency} />
           ) : (
             <CurrencyBadge currency={draft.currency} recorded={!!draft.original} />
           )}
-          <TextInput
-            // Android adds the decimal key when the keypad changes but never takes it away, so
-            // yen after rupees kept it (#866): a whole currency gets a field of its own.
-            key={places === 0 ? 'whole' : 'decimal'}
-            ref={amountRef}
-            value={draft.amount}
-            maxLength={40}
-            keyboardType={places === 0 ? 'number-pad' : 'decimal-pad'}
-            returnKeyType="next"
-            submitBehavior="submit"
-            editable={!locked}
-            placeholder={places === 0 ? '0' : `0.${'0'.repeat(places)}`}
-            placeholderTextColor={theme.textMuted}
-            selectionColor={theme.brand.main}
-            // TalkBack reads the currency with the amount (#720).
-            accessibilityLabel={`Amount, ${getCurrency(draft.currency)?.name ?? draft.currency}, required`}
-            accessibilityHint={errors.amount}
-            onChangeText={(amount) => {
-              // A refused edit leaves the field showing the draft's amount.
-              if (amount !== draft.amount && acceptsNumericText(amount, draft.amount))
-                onChange({ amount });
+          {/* The amount and its symbol keep together: beside the chip while the whole amount
+              fits there, on a line of their own under it where it doesn't. */}
+          <View
+            style={{
+              // Yoga breaks a wrapping line by its children's least widths, not their basis.
+              minWidth: amountLine(draft.amount || placeholder, symbol, !!showLock, window),
+              flexGrow: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: AMOUNT_GAP,
             }}
-            onFocus={() => setFocusedPlaces(places)}
-            onBlur={() => {
-              setFocusedPlaces(null);
-              onLeave('amount');
-            }}
-            onSubmitEditing={onAmountDone}
-            style={[
-              input,
-              {
-                flex: 1,
-                minHeight: 48,
-                fontFamily: fonts.mono,
-                fontSize: 32,
-                lineHeight: 38,
-              },
-            ]}
-          />
-          {showLock ? (
-            <Icon name="lock-closed-outline" size={20} color={theme.textSecondary} />
-          ) : null}
+          >
+            {onCurrency ? <CurrencySymbol currency={draft.currency} /> : null}
+            <TextInput
+              // Android adds the decimal key when the keypad changes but never takes it away, so
+              // yen after rupees kept it (#866): a whole currency gets a field of its own.
+              key={places === 0 ? 'whole' : 'decimal'}
+              ref={amountRef}
+              value={draft.amount}
+              maxLength={40}
+              keyboardType={places === 0 ? 'number-pad' : 'decimal-pad'}
+              returnKeyType="next"
+              submitBehavior="submit"
+              editable={!locked}
+              placeholder={placeholder}
+              placeholderTextColor={theme.textMuted}
+              selectionColor={theme.brand.main}
+              // TalkBack reads the currency with the amount (#720).
+              accessibilityLabel={`Amount, ${getCurrency(draft.currency)?.name ?? draft.currency}, required`}
+              accessibilityHint={errors.amount}
+              onChangeText={(amount) => {
+                // A refused edit leaves the field showing the draft's amount.
+                if (amount !== draft.amount && acceptsNumericText(amount, draft.amount))
+                  onChange({ amount });
+              }}
+              onFocus={() => setFocusedPlaces(places)}
+              onBlur={() => {
+                setFocusedPlaces(null);
+                onLeave('amount');
+              }}
+              onSubmitEditing={onAmountDone}
+              style={[
+                input,
+                {
+                  flex: 1,
+                  minHeight: 48,
+                  fontFamily: fonts.mono,
+                  fontSize: AMOUNT_SIZE,
+                  lineHeight: 38,
+                },
+              ]}
+            />
+            {showLock ? (
+              <Icon name="lock-closed-outline" size={LOCK_SIZE} color={theme.textSecondary} />
+            ) : null}
+          </View>
         </View>
       </View>
       <FieldError message={errors.amount} />
