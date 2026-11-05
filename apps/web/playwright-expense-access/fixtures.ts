@@ -8,7 +8,9 @@ import {
   type Locator,
   type Page,
 } from '@playwright/test';
+import { MongoClient, ObjectId } from 'mongodb';
 import { DEMO_PERSONA_IDS, type DemoPersonaKey } from '../src/lib/demo-personas';
+import { expenseAccessMongoUri } from './mongo-target';
 
 /** The top bar's Add expense (#304): labelled on desktop, an icon button of the same name on phones. */
 export const addExpenseButton = (page: Page) =>
@@ -45,6 +47,30 @@ async function login(baseURL: string, persona: DemoPersonaKey) {
   const session = await (await context.get('/api/auth/get-session')).json();
   expect(session?.user?.id).toBe(DEMO_PERSONA_IDS[persona]);
   return context;
+}
+
+/**
+ * Take a member who still owes or is owed out of a Group, as removal did before #875: Groups from
+ * then still hold such members, though no request can remove one now. Written straight into this
+ * run's isolated database, so only the serial browser project's specs may use it.
+ */
+export async function removeWithOpenBalance(groupId: string, memberId: string) {
+  const name = process.env.EXPENSE_ACCESS_TEST_DB;
+  if (!name?.startsWith('splitbook-test-access-')) throw new Error('Isolated database required');
+  const client = new MongoClient(expenseAccessMongoUri(name));
+  try {
+    const member = new ObjectId(memberId);
+    const removed = await client
+      .db(name)
+      .collection<{ members: { user: ObjectId }[] }>('groups')
+      .updateOne(
+        { _id: new ObjectId(groupId), 'members.user': member },
+        { $pull: { members: { user: member } }, $inc: { __v: 1 } },
+      );
+    expect(removed.modifiedCount).toBe(1);
+  } finally {
+    await client.close();
+  }
 }
 
 export async function joinGroup(

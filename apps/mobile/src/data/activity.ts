@@ -12,6 +12,8 @@ import type { LoadStatus, ScrollAnchor } from './types';
 const metadata = z.object({
   preparedBy: assistantAttributionSchema.optional(),
   userId: objectId.optional(),
+  /** The member an admin removed, by name (#875). */
+  userName: z.string().optional(),
   method: z.string().optional(),
   expenseId: objectId.optional(),
   settlementId: objectId.optional(),

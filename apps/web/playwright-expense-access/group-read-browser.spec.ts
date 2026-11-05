@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { test, expect, dataOf, joinGroup, type Ledger } from './fixtures';
+import { test, expect, dataOf, joinGroup, removeWithOpenBalance, type Ledger } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
 function appURL(path: string) {
@@ -420,7 +420,8 @@ for (const { tab, poll, read, tabPath = read, shows, empty } of [
         groupReads.push(response.status());
     });
 
-    await dataOf(await ledger.priya.delete(`${groupPath}/members/${SAM}`));
+    // Sam still owes: removed as removal allowed before #875.
+    await removeWithOpenBalance(groupId, SAM);
     const refused = page.waitForResponse(
       (response) => new URL(response.url()).pathname === readPath && response.status() === 403,
     );
@@ -526,7 +527,8 @@ test('a Household reopened after Sam is back shows no month figures or dialog fr
   await expect(page.getByRole('dialog')).toBeVisible();
 
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
-  await dataOf(await ledger.priya.delete(`${groupPath}/members/${SAM}`));
+  // Sam still owes: removed as removal allowed before #875.
+  await removeWithOpenBalance(household._id, SAM);
   const refused = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === `${groupPath}/expenses` && response.status() === 403,
@@ -642,7 +644,8 @@ test('the Dashboard after a loss shows none of the lost Group, even when its ref
     ),
   );
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
-  await dataOf(await ledger.priya.delete(`${groupPath}/members/${SAM}`));
+  // Sam still owes: removed as removal allowed before #875.
+  await removeWithOpenBalance(groupId, SAM);
   const refused = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === `${groupPath}/expenses` && response.status() === 403,

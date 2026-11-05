@@ -313,6 +313,20 @@ describe('Leave Group', () => {
     ]);
   });
 
+  it('names a recurring Expense that still includes the member, and only closes (#257)', () => {
+    const message =
+      'Rent (recurring) still includes you. Ask an admin to remove you from it, then leave.';
+    const { root } = page({
+      leave: leaveActions({ status: 'refused', code: 'RECURRING_EXPENSE_PROBLEM', message }),
+    });
+    const modal = sheet(root);
+    expect(text(one(byRole(modal, 'alert')))).toBe(message);
+    expect(byRole(modal, 'button').map((button) => button.props.accessibilityLabel)).toEqual([
+      'Cancel, staying in this Group',
+      'Cancel',
+    ]);
+  });
+
   it('offers to try again after a concurrent change', () => {
     const { root } = page({
       leave: leaveActions({

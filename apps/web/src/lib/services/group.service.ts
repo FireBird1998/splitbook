@@ -9,7 +9,7 @@ import connectDB from '@/lib/db';
 import { assertCreateReplay, createRequestMetadata } from '@/lib/financial-write';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import Group from '@/lib/models/Group';
-import '@/lib/models/User'; // Ensure User model is registered for populate()
+import User from '@/lib/models/User';
 import { activityService } from './activity.service';
 import { balanceService } from './balance.service';
 import { recurringExpenseService } from './recurring-expense.service';
@@ -78,15 +78,58 @@ async function latestExpenseCurrencies(
   return new Map(latest.map((entry) => [String(entry._id), entry.currency]));
 }
 
-/** Why a member can't leave yet: an open balance, or they are the last admin. */
+/** A member's non-zero balance in each currency, in minor units: negative owes, positive is owed. */
+type OpenBalances = { currency: string; amountMinor: number }[];
+
+/** A recurring Expense in its problem state, by name (#257). */
+type BrokenRecurringExpenses = { id: string; description: string }[];
+
+/** What keeps a member in the Group, whether they leave or an admin removes them. */
+type DepartureBlock =
+  | { code: 'OPEN_BALANCE'; balances: OpenBalances }
+  | { code: 'RECURRING_EXPENSE_PROBLEM'; recurringExpenses: BrokenRecurringExpenses };
+
+/**
+ * Why a member can't leave yet: an open balance, a recurring Expense in its problem state that
+ * still includes them (#257), or they are the last admin.
+ */
 export class LeaveBlockedError extends Error {
   constructor(
-    readonly code: 'OPEN_BALANCE' | 'LAST_ADMIN',
+    readonly code: DepartureBlock['code'] | 'LAST_ADMIN',
     /** For OPEN_BALANCE: the member's non-zero balance in each currency, in minor units. */
-    readonly balances: { currency: string; amountMinor: number }[] = [],
+    readonly balances: OpenBalances = [],
+    /** For RECURRING_EXPENSE_PROBLEM: the recurring Expenses that still include them. */
+    readonly recurringExpenses: BrokenRecurringExpenses = [],
+    /** Whether the member is an admin, who can remove themselves from those. */
+    readonly admin = false,
   ) {
     super(code);
     this.name = 'LeaveBlockedError';
+  }
+}
+
+/**
+ * Why an admin can't remove this member yet: what would stop the member leaving. They still owe
+ * or are owed in some currency, so their Debts would stay in Balances with nobody able to record
+ * them (#875), or a recurring Expense in its problem state still includes them, so its missed
+ * months would fall on the others once it is repaired (#257).
+ */
+export class RemovalBlockedError extends Error {
+  readonly code: DepartureBlock['code'];
+  readonly balances: OpenBalances;
+  readonly recurringExpenses: BrokenRecurringExpenses;
+
+  constructor(
+    block: DepartureBlock,
+    /** The member, as the refusal names them. */
+    readonly memberName: string,
+  ) {
+    super(block.code);
+    this.name = 'RemovalBlockedError';
+    this.code = block.code;
+    this.balances = block.code === 'OPEN_BALANCE' ? block.balances : [];
+    this.recurringExpenses =
+      block.code === 'RECURRING_EXPENSE_PROBLEM' ? block.recurringExpenses : [];
   }
 }
 
@@ -470,13 +513,42 @@ export class GroupService {
   }
 
   /**
+   * What stops a member leaving the Group, or an admin removing them, once the admin rules allow
+   * it. The recurring Expenses already due are added first; then no recurring Expense in its
+   * problem state may still include them (#257), since its missed months would fall on the
+   * others once it is repaired; then they must be settled up in every currency. Throws
+   * `conflict` when adding the due Expenses doesn't finish, since one may then be missing from
+   * Balances. Null when nothing stops them.
+   */
+  private async departureBlock(
+    groupId: string,
+    memberId: string,
+    conflict: 'LEAVE_CONFLICT' | 'REMOVAL_CONFLICT',
+  ): Promise<DepartureBlock | null> {
+    // Balances follow Expense reads: add the recurring Expenses already due before checking,
+    // and never let the member go on a run that may have missed one.
+    const due = await recurringExpenseService.materializeDueExpenses(groupId);
+    if (!due.complete) throw new Error(conflict);
+
+    // Before the balance: repairing a recurring Expense can add months the member owes.
+    const broken = await recurringExpenseService.problemTemplatesIncluding(groupId, memberId);
+    if (broken.length > 0) return { code: 'RECURRING_EXPENSE_PROBLEM', recurringExpenses: broken };
+
+    const open = await balanceService.getMemberOpenBalances(groupId, memberId);
+    return open.length > 0 ? { code: 'OPEN_BALANCE', balances: open } : null;
+  }
+
+  /**
    * Remove a member from the group. Only admins can do this.
    * Cannot remove the last admin, cannot remove self (use leave instead).
+   * The member must be free to leave: settled up in every currency, counting the recurring
+   * Expenses already due (#875), and in no recurring Expense in its problem state (#257).
+   * Activity names the member removed.
    */
   async removeMember(groupId: string, targetUserId: string, actorId: string) {
     await connectDB();
 
-    const group = await Group.findById(groupId);
+    const group = await Group.findById(groupId).select('members').lean();
     if (!group) return null;
 
     // Check admin permission
@@ -501,22 +573,40 @@ export class GroupService {
       }
     }
 
-    group.members = group.members.filter(
-      (m) => m.user.toString() !== targetUserId,
-    ) as typeof group.members;
-    await withGroupMutation(groupId, async () => group.save());
+    const person = await User.findById(targetUserId).select('name').lean<{ name?: string }>();
+    const name = person?.name?.trim() || null;
+    const block = await this.departureBlock(groupId, targetUserId, 'REMOVAL_CONFLICT');
+    if (block) throw new RemovalBlockedError(block, name ?? 'This member');
+
+    // Checking took a while: the actor must still be an admin, and the member still here, at
+    // the moment of the update. The version bump makes a member change loaded before this
+    // removal fail instead of writing to a shifted member index.
+    const removed = await withGroupMutation(groupId, async () =>
+      Group.findOneAndUpdate(
+        {
+          _id: groupId,
+          'members.user': targetUserId,
+          members: { $elemMatch: { user: actorId, role: 'admin' } },
+        },
+        { $pull: { members: { user: targetUserId } }, $inc: { __v: 1 } },
+        { returnDocument: 'after' },
+      ),
+    );
+    if (!removed) throw new Error('REMOVAL_CONFLICT');
 
     await activityService.log(groupId, 'member_left', actorId, {
       userId: targetUserId,
+      ...(name ? { userName: name } : {}),
       method: 'removed',
     });
 
-    return group.populate('members.user', PERSON_FIELDS);
+    return removed.populate('members.user', PERSON_FIELDS);
   }
 
   /**
    * The member leaves the Group. They must be settled up in every currency,
-   * counting the recurring Expenses already due, which are added first. The
+   * counting the recurring Expenses already due, which are added first, and no
+   * recurring Expense in its problem state may still include them (#257). The
    * last admin must hand over first. The last member must explicitly consent
    * to permanently deleting the Group and its history.
    * Returns null when the Group doesn't exist.
@@ -552,13 +642,10 @@ export class GroupService {
         throw new LeaveBlockedError('LAST_ADMIN');
       }
 
-      // Balances follow Expense reads: add the recurring Expenses already due before
-      // checking, and never let the member go on a run that may have missed one.
-      const due = await recurringExpenseService.materializeDueExpenses(groupId);
-      if (!due.complete) throw new Error('LEAVE_CONFLICT');
-
-      const open = await balanceService.getMemberOpenBalances(groupId, actorId);
-      if (open.length > 0) throw new LeaveBlockedError('OPEN_BALANCE', open);
+      const block = await this.departureBlock(groupId, actorId, 'LEAVE_CONFLICT');
+      if (block?.code === 'OPEN_BALANCE') throw new LeaveBlockedError(block.code, block.balances);
+      if (block)
+        throw new LeaveBlockedError(block.code, [], block.recurringExpenses, self.role === 'admin');
 
       // An admin may leave only while another admin remains at the moment of the update.
       const stillHandedOver =

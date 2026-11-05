@@ -2,7 +2,7 @@ import { tagActionMetadata } from './fixtures';
 import { randomUUID } from 'node:crypto';
 import { MongoClient, ObjectId } from 'mongodb';
 import type { APIRequestContext } from '@playwright/test';
-import { test, expect, dataOf, expensePath, joinGroup } from './fixtures';
+import { test, expect, dataOf, expensePath, joinGroup, removeWithOpenBalance } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { expenseAccessMongoUri } from './mongo-target';
 
@@ -111,7 +111,8 @@ test('Expense replay survives participant departure while a new creation is reje
   const headers = keyHeaders();
   const path = `/api/groups/${ledger.groupB}/expenses`;
   const first = await dataOf(await ledger.priya.post(path, { data: body, headers }), 201);
-  await dataOf(await ledger.priya.delete(`/api/groups/${ledger.groupB}/members/${sam}`));
+  // Sam owes his share, so he leaves as removal allowed before #875.
+  await removeWithOpenBalance(ledger.groupB, sam);
   const before = await snapshot(ledger.priya, ledger.groupB);
   expect((await dataOf(await ledger.priya.post(path, { data: body, headers }), 201))._id).toBe(
     first._id,
@@ -134,7 +135,8 @@ test('Settlement replay rechecks both parties and denies a removed actor', async
     await ledger.sam.post(path, { data: body, headers: payerHeaders }),
     201,
   );
-  await dataOf(await ledger.priya.delete(`/api/groups/${ledger.groupB}/members/${sam}`));
+  // Sam is owed what he paid, so he leaves as removal allowed before #875.
+  await removeWithOpenBalance(ledger.groupB, sam);
   const before = await snapshot(ledger.priya, ledger.groupB);
   const partyDenied = await ledger.priya.post(path, { data: body, headers: recipientHeaders });
   expect(partyDenied.status(), await partyDenied.text()).toBe(422);

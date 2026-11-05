@@ -1,8 +1,6 @@
 import { after } from 'next/server';
 import { resumeRequestedGroupDeletions } from '@/lib/services/group-cleanup.service';
-import { NextResponse } from 'next/server';
-import { formatCurrency } from '@splitbook/shared/currency';
-import { toMajorAmount } from '@splitbook/shared/exact-money';
+import { leaveOpenBalance, leaveRecurringProblem } from '@/lib/departure-refusals';
 import {
   getAuthUser,
   unauthorized,
@@ -14,19 +12,6 @@ import {
   routeIds,
 } from '@/lib/utils/api-response';
 import { groupService, LeaveBlockedError } from '@/lib/services/group.service';
-
-/** "you owe ₹1,480.00 and are owed €12.50", one figure per currency. */
-function describeOpenBalances(balances: LeaveBlockedError['balances']) {
-  const figure = ({ currency, amountMinor }: { currency: string; amountMinor: number }) =>
-    formatCurrency(toMajorAmount(Math.abs(amountMinor), currency), currency);
-  const owe = balances.filter((balance) => balance.amountMinor < 0).map(figure);
-  const owed = balances.filter((balance) => balance.amountMinor > 0).map(figure);
-  const join = (figures: string[]) => figures.join(' and ');
-  return [owe.length ? `you owe ${join(owe)}` : '', owed.length ? `are owed ${join(owed)}` : '']
-    .filter(Boolean)
-    .join(' and ')
-    .replace(/^are owed/, 'you are owed');
-}
 
 // POST /api/groups/[id]/leave — The signed-in member leaves the Group
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -62,18 +47,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return error('Make someone else an admin before you leave.', 409, 'LAST_ADMIN');
     }
     if (err instanceof LeaveBlockedError && err.code === 'OPEN_BALANCE') {
-      return NextResponse.json(
-        {
-          error: `Settle up before you leave: ${describeOpenBalances(err.balances)} in this Group.`,
-          status: 409,
-          code: 'OPEN_BALANCE',
-          balances: err.balances.map(({ currency, amountMinor }) => ({
-            currency,
-            amount: toMajorAmount(amountMinor, currency),
-          })),
-        },
-        { status: 409 },
-      );
+      return leaveOpenBalance(err.balances);
+    }
+    if (err instanceof LeaveBlockedError && err.code === 'RECURRING_EXPENSE_PROBLEM') {
+      return leaveRecurringProblem(err.recurringExpenses, err.admin);
     }
     if (err instanceof Error && err.message === 'GROUP_DELETION_CONFIRMATION_REQUIRED') {
       return error(

@@ -4,12 +4,16 @@
  * (`signed-in-route.ts`).
  *
  * Only an admin removes members or changes roles. An admin leaves through leave, not removal,
- * and the last admin cannot be made a member.
+ * and the last admin cannot be made a member. A member who owes or is owed is removed only once
+ * they're settled up, as they would have to be to leave (#875).
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import Activity from '@/lib/models/Activity';
 import { DEMO_PERSONA_IDS, type DemoPersonaKey } from '@/lib/demo-personas';
+import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
+import { settlementService } from '@/lib/services/settlement.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import {
   callRoute,
@@ -41,7 +45,12 @@ afterAll(() => disconnectSignedIn(db));
 /** Alex's trip, with Alex as its only admin and these people as members. */
 async function coorgWeekend(...members: string[]) {
   const created = await groupService.create(
-    { name: 'Coorg Weekend', category: 'trip', defaultCurrency: 'INR', alternateCurrencies: [] },
+    {
+      name: 'Coorg Weekend',
+      category: 'trip',
+      defaultCurrency: 'INR',
+      alternateCurrencies: ['EUR'],
+    },
     alex,
   );
   const groupId = String(created._id);
@@ -88,6 +97,29 @@ async function roles(groupId: string) {
 }
 
 const forbidden = { status: 403, body: { error: 'Forbidden', status: 403 } };
+
+/** `payer` pays `amount` in `currency`, shared equally by `between`. */
+function pays(groupId: string, payer: string, amount: number, between: string[], currency = 'INR') {
+  return expenseService.create(
+    groupId,
+    {
+      description: 'Dinner',
+      amount,
+      currency,
+      category: 'food',
+      date: new Date('2026-10-20T12:00:00.000Z'),
+      splitMethod: 'equal',
+      tag: 'Food',
+      paidBy: [{ user: payer, amount }],
+      splitBetween: between.map((user) => ({ user })),
+    },
+    payer,
+  );
+}
+
+function removals(groupId: string) {
+  return Activity.find({ group: groupId, type: 'member_left' }).lean();
+}
 
 describe('DELETE /api/groups/[id]/members/[userId]', () => {
   it('lets Alex, the admin, remove Sam, who then cannot read the Group', async () => {
@@ -137,6 +169,85 @@ describe('DELETE /api/groups/[id]/members/[userId]', () => {
       status: 400,
       body: { error: 'You cannot remove yourself. Use leave group instead.', status: 400 },
     });
+  });
+});
+
+describe('removing a member who owes or is owed (#875)', () => {
+  it('refuses while Priya owes, naming what she owes', async () => {
+    const groupId = await coorgWeekend(sam, priya);
+    await pays(groupId, alex, 900, [alex, sam, priya]);
+
+    const refused = await removeMember(groupId, priya, await signIn('alex'));
+
+    expect(refused).toEqual({
+      status: 409,
+      body: {
+        error: 'Priya Shah owes ₹300.00 in this Group. Settle up before removing them.',
+        status: 409,
+        code: 'OPEN_BALANCE',
+        balances: [{ currency: 'INR', amount: -300 }],
+      },
+    });
+    expect(await roles(groupId)).toEqual([
+      { user: alex, role: 'admin' },
+      { user: sam, role: 'member' },
+      { user: priya, role: 'member' },
+    ]);
+    expect(await removals(groupId)).toEqual([]);
+  });
+
+  it('says what she owes and is owed, in each currency', async () => {
+    const groupId = await coorgWeekend(sam, priya);
+    await pays(groupId, priya, 900, [alex, sam, priya]);
+    await pays(groupId, sam, 25, [sam, priya], 'EUR');
+
+    const refused = await removeMember(groupId, priya, await signIn('alex'));
+
+    expect(refused).toEqual({
+      status: 409,
+      body: {
+        error:
+          'Priya Shah owes €12.50 and is owed ₹600.00 in this Group. Settle up before removing them.',
+        status: 409,
+        code: 'OPEN_BALANCE',
+        balances: [
+          { currency: 'EUR', amount: -12.5 },
+          { currency: 'INR', amount: 600 },
+        ],
+      },
+    });
+  });
+
+  it('says what a member who is only owed is owed', async () => {
+    const groupId = await coorgWeekend(sam, priya);
+    await pays(groupId, priya, 900, [alex, sam, priya]);
+
+    const refused = await removeMember(groupId, priya, await signIn('alex'));
+
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toBe(
+      'Priya Shah is owed ₹600.00 in this Group. Settle up before removing them.',
+    );
+  });
+
+  it('removes her once she has settled up, and Activity names her', async () => {
+    const groupId = await coorgWeekend(sam, priya);
+    await pays(groupId, alex, 900, [alex, sam, priya]);
+    await settlementService.create(groupId, { paidTo: alex, amount: 300, currency: 'INR' }, priya);
+
+    const removed = await removeMember(groupId, priya, await signIn('alex'));
+
+    expect(removed).toEqual({
+      status: 200,
+      body: { data: { message: 'Member removed' }, status: 200 },
+    });
+    expect(await roles(groupId)).toEqual([
+      { user: alex, role: 'admin' },
+      { user: sam, role: 'member' },
+    ]);
+    const [entry] = await removals(groupId);
+    expect(String(entry.actor)).toBe(alex);
+    expect(entry.metadata).toEqual({ userId: priya, userName: 'Priya Shah', method: 'removed' });
   });
 });
 

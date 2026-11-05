@@ -4,7 +4,8 @@ import { assistantAttributionSchema } from './draft-attribution';
 /**
  * The read contract of the latest Activity across the member's Groups (#309), returned in wire
  * shape. Home's "Latest changes" card reads it. Each event names its Group, and people by name
- * only: the actor as `{ _id, name }`, a payment's two sides by `paidByName` and `paidToName`.
+ * only: the actor as `{ _id, name }`, a payment's two sides by `paidByName` and `paidToName`, and
+ * a member an admin removed by `userName`.
  */
 import { z } from 'zod';
 import { amount, currencyCode, identity, timestamp } from './wire-fields';
@@ -28,6 +29,8 @@ const metadata = z.looseObject({
   currency: currencyCode.optional(),
   paidByName: z.string().optional(),
   paidToName: z.string().optional(),
+  /** The member an admin removed, by name (#875). */
+  userName: z.string().optional(),
   action: z.string().optional(),
   method: z.string().optional(),
   changes: z

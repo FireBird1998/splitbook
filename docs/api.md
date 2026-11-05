@@ -589,31 +589,88 @@ PATCH and DELETE are admin-only. **Body** for PATCH is `{ "role": "admin" | "mem
 Demoting or removing the last admin returns **409**; removing yourself returns
 **400** `You cannot remove yourself. Use leave group instead.`
 
+### DELETE /api/groups/[id]/members/[userId]
+
+An admin removes another member, with no body. The member is removed only when they
+could leave themselves (#875), so their Debts never stay in Balances with nobody able
+to record them, and a broken recurring Expense's missed months never fall on the
+others:
+
+- **Settled up first.** The member's balance must be zero in every currency.
+  Otherwise **409** with `code: "OPEN_BALANCE"`, a readable `error` such as
+  `Priya Shah owes ₹300.00 in this Group. Settle up before removing them.`
+  (`is owed` for a positive balance; `Priya Shah owes €12.50 and is owed ₹600.00`
+  across currencies), and `balances` as for leaving.
+- **Due recurring Expenses count.** The recurring Expenses already due are added
+  first, as for leaving, so this month's Rent is part of the settle-up. If adding them
+  doesn't finish, **409** `code: "REMOVAL_CONFLICT"` with
+  `This Group changed while you were removing this member. Try again.`, and trying
+  again adds what is still missing. The same answer comes when the members change
+  while the removal is checked, such as the admin losing their role.
+- **No recurring Expense in its problem state includes them (#257)**, as for leaving:
+  **409** `code: "RECURRING_EXPENSE_PROBLEM"` with `recurringExpenses` and a readable
+  `error` such as
+  `Rent (recurring) still includes Priya Shah. Remove them from it before removing them from the Group.`
+  It is checked before the balance.
+
+**Response:** `{ "data": { "message": "Member removed" } }`. Activity records
+`member_left` with `{ userId, userName, method: "removed" }`: `userName` is the
+removed member's name at the time, which Activity shows ("Alex removed Priya Shah
+from the group"). A removal recorded before #875 has no `userName` and reads
+"removed a member". A member who isn't an admin, or someone outside the Group, gets
+**403**; a `userId` who isn't a member gets **404**.
+
 ### POST /api/groups/[id]/leave
 
-Any member may leave, with no body. The rules:
+Any member may leave. The body is empty, or `{ "deleteIfLastMember": true }` from the
+last member (below). While other members remain, the rules are:
 
 - **Settled up first.** The member's balance must be zero in every currency.
   Otherwise **409** with `code: "OPEN_BALANCE"`, a readable `error` such as
   `Settle up before you leave: you owe ₹150.00 in this Group.`, and
   `balances: [{ "currency": "INR", "amount": -150 }]` (negative: they owe;
   positive: they are owed).
-- **Due recurring Expenses count.** While other members remain, the recurring
-  Expenses already due are added first, as every Group read does, and only then
-  is the balance checked. A Rent that fell due this month is therefore part of
-  the settle-up. If adding them doesn't finish, the leave is refused with **409**
-  `code: "LEAVE_CONFLICT"`; trying again adds what is still missing. A template in
-  its problem state (for example, its Tag archived) doesn't hold up the leave: its
-  missed periods are not generated for the departing member. An archived Group
-  adds none, and neither does any Group while recurring Expenses are switched off.
-- **The last admin hands over first.** While other members remain, the only admin
-  gets **409** `code: "LAST_ADMIN"`, `Make someone else an admin before you leave.`
-- **The last member archives the Group.** Nobody would be left to reach it, so the
-  Group is archived in the same step.
+- **Due recurring Expenses count.** The recurring Expenses already due are added
+  first, as every Group read does, and only then is the balance checked. A Rent that
+  fell due this month is therefore part of the settle-up. If adding them doesn't
+  finish, the leave is refused with **409** `code: "LEAVE_CONFLICT"`; trying again
+  adds what is still missing. An archived Group adds none, and neither does any Group
+  while recurring Expenses are switched off.
+- **No recurring Expense in its problem state includes them (#257).** A template in
+  its problem state (its Tag archived, a member it names gone, or its currency or
+  money unreadable) adds nothing, and its missed months are added once it is
+  repaired, shared by whoever it includes then. So while one includes the member, as
+  a payer or in its split, the leave is refused with **409**
+  `code: "RECURRING_EXPENSE_PROBLEM"`, a readable `error` naming it, such as
+  `Rent (recurring) still includes you. Ask an admin to remove you from it, then leave.`
+  (an admin reads `Remove yourself from it, then leave.`; several are named together,
+  `Rent (recurring) and Wi-Fi (recurring) still include you.`), and
+  `recurringExpenses: [{ "id": "…", "description": "Rent" }]`. Once an admin repairs
+  it, its missed months are added with the member's share, and the settle-up covers
+  them; once they remove the member from it, the leave goes ahead. It is checked
+  before the balance, and only where recurring Expenses run: not while they are
+  switched off, outside a Household, or in an archived Group. Before #257 such a
+  template didn't hold up the leave.
+- **The last admin hands over first.** The only admin gets **409**
+  `code: "LAST_ADMIN"`, `Make someone else an admin before you leave.`
 
-**Response:** `{ "data": { "message": "Left group", "archived": false } }`
-(`archived: true` when the last member left). Activity records `member_left`
-with `{ userId, method: "left" }`, plus the archive change when it happens.
+**The last member deletes the Group.** Nobody would be left to reach it, so the last
+member's leave permanently deletes the Group and its history: its Expenses,
+Settlements, Activity, recurring Expenses, invitations, Drafts and Tag actions. It
+needs their consent: without `{ "deleteIfLastMember": true }` it is refused with
+**409** `code: "GROUP_DELETION_CONFIRMATION_REQUIRED"` and nothing changes. Where the
+database can't run transactions it is refused with **409**
+`code: "GROUP_DELETION_UNAVAILABLE"`, and the member stays. Balances and recurring
+Expenses aren't checked: no member would remain to settle with.
+
+**Response:** `{ "data": { "message": "Left group", "archived": false } }`, and
+Activity records `member_left` with `{ userId, method: "left" }`. For the last member
+the Group is emptied and hidden at once, then its records are deleted in batches:
+`{ "data": { "message": "Left group", "archived": true, "deleted": true, "deletionPending": false } }`
+once everything is gone, or `"deleted": false, "deletionPending": true` while the
+rest is still being deleted, which the server finishes in the background and a retry
+with the same body resumes. `archived: true` means only that the Group is already out
+of reach; nothing of it is kept, and no Activity is recorded.
 A stranger gets **403**; a race with another leave or join that can't be
 resolved after three tries, or a due recurring Expense that couldn't be added,
 gets **409** `code: "LEAVE_CONFLICT"`.
@@ -1167,7 +1224,10 @@ an outcome for each, in the order asked:
 
 Household-themed groups only (`category: "home"`). Templates materialize
 expenses lazily when the group, its expense list or its balances are read, and
-before a member's leave is checked. An archived Group materializes nothing.
+before a member's leave or removal is checked. An archived Group materializes
+nothing. A template in its problem state that includes a member keeps them in the
+Group until it is repaired or they are taken out of it (#257, see
+[leaving](#post-apigroupsidleave)).
 
 **Off by default (#289).** The whole feature sits behind the server's
 `RECURRING_EXPENSES_ENABLED` switch, on only when it is `true`. While it is off:
@@ -1255,7 +1315,8 @@ Generated expenses carry `recurringExpense` (the template id) and `period`
 under concurrent readers. A template whose configuration no longer validates
 against group state — archived tag, removed member, currency drift — is skipped
 silently without advancing its marker; the settings list surfaces the problem
-state, though its client-side check does not cover currency drift.
+state, though its client-side check does not cover currency drift. While it
+includes a member, they can't leave or be removed (#257).
 
 The switch's history is one document in `productswitches`
 (`_id: "recurringExpenses"`). The first generation run that finds the switch off
@@ -1903,10 +1964,10 @@ is cut to 50, and anything but a whole number of at least 1 is a 422
 validation error.
 
 People appear by name only: `actor` is `{ _id, name }`, or `null` when the
-account no longer exists, and a payment's sides are `paidByName` and
-`paidToName`. `metadata` carries only what the card uses; an Expense edit keeps
-only its money `changes` (`amount`, `amountMinor`, `currency`), before and
-after. `currency` is the currency of the event's amounts: the recorded one, or,
+account no longer exists, a payment's sides are `paidByName` and
+`paidToName`, and a member an admin removed is `userName` (#875). `metadata`
+carries only what the card uses; an Expense edit keeps only its money `changes`
+(`amount`, `amountMinor`, `currency`), before and after. `currency` is the currency of the event's amounts: the recorded one, or,
 for an edit, the Expense's currency at the time. The shared path, query key
 and decoder are `userActivityPath`, `userActivityKey` and
 `parseUserActivityResponse` (`@splitbook/shared/user-activity-read`).

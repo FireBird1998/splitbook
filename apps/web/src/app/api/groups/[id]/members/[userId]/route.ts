@@ -10,7 +10,8 @@ import {
   readJson,
   routeIds,
 } from '@/lib/utils/api-response';
-import { groupService } from '@/lib/services/group.service';
+import { removalOpenBalance, removalRecurringProblem } from '@/lib/departure-refusals';
+import { groupService, RemovalBlockedError } from '@/lib/services/group.service';
 import { z } from 'zod/v4';
 
 const updateMemberSchema = z.object({
@@ -48,7 +49,9 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/groups/[id]/members/[userId] — Remove member from group
+// DELETE /api/groups/[id]/members/[userId] — Remove member from group. A member who owes or is
+// owed (#875), or whom a recurring Expense in its problem state still includes (#257), stays,
+// as they would to leave.
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string; userId: string }> },
@@ -69,6 +72,16 @@ export async function DELETE(
       return error('Cannot remove the last admin.', 409);
     if (err instanceof Error && err.message === 'SELF_REMOVE')
       return error('You cannot remove yourself. Use leave group instead.', 400);
+    if (err instanceof RemovalBlockedError)
+      return err.code === 'OPEN_BALANCE'
+        ? removalOpenBalance(err.memberName, err.balances)
+        : removalRecurringProblem(err.memberName, err.recurringExpenses);
+    if (err instanceof Error && err.message === 'REMOVAL_CONFLICT')
+      return error(
+        'This Group changed while you were removing this member. Try again.',
+        409,
+        'REMOVAL_CONFLICT',
+      );
     return serverError(err);
   }
 }

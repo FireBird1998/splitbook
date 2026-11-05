@@ -2,7 +2,8 @@
  * Integration tests for a member leaving a Group, against a real, isolated
  * MongoDB database (`splitbook-test-group-leave`). Covers the settle-up rule,
  * the last-admin and last-member cases, how Balances show former members, and
- * the recurring Expenses that fall due before a member leaves a Household.
+ * the recurring Expenses that fall due before a member leaves a Household or
+ * an admin removes them from it (#875).
  * Only the session is a stand-in for the route checks.
  */
 
@@ -25,6 +26,7 @@ import {
   toPeriod,
 } from '@splitbook/shared/recurring-due-periods';
 import { POST as leaveRoute } from '@/app/api/groups/[id]/leave/route';
+import { DELETE as removeRoute } from '@/app/api/groups/[id]/members/[userId]/route';
 
 const session = vi.hoisted(() => ({ userId: null as string | null }));
 vi.mock('next/headers', () => ({ headers: vi.fn(async () => new Headers()) }));
@@ -241,7 +243,8 @@ describe('Balances with former members', () => {
   it('names a removed member who still has a balance instead of "Unknown"', async () => {
     const groupId = await createTrip();
     await addExpense(groupId, alice, 300, [alice, bob, carol]);
-    await groupService.removeMember(groupId, carol, alice);
+    // Removed with the balance open, as removal allowed before #875: written directly.
+    await Group.updateOne({ _id: groupId }, { $pull: { members: { user: carol } } });
 
     const balances = await balanceService.getGroupBalances(groupId);
     const removed = balances!.balances.find((balance) => balance.user._id === carol);
@@ -302,6 +305,14 @@ async function householdWithRentDue() {
   return { groupId, templateId };
 }
 
+/** Archive the Household's Rent Tag, which puts its Rent in its problem state. */
+async function archiveRentTag(groupId: string) {
+  const group = await groupService.getById(groupId);
+  const rentTag = group!.tags.find((tag) => tag.name === 'Rent')!;
+  await groupService.updateTag(groupId, String(rentTag._id), { isArchived: true }, alice);
+  return String(rentTag._id);
+}
+
 function rentFor(templateId: string, period: string) {
   return Expense.countDocuments({ recurringExpense: templateId, period, isDeleted: false });
 }
@@ -310,6 +321,18 @@ async function leaveThroughRoute(groupId: string, userId: string) {
   session.userId = userId;
   const request = new Request(`http://localhost/api/groups/${groupId}/leave`, { method: 'POST' });
   const response = await leaveRoute(request, { params: Promise.resolve({ id: groupId }) });
+  return { status: response.status, body: await response.json() };
+}
+
+/** `actorId` removes `userId` through `DELETE /api/groups/[id]/members/[userId]`. */
+async function removeThroughRoute(groupId: string, actorId: string, userId: string) {
+  session.userId = actorId;
+  const request = new Request(`http://localhost/api/groups/${groupId}/members/${userId}`, {
+    method: 'DELETE',
+  });
+  const response = await removeRoute(request, {
+    params: Promise.resolve({ id: groupId, userId }),
+  });
   return { status: response.status, body: await response.json() };
 }
 
@@ -412,22 +435,94 @@ describe('leaving a Household with a recurring Expense due', () => {
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
   });
 
-  it('does not hold up the leave for a template in its problem state', async () => {
+  it('refuses the leave while a recurring Expense in its problem state includes the member (#257)', async () => {
+    // The Rent's Tag is archived, so the Rent is in its problem state and this month's Rent is
+    // not added. Bob is otherwise settled up.
     const { groupId, templateId } = await householdWithRentDue();
-    const group = await groupService.getById(groupId);
-    const rentTag = group!.tags.find((tag) => tag.name === 'Rent')!;
-    await groupService.updateTag(groupId, String(rentTag._id), { isArchived: true }, alice);
+    const rentTagId = await archiveRentTag(groupId);
 
-    // The Rent no longer validates, so it is skipped as reads skip it, and the run
-    // still counts as finished.
-    expect(await recurringExpenseService.materializeDueExpenses(groupId)).toEqual({
-      generated: 0,
-      complete: true,
+    const blocked = await blockedCode(groupService.leave(groupId, bob));
+
+    expect(blocked.code).toBe('RECURRING_EXPENSE_PROBLEM');
+    expect(blocked.recurringExpenses).toEqual([{ id: templateId, description: 'Rent' }]);
+    expect(await memberIds(groupId)).toEqual([alice, bob, carol].sort());
+    expect(await Activity.countDocuments({ group: groupId, type: 'member_left' })).toBe(0);
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
+
+    // Once an admin restores the Tag, this month's Rent is added with Bob's share in it, so
+    // the members who stay never carry it. Bob leaves when he has paid it.
+    await groupService.updateTag(groupId, rentTagId, { isArchived: false }, alice);
+    const owing = await blockedCode(groupService.leave(groupId, bob));
+    expect(owing.code).toBe('OPEN_BALANCE');
+    expect(owing.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
+    await settlementService.create(groupId, { paidTo: alice, amount: 10000, currency: 'INR' }, bob);
+    await expect(groupService.leave(groupId, bob)).resolves.toEqual({ archived: false });
+    expect(await memberIds(groupId)).toEqual([alice, carol].sort());
+  });
+
+  it('answers 409 RECURRING_EXPENSE_PROBLEM through the route, naming the recurring Expense', async () => {
+    const { groupId, templateId } = await householdWithRentDue();
+    await archiveRentTag(groupId);
+
+    expect(await leaveThroughRoute(groupId, bob)).toEqual({
+      status: 409,
+      body: {
+        error:
+          'Rent (recurring) still includes you. Ask an admin to remove you from it, then leave.',
+        status: 409,
+        code: 'RECURRING_EXPENSE_PROBLEM',
+        recurringExpenses: [{ id: templateId, description: 'Rent' }],
+      },
     });
+  });
+
+  it('asks an admin who leaves to remove themselves from it', async () => {
+    const { groupId } = await householdWithRentDue();
+    await groupService.updateMemberRole(groupId, carol, 'admin', alice);
+    await archiveRentTag(groupId);
+
+    const refused = await leaveThroughRoute(groupId, alice);
+
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toBe(
+      'Rent (recurring) still includes you. Remove yourself from it, then leave.',
+    );
+  });
+
+  it('lets the member leave once an admin removes them from it, though it still has a problem', async () => {
+    const { groupId, templateId } = await householdWithRentDue();
+    await archiveRentTag(groupId);
+    await recurringExpenseService.update(
+      groupId,
+      templateId,
+      { splitMethod: 'equal', splitBetween: [{ user: alice }, { user: carol }] },
+      alice,
+    );
+
     await expect(groupService.leave(groupId, bob)).resolves.toEqual({ archived: false });
 
     expect(await memberIds(groupId)).toEqual([alice, carol].sort());
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
+  });
+
+  it('checks only where recurring Expenses run: not while they are switched off', async () => {
+    const { groupId } = await householdWithRentDue();
+    await archiveRentTag(groupId);
+    vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'false');
+    try {
+      await expect(groupService.leave(groupId, bob)).resolves.toEqual({ archived: false });
+    } finally {
+      vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'true');
+    }
+  });
+
+  it('checks only where recurring Expenses run: not in an archived Household', async () => {
+    const { groupId } = await householdWithRentDue();
+    await archiveRentTag(groupId);
+    await groupService.archive(groupId, alice);
+
+    await expect(groupService.leave(groupId, bob)).resolves.toEqual({ archived: false });
   });
 
   it('adds nothing first when the Household is archived', async () => {
@@ -437,6 +532,77 @@ describe('leaving a Household with a recurring Expense due', () => {
     await expect(groupService.leave(groupId, bob)).resolves.toEqual({ archived: false });
 
     expect(await memberIds(groupId)).toEqual([alice, carol].sort());
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
+  });
+});
+
+describe('removing a member from a Household with a recurring Expense due (#875)', () => {
+  it('adds this month’s Rent before checking Balances, so the member who owes it stays', async () => {
+    const { groupId, templateId } = await householdWithRentDue();
+
+    expect(await removeThroughRoute(groupId, alice, bob)).toEqual({
+      status: 409,
+      body: {
+        error: 'Bob Tester owes ₹10,000.00 in this Group. Settle up before removing them.',
+        status: 409,
+        code: 'OPEN_BALANCE',
+        balances: [{ currency: 'INR', amount: -10000 }],
+      },
+    });
+
+    expect(await memberIds(groupId)).toEqual([alice, bob, carol].sort());
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
+    expect(await Activity.countDocuments({ group: groupId, type: 'member_left' })).toBe(0);
+  });
+
+  it('removes the member once they pay this month’s share, without a second Rent', async () => {
+    const { groupId, templateId } = await householdWithRentDue();
+    expect((await removeThroughRoute(groupId, alice, bob)).status).toBe(409);
+    await settlementService.create(groupId, { paidTo: alice, amount: 10000, currency: 'INR' }, bob);
+
+    expect(await removeThroughRoute(groupId, alice, bob)).toEqual({
+      status: 200,
+      body: { data: { message: 'Member removed' }, status: 200 },
+    });
+    expect(await memberIds(groupId)).toEqual([alice, carol].sort());
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
+  });
+
+  it('refuses the removal while a recurring Expense in its problem state includes the member (#257)', async () => {
+    const { groupId, templateId } = await householdWithRentDue();
+    await archiveRentTag(groupId);
+
+    expect(await removeThroughRoute(groupId, alice, bob)).toEqual({
+      status: 409,
+      body: {
+        error:
+          'Rent (recurring) still includes Bob Tester. Remove them from it before removing them from the Group.',
+        status: 409,
+        code: 'RECURRING_EXPENSE_PROBLEM',
+        recurringExpenses: [{ id: templateId, description: 'Rent' }],
+      },
+    });
+    expect(await memberIds(groupId)).toEqual([alice, bob, carol].sort());
+  });
+
+  it('refuses the removal when adding due Expenses does not finish', async () => {
+    const { groupId, templateId } = await householdWithRentDue();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(Expense, 'create').mockImplementationOnce(() =>
+      Promise.reject(new Error('Expense store unavailable')),
+    );
+
+    expect(await removeThroughRoute(groupId, alice, bob)).toEqual({
+      status: 409,
+      body: {
+        error: 'This Group changed while you were removing this member. Try again.',
+        status: 409,
+        code: 'REMOVAL_CONFLICT',
+      },
+    });
+
+    expect(await memberIds(groupId)).toEqual([alice, bob, carol].sort());
+    expect(await Activity.countDocuments({ group: groupId, type: 'member_left' })).toBe(0);
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
   });
 });

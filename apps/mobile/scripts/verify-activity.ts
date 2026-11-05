@@ -189,6 +189,14 @@ async function run() {
         .activity.events.filter((event) => event.type === 'settlement_recorded').length,
       1,
     );
+    // Sam is owed the ₹5 he paid for an Expense since deleted. Alex pays it back, so Sam is
+    // settled up and can be removed (#875).
+    await alex.request(
+      `/api/groups/${fixture.groupId}/settlements`,
+      'POST',
+      { paidBy: alexId, paidTo: samId, amount: 5, currency: 'INR', note: 'Paid back' },
+      201,
+    );
     await alex.request(`/api/groups/${fixture.groupId}/members/${samId}`, 'DELETE');
     await controller.refresh();
     assert.equal(controller.getSnapshot().activity.status, 'denied');
@@ -206,7 +214,8 @@ async function run() {
     assert.equal(removal.actor?._id, alexId);
     assert.equal(removal.metadata.userId, samId);
     assert.equal(removal.metadata.method, 'removed');
-    assert.equal(formatActivityHeadline(removal), 'Alex Rivera removed a member from the group');
+    assert.equal(removal.metadata.userName, 'Sam Chen');
+    assert.equal(formatActivityHeadline(removal), 'Alex Rivera removed Sam Chen from the group');
     await controller.selectActivity(removal._id);
     assert.equal(controller.getSnapshot().activity.selected?.metadata.userId, samId);
     assert.equal(controller.getSnapshot().activity.target.status, 'none');

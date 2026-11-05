@@ -261,6 +261,15 @@ describe('GET /api/user/activity', () => {
     });
   });
 
+  it('names the member an admin removed by name only (#875)', async () => {
+    const ferry = await createGroup('Ferry Trip', alice, bob);
+    await groupService.removeMember(ferry, bob, alice);
+
+    const read = await latest(alice);
+    expect(read.activities[0]).toMatchObject({ type: 'member_left', actor: { _id: alice } });
+    expect(read.activities[0].metadata).toEqual({ userName: 'Bob Tester', method: 'removed' });
+  });
+
   it('carries the Assistant rule an admin set, for its line in the latest changes (#621)', async () => {
     const ferry = await createGroup('Ferry Trip', alice, bob);
     await groupService.setAssistantRule(ferry, 'not_allowed', alice);

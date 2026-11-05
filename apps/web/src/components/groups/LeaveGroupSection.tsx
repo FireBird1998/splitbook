@@ -2,7 +2,6 @@
 
 import { useToReview } from '@/components/to-review/use-to-review';
 import { useState } from 'react';
-import Link from 'next/link';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -19,17 +18,12 @@ import { unsupportedMoneyOnLeave } from '@splitbook/shared/group-currencies';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { fetchWebBalances } from '@/lib/web-read';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
-import { groupTabHref } from './group-tabs';
+import RefusalAlert, { refusalFrom, type Refusal } from './RefusalAlert';
 
 interface LeaveGroupSectionProps {
   groupId: string;
   groupName: string;
   memberCount?: number;
-}
-
-interface Refusal {
-  message: string;
-  code?: string;
 }
 
 /**
@@ -79,14 +73,12 @@ export default function LeaveGroupSection({
         window.location.href = '/dashboard';
         return;
       }
-      const body: unknown = await res.json().catch(() => null);
-      const { error, code } = (body ?? {}) as { error?: unknown; code?: unknown };
-      if (code === 'GROUP_DELETION_CONFIRMATION_REQUIRED') setDeleteIfLastMember(true);
-      setRefusal({
-        message:
-          typeof error === 'string' && error ? error : 'Could not leave the Group. Try again.',
-        code: typeof code === 'string' ? code : undefined,
-      });
+      const refused = refusalFrom(
+        await res.json().catch(() => null),
+        'Could not leave the Group. Try again.',
+      );
+      if (refused.code === 'GROUP_DELETION_CONFIRMATION_REQUIRED') setDeleteIfLastMember(true);
+      setRefusal(refused);
     } catch {
       setRefusal({ message: 'Could not leave the Group. Check your connection and try again.' });
     } finally {
@@ -138,21 +130,7 @@ export default function LeaveGroupSection({
               {unsupportedNote}
             </Alert>
           )}
-          {refusal && (
-            <Alert
-              severity="warning"
-              sx={{ mt: 2 }}
-              action={
-                refusal.code === 'OPEN_BALANCE' ? (
-                  <Button component={Link} href={groupTabHref(groupId, 'balances')} size="small">
-                    Go to Balances
-                  </Button>
-                ) : undefined
-              }
-            >
-              {refusal.message}
-            </Alert>
-          )}
+          {refusal && <RefusalAlert groupId={groupId} refusal={refusal} sx={{ mt: 2 }} />}
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           <Button onClick={close} color="inherit" disabled={leaving}>

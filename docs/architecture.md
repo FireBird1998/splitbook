@@ -316,7 +316,10 @@ check _role_. Expense mutation stops at membership.
 > member that has a recurring template, one Group after another, so Home and the
 > sidebar agree with each Group's page. Leaving a Group
 > (`POST /api/groups/[id]/leave`) materializes too, before its settle-up check,
-> and is refused with `LEAVE_CONFLICT` when that run didn't finish (#253). An
+> and is refused with `LEAVE_CONFLICT` when that run didn't finish (#253); an
+> admin removing a member does the same, refused with `REMOVAL_CONFLICT` (#875).
+> Both are also refused while a template in its problem state includes the
+> member, whose missed months it would add without them once repaired (#257). An
 > archived Group generates nothing on any of these reads or a leave, and its
 > templates' markers don't move, so a member who still has an archived Household
 > open never adds a month's Expenses to it.

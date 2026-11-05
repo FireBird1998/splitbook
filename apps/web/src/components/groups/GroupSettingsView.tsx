@@ -45,6 +45,7 @@ import ErrorState from '@/components/common/ErrorState';
 import { validateTripDates } from '@splitbook/shared/trip-setup';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
 import RecurringExpensesSection from '@/components/groups/RecurringExpensesSection';
+import RefusalAlert, { refusalFrom, type Refusal } from '@/components/groups/RefusalAlert';
 import { apiFetch } from '@/lib/utils/api-fetch';
 
 interface GroupSettingsViewProps {
@@ -87,6 +88,7 @@ function GroupSettingsContent({
   const [memberMenuAnchor, setMemberMenuAnchor] = useState<HTMLElement | null>(null);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [memberLoading, setMemberLoading] = useState(false);
+  const [memberRefusal, setMemberRefusal] = useState<Refusal | null>(null);
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteLinkLoading, setInviteLinkLoading] = useState(false);
@@ -232,6 +234,7 @@ function GroupSettingsContent({
   const handleMemberAction = async (action: 'promote' | 'demote' | 'remove') => {
     if (!selectedMember) return;
     setMemberLoading(true);
+    setMemberRefusal(null);
     try {
       const res =
         action === 'remove'
@@ -248,7 +251,9 @@ function GroupSettingsContent({
       // Refresh either way: a rejection usually means the member list is stale.
       mutate();
       if (!res.ok) {
-        setSnackbar({ open: true, message: await failureMessage(res, 'Action failed') });
+        // Why it was refused can take a sentence, such as what a member still owes (#875):
+        // it stays on the page until dismissed.
+        setMemberRefusal(refusalFrom(await res.json().catch(() => null), 'Action failed'));
         return;
       }
       setSnackbar({
@@ -498,6 +503,15 @@ function GroupSettingsContent({
               </Stack>
             ))}
           </Stack>
+
+          {memberRefusal && (
+            <RefusalAlert
+              groupId={groupId}
+              refusal={memberRefusal}
+              onClose={() => setMemberRefusal(null)}
+              sx={{ mt: 2 }}
+            />
+          )}
 
           {/* Member action menu */}
           <Menu

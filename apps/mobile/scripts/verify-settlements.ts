@@ -267,6 +267,13 @@ async function run() {
       'PASS: recovered payment appears once in the native Activity controller after authoritative refresh.',
     );
     await start('1', 'Revoked member payment');
+    // Sam pays what he still owes first, elsewhere, so Alex can remove him (#875).
+    await sam.request(
+      settlements,
+      'POST',
+      { paidBy: samId, paidTo: alexId, amount: 6.88, currency: 'INR', note: 'Settled up' },
+      201,
+    );
     await alex.request(`${path}/members/${samId}`, 'DELETE');
     count = writes.length;
     await controller.recordSettlement();
