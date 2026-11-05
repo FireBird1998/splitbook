@@ -760,8 +760,9 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     ))
       expect(node.props.accessibilityLabel).toBeTruthy();
   });
-  it('preserves existing invalid payer guidance while blocking save (#712)', async () => {
+  it('says the same person is listed twice, not that Claude didn’t know who paid (#716)', async () => {
     const f = fixture({ one: true });
+    // ₹12.34 paid as ₹6.17 + ₹6.17, both by Alex.
     f.items()[0].draft.values!.paidBy = [
       { user: user.id, amount: 6.17 },
       { user: user.id, amount: 6.17 },
@@ -771,8 +772,13 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       await f.controller.startReviewRun();
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
-    expect(text(tree)).toContain('who paid');
-    expect(text(tree)).toContain('Claude didn’t know who paid');
+    expect(text(tree)).toContain('One thing left before you can save: who paid');
+    // Its tile asks for the payer as for a missing one, never "2 people" for one person twice.
+    expect(text(tree)).not.toContain('2 people');
+    expect(text(tree)).toContain('The same person is listed twice. Choose who paid.');
+    expect(text(tree)).not.toContain('didn’t know who paid');
+    // The tile still asks for the payer, and saving stays off until they're chosen.
+    expect(text(tree)).toContain('Who paid? · Choose');
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
   });
   it('names a split that does not add up, not a missing amount (#506)', async () => {

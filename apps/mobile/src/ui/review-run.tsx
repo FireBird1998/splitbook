@@ -15,6 +15,8 @@ import {
   summarizeReviewRun,
   describeDraftChange,
   needsAmount,
+  payerListedTwice,
+  PAYER_LISTED_TWICE,
   type ReviewNeed,
 } from '@splitbook/shared/to-review';
 import {
@@ -72,7 +74,6 @@ import { fonts, useTheme } from './theme';
 import { reviewedItemsLine } from './review-run-copy';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
-/** As entered, never rounded: the Needs line says when it has too many decimals (#537). */
 /**
  * An amount as its field shows it, with its currency's places, as Add expense does: 18.4 in euros
  * is "18.40" (#874). One with more places than the currency has stays as entered (#537).
@@ -84,6 +85,7 @@ function amountText(amount: string, currency: string) {
   return fraction.length >= places ? amount : `${whole}.${fraction.padEnd(places, '0')}`;
 }
 
+/** As entered, never rounded: the Needs line says when it has too many decimals (#537). */
 function money(amount: number | undefined, currency: string | undefined) {
   if (amount === undefined || !currency) return 'Amount needed';
   return formatCurrencyAsEntered(amount, currency);
@@ -590,11 +592,12 @@ function ReviewRunContent({
           locked={locked}
           errors={{
             date: hasNeed('date') ? 'Choose a date' : undefined,
-            payers: hasNeed('paidBy')
-              ? 'Who paid? · Choose'
-              : hasNeed('paidBy', 'payer-total')
-                ? 'Must add up to the total'
-                : undefined,
+            payers:
+              hasNeed('paidBy') || hasNeed('paidBy', 'listed-twice')
+                ? 'Who paid? · Choose'
+                : hasNeed('paidBy', 'payer-total')
+                  ? 'Must add up to the total'
+                  : undefined,
             // A split that is there but doesn't add up says so, not "Choose" (#506).
             split:
               hasNeed('splitBetween') || hasNeed('splitMethod')
@@ -608,7 +611,11 @@ function ReviewRunContent({
           }}
           values={{
             date: expenseDateLabel(form.date, controller.reviewNow()),
-            payers: values.paidBy?.length ? paidBySummary(form, person) : 'Choose',
+            // One person listed twice isn't "2 people": the tile asks, as for no payer (#716).
+            payers:
+              values.paidBy?.length && !payerListedTwice(model.needs)
+                ? paidBySummary(form, person)
+                : 'Choose',
             split: values.splitMethod ? splitSummary(form) : 'Choose',
             tag:
               state.context?.tags.find((tag) => tag.id === form.tagId)?.name ??
@@ -627,9 +634,14 @@ function ReviewRunContent({
         <OptionalDetails draft={form} locked={locked} onChange={change} />
         {!!model.needs.length && (
           <Banner tone="warning" message={reason ?? ''}>
-            {hasNeed('paidBy') && assistant ? (
+            {/* Only a payer that is really missing is one the assistant didn't know (#716). */}
+            {hasNeed('paidBy', 'missing') && assistant ? (
               <CompactText variant="small" tone="secondary" style={{ paddingLeft: 4 }}>
                 {assistant} didn’t know who paid, so it left that to you
+              </CompactText>
+            ) : payerListedTwice(model.needs) ? (
+              <CompactText variant="small" tone="secondary" style={{ paddingLeft: 4 }}>
+                {PAYER_LISTED_TWICE}
               </CompactText>
             ) : null}
           </Banner>

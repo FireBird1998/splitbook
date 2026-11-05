@@ -5,6 +5,8 @@ import {
   reviewDate,
   memberProblems,
   needsAmount,
+  payerListedTwice,
+  PAYER_LISTED_TWICE,
   reviewProblem,
   reviewSplitMethod,
   summarizeReviewRun,
@@ -840,6 +842,88 @@ describe('a fact that is there but wrong (#506)', () => {
       'The amount can have at most 2 decimal places.',
       'The amount must be a whole number.',
     ]);
+  });
+});
+
+describe('payers that name the same person twice (#716)', () => {
+  /** ₹12.34 paid as ₹6.17 and ₹6.17 by one member, as a Draft review sends it. */
+  const doubled = (preparedBy: ToReviewItem['draft']['preparedBy']) => {
+    const base = item(1);
+    return buildToReview(
+      read([
+        {
+          ...base,
+          draft: {
+            ...base.draft,
+            preparedBy,
+            missingFields: ['paidBy'],
+            values: {
+              ...base.draft.values,
+              amount: 12.34,
+              currency: 'INR',
+              paidBy: [
+                { user: member, amount: 6.17 },
+                { user: member, amount: 6.17 },
+              ],
+            },
+          },
+          problems: ['paidBy: Each person can appear only once'],
+        },
+      ]),
+      [],
+      now,
+    ).items[0];
+  };
+
+  it('says the same person is listed twice, never that an assistant didn’t know who paid', () => {
+    const model = doubled({ kind: 'assistant', name: 'Claude' });
+
+    expect(model.state).toBe('needs-details');
+    expect(model.needs).toEqual([{ field: 'paidBy', reason: 'listed-twice' }]);
+    expect(payerListedTwice(model.needs)).toBe(true);
+    expect(PAYER_LISTED_TWICE).toBe('The same person is listed twice. Choose who paid.');
+    // It still needs who paid, but nothing was left out.
+    expect([model.missingFacts, model.unknownFacts]).toEqual([['who paid'], []]);
+    expect(model.label).toBe('Needs who paid');
+    // The Needs line already names the payer, so the problem isn't said again.
+    expect(memberProblems(model)).toEqual([]);
+  });
+
+  it('keeps “didn’t know who paid” for a payer that is really missing', () => {
+    const base = item(1);
+    const values = { ...base.draft.values };
+    delete values.paidBy;
+    const [model] = buildToReview(
+      read([
+        {
+          ...base,
+          draft: {
+            ...base.draft,
+            preparedBy: { kind: 'assistant', name: 'Claude' },
+            missingFields: ['paidBy'],
+            values,
+          },
+          problems: ['paidBy: Choose who paid.'],
+        },
+      ]),
+      [],
+      now,
+    ).items;
+
+    expect(model.needs).toEqual([{ field: 'paidBy', reason: 'missing' }]);
+    expect(model.unknownFacts).toEqual(['who paid']);
+    expect(payerListedTwice(model.needs)).toBe(false);
+  });
+
+  it('says it in the same words wherever the problem is shown alone', () => {
+    expect(
+      [
+        'paidBy: Each person can appear only once',
+        'Invalid Draft: paidBy: Each person can appear only once',
+        // Someone in the split twice keeps its own words.
+        'splitBetween: Each person can appear only once',
+      ].map((problem) => reviewProblem(problem)),
+    ).toEqual([PAYER_LISTED_TWICE, PAYER_LISTED_TWICE, 'Choose each member only once.']);
   });
 });
 

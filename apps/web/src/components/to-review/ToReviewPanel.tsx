@@ -16,7 +16,12 @@ import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { type DraftContext } from '@splitbook/shared/persistent-draft-editor';
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
-import { memberProblems, type ReviewItemModel } from '@splitbook/shared/to-review';
+import {
+  memberProblems,
+  payerListedTwice,
+  PAYER_LISTED_TWICE,
+  type ReviewItemModel,
+} from '@splitbook/shared/to-review';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
 import { RADIUS } from '@/lib/theme/tokens';
 import { useReviewEditor } from './use-review-editor';
@@ -172,6 +177,10 @@ export default function ToReviewPanel({
               didn’t know {fact}, so it left that to you.
             </Typography>
           ))}
+        {/* Payers that name one member twice were there, just wrong (#716). */}
+        {payerListedTwice(item.needs) && (
+          <Typography variant="body2">{PAYER_LISTED_TWICE}</Typography>
+        )}
         <Box
           component="fieldset"
           disabled={blocked || !available}
