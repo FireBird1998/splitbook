@@ -54,6 +54,7 @@ import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import { recentDay } from './day-format';
 import { ChangeCurrencySheet, UnlistedCurrencySheet, type UnlistedItem } from './review-currency';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 const offlineMessage =
   'You’re offline. What Claude prepared and what you set aside show up when you’re back online';
@@ -86,7 +87,7 @@ function unlistedItem(item: ReviewItemModel, currency: string): UnlistedItem {
       : null;
   return {
     description: values?.description || 'Expense to review',
-    detail: [sourceLabel(item), date].filter(Boolean).join(' · '),
+    detail: [sourceLabel(item), date].filter(Boolean).join(SEPARATOR),
     amount: values?.amount,
     currency,
     alsoNeeds: [
@@ -100,7 +101,7 @@ function unlistedItem(item: ReviewItemModel, currency: string): UnlistedItem {
 }
 function sourceLabel(item: ReviewItemModel) {
   if (item.id.startsWith('save:')) return 'Save awaiting confirmation';
-  if (item.deviceItem) return 'Unfinished · only on this phone';
+  if (item.deviceItem) return `Unfinished${SEPARATOR}only on this phone`;
   const source = item.accountItem?.draft.preparedBy;
   return source?.kind === 'assistant' ? `Prepared by ${source.name}` : 'Set aside by you';
 }
@@ -208,8 +209,8 @@ function ItemRow({
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
           <CompactText variant="caption" tone="secondary">
             {sourceLabel(item)}
-            {date ? ` · ${date}` : ''}
-            {groupName ? ` · ${groupName}` : ''}
+            {date ? `${SEPARATOR}${date}` : ''}
+            {groupName ? `${SEPARATOR}${groupName}` : ''}
           </CompactText>
           {badge ? <Badge label={badge} tone="warning" /> : null}
         </View>
@@ -389,7 +390,8 @@ export function ToReviewHomeCard({
           spare
           style={headingBeside}
         >
-          To review · {model.counts.total}
+          To review{SEPARATOR}
+          {model.counts.total}
         </CompactText>
         <CompactText variant="caption" tone="secondary" spare>
           Only you see these
@@ -510,7 +512,7 @@ export function ToReviewGroupBanner({
   if (!group) return null;
   const summary = [group.bannerSummary, state.offline ? 'On this phone' : null]
     .filter(Boolean)
-    .join(' · ');
+    .join(SEPARATOR);
   return (
     <Pressable
       accessibilityRole="button"
@@ -923,7 +925,7 @@ export function ToReviewList({
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <TopBar
           title="To review"
-          subtitle={`${groupName} · ${
+          subtitle={`${groupName}${SEPARATOR}${
             model.counts.total === 0
               ? 'nothing waiting'
               : `${model.counts.total} ${model.counts.total === 1 ? 'item' : 'items'}`
@@ -1092,7 +1094,7 @@ export function ToReviewList({
                     if (!items.length) return null;
                     return (
                       <View key={kind} style={{ gap: 6 }}>
-                        <SectionHeader title={`${label} · ${items.length}`} />
+                        <SectionHeader title={`${label}${SEPARATOR}${items.length}`} />
                         {kind === 'needs-details' && payers.length >= 2 && (
                           <Banner
                             tone="info"
@@ -1330,7 +1332,7 @@ export function ToReviewList({
                     : 'Set aside by you',
                 ]
                   .filter(Boolean)
-                  .join(' · ');
+                  .join(SEPARATOR);
                 return (
                   <View key={item.draft.id}>
                     {index > 0 && <Divider inset={0} />}

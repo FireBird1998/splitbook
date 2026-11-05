@@ -21,6 +21,7 @@ import {
   layoutHeight,
   layoutWidth,
   middleCutEnd,
+  outerTexts,
   unreadText,
   wordsOf,
 } from '../test-utils/layout';
@@ -755,11 +756,11 @@ describe('a payment in another currency’s record (#728)', () => {
     const { root, update } = render({ state: activity({ events: [zloty] }) });
     // The row reads the whole payment, its rate included.
     const row = buttons(root).find((label) => label?.includes('Sam Chen'))!;
-    expect(row).toContain('PLN\u00a060.00, at the suggested ₹20.826267 per PLN (20 Oct)');
+    expect(row).toContain('PLN\u00a060.00, at the suggested ₹20.826267 per\u00a0PLN (20\u00a0Oct)');
     update({ state: activity({ events: [zloty], selected: zloty }) });
     const record = text(root);
     expect(record).toContain('to clear PLN\u00a060.00, a Debt in PLN');
-    expect(record).toContain('₹20.826267 per PLN');
+    expect(record).toContain('₹20.826267 per\u00a0PLN');
     for (const shown of [row, record]) expect(shown).not.toContain('zł');
   });
 
@@ -787,11 +788,11 @@ describe('a payment in another currency’s record (#728)', () => {
       '₹1,850.00',
       'to clear €20.00, a Debt in EUR',
       'Rate used',
-      '₹92.50 per €',
+      '₹92.50 per\u00a0€',
       'Your rate',
       'Suggested',
-      '₹92.10 per €',
-      'Frankfurter · rates of 20 Oct · fetched 21 Oct 06:00',
+      '₹92.10 per\u00a0€',
+      'Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched 21 Oct 06:00',
       'Amount cleared',
       '€20.00',
       'Amount paid',
@@ -817,7 +818,7 @@ describe('a payment in another currency’s record (#728)', () => {
       state: activity({ selected: payment({ rateSource: 'exchange-rate-api' }) }),
       onOpenLink,
     });
-    expect(text(root)).toContain('Rates of 20 Oct · fetched 21 Oct 06:00');
+    expect(text(root)).toContain('Rates of 20 Oct\u00a0· fetched 21 Oct 06:00');
     const [link] = labelled(root, 'Rates By Exchange Rate API');
     expect(link?.props.accessibilityRole).toBe('link');
     act(() => link!.props.onPress());
@@ -840,7 +841,7 @@ describe('a payment in another currency’s record (#728)', () => {
     });
     const shown = text(root);
     expect(shown).toContain('No suggestion');
-    expect(shown).not.toContain('per €Suggested');
+    expect(shown).not.toContain('per\u00a0€Suggested');
     expect(shown).not.toContain('You and Sam in EUR:');
     expect(shown).toContain('INR balances didn’t change. Only the Debt’s own currency moves.');
   });
@@ -916,7 +917,7 @@ describe.each(['light', 'dark'] as const)(
       const tree = screen!.toJSON() as ReactTestRendererJSON;
       const words = (node: ReactTestRendererJSON | string): string =>
         typeof node === 'string' ? node : (node.children ?? []).map(words).join('');
-      expect(words(tree)).toContain('You → Sam Chen · €20.00 · Wed 21 Oct 2026, 10:20');
+      expect(words(tree)).toContain('You → Sam Chen\u00a0· €20.00\u00a0· Wed 21 Oct 2026, 10:20');
       // The screen's content is inset 16dp on each side.
       expect(unreadText(tree, size.fontScale, size.width - 32)).toEqual([]);
     });
@@ -1052,12 +1053,37 @@ describe('a payment that settled several Debts at once (#734)', () => {
     const rows = buttons(root).filter((label) => label?.includes('Sam Chen'));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toContain(whole);
-    expect(rows[0]).toContain('€20.00 at the suggested ₹92.10 per € (20 Oct)');
+    expect(rows[0]).toContain('€20.00 at the suggested ₹92.10 per\u00a0€ (20\u00a0Oct)');
     expect(text(root)).not.toContain('recorded a payment');
     act(() => button(root, rows[0]!)[0]!.props.onPress());
     // The row is where the payment is in the feed: at its newest event.
     expect(onSelect).toHaveBeenCalledWith(euros._id);
   });
+
+  // #892: at 150% and 200% a line began "· €20.00 at the" or "· 3:55 PM", and "(4 Nov)" and
+  // "per €" split. A line breaks only at an ordinary space: a no-break space keeps each dot with
+  // what comes before it, and those words together.
+  it.each([1.5, 2])(
+    'never starts a line with a dot, or splits “per\u00a0€” or “(20\u00a0Oct)”, at %s× text (#892)',
+    (fontScale) => {
+      setWindow({ width: 360, height: 640, fontScale });
+      render({
+        state: activity({
+          events: [euros, rupees, ...events.slice(0, 2)],
+          pagination: { page: 1, limit: 20, total: 4, totalPages: 1 },
+        }),
+      });
+      const lines = outerTexts(screen!.toJSON() as ReactTestRendererJSON).map(wordsOf);
+      const dotted = lines.filter((words) => words.includes('·'));
+      // The batch's details, and each row's time after them.
+      expect(dotted.length).toBeGreaterThanOrEqual(3);
+      expect(lines.join('\n')).toContain('at the suggested ₹92.10 per\u00a0€ (20\u00a0Oct)');
+      for (const words of lines) {
+        expect(words, words).not.toMatch(/(^|[ \n])·/);
+        expect(words, words).not.toMatch(/per [€₹¥$A-Z]|\(\d+ [A-Z][a-z]{2}\)/);
+      }
+    },
+  );
 
   // #792: a batch's row has details, so from 130% its avatar keeps beside the headline.
   it('keeps its avatar beside its headline at 130% text (#792)', () => {
@@ -1295,7 +1321,9 @@ describe.each(['light', 'dark'] as const)('Activity rows at large text in %s (#8
     }
     // The batch's headline names every Debt it cleared, and its details each Debt's rate.
     expect(wordsOf(row(rows.batch))).toContain('₹1,480.00, €15.00, ¥2,500 and £10.00');
-    expect(wordsOf(row(rows.batch))).toContain('£10.00 at the suggested ₹110.25 per £ (20 Oct)');
+    expect(wordsOf(row(rows.batch))).toContain(
+      '£10.00 at the suggested ₹110.25 per\u00a0£ (20\u00a0Oct)',
+    );
   });
 
   it.each([1, 1.3])(
@@ -1324,7 +1352,7 @@ describe.each(['light', 'dark'] as const)('Activity rows at large text in %s (#8
       // past two lines here, so the cut takes them, not the time.
       const time = lines(rows.batch).find(({ words }) => words.includes('3:18 PM'));
       expect(Number(time!.text.props.numberOfLines) || 0).toBe(0);
-      expect(time!.words.replaceAll(hairSpace, '')).toBe(' · 3:18 PM');
+      expect(time!.words.replaceAll(hairSpace, '')).toBe('\u00a0· 3:18 PM');
       const debts = lines(rows.batch).find(
         ({ text, words }) => Number(text.props.numberOfLines) === 2 && words.includes('at the'),
       )!;

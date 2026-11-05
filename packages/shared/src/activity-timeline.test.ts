@@ -428,9 +428,9 @@ describe('a Debt paid in another currency in Activity (#727)', () => {
 
   it('says both amounts and the rate, with the viewer as You', () => {
     expect(formatActivityHeadline(paid(), alex._id)).toBe(
-      'You paid Sam Chen ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
+      'You paid Sam Chen ₹1,850.00 to clear €20.00 at ₹92.50 per\u00a0€, suggested ₹92.10 (20\u00a0Oct)',
     );
-    expect(formatActivityDetail(paid(), alex._id)).toBe('Settlement · EUR Debt paid in INR');
+    expect(formatActivityDetail(paid(), alex._id)).toBe('Settlement\u00a0· EUR Debt paid in INR');
   });
 
   it('shows the rates to at most six places, as the sheet and the card do (#727 review)', () => {
@@ -443,7 +443,7 @@ describe('a Debt paid in another currency in Activity (#727)', () => {
       suggestedRate: '91.9',
     });
     expect(formatActivityHeadline(uneven, alex._id)).toBe(
-      'You paid Sam Chen ₹1,596.09 to clear €17.33 at ₹92.099827 per €, suggested ₹91.90 (20 Oct)',
+      'You paid Sam Chen ₹1,596.09 to clear €17.33 at ₹92.099827 per\u00a0€, suggested ₹91.90 (20\u00a0Oct)',
     );
   });
 
@@ -457,7 +457,7 @@ describe('a Debt paid in another currency in Activity (#727)', () => {
       rateKind: 'suggested',
     });
     expect(formatActivityHeadline(older, alex._id)).toBe(
-      'You paid Sam Chen ₹1,596.09 to clear €17.33 at the suggested ₹92.10 per € (20 Oct)',
+      'You paid Sam Chen ₹1,596.09 to clear €17.33 at the suggested ₹92.10 per\u00a0€ (20\u00a0Oct)',
     );
   });
 

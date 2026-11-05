@@ -186,9 +186,9 @@ describe('To review model', () => {
     own.draft.values = {};
     own.draft.missingFields = ['paidBy'];
     const model = buildToReview(read([a, b, c, own]), [], now);
-    expect(model.sourceSummary).toBe('1 from ChatGPT · 2 from Claude · 1 needs details');
+    expect(model.sourceSummary).toBe('1 from ChatGPT\u00a0· 2 from Claude\u00a0· 1 needs details');
     expect(model.groups[0].bannerSummary).toBe(
-      '1 from ChatGPT today · 2 from Claude today · 1 needs details',
+      '1 from ChatGPT today\u00a0· 2 from Claude today\u00a0· 1 needs details',
     );
   });
   it('says “1 needs details” and “2 need details” (#877)', () => {
@@ -247,7 +247,12 @@ describe('To review model', () => {
         { id: '4', status: 'skipped' },
         { id: '5', status: 'unresolved' },
       ]),
-    ).toEqual({ saved: 2, deleted: 1, left: 2, label: 'Saved 2 · Deleted 1 · 2 left for later' });
+    ).toEqual({
+      saved: 2,
+      deleted: 1,
+      left: 2,
+      label: 'Saved 2\u00a0· Deleted 1\u00a0· 2 left for later',
+    });
     expect(summarizeReviewRun([{ id: '1', status: 'failed' }]).label).toBe('1 left for later');
     expect(summarizeReviewRun([]).label).toBe('');
     expect(buildToReview({ total: 0, groups: [] }, [], now).counts.total).toBe(0);
@@ -378,11 +383,11 @@ describe('changes while an item is open', () => {
     const { before, after } = changed();
     after.values!.splitBetween = [{ user: 'c00000000000000000000001' }];
     expect(describeDraftChange(before, after, names)).toContain(
-      'the split a moment ago: Split equally · Alex → Split equally · Sam',
+      'the split a moment ago: Split equally\u00a0· Alex → Split equally\u00a0· Sam',
     );
     after.values!.splitMethod = 'percentage';
     after.values!.splitBetween[0].percentage = 100;
-    expect(describeDraftChange(before, after, names)).toContain('percentage · Sam 100%');
+    expect(describeDraftChange(before, after, names)).toContain('percentage\u00a0· Sam 100%');
   });
   it('describes multiple changed facts and the member on another device', () => {
     const { before, after } = changed();

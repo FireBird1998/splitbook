@@ -55,33 +55,39 @@ describe('an extra currency as its settings row shows it (#721)', () => {
         { expenses: expenses(11), settlements: 1 },
         addedBy(SAM, 'Sam', localNoon('2026-10-01')),
       ),
-    ).toEqual({ inUse: true, line: '11 Expenses · 1 Settlement · added by Sam, 1 Oct' });
+    ).toEqual({ inUse: true, line: '11 Expenses\u00a0· 1 Settlement\u00a0· added by Sam, 1 Oct' });
     expect(
       row('JPY', { expenses: expenses(24) }, addedBy(SAM, 'Sam', localNoon('2026-10-05'))),
-    ).toEqual({ inUse: true, line: '24 Expenses · whole amounts only · added by Sam, 5 Oct' });
+    ).toEqual({
+      inUse: true,
+      line: '24 Expenses\u00a0· whole amounts only\u00a0· added by Sam, 5 Oct',
+    });
     expect(row('GBP', {}, addedBy(PRIYA, 'Priya', localNoon('2026-10-02')))).toEqual({
       inUse: false,
-      line: 'Nothing uses it · added by Priya, 2 Oct',
+      line: 'Nothing uses it\u00a0· added by Priya, 2 Oct',
     });
   });
 
   it('says one in the singular, and counts every To review item, yours or not', () => {
     expect(
       row('EUR', { expenses: expenses(1), settlements: 2, toReview: { yours: 1, others: 2 } }),
-    ).toEqual({ inUse: true, line: '1 Expense · 2 Settlements · 3 items in To review' });
+    ).toEqual({ inUse: true, line: '1 Expense\u00a0· 2 Settlements\u00a0· 3 items in To review' });
     expect(row('EUR', { toReview: { yours: 0, others: 1 } })).toEqual({
       inUse: true,
       line: '1 item in To review',
     });
-    expect(row('KRW', {})).toEqual({ inUse: false, line: 'Nothing uses it · whole amounts only' });
+    expect(row('KRW', {})).toEqual({
+      inUse: false,
+      line: 'Nothing uses it\u00a0· whole amounts only',
+    });
   });
 
   it('calls the viewer you, and gives the year of an earlier one', () => {
     expect(row('GBP', {}, addedBy(ALEX, 'Alex', localNoon('2026-10-02'))).line).toBe(
-      'Nothing uses it · added by you, 2 Oct',
+      'Nothing uses it\u00a0· added by you, 2 Oct',
     );
     expect(row('GBP', {}, addedBy(SAM, 'Sam', localNoon('2025-12-30'))).line).toBe(
-      'Nothing uses it · added by Sam, 30 Dec 2025',
+      'Nothing uses it\u00a0· added by Sam, 30 Dec 2025',
     );
   });
 });

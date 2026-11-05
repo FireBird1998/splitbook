@@ -61,7 +61,7 @@ describe.each(readers)('$name historical Settlement currencies (#779)', ({ read 
     const event = read(recorded.metadata);
     expect(event.metadata).toMatchObject(recorded.metadata);
     expect(formatActivityHeadline(event, alex)).toBe(
-      'You paid Sam Chen DEM\u00a040.00 to clear €20.00 at DEM\u00a02.00 per €; no rate suggested',
+      'You paid Sam Chen DEM\u00a040.00 to clear €20.00 at DEM\u00a02.00 per\u00a0€; no rate suggested',
     );
   });
 
@@ -70,7 +70,7 @@ describe.each(readers)('$name historical Settlement currencies (#779)', ({ read 
     const event = read(metadata);
     expect(event.metadata).toMatchObject(metadata);
     expect(formatActivityHeadline(event, alex)).toBe(
-      'You paid Sam Chen €40.00 to clear DEM\u00a020.00 at €2.00 per DEM; no rate suggested',
+      'You paid Sam Chen €40.00 to clear DEM\u00a020.00 at €2.00 per\u00a0DEM; no rate suggested',
     );
   });
 });

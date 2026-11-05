@@ -426,10 +426,10 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     await tap(home, 'Review 2, one at a time');
     const run = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     expect(text(run)).toContain('Maple House');
-    expect(text(run)).toContain('Review · 1 of 2 · across 2 Groups');
+    expect(text(run)).toContain('Review\u00a0· 1 of 2\u00a0· across 2 Groups');
     await tap(run, 'Skip for now');
     expect(text(run)).toContain('Goa Friends Trip');
-    expect(text(run)).toContain('Review · 2 of 2');
+    expect(text(run)).toContain('Review\u00a0· 2 of 2');
     await tap(run, 'Close review');
     expect(run.toJSON()).toBeNull();
     expect(f.controller.getSnapshot().screen).toBe('groups');
@@ -479,7 +479,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     expect(text(tree)).toContain('You set this aside');
-    expect(text(tree)).toContain('Finish later · today');
+    expect(text(tree)).toContain('Finish later\u00a0· today');
     expect(button(tree, 'Save expense').props.disabled).toBe(false);
     await tap(tree, 'Save expense');
     expect(
@@ -778,7 +778,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(text(tree)).toContain('The same person is listed twice. Choose who paid.');
     expect(text(tree)).not.toContain('didn’t know who paid');
     // The tile still asks for the payer, and saving stays off until they're chosen.
-    expect(text(tree)).toContain('Who paid? · Choose');
+    expect(text(tree)).toContain('Who paid?\u00a0· Choose');
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
   });
   it('names a split that does not add up, not a missing amount (#506)', async () => {

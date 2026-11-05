@@ -14,8 +14,8 @@ import NativeSelect from '@mui/material/NativeSelect';
 import Typography from '@mui/material/Typography';
 import type { Theme } from '@mui/material/styles';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import { currencyPrefix, formatCurrency } from '@splitbook/shared/currency';
-import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
+import { formatCurrency } from '@splitbook/shared/currency';
+import { decimalMoney, minorMoney, perUnit } from '@splitbook/shared/cross-currency-settlement';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
 import { suggestedSettlementMinor } from '@splitbook/shared/settlement-preview';
@@ -485,7 +485,7 @@ export default function RecordPaymentForm({
     shown?.paidCurrency && shown.amountPaidMinor !== undefined && shown.appliedRate
       ? {
           amount: minorMoney(shown.amountPaidMinor, shown.paidCurrency),
-          rate: `${decimalMoney(rateText(shown.appliedRate), shown.paidCurrency)} per ${currencyPrefix(shown.currency)}`,
+          rate: `${decimalMoney(rateText(shown.appliedRate), shown.paidCurrency)} ${perUnit(shown.currency)}`,
         }
       : null;
   const sendLabel = shownPaid

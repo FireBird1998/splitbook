@@ -73,6 +73,7 @@ import { useStartWhileUnfocused } from './start-while-unfocused';
 import { fonts, useTheme } from './theme';
 import { reviewedItemsLine } from './review-run-copy';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /**
  * An amount as its field shows it, with its currency's places, as Add expense does: 18.4 in euros
@@ -433,14 +434,14 @@ function ReviewRunContent({
   const assistant =
     item.draft.preparedBy.kind === 'assistant' ? item.draft.preparedBy.name : undefined;
   const sourceTitle = assistant ? `Prepared by ${assistant}` : 'You set this aside';
-  const sourceDetail = `${assistant ? 'From your chat' : 'Finish later'} · ${day} ${clockTime(item.draft.createdAt)}`;
+  const sourceDetail = `${assistant ? 'From your chat' : 'Finish later'}${SEPARATOR}${day} ${clockTime(item.draft.createdAt)}`;
   const canSave = !(locked || state.busy || !!reason || !!invalid || !!state.unkept);
   const shares = state.allocation?.splitBetween
     .map(
       (row) =>
         `${person(row.user)} ${row.user === userId ? 'share' : 'shares'} ${money(row.amount, state.allocation!.currency)}`,
     )
-    .join(' · ');
+    .join(SEPARATOR);
   const field = { color: theme.text, paddingVertical: 4, paddingHorizontal: 0 };
   // The item's own currency beside the Amount, main or extra, and Add expense's picker to change
   // it, with every currency the Group lists; nothing is converted (#874).
@@ -456,7 +457,7 @@ function ReviewRunContent({
     <>
       <RunScreen
         title={groupName}
-        subtitle={`Review · ${state.index + 1} of ${state.items.length}${groups > 1 ? ` · across ${groups} Groups` : ''}`}
+        subtitle={`Review${SEPARATOR}${state.index + 1} of ${state.items.length}${groups > 1 ? `${SEPARATOR}across ${groups} Groups` : ''}`}
         close={close}
         refresh={
           offline
@@ -594,7 +595,7 @@ function ReviewRunContent({
             date: hasNeed('date') ? 'Choose a date' : undefined,
             payers:
               hasNeed('paidBy') || hasNeed('paidBy', 'listed-twice')
-                ? 'Who paid? · Choose'
+                ? `Who paid?${SEPARATOR}Choose`
                 : hasNeed('paidBy', 'payer-total')
                   ? 'Must add up to the total'
                   : undefined,
@@ -675,7 +676,8 @@ function ReviewRunContent({
                     .map((expense) => (
                       <View key={expense._id} style={{ gap: 1 }}>
                         <CompactText variant="caption" tone="secondary">
-                          {recentDay(expenseLocalDate(expense.date))} ·{' '}
+                          {recentDay(expenseLocalDate(expense.date))}
+                          {SEPARATOR}
                           {money(expense.amount, expense.currency)}
                         </CompactText>
                         <CompactText variant="caption" tone="secondary">

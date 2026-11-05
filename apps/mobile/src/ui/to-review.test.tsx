@@ -543,13 +543,13 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       release();
       await f.controller.refreshToReview();
     });
-    expect(text(home)).toContain('To review · 4');
+    expect(text(home)).toContain('To review\u00a0· 4');
     await act(async () => {
       const refreshing = f.controller.refreshToReview();
       expect(f.controller.toReviewModel().counts.total).toBe(4);
       await refreshing;
     });
-    expect(text(home)).toContain('To review · 4');
+    expect(text(home)).toContain('To review\u00a0· 4');
     expect(text(home)).toContain('4 from Claude');
     const banner = await render(
       <ToReviewGroupBanner controller={f.controller} groupId={groupId} />,
@@ -572,13 +572,13 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       ),
       'an icon, not a text button',
     ).toHaveLength(0);
-    expect(text(list)).toContain('Maple House · 4 items');
+    expect(text(list)).toContain('Maple House\u00a0· 4 items');
     // The three counts in a card, then Save and Review one at a time, full width.
     for (const label of ['ready to save', 'needs details', 'on this phone'])
       expect(text(list)).toContain(label);
     expect(button(list, 'Save 2 ready').props.style({ pressed: false }).alignSelf).toBe('stretch');
     // Each section says how many it holds.
-    expect(text(list)).toMatch(/Ready · \d/);
+    expect(text(list)).toMatch(/Ready\u00a0· \d/);
   });
   it('says how many need details, as one or as several (#877)', async () => {
     // Each count is its label, then its figure.
@@ -592,6 +592,34 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       expect(text(list)).toContain(shown);
       expect(text(list)).not.toContain(hidden);
     }
+  });
+  // #892: at large text To review read "Unfinished / · only on". A line breaks only at an
+  // ordinary space, and a no-break space keeps each dot with what comes before it.
+  it.each([1.5, 2])('never starts a line with a dot at %s× text (#892)', async (fontScale) => {
+    const f = fixture();
+    await signIn(f);
+    await act(async () => {
+      await f.controller.refreshToReview();
+    });
+    setWindow({ width: 360, height: 640, fontScale });
+    const shown: string[] = [];
+    for (const element of [
+      <ToReviewHomeCard key="home" controller={f.controller} />,
+      <ToReviewGroupBanner key="banner" controller={f.controller} groupId={groupId} />,
+      <ToReviewList key="list" controller={f.controller} groupId={groupId} />,
+    ]) {
+      let tree!: ReactTestRenderer;
+      await act(async () => {
+        tree = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>{element}</ThemeContext.Provider>,
+        );
+      });
+      trees.push(tree);
+      shown.push(...text(tree).split('\n'));
+    }
+    // The Group's banner, Home's sources and each item's source, date and Group.
+    expect(shown.filter((words) => words.includes('·')).length).toBeGreaterThan(3);
+    for (const words of shown) expect(words, words).not.toMatch(/(^|[ \n])·/);
   });
   it('shows Home’s card and the Group’s bar as their boards (#646)', async () => {
     const f = fixture();
@@ -667,7 +695,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       await signIn(f);
       const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
       // Dated 14 Oct, as the test clock's today is there too, never the day before.
-      expect(text(list)).toContain('Prepared by Claude · Today');
+      expect(text(list)).toContain('Prepared by Claude\u00a0· Today');
       expect(text(list)).not.toContain('Yesterday');
       await tap(list, 'Save 2 ready');
       expect(text(list)).toContain('Save 2 expenses?');
@@ -679,7 +707,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     f.items()[0].draft.values!.date = '2026-10-10';
     await signIn(f);
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
-    expect(text(list)).toContain('Prepared by Claude · 10 Oct 2026');
+    expect(text(list)).toContain('Prepared by Claude\u00a0· 10 Oct 2026');
     expect(text(list)).not.toContain('Oct 10');
   });
   it('saves ready items without a currency in the Group’s (#512)', async () => {
@@ -861,7 +889,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(f.saves).toHaveLength(0);
     await tap(list, 'Confirm save 3 ready');
     expect(text(list)).toContain('After saving');
-    expect(text(list)).toContain('Saved 1 · 2 left for later');
+    expect(text(list)).toContain('Saved 1\u00a0· 2 left for later');
     expect(text(list)).toContain('Changed since you checked');
     expect(text(list)).toContain('Couldn’t save: Tag is unavailable');
     expect(f.committed.size).toBe(1);
@@ -1242,7 +1270,7 @@ describe('To review quick fixes on Android (#439)', () => {
     await settle();
     expect(f.puts[0]).toMatchObject({ id: lunch, revision: '0' });
     expect(f.puts[0].values.paidBy).toEqual([{ user: user.id }]);
-    expect(text(list)).toContain('You paid · Split equally · General');
+    expect(text(list)).toContain('You paid\u00a0· Split equally\u00a0· General');
     await tap(list, 'Save Lunch');
     await settle();
     expect(f.reviews.at(-1)).toEqual([lunch]);
@@ -1432,7 +1460,7 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     expect(text(list)).toContain('Needs details');
     expect(text(list)).toContain('Currency not listed');
     // Android's rows stay compact: what saving records is a Ready row's line only (#793).
-    expect(text(list)).not.toContain('You paid · Split equally');
+    expect(text(list)).not.toContain('You paid\u00a0· Split equally');
     await tap(list, 'Review Dinner in Zürich');
     const sheet = dialog(list, 'Dinner in Zürich');
     expect(sheet).not.toBeNull();
@@ -1804,7 +1832,7 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     const yen = button(list, 'JPY, Japanese Yen, whole amounts only, can’t keep 86.50');
     expect(yen.props.accessibilityState).toMatchObject({ disabled: true, checked: false });
     expect(words(dialog(list, 'Change currency'))).toContain(
-      'Whole amounts only · Can’t keep 86.50',
+      'Whole amounts only\u00a0· Can’t keep 86.50',
     );
     await tap(list, 'JPY, Japanese Yen, whole amounts only, can’t keep 86.50');
     expect(button(list, 'Use JPY')).toBeUndefined();

@@ -17,6 +17,7 @@ import {
   type ExpenseDraftValues,
 } from './validators/expense-draft';
 import type { ToReviewItem, ToReviewRead } from './to-review-read';
+import { SEPARATOR } from './separator';
 
 export type ToReviewState = 'ready' | 'duplicate' | 'needs-details' | 'on-this-phone';
 /** Device recovery stays plain data; this model never uploads it or selects it for saving. */
@@ -218,7 +219,7 @@ export function toReviewSourceSummary(items: readonly ReviewItemModel[], now?: D
     );
   const needs = items.filter((item) => item.state === 'needs-details').length;
   if (needs) parts.push(`${needs} ${needDetailsWords(needs)}`);
-  return parts.join(' · ');
+  return parts.join(SEPARATOR);
 }
 function counts(items: readonly ReviewItemModel[]) {
   return {
@@ -327,7 +328,7 @@ export function summarizeReviewRun(outcomes: readonly ReviewRunOutcome[]) {
     deleted ? `Deleted ${deleted}` : '',
     left ? `${left} left for later` : '',
   ].filter(Boolean);
-  return { saved, deleted, left, label: parts.join(' · ') };
+  return { saved, deleted, left, label: parts.join(SEPARATOR) };
 }
 
 /** A date-only Expense fact is a calendar day, not a UTC instant. */
@@ -369,7 +370,7 @@ export function describeDraftChange(
       })
       .join(', ') || 'not specified';
   const split = (values: ExpenseDraftValues) =>
-    `${reviewSplitMethod(values.splitMethod)} · ${people(values.splitBetween, values.currency)}`;
+    `${reviewSplitMethod(values.splitMethod)}${SEPARATOR}${people(values.splitBetween, values.currency)}`;
   const fields = [
     [
       'amount',

@@ -221,7 +221,7 @@ describe('a Debt paid in rupees (#728, board "Pay in rupees")', () => {
     expect(shown).toContain('Rate · ₹ for each €');
     expect(shown).toContain('Suggested');
     expect(shown).toContain('1 € =');
-    expect(shown).toContain('Frankfurter · rates of 20 Oct · fetched today 06:00');
+    expect(shown).toContain('Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched today 06:00');
     expect(shown).toContain('rounded to the paisa');
     expect(shown).toContain('Clears your €20.00 Debt to Sam. Sam gets ₹1,842.00.');
     expect(shown).toContain(recordPaymentFootnote);
@@ -347,7 +347,7 @@ describe('the rate when there is no suggestion (#728, boards "No rate suggested"
     };
     const { root, on } = render(state(inRupees({ status: 'ready', suggestion: mixed })));
     const shown = text(root);
-    expect(shown).toContain('Rates of 21 Oct · fetched today 06:00');
+    expect(shown).toContain('Rates of 21 Oct\u00a0· fetched today 06:00');
     expect(shown).toContain('Clears your €20.00 Debt to Sam. Sam gets ₹1,841.20.');
     const link = one(root, 'Rates By Exchange Rate API');
     expect(link.props.accessibilityRole).toBe('link');
@@ -399,7 +399,7 @@ describe('an unconfirmed payment in another currency (#728)', () => {
     const shown = text(root);
     expect(labelled(root, 'Pay in')).toHaveLength(0);
     expect(shown).toContain('Amount cleared');
-    expect(shown).toContain('Paid as ₹1,850.00 at ₹92.50 per €');
+    expect(shown).toContain('Paid as ₹1,850.00 at ₹92.50 per\u00a0€');
     expect(one(root, 'Amount cleared, required').props.editable).toBe(false);
     expect(labelled(root, 'Retry payment')).toHaveLength(1);
   });
@@ -426,7 +426,7 @@ describe('an unconfirmed payment in another currency (#728)', () => {
       }),
     );
     const shown = text(root);
-    expect(shown).toContain('Paid as ₹1,249.58 at ₹20.826267 per PLN');
+    expect(shown).toContain('Paid as ₹1,249.58 at ₹20.826267 per\u00a0PLN');
     expect(shown).not.toContain('zł');
   });
 });

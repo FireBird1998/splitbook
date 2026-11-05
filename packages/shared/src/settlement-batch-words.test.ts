@@ -44,7 +44,7 @@ describe('a payment that settled several Debts at once (#734)', () => {
       debts: [
         '₹1,480.00, same currency, no rate',
         // The suggestion is said once when it's the rate used (#870).
-        '€20.00 at the suggested ₹92.10 per € (20 Oct)',
+        '€20.00 at the suggested ₹92.10 per\u00a0€ (20\u00a0Oct)',
       ],
       rest: null,
     });
@@ -65,7 +65,7 @@ describe('a payment that settled several Debts at once (#734)', () => {
       headline: 'Alex Rivera paid you ₹3,330.00 to clear ₹1,480.00 and €20.00',
       debts: [
         '₹1,480.00, same currency, no rate',
-        '€20.00 at ₹92.50 per €, suggested ₹92.10 (20 Oct)',
+        '€20.00 at ₹92.50 per\u00a0€, suggested ₹92.10 (20\u00a0Oct)',
       ],
     });
   });
