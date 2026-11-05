@@ -102,6 +102,9 @@ export default function CurrencySwitch({
             sx={[
               {
                 minWidth: 150,
+                // Never wider than the row, as MUI's 360 px cap allows on a phone at large text:
+                // the figure wraps inside the tab instead (#854).
+                maxWidth: '100%',
                 minHeight: 0,
                 px: 2,
                 py: 1.25,
