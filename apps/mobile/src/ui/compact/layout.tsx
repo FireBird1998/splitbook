@@ -349,6 +349,7 @@ function TrailingSkeleton() {
 export const ListRow = memo(function ListRow({
   leading,
   title,
+  titleTone = 'primary',
   meta,
   metaTone = 'secondary',
   metaLines = 1,
@@ -365,6 +366,8 @@ export const ListRow = memo(function ListRow({
 }: {
   leading?: ReactNode;
   title: string;
+  /** The title's colour: `secondary` for a row that's no longer offered, as an archived Tag. */
+  titleTone?: TextTone;
   /** Lines the title may take: more for a name the member typed, which can be long. */
   titleLines?: number;
   meta?: string;
@@ -398,7 +401,7 @@ export const ListRow = memo(function ListRow({
   const main = (
     <>
       <View style={{ flex: 1, minWidth: column ?? 0, gap: 1 }}>
-        <CompactText weight="semibold" numberOfLines={whole ? 0 : titleLines}>
+        <CompactText weight="semibold" tone={titleTone} numberOfLines={whole ? 0 : titleLines}>
           {title}
         </CompactText>
         {meta ? (

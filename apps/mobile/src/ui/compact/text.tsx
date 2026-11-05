@@ -407,7 +407,14 @@ export function Money({
 
 /** "Required" or "Optional" beside a field label, shown before any attempt to save. */
 export function FieldMarker({ kind }: { kind: 'required' | 'optional' }) {
-  const theme = useTheme();
+  return fieldMarker(useTheme(), kind);
+}
+
+/**
+ * `FieldMarker`'s view, drawn by a plain call: a tile that draws it on every render, as
+ * SelectorTile's Optional does, adds no component render (#646, render ceilings).
+ */
+export function fieldMarker(theme: SemanticTokens, kind: 'required' | 'optional') {
   const required = kind === 'required';
   return (
     <View

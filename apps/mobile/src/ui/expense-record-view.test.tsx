@@ -798,6 +798,18 @@ describe('compact Expense record', () => {
     });
   });
 
+  it('colours the confirming Delete as destructive, like every other Delete (#646)', async () => {
+    const { lightTokens } = await import('@splitbook/shared/design-tokens');
+    const ui = await render(open(ids.bill));
+    await ui.press('Expense options');
+    await ui.press('Delete expense');
+    expect(text(ui.shown())).toContain('Delete this Expense?');
+    const confirm = ui.pressable('Delete expense');
+    expect(confirm.props.style({ pressed: false }).backgroundColor).toBe(
+      lightTokens.status.negative,
+    );
+  });
+
   it('opens the delete review on a tap or a screen reader’s activate, never on a drag (#684)', async () => {
     const ui = await render(open(ids.bill));
     await ui.press('Expense options');

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
-import { CompactButton } from './controls';
+import { CompactButton, IconButton } from './controls';
 import { useTextColumn } from './layout';
 import { radius, shouldDismissSheet } from './scale';
 import { CompactText } from './text';
@@ -19,7 +19,8 @@ import { CompactText } from './text';
  * A bottom sheet over the current screen: handle, header with Done, a scrolling body and a pinned
  * footer for totals and status. Swipe-down, tapping outside and Back all behave like Done, so
  * dismissing keeps entries unless the caller's Done discards them, as Record payment's Close
- * does (it says so through `dismissLabel`). It grows with its content up to 90% of the screen.
+ * does (it says so through `dismissLabel`, and draws its Close as ×: `doneIcon`). It grows with
+ * its content up to 90% of the screen.
  */
 export function BottomSheet({
   visible,
@@ -29,6 +30,7 @@ export function BottomSheet({
   titleAccessory,
   onDone,
   doneLabel = 'Done',
+  doneIcon,
   dismissLabel = `Close ${title}, keeping your entries`,
   dismissible = true,
   children,
@@ -48,6 +50,12 @@ export function BottomSheet({
   titleAccessory?: ReactNode;
   onDone: () => void;
   doneLabel?: string;
+  /**
+   * Draws Done as this icon, a 48 dp button named `doneLabel`: × for a sheet whose close
+   * discards its entries, as Record payment's and Settle up's do. Sheets that keep entries keep
+   * their words.
+   */
+  doneIcon?: 'close';
   /** The scrim's spoken label, when closing doesn't keep entries. */
   dismissLabel?: string;
   /** False while the sheet can't close, e.g. while it's saving: nothing closes it, and a swipe springs back. */
@@ -57,7 +65,9 @@ export function BottomSheet({
 }) {
   const theme = useTheme();
   const column = useTextColumn();
-  const doneButton = (
+  const doneButton = doneIcon ? (
+    <IconButton icon={doneIcon} label={doneLabel} disabled={!dismissible} onPress={onDone} />
+  ) : (
     <CompactButton
       label={doneLabel}
       variant="text"

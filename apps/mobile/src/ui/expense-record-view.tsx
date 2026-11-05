@@ -612,6 +612,7 @@ export function ExpenseRecordScreen({
           <CompactButton
             label="Delete expense"
             block
+            destructive
             disabled={offline}
             hint={offline ? savingNeedsConnection : undefined}
             onPress={onDelete}

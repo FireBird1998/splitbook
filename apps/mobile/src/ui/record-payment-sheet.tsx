@@ -388,6 +388,7 @@ function SinglePaymentSheet({
       visible={visible}
       title="Record payment"
       doneLabel="Close"
+      doneIcon="close"
       dismissLabel="Close without recording"
       dismissible={status !== 'saving'}
       onDone={onClose}
@@ -626,7 +627,8 @@ function SinglePaymentSheet({
             <SelectorTile icon="calendar-outline" label="Date" value={today} />
             <SelectorTile
               icon="document-text-outline"
-              label="Note, optional"
+              label="Note"
+              optional
               value={figures.note.trim() || 'Add a note'}
               locked={!editable}
               onPress={() => {

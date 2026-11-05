@@ -46,7 +46,7 @@ import {
   environment,
   googleSignInEnabled,
 } from './src/runtime';
-import { ThemeContext, fonts, useTheme } from './src/ui/theme';
+import { ThemeContext, useTheme } from './src/ui/theme';
 import { Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
 import {
   Badge,
@@ -93,6 +93,7 @@ import type { MobileGroup, MobileSnapshot } from './src/data/types';
 import { shownGroup, type MobileController } from './src/data/mobile-controller';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { PRODUCT_NAME } from './src/product';
+import { brandLogo } from './src/ui/brand-logo';
 import { SEPARATOR } from '@splitbook/shared/separator';
 
 void SplashScreen.preventAutoHideAsync();
@@ -276,7 +277,7 @@ function AuthenticationScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
-        {/* Shrinks so the wordmark and its short status never push Settings off screen. */}
+        {/* Shrinks so the logo and its short status never push Settings off screen. */}
         {!showsSignIn || state.screen !== 'groups' ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
             {state.screen !== 'groups' ? (
@@ -296,29 +297,9 @@ function AuthenticationScreen() {
               >
                 <Icon name="arrow-back-outline" color={theme.text} />
               </Pressable>
-            ) : (
-              <View
-                style={{
-                  backgroundColor: theme.brand.main,
-                  width: 32,
-                  height: 36,
-                  borderRadius: 9,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}
-              >
-                <Copy
-                  style={{ color: theme.brand.contrastText, fontFamily: fonts.bold, fontSize: 22 }}
-                >
-                  s
-                </Copy>
-              </View>
-            )}
-            {!showsSignIn && (
-              <Copy style={{ fontFamily: fonts.semibold, fontSize: 23, letterSpacing: -0.6 }}>
-                splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
-              </Copy>
-            )}
+            ) : null}
+            {/* The one logo, as on Home and Sign in; Sign in draws its own below (#646). */}
+            {!showsSignIn && brandLogo(theme.mode)}
             {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
             <RefreshStatus visible={feedback.quiet} />
           </View>

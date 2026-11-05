@@ -380,6 +380,7 @@ export function SettleAllSheet({
       visible={visible}
       title={`Settle up with ${other}`}
       doneLabel="Close"
+      doneIcon="close"
       dismissLabel="Close without recording"
       dismissible={status !== 'saving'}
       onDone={onClose}

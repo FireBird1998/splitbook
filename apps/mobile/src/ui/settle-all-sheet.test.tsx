@@ -195,6 +195,18 @@ describe('Settle up with Sam (#734)', () => {
   });
 
   // #872: with Debts only in euros and yen, Pay in still offers rupees, first.
+  it('closes with ×, named Close, as Record payment does (#646)', () => {
+    const { root, on } = render(state(paying()));
+    const close = one(root, 'Close');
+    expect(close.props.accessibilityRole).toBe('button');
+    expect(
+      close.findAll((node) => isHost(node, 'Ionicons')).map((icon) => icon.props.name),
+    ).toEqual(['close']);
+    expect(text(close)).toBe('');
+    act(() => close.props.onPress());
+    expect(on.onClose).toHaveBeenCalledOnce();
+  });
+
   it('offers the main currency first in Pay in, then each Debt’s own (#872)', () => {
     const extras = paying({
       debts: [

@@ -147,6 +147,14 @@ A change's row is drawn again only when what it says changes, so a slide or a re
 | Type 20 characters into Description          |            103 |          63 |
 | Type with a delayed device write             |              6 |           4 |
 
+### Lowered with #646 (Slice A)
+
+**Build:** `fix/p14-android-fidelity`, on `main` at `e8134c12`, recorded three times with `RENDER_PROFILE=record`; the three runs gave identical counts. The header shown while the session is checked draws the shared logo, a plain function, in place of the old "s" tile and the typed wordmark, three counted `Copy` renders. The Record payment sheet's Optional marker on its Note tile is drawn by a plain call (`fieldMarker`), so the payment journeys keep their counts. Only this render ceiling comes down: no request, publish or commit count moved, so nothing needs a re-record.
+
+| Journey                           | Renders before | Renders now |
+| --------------------------------- | -------------: | ----------: |
+| Sign in and show Home (20 Groups) |            312 |         309 |
+
 ### Requests per journey
 
 What each journey sends, in order, at `d506f6e`. `:id` is the Household Group's id. **Group** is `GET /api/groups/:id`; **Balances** is `GET /api/groups/:id/balances`; **Expenses page N** is `GET /api/groups/:id/expenses?page=N&limit=20&includeMemberBreakdown=1` with the Month on screen as `dateFrom` and `dateTo`; **Activity page N** is `GET /api/groups/:id/activity?page=N&limit=20`. Every request but the persona sign-in is a GET.
