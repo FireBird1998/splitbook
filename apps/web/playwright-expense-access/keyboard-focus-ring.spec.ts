@@ -404,12 +404,30 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(toggle).toBeChecked();
     });
 
-    test('an Insights chart (#848)', async ({ page, ledger }) => {
+    test('a chart focused by script while the keyboard is in use, as with x-charts’ keyboard navigation (#848)', async ({
+      page,
+      ledger,
+    }) => {
       await signIn(page, ledger, `/groups/${await twoCurrencyGroup(ledger)}?tab=insights`);
-      // The chart's svg clips what it draws, so Chromium lets the keyboard reach it to scroll.
+      // Tab skips the chart (#881), so it takes focus only from a click or a script.
       const chart = page.locator('svg.MuiChartsSurface-root').first();
       await expect(chart).toBeVisible();
-      await expectKeyboardRingOnly(page, chart);
+      await chart.scrollIntoViewIfNeeded();
+      const before = await layoutAround(chart);
+      await chart.click();
+      await expect(chart).toBeFocused();
+      await expect(chart).toHaveCSS('outline-style', 'none');
+      await expect(chart).toHaveCSS('box-shadow', 'none');
+      await page.keyboard.press('Shift+Tab');
+      await chart.evaluate((svg) => (svg as SVGElement).focus());
+      await expect(chart).toBeFocused();
+      await expect(chart).toHaveCSS('outline-style', 'solid');
+      await expect(chart).toHaveCSS('outline-width', '2px');
+      await expect(chart).toHaveCSS('outline-color', await focusMain(page));
+      await expect(chart).toHaveCSS('outline-offset', '2px');
+      await expect(chart).toHaveCSS('box-shadow', /0px 0px 0px 4px/);
+      expect(await clippedBy(chart, 4)).toBeNull();
+      expect(await layoutAround(chart)).toEqual(before);
     });
   });
 }

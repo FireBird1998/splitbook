@@ -496,6 +496,8 @@ in a `HomeSlot` of its width.
   padding. A switch's focus sits on its small thumb button, so the ring goes inside the whole
   switch, round at its ends. A chart's `svg` draws the ring on `:focus-visible`, over x-charts'
   `outline: none`
+- Tab skips a chart: it sits in an `aria-hidden` box beside a table with its numbers, so its
+  `svg`, which Chromium makes a Tab stop because it clips, takes `tabIndex={-1}` (#881)
 - A row that opens a card beside it moves focus to the card's heading, and closing the card puts
   focus back on the row, as Activity's payment rows do (#852)
 - A currency tab is never wider than its row; at large text its amount wraps under the words,
