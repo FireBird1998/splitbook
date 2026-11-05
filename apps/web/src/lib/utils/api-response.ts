@@ -1,5 +1,9 @@
 import { headers } from 'next/headers';
 import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
+import {
+  DATABASE_UNAVAILABLE,
+  DATABASE_UNAVAILABLE_MESSAGE,
+} from '@splitbook/shared/database-unavailable';
 import { NextResponse } from 'next/server';
 import type { ZodError } from 'zod';
 import { auth } from '@/lib/auth';
@@ -10,6 +14,11 @@ import {
   EXPECTED_ACCOUNT_HEADER,
 } from '@/lib/expected-account';
 import { RECURRING_EXPENSES_OFF } from '@/lib/recurring-expenses-switch';
+import {
+  AuthDatabaseWatch,
+  DatabaseUnavailableError,
+  isDatabaseUnreachable,
+} from '@/lib/mongodb-client';
 import {
   CurrencyInUseError,
   CurrencyIsMainError,
@@ -37,7 +46,13 @@ export interface AuthUser {
  */
 export async function getAuthUser(): Promise<AuthUser | null> {
   const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const watch = new AuthDatabaseWatch();
+  const session = await watch
+    .run(() => auth.api.getSession({ headers: requestHeaders }))
+    .catch((cause: unknown) => {
+      // A page's layout calls this first: its error boundary knows this one (`app/error.tsx`).
+      throw watch.failure(cause);
+    });
   if (!session?.user?.id) return null;
   const expectedAccount = requestHeaders.get(EXPECTED_ACCOUNT_HEADER);
   if (expectedAccount !== null && expectedAccount !== session.user.id) {
@@ -162,8 +177,30 @@ export function serverError(err?: unknown) {
       return error(messages.STALE_REVISION[0], 409, 'STALE_REVISION');
     if (messages[err.message]) return error(...messages[err.message], err.message);
   }
+  if (isDatabaseUnreachable(err)) return databaseUnavailable(err);
   console.error('Server error:', err);
   return internalServerError();
+}
+
+/** Each error in the chain, as the driver named and described it, never as the request held it. */
+function databaseFailure(err: unknown): string {
+  const parts: string[] = [];
+  for (let cause = err; cause instanceof Error && parts.length < 8; cause = cause.cause)
+    if (!(cause instanceof DatabaseUnavailableError)) parts.push(`${cause.name}: ${cause.message}`);
+  return parts.join(' <- ');
+}
+
+/**
+ * 503 DATABASE_UNAVAILABLE: the database couldn't be reached, even after the one retry (#826,
+ * #858, #862), in the words every client shows as they are. Only the driver's own description is
+ * logged: an unreachable database's errors carry no request data.
+ */
+export function databaseUnavailable(err: unknown) {
+  console.error('Database unreachable:', databaseFailure(err));
+  return NextResponse.json(
+    { error: DATABASE_UNAVAILABLE_MESSAGE, status: 503, code: DATABASE_UNAVAILABLE },
+    { status: 503 },
+  );
 }
 
 function internalServerError() {

@@ -54,6 +54,18 @@ can't use is one such fault, never the request's (#547). The Draft routes answer
 an id that isn't one with `422` `VALIDATION_ERROR`, and the Tag routes answer
 both with `400` `INVALID_TAG_COMMAND`.
 
+**A database Splitbook can't reach answers `503` `DATABASE_UNAVAILABLE` (#826).**
+A request that can't reach the database answers within about 5 s, never after
+the driver's old 30 s or as "Internal server error":
+`{ "error": "Couldn’t reach Splitbook. Try again.", "code": "DATABASE_UNAVAILABLE", "status": 503 }`.
+Every route answers it, Better Auth's under `/api/auth/*` included. A write that
+answers it may or may not be recorded, since its connection can drop mid-save:
+the client keeps its `Idempotency-Key` or revision and sends the same request
+again, which records it once. A web page that can't reach the database shows the
+same words with Try again; Android shows them as Splitbook's own error, never as
+being offline. `apps/web/src/app/api/database-unavailable.integration.test.ts`
+pins each against a database it interrupts.
+
 **An archived Group takes no more changes (#578).** Once an admin archives a
 Group (`DELETE /api/groups/[id]`), every write to its ledger answers **409**
 `GROUP_ARCHIVED` ("This Group was archived, so nothing more can be saved in

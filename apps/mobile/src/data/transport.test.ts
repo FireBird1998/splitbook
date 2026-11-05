@@ -331,6 +331,42 @@ describe('failure kinds (#208)', () => {
     },
   );
 
+  // Splitbook answered, so the device isn't offline: its database couldn't be reached (#826).
+  it.each([
+    ['a read', 'GET'],
+    ['a save', 'POST'],
+  ] as const)(
+    'says Splitbook’s 503 DATABASE_UNAVAILABLE on %s in the server’s words, as a server error',
+    async (_, method) => {
+      const t = setup(async () =>
+        Response.json(
+          {
+            error: 'Couldn’t reach Splitbook. Try again.',
+            status: 503,
+            code: 'DATABASE_UNAVAILABLE',
+          },
+          { status: 503 },
+        ),
+      );
+      const error = await caught(
+        t.request(`/api/groups/${groupId}/expenses`, 1, {
+          method,
+          ...(method === 'POST' ? { body: {}, idempotencyKey: 'expense-key-1' } : {}),
+        }),
+      );
+      expect(error).toBeInstanceOf(RequestError);
+      expect(error).toMatchObject({
+        kind: 'server-error',
+        message: 'Couldn’t reach Splitbook. Try again.',
+        status: 503,
+        code: 'DATABASE_UNAVAILABLE',
+        networkFailure: false,
+      });
+      expect(t.sent).toHaveLength(1);
+      expect(t.hooks).toEqual([]);
+    },
+  );
+
   it('gives a body that stops arriving the network kind (#231)', async () => {
     const t = setup(async () => bodyFails());
     expect(await caught(t.request('/api/groups', 1))).toMatchObject({

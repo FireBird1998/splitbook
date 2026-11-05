@@ -1,5 +1,9 @@
 import { readSessionCookie } from './cookies';
 import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
+import {
+  DATABASE_UNAVAILABLE,
+  DATABASE_UNAVAILABLE_MESSAGE,
+} from '@splitbook/shared/database-unavailable';
 import type { FetchResponse, MobileFetch, MobileTimer } from './types';
 import { PRODUCT_NAME } from '../product';
 
@@ -41,7 +45,10 @@ export class Superseded extends Error {}
  * - `rejected`: any other definite 4xx, so any 4xx but 401, 403, 404, 408 and 429: the server
  *   refused this request as sent;
  * - `malformed`: a 2xx whose body arrived whole but isn't JSON;
- * - `server-error`: any other 5xx, a 408 or 429, or an answer the app can't use.
+ * - `server-error`: any other 5xx, a 408 or 429, or an answer the app can't use. Splitbook's own
+ *   503 DATABASE_UNAVAILABLE is one: Splitbook answered, so the device isn't offline, but its
+ *   database couldn't be reached even after the server's one retry. It says so in the server's
+ *   words (#826).
  */
 export type FailureKind =
   | 'network'
@@ -452,7 +459,9 @@ export function createTransport({
         throw new RequestError(
           code === 'TAG_ADMIN_REQUIRED'
             ? 'Only Group admins can manage Tags. Your Group is still available.'
-            : message,
+            : code === DATABASE_UNAVAILABLE
+              ? DATABASE_UNAVAILABLE_MESSAGE
+              : message,
           response.status,
           code,
           false,

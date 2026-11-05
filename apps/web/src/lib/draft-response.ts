@@ -1,6 +1,7 @@
 import { ZodError } from 'zod';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
-import { error, serverError, validationError } from '@/lib/utils/api-response';
+import { isDatabaseUnreachable } from '@/lib/mongodb-client';
+import { databaseUnavailable, error, serverError, validationError } from '@/lib/utils/api-response';
 
 export function draftError(cause: unknown) {
   if (cause instanceof ZodError) return validationError(cause);
@@ -28,7 +29,9 @@ export function draftError(cause: unknown) {
     ].includes(cause.message)
   )
     return serverError(cause);
-  // Database errors may embed submitted values. Never log them at this private boundary.
+  // An unreachable database's errors carry no submitted values, so they are logged as such.
+  if (isDatabaseUnreachable(cause)) return databaseUnavailable(cause);
+  // Other database errors may embed submitted values. Never log them at this private boundary.
   return error(
     'Draft request not confirmed. Reload before retrying; reuse the original creation request.',
     503,

@@ -16,6 +16,7 @@ vi.mock('@/lib/services/expense.service', () => ({ expenseService: { create: vi.
 vi.mock('@/lib/services/recurring-expense.service', () => ({ recurringExpenseService: {} }));
 
 const { getAuthUser, readJson, routeIds, serverError } = await import('./api-response');
+const { DatabaseUnavailableError } = await import('@/lib/mongodb-client');
 const balancesRoute = await import('@/app/api/user/balances/route');
 const expensesRoute = await import('@/app/api/groups/[id]/expenses/route');
 
@@ -72,6 +73,38 @@ describe('serverError', () => {
     for (const fault of faults) expect(serverError(fault).status, fault.message).toBe(500);
     expect(logged.mock.calls.map(([, fault]) => fault)).toEqual(faults);
   });
+
+  // The owner's decision of 2026-11-05 (#826, #858, #862): never "Internal server error".
+  it.each([
+    [
+      'a server selection that timed out',
+      () =>
+        new mongoose.mongo.MongoServerSelectionError('Server selection timed out after 5000 ms', {
+          servers: new Map(),
+        } as never),
+    ],
+    ['a connection that broke', () => new mongoose.mongo.MongoNetworkError('read ECONNRESET')],
+    [
+      'the one retry’s failure',
+      () => new DatabaseUnavailableError(new mongoose.mongo.MongoNetworkError('read ECONNRESET')),
+    ],
+  ])(
+    'answers %s as 503 DATABASE_UNAVAILABLE, in the owner’s words, and logs only the driver’s description',
+    async (_, make) => {
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      logged.mockClear();
+      const response = serverError(make());
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: 'Couldn’t reach Splitbook. Try again.',
+        code: 'DATABASE_UNAVAILABLE',
+        status: 503,
+      });
+      expect(logged.mock.calls).toEqual([
+        ['Database unreachable:', expect.stringMatching(/^Mongo/)],
+      ]);
+    },
+  );
 });
 
 describe('routeIds (#539)', () => {
@@ -199,5 +232,31 @@ describe('getAuthUser and the page’s expected account', () => {
     vi.mocked(auth.api.getSession).mockResolvedValue(null as never);
     await expect(getAuthUser()).resolves.toBeNull();
     expect((await readBalances()).status).toBe(401);
+  });
+});
+
+// A server page's layout reads the session first (#826): a database it can't reach fails the page
+// with the error its boundary knows by digest (`app/error.tsx`), never as an unknown fault.
+describe('getAuthUser when the database can’t be reached', () => {
+  it('throws a DatabaseUnavailableError, caused by what the session read met', async () => {
+    const cause = new mongoose.mongo.MongoServerSelectionError(
+      'Server selection timed out after 5000 ms',
+      { servers: new Map() } as never,
+    );
+    vi.mocked(headers).mockResolvedValue(new Headers());
+    vi.mocked(auth.api.getSession).mockRejectedValue(cause);
+    const thrown = await getAuthUser().catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(DatabaseUnavailableError);
+    expect(thrown).toMatchObject({ digest: 'DATABASE_UNAVAILABLE', cause });
+  });
+
+  it('passes the one retry’s own error on as it is, and any other failure too', async () => {
+    const unavailable = new DatabaseUnavailableError(new mongoose.mongo.MongoNetworkError('x'));
+    vi.mocked(headers).mockResolvedValue(new Headers());
+    vi.mocked(auth.api.getSession).mockRejectedValueOnce(unavailable);
+    await expect(getAuthUser()).rejects.toBe(unavailable);
+    const other = new Error('Something unexpected');
+    vi.mocked(auth.api.getSession).mockRejectedValueOnce(other);
+    await expect(getAuthUser()).rejects.toBe(other);
   });
 });

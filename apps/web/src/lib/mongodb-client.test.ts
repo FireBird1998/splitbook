@@ -140,3 +140,91 @@ describe('one driver', () => {
     expect(mongoose.mongo.UUID).toBe(UUID);
   });
 });
+
+/** A driver error as a refused connection leaves it (#862): labelled as the driver labels it. */
+function refusedConnection() {
+  const error = new mongoose.mongo.MongoNetworkError('connect ECONNREFUSED 127.0.0.1:27017', {
+    cause: new Error('connect ECONNREFUSED 127.0.0.1:27017'),
+  });
+  error.addErrorLabel('SystemOverloadedError');
+  error.addErrorLabel('RetryableError');
+  return error;
+}
+
+// The owner's decision of 2026-11-05 (#826): "Couldn't reach Splitbook. Try again." within about
+// 5 s.
+describe('a database that can’t be reached', () => {
+  it('is a DatabaseUnavailableError in the owner’s words, with a code and a digest a page keeps', async () => {
+    const { DatabaseUnavailableError } = await freshServer();
+    const cause = refusedConnection();
+    const error = new DatabaseUnavailableError(cause);
+    expect(error).toMatchObject({
+      name: 'DatabaseUnavailableError',
+      message: 'Couldn’t reach Splitbook. Try again.',
+      code: 'DATABASE_UNAVAILABLE',
+      digest: 'DATABASE_UNAVAILABLE',
+      cause,
+    });
+  });
+
+  it.each([
+    [
+      'a server selection that timed out',
+      () =>
+        new mongoose.mongo.MongoServerSelectionError('Server selection timed out after 5000 ms', {
+          servers: new Map(),
+        } as never),
+    ],
+    ['a refused connection', refusedConnection],
+    [
+      'a connection that timed out',
+      () => new mongoose.mongo.MongoNetworkTimeoutError('connection timed out'),
+    ],
+    [
+      'a ping whose time ran out, waiting for a server',
+      () =>
+        new mongoose.mongo.MongoOperationTimeoutError('Timed out during server selection', {
+          cause: new mongoose.mongo.MongoServerSelectionError('read ECONNRESET', {
+            servers: new Map(),
+          } as never),
+        }),
+    ],
+    [
+      'a server shedding load',
+      () => {
+        const error = new mongoose.mongo.MongoServerError({ message: 'overloaded', code: 462 });
+        error.addErrorLabel('SystemOverloadedError');
+        return error;
+      },
+    ],
+    [
+      'a Mongoose call that waited out a connection',
+      () => new mongoose.Error('Operation `users.findOne()` buffering timed out after 5000ms'),
+    ],
+    ['a closed client', () => new mongoose.mongo.MongoTopologyClosedError()],
+    [
+      'an error caused by one',
+      () => new Error('Session read failed', { cause: refusedConnection() }),
+    ],
+  ])('counts %s as unreachable', async (_, make) => {
+    const { isDatabaseUnreachable } = await freshServer();
+    expect(isDatabaseUnreachable(make())).toBe(true);
+  });
+
+  it.each([
+    [
+      'a duplicate key',
+      () => new mongoose.mongo.MongoServerError({ message: 'E11000', code: 11000 }),
+    ],
+    ['a domain refusal', () => new Error('FORBIDDEN')],
+    [
+      'a transaction that ran out of time with no network failure',
+      () => new mongoose.mongo.MongoOperationTimeoutError('Timed out during withTransaction'),
+    ],
+    ['a failed fetch of something else', () => new TypeError('fetch failed')],
+    ['a value that isn’t an error', () => 'ECONNREFUSED'],
+  ])('never counts %s as unreachable', async (_, make) => {
+    const { isDatabaseUnreachable } = await freshServer();
+    expect(isDatabaseUnreachable(make())).toBe(false);
+  });
+});

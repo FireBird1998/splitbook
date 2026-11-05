@@ -1,12 +1,21 @@
 // The app's one MongoDB client per server instance, shared by Mongoose (`lib/db.ts`) and Better
 // Auth's adapter (#826). Building it doesn't connect, so it is safe at import time (including
 // `next build`, where MONGODB_URI may be absent). Connecting goes through `connectMongo()`.
+//
+// It is also the app's one policy for a database it can't reach: the timeouts, and what counts
+// as unreachable (`isDatabaseUnreachable`), which every API and page answers with "Couldn't
+// reach Splitbook. Try again." (#826).
 
 import 'server-only';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { attachDatabasePool } from '@vercel/functions';
 import type { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import type { Db } from 'mongodb';
 import mongoose from 'mongoose';
+import {
+  DATABASE_UNAVAILABLE,
+  DATABASE_UNAVAILABLE_MESSAGE,
+} from '@splitbook/shared/database-unavailable';
 import { directConnectionFor } from '@/lib/mongodb-uri';
 
 /**
@@ -31,6 +40,48 @@ export const MONGO_CONNECTION_OPTIONS = {
   maxIdleTimeMS: 5_000,
   connectTimeoutMS: 5_000,
 } as const;
+
+/**
+ * The database couldn't be reached. Every API answers it as 503 DATABASE_UNAVAILABLE, and a
+ * server page's error boundary knows it by its digest, which Next.js keeps on an error a server
+ * component throws, where it hides the message (`app/error.tsx`).
+ */
+export class DatabaseUnavailableError extends Error {
+  readonly code = DATABASE_UNAVAILABLE;
+  readonly digest = DATABASE_UNAVAILABLE;
+  constructor(cause: unknown) {
+    super(DATABASE_UNAVAILABLE_MESSAGE, { cause });
+    this.name = 'DatabaseUnavailableError';
+  }
+}
+
+const { mongo } = mongoose;
+
+/**
+ * Whether an error, or one it was caused by, means the database couldn't be reached: no server
+ * to select, a connection that couldn't be opened or broke, a pool cleared after one did, a
+ * server shedding load, or a Mongoose call that waited out a connection. Nothing else is: a
+ * refusal, a duplicate key or a bug is still answered as itself.
+ */
+export function isDatabaseUnreachable(error: unknown): boolean {
+  let cause = error;
+  for (let depth = 0; cause instanceof Error && depth < 8; depth += 1) {
+    if (
+      cause instanceof DatabaseUnavailableError ||
+      cause instanceof mongo.MongoServerSelectionError ||
+      cause instanceof mongoose.Error.MongooseServerSelectionError ||
+      // A pool cleared because a connection failed is one too.
+      cause instanceof mongo.MongoNetworkError ||
+      cause instanceof mongo.MongoTopologyClosedError ||
+      (cause instanceof mongo.MongoError &&
+        cause.hasErrorLabel(mongo.MongoErrorLabel.SystemOverloadedError)) ||
+      (cause.name === 'MongooseError' && cause.message.includes('buffering timed out'))
+    )
+      return true;
+    cause = cause.cause;
+  }
+  return false;
+}
 
 // A syntactically valid placeholder so an unconfigured build still constructs
 // the auth instance; any database call would fail loudly at request time.
@@ -112,6 +163,28 @@ export function getAuthDb(): Db {
 
 type AuthAdapter = ReturnType<typeof mongodbAdapter>;
 
+/**
+ * Better Auth answers a failure of its adapter as its own 500, or throws its own "Failed to get
+ * session", and drops what caused it. A watch notes, for the work it runs, the first time the
+ * adapter met a database it couldn't reach, so its caller can still answer that as itself.
+ */
+export class AuthDatabaseWatch {
+  unreachable: unknown = undefined;
+
+  run<T>(work: () => Promise<T>): Promise<T> {
+    return authWatches.run(this, work);
+  }
+
+  /** What to throw for `error` from the work: the database's failure, when it met one. */
+  failure(error: unknown): unknown {
+    const cause = this.unreachable ?? (isDatabaseUnreachable(error) ? error : undefined);
+    if (cause === undefined) return error;
+    return cause instanceof DatabaseUnavailableError ? cause : new DatabaseUnavailableError(cause);
+  }
+}
+
+const authWatches = new AsyncLocalStorage<AuthDatabaseWatch>();
+
 /** Better Auth's adapter, connecting the shared client before each of its calls. */
 export function connectedAuthAdapter(adapter: AuthAdapter): AuthAdapter {
   return (options) => {
@@ -121,8 +194,15 @@ export function connectedAuthAdapter(adapter: AuthAdapter): AuthAdapter {
         key,
         typeof value === 'function'
           ? async (...args: unknown[]) => {
-              await connectMongo();
-              return Reflect.apply(value, base, args);
+              try {
+                await connectMongo();
+                return await Reflect.apply(value, base, args);
+              } catch (error) {
+                const watch = authWatches.getStore();
+                if (watch && watch.unreachable === undefined && isDatabaseUnreachable(error))
+                  watch.unreachable = error;
+                throw error;
+              }
             }
           : value,
       ]),
