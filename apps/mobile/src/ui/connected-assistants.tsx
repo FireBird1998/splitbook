@@ -26,6 +26,7 @@ import {
 import { nearDay, spellDay, spellTime } from './day-format';
 import { ReadTime } from './financial-views';
 import { useDismissAfter } from './group-snackbar';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** When an assistant last called, as Settings on the web says it. */
 export function lastUsedLabel(value: string | null, now = Date.now()) {
@@ -44,7 +45,7 @@ const reach = (assistant: ListedAssistant) =>
     assistant.groups && assistantGroupCountLabel(assistant.groups),
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(SEPARATOR);
 
 function AssistantRow({
   assistant,
@@ -143,7 +144,7 @@ export function ConnectedAssistants({
       ) : null}
       {assistants && assistants.length > 0 ? (
         <View style={{ gap: 6 }}>
-          <SectionHeader title={`Assistants · ${assistants.length}`} />
+          <SectionHeader title={`Assistants${SEPARATOR}${assistants.length}`} />
           <Card>
             {assistants.map((assistant, index) => (
               <View key={assistant.id}>
@@ -209,7 +210,7 @@ export function ConnectedAssistants({
               <CompactText variant="caption" tone="secondary">
                 {[confirming.host, connectedAssistantAccessLabel(confirming.access)]
                   .filter(Boolean)
-                  .join(' · ')}
+                  .join(SEPARATOR)}
               </CompactText>
             </View>
           </View>

@@ -6,6 +6,7 @@
 import { moneyParticipantId, readStoredAmountMinor } from './exact-money';
 import type { ExpenseAllocationRead, ExpenseRead } from './expense-page-read';
 import { expensePosition, type ExpensePosition } from './expense-position';
+import { NO_BREAK_SEPARATOR } from './separator';
 
 /** A payer or share row in exact minor units, or null when its stored money can't be read. */
 function minorRows(expense: ExpenseRead, rows: ExpenseAllocationRead[]) {
@@ -56,13 +57,15 @@ export const SPLIT_LABELS: Record<ExpenseRead['splitMethod'], string> = {
   shares: 'By shares',
 };
 
-/** "Equally · 3": the split method and how many people have a share of it. */
+/**
+ * "Equally · 3": the split method and how many people have a share of it, on one line (#895).
+ */
 export function expenseSplitSummary(expense: {
   splitMethod: ExpenseRead['splitMethod'];
   splitBetween: ReadonlyArray<{ amount: number }>;
 }) {
   const people = expense.splitBetween.filter((row) => row.amount > 0).length;
-  return `${SPLIT_LABELS[expense.splitMethod]} · ${people}`;
+  return `${SPLIT_LABELS[expense.splitMethod]}${NO_BREAK_SEPARATOR}${people}`;
 }
 
 /** Who paid, as a row names them. */

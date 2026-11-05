@@ -145,7 +145,7 @@ test('Home lists every Group: Theme, members, spent this month, the balance and 
     const day = '\\d{1,2} [A-Z][a-z]{2}(?: \\d{4})?';
     await expect(
       table.locator(`tbody tr:has(a[href="/groups/${DEMO_GROUP_ID}"])`).getByRole('rowheader'),
-    ).toContainText(new RegExp(`^${DEMO_TRIP_NAME}Trip · (?:\\d{1,2}–${day}|${day} – ${day})$`));
+    ).toContainText(new RegExp(`^${DEMO_TRIP_NAME}Trip\\s· (?:\\d{1,2}–${day}|${day} – ${day})$`));
     // The page never scrolls sideways; a narrow card scrolls its table instead.
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

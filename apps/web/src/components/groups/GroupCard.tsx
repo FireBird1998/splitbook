@@ -28,6 +28,7 @@ import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { DashboardBalanceAmount } from '@splitbook/shared/types';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import { groupDatesLabel } from './group-dates';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface GroupCardProps {
   group: GroupRead;
@@ -56,7 +57,7 @@ function HouseholdMonthSpend({ groupId, currency }: { groupId: string; currency:
 
   return (
     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-      {format(now, 'MMMM')} so far ·{' '}
+      {format(now, 'MMMM')} so far{SEPARATOR}
       <MoneyText
         amount={summary.totalAmount ?? 0}
         currency={currency}

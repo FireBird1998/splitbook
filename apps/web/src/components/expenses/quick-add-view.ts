@@ -12,6 +12,7 @@ import {
   type QuickAddProblemCode,
   type QuickAddRead,
 } from '@splitbook/shared/quick-add';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export type QuickAddChipKey = 'description' | 'amount' | 'payer' | 'split' | 'date' | 'tag';
 
@@ -169,7 +170,7 @@ export function quickAddModel({
           : 'Needed';
   chips.push({
     key: 'amount',
-    label: unlisted ? 'Amount · not on the list' : 'Amount',
+    label: unlisted ? `Amount${SEPARATOR}not on the list` : 'Amount',
     value: amount,
     state: stateFor('amount'),
     spoken: unlisted
@@ -196,10 +197,10 @@ export function quickAddModel({
   const split = splitProblem
     ? 'Check names'
     : everyone
-      ? `Equally · ${selected.length}`
+      ? `Equally${SEPARATOR}${selected.length}`
       : selected.length <= 3
-        ? `Equally · ${list(selected.map(nameOf))}`
-        : `Equally · ${selected.length} of ${members.length}`;
+        ? `Equally${SEPARATOR}${list(selected.map(nameOf))}`
+        : `Equally${SEPARATOR}${selected.length} of ${members.length}`;
   chips.push({
     key: 'split',
     label: 'Split',
@@ -219,7 +220,11 @@ export function quickAddModel({
   });
   chips.push({
     key: 'tag',
-    label: tag ? (tag.how === 'suggested' ? 'Tag · suggested' : 'Tag') : 'Tag · needed',
+    label: tag
+      ? tag.how === 'suggested'
+        ? `Tag${SEPARATOR}suggested`
+        : 'Tag'
+      : `Tag${SEPARATOR}needed`,
     value: tag?.name ?? 'Choose one',
     state: tag ? (tag.how === 'suggested' ? 'suggested' : 'read') : 'needed',
     spoken: tag

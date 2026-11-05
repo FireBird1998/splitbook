@@ -10,6 +10,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
 import { memberLabel } from '@splitbook/shared/activity-timeline';
 import { paymentRecord, type CrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface PaymentRecordCardProps {
   record: CrossCurrencyRecord;
@@ -74,7 +75,9 @@ export default function PaymentRecordCard({
             Payment
           </Typography>
           <Typography sx={{ m: 0, fontSize: '0.75rem', color: 'text.secondary' }}>
-            Recorded by {recorder === 'You' ? 'you' : recorder} · {when}
+            Recorded by {recorder === 'You' ? 'you' : recorder}
+            {SEPARATOR}
+            {when}
           </Typography>
         </Box>
         <IconButton aria-label="Close Payment" onClick={onClose} size="small">

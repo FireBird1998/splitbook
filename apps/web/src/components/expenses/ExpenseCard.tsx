@@ -16,6 +16,7 @@ import {
   listedExpensePosition,
 } from '@splitbook/shared/expense-row';
 import { ExpenseTag, PositionText, RepeatsIcon } from './expense-row-parts';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface ExpenseCardProps {
   expense: ExpenseRead;
@@ -106,7 +107,9 @@ export default function ExpenseCard({
               sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary', mt: 0.25 }}
             >
               {payer.label === 'You' ? 'You paid' : `${payer.label} paid`}
-              <PreparedBy value={expense.preparedBy} inline /> · {expenseSplitSummary(expense)}
+              <PreparedBy value={expense.preparedBy} inline />
+              {SEPARATOR}
+              {expenseSplitSummary(expense)}
             </Box>
             {expense.tag && (
               <Box component="span" sx={{ display: 'block', mt: 0.75 }}>

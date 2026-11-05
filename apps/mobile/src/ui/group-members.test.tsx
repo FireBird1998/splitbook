@@ -135,7 +135,10 @@ describe('Members and Group details', () => {
   it('titles the page with the Group and returns from the back arrow', () => {
     const { root, props } = page();
     // A section's title keeps a hair space to spare (#639).
-    expect(byRole(root, 'header').map(text)).toEqual(['Members and details', 'Members · 3\u200a']);
+    expect(byRole(root, 'header').map(text)).toEqual([
+      'Members and details',
+      'Members\u00a0· 3\u200a',
+    ]);
     expect(text(root)).toContain('Maple House');
     act(() => {
       one(byRole(root, 'button', 'Back to Group')).props.onPress();
@@ -167,7 +170,7 @@ describe('Members and Group details', () => {
       'Priya Shah, Admin',
       'Sam Chen, Member',
     ]);
-    expect(text(root)).toContain('Alex Rivera · YouAdmin');
+    expect(text(root)).toContain('Alex Rivera\u00a0· YouAdmin');
     expect(text(root)).toContain('Sam ChenMember');
     const rows = hosts(root, (p) => p.accessible === true).slice(4);
     const shields = rows.map(
@@ -393,7 +396,7 @@ describe.each(['light', 'dark'] as const)('Members at large text in %s (#639)', 
           />
         </ThemeContext.Provider>,
       );
-      expect(labelRuns(root, 'Members · 3')).toEqual([['Members · 3', hairSpace]]);
+      expect(labelRuns(root, 'Members\u00a0· 3')).toEqual([['Members\u00a0· 3', hairSpace]]);
     },
   );
 });

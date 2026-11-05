@@ -241,11 +241,11 @@ describe('the Trip strip’s currencies (#730)', () => {
       'TRI',
       '17–20 Sep',
       '3 MEMBERS',
-      'INR · EUR · JPY',
+      'INR\u00a0· EUR\u00a0· JPY',
     ]);
-    expect(shown(root, 'INR · EUR · JPY').fontFamily).toBe(fonts.mono);
+    expect(shown(root, 'INR\u00a0· EUR\u00a0· JPY').fontFamily).toBe(fonts.mono);
     // On the stub, with the dates and members.
-    expect(holder(root, 'INR · EUR · JPY')).toEqual(holder(root, '17–20 Sep'));
+    expect(holder(root, 'INR\u00a0· EUR\u00a0· JPY')).toEqual(holder(root, '17–20 Sep'));
   });
 
   it('says two currencies with “and”, and lists one currency nowhere', () => {
@@ -253,7 +253,7 @@ describe('the Trip strip’s currencies (#730)', () => {
     expect(image(two).props.accessibilityLabel).toBe(
       'Trip from GOA to TRI, 17 to 20 September, 3 members, currencies INR and USD',
     );
-    shown(two, 'INR · USD');
+    shown(two, 'INR\u00a0· USD');
     act(() => screen?.unmount());
     const one = render(trip());
     expect(image(one).props.accessibilityLabel).toBe(
@@ -263,14 +263,14 @@ describe('the Trip strip’s currencies (#730)', () => {
 
   it.each(['light', 'dark'] as const)('sets them in the strip’s text colour in %s', (mode) => {
     const root = render(trip({ alternateCurrencies: ['EUR', 'JPY'] }), mode);
-    expect(shown(root, 'INR · EUR · JPY').color).toBe(getSemanticTokens(mode).strip.text);
+    expect(shown(root, 'INR\u00a0· EUR\u00a0· JPY').color).toBe(getSemanticTokens(mode).strip.text);
   });
 
   it('keeps them on the stub below the route at large text', () => {
     setWindow({ fontScale: 1.3 });
     const root = render(trip({ alternateCurrencies: ['EUR', 'JPY'] }));
-    expect(holder(root, 'INR · EUR · JPY')).toEqual(holder(root, '17–20 Sep'));
-    expect(holder(root, 'INR · EUR · JPY')).toMatchObject({ flexWrap: 'wrap' });
+    expect(holder(root, 'INR\u00a0· EUR\u00a0· JPY')).toEqual(holder(root, '17–20 Sep'));
+    expect(holder(root, 'INR\u00a0· EUR\u00a0· JPY')).toMatchObject({ flexWrap: 'wrap' });
   });
 });
 
@@ -285,12 +285,16 @@ describe('the Trip strip in five currencies (#886)', () => {
   it.each([1, 1.3, 2])('never runs the route under the currencies, 360 dp at %s× text', (scale) => {
     setWindow({ width: 360, height: 640, fontScale: scale });
     const root = render(trip(five));
-    expect(texts(root).map((node) => node.shown)).toContain('INR · EUR · CHF · GBP · JPY');
+    expect(texts(root).map((node) => node.shown)).toContain(
+      'INR\u00a0· EUR\u00a0· CHF\u00a0· GBP\u00a0· JPY',
+    );
     // The strip is inset 16 dp from the screen's edges.
     expect(unreadText(json(), scale, 360 - 32)).toEqual([]);
     // The currencies are under the route, on the stub's own line, which wraps.
     expect(gradient(root)).not.toHaveProperty('flexDirection');
-    expect(holder(root, 'INR · EUR · CHF · GBP · JPY')).toMatchObject({ flexWrap: 'wrap' });
+    expect(holder(root, 'INR\u00a0· EUR\u00a0· CHF\u00a0· GBP\u00a0· JPY')).toMatchObject({
+      flexWrap: 'wrap',
+    });
     expect(flat(rules(root)[2].props.style)).toMatchObject({ height: 1, flexDirection: 'row' });
   });
 

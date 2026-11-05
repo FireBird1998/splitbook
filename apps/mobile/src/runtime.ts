@@ -10,6 +10,7 @@ import { createMobileController } from './data';
 import { mobileConfig } from './config';
 import { createGoogleIdentityProvider } from './google-identity';
 import { createAppearanceController } from './data/appearance';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 const config = mobileConfig(
   {
@@ -39,9 +40,9 @@ export const environment = {
   isProduction: config?.googleEnvironment === 'production',
   label: googleSignInEnabled
     ? config?.googleEnvironment === 'production'
-      ? 'Private beta · production ledger'
-      : 'Private beta · staging ledger'
-    : 'Local development · fictional data',
+      ? `Private beta${SEPARATOR}production ledger`
+      : `Private beta${SEPARATOR}staging ledger`
+    : `Local development${SEPARATOR}fictional data`,
   apiOrigin: new URL(controllerConfig.apiBaseUrl).origin,
   webOrigin: new URL(controllerConfig.inviteOrigin ?? controllerConfig.authOrigin).origin,
 };

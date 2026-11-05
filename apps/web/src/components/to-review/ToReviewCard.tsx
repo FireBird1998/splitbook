@@ -13,6 +13,7 @@ import {
   homeRowSx,
 } from '@/components/dashboard/HomeCard';
 import { toReviewEnabled, useToReview } from './use-to-review';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export default function ToReviewCard() {
   const { read, retry } = useToReview();
@@ -26,7 +27,9 @@ export default function ToReviewCard() {
     <HomeRow>
       <HomeCard
         id="to-review"
-        title={read.status === 'ready' ? `To review · ${read.value.counts.total}` : 'To review'}
+        title={
+          read.status === 'ready' ? `To review${SEPARATOR}${read.value.counts.total}` : 'To review'
+        }
       >
         {read.status === 'error' && (
           <HomeCardError message="Unable to load To review." onRetry={retry} />

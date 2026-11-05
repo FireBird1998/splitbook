@@ -30,6 +30,7 @@ import {
 } from './connected-assistants-client';
 import DisconnectDialog from './DisconnectDialog';
 import { lastUsedLabel } from './last-used';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 const sameGroups = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((id) => b.includes(id));
@@ -177,7 +178,8 @@ export default function AssistantPage({ id, accountId }: { id: string; accountId
                 </Typography>
               )}
               <Typography variant="body2" sx={{ mt: 0.5 }}>
-                {connectedAssistantAccessLabel(assistant.access)} ·{' '}
+                {connectedAssistantAccessLabel(assistant.access)}
+                {SEPARATOR}
                 {lastUsedLabel(assistant.lastUsedAt)}
               </Typography>
               <Typography variant="body2" color="text.secondary">

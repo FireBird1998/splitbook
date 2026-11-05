@@ -2,6 +2,7 @@ import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import { parseMonthParam } from '@/components/groups/MonthCycleBar';
 import { groupIdInPath } from '@/components/layout/shell-nav';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /**
  * The pure parts of the top bar's Add expense (#304): where it adds an Expense from a given
@@ -28,7 +29,7 @@ export function groupChoiceDetail(group: GroupRead): string {
     getGroupTheme(group.category).label,
     `${members} ${members === 1 ? 'member' : 'members'}`,
     group.defaultCurrency,
-  ].join(' · ');
+  ].join(SEPARATOR);
 }
 
 /**

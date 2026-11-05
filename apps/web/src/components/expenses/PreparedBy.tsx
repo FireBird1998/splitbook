@@ -1,4 +1,5 @@
 import { assistantAttributionSchema } from '@splitbook/shared/draft-attribution';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** Provenance is optional on old records and hidden with the To review flag. */
 export default function PreparedBy({
@@ -15,7 +16,7 @@ export default function PreparedBy({
   // domain is, stays readable inside the card, cell or line that shows it (#751).
   return (
     <span>
-      {inline ? ' · prepared by ' : 'Prepared by '}
+      {inline ? `${SEPARATOR}prepared by ` : 'Prepared by '}
       <bdi style={{ overflowWrap: 'anywhere' }}>{result.data.name}</bdi>
     </span>
   );

@@ -13,6 +13,7 @@ import {
   type ExportFormat,
   type ExportRequest,
 } from '@splitbook/shared/export-request';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** "Period" is a date window, not the glossary's Month. */
 export type ExportPeriod = 'this' | 'last' | 'custom' | 'all';
@@ -114,7 +115,7 @@ export function exportGroupOptions(groups: readonly GroupRead[]): ExportGroupOpt
   return groups.map((group) => ({
     id: group._id,
     name: group.name,
-    meta: `${getGroupTheme(group.category).label} · ${group.defaultCurrency}`,
+    meta: `${getGroupTheme(group.category).label}${SEPARATOR}${group.defaultCurrency}`,
     currency: group.defaultCurrency,
   }));
 }

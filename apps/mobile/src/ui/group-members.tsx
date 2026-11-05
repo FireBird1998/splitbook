@@ -19,6 +19,7 @@ import {
 } from './compact';
 import { Icon, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 const themeIcons: Record<GroupCategory, IconName> = {
   trip: 'airplane-outline',
@@ -252,7 +253,7 @@ export function GroupMembers({
           <>
             <GroupDetails group={group} />
             <SectionHeader
-              title={`Members · ${group.members.length}`}
+              title={`Members${SEPARATOR}${group.members.length}`}
               trailing={
                 <CompactButton
                   label="Invite"
@@ -281,7 +282,7 @@ export function GroupMembers({
                     {index > 0 ? <Divider inset={58} /> : null}
                     <ListRow
                       leading={<CompactAvatar name={member.user.name} />}
-                      title={you ? `${member.user.name} · You` : member.user.name}
+                      title={you ? `${member.user.name}${SEPARATOR}You` : member.user.name}
                       meta={role}
                       trailing={
                         member.role === 'admin' ? (

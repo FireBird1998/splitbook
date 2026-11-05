@@ -27,6 +27,7 @@ import { RADIUS } from '@/lib/theme/tokens';
 import { useReviewEditor } from './use-review-editor';
 import { ReviewMatches, reviewSource } from './ReviewDetails';
 import type { WebReviewClient } from './review-client';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export type ReviewPanelHandle = { flush: () => Promise<boolean>; focus: () => void };
 
@@ -146,7 +147,9 @@ export default function ToReviewPanel({
         {/* An assistant's host can be long with no hyphens; it wraps anywhere, so its domain stays
             inside the panel where the member decides whether to save its Draft (#751). */}
         <Typography variant="body2" color="text.secondary" style={{ overflowWrap: 'anywhere' }}>
-          {groupName} · {reviewSource(item.accountItem!)}
+          {groupName}
+          {SEPARATOR}
+          {reviewSource(item.accountItem!)}
         </Typography>
         {editor.note && (
           <Alert severity="info" role="status">

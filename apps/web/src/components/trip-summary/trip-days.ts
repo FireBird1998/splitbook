@@ -7,6 +7,7 @@
 import { format } from 'date-fns';
 import { dayCount } from '@splitbook/shared/trip-summary';
 import type { DayKey } from '@splitbook/shared/zoned-calendar';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** The Expenses table's date pattern (`expenseDay`), without and with the year. */
 const DAY_PATTERN = 'EEE d MMM';
@@ -51,8 +52,8 @@ export function tripDayName(
   { start, end, thisYear }: { start: DayKey | null; end: DayKey | null; thisYear: number },
 ): string {
   const label = tripDayLabel(day, thisYear);
-  if (start && day < start) return `Before the trip · ${label}`;
-  if (end && day > end) return `After the trip · ${label}`;
+  if (start && day < start) return `Before the trip${SEPARATOR}${label}`;
+  if (end && day > end) return `After the trip${SEPARATOR}${label}`;
   const number = tripDayNumber(day, start);
-  return number === null ? label : `Day ${number} · ${label}`;
+  return number === null ? label : `Day ${number}${SEPARATOR}${label}`;
 }

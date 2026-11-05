@@ -12,6 +12,7 @@ import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { fetchWebExpenseRecord } from '@/lib/web-read';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import { moneyParticipantId } from '@splitbook/shared/exact-money';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export function reviewSource(item: ToReviewItem) {
   const by = item.draft.preparedBy;
@@ -38,13 +39,18 @@ export function ReviewFacts({
   return (
     <Box sx={{ overflowWrap: 'anywhere' }}>
       <Typography fontWeight={600}>
-        {v.description || 'Description missing'} · {reviewAmount(v, currency)}
+        {v.description || 'Description missing'}
+        {SEPARATOR}
+        {reviewAmount(v, currency)}
       </Typography>
       <Typography variant="body2" color="text.secondary">
-        {reviewDate(v.date)} · {reviewSource(item)}
+        {reviewDate(v.date)}
+        {SEPARATOR}
+        {reviewSource(item)}
       </Typography>
       <Typography variant="body2">
-        Paid by {v.paidBy?.map((p) => names[p.user] ?? 'a member').join(', ') || 'not specified'} ·{' '}
+        Paid by {v.paidBy?.map((p) => names[p.user] ?? 'a member').join(', ') || 'not specified'}
+        {SEPARATOR}
         {reviewSplitMethod(v.splitMethod)}
         {v.splitBetween?.length
           ? ` between ${v.splitBetween.map((p) => names[p.user] ?? 'a member').join(', ')}`
@@ -80,8 +86,10 @@ function ExpenseMatch({
       <Typography fontWeight={600}>{expense?.description ?? description}</Typography>
       {expense ? (
         <Typography variant="body2">
-          {formatCurrency(expense.amount, expense.currency)} ·{' '}
-          {formatDate(expenseLocalDate(expense.date))} · Added by {addedBy}
+          {formatCurrency(expense.amount, expense.currency)}
+          {SEPARATOR}
+          {formatDate(expenseLocalDate(expense.date))}
+          {SEPARATOR}Added by {addedBy}
         </Typography>
       ) : (
         <Typography variant="body2">
@@ -126,7 +134,10 @@ export function ReviewMatches({
                 currency={currency}
               />
             ) : (
-              <Typography>{match.description} · Another item in To review</Typography>
+              <Typography>
+                {match.description}
+                {SEPARATOR}Another item in To review
+              </Typography>
             )}
           </Box>
         ),

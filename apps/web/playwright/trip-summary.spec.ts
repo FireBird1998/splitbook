@@ -311,7 +311,7 @@ test('a Trip’s Expenses sit under their trip days, each with its total', async
     .filter((day) => day.expenseCount > 0)
     .reverse()
     .map((day) => ({ label: name(day.day), total: money(day.spentMinor, read.currency) }));
-  expect(expected[0].label).toMatch(/^Day \d · \w{3} \d{1,2} \w{3}/);
+  expect(expected[0].label).toMatch(/^Day \d\s· \w{3} \d{1,2} \w{3}/);
   const list = main(page).getByRole('region', { name: /^Expenses/ });
 
   if (isPhone(testInfo)) {
@@ -357,5 +357,5 @@ test('a Trip’s Expenses sit under their trip days, each with its total', async
     timeout: 30_000,
   });
   await expect(list.locator('[data-trip-day]')).toHaveCount(0);
-  await expect(list.getByText(/^Day \d · /)).toHaveCount(0);
+  await expect(list.getByText(/^Day \d\s· /)).toHaveCount(0);
 });

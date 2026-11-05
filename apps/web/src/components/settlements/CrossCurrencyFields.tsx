@@ -29,6 +29,7 @@ import {
   type CrossCurrencySettlementFields,
 } from '@splitbook/shared/cross-currency-settlement';
 import type { RateSuggestionState } from '@/lib/hooks/use-rate-suggestion';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#884). */
 const symbol = currencyPrefix;
@@ -208,7 +209,7 @@ export default function CrossCurrencyFields({
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {head(
-            `Rate · ${symbol(paidCurrency)} for each ${symbol(currency)}`,
+            `Rate${SEPARATOR}${symbol(paidCurrency)} for each ${symbol(currency)}`,
             // No tag while the suggestion is read: none is known yet.
             rate.status !== 'loading' && (
               <Box

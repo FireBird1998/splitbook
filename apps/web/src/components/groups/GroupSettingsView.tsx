@@ -47,6 +47,7 @@ import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes'
 import RecurringExpensesSection from '@/components/groups/RecurringExpensesSection';
 import RefusalAlert, { refusalFrom, type Refusal } from '@/components/groups/RefusalAlert';
 import { apiFetch } from '@/lib/utils/api-fetch';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface GroupSettingsViewProps {
   groupId: string;
@@ -483,7 +484,7 @@ function GroupSettingsContent({
                     <Typography variant="caption" color="text.disabled">
                       {[m.user.email, `Joined ${formatDate(m.joinedAt)}`]
                         .filter(Boolean)
-                        .join(' · ')}
+                        .join(SEPARATOR)}
                     </Typography>
                   </Box>
                 </Stack>

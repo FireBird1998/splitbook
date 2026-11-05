@@ -144,7 +144,7 @@ describe('Balances destination', () => {
   it('shows the all-time balance, the payments the member can record and everyone’s position', () => {
     const { root, onRecord } = view();
     const shown = text(root);
-    expect(shown).toContain('All-time balance · INR');
+    expect(shown).toContain('All-time balance\u00a0· INR');
     expect(labelled(root, 'You owe ₹1,480.00')).toHaveLength(2);
     expect(shown).toContain('Includes every month. Picking a month on Expenses doesn’t change it.');
     expect(shown).toContain('Record one once it’s paid');
@@ -829,7 +829,7 @@ describe('Balances, one currency at a time (#725)', () => {
     ]);
     // Each tab's words keep a hair space to spare (#639).
     expect(text(root).replaceAll(hairSpace, '')).toContain(
-      'INR · main−₹1,480.00EUR−€20.00JPY+¥8,400',
+      'INR\u00a0· main−₹1,480.00EUR−€20.00JPY+¥8,400',
     );
   });
 
@@ -837,15 +837,15 @@ describe('Balances, one currency at a time (#725)', () => {
     const onRecord = vi.fn();
     const root = render(element(buckets(), onRecord));
     const shown = text(root);
-    expect(shown).toContain('All-time balance · INR');
+    expect(shown).toContain('All-time balance\u00a0· INR');
     expect(labelled(root, 'You owe ₹1,480.00')).toHaveLength(2);
-    expect(shown).toContain('Settle up · INR');
-    expect(shown).toContain('Everyone · INR');
+    expect(shown).toContain('Settle up\u00a0· INR');
+    expect(shown).toContain('Everyone\u00a0· INR');
     expect(labelled(root, 'Sam Chen gets back ₹2,210.00')).toHaveLength(1);
     expect(shown).toContain('Each currency keeps its own balances. Nothing is converted.');
     for (const other of ['EUR', 'JPY']) {
-      expect(shown).not.toContain(`All-time balance · ${other}`);
-      expect(shown).not.toContain(`Everyone · ${other}`);
+      expect(shown).not.toContain(`All-time balance\u00a0· ${other}`);
+      expect(shown).not.toContain(`Everyone\u00a0· ${other}`);
     }
     act(() => labelled(root, 'Record your payment to Sam Chen')[0]!.props.onPress());
     expect(onRecord).toHaveBeenCalledWith(you, sam, 'INR');
@@ -855,7 +855,7 @@ describe('Balances, one currency at a time (#725)', () => {
     const root = render(element(buckets(tripInr(0))));
     expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe('EUR, you owe €20.00');
     expect(tabs(root)[0]).toEqual(['INR, main currency, you’re settled up', false]);
-    expect(text(root)).toContain('All-time balance · EUR');
+    expect(text(root)).toContain('All-time balance\u00a0· EUR');
     act(() => screen?.unmount());
 
     const settled = (bucket: GroupCurrencyBalance): GroupCurrencyBalance => ({
@@ -875,19 +875,19 @@ describe('Balances, one currency at a time (#725)', () => {
     choose(root, 'JPY, you’re owed ¥8,400');
     expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe('JPY, you’re owed ¥8,400');
     const shown = text(root);
-    expect(shown).toContain('All-time balance · JPY');
+    expect(shown).toContain('All-time balance\u00a0· JPY');
     expect(labelled(root, 'You’re owed ¥8,400')).toHaveLength(1);
     expect(labelled(root, 'You get back ¥8,400')).toHaveLength(1);
-    expect(shown).toContain('Settle up · JPY');
+    expect(shown).toContain('Settle up\u00a0· JPY');
     expect(labelled(root, 'Sam Chen pays you, ¥8,400')).toHaveLength(1);
     // A Debt is recorded on its own currency's tab, in its currency (#728).
     expect(shown).toContain('Record one once it’s paid');
     expect(shown).not.toContain('the main currency');
     act(() => labelled(root, 'Record Sam Chen’s payment to you')[0]!.props.onPress());
     expect(onRecord).toHaveBeenCalledWith(sam, you, 'JPY');
-    expect(shown).toContain('Everyone · JPY');
+    expect(shown).toContain('Everyone\u00a0· JPY');
     expect(labelled(root, 'Sam Chen owes ¥8,400')).toHaveLength(1);
-    expect(shown).not.toContain('All-time balance · INR');
+    expect(shown).not.toContain('All-time balance\u00a0· INR');
     expect(shown).not.toContain('₹2,210.00');
   });
 
@@ -897,7 +897,7 @@ describe('Balances, one currency at a time (#725)', () => {
     expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe(
       'INR, main currency, you’re settled up',
     );
-    expect(text(root)).toContain('All-time balance · INR');
+    expect(text(root)).toContain('All-time balance\u00a0· INR');
     expect(text(root)).toContain('Settled up');
 
     choose(root, 'JPY, you’re owed ¥8,400');
@@ -909,9 +909,9 @@ describe('Balances, one currency at a time (#725)', () => {
     const root = render(element([inr]));
     expect(tablists(root)).toHaveLength(0);
     const shown = text(root);
-    expect(shown).toContain('All-time balance · INR');
+    expect(shown).toContain('All-time balance\u00a0· INR');
     expect(shown).toContain('Everyone');
-    expect(shown).not.toContain('Everyone · INR');
+    expect(shown).not.toContain('Everyone\u00a0· INR');
     expect(shown).not.toContain('Nothing is converted.');
   });
   // #734, board "Android · Settle both currencies at once".
@@ -1081,7 +1081,7 @@ describe.each(['light', 'dark'] as const)('a settled currency’s tab in %s (#77
       </ThemeContext.Provider>,
     );
     const [tab] = labelled(root, 'INR, main currency, you’re settled up');
-    expect(text(tab!).replaceAll(hairSpace, '')).toBe('INR · mainSettled up');
+    expect(text(tab!).replaceAll(hairSpace, '')).toBe('INR\u00a0· mainSettled up');
     const [words] = tab!.findAll(
       (node) => isHost(node, 'Text') && node.children.includes('Settled up'),
     );
@@ -1195,7 +1195,7 @@ describe('Settle up, suggested or before simplifying (#612)', () => {
   it('names the section “Settle up” and opens on Suggested, with Record and its caption', () => {
     const root = view([euros, rupees, yen]);
     const shown = text(root);
-    expect(shown).toContain('Settle up · INR');
+    expect(shown).toContain('Settle up\u00a0· INR');
     expect(shown).not.toContain('Suggested payments');
     expect(switches(root).map((group) => group.props.accessibilityLabel)).toEqual([
       'Settle up view',
@@ -1235,7 +1235,7 @@ describe('Settle up, suggested or before simplifying (#612)', () => {
       ),
     ).toHaveLength(0);
     const shown = text(root);
-    expect(shown).toContain('Settle up · INR');
+    expect(shown).toContain('Settle up\u00a0· INR');
     expect(shown).not.toContain('Record one once it’s paid');
     expect(shown).toContain(note);
     // A Debt is neither good nor bad news: its amount is in the text colour, never red or green.
@@ -1268,7 +1268,7 @@ describe('Settle up, suggested or before simplifying (#612)', () => {
     ]);
     // One currency: the section's title names none, as the others don't.
     expect(text(root)).toContain('Settle up');
-    expect(text(root)).not.toContain('Settle up · INR');
+    expect(text(root)).not.toContain('Settle up\u00a0· INR');
     press(root, 'Before simplifying');
     expect(labelled(root, 'You owe Priya Shah, ₹1,480.00')).toHaveLength(1);
     expect(labelled(root, 'Priya Shah owes Sam Chen, ₹1,480.00')).toHaveLength(1);
@@ -1381,7 +1381,7 @@ describe('Settle up, suggested or before simplifying (#612)', () => {
   it('shows Suggested alone, with no switch, for a reply without Debts', () => {
     const root = view([euros, rupees, yen]);
     press(root, 'JPY, you’re owed ¥8,400');
-    expect(text(root)).toContain('Settle up · JPY');
+    expect(text(root)).toContain('Settle up\u00a0· JPY');
     expect(text(root)).toContain('Record one once it’s paid');
     expect(switches(root)).toHaveLength(0);
     expect(labelled(root, 'Record Sam Chen’s payment to you')).toHaveLength(1);

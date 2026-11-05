@@ -89,6 +89,13 @@ Money is deliberately monospaced so columns of amounts align and digits do not
 shift width as values change. Render it through `MoneyText` rather than styling
 `Typography` ad hoc.
 
+Join a line's parts with `SEPARATOR` from `@splitbook/shared/separator`, on the web and
+on Android: " · " with a no-break space (U+00A0) before the dot, so a line that wraps there
+ends with the dot and the next never starts with it (#892, #895). A short pair that reads as
+one, such as "Equally · 2", uses `NO_BREAK_SEPARATOR`, and a date-time such as "5 Nov 17:44"
+keeps its parts together with `NO_BREAK_SPACE`. Outfit draws U+00A0 but has no U+202F or
+U+2009. `packages/shared/src/separator.test.ts` fails on a plain " · " in UI text.
+
 ### Shape
 
 `RADIUS = { sm: 8, md: 12, lg: 16 }` — buttons and chips `sm`, cards `md`,

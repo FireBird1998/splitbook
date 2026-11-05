@@ -565,7 +565,7 @@ describe('compact Expense record', () => {
       'Sam Chen: paid ₹2,860.00, share ₹953.34',
       'Priya Shah: paid nothing, share ₹953.33',
     ]);
-    expect(shown).toContain('Equally · 3');
+    expect(shown).toContain('Equally\u00a0· 3');
     expect(shown).toContain('Shares differ by the smallest unit so the whole amount is shared.');
     // A saved Expense always adds up; the form’s running check isn’t repeated.
     expect(shown).not.toContain('Adds up');
@@ -794,7 +794,7 @@ describe('compact Expense record', () => {
     expect(ui.writes).toEqual([`DELETE /api/groups/${groupId}/expenses/${ids.bill}`]);
     expect(ui.controller.getSnapshot()).toMatchObject({
       screen: 'group',
-      snackbar: { message: 'Expense deleted · Electricity bill' },
+      snackbar: { message: 'Expense deleted\u00a0· Electricity bill' },
     });
   });
 

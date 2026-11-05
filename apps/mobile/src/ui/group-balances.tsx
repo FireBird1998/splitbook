@@ -40,6 +40,7 @@ import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
 import { CurrencyTabs } from './currency-tabs';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** Record's reason offline, here and on the Record payment sheet (#728). */
 export { recordNeedsConnection };
@@ -400,7 +401,8 @@ function MemberBalanceCard({
       <View style={{ gap: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <CompactText variant="overline" accessibilityRole="header" style={title}>
-            All-time balance · {bucket.currency}
+            All-time balance{SEPARATOR}
+            {bucket.currency}
           </CompactText>
           <ReadTime
             refreshedAt={refreshedAt}
@@ -912,7 +914,8 @@ export function GroupBalancesView({
                 <View style={title}>
                   <SkeletonOf bar>
                     <CompactText variant="overline">
-                      All-time balance · {group.defaultCurrency}
+                      All-time balance{SEPARATOR}
+                      {group.defaultCurrency}
                     </CompactText>
                   </SkeletonOf>
                 </View>
@@ -961,7 +964,7 @@ export function GroupBalancesView({
     beforeChosen?.groupId === group.id && beforeChosen.currency === currency
       ? 'before'
       : 'suggested';
-  const inCurrency = (heading: string) => (several ? `${heading} · ${currency}` : heading);
+  const inCurrency = (heading: string) => (several ? `${heading}${SEPARATOR}${currency}` : heading);
   return (
     <View style={{ gap: 14 }}>
       <RetainedNotice

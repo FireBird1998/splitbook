@@ -24,7 +24,7 @@ describe('an assistant’s credit (#751)', () => {
       const html = credit(inline);
       expect(html, String(inline)).toContain(`<bdi style="overflow-wrap:anywhere">${host}</bdi>`);
     }
-    expect(credit(true)).toContain(' · prepared by ');
+    expect(credit(true)).toContain('\u00a0· prepared by ');
     expect(credit(false)).toContain('Prepared by ');
   });
 });

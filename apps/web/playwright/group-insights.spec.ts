@@ -318,7 +318,7 @@ test('a Trip shows its Trip summary in place of Months (#316)', async ({ page })
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}/insights`);
   const main = page.getByRole('main');
-  await expect(main.getByRole('region', { name: /^Whole trip · / })).toBeVisible({
+  await expect(main.getByRole('region', { name: /^Whole trip\s· / })).toBeVisible({
     timeout: 30_000,
   });
   await expect(

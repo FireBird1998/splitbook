@@ -93,6 +93,7 @@ import type { MobileGroup, MobileSnapshot } from './src/data/types';
 import { shownGroup, type MobileController } from './src/data/mobile-controller';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { PRODUCT_NAME } from './src/product';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -539,7 +540,7 @@ function TaskScreen() {
         // Whose assistants they are, as the board has it (#622).
         subtitle={
           state.screen === 'assistants' && state.auth.user
-            ? `Account · ${state.auth.user.name}`
+            ? `Account${SEPARATOR}${state.auth.user.name}`
             : undefined
         }
         // Disabled while joining: the join finishes and opens its Group (#152).

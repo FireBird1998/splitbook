@@ -15,6 +15,7 @@ import {
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import ErrorState from '@/components/common/ErrorState';
 import { TabCard, PaysArrow, PersonAvatar, visuallyHidden } from './TabCard';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** Someone named in a payment, as the settlements read populates them; null for an account gone. */
 type PaymentPerson = { _id: string; name?: string } | null | undefined;
@@ -106,8 +107,8 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
           : count === 0
             ? 'None recorded yet'
             : counted === count
-              ? `${count} recorded · already counted in the balances above`
-              : `${count} recorded · ${counted} counted in the balances above`
+              ? `${count} recorded${SEPARATOR}already counted in the balances above`
+              : `${count} recorded${SEPARATOR}${counted} counted in the balances above`
       }
     >
       {state.status === 'loading' ? (

@@ -325,7 +325,7 @@ describe('Group creation corrections, rendered', () => {
   it('marks the name required, explains a blank name at the field and focuses it, then creates', async () => {
     const view = await render('create');
     const name = () => view.input('Trip name, required');
-    expect(text(fieldOf(name()))).toContain('Trip name · Required');
+    expect(text(fieldOf(name()))).toContain('Trip name\u00a0· Required');
     expect(view.pressable('Create Trip').props.disabled).toBe(false);
 
     await view.press('Create Trip');

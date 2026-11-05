@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 import SegmentedControl from '@/components/charts/SegmentedControl';
 import MoneyText from '@/components/common/MoneyText';
 import { TabCard } from './TabCard';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export interface Debt {
   from: { _id: string; name: string };
@@ -43,7 +44,7 @@ export default function SettleUpViews({
       title="Settle up"
       subtitle={
         showingSuggested && suggestedCount > 0
-          ? `${currency} · Record one once it’s paid`
+          ? `${currency}${SEPARATOR}Record one once it’s paid`
           : currency
       }
     >

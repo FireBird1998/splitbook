@@ -6,6 +6,7 @@ import { addableCurrencies, alreadyListedNote } from '@splitbook/shared/group-cu
 import { Banner, BottomSheet, CompactButton, CompactText, radius, touch, useTap } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /**
  * Adding a currency to a Group (#722, board "Add a currency"), as any member may on the web: a
@@ -45,7 +46,7 @@ export function AddCurrencySheet({
     <BottomSheet
       visible={visible}
       title="Add a currency"
-      subtitle={`${groupName} · ${extraCount} of ${MAX_EXTRA_CURRENCIES} extra currencies`}
+      subtitle={`${groupName}${SEPARATOR}${extraCount} of ${MAX_EXTRA_CURRENCIES} extra currencies`}
       onDone={onCancel}
       doneLabel="Cancel"
       dismissLabel="Close Add a currency"

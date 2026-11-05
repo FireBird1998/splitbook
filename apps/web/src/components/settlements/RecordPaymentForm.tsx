@@ -61,6 +61,7 @@ import {
   whoSees,
   type LedgerState,
 } from './record-payment';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** Someone who can be picked as From or To. */
 export interface PaymentParty {
@@ -575,7 +576,9 @@ export default function RecordPaymentForm({
           Record payment
         </Typography>
         <Typography sx={{ m: 0, fontSize: '0.75rem', color: 'text.secondary' }}>
-          {groupName} · {payable ? `Debt in ${currency}` : currency}
+          {groupName}
+          {SEPARATOR}
+          {payable ? `Debt in ${currency}` : currency}
         </Typography>
       </Box>
 

@@ -179,7 +179,7 @@ describe('Settle up with Sam (#734)', () => {
       one(root, 'EUR Debt €20.00 at ₹92.10 per €, suggested, Frankfurter, 20 Oct. Pays ₹1,842.00'),
     ).toBeDefined();
     expect(shown).toContain('Same currency, no rate');
-    expect(shown).toContain('Suggested · Frankfurter, 20 Oct');
+    expect(shown).toContain('Suggested\u00a0· Frankfurter, 20 Oct');
     expect(shown).toContain('You pay Sam Chen');
     expect(shown).toContain('₹3,322.00');
     expect(shown).toContain(
@@ -243,7 +243,7 @@ describe('Settle up with Sam (#734)', () => {
       ),
     );
     const shown = text(custom.root);
-    expect(shown).toContain('Your rate · suggested ₹92.10, Frankfurter, 20 Oct');
+    expect(shown).toContain('Your rate\u00a0· suggested ₹92.10, Frankfurter, 20 Oct');
     expect(shown).toContain('₹1,850.00');
     expect(shown).toContain('₹3,330.00');
     act(() => one(custom.root, 'Use ₹92.10 for the EUR Debt').props.onPress());
@@ -259,7 +259,7 @@ describe('Settle up with Sam (#734)', () => {
       ),
     );
     const shown = text(root);
-    expect(shown).toContain('No rate suggested · Enter the rate you agreed');
+    expect(shown).toContain('No rate suggested\u00a0· Enter the rate you agreed');
     expect(one(root, 'Rate for the EUR Debt, INR for each EUR').props.value).toBe('');
     expect(record(root).props.accessibilityState?.disabled).toBe(true);
     expect(record(root).props.accessibilityHint).toBe(
@@ -282,7 +282,7 @@ describe('Settle up with Sam (#734)', () => {
         paying({ rates: { EUR: { rate: { status: 'ready', suggestion: mixed }, custom: null } } }),
       ),
     );
-    expect(text(root)).toContain('Suggested · rates of 21 Oct');
+    expect(text(root)).toContain('Suggested\u00a0· rates of 21 Oct');
     const link = one(root, 'Rates By Exchange Rate API');
     expect(link.props.accessibilityRole).toBe('link');
     act(() => link.props.onPress());

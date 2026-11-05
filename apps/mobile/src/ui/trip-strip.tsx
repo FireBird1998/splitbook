@@ -8,6 +8,7 @@ import type { MobileGroup } from '../data/types';
 import { CompactText, isLargeText, scaledSp, space, textVariants } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 // Trip dates are calendar days stored at midnight UTC.
 const day = (date: Date, month: 'short' | 'long') =>
@@ -133,7 +134,7 @@ export function TripStrip({ group }: { group: MobileGroup }) {
   const members = `${count} ${count === 1 ? 'member' : 'members'}`;
   const currencies = groupCurrencies(group);
   const several = currencies.length > 1;
-  const list = currencies.join(' · ');
+  const list = currencies.join(SEPARATOR);
   // At large text, or where the stub doesn't fit beside the route, it goes under the route.
   const stacked =
     isLargeText(window.fontScale) ||

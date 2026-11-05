@@ -41,6 +41,7 @@ import type { IconName } from './primitives';
 import { useTheme } from './theme';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import { nearDay, spellDay } from './day-format';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 const categoryIcons: Record<string, IconName> = {
   food: 'restaurant-outline',
@@ -74,7 +75,7 @@ export function expenseDayLabel(date: Date, now: number) {
     year: date.getFullYear() !== new Date(now).getFullYear(),
   });
   const near = nearDay(date, now);
-  return near ? `${near} · ${label}` : label;
+  return near ? `${near}${SEPARATOR}${label}` : label;
 }
 
 /** Expenses keep the server's newest-first order, grouped under the day they are dated (#437). */
@@ -119,7 +120,7 @@ const ExpenseRow = memo(function ExpenseRow({
     <ListRow
       leading={<IconTile icon={categoryIcons[expense.category] ?? 'receipt-outline'} />}
       title={expense.description}
-      meta={[paid, expense.tag].filter(Boolean).join(' · ')}
+      meta={[paid, expense.tag].filter(Boolean).join(SEPARATOR)}
       // On its own line, so a long host keeps its domain readable (#751).
       note={expense.preparedBy && `prepared by ${expense.preparedBy.name}`}
       trailing={
@@ -438,7 +439,7 @@ const ExpenseSummary = memo(function ExpenseSummary({
               tone="secondary"
               style={{ paddingHorizontal: 14, marginTop: -6, paddingBottom: 10 }}
             >
-              Also {figures.others.join(' · ')} in other currencies
+              Also {figures.others.join(SEPARATOR)} in other currencies
             </CompactText>
           ) : null}
           <Divider />

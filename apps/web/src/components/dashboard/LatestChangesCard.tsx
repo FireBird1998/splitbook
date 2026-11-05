@@ -26,6 +26,7 @@ import { settlementBatchWords } from '@splitbook/shared/settlement-batch-words';
 import { newestEvent, type ActivityBatch } from '@/components/activity/batch-words';
 import { fetcher } from '@/lib/utils/fetcher';
 import { RADIUS } from '@/lib/theme/tokens';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** The read behind the card: the member's latest changes across their Groups (#309). */
 export const LATEST_CHANGES_KEY = userActivityKey(WEB_QUERY_ACCOUNT, {
@@ -258,7 +259,8 @@ function LatestChangeRow({
             component="span"
             sx={{ fontSize: '0.75rem', lineHeight: 1.35, color: 'text.secondary' }}
           >
-            {event.group.name} ·{' '}
+            {event.group.name}
+            {SEPARATOR}
             <time dateTime={event.createdAt}>{formatActivityTimestamp(event)}</time>
           </Box>
         </Box>

@@ -28,6 +28,7 @@ import { useStartWhileUnfocused } from './start-while-unfocused';
 import { Copy, Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export type GroupCreateDraft = GroupDraft;
 
@@ -101,7 +102,9 @@ export function Field({
     <View style={{ gap: 7 }}>
       <Copy style={{ fontFamily: fonts.medium, fontSize: 14 }}>
         {label}
-        {required && <Copy style={{ fontSize: 14, color: theme.textSecondary }}> · Required</Copy>}
+        {required && (
+          <Copy style={{ fontSize: 14, color: theme.textSecondary }}>{SEPARATOR}Required</Copy>
+        )}
       </Copy>
       <TextInput
         {...props}

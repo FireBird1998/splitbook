@@ -16,6 +16,7 @@ import type { GroupCategory } from '@splitbook/shared/types';
 import { openExpenseQuery } from '@/components/expenses/expense-list-query';
 import { groupTabHref } from '@/components/groups/group-tabs';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export type SearchSectionKey = 'groups' | 'people' | 'expenses';
 
@@ -72,7 +73,7 @@ function groupOption(group: SearchGroupResult): SearchOption {
     key: `group:${group.id}`,
     href: groupHref(group.id),
     title: group.name,
-    detail: `${getGroupTheme(category).label} · ${plural(group.memberCount, 'member', 'members')}`,
+    detail: `${getGroupTheme(category).label}${SEPARATOR}${plural(group.memberCount, 'member', 'members')}`,
     category,
   };
 }
@@ -109,7 +110,7 @@ function expenseOption(expense: SearchExpenseResult): SearchOption {
     key: `expense:${expense.id}`,
     href: expenseHref(expense),
     title: expense.description,
-    detail: `${expense.groupName} · ${formatDate(expenseLocalDate(expense.date))}`,
+    detail: `${expense.groupName}${SEPARATOR}${formatDate(expenseLocalDate(expense.date))}`,
     amount: expenseAmount(expense),
   };
 }

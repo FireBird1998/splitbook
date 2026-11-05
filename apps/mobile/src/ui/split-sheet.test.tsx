@@ -302,7 +302,7 @@ describe('Split sheet', () => {
   it('offers four methods, a checkbox for each person and their resulting share', async () => {
     const ui = await withAmount('1249.50');
     expect(ui.sheet()).toBeTruthy();
-    expect(text(ui.sheet()!)).toContain('Total ₹1,249.50 · INR');
+    expect(text(ui.sheet()!)).toContain('Total ₹1,249.50\u00a0· INR');
     expect(ui.methods()).toEqual([
       ['Equal', true],
       ['Amounts', false],
@@ -315,7 +315,7 @@ describe('Split sheet', () => {
       { label: 'Priya Shah, ₹416.50', checked: true },
     ]);
     expect(text(ui.sheet()!)).toContain('Adds up');
-    expect(text(ui.sheet()!)).toContain('3 people · ₹1,249.50 allocated');
+    expect(text(ui.sheet()!)).toContain('3 people\u00a0· ₹1,249.50 allocated');
     expect(text(ui.sheet()!)).not.toContain('leftover');
 
     await ui.toggle('Priya Shah');
@@ -324,7 +324,7 @@ describe('Split sheet', () => {
       { label: 'Sam Chen, ₹624.75', checked: true },
       { label: 'Priya Shah, Not included', checked: false },
     ]);
-    expect(ui.splitTile().props.accessibilityLabel).toBe('Split: Equally · 2');
+    expect(ui.splitTile().props.accessibilityLabel).toBe('Split: Equally\u00a0· 2');
   });
 
   it('uses steppers for Shares and names who got the leftover', async () => {
@@ -351,19 +351,19 @@ describe('Split sheet', () => {
       { label: 'Sam Chen, ₹312.38', checked: true },
       { label: 'Priya Shah, ₹312.37', checked: true },
     ]);
-    expect(text(ui.sheet()!)).toContain('4 shares · ₹1,249.50 allocated');
+    expect(text(ui.sheet()!)).toContain('4 shares\u00a0· ₹1,249.50 allocated');
     expect(text(ui.sheet()!)).toContain(
       'The leftover ₹0.01 goes to Sam Chen so the total is exact.',
     );
     expect(moneyRuns(ui.sheet()!)).toEqual([
-      { run: '₹1,249.50', line: 'Total ₹1,249.50 · INR' },
-      { run: '₹1,249.50', line: '4 shares · ₹1,249.50 allocated' },
+      { run: '₹1,249.50', line: 'Total ₹1,249.50\u00a0· INR' },
+      { run: '₹1,249.50', line: '4 shares\u00a0· ₹1,249.50 allocated' },
       { run: '₹0.01', line: 'The leftover ₹0.01 goes to Sam Chen so the total is exact.' },
     ]);
     expect(
       spoken(
         ui.sheet()!,
-        'Adds up. 4 shares · ₹1,249.50 allocated. The leftover ₹0.01 goes to Sam Chen so the total is exact.',
+        'Adds up. 4 shares\u00a0· ₹1,249.50 allocated. The leftover ₹0.01 goes to Sam Chen so the total is exact.',
       ),
     ).toHaveLength(1);
     expect(ui.pressable('Decrease shares for Sam Chen').props.disabled).toBe(true);
@@ -378,7 +378,7 @@ describe('Split sheet', () => {
     expect(text(ui.sheet()!)).toContain('₹49.50 still to assign');
     expect(text(ui.sheet()!)).toContain('₹1,200.00 of ₹1,249.50');
     expect(moneyRuns(ui.sheet()!)).toEqual([
-      { run: '₹1,249.50', line: 'Total ₹1,249.50 · INR' },
+      { run: '₹1,249.50', line: 'Total ₹1,249.50\u00a0· INR' },
       { run: '₹49.50', line: '₹49.50 still to assign' },
       { run: '₹1,200.00', line: '₹1,200.00 of ₹1,249.50' },
       { run: '₹1,249.50', line: '₹1,200.00 of ₹1,249.50' },
@@ -393,7 +393,7 @@ describe('Split sheet', () => {
 
     await ui.done();
     expect(ui.sheet()).toBeUndefined();
-    expect(ui.splitTile().props.accessibilityLabel).toBe('Split: By amounts · 3');
+    expect(ui.splitTile().props.accessibilityLabel).toBe('Split: By amounts\u00a0· 3');
     await ui.type('Description, required', 'Weekly groceries');
     const tag = ui
       .root()
@@ -429,7 +429,7 @@ describe('Split sheet', () => {
     await ui.type('Percentage for Priya Shah', '30');
     expect(text(ui.sheet()!)).toContain('5% over 100%');
     await ui.type('Percentage for Priya Shah', '25');
-    expect(text(ui.sheet()!)).toContain('100% · ₹1,000.00 allocated');
+    expect(text(ui.sheet()!)).toContain('100%\u00a0· ₹1,000.00 allocated');
   });
 
   it('warns that switching method clears the values, and does clear them', async () => {
@@ -465,7 +465,7 @@ describe('Split sheet', () => {
     await ui.press('Close Split, keeping your entries');
     expect(ui.sheet()).toBeUndefined();
     expect(ui.splitTile().props.accessibilityLabel).toBe(
-      'Split: Equally · 0. Choose at least one person to share this Expense.',
+      'Split: Equally\u00a0· 0. Choose at least one person to share this Expense.',
     );
     await ui.openSplit();
     expect(ui.people().every((row) => !row.checked)).toBe(true);
@@ -590,7 +590,7 @@ describe('An Amounts entry above the largest Expense amount (#187)', () => {
     expect(ui.input('Amount for you').props.accessibilityHint).toBe(correction);
     expect(text(ui.sheet()!)).toContain('Correct the entry marked above.');
     await ui.done();
-    expect(ui.splitTile().props.accessibilityLabel).toMatch(/^Split: By amounts · 2\. /);
+    expect(ui.splitTile().props.accessibilityLabel).toMatch(/^Split: By amounts\u00a0· 2\. /);
     expect(ui.writes).toEqual([]);
   });
 });

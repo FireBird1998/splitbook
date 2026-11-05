@@ -99,11 +99,11 @@ describe('Connected assistants (#622)', () => {
     const shown = screenText();
     for (const line of [
       'Assistants act as you, only with the access you give them.',
-      'Assistants · 2',
+      'Assistants\u00a0· 2',
       'Fictional Helper',
-      'Read only + To review · 1 of 2 Groups',
+      'Read only + To review\u00a0· 1 of 2 Groups',
       'Fictional Reader',
-      'Read only · 2 of 2 Groups',
+      'Read only\u00a0· 2 of 2 Groups',
       'Not used yet',
     ])
       expect(shown).toContain(line);
@@ -125,14 +125,14 @@ describe('Connected assistants (#622)', () => {
     const shown = screenText();
     expect(shown).toContain('No connected assistants');
     expect(shown).toContain('Assistants you connect appear here.');
-    expect(shown).not.toContain('Assistants · ');
+    expect(shown).not.toContain('Assistants\u00a0· ');
   });
 
   it('asks in a sheet before it disconnects one', () => {
     const actions = render(listed({ confirming: 'c1' }));
     const asked = sheet()!;
     expect(asked).toContain('Disconnect Fictional Helper?');
-    expect(asked).toContain('helper.example.test · Read only + To review');
+    expect(asked).toContain('helper.example.test\u00a0· Read only + To review');
     expect(asked).toContain(
       'The assistant stops at once. Items already prepared stay in your To review. Previously shared information may remain in your assistant.',
     );

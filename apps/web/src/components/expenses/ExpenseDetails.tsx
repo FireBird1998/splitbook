@@ -20,6 +20,7 @@ import { getCategory } from '@splitbook/shared/categories';
 import { moneyParticipantId } from '@splitbook/shared/exact-money';
 import { expenseEdits, FORMER_MEMBER } from '@splitbook/shared/expense-detail';
 import ExpenseEditLines from './ExpenseEditLines';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface Person {
   _id: string;
@@ -210,7 +211,8 @@ export default function ExpenseDetails({
       <Box>
         {expense.createdBy && expense.createdAt && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            Added by <strong>{youOrName(expense.createdBy)}</strong> ·{' '}
+            Added by <strong>{youOrName(expense.createdBy)}</strong>
+            {SEPARATOR}
             {formatDateTime(expense.createdAt)}
           </Typography>
         )}
@@ -245,7 +247,8 @@ export default function ExpenseDetails({
                   {edits.map((edit, index) => (
                     <Box key={`${edit.at}-${index}`}>
                       <Typography variant="caption" color="text.secondary">
-                        <strong>{youOrName(edit.by)}</strong> {edit.action} ·{' '}
+                        <strong>{youOrName(edit.by)}</strong> {edit.action}
+                        {SEPARATOR}
                         {formatDateTime(edit.at)}
                       </Typography>
                       <ExpenseEditLines lines={edit.lines} />

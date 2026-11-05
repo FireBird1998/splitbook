@@ -24,6 +24,7 @@ import EmptyState from '@/components/common/EmptyState';
 import MoneyText from '@/components/common/MoneyText';
 import { useThemeMode } from '@/providers/ThemeProvider';
 import { getSemanticTokens, RADIUS } from '@/lib/theme/tokens';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export default function DesignSystemLab() {
   const [recovered, setRecovered] = useState(false);
@@ -39,7 +40,7 @@ export default function DesignSystemLab() {
           Splitbook design system
         </Typography>
         <Typography color="text.secondary">
-          Local examples · synthetic data · no account or database
+          Local examples{SEPARATOR}synthetic data{SEPARATOR}no account or database
         </Typography>
         <Box>
           <Button variant="outlined" startIcon={<DarkModeIcon />} onClick={toggleTheme}>
@@ -65,7 +66,8 @@ export default function DesignSystemLab() {
                 {tone}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Foreground {color} · tint {tokens[tone as keyof typeof tokens.status].bg}
+                Foreground {color}
+                {SEPARATOR}tint {tokens[tone as keyof typeof tokens.status].bg}
               </Typography>
             </Paper>
           ))}

@@ -28,6 +28,7 @@ import {
   type CardRead,
   type HomeInvitation,
 } from './home-reads';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** Read by screen readers only. Pixel strings: in `sx`, a bare 1 means 100%. */
 const visuallyHidden = {
@@ -105,7 +106,8 @@ function PaymentRow({
           {title}
         </Typography>
         <Typography noWrap component="p" variant="caption" sx={{ color: 'text.secondary' }}>
-          {payment.groupName} · suggested payment
+          {payment.groupName}
+          {SEPARATOR}suggested payment
         </Typography>
       </Box>
       {/* The amount over Record (web.css .lrow .end), leaving the names room in a narrow card. */}

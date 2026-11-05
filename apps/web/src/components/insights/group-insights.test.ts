@@ -173,7 +173,7 @@ describe('the stat cards', () => {
       },
       share: { text: '₹6,140.00', paidText: '₹5,210.00' },
       expenses: { count: 14, recurringLine: '3 added by recurring Expenses' },
-      biggest: { text: '₹3,000.00', line: 'Cook (September) · Priya Shah paid' },
+      biggest: { text: '₹3,000.00', line: 'Cook (September)\u00a0· Priya Shah paid' },
     });
   });
 
@@ -275,7 +275,7 @@ describe('monthly spending', () => {
       shortName: '5-month avg',
       rowLabel: '5-month average',
     });
-    expect(model.subtitle).toBe('INR · April to September 2026 · whole Group');
+    expect(model.subtitle).toBe('INR\u00a0· April to September 2026\u00a0· whole Group');
     expect(model.explanation).toBe('September is ₹567.00 above the 5-month average.');
     expect(model.focusComparison).toBe('₹567.00 above the 5-month average');
   });
@@ -325,7 +325,7 @@ describe('monthly spending', () => {
     };
     const model = monthlySpending(first, { currentMonth: '2026-10' });
     expect(model.average).toBeNull();
-    expect(model.subtitle).toBe('INR · September 2026 · whole Group');
+    expect(model.subtitle).toBe('INR\u00a0· September 2026\u00a0· whole Group');
     expect(model.explanation).toBe(
       'September is this Group’s first month, so there is nothing earlier to compare it with yet.',
     );

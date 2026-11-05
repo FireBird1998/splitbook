@@ -46,7 +46,7 @@ test('Sam selects two of three Expenses and downloads just those, with each memb
   const main = page.getByRole('main');
   await main.getByRole('checkbox', { name: /^Select Milk and bread, / }).check();
   await main.getByRole('checkbox', { name: /^Select Plumber, / }).check();
-  const panel = page.getByRole('region', { name: / selected · / });
+  const panel = page.getByRole('region', { name: / selected\s· / });
 
   const download = page.waitForEvent('download');
   await panel.getByRole('button', { name: 'Export selected' }).click();

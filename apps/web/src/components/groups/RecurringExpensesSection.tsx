@@ -59,6 +59,7 @@ import { apiFetch } from '@/lib/utils/api-fetch';
 import { recurringRefusal } from '@/components/groups/recurring-refusal';
 import { RECURRING_SECTION_ID } from '@/components/groups/group-tabs';
 import { memberLabel } from '@splitbook/shared/activity-timeline';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface RecurringExpensesSectionProps {
   groupId: string;
@@ -603,9 +604,12 @@ export default function RecurringExpensesSection({
                       )}
                     </Stack>
                     <Typography variant="caption" color="text.disabled">
-                      Day {template.dayOfMonth} monthly · {payerPays(template)} ·{' '}
-                      {splitSummary(template)} · since {dayLabel(template.startsOn)}
-                      {template.endsOn ? ` · until ${dayLabel(template.endsOn)}` : ''}
+                      Day {template.dayOfMonth} monthly{SEPARATOR}
+                      {payerPays(template)}
+                      {SEPARATOR}
+                      {splitSummary(template)}
+                      {SEPARATOR}since {dayLabel(template.startsOn)}
+                      {template.endsOn ? `${SEPARATOR}until ${dayLabel(template.endsOn)}` : ''}
                     </Typography>
                   </Box>
                 </Stack>
@@ -861,7 +865,7 @@ export default function RecurringExpensesSection({
                     .map((split) => {
                       return `${memberName(split.user)}: ${formatCurrency(split.amount, defaultCurrency)}`;
                     })
-                    .join(' · ')}
+                    .join(SEPARATOR)}
                 </Typography>
               )}
             </Box>

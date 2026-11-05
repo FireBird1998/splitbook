@@ -729,7 +729,7 @@ test('saving Group settings preserves fields and updates the list, dashboard The
     .getByRole('region', { name: 'Groups' })
     .getByRole('link', { name: /^Shared contract spring trip / });
   await expect(trip).toBeVisible();
-  await expect(trip).toHaveAccessibleName(/Trip · 10–14 Apr 2032$/);
+  await expect(trip).toHaveAccessibleName(/Trip\s· 10–14 Apr 2032$/);
   await sidebar.getByRole('link', { name: 'Groups', exact: true }).click();
   await page.locator(`a[href="${settingsPath}"]`).click();
   await expect(page.getByLabel('Group Name', { exact: true })).toHaveValue(name);

@@ -26,6 +26,7 @@ import type {
 import type { ExpensePosition } from '@splitbook/shared/expense-position';
 import { PositionText } from './expense-row-parts';
 import { expenseDayLabel } from './ExpenseTable';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface PanelTag {
   _id?: string;
@@ -213,7 +214,7 @@ export default function ExpenseSelectionPanel({
     >
       <Stack direction="row" alignItems="baseline" justifyContent="space-between" gap={1}>
         <Typography id="expense-selection-title" component="h2" variant="h6">
-          {count} selected ·{' '}
+          {count} selected{SEPARATOR}
           {totals(expenses).map(([currency, minor], index) => (
             <Box component="span" key={currency}>
               {index > 0 ? ' + ' : ''}
@@ -256,7 +257,7 @@ export default function ExpenseSelectionPanel({
                   `${expensePayerSummary(expense, userId).label} paid`,
                 ]
                   .filter(Boolean)
-                  .join(' · ')}
+                  .join(SEPARATOR)}
               </Typography>
             </Box>
             <MoneyText

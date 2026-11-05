@@ -8,6 +8,7 @@ import { groupThemeIcon } from '@/components/layout/group-theme-icons';
 import TripStrip from '@/components/trip/TripStrip';
 import { PRODUCT_NAME } from '@/lib/product';
 import LandingSection, { landingCard } from './LandingSection';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** Each Theme's line on the landing page, from the design canvas "Landing page" (#443). */
 const TAGLINES: Record<GroupCategory, string> = {
@@ -60,8 +61,11 @@ function TripExtras() {
             <Typography variant="body2" color="text.secondary">
               <Box component="strong" sx={{ color: 'text.primary', fontWeight: 600 }}>
                 {row.day}
-              </Box>{' '}
-              · {row.date} · {row.expenses} Expenses
+              </Box>
+              {SEPARATOR}
+              {row.date}
+              {SEPARATOR}
+              {row.expenses} Expenses
             </Typography>
             <MoneyText amount={row.spent} currency="INR" tone="neutral" color="text.primary" />
           </Box>

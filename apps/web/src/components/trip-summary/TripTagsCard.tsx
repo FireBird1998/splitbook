@@ -11,6 +11,7 @@ import {
   HomeCardLoading,
 } from '@/components/dashboard/HomeCard';
 import type { TripCardState, TripTagRow } from './trip-summary';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /*
  * "By Tag" on a Trip's Insights tab (#316, design canvas "Web portal", Trip Group): each Tag's
@@ -35,7 +36,7 @@ export default function TripTagsCard({ currency, rows, state, onRetry }: TripTag
       id="trip-tags"
       title="By Tag"
       width="narrow"
-      subtitle={ready && currency ? `Whole trip · ${currency}` : undefined}
+      subtitle={ready && currency ? `Whole trip${SEPARATOR}${currency}` : undefined}
     >
       {ready ? (
         rows.length > 0 ? (
@@ -120,7 +121,8 @@ function TagRow({ row }: { row: TripTagRow }) {
         component="span"
         sx={{ gridArea: 'detail', fontSize: '0.75rem', color: 'text.secondary' }}
       >
-        {row.percentText} of spend · {row.countText}
+        {row.percentText} of spend{SEPARATOR}
+        {row.countText}
       </Typography>
     </>
   );

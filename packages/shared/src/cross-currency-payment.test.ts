@@ -316,38 +316,40 @@ describe('what the sheet says about the rate (#727)', () => {
 
   it('names the source and when its rates are from, with the second source’s attribution', () => {
     expect(rateNote('suggested', frankfurter, 'INR', now)).toEqual({
-      text: 'Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched today 06:00',
+      text: 'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a0today\u00a006:00',
       attribution: null,
       useSuggestion: null,
     });
     expect(rateNote('suggested', secondSource, 'INR', now)).toEqual({
-      text: 'Rates of 21 Oct\u00a0· fetched today 06:00',
+      text: 'Rates of\u00a021\u00a0Oct\u00a0· fetched\u00a0today\u00a006:00',
       attribution: EXCHANGE_RATE_API_ATTRIBUTION,
       useSuggestion: null,
     });
     expect(rateNote('suggested', fiveDaysOld, 'INR', now)).toEqual({
-      text: 'Frankfurter\u00a0· rates of 16 Oct, 5 days old. Today’s rates aren’t in yet.',
+      text: 'Frankfurter\u00a0· rates of\u00a016\u00a0Oct, 5 days old. Today’s rates aren’t in yet.',
       attribution: null,
       useSuggestion: null,
     });
     expect(
       rateNote('suggested', { ...frankfurter, fetchedAt: local(20, 18).toISOString() }, 'INR', now)
         .text,
-    ).toBe('Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched yesterday 18:00');
+    ).toBe('Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a0yesterday\u00a018:00');
     expect(
       rateNote('suggested', { ...frankfurter, fetchedAt: local(18, 18).toISOString() }, 'INR', now)
         .text,
-    ).toBe('Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched 18 Oct 18:00');
+    ).toBe(
+      'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a018\u00a0Oct\u00a018:00',
+    );
   });
 
   it('keeps the suggestion one click away from the member’s own rate', () => {
     expect(rateNote('custom', frankfurter, 'INR', now)).toEqual({
-      text: 'Your rate. Suggested ₹92.10 from Frankfurter, rates of 20 Oct.',
+      text: 'Your rate. Suggested ₹92.10 from Frankfurter, rates of\u00a020\u00a0Oct.',
       attribution: null,
       useSuggestion: '92.1',
     });
     expect(rateNote('custom', secondSource, 'INR', now)).toEqual({
-      text: 'Your rate. Suggested ₹92.06, rates of 21 Oct.',
+      text: 'Your rate. Suggested ₹92.06, rates of\u00a021\u00a0Oct.',
       attribution: EXCHANGE_RATE_API_ATTRIBUTION,
       useSuggestion: '92.06',
     });
@@ -411,7 +413,7 @@ describe('the Group’s rate read, as the sheet reads it (#726, #727)', () => {
     expect(crossCurrencyRateKind(zlotyInRupees, reading.amounts, suggestion)).toBe('suggested');
     const own = editCrossCurrencyEntry(entry, zlotyInRupees, 'rate', '21');
     expect(rateNote('custom', suggestion, 'INR', now)).toMatchObject({
-      text: 'Your rate. Suggested ₹20.826633, rates of 21 Oct.',
+      text: 'Your rate. Suggested ₹20.826633, rates of\u00a021\u00a0Oct.',
       useSuggestion: '20.826633',
     });
     expect(fields(own)).toEqual(['60.00', '21', '1260.00']);
@@ -492,7 +494,8 @@ describe('a payment’s record, as its card shows it (#727)', () => {
       badge: 'Your rate',
       suggested: {
         rate: '₹92.10 per\u00a0€',
-        source: 'Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched 21 Oct 06:00',
+        source:
+          'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a021\u00a0Oct\u00a006:00',
         attribution: null,
       },
       cleared: '€20.00',
@@ -561,7 +564,7 @@ describe('a payment’s record, as its card shows it (#727)', () => {
       payee: 'You',
       badge: 'Suggested',
       suggested: {
-        source: 'Rates of 20 Oct\u00a0· fetched 21 Oct 06:00',
+        source: 'Rates of\u00a020\u00a0Oct\u00a0· fetched\u00a021\u00a0Oct\u00a006:00',
         attribution: EXCHANGE_RATE_API_ATTRIBUTION,
       },
       pair: { label: 'Alex and you in EUR:' },

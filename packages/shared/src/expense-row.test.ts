@@ -157,13 +157,19 @@ describe('a listed Expense’s position', () => {
 
 describe('how a listed Expense is split', () => {
   it('names the method and how many people share it', () => {
-    expect(expenseSplitSummary(electricity)).toBe('Equally · 3');
-    expect(expenseSplitSummary({ ...electricity, splitMethod: 'shares' })).toBe('By shares · 3');
-    expect(expenseSplitSummary({ ...electricity, splitMethod: 'percentage' })).toBe(
-      'By percentage · 3',
+    expect(expenseSplitSummary(electricity)).toBe('Equally\u00a0·\u00a03');
+    expect(expenseSplitSummary({ ...electricity, splitMethod: 'shares' })).toBe(
+      'By shares\u00a0·\u00a03',
     );
-    expect(expenseSplitSummary({ ...electricity, splitMethod: 'exact' })).toBe('By amounts · 3');
-    expect(expenseSplitSummary({ ...electricity, splitMethod: 'unequal' })).toBe('By amounts · 3');
+    expect(expenseSplitSummary({ ...electricity, splitMethod: 'percentage' })).toBe(
+      'By percentage\u00a0·\u00a03',
+    );
+    expect(expenseSplitSummary({ ...electricity, splitMethod: 'exact' })).toBe(
+      'By amounts\u00a0·\u00a03',
+    );
+    expect(expenseSplitSummary({ ...electricity, splitMethod: 'unequal' })).toBe(
+      'By amounts\u00a0·\u00a03',
+    );
   });
 
   it('leaves out someone named with a share of nothing', () => {
@@ -175,7 +181,7 @@ describe('how a listed Expense is split', () => {
       ],
       { splitMethod: 'shares' },
     );
-    expect(expenseSplitSummary(shares)).toBe('By shares · 1');
+    expect(expenseSplitSummary(shares)).toBe('By shares\u00a0·\u00a01');
   });
 });
 

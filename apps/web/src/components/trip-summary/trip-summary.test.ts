@@ -100,9 +100,9 @@ describe('trip days', () => {
   it('are numbered from the Trip’s first day, and named outside its dates', () => {
     const dates = { start: '2026-09-17', end: '2026-09-20', thisYear: 2026 };
     expect(tripDayNumber('2026-09-18', '2026-09-17')).toBe(2);
-    expect(tripDayName('2026-09-18', dates)).toBe('Day 2 · Fri 18 Sep');
-    expect(tripDayName('2026-09-16', dates)).toBe('Before the trip · Wed 16 Sep');
-    expect(tripDayName('2026-09-21', dates)).toBe('After the trip · Mon 21 Sep');
+    expect(tripDayName('2026-09-18', dates)).toBe('Day 2\u00a0· Fri 18 Sep');
+    expect(tripDayName('2026-09-16', dates)).toBe('Before the trip\u00a0· Wed 16 Sep');
+    expect(tripDayName('2026-09-21', dates)).toBe('After the trip\u00a0· Mon 21 Sep');
     expect(tripDayName('2026-09-18', { ...dates, start: null })).toBe('Fri 18 Sep');
   });
 });
@@ -119,7 +119,7 @@ describe('the card state', () => {
 describe('the whole trip', () => {
   it('says what was spent, the member’s share, what they paid, and per person per day', () => {
     expect(tripFigures(read())).toEqual({
-      heading: 'Whole trip · INR',
+      heading: 'Whole trip\u00a0· INR',
       spent: { text: '₹6,220.00', line: '4 Expenses over 4 days' },
       share: { text: '₹2,073.33', line: 'In all 4 of its Expenses' },
       paid: {
@@ -128,7 +128,7 @@ describe('the whole trip', () => {
         tone: 'positive',
       },
       // ₹6,220.00 ÷ (3 people × 4 days), rounded half up.
-      perPersonPerDay: { text: '₹518.33', line: '3 people · 4 days' },
+      perPersonPerDay: { text: '₹518.33', line: '3 people\u00a0· 4 days' },
     });
     expect(tripFigures(read({ memberId: PRIYA.id })).paid).toEqual({
       text: '₹380.00',
@@ -163,12 +163,12 @@ describe('the whole trip', () => {
 describe('day by day', () => {
   it('names each day, its two biggest Expenses and the member’s share, and the biggest day', () => {
     const chart = tripDayChart(read(), { thisYear: 2026 });
-    expect(chart.subtitle).toBe('INR spent each day · Thu 17 Sep to Sun 20 Sep');
+    expect(chart.subtitle).toBe('INR spent each day\u00a0· Thu 17 Sep to Sun 20 Sep');
     expect(chart.rows.map((row) => [row.name, row.axis, row.spentText, row.focus])).toEqual([
-      ['Day 1 · Thu 17 Sep', 'Thu 17', '₹640.00', false],
-      ['Day 2 · Fri 18 Sep', 'Fri 18', '₹3,180.00', true],
-      ['Day 3 · Sat 19 Sep', 'Sat 19', '₹0.00', false],
-      ['Day 4 · Sun 20 Sep', 'Sun 20', '₹2,400.00', false],
+      ['Day 1\u00a0· Thu 17 Sep', 'Thu 17', '₹640.00', false],
+      ['Day 2\u00a0· Fri 18 Sep', 'Fri 18', '₹3,180.00', true],
+      ['Day 3\u00a0· Sat 19 Sep', 'Sat 19', '₹0.00', false],
+      ['Day 4\u00a0· Sun 20 Sep', 'Sun 20', '₹2,400.00', false],
     ]);
     expect(chart.rows[1].biggest).toEqual([
       { description: 'Villa stay', amountText: '₹2,800.00' },

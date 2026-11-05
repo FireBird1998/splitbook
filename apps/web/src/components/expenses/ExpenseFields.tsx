@@ -49,6 +49,7 @@ import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupTagOption } from './expense-form-helpers';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { memberLabel } from '@splitbook/shared/activity-timeline';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export interface ExpenseFieldsProps {
   values: Omit<ExpenseDraftValues, 'splitMethod'> & {
@@ -586,13 +587,13 @@ export default function ExpenseFields({
           <Box component="span" sx={{ fontWeight: 600 }}>
             {payerSummary}
           </Box>
-          {' · '}
+          {SEPARATOR}
           <span>{splitMethodLabel[splitMethod] || 'Split'}</span>
-          {' · '}
+          {SEPARATOR}
           <span>{memberSummary}</span>
           {unit && (
             <>
-              {' · '}
+              {SEPARATOR}
               <span>whole {unit}</span>
             </>
           )}
@@ -998,7 +999,8 @@ export default function ExpenseFields({
                 )}
                 {splitMethod === 'shares' && sharesTotal > 0 && (
                   <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
-                    {sharesTotal} share{sharesTotal !== 1 ? 's' : ''} ·{' '}
+                    {sharesTotal} share{sharesTotal !== 1 ? 's' : ''}
+                    {SEPARATOR}
                     {formatCurrency(perShareAmount, currency)}/share
                   </Box>
                 )}

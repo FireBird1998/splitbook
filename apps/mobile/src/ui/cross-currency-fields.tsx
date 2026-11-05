@@ -21,6 +21,7 @@ import type { RateState } from '../data/settlement';
 import { Badge, Banner, CompactButton, CompactText, radius } from './compact';
 import { FieldError } from './group-workflows';
 import { fonts, useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#868). */
 const symbol = currencyPrefix;
@@ -215,7 +216,7 @@ export function CrossCurrencyFields({
           {field('cleared', currency, `Amount cleared, ${currency}`)}
         </View>
         <View style={{ gap: 4 }}>
-          <Head label={`Rate · ${symbol(paidCurrency)} for each ${symbol(currency)}`}>
+          <Head label={`Rate${SEPARATOR}${symbol(paidCurrency)} for each ${symbol(currency)}`}>
             {/* No tag while no suggestion is known either way. */}
             {known ? (
               <Badge

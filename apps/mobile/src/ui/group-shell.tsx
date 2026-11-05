@@ -16,6 +16,7 @@ import {
   progressHeight,
 } from './compact';
 import { useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /** Under the floating action: it sits 16 above the navigation and is 56 tall, then a gap. */
 export const floatingRoom = 16 + 56 + 16;
@@ -23,7 +24,7 @@ export const floatingRoom = 16 + 56 + 16;
 /** "Household · 3 members · INR" */
 export function groupSubtitle(group: MobileGroup) {
   const count = group.members.length;
-  return `${getGroupTheme(group.category).label} · ${count} ${count === 1 ? 'member' : 'members'} · ${group.defaultCurrency}`;
+  return `${getGroupTheme(group.category).label}${SEPARATOR}${count} ${count === 1 ? 'member' : 'members'}${SEPARATOR}${group.defaultCurrency}`;
 }
 
 interface GroupShellProps {

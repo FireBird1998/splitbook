@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography';
 import { toReviewHref } from '@splitbook/shared/api-paths';
 import { RADIUS } from '@/lib/theme/tokens';
 import { toReviewEnabled, useToReview } from './use-to-review';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 export default function ToReviewBanner({ groupId }: { groupId: string }) {
   const { read, retry, failed } = useToReview();
@@ -46,7 +47,9 @@ export default function ToReviewBanner({ groupId }: { groupId: string }) {
       {group && !failed && (
         <>
           <Typography sx={{ overflowWrap: 'anywhere', minWidth: 0 }}>
-            {[`${group.counts.total} to review`, group.bannerSummary].filter(Boolean).join(' · ')}
+            {[`${group.counts.total} to review`, group.bannerSummary]
+              .filter(Boolean)
+              .join(SEPARATOR)}
           </Typography>
           <Button
             component={Link}

@@ -24,6 +24,7 @@ import { PersonAvatar } from '@/components/balances/TabCard';
 import { lastUsedLabel } from '@/components/mcp/last-used';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { fetcher } from '@/lib/utils/fetcher';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 type Member = Pick<GroupReadMember, 'user' | 'role'>;
 
@@ -138,7 +139,9 @@ function WhoIsConnected({
                     color="text.secondary"
                     sx={{ overflowWrap: 'anywhere' }}
                   >
-                    <bdi>{row.assistant}</bdi> · {lastUsedLabel(row.lastUsedAt)}
+                    <bdi>{row.assistant}</bdi>
+                    {SEPARATOR}
+                    {lastUsedLabel(row.lastUsedAt)}
                   </Typography>
                 ))
               )}

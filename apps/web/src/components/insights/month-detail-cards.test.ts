@@ -190,7 +190,7 @@ describe('By Tag', () => {
     expect(model.subtitle).toBe('September vs August 2026');
     expect(model.averageName).toBe('August');
     const first = byTagModel(FIRST, FIRST_BY_TAG);
-    expect(first.subtitle).toBe('September 2026 · nothing earlier to compare');
+    expect(first.subtitle).toBe('September 2026\u00a0· nothing earlier to compare');
     expect(first.averageName).toBeNull();
     expect(first.rows.map((row) => [row.averageText, row.changeText, row.tick])).toEqual(
       Array(4).fill([null, '–', null]),
@@ -364,7 +364,7 @@ describe('Who paid this month', () => {
       },
       { userId: alex },
     );
-    expect(model.subtitle).toBe('September 2026 · Paid against each member’s share');
+    expect(model.subtitle).toBe('September 2026\u00a0· Paid against each member’s share');
     expect(model.rows.map((row) => [row.name, row.former, row.netNote])).toEqual([
       ['Sam Chen', true, 'paid more than their share'],
       ['You', false, 'paid less than your share'],
@@ -427,25 +427,31 @@ describe('Recurring Expenses', () => {
       userId: alex,
       currentMonth: '2026-10',
     });
-    expect(model.subtitle).toBe('₹4,849.00 · 3 of 14 Expenses in September');
+    expect(model.subtitle).toBe('₹4,849.00\u00a0· 3 of 14 Expenses in September');
     expect(
       model.rows.map((row) => [row.description, row.amountText, row.schedule, row.added, row.next]),
     ).toEqual([
       [
         'Cook',
         '₹3,000.00',
-        'Monthly on the 5th · Priya Shah pays',
+        'Monthly on the 5th\u00a0· Priya Shah pays',
         'Added Sat 5 Sep',
         'Next Mon 5 Oct',
       ],
       [
         'Water purifier service',
         '₹850.00',
-        'Monthly on the 21st · Sam Chen pays',
+        'Monthly on the 21st\u00a0· Sam Chen pays',
         'Added Mon 21 Sep',
         'Next Wed 21 Oct',
       ],
-      ['Wi-Fi', '₹999.00', 'Monthly on the 28th · You pay', 'Added Mon 28 Sep', 'Next Wed 28 Oct'],
+      [
+        'Wi-Fi',
+        '₹999.00',
+        'Monthly on the 28th\u00a0· You pay',
+        'Added Mon 28 Sep',
+        'Next Wed 28 Oct',
+      ],
     ]);
     const markup = render();
     expect(text(markup)).toContain(
@@ -469,9 +475,13 @@ describe('Recurring Expenses', () => {
       { userId: alex, currentMonth: '2026-10' },
     );
     expect(model.rows.map((row) => [row.schedule, row.added, row.next])).toEqual([
-      ['Monthly on the 31st or the month’s last day · Priya Shah pays', null, 'Next Sat 31 Oct'],
-      ['Monthly on the 5th · Priya Shah pays', 'Added Sat 5 Sep', 'Paused'],
-      ['Monthly on the 5th · Priya Shah pays', 'Added Sat 5 Sep', 'Ended'],
+      [
+        'Monthly on the 31st or the month’s last day\u00a0· Priya Shah pays',
+        null,
+        'Next Sat 31 Oct',
+      ],
+      ['Monthly on the 5th\u00a0· Priya Shah pays', 'Added Sat 5 Sep', 'Paused'],
+      ['Monthly on the 5th\u00a0· Priya Shah pays', 'Added Sat 5 Sep', 'Ended'],
     ]);
   });
 

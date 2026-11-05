@@ -440,7 +440,7 @@ describe('After a save on Expenses', () => {
       screen: 'group',
       destination: 'expenses',
       keptDraft: null,
-      snackbar: { message: 'Expense saved · Weekly groceries', expenseId: saved.id },
+      snackbar: { message: 'Expense saved\u00a0· Weekly groceries', expenseId: saved.id },
     });
     expect(server.drafts.size).toBe(0);
 

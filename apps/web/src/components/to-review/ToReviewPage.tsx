@@ -45,6 +45,7 @@ import { memberLabel } from '@splitbook/shared/activity-timeline';
 import { ReviewFacts } from './ReviewDetails';
 import ToReviewPanel, { type ReviewPanelHandle } from './ToReviewPanel';
 import ReviewRow from './ReviewRow';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 type Confirmation = {
   reviews: DraftReview[];
@@ -305,7 +306,7 @@ export default function ToReviewPage({
           .filter((id) => items.some((item) => item.id === id))
           .map((id) => ({ id, status: 'skipped' as const })),
       ];
-      setSummary(`Done for now · ${summarizeReviewRun(all).label}`);
+      setSummary(`Done for now${SEPARATOR}${summarizeReviewRun(all).label}`);
       setRun(null);
     }
   }
@@ -370,7 +371,7 @@ export default function ToReviewPage({
     // Omit unavailable items from our outcomes rather than strand the panel or claim a save.
     while (next < run.ids.length && !items.some((item) => item.id === run.ids[next])) next++;
     if (next >= run.ids.length) {
-      setSummary(`Done for now · ${summarizeReviewRun(nextOutcomes).label}`);
+      setSummary(`Done for now${SEPARATOR}${summarizeReviewRun(nextOutcomes).label}`);
       setRun(null);
       setOpened(null);
     } else {
@@ -449,7 +450,7 @@ export default function ToReviewPage({
       )
         next++;
       if (next >= run.ids.length) {
-        setSummary(`Done for now · ${summarizeReviewRun(nextOutcomes).label}`);
+        setSummary(`Done for now${SEPARATOR}${summarizeReviewRun(nextOutcomes).label}`);
         setRun(null);
         setOpened(null);
       } else {
@@ -608,7 +609,8 @@ export default function ToReviewPage({
           {!!model.counts.total && (
             <>
               <Typography>
-                {model.counts.ready} ready · {model.counts.duplicate} to check
+                {model.counts.ready} ready{SEPARATOR}
+                {model.counts.duplicate} to check
               </Typography>
               {model.sourceSummary && (
                 <Typography variant="body2" color="text.secondary">
@@ -765,8 +767,8 @@ export default function ToReviewPage({
                 color="text.secondary"
                 sx={{ display: { xs: 'none', md: 'block' } }}
               >
-                Keyboard shortcuts: ↑ ↓ or J K move · Enter opens · 1–9 choose · S saves · Esc
-                closes
+                Keyboard shortcuts: ↑ ↓ or J K move{SEPARATOR}Enter opens{SEPARATOR}1–9 choose
+                {SEPARATOR}S saves{SEPARATOR}Esc closes
               </Typography>
             </Stack>
             {selected && (
@@ -826,7 +828,8 @@ export default function ToReviewPage({
             ))}
             {confirmation?.totals.map((total) => (
               <Typography key={total.currency} fontWeight={600}>
-                Total · {total.formatted}
+                Total{SEPARATOR}
+                {total.formatted}
               </Typography>
             ))}
             <Typography>

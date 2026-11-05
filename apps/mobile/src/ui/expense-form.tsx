@@ -44,6 +44,7 @@ import {
   useTap,
 } from './compact';
 import { useTheme } from './theme';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 type Allocation = ReturnType<typeof expenseMoney>;
 type SectionRef = (field: ExpenseField) => (node: ViewInstance | null) => void;
@@ -85,7 +86,7 @@ export function expenseDateLabel(value: string, now = Date.now()) {
 }
 
 export const splitSummary = (draft: ExpenseDraft) =>
-  `${splitSummaries[draft.splitMethod]} · ${draft.participantIds.length}`;
+  `${splitSummaries[draft.splitMethod]}${SEPARATOR}${draft.participantIds.length}`;
 
 /**
  * Amount with its currency, then Description: the two typed values. The currency opens the
@@ -258,7 +259,7 @@ const AllocationHeading = memo(function AllocationHeading({
       <CompactText variant="overline" accessibilityRole="header" spare style={headingBeside}>
         {currency
           ? // "· whole yen" for a currency without a smaller unit, as the web says (#720).
-            `Who owes what · ${currency}${wholeUnit(currency) ? ` · whole ${wholeUnit(currency)}` : ''}`
+            `Who owes what${SEPARATOR}${currency}${wholeUnit(currency) ? `${SEPARATOR}whole ${wholeUnit(currency)}` : ''}`
           : 'Who owes what'}
       </CompactText>
       {savedLabel ? (

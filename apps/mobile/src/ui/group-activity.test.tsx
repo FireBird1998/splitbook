@@ -792,7 +792,7 @@ describe('a payment in another currency’s record (#728)', () => {
       'Your rate',
       'Suggested',
       '₹92.10 per\u00a0€',
-      'Frankfurter\u00a0· rates of 20 Oct\u00a0· fetched 21 Oct 06:00',
+      'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a021\u00a0Oct\u00a006:00',
       'Amount cleared',
       '€20.00',
       'Amount paid',
@@ -818,7 +818,9 @@ describe('a payment in another currency’s record (#728)', () => {
       state: activity({ selected: payment({ rateSource: 'exchange-rate-api' }) }),
       onOpenLink,
     });
-    expect(text(root)).toContain('Rates of 20 Oct\u00a0· fetched 21 Oct 06:00');
+    expect(text(root)).toContain(
+      'Rates of\u00a020\u00a0Oct\u00a0· fetched\u00a021\u00a0Oct\u00a006:00',
+    );
     const [link] = labelled(root, 'Rates By Exchange Rate API');
     expect(link?.props.accessibilityRole).toBe('link');
     act(() => link!.props.onPress());

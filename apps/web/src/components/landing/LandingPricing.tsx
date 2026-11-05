@@ -8,6 +8,7 @@ import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
 import type { WhatsLive } from '@/lib/landing/whats-live';
 import type { LandingSectionLink } from './LandingPage';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 interface Plan {
   name: string;
@@ -52,7 +53,7 @@ const PLANS: Plan[] = [
     price: '₹29',
     per: (
       <>
-        a month · or <Amount>₹199</Amount> a year
+        a month{SEPARATOR}or <Amount>₹199</Amount> a year
       </>
     ),
     note: 'For the flat, the office and every trip.',

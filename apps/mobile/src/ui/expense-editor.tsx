@@ -92,6 +92,7 @@ import { savingNeedsConnection } from './offline-notice';
 import { spellMoment } from './day-format';
 import { useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
+import { SEPARATOR } from '@splitbook/shared/separator';
 
 /**
  * × on the form: where it goes, keeping the draft. An edit begun on the Expense's record returns
@@ -546,7 +547,7 @@ function ExpenseTask({
         }
         subtitle={
           context
-            ? `${context.group.name} · ${draft?.currency ?? context.group.defaultCurrency}`
+            ? `${context.group.name}${SEPARATOR}${draft?.currency ?? context.group.defaultCurrency}`
             : undefined
         }
         prominent={!form && !newTask}
