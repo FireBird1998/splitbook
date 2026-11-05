@@ -31,6 +31,8 @@ import {
   Divider,
   LinearProgress,
   SectionHeader,
+  hairSpace,
+  textVariants,
   useLargeText,
   useLargestText,
   useTap,
@@ -113,26 +115,65 @@ function Runs({ runs }: { runs: TextRun[] }) {
   );
 }
 
-function Details({
-  line,
-  time,
-  whole = false,
-}: {
-  line: ActivityLine;
-  time: string;
-  /** All the lines it needs, as in an event's detail, where it is read in full (#783). */
-  whole?: boolean;
-}) {
-  const parts = [...line.details, { text: time }];
+/** Parts of a line, with a dot between them and their amounts in the money font. */
+function Parts({ parts }: { parts: ActivityLine['details'] }) {
   return (
-    <CompactText variant="caption" tone="secondary" numberOfLines={whole ? 0 : 2}>
+    <>
       {parts.map((part, index) => (
         <Fragment key={index}>
           {index > 0 ? ' · ' : ''}
           <Runs runs={part.runs ?? [part]} />
         </Fragment>
       ))}
-    </CompactText>
+    </>
+  );
+}
+
+function Details({
+  line,
+  time,
+  whole = false,
+  keepTime = false,
+}: {
+  line: ActivityLine;
+  time: string;
+  /**
+   * All the lines it needs: in an event's detail, where it is read in full (#783), and in the
+   * list from 150% text (#871).
+   */
+  whole?: boolean;
+  /**
+   * Cut at two lines, the time stays: a settle-all batch's Debts, one after another, ran past two
+   * lines and took its time with them (#871).
+   */
+  keepTime?: boolean;
+}) {
+  const theme = useTheme();
+  if (whole || !keepTime || line.details.length === 0)
+    return (
+      <CompactText variant="caption" tone="secondary" numberOfLines={whole ? 0 : 2}>
+        <Parts parts={[...line.details, { text: time }]} />
+      </CompactText>
+    );
+  // The details take two lines at most, cut at their tail, and the time follows their last
+  // line, never cut with them. The time is a plain text in the caption's look, so a row draws no
+  // more components than it did.
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+      <CompactText
+        variant="caption"
+        tone="secondary"
+        numberOfLines={2}
+        spare
+        style={{ flexShrink: 1 }}
+      >
+        <Parts parts={line.details} />
+      </CompactText>
+      <Text style={[textVariants.caption, { color: theme.textSecondary }]}>
+        {` · ${time}`}
+        {hairSpace}
+      </Text>
+    </View>
   );
 }
 
@@ -149,19 +190,24 @@ const EventContent = memo(function EventContent({
   line,
   name,
   time,
+  batch = false,
 }: {
   line: ActivityLine;
   name: string;
   time: string;
+  /** A settle-all batch's row: below 150% its time keeps its place beside the cut details. */
+  batch?: boolean;
 }) {
-  // An assistant's credit has a line of its own, cut in the middle so the start and the domain
-  // at the end both show, and whole at the largest text (#751).
+  // From 150% text the headline and the details take the lines they need, as other rows' titles
+  // do (#639, #871); below it they are cut at two lines. An assistant's credit has a line of its
+  // own, cut in the middle so the start and the domain at the end both show, and whole at the
+  // largest text (#751).
   const whole = useLargestText();
   return (
     <>
       <CompactAvatar name={name} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Headline line={line} numberOfLines={2} />
+        <Headline line={line} numberOfLines={whole ? 0 : 2} />
         {line.credit ? (
           <CompactText
             variant="caption"
@@ -172,7 +218,7 @@ const EventContent = memo(function EventContent({
             {line.credit}
           </CompactText>
         ) : null}
-        <Details line={line} time={time} />
+        <Details line={line} time={time} whole={whole} keepTime={batch} />
       </View>
     </>
   );
@@ -238,7 +284,12 @@ const ActivityRow = memo(
           backgroundColor: pressed && !tap.dragged ? theme.surfaceMuted : undefined,
         })}
       >
-        <EventContent line={line} name={event.actor?.name || 'Former member'} time={time} />
+        <EventContent
+          line={line}
+          name={event.actor?.name || 'Former member'}
+          time={time}
+          batch={!!batch}
+        />
       </Pressable>
     );
   },
