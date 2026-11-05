@@ -490,6 +490,11 @@ in a `HomeSlot` of its width.
   takes `insetKeyboardFocusRing`: the outline inside its edge, without the halo, as an Expense
   card's row does; or the parent stops clipping, as the currency tabs' Tabs do, which wrap and
   never scroll
+- Page numbers, checkboxes and radios focused from the keyboard draw the ring too, on MUI's
+  `Mui-focusVisible`, so a click draws none (#848). A switch's focus sits on its small thumb
+  button, so the ring goes around the whole switch, round at its ends. A chart's `svg`, which
+  Chromium lets the keyboard reach because it clips, draws it on `:focus-visible`, over
+  x-charts' `outline: none`
 - Screen reader labels on icon-only buttons
 
 Enforced by `playwright/theme-a11y.spec.ts`, which runs **axe-core** across four

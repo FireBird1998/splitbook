@@ -8,6 +8,9 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import ToggleButton from '@mui/material/ToggleButton';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
 import Link from '@mui/material/Link';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
@@ -26,6 +29,7 @@ export default function DesignSystemLab() {
   const [recovered, setRecovered] = useState(false);
   const [filtered, setFiltered] = useState(false);
   const [compact, setCompact] = useState(false);
+  const [split, setSplit] = useState('equally');
   const { mode, toggleTheme } = useThemeMode();
   const tokens = getSemanticTokens(mode);
   return (
@@ -209,6 +213,16 @@ export default function DesignSystemLab() {
                 Sample toggle
               </ToggleButton>
             </Stack>
+            <RadioGroup
+              row
+              aria-label="Sample split"
+              name="sample-split"
+              value={split}
+              onChange={(event) => setSplit(event.target.value)}
+            >
+              <FormControlLabel value="equally" control={<Radio />} label="Split equally" />
+              <FormControlLabel value="shares" control={<Radio />} label="Split by shares" />
+            </RadioGroup>
             <Typography variant="body2" color="text.secondary">
               Use Tab to inspect focus. Buttons keep their existing touch sizing. Motion follows
               your system preference.

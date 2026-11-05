@@ -50,6 +50,35 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
       ).toEqual([]);
   });
 
+  it('rings a page number, checkbox, radio, switch or chart focused from the keyboard, and none on a click (#848)', () => {
+    const theme = createAppTheme(mode);
+    const baseline = theme.components?.MuiCssBaseline?.styleOverrides;
+    const ring = (
+      (typeof baseline === 'function' ? baseline(theme) : baseline) as Record<string, object>
+    )[':focus-visible'];
+    const root = (name: string) => {
+      const overrides = (
+        theme.components as Record<string, { styleOverrides?: { root?: unknown } }>
+      )[name]?.styleOverrides?.root;
+      return (typeof overrides === 'function' ? overrides({ theme }) : (overrides ?? {})) as Record<
+        string,
+        unknown
+      >;
+    };
+    // Each keyed to MUI's keyboard focus class, which a mouse click doesn't set.
+    expect(root('MuiPaginationItem')['&.Mui-focusVisible']).toEqual(ring);
+    expect(root('MuiCheckbox')['&.Mui-focusVisible']).toEqual(ring);
+    expect(root('MuiRadio')['&.Mui-focusVisible']).toEqual(ring);
+    // The switch's focus is on its small thumb button: the ring goes around the whole switch,
+    // as round at its ends as the track.
+    expect(root('MuiSwitch')['&:has(.Mui-focusVisible)']).toEqual({
+      ...ring,
+      borderRadius: 999,
+    });
+    // The chart's svg turns its outline off on focus; the ring comes back for the keyboard.
+    expect(root('MuiChartsSurface')['&:focus-visible']).toEqual(ring);
+  });
+
   it('lets a bordered text field’s own border show its focus, with no second ring; a button keeps the ring (#823)', () => {
     const theme = createAppTheme(mode);
     const baseline = theme.components?.MuiCssBaseline?.styleOverrides;

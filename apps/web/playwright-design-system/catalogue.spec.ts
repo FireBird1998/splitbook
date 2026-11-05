@@ -182,3 +182,34 @@ test('a mouse click on a button, toggle button or chip draws no ring; Tab does (
     await expect(control, name).toHaveCSS('outline-style', 'solid');
   }
 });
+
+test('a radio clicked draws no ring; Tabbed to, the ring goes around its round box and nothing moves (#848)', async ({
+  page,
+}) => {
+  await page.goto('/dev/design-system');
+  const group = page.getByRole('radiogroup', { name: 'Sample split' });
+  const radio = group.getByRole('radio', { name: 'Split by shares' });
+  const round = radio.locator('xpath=ancestor::span[contains(@class,"MuiRadio-root")][1]');
+  const layout = () =>
+    group.evaluate((element) =>
+      [...element.querySelectorAll('label')].map((label) => {
+        const { x, y, width, height } = label.getBoundingClientRect();
+        return { x: x + window.scrollX, y: y + window.scrollY, width, height };
+      }),
+    );
+  const before = await layout();
+  await radio.click();
+  await expect(radio).toBeChecked();
+  await expect(radio).toBeFocused();
+  await expect(round).toHaveCSS('outline-style', 'none');
+  // Out and back in from the keyboard: Tab enters the group at its checked radio.
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(radio).toBeFocused();
+  await expect(round).toHaveCSS('outline-style', 'solid');
+  await expect(round).toHaveCSS('outline-width', '2px');
+  await expect(round).toHaveCSS('outline-offset', '2px');
+  await expect(round).toHaveCSS('box-shadow', /0px 0px 0px 4px/);
+  await expect(round).toHaveCSS('border-radius', '50%');
+  expect(await layout()).toEqual(before);
+});
