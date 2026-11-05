@@ -17,7 +17,7 @@ import {
 } from '@splitbook/shared/activity-timeline';
 import { fetchWebActivity } from '@/lib/web-read';
 import { keyboardFocusRing } from '@/lib/theme/focus-ring';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ButtonBase from '@mui/material/ButtonBase';
 import { readCrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
 import { groupSettlementBatches } from '@splitbook/shared/settlement-batch-activity';
@@ -63,6 +63,29 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
 
   /** The payment whose card is open beside the list (#727). */
   const [openId, setOpenId] = useState<string | null>(null);
+  // Opening a row's card moves keyboard focus to the card's heading, and closing the card puts it
+  // back on the row that opened it, so a keyboard user keeps their place (#852).
+  const cardHeadingRef = useRef<HTMLHeadingElement>(null);
+  /** Each row that opens a card, by its event's id. */
+  const cardRows = useRef(new Map<string, HTMLElement>());
+  /** Where focus goes once the card has opened or closed: its heading, or the row it was for. */
+  const focusNext = useRef<{ card: true } | { row: string } | null>(null);
+  useEffect(() => {
+    const next = focusNext.current;
+    focusNext.current = null;
+    if (!next) return;
+    if ('card' in next) cardHeadingRef.current?.focus();
+    else cardRows.current.get(next.row)?.focus();
+  }, [openId]);
+  // Closed from its own row, focus stays on the row.
+  const toggle = (id: string, open: boolean) => {
+    focusNext.current = open ? null : { card: true };
+    setOpenId(open ? null : id);
+  };
+  const closeCard = () => {
+    focusNext.current = openId ? { row: openId } : null;
+    setOpenId(null);
+  };
   // A new event can move the last event of a page onto the next one.
   const seen = new Set<string>();
   const activities = (data?.flatMap((page) => page.data.activities) || []).filter((activity) => {
@@ -101,7 +124,7 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
   }
 
   if (error && !data) {
-    return <Typography color="error.main">{error.message}</Typography>;
+    return <Typography sx={{ color: 'status.negative' }}>{error.message}</Typography>;
   }
 
   if (activities.length === 0) {
@@ -220,8 +243,15 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
               return payment ? (
                 <ButtonBase
                   key={activity._id}
+                  ref={(row: HTMLElement | null) => {
+                    if (!row) return;
+                    cardRows.current.set(activity._id, row);
+                    return () => {
+                      cardRows.current.delete(activity._id);
+                    };
+                  }}
                   aria-expanded={Boolean(open)}
-                  onClick={() => setOpenId(open ? null : activity._id)}
+                  onClick={() => toggle(activity._id, Boolean(open))}
                   sx={[
                     {
                       ...rowSx,
@@ -277,37 +307,49 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
   const card =
     openBatch && opened ? (
       <BatchPaymentCard
+        key={opened._id}
         words={wordsOf(openBatch)}
         recordedBy={opened.actor}
         recordedAt={opened.createdAt}
         viewerId={viewerId}
-        onClose={() => setOpenId(null)}
+        headingRef={cardHeadingRef}
+        onClose={closeCard}
       />
     ) : openRecord && opened ? (
       <PaymentRecordCard
+        key={opened._id}
         record={openRecord}
         recordedBy={opened.actor}
         recordedAt={opened.createdAt}
         viewerId={viewerId}
-        onClose={() => setOpenId(null)}
+        headingRef={cardHeadingRef}
+        onClose={closeCard}
       />
     ) : null;
 
-  return card ? (
+  // The list keeps its place in the tree whether a card is open or not: drawn again, its rows
+  // would lose keyboard focus as the card opens and closes (#852).
+  return (
     <Box
-      sx={{
-        display: 'grid',
-        gap: 3,
-        gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 380px' },
-        alignItems: 'start',
-      }}
+      sx={
+        card
+          ? {
+              display: 'grid',
+              gap: 3,
+              gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 380px' },
+              alignItems: 'start',
+            }
+          : undefined
+      }
     >
+      {/* Its place beside a card is set before one opens, so focus never lands on a card that
+          is about to move. */}
       <Box sx={{ order: { xs: 2, md: 1 }, minWidth: 0 }}>{list}</Box>
-      <Box sx={{ order: { xs: 1, md: 2 }, position: { md: 'sticky' }, top: { md: 88 } }}>
-        {card}
-      </Box>
+      {card && (
+        <Box sx={{ order: { xs: 1, md: 2 }, position: { md: 'sticky' }, top: { md: 88 } }}>
+          {card}
+        </Box>
+      )}
     </Box>
-  ) : (
-    list
   );
 }

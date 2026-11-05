@@ -495,6 +495,8 @@ in a `HomeSlot` of its width.
   button, so the ring goes around the whole switch, round at its ends. A chart's `svg`, which
   Chromium lets the keyboard reach because it clips, draws it on `:focus-visible`, over
   x-charts' `outline: none`
+- A row that opens a card beside it moves focus to the card's heading, and closing the card puts
+  focus back on the row, as Activity's payment rows do (#852)
 - Screen reader labels on icon-only buttons
 
 Enforced by `playwright/theme-a11y.spec.ts`, which runs **axe-core** across four
