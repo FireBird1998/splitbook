@@ -69,6 +69,20 @@ function moneyText(html: string, from?: string): string[] {
     .map(([, , inner]) => inner.trim());
 }
 
+/** The style rules for a class attribute's emotion classes, in the order they were emitted. */
+function classRules(html: string, classAttribute: string): string {
+  const classes = classAttribute.split(' ');
+  return [...html.matchAll(/\.(css-[\w-]+)\{([^}]*)\}/g)]
+    .filter(([, name]) => classes.includes(name))
+    .map(([, , rule]) => rule)
+    .join(';');
+}
+
+/** The last value a run of declarations gives a property: the one that applies. */
+function lastValue(rules: string, property: string): string | undefined {
+  return [...rules.matchAll(new RegExp(`(?:^|;)${property}:([^;]+)`, 'g'))].at(-1)?.[1];
+}
+
 /** The style rules of the element with this id, or of the first element with this tag. */
 function rulesOf(html: string, element: RegExp): string {
   const classes = element.exec(html)?.[1]?.split(' ') ?? [];
@@ -700,6 +714,7 @@ describe('the content sections (#446)', () => {
 
   it('show the split methods as chips on the Groceries card, Shares picked, never as controls (#646)', () => {
     for (const mode of MODES) {
+      const { palette } = createAppTheme(mode);
       const split = section(render(mode, OFF), 'how');
       const at = split.indexOf('data-split-methods');
       expect(at).toBeGreaterThan(-1);
@@ -708,16 +723,41 @@ describe('the content sections (#446)', () => {
       const chips = [
         ...split.matchAll(/<div\b[^>]*class="([^"]*MuiChip-root[^"]*)"[^>]*>([\s\S]*?)<\/div>/g),
       ];
-      expect(
-        chips.map(([, classes, inner]) => [text(inner), classes.includes('MuiChip-filled')]),
-      ).toEqual([
-        ['Equally', false],
-        ['Amounts', false],
-        ['Percentage', false],
-        ['Shares', true],
+      expect(chips.map(([, , inner]) => text(inner))).toEqual([
+        'Equally',
+        'Amounts',
+        'Percentage',
+        'Shares',
       ]);
-      for (const [chip] of chips) expect(chip).not.toMatch(/<button\b|role="button"|tabindex=/);
+      for (const [chip, classes, inner] of chips) {
+        expect(chip).not.toMatch(/<button\b|role="button"|tabindex=/);
+        expect(classes).toContain('MuiChip-outlined');
+        const rules = classRules(split, classes);
+        // The last declaration of each property is the one that wins.
+        expect(lastValue(rules, 'border-radius')).toBe('8px');
+        const picked = text(inner) === 'Shares';
+        expect(lastValue(rules, 'background-color') === palette.tint.brand).toBe(picked);
+        expect(lastValue(rules, 'color') === palette.primary.main).toBe(picked);
+        if (picked) expect(lastValue(rules, 'border-color')).toBe(palette.primary.main);
+      }
     }
+  });
+
+  it('end the Trip card’s closing line level with the bottom of the cards beside it at lg (#646)', () => {
+    const groups = section(render('light', OFF), 'groups');
+    const card = groups.slice(groups.indexOf('data-group-theme="trip"'));
+    const stack = /^[^>]*>(?:<style\b[^>]*>[^<]*<\/style>)*<div\b[^>]*class="([^"]*)"/.exec(
+      card,
+    )![1];
+    const stackRules = classRules(groups, stack);
+    expect(stackRules).toContain('display:flex');
+    expect(stackRules).toContain('flex-direction:column');
+    expect(stackRules).toContain('height:100%');
+    const closing =
+      /<p\b[^>]*class="([^"]*)"[^>]*>A boarding-pass header, a setup checklist and a date range, with Expenses grouped by Trip day\.<\/p>/.exec(
+        card,
+      )![1];
+    expect(lastValue(classRules(groups, closing), 'margin-top')).toBe('auto');
   });
 
   it('show the web card everywhere, and the Android card only with a Play listing', () => {

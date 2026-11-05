@@ -21,7 +21,8 @@ import { authClient, signInWithGoogle } from '@/lib/auth-client';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
 import type { GroupCategory } from '@splitbook/shared/types';
 import { apiFetch } from '@/lib/utils/api-fetch';
-import { counted } from '@splitbook/shared/separator';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 import { RADIUS } from '@/lib/theme/tokens';
 
 interface JoinGroupClientProps {
@@ -48,7 +49,9 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
           const data = await res.json();
           setGroup(data.data);
         } else {
-          setError('This invite link is invalid or has expired.');
+          setError(
+            'This invite link has expired or isn’t valid. Ask whoever sent it for a new one.',
+          );
         }
       } catch {
         setError('Failed to load group information.');
@@ -125,7 +128,7 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
           </Typography>
           <Typography color="text.secondary">{error}</Typography>
           <Button variant="outlined" onClick={() => router.push('/')}>
-            Go Home
+            Go to Home
           </Button>
         </Stack>
       </JoinPage>
@@ -152,13 +155,13 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
               {createElement(groupThemeIcon(category), { sx: { fontSize: 28 } })}
             </JoinTile>
             <Typography color="text.secondary" sx={{ mt: 2, mb: 1 }}>
-              You’ve been invited to join:
+              You’ve been invited to join
             </Typography>
             <Typography component="h1" sx={titleSx}>
               {group?.name as string}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {counted(group?.memberCount as number, 'member')}
+              {inviteSummary(category, group?.memberCount as number)}
             </Typography>
           </Stack>
 
@@ -200,6 +203,11 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
       </Paper>
     </JoinPage>
   );
+}
+
+/** "Household · 3 members": the Theme, then the count kept whole with its noun (#646). */
+function inviteSummary(category: GroupCategory, memberCount: number): string {
+  return `${getGroupTheme(category).label}${SEPARATOR}${counted(memberCount, 'member')}`;
 }
 
 /** The page's title style: the Group page header's h1 (board WebJoin, #646). */

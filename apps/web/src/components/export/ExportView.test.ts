@@ -167,7 +167,7 @@ describe('the Export page', () => {
         value: 'csv',
         checked: false,
         label: 'CSV files',
-        description: 'Expenses and payments, ready for a spreadsheet.',
+        description: 'Plain rows for any spreadsheet or tool.',
       },
       {
         type: 'radio',
@@ -175,7 +175,7 @@ describe('the Export page', () => {
         value: 'statement',
         checked: true,
         label: 'Printable statement',
-        description: 'One Group’s balances and Expenses, to print or save as PDF.',
+        description: 'A readable summary of one Group, to print or save as PDF.',
       },
       {
         type: 'radio',
@@ -183,9 +183,33 @@ describe('the Export page', () => {
         value: 'json',
         checked: false,
         label: 'Full backup',
-        description: 'Every chosen Group in one JSON file, all time.',
+        description: 'Everything in the chosen Groups, all time, in one JSON file.',
       },
     ]);
+    // Each title is followed by its file type, in the money font, outside the radio's name.
+    const badges = [
+      ...format.matchAll(/<span\b[^>]*class="([^"]*)"[^>]*data-format-badge=""[^>]*>([^<]*)</g),
+    ];
+    expect(badges.map(([, , badge]) => badge)).toEqual(['.csv', 'PDF', '.json']);
+    const mono = String(createAppTheme('light').typography.money.fontFamily)
+      .split(',')[0]
+      .replace(/[()]/g, '\\$&');
+    for (const [, classes] of badges)
+      expect(
+        classes
+          .split(' ')
+          .some((name) => new RegExp(`\\.${name}\\{[^}]*font-family:${mono}`).test(html)),
+      ).toBe(true);
+    for (const [label, badge] of [
+      ['CSV files', '.csv'],
+      ['Printable statement', 'PDF'],
+      ['Full backup', '.json'],
+    ])
+      expect(html).toMatch(
+        new RegExp(
+          `>${label}</span>(?:<style\\b[^>]*>[^<]*</style>)*<span\\b[^>]*data-format-badge=""[^>]*>${badge.replace('.', '\\.')}<`,
+        ),
+      );
     // No dropdown for the format, and the format comes before the Groups and the period.
     expect(html).not.toMatch(/<option value="json"/);
     expect(html.indexOf('<fieldset')).toBeLessThan(html.indexOf('id="export-groups-heading"'));

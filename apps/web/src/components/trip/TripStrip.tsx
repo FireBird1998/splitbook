@@ -22,7 +22,6 @@ interface TripStripProps {
   href?: string;
   dateLabel?: string | null;
   memberCount?: number;
-  memberNames?: string[];
   /** Signed personal balance; null/undefined or ~0 renders "Settled". */
   balance?: TripStripAmount | null;
   /** Data has not loaded; never describe an unknown balance as settled. */
@@ -36,32 +35,57 @@ interface TripStripProps {
 }
 
 const MOBILE_QUERY = '@media (max-width:640px)';
+/** Below 720 px, where the full strip's items wrap. */
+const NARROW_FULL_QUERY = '@media (max-width:719.95px)';
 
+/**
+ * One item of the strip's meta row. The compact strip leads with its label in bold; the full
+ * strip (the Trip page) has a small, muted label above a bold 16 px value (#646).
+ */
 function MetaItem({
   label,
   value,
   mono = false,
+  emphasis = 'label',
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  emphasis?: 'label' | 'value';
 }) {
+  const valueFirst = emphasis === 'value';
   return (
     <Box component="span">
       <Box
-        component="strong"
-        sx={{
-          display: 'block',
-          color: 'strip.text',
-          fontWeight: 600,
-          fontSize: '0.875rem',
-        }}
+        component={valueFirst ? 'span' : 'strong'}
+        sx={
+          valueFirst
+            ? {
+                display: 'block',
+                color: 'strip.muted',
+                fontWeight: 500,
+                fontSize: '0.75rem',
+                lineHeight: 1.4,
+              }
+            : { display: 'block', color: 'strip.text', fontWeight: 600, fontSize: '0.875rem' }
+        }
       >
         {label}
       </Box>
       <Box
-        component="span"
-        sx={mono ? (theme) => ({ ...(theme.typography.money as React.CSSProperties) }) : undefined}
+        component={valueFirst ? 'strong' : 'span'}
+        sx={(theme) => ({
+          ...(mono ? (theme.typography.money as React.CSSProperties) : {}),
+          ...(valueFirst
+            ? {
+                display: 'block',
+                fontSize: '1rem',
+                lineHeight: 1.35,
+                fontWeight: 700,
+                color: (theme.vars ?? theme).palette.strip.text,
+              }
+            : {}),
+        })}
       >
         {value}
       </Box>
@@ -99,7 +123,6 @@ export default function TripStrip({
   href,
   dateLabel,
   memberCount,
-  memberNames,
   balance,
   balanceUnavailable = false,
   tripTotal,
@@ -251,6 +274,7 @@ export default function TripStrip({
         </Box>
 
         <Box
+          data-strip-items=""
           sx={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -258,20 +282,30 @@ export default function TripStrip({
             rowGap: 1.5,
             fontSize: '0.875rem',
             color: 'strip.muted',
+            // The Trip page's items wrap from the left below 720 px, 12 px between rows and
+            // 40 px between items, so Currency sits under Dates (#646).
+            ...(isFull && {
+              [NARROW_FULL_QUERY]: {
+                rowGap: '12px',
+                columnGap: '40px',
+                justifyContent: 'flex-start',
+              },
+            }),
           }}
         >
           {isFull ? (
             // The Trip page's strip: Dates, Members and Currency, as the board has it (#646). The
             // name is the page's heading, and the header's Invite button shares the invite.
             <>
-              {dateLabel && <MetaItem label="Dates" value={dateLabel} />}
-              {memberNames && memberNames.length > 0 && (
-                <MetaItem label="Members" value={memberNames.join(SEPARATOR)} />
+              {dateLabel && <MetaItem label="Dates" value={dateLabel} emphasis="value" />}
+              {memberCount !== undefined && (
+                <MetaItem label="Members" value={String(memberCount)} emphasis="value" />
               )}
               <MetaItem
                 label={tripCurrencies.length > 1 ? 'Currencies' : 'Currency'}
                 value={tripCurrencies.join(SEPARATOR)}
                 mono
+                emphasis="value"
               />
             </>
           ) : (

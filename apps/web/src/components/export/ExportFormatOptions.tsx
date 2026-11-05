@@ -7,21 +7,24 @@ import { RADIUS } from '@/lib/theme/tokens';
 export type ExportChoice = 'csv' | 'json' | 'statement';
 
 /** The formats in the board's order, each with its one line (design canvas "Export"). */
-const FORMATS: { value: ExportChoice; label: string; description: string }[] = [
+const FORMATS: { value: ExportChoice; label: string; badge: string; description: string }[] = [
   {
     value: 'csv',
     label: 'CSV files',
-    description: 'Expenses and payments, ready for a spreadsheet.',
+    badge: '.csv',
+    description: 'Plain rows for any spreadsheet or tool.',
   },
   {
     value: 'statement',
     label: 'Printable statement',
-    description: 'One Group’s balances and Expenses, to print or save as PDF.',
+    badge: 'PDF',
+    description: 'A readable summary of one Group, to print or save as PDF.',
   },
   {
     value: 'json',
     label: 'Full backup',
-    description: 'Every chosen Group in one JSON file, all time.',
+    badge: '.json',
+    description: 'Everything in the chosen Groups, all time, in one JSON file.',
   },
 ];
 
@@ -92,13 +95,33 @@ export default function ExportFormatOptions({
               <Box
                 sx={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, pt: 0.25 }}
               >
-                <Typography
-                  id={`${id}-label`}
-                  component="span"
-                  sx={{ fontSize: '0.9375rem', fontWeight: 600, color: 'text.primary' }}
-                >
-                  {format.label}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 1 }}>
+                  <Typography
+                    id={`${id}-label`}
+                    component="span"
+                    sx={{ fontSize: '0.9375rem', fontWeight: 600, color: 'text.primary' }}
+                  >
+                    {format.label}
+                  </Typography>
+                  {/* The file type, beside the title but outside the radio's name (#646). */}
+                  <Box
+                    component="span"
+                    aria-hidden
+                    data-format-badge=""
+                    sx={(theme) => ({
+                      ...theme.typography.money,
+                      px: 0.75,
+                      py: '1px',
+                      fontSize: '0.6875rem',
+                      lineHeight: 1.4,
+                      borderRadius: `${RADIUS.sm}px`,
+                      bgcolor: 'surface.muted',
+                      color: 'text.secondary',
+                    })}
+                  >
+                    {format.badge}
+                  </Box>
+                </Box>
                 <Typography
                   id={`${id}-line`}
                   component="span"

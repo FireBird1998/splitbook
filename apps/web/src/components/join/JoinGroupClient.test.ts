@@ -3,6 +3,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { ThemeProvider } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
+import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
 
 /*
  * The invite page (board WebJoin, #646): the brand mark while the invite loads, then the Group's
@@ -96,13 +97,37 @@ describe('the invite page', () => {
     ).not.toHaveLength(0);
   });
 
+  it('leads with “You’ve been invited to join” and gives the Theme and member count under the name', async () => {
+    const lines = async (memberCount: number) => {
+      const { root } = await render(
+        Promise.resolve(
+          Response.json({
+            data: { name: 'Synthetic Lakeview Flat', category: 'home', memberCount },
+          }),
+        ),
+      );
+      const shown = hosts(root.findByType('main' as never), 'p').map((node) => textOf(node));
+      act(() => renderer?.unmount());
+      renderer = null;
+      return shown.slice(0, 2);
+    };
+    expect(await lines(3)).toEqual([
+      'You’ve been invited to join',
+      `Household${SEPARATOR}3${NO_BREAK_SPACE}members`,
+    ]);
+    expect((await lines(1))[1]).toBe(`Household${SEPARATOR}1${NO_BREAK_SPACE}member`);
+  });
+
   it('says plainly when the invite can’t be opened, under an icon tile, without an emoji', async () => {
     const { root } = await render(Promise.resolve(Response.json({}, { status: 404 })));
     expect(h1s(root)).toEqual(['Can’t open this invite']);
     const main = textOf(root.findByType('main' as never));
     expect(main).not.toMatch(EMOJI);
     expect(main).not.toContain('Oops');
-    expect(main).toContain('This invite link is invalid or has expired.');
+    expect(main).toContain(
+      'This invite link has expired or isn’t valid. Ask whoever sent it for a new one.',
+    );
+    expect(hosts(root, 'button').map((node) => textOf(node))).toEqual(['Go to Home']);
     expect(tile(root).map((node) => node.props['data-join-tile'])).toEqual(['error']);
   });
 });

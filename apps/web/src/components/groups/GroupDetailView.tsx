@@ -42,7 +42,7 @@ import {
 } from './group-page-context';
 import { groupSettingsHref, groupTabHref } from './group-tabs';
 import { groupExportHref } from '@/components/layout/shell-nav';
-import { groupDatesLabel } from './group-dates';
+import { tripDateRange } from './group-dates';
 
 interface GroupDetailViewProps {
   groupId: string;
@@ -204,7 +204,6 @@ function GroupDetailContent({
   const theme = getGroupTheme(group.category);
   const startDate = group.startDate;
   const endDate = group.endDate;
-  const dateLabel = groupDatesLabel(theme, startDate, endDate, { tracking: true });
   const currency = group.defaultCurrency;
   const strip = tripStripFigures({
     group,
@@ -260,11 +259,8 @@ function GroupDetailContent({
             currency={strip.currency}
             currencies={strip.currencies}
             variant="full"
-            dateLabel={dateLabel}
+            dateLabel={tripDateRange(startDate, endDate)}
             memberCount={members.length}
-            memberNames={members.map((member) =>
-              member.user._id === userId ? 'You' : member.user.name.split(' ')[0],
-            )}
             balance={
               strip.balance === null ? null : { amount: strip.balance, currency: strip.currency }
             }

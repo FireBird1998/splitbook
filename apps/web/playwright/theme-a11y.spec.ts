@@ -81,10 +81,11 @@ test('the invite page respects the project theme and is accessible', async ({ pa
   const home = page.getByRole('banner').getByRole('link', { name: 'Splitbook home' });
   await expect(home).toHaveAttribute('href', '/');
   await expect(home.getByRole('img')).toHaveAttribute('src', logoArtwork(testInfo));
-  // The card is the Group's own: its icon, name and member count, and no brand artwork.
+  // The card is the Group's own: its icon, name, Theme and member count, and no brand artwork.
   const card = page.getByRole('main');
   await expect(card.getByRole('img')).toHaveCount(0);
-  await expect(card.getByText('3 members')).toBeVisible();
+  // "Household · 3 members", the count kept whole with its noun (#646).
+  await expect(card.getByText(/^Household\s·\s3\smembers$/)).toBeVisible();
   await expect(card.getByRole('button', { name: 'Sign in to Join' })).toBeVisible();
   await expect(
     card.getByText('Splitbook keeps a shared record of what the Group spends and who owes whom.'),

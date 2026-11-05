@@ -34,8 +34,9 @@ const MONTHS = [
 ];
 
 function TripExtras() {
+  // It grows to fill the card, so its closing line sits at the foot of the 2 by 2 block (#646).
   return (
-    <Stack spacing={2}>
+    <Stack spacing={2} useFlexGap sx={{ flex: '1 1 auto' }}>
       <TripStrip
         name="Goa Weekend"
         currency="INR"
@@ -71,7 +72,7 @@ function TripExtras() {
           </Box>
         ))}
       </Box>
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 'auto' }}>
         A boarding-pass header, a setup checklist and a date range, with Expenses grouped by Trip
         day.
       </Typography>
@@ -169,7 +170,11 @@ export default function LandingGroups() {
                 }),
               }}
             >
-              <Stack spacing={1.5}>
+              <Stack
+                spacing={1.5}
+                useFlexGap
+                sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+              >
                 <Stack direction="row" spacing={1.25} alignItems="center">
                   <Icon fontSize="small" color="primary" aria-hidden />
                   <Typography variant="h6" component="h3" sx={{ m: 0 }}>

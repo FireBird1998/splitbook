@@ -17,6 +17,7 @@ import {
 } from '@splitbook/shared/exact-money';
 import MoneyText from '@/components/common/MoneyText';
 import { PRODUCT_NAME } from '@/lib/product';
+import { RADIUS } from '@/lib/theme/tokens';
 import LandingSection, { landingCard } from './LandingSection';
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
@@ -97,8 +98,16 @@ function GroceriesCard() {
               key={method}
               label={method}
               size="small"
-              color={method === 'Shares' ? 'primary' : 'default'}
-              variant={method === 'Shares' ? 'filled' : 'outlined'}
+              variant="outlined"
+              sx={{
+                borderRadius: `${RADIUS.sm}px`,
+                // Shares, the method this Expense uses, in the brand's tint, border and text.
+                ...(method === 'Shares' && {
+                  bgcolor: 'tint.brand',
+                  borderColor: 'primary.main',
+                  color: 'primary.main',
+                }),
+              }}
             />
           ))}
         </Box>
