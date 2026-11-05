@@ -1,5 +1,5 @@
 import type { ViewInstance, TextInputInstance } from 'react-native';
-import { memo, useState, type ReactNode, type Ref } from 'react';
+import { createContext, memo, useState, type ReactNode, type Ref } from 'react';
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { EXPENSE_CATEGORIES, getCategory } from '@splitbook/shared/categories';
 import { formatCurrency, wholeUnit } from '@splitbook/shared/currency';
@@ -41,6 +41,7 @@ import {
   headingLine,
   useLargeText,
   useLargestText,
+  useShortWindow,
   useTap,
 } from './compact';
 import { useTheme } from './theme';
@@ -771,7 +772,18 @@ export function ActionBar({ children }: { children: ReactNode }) {
   );
 }
 
-/** Pinned under the form, above the keyboard; it names the amount once that is valid. */
+/**
+ * Whether what's under Save sits beside it, in one row: Finish later lays itself out as the
+ * row's start, with Save taking the rest (#646).
+ */
+export const SaveBarRow = createContext(false);
+
+/**
+ * Pinned under the form, above the keyboard; it names the amount once that is valid. On a short
+ * window (`useShortWindow`), what's under Save, such as Finish later, goes beside it in one row,
+ * so the bar takes about 76 dp and the form keeps "Who owes what" in view at 360×640 (#646).
+ * From 130% text the two don't fit side by side, so they stay stacked.
+ */
 export function SaveBar({
   label,
   amount,
@@ -796,6 +808,24 @@ export function SaveBar({
   // From 150% the amount goes under the words: beside "CHF 2,500.50" at 200% on a 360 dp phone,
   // Save read "Save ex / pense" (#867), as Record payment's did (#639).
   const largest = useLargestText();
+  const short = useShortWindow();
+  const large = useLargeText();
+  const beside = short && !large && !!children;
+  const save = (
+    <CompactButton
+      label={label}
+      amount={amount}
+      amountBelow={largest}
+      busy={busy}
+      block
+      disabled={blocked !== null}
+      hint={blocked ?? undefined}
+      onPress={onSave}
+    />
+  );
+  const other = secondary ? (
+    <CompactButton label={secondary.label} variant="text" block onPress={secondary.onPress} />
+  ) : null;
   return (
     <ActionBar>
       {/* Above Save: the bar grows upward from the bottom of the screen, so Save stays put. */}
@@ -804,20 +834,22 @@ export function SaveBar({
           {blocked}
         </CompactText>
       ) : null}
-      <CompactButton
-        label={label}
-        amount={amount}
-        amountBelow={largest}
-        busy={busy}
-        block
-        disabled={blocked !== null}
-        hint={blocked ?? undefined}
-        onPress={onSave}
-      />
-      {secondary ? (
-        <CompactButton label={secondary.label} variant="text" block onPress={secondary.onPress} />
-      ) : null}
-      {children}
+      {beside ? (
+        <>
+          {/* What goes beside Save starts the row; a note of its own takes a line above it. */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 8, rowGap: 6 }}>
+            <SaveBarRow.Provider value>{children}</SaveBarRow.Provider>
+            <View style={{ flex: 1 }}>{save}</View>
+          </View>
+          {other}
+        </>
+      ) : (
+        <>
+          {save}
+          {other}
+          {children}
+        </>
+      )}
     </ActionBar>
   );
 }

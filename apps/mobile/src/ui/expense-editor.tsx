@@ -18,6 +18,7 @@ import {
   type RecordOutline,
 } from './expense-record-view';
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -26,7 +27,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { AccessibilityInfo, ScrollView, View } from 'react-native';
+import { AccessibilityInfo, ScrollView, Text, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { expenseDifferences } from '@splitbook/shared/expense-review';
@@ -90,7 +91,7 @@ import { SplitSheet } from './split-sheet';
 import { ErrorBoundary } from './error-boundary';
 import { savingNeedsConnection } from './offline-notice';
 import { spellMoment } from './day-format';
-import { useTheme } from './theme';
+import { fonts, useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
 import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
 
@@ -883,19 +884,31 @@ function ExpenseTask({
             <Banner
               tone="error"
               title={`${invalid.length === 1 ? 'One thing' : `${invalid.length}${NO_BREAK_SPACE}things`} to fix before saving`}
-              message={expenseRecoveryWords('Your draft is kept. Go to each one:')}
-            >
-              {invalid.map((field) => (
-                <CompactButton
-                  key={field}
-                  label={expenseFieldLabels[field]}
-                  accessibilityLabel={`Go to ${expenseFieldLabels[field]}`}
-                  variant="text"
-                  dense
-                  onPress={() => goTo(field)}
-                />
-              ))}
-            </Banner>
+              message={
+                <>
+                  {expenseRecoveryWords('Your draft is kept.')} Fix{' '}
+                  {invalid.map((field, index) => (
+                    <Fragment key={field}>
+                      {index === 0 ? '' : index === invalid.length - 1 ? ' and ' : ', '}
+                      {/* Each name is a link to its field, spoken as "Go to Amount". */}
+                      <Text
+                        accessibilityRole="link"
+                        accessibilityLabel={`Go to ${expenseFieldLabels[field]}`}
+                        onPress={() => goTo(field)}
+                        style={{
+                          fontFamily: fonts.semibold,
+                          color: theme.status.negative,
+                          textDecorationLine: 'underline',
+                        }}
+                      >
+                        {expenseFieldLabels[field]}
+                      </Text>
+                    </Fragment>
+                  ))}
+                  .
+                </>
+              }
+            />
           ) : null}
           <AmountDescriptionCard
             controller={controller}

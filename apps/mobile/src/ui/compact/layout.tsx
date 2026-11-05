@@ -16,6 +16,7 @@ import { usePulse, useReveal, useSweep, sweepTrack, type Reveal } from './motion
 import {
   isLargeText,
   isLargestText,
+  isShortWindow,
   largeTextColumn,
   lineBox,
   radius,
@@ -29,6 +30,9 @@ export const useLargeText = () => isLargeText(useWindowDimensions().fontScale);
 
 /** From 150% text, titles and labels take as many lines as they need (`LARGEST_TEXT_SCALE`). */
 export const useLargestText = () => isLargestText(useWindowDimensions().fontScale);
+
+/** Whether the window is shorter than `SHORT_WINDOW_HEIGHT`, as a 360×640 phone's is. */
+export const useShortWindow = () => isShortWindow(useWindowDimensions().height);
 
 /**
  * At large text, the least room a line's text keeps beside what follows it (`largeTextColumn`);

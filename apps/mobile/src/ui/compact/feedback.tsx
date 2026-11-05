@@ -41,7 +41,8 @@ export function Banner({
   title?: string;
   /** The title heads what follows, such as a duplicate's details: read as a heading. */
   heading?: boolean;
-  message: string;
+  /** Text, or text runs such as a sentence with links in it. */
+  message: ReactNode;
   /** A notice that stays on the screen, e.g. an unconfirmed payment: announced politely. */
   standing?: boolean;
   /** Beside the title, such as a draft's amount. */

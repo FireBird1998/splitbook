@@ -27,6 +27,7 @@ import { ControllerExpenseEditor } from './controller-expense-editor';
 import { expenseDateLabel } from './expense-form';
 import { ExpenseRecordView } from './expense-record-view';
 import { OfflineNotice } from './offline-notice';
+import { expenseRecoveryWords } from './expense-recovery-copy';
 
 const { AccessibilityInfo } = await import('react-native');
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -323,11 +324,20 @@ async function render(
     mocks
       .filter((mock) => mock.element.props.accessibilityLabel === label)
       .reduce((count, mock) => count + mock.focus.mock.calls.length, 0);
+  /** A link in a sentence, such as a field's name in the corrections banner (#646). */
+  const link = (label: string) =>
+    root().find(
+      (node) =>
+        isHost(node, 'Text') &&
+        node.props.accessibilityRole === 'link' &&
+        node.props.accessibilityLabel === label,
+    );
   return {
     ...harness,
     root,
     input,
     pressable,
+    link,
     tile,
     revealed,
     focusCount,
@@ -514,7 +524,7 @@ describe('rendered Expense corrections', () => {
     expect(ui.focusCount('Amount, Indian Rupee, required')).toBe(0);
     expect(ui.revealed).toHaveLength(1);
     expect(text(ui.root())).toContain('One thing to fix before saving');
-    expect(ui.pressable('Go to Description')).toBeTruthy();
+    expect(ui.link('Go to Description')).toBeTruthy();
     expect(ui.input('Amount, Indian Rupee, required').props.value).toBe('250.50');
     expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Groceries');
 
@@ -570,8 +580,51 @@ describe('rendered Expense corrections', () => {
     expect(corrections(ui.root())).toContain('Choose a Tag for this Expense.');
     expect(text(ui.root())).toContain('4\u00a0things to fix before saving');
     for (const field of ['Amount', 'Description', 'Date', 'Tag'])
-      expect(ui.pressable(`Go to ${field}`)).toBeTruthy();
+      expect(ui.link(`Go to ${field}`)).toBeTruthy();
     expect(ui.focusCount('Amount, Indian Rupee, required')).toBe(1);
+  });
+
+  // #646 A9: one sentence, as the board has it, with each field's name a link to it.
+  it('says what to fix in one sentence, each name a link that goes to its field', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await ui.press('Save expense');
+    const banner = () =>
+      ui.root().find((node) => isHost(node, 'View') && node.props.accessibilityRole === 'alert');
+    // The banner's sentence: one text, its field names nested in it.
+    const sentence = () =>
+      banner().find(
+        (node) =>
+          isHost(node, 'Text') &&
+          node.props.accessibilityRole !== 'link' &&
+          node.findAll((child) => isHost(child, 'Text') && child.props.accessibilityRole === 'link')
+            .length > 0,
+      );
+    const words = (node: ReactTestInstance): string =>
+      node.children.map((child) => (typeof child === 'string' ? child : words(child))).join('');
+    expect(words(sentence())).toBe(
+      expenseRecoveryWords('Your draft is kept. Fix Amount, Description and Tag.'),
+    );
+    expect(text(banner())).not.toContain('Go to each one');
+    // No buttons under it: the names are the way to each field.
+    expect(banner().findAll((node) => isHost(node, 'Pressable'))).toEqual([]);
+    const links = sentence().findAll(
+      (node) => isHost(node, 'Text') && node.props.accessibilityRole === 'link',
+    );
+    expect(links.map((node) => [words(node), node.props.accessibilityLabel])).toEqual([
+      ['Amount', 'Go to Amount'],
+      ['Description', 'Go to Description'],
+      ['Tag', 'Go to Tag'],
+    ]);
+    expect(ui.focusCount('Description, required')).toBe(0);
+    await act(async () => ui.link('Go to Description').props.onPress());
+    await settle();
+    expect(ui.focusCount('Description, required')).toBe(1);
+    // Two names are joined with "and" alone.
+    await ui.type('Amount, Indian Rupee, required', '250.50');
+    await ui.press('Save expense');
+    expect(words(sentence())).toBe(
+      expenseRecoveryWords('Your draft is kept. Fix Description and Tag.'),
+    );
   });
 
   it('waits until a field is left before showing its correction', async () => {

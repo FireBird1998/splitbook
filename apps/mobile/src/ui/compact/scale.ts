@@ -100,6 +100,14 @@ export function lineBox(kind: LineKind, fontScale: number) {
   };
 }
 
+/**
+ * Below this window height, in dp, the window is short, as a 360×640 phone's is: Add expense's
+ * Save bar keeps Finish later beside Save, without its note, so the form keeps "Who owes what"
+ * in view (#646).
+ */
+export const SHORT_WINDOW_HEIGHT = 700;
+export const isShortWindow = (height: number) => height < SHORT_WINDOW_HEIGHT;
+
 /** At or above this Android font scale, tile grids use one column. */
 export const LARGE_TEXT_SCALE = 1.3;
 // Android reports the scale as a 32-bit float (130% arrives as 1.2999999523…), so compare
