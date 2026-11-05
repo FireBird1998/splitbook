@@ -284,6 +284,48 @@ describe('Settle up with Sam (#734)', () => {
     expect(network.sent[0].body).toMatchObject({ paidCurrency: 'EUR' });
   });
 
+  // #872: Sam is owed only in extra currencies; Pay in still offers rupees, first.
+  it('pays Debts only in extra currencies in the main currency, each at its own rate (#872)', async () => {
+    const extras: SettleAllOffer = {
+      ...offer,
+      debts: [
+        { currency: 'EUR', amountMinor: 2000 },
+        { currency: 'JPY', amountMinor: 2500 },
+      ],
+    };
+    rates.byPair = {
+      'EUR>INR': { status: 'ready', suggestion: suggestion('92.1') },
+      'JPY>INR': { status: 'ready', suggestion: suggestion('0.56') },
+    };
+    await mount({
+      offer: extras,
+      payCurrencies: ['INR', 'EUR', 'JPY'],
+      recheck: async () => extras.debts,
+    });
+    const payIn = sheet().find((node) => node.props.role === 'radiogroup');
+    expect(payIn.findAll((node) => node.type === 'button').map((node) => textOf(node))).toEqual([
+      'INR',
+      'EUR',
+      'JPY',
+    ]);
+    expect(button('INR')!.props['aria-checked']).toBe(true);
+    expect(rows()).toEqual([
+      'Debt Rate You pay',
+      expect.stringMatching(/^EUR €20\.00 ₹92\.10 per € Frankfurter .* Change ₹1,842\.00$/),
+      expect.stringMatching(/^JPY ¥2,500 ₹0\.56 per ¥ Frankfurter .* Change ₹1,400\.00$/),
+      'Total ₹3,242.00',
+    ]);
+
+    await press('Record ₹3,242.00');
+    expect(network.sent[0].body).toMatchObject({
+      paidCurrency: 'INR',
+      settlements: [
+        { currency: 'EUR', amount: 20, amountPaidMinor: 184200, rateKind: 'suggested' },
+        { currency: 'JPY', amount: 2500, amountPaidMinor: 140000, rateKind: 'suggested' },
+      ],
+    });
+  });
+
   it('never pays a Debt at another paying currency’s rate after Pay in changes', async () => {
     // Sam is owed in yen too. In rupees both rates are known; the yen-to-euro one isn't yet.
     const three: SettleAllOffer = {

@@ -124,6 +124,26 @@ const rank = (currencies: readonly string[], currency: string) => {
   return at < 0 ? currencies.length : at;
 };
 
+/**
+ * The currencies a settle-up can be paid in (#872, the Designer's rule): the Group's main currency
+ * first, then each Debt's own, once each, so Debts only in extra currencies can be paid in the main
+ * one. Other listed currencies no Debt is in stay off, to keep the choice short, and a Debt's
+ * currency the Group no longer lists can't be paid in.
+ */
+export function settleAllPayCurrencies(
+  debts: readonly { currency: string }[],
+  listed: readonly string[],
+  mainCurrency: string,
+): string[] {
+  return [
+    ...new Set(
+      [mainCurrency, ...debts.map(({ currency }) => currency)].filter((code) =>
+        listed.includes(code),
+      ),
+    ),
+  ];
+}
+
 /** "₹1,480.00 and €20.00", or "₹500.00, €12.50 and ¥900". */
 const andList = (words: string[]) =>
   words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : (words[0] ?? '');

@@ -73,6 +73,7 @@ import {
   type SettlementField,
 } from './settlement';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
+import { settleAllPayCurrencies } from '@splitbook/shared/settle-all';
 import {
   assertSettlementMembers,
   assertSettlementAuthorization,
@@ -4944,8 +4945,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /**
    * Settle up (#734, board "Settle both currencies at once"): one payment, in one currency, for
    * every Debt the payer owes the other in two currencies or more, each at its own rate. It is
-   * paid in the main currency when one of the Debts is in it, else the first of them the Group
-   * lists; the rates for the others are looked up live.
+   * paid in the Group's main currency, the first Pay in offers, even when no Debt is in it (#872);
+   * the rates for the Debts in other currencies are looked up live.
    */
   const selectSettleAll = async (paidBy: string, paidTo: string) => {
     const state = snapshot.settlement,
@@ -4963,12 +4964,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     const debts = debtsBetween(state.balances, state.group, paidBy, paidTo);
-    const listed = groupCurrencies(state.group);
-    const payable = debts.map(({ currency }) => currency).filter((c) => listed.includes(c));
-    if (debts.length < 2 || !payable.length) return;
-    const paidCurrency = payable.includes(state.group.defaultCurrency)
-      ? state.group.defaultCurrency
-      : payable[0]!;
+    const [paidCurrency] = settleAllPayCurrencies(
+      debts,
+      groupCurrencies(state.group),
+      state.group.defaultCurrency,
+    );
+    if (debts.length < 2 || !paidCurrency) return;
     const asked = ++rateRequest;
     publish({
       ...snapshot,
@@ -5027,15 +5028,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }),
     );
   };
-  /** Pay the settle-up in another of its Debts' currencies: each rate starts afresh. */
+  /**
+   * Pay the settle-up in another currency Pay in offers, the main one or a Debt's (#872): each
+   * rate starts afresh.
+   */
   const payBatchIn = async (paidCurrency: string) => {
     const state = snapshot.settlement,
       batch = state.batch;
     if (!batch || !state.group || !state.groupId || !state.draft) return;
     if (
       batch.paidCurrency === paidCurrency ||
-      !batch.debts.some(({ currency }) => currency === paidCurrency) ||
-      !groupCurrencies(state.group).includes(paidCurrency)
+      !settleAllPayCurrencies(
+        batch.debts,
+        groupCurrencies(state.group),
+        state.group.defaultCurrency,
+      ).includes(paidCurrency)
     )
       return;
     const asked = ++rateRequest;

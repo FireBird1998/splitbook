@@ -57,7 +57,7 @@ export interface SettleAllDialogProps {
   offer: SettleAllOffer | null;
   /** Everyone's name, kept with a stored payment. */
   names: Readonly<Record<string, string>>;
-  /** The currencies it can be paid in: the Debts' own that the Group lists. */
+  /** The currencies it can be paid in: the main currency first, then the Debts' own (#872). */
   payCurrencies: string[];
   /** The payment stored for the two, if any: one that may already be recorded. */
   stored: SettlementAttempt | null;
@@ -151,9 +151,8 @@ export default function SettleAllDialog({
   onDone,
   onRefresh,
 }: SettleAllDialogProps) {
-  const [paidCurrency, setPaidCurrency] = useState(
-    () => offer?.debts.find(({ currency }) => payCurrencies.includes(currency))?.currency ?? '',
-  );
+  // The first currency Pay in offers: the Group's main currency (#872).
+  const [paidCurrency, setPaidCurrency] = useState(() => payCurrencies[0] ?? '');
   const [read, setRead] = useState<Record<string, RateSuggestionState>>({});
   const [custom, setCustom] = useState<Record<string, string | null>>({});
   const [changing, setChanging] = useState<Record<string, boolean>>({});

@@ -9,6 +9,7 @@ import {
 import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
+import { settleAllPayCurrencies } from '@splitbook/shared/settle-all';
 import { acceptsNumericText } from '../data/field-feedback';
 import {
   readBatchPayment,
@@ -316,11 +317,14 @@ export function SettleAllSheet({
       : null;
   const waiting = reading?.waiting ?? null;
   const count = legs.length;
+  // The main currency first, then each Debt's own (#872).
   const payCurrencies =
     batch && state.group
-      ? batch.debts
-          .map(({ currency }) => currency)
-          .filter((currency) => groupCurrencies(state.group!).includes(currency))
+      ? settleAllPayCurrencies(
+          batch.debts,
+          groupCurrencies(state.group),
+          state.group.defaultCurrency,
+        )
       : [];
   const retrying = checking && attempt !== null;
   // What it pays in all, as Record and the total say it.

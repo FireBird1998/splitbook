@@ -51,7 +51,11 @@ import type { EveryonePerson } from './everyone-chart';
 import SettleUpViews, { type Debt } from './SettleUpViews';
 import SettleAllOffers from './SettleAllOffers';
 import SettleAllDialog from '@/components/settlements/SettleAllDialog';
-import { settleAllDebtsBetween, settleAllOffers } from '@splitbook/shared/settle-all';
+import {
+  settleAllDebtsBetween,
+  settleAllOffers,
+  settleAllPayCurrencies,
+} from '@splitbook/shared/settle-all';
 
 interface BalancesViewProps {
   groupId: string;
@@ -747,9 +751,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           accountId={userId}
           offer={settlingOffer}
           names={names}
-          payCurrencies={(settlingOffer?.debts ?? [])
-            .map(({ currency: code }) => code)
-            .filter((code) => listed.includes(code))}
+          payCurrencies={settleAllPayCurrencies(settlingOffer?.debts ?? [], listed, groupCurrency)}
           stored={settlingStored}
           recheck={async () => {
             // The Balances read again, live: Record pays only the Debts as they are now.
