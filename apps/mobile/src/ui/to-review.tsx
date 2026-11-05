@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import {
   memberProblems,
+  needDetailsWords,
   reviewNeedWords,
   summarizeReviewRun,
   type ReviewItemModel,
@@ -1060,7 +1061,7 @@ export function ToReviewList({
                         },
                         {
                           value: String(model.counts.needsDetails),
-                          label: 'needs details',
+                          label: needDetailsWords(model.counts.needsDetails),
                           tone: 'warning',
                         },
                         {

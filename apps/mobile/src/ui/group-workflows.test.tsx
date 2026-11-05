@@ -81,6 +81,17 @@ describe('An invitation while offline (#286)', () => {
   });
 });
 
+describe('The private-beta note on an invitation (#877)', () => {
+  it.each([
+    ['shows before signing in', false, false, true],
+    ['isn’t shown once signed in', true, false, false],
+    ['isn’t shown to a member already in the Group', true, true, false],
+  ] as const)('%s', (_, signedIn, alreadyMember, shown) => {
+    const { text } = offlineInvitation(signedIn, alreadyMember);
+    expect(text.includes('You’ll need an account approved for the private beta.')).toBe(shown);
+  });
+});
+
 describe('A long Group name (#554)', () => {
   it('opens at its start, and leaves the cursor to the member while typing', () => {
     setWindow({ width: 360, height: 780, fontScale: 2 });

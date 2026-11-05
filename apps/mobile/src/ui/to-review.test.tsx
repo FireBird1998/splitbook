@@ -151,6 +151,8 @@ function fixture(
      * currencies (#865): neither GBP nor USD is listed.
      */
     teaAndBagels?: string[];
+    /** A second item missing its amount and date, so two need details (#877). */
+    twoIncomplete?: boolean;
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -171,6 +173,14 @@ function fixture(
   let items: DraftReview[] = options.empty
     ? []
     : [review(first), review(second), review(incomplete), duplicate];
+  if (options.twoIncomplete)
+    items.push(
+      review({
+        ...row(5, 'Missing taxi', 15),
+        values: { description: 'Missing taxi' },
+        missingFields: ['amount', 'date'],
+      }),
+    );
   if (options.unpaid)
     items = [
       {
@@ -569,6 +579,19 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(button(list, 'Save 2 ready').props.style({ pressed: false }).alignSelf).toBe('stretch');
     // Each section says how many it holds.
     expect(text(list)).toMatch(/Ready · \d/);
+  });
+  it('says how many need details, as one or as several (#877)', async () => {
+    // Each count is its label, then its figure.
+    for (const [twoIncomplete, shown, hidden] of [
+      [false, 'needs details\n1', 'need details'],
+      [true, 'need details\n2', 'needs details'],
+    ] as const) {
+      const f = fixture({ twoIncomplete });
+      await signIn(f);
+      const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+      expect(text(list)).toContain(shown);
+      expect(text(list)).not.toContain(hidden);
+    }
   });
   it('shows Home’s card and the Group’s bar as their boards (#646)', async () => {
     const f = fixture();

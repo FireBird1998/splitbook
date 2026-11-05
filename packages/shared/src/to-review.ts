@@ -198,6 +198,8 @@ function accountModel(
     accountItem: item,
   };
 }
+/** "needs details" after 1, "need details" after any other count (#877); plurals by hand. */
+export const needDetailsWords = (count: number) => (count === 1 ? 'needs details' : 'need details');
 export function toReviewSourceSummary(items: readonly ReviewItemModel[], now?: Date): string {
   const sources = new Map<string, { total: number; today: number }>();
   for (const item of items) {
@@ -215,7 +217,7 @@ export function toReviewSourceSummary(items: readonly ReviewItemModel[], now?: D
         `${count.total} from ${name}${now && count.today === count.total ? ' today' : ''}`,
     );
   const needs = items.filter((item) => item.state === 'needs-details').length;
-  if (needs) parts.push(`${needs} needs details`);
+  if (needs) parts.push(`${needs} ${needDetailsWords(needs)}`);
   return parts.join(' · ');
 }
 function counts(items: readonly ReviewItemModel[]) {

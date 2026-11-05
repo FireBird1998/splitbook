@@ -706,10 +706,13 @@ export function InvitationPreview({
           )}
         </View>
       </Card>
-      <CompactText variant="small" tone="secondary">
-        You’ll need an account approved for the private beta. An invitation doesn’t grant account
-        access.
-      </CompactText>
+      {/* Only someone signed out may not have an account yet (#877). */}
+      {!signedIn && (
+        <CompactText variant="small" tone="secondary">
+          You’ll need an account approved for the private beta. An invitation doesn’t grant account
+          access.
+        </CompactText>
+      )}
       <CompactButton label="Not now" variant="tonal" block disabled={joining} onPress={onCancel} />
     </View>
   );

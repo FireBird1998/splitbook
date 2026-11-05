@@ -336,7 +336,9 @@ function closedLeave(): LeaveGroupState {
 /** The server's refusals to let a member leave, with fallbacks for its own words. */
 const leaveRefusals: Record<string, string> = {
   OPEN_BALANCE: 'Settle up before you leave this Group.',
-  LAST_ADMIN: 'Make someone else an admin before you leave.',
+  // Android can't change roles, as Members says (#877).
+  LAST_ADMIN:
+    'Make someone else an admin before you leave. Changing roles is done on the web for now.',
   LEAVE_CONFLICT: 'This Group changed while you were leaving. Try again.',
   // #257: the server's words name the recurring Expense, in its problem state, that includes them.
   RECURRING_EXPENSE_PROBLEM:
@@ -346,6 +348,21 @@ const leaveRefusals: Record<string, string> = {
   GROUP_DELETION_UNAVAILABLE:
     'Permanent Group deletion is unavailable here. You are still a member; no history was deleted.',
 };
+/**
+ * A refusal in the server's words, except where they send the member to what Android can't do
+ * (#877): the last admin is told roles are changed on the web, and an admin whose recurring
+ * Expense still includes them is told to remove themselves from it there.
+ */
+function leaveRefusalWords(code: string, server: string | null): string {
+  const words = server?.trim();
+  if (code === 'LAST_ADMIN' || !words) return leaveRefusals[code];
+  return code === 'RECURRING_EXPENSE_PROBLEM'
+    ? words.replace(
+        /Remove yourself from (it|them), then leave\.$/,
+        'Remove yourself from $1 on the web, then leave.',
+      )
+    : words;
+}
 const unconfirmedSaveBeforeLeaving =
   'An Expense save in this Group isn’t confirmed yet. Check it on Expenses first: it may already be recorded and change your balance.';
 const unconfirmedPaymentBeforeLeaving =
@@ -5912,11 +5929,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       deletionPending = leftGroup.deletionPending === true;
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
-      const refusal =
-        error instanceof RequestError && error.status === 409 && error.code
-          ? leaveRefusals[error.code]
-          : undefined;
-      if (refusal && error instanceof RequestError) {
+      const code = error instanceof RequestError && error.status === 409 ? error.code : null;
+      if (code && leaveRefusals[code] && error instanceof RequestError) {
         if (shown())
           publish({
             ...snapshot,
@@ -5927,7 +5941,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               ...(error.code === 'GROUP_DELETION_CONFIRMATION_REQUIRED'
                 ? { deleteIfLastMember: true }
                 : {}),
-              message: error.serverMessage?.trim() || refusal,
+              message: leaveRefusalWords(code, error.serverMessage),
               check: error.code === 'OPEN_BALANCE' ? 'balances' : null,
             },
           });

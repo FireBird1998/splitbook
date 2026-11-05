@@ -191,6 +191,18 @@ describe('To review model', () => {
       '1 from ChatGPT today · 2 from Claude today · 1 needs details',
     );
   });
+  it('says “1 needs details” and “2 need details” (#877)', () => {
+    const summary = (count: number) => {
+      const items = Array.from({ length: count }, (_, index) => {
+        const row = item(index + 1);
+        row.draft.values = {};
+        row.draft.missingFields = ['paidBy'];
+        return row;
+      });
+      return buildToReview(read(items), [], now).sourceSummary;
+    };
+    expect([summary(1), summary(2)]).toEqual(['1 needs details', '2 need details']);
+  });
   it('uses the local calendar day at midnight in every host timezone', () => {
     const a = item(1);
     a.draft.preparedBy = { kind: 'assistant', name: 'Claude' };

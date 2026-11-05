@@ -20,7 +20,7 @@ test('To review card and Group banner share counts, sources and links; empty hid
   await expectThemeApplied(page, testInfo);
   const card = page.getByRole('region', { name: 'To review · 2', exact: true });
   await expect(card).toBeVisible();
-  await expect(card).toContainText('2 from Claude · 2 needs details');
+  await expect(card).toContainText('2 from Claude · 2 need details');
   await expect(card).toContainText('Only you see these');
   await expect(card.getByRole('link', { name: new RegExp(DEMO_TRIP_NAME) })).toHaveAttribute(
     'href',
@@ -33,7 +33,7 @@ test('To review card and Group banner share counts, sources and links; empty hid
   await reviewScreenshot(page, testInfo, 'to-review-home');
   await page.goto(`/groups/${DEMO_GROUP_ID}/expenses`);
   const banner = page.getByRole('region', { name: 'To review', exact: true });
-  await expect(banner).toContainText('2 to review · 2 from Claude today · 2 needs details');
+  await expect(banner).toContainText('2 to review · 2 from Claude today · 2 need details');
   await expect(banner.getByRole('link', { name: 'Review', exact: true })).toHaveAttribute(
     'href',
     `/groups/${DEMO_GROUP_ID}/review`,
