@@ -440,9 +440,24 @@ describe('a Debt paid in another currency in Activity (#727)', () => {
       amountMinor: 1733,
       amountPaidMinor: 159609,
       appliedRate: '92.099826889786497403',
+      suggestedRate: '91.9',
     });
     expect(formatActivityHeadline(uneven, alex._id)).toBe(
-      'You paid Sam Chen ₹1,596.09 to clear €17.33 at ₹92.099827 per €, suggested ₹92.10 (20 Oct)',
+      'You paid Sam Chen ₹1,596.09 to clear €17.33 at ₹92.099827 per €, suggested ₹91.90 (20 Oct)',
+    );
+  });
+
+  // #870: an older payment at the suggestion kept a rate worked back from the amount paid.
+  it('says an older payment at the suggestion was at the suggested rate, once (#870)', () => {
+    const older = paid({
+      amount: 17.33,
+      amountMinor: 1733,
+      amountPaidMinor: 159609,
+      appliedRate: '92.099826889786497403',
+      rateKind: 'suggested',
+    });
+    expect(formatActivityHeadline(older, alex._id)).toBe(
+      'You paid Sam Chen ₹1,596.09 to clear €17.33 at the suggested ₹92.10 per € (20 Oct)',
     );
   });
 

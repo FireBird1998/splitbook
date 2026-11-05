@@ -164,7 +164,8 @@ for (const scheme of ['light', 'dark'] as const) {
       name: /You paid Sam Chen ₹3,322\.00 to clear ₹1,480\.00 and €20\.00/,
     });
     await expect(row).toHaveCount(1);
-    await expect(row).toContainText('€20.00 at ₹92.10 per €, suggested ₹92.10');
+    // Said once when it's the rate used (#870).
+    await expect(row).toContainText('€20.00 at the suggested ₹92.10 per €');
     await row.click();
     await expect(page.getByRole('region', { name: 'Payment' })).toContainText(/Paid\s*₹3,322\.00/);
     await shoot(page, testInfo, `activity-${scheme}`);

@@ -371,7 +371,8 @@ describe('settling up in several currencies at once (#734)', () => {
       rateKind: 'suggested',
       suggestedRate: '0.010858',
     });
-    expect(String(row?.appliedRate)).toMatch(/^0\.0108581081/);
+    // The rate kept is the suggestion the member paid at (#870).
+    expect(row?.appliedRate).toBe('0.010858');
     expect(plain).toEqual({ amount: 20, currency: 'EUR' });
   });
 
@@ -389,7 +390,7 @@ describe('settling up in several currencies at once (#734)', () => {
         amount: 20,
         currency: 'EUR',
         amountPaidMinor: 185000,
-        appliedRate: '92.5',
+        appliedRate: '92.50',
         rateKind: 'custom',
         ...fromFrankfurter,
       },
@@ -417,7 +418,7 @@ describe('settling up in several currencies at once (#734)', () => {
         amount: 20,
         currency: 'EUR',
         amountPaidMinor: 184800,
-        appliedRate: '92.4',
+        appliedRate: '92.40',
         rateKind: 'entered',
       },
     ]);
@@ -449,7 +450,7 @@ describe('settling up in several currencies at once (#734)', () => {
         amount: 20,
         currency: 'EUR',
         amountPaidMinor: 184800,
-        appliedRate: '92.4',
+        appliedRate: '92.40',
         rateKind: 'custom',
         ...fromFrankfurter,
       },

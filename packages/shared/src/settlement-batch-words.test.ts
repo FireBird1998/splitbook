@@ -43,7 +43,8 @@ describe('a payment that settled several Debts at once (#734)', () => {
       headline: 'You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00',
       debts: [
         '₹1,480.00, same currency, no rate',
-        '€20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct)',
+        // The suggestion is said once when it's the rate used (#870).
+        '€20.00 at the suggested ₹92.10 per € (20 Oct)',
       ],
       rest: null,
     });

@@ -5302,6 +5302,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           cross && pair && reading?.status === 'valid'
             ? crossCurrencyPaymentFields(
                 pair,
+                cross.entry,
                 reading.amounts,
                 cross.rate.status === 'ready' ? cross.rate.suggestion : null,
               )

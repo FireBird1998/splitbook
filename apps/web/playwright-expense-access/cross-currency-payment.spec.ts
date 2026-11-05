@@ -206,7 +206,8 @@ for (const scheme of ['light', 'dark'] as const) {
       currency: 'EUR',
       amountPaidMinor: 185000,
       paidCurrency: 'INR',
-      appliedRate: '92.5',
+      // As typed (#870).
+      appliedRate: '92.50',
       rateKind: 'custom',
       suggestedRate: '92.1',
       rateSource: 'frankfurter',

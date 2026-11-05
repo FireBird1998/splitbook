@@ -377,8 +377,8 @@ export default function RecordPaymentForm({
         paidByName: realName(from),
         paidToName: realName(to),
         // Paid in another currency: its paid side and the rate, beside the amount cleared.
-        ...(crossReading?.status === 'valid'
-          ? crossCurrencyPaymentFields(pair, crossReading.amounts, suggestion)
+        ...(crossEntry && crossReading?.status === 'valid'
+          ? crossCurrencyPaymentFields(pair, crossEntry, crossReading.amounts, suggestion)
           : {}),
       };
     }

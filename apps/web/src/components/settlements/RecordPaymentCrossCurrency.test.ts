@@ -211,7 +211,7 @@ describe('paying a euro Debt in rupees (#727)', () => {
     await submit();
     expect(saved.payments[0]).toMatchObject({
       amountPaidMinor: 185000,
-      appliedRate: '92.5',
+      appliedRate: '92.50',
       rateKind: 'custom',
       suggestedRate: '92.1',
     });

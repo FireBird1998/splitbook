@@ -44,9 +44,9 @@ describe('calculateSettlementBatch', () => {
     });
     expect(result.totalPaidMinor).toBe(6);
     expect(result.settlements).toMatchObject([
-      { amount: 0.01, amountPaidMinor: 2, appliedRate: '2' },
-      { amount: 0.01, amountPaidMinor: 2, appliedRate: '2' },
-      { amount: 1, amountPaidMinor: 2, appliedRate: '0.02' },
+      { amount: 0.01, amountPaidMinor: 2, appliedRate: '1.5' },
+      { amount: 0.01, amountPaidMinor: 2, appliedRate: '1.5' },
+      { amount: 1, amountPaidMinor: 2, appliedRate: '0.015' },
     ]);
   });
   it('rounds payments in JPY to whole units and retains each suggested or custom rate', () => {
@@ -69,8 +69,8 @@ describe('calculateSettlementBatch', () => {
     });
     expect(result.totalPaidMinor).toBe(4);
     expect(result.settlements).toMatchObject([
-      { ...provenance, amountPaidMinor: 2, appliedRate: '200', rateKind: 'suggested' },
-      { ...provenance, amountPaidMinor: 2, appliedRate: '200', rateKind: 'custom' },
+      { ...provenance, amountPaidMinor: 2, appliedRate: '150', rateKind: 'suggested' },
+      { ...provenance, amountPaidMinor: 2, appliedRate: '249.5', rateKind: 'custom' },
     ]);
   });
   it('uses the custom rate for paid amounts while retaining the different suggestion', () => {

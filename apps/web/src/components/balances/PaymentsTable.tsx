@@ -6,7 +6,8 @@ import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { rateText } from '@splitbook/shared/cross-currency-payment';
-import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
+import { decimalMoney, minorMoney, rateUsed } from '@splitbook/shared/cross-currency-settlement';
+import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import ErrorState from '@/components/common/ErrorState';
 import { TabCard, PaysArrow, PersonAvatar, visuallyHidden } from './TabCard';
 
@@ -29,6 +30,26 @@ export interface PaymentRead {
   paidCurrency?: string;
   appliedRate?: string;
   rateKind?: 'suggested' | 'custom' | 'entered';
+  suggestedRate?: string;
+}
+
+/**
+ * The rate a payment was made at, as its record says it (#870): the suggestion when it gives the
+ * amount paid, as an older record's rate worked back from the rounded amount doesn't show it.
+ */
+function rateOf({ amountPaidMinor, paidCurrency, appliedRate, ...payment }: PaymentRead) {
+  if (amountPaidMinor === undefined || !paidCurrency || !appliedRate) return appliedRate ?? '';
+  try {
+    return rateUsed({
+      ...payment,
+      amountPaidMinor,
+      paidCurrency,
+      appliedRate,
+      amountMinor: parseAmountMinor(payment.amount, payment.currency),
+    }).rate;
+  } catch {
+    return appliedRate;
+  }
 }
 
 export type PaymentsState =
@@ -228,9 +249,8 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
                             paid as {minorMoney(
                               payment.amountPaidMinor,
                               payment.paidCurrency,
-                            )} at{' '}
-                            {decimalMoney(rateText(payment.appliedRate), payment.paidCurrency)} per{' '}
-                            {getCurrency(payment.currency)?.symbol ?? payment.currency}
+                            )} at {decimalMoney(rateText(rateOf(payment)), payment.paidCurrency)}{' '}
+                            per {getCurrency(payment.currency)?.symbol ?? payment.currency}
                           </Box>
                         )}
                     </Box>

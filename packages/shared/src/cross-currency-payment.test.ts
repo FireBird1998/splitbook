@@ -234,21 +234,73 @@ describe('the rate kind a payment records (#727)', () => {
 
   it('sends the suggestion beside a suggested or custom rate, and nothing beside an entered one', () => {
     const own = editCrossCurrencyEntry(start, euroInRupees, 'rate', '92.50');
-    expect(crossCurrencyPaymentFields(euroInRupees, read(own), frankfurter)).toEqual({
+    expect(crossCurrencyPaymentFields(euroInRupees, own, read(own), frankfurter)).toEqual({
       amountPaidMinor: 185000,
       paidCurrency: 'INR',
-      appliedRate: '92.5',
+      appliedRate: '92.50',
       rateKind: 'custom',
       suggestedRate: '92.1',
       rateSource: 'frankfurter',
       rateAsOf: '2026-10-20',
       rateFetchedAt: frankfurter.fetchedAt,
     });
-    expect(crossCurrencyPaymentFields(euroInRupees, read(own), null)).toEqual({
+    expect(crossCurrencyPaymentFields(euroInRupees, own, read(own), null)).toEqual({
       amountPaidMinor: 185000,
       paidCurrency: 'INR',
-      appliedRate: '92.5',
+      appliedRate: '92.50',
       rateKind: 'entered',
+    });
+  });
+});
+
+// #870: the record keeps the rate the member applied, as they saw it, never one worked back from
+// the rounded amount paid. €54.83 at the suggested ₹92.10 is ₹5,049.843, so ₹5,049.84 is paid.
+describe('the rate a payment records, as the member chose it (#870)', () => {
+  const debt = startCrossCurrencyEntry(euroInRupees, '54.83', frankfurter);
+  const sent = (entry: ReturnType<typeof startCrossCurrencyEntry>) => {
+    const reading = readCrossCurrencyEntry(entry, euroInRupees);
+    if (reading.status !== 'valid') throw new Error(reading.status);
+    return crossCurrencyPaymentFields(euroInRupees, entry, reading.amounts, frankfurter);
+  };
+
+  it('is the suggestion itself when the member pays at it', () => {
+    expect(sent(debt)).toMatchObject({
+      amountPaidMinor: 504984,
+      appliedRate: '92.1',
+      rateKind: 'suggested',
+      suggestedRate: '92.1',
+    });
+  });
+
+  it('is the rate as typed, when it gives the amount paid', () => {
+    // 54.83 × 91.5 = 5016.945: ₹5,016.95.
+    expect(sent(editCrossCurrencyEntry(debt, euroInRupees, 'rate', '91.50'))).toMatchObject({
+      amountPaidMinor: 501695,
+      appliedRate: '91.50',
+      rateKind: 'custom',
+    });
+    expect(sent(editCrossCurrencyEntry(debt, euroInRupees, 'rate', '1,092.10')).appliedRate).toBe(
+      '1092.10',
+    );
+  });
+
+  it('is worked out from both amounts when the member typed them, or the rate can’t give them', () => {
+    expect(sent(editCrossCurrencyEntry(debt, euroInRupees, 'paid', '5,000'))).toMatchObject({
+      amountPaidMinor: 500000,
+      appliedRate: '91.190953857377348167',
+      rateKind: 'custom',
+    });
+    // ₹100.00 at 92.10 clears €1.09, and €1.09 at 92.10 would pay ₹100.39: the rate follows them.
+    const paidAndRate = editCrossCurrencyEntry(
+      editCrossCurrencyEntry(debt, euroInRupees, 'paid', '100.00'),
+      euroInRupees,
+      'rate',
+      '92.10',
+    );
+    expect(paidAndRate.cleared).toBe('1.09');
+    expect(sent(paidAndRate)).toMatchObject({
+      amountPaidMinor: 10000,
+      appliedRate: '91.743119266055045872',
     });
   });
 });
@@ -427,6 +479,54 @@ describe('a payment’s record, as its card shows it (#727)', () => {
       unchanged: 'INR balances didn’t change. Only the Debt’s own currency moves.',
       kept: 'The rate is kept as recorded. It never changes, even when rates move later.',
     });
+  });
+
+  it('shows the rate used as the member applied it: the suggestion, or theirs as typed (#870)', () => {
+    const atSuggestion = {
+      ...record,
+      amountMinor: 5483,
+      amountPaidMinor: 504984,
+      appliedRate: '92.1',
+      rateKind: 'suggested' as const,
+    };
+    expect(paymentRecord(atSuggestion, alex)).toMatchObject({
+      paid: '₹5,049.84',
+      rateUsed: '₹92.10 per €',
+      badge: 'Suggested',
+      suggested: { rate: '₹92.10 per €' },
+    });
+    expect(
+      paymentRecord(
+        { ...atSuggestion, amountPaidMinor: 501695, appliedRate: '91.5', rateKind: 'custom' },
+        alex,
+      ),
+    ).toMatchObject({ rateUsed: '₹91.50 per €', badge: 'Your rate' });
+  });
+
+  it('reads an older record’s worked-out rate as the suggestion, when rounding explains the gap (#870)', () => {
+    const older = {
+      ...record,
+      amountMinor: 5483,
+      amountPaidMinor: 504984,
+      appliedRate: '92.099945285427685574',
+      rateKind: 'suggested' as const,
+    };
+    expect(paymentRecord(older, alex)).toMatchObject({
+      rateUsed: '₹92.10 per €',
+      badge: 'Suggested',
+    });
+    // A rate of the member's own that rounding doesn't explain stays theirs.
+    expect(
+      paymentRecord(
+        {
+          ...older,
+          amountPaidMinor: 501695,
+          appliedRate: '91.500091190953857377',
+          rateKind: 'custom',
+        },
+        alex,
+      ),
+    ).toMatchObject({ rateUsed: '₹91.500091 per €', badge: 'Your rate' });
   });
 
   it('names the second source, an entered rate, and leaves out what an older record didn’t keep', () => {

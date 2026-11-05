@@ -1497,8 +1497,8 @@ with `paidBy` / `paidTo` for the request above. Each cross-currency row also inc
 its `paidCurrency`; the batch validator derives it from the top-level field.
 The helper calls `calculateCrossCurrencySettlement` for each cross-currency row,
 rounding half up to that paying currency's minor unit (whole JPY/KRW), then sums
-those rounded minor units exactly. Its `appliedRate` always comes from the two
-rounded amounts. A missing rate, duplicate currency, invalid amount/rate, zero
+those rounded minor units exactly. Each row's `appliedRate` is its rate as chosen:
+the suggested rate, or the member's own (#870). A missing rate, duplicate currency, invalid amount/rate, zero
 rounded result or unsafe total is refused. No ledger conversion occurs.
 `createSettlementBatchSchema` and `CreateSettlementBatchInput` are exported from
 `@splitbook/shared/validators/settlement-batch` for both clients.
@@ -1540,8 +1540,11 @@ For a Cross-currency Settlement, send these fields with the existing body:
   to both same-currency and cross-currency Settlements; only the cleared currency's
   ledger moves.
 - `appliedRate`: a positive decimal string meaning **1 cleared = X paid** in major
-  units. It must equal the rate derived from the two stored amounts, rounded half
-  up to 18 decimal places. Trailing zeroes do not change its meaning.
+  units: the rate the member applied, as they chose it (#870). It must give the
+  amount paid, applied to the amount cleared and rounded half up in the paying
+  currency, or equal the rate derived from the two stored amounts, rounded half
+  up to 18 decimal places, as clients before #870 send it. Trailing zeroes do not
+  change its meaning.
 - `rateKind`: `suggested`, `custom`, or `entered`. The first two require all of
   `suggestedRate`, `rateSource`, `rateAsOf` and `rateFetchedAt`; `entered` omits all
   four and means no suggestion was available. `suggested` also requires that the
@@ -1582,7 +1585,9 @@ The missing amount rounds half up in its own currency (including an inferred
 cleared amount); the result's rate is always derived from the resulting amounts,
 not copied from the entered rate. Zero or unsafe results are refused. No floating
 point multiplication or division is used. Callers retain the user's rate separately
-while editing and send the helper's `appliedRate` with the two resulting amounts.
+while editing. They send the rate the member applied when it gives the amount paid
+(the suggestion, or the member's own as typed) and otherwise the helper's
+`appliedRate`, with the two resulting amounts (#870).
 
 Cross-currency Settlement reads also include server-computed `pairDebtBeforeMinor`
 and `pairDebtAfterMinor`: signed safe integer minor units in the cleared `currency`,

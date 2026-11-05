@@ -113,7 +113,7 @@ describe('a payment that settled several Debts at once, on the Activity tab (#73
     expect(batchRows()).toHaveLength(1);
     const row = textOf(batchRows()[0]);
     expect(row).toContain('₹1,480.00, same currency, no rate');
-    expect(row).toContain('€20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct)');
+    expect(row).toContain('€20.00 at the suggested ₹92.10 per € (20 Oct)');
     // Neither Settlement has a row of its own.
     expect(textOf(renderer.root)).not.toContain('You paid Sam Chen ₹1,480.00');
     expect(textOf(renderer.root)).not.toContain('You paid Sam Chen ₹1,842.00');
@@ -134,7 +134,7 @@ describe('a payment that settled several Debts at once, on the Activity tab (#73
     )!;
     expect(textOf(card)).toContain('Paid ₹3,322.00');
     expect(textOf(card)).toContain('to clear ₹1,480.00 and €20.00');
-    expect(textOf(card)).toContain('€20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct)');
+    expect(textOf(card)).toContain('€20.00 at the suggested ₹92.10 per € (20 Oct)');
     expect(textOf(card)).toContain(
       'Each currency’s balances moved only by its own Debt. The rates are kept as recorded.',
     );

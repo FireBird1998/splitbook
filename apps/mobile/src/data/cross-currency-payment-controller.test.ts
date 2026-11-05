@@ -361,7 +361,7 @@ describe('a Debt paid in another currency (#728)', () => {
       {
         ...paidSide,
         amountPaidMinor: 185000,
-        appliedRate: '92.5',
+        appliedRate: '92.50',
         rateKind: 'custom',
         ...fromFrankfurter,
       },
@@ -455,7 +455,7 @@ describe('a Debt paid in another currency (#728)', () => {
       controller.editCrossCurrency('rate', '92.40');
       await controller.recordSettlement();
       expect(payments).toEqual([
-        { ...paidSide, amountPaidMinor: 184800, appliedRate: '92.4', rateKind: 'entered' },
+        { ...paidSide, amountPaidMinor: 184800, appliedRate: '92.40', rateKind: 'entered' },
       ]);
     },
   );
@@ -522,7 +522,7 @@ describe('a Debt paid in another currency (#728)', () => {
       {
         ...paidSide,
         amountPaidMinor: 184200,
-        appliedRate: '92.1',
+        appliedRate: '92.099945',
         rateKind: 'suggested',
         ...fromFrankfurter,
         suggestedRate: '92.099945',
@@ -564,7 +564,7 @@ describe('a Debt paid in another currency (#728)', () => {
       {
         ...paidSide,
         amountPaidMinor: 184800,
-        appliedRate: '92.4',
+        appliedRate: '92.40',
         rateKind: 'custom',
         ...fromFrankfurter,
       },
@@ -644,7 +644,7 @@ describe('a Debt paid in another currency (#728)', () => {
         paid: {
           amountPaidMinor: 185000,
           paidCurrency: 'INR',
-          appliedRate: '92.5',
+          appliedRate: '92.50',
           rateKind: 'custom',
         },
       },

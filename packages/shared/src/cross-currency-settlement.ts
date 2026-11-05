@@ -15,6 +15,36 @@ export interface CrossCurrencyAmounts {
   appliedRate: string;
 }
 
+/**
+ * Whether this rate, applied to the amount cleared and rounded half up in the paid currency, pays
+ * exactly the amount paid: a rate a Settlement may keep as the member applied it (#870).
+ */
+export function rateGivesPaid(
+  record: { currency: string; paidCurrency: string; amountMinor: number; amountPaidMinor: number },
+  rate: string,
+): boolean {
+  try {
+    return (
+      calculateCrossCurrencySettlement({
+        currency: record.currency,
+        paidCurrency: record.paidCurrency,
+        amountClearedMinor: record.amountMinor,
+        rate,
+      }).amountPaidMinor === record.amountPaidMinor
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** A rate shows at most this many places, or more for a rate under 1 (`roundedRate`). */
+const RATE_PLACES = 6;
+/** A rate under 1 keeps this many significant digits, where six places would keep fewer. */
+const RATE_DIGITS = 6;
+/** The most places a rate can be recorded with. */
+const MAX_RATE_PLACES = 18;
+const TEN = BigInt(10);
+
 function invalid(message: string): never {
   throw new MoneyValidationError('INVALID_CROSS_CURRENCY_SETTLEMENT', message);
 }
@@ -84,6 +114,29 @@ export function calculateCrossCurrencySettlement(
   };
 }
 
+/**
+ * A rate as rates show (#873), as a plain decimal: rounded half up to six places, or to six
+ * significant digits for a rate under 1 that six places would cut (0.005980066445 is 0.00598007,
+ * never 0.00598), with no trailing zeros. A suggestion is read this way, so it pays as it shows.
+ */
+export function roundedRate(rate: string): string {
+  const { numerator, denominator } = rateFraction(rate);
+  // The zeros after the point before its first digit: 2 in 0.00598.
+  let zeros = 0;
+  while (zeros < MAX_RATE_PLACES && numerator * TEN ** BigInt(zeros + 1) < denominator) zeros++;
+  const places = Math.min(MAX_RATE_PLACES, Math.max(RATE_PLACES, zeros + RATE_DIGITS));
+  const scale = TEN ** BigInt(places);
+  const units = (BigInt(2) * numerator * scale + denominator) / (BigInt(2) * denominator);
+  const fraction = (units % scale).toString().padStart(places, '0').replace(/0+$/, '');
+  return fraction ? `${units / scale}.${fraction}` : (units / scale).toString();
+}
+
+/** A rate as its field and every record show it: `roundedRate`, with at least two places. */
+export function rateText(rate: string): string {
+  const [whole, fraction = ''] = roundedRate(rate).split('.');
+  return `${whole}.${fraction.padEnd(2, '0')}`;
+}
+
 /** Stored snapshots, never refreshed or recomputed from the current rate service. */
 export interface CrossCurrencySettlementFields {
   /** Read-only signed Debt before simplifying, from the payer's side. */
@@ -91,6 +144,10 @@ export interface CrossCurrencySettlementFields {
   pairDebtAfterMinor?: number;
   amountPaidMinor: number;
   paidCurrency: string;
+  /**
+   * The rate applied, as the member chose it (#870): the suggestion, or theirs as typed, when it
+   * gives the amount paid; otherwise worked out from the two amounts, as older records all are.
+   */
   appliedRate: string;
   rateKind: 'suggested' | 'custom' | 'entered';
   suggestedRate?: string;
@@ -156,9 +213,28 @@ export function minorMoney(minor: number, currency: string): string {
 }
 
 /**
+ * The rate a payment's record and Activity show as used (#870): the suggestion whenever it gives
+ * the amount paid, which every payment at it does, though an older record keeps a rate worked
+ * back from the rounded amount paid (₹92.099945 for a payment at ₹92.10); else the rate kept.
+ */
+export function rateUsed(
+  record: Pick<
+    CrossCurrencySettlementFields,
+    'amountPaidMinor' | 'paidCurrency' | 'appliedRate' | 'suggestedRate'
+  > & { amountMinor: number; currency: string },
+): { rate: string; suggested: boolean } {
+  return record.suggestedRate && rateGivesPaid(record, record.suggestedRate)
+    ? { rate: record.suggestedRate, suggested: true }
+    : { rate: record.appliedRate, suggested: false };
+}
+
+/**
  * Shared Activity/record wording from the immutable stored fields, with no rate lookup or
- * conversion. A caller showing fallback provenance must link the attribution text using
- * EXCHANGE_RATE_API_ATTRIBUTION.url (both exchange-rate-api and mixed sources require it).
+ * conversion, rates as they show (`rateText`). The suggestion is said once when it's the rate
+ * used (#870): "at the suggested ₹92.10 per € (22 Oct)"; beside another rate, "at ₹92.50 per €,
+ * suggested ₹92.10 (21 Oct)". A caller showing fallback provenance must link the attribution
+ * text using EXCHANGE_RATE_API_ATTRIBUTION.url (both exchange-rate-api and mixed sources
+ * require it).
  */
 export function formatCrossCurrencySettlement(
   record: CrossCurrencySettlementFields & {
@@ -182,7 +258,10 @@ export function formatCrossCurrencySettlement(
       ? `Paid to ${recipient}`
       : 'Paid';
   const clearedSymbol = getCurrency(record.currency)?.symbol ?? record.currency;
-  let text = `${people} ${minorMoney(record.amountPaidMinor, record.paidCurrency)} to clear ${minorMoney(record.amountMinor, record.currency)} at ${decimalMoney(record.appliedRate, record.paidCurrency)} per ${clearedSymbol}`;
+  const money = (rate: string) => decimalMoney(rateText(rate), record.paidCurrency);
+  const used = rateUsed(record);
+  const lead = `${people} ${minorMoney(record.amountPaidMinor, record.paidCurrency)} to clear ${minorMoney(record.amountMinor, record.currency)} at`;
+  let text: string;
   if (record.suggestedRate && record.rateAsOf) {
     rateFraction(record.suggestedRate);
     const [, month, day] = record.rateAsOf.split('-');
@@ -200,8 +279,11 @@ export function formatCrossCurrencySettlement(
       'Nov',
       'Dec',
     ][Number(month) - 1];
-    text += `, suggested ${decimalMoney(record.suggestedRate, record.paidCurrency)} (${Number(day)} ${monthName})`;
-  } else text += '; no rate suggested';
+    const dated = `(${Number(day)} ${monthName})`;
+    text = used.suggested
+      ? `${lead} the suggested ${money(used.rate)} per ${clearedSymbol} ${dated}`
+      : `${lead} ${money(used.rate)} per ${clearedSymbol}, suggested ${money(record.suggestedRate)} ${dated}`;
+  } else text = `${lead} ${money(used.rate)} per ${clearedSymbol}; no rate suggested`;
   if (record.rateSource === 'exchange-rate-api' || record.rateSource === 'mixed')
     text += ` · ${EXCHANGE_RATE_API_ATTRIBUTION.text}`;
   return text;

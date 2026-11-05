@@ -3309,7 +3309,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     // Activity says both amounts and the rate, and the payment's record what it changed.
     await app.press('Activity');
     const row =
-      'You paid Sam Chen ₹1,842.00 to clear €20.00, at ₹92.10 per €, suggested ₹92.10 (20 Oct)';
+      'You paid Sam Chen ₹1,842.00 to clear €20.00, at the suggested ₹92.10 per € (20 Oct)';
     const [opens] = app.hosts(
       (p) => p.accessibilityRole === 'button' && String(p.accessibilityLabel).startsWith(row),
     );

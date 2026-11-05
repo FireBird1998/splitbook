@@ -169,7 +169,8 @@ describe('readSettleAll', () => {
     expect(read.amounts!.totalPaidMinor).toBe(333000);
     expect(read.amounts!.settlements[1]).toMatchObject({
       rateKind: 'custom',
-      appliedRate: '92.5',
+      // As typed (#870).
+      appliedRate: '92.50',
       suggestedRate: '92.1',
     });
   });

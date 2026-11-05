@@ -17,9 +17,15 @@ import {
   minorMoney,
   EXCHANGE_RATE_API_ATTRIBUTION,
   rateFraction,
+  rateGivesPaid,
+  rateText,
+  rateUsed,
+  roundedRate,
   type CrossCurrencyAmounts,
   type CrossCurrencySettlementFields,
 } from './cross-currency-settlement';
+
+export { rateText, roundedRate } from './cross-currency-settlement';
 
 export type CrossCurrencyField = 'cleared' | 'rate' | 'paid';
 
@@ -60,12 +66,6 @@ export type CrossCurrencyReading =
 
 /** A suggestion older than this many days shows its age. */
 const OLD_AFTER_DAYS = 1;
-/** A rate shows at most this many places, or more for a rate under 1 (`roundedRate`). */
-const RATE_PLACES = 6;
-/** A rate under 1 keeps this many significant digits, where six places would keep fewer. */
-const RATE_DIGITS = 6;
-/** The most places a rate can be recorded with. */
-const MAX_RATE_PLACES = 18;
 
 const FIELDS: CrossCurrencyField[] = ['cleared', 'rate', 'paid'];
 const TEN = BigInt(10);
@@ -83,29 +83,6 @@ function amountText(minor: number, currency: string): string {
 /** A suggested rate as its field shows it: as read (already rounded), with at least two places. */
 export function suggestedRateText(rate: string): string {
   const [whole, fraction = ''] = rate.split('.');
-  return `${whole}.${fraction.padEnd(2, '0')}`;
-}
-
-/**
- * A rate as rates show (#873), as a plain decimal: rounded half up to six places, or to six
- * significant digits for a rate under 1 that six places would cut (0.005980066445 is 0.00598007,
- * never 0.00598), with no trailing zeros. A suggestion is read this way, so it pays as it shows.
- */
-export function roundedRate(rate: string): string {
-  const { numerator, denominator } = rateFraction(rate);
-  // The zeros after the point before its first digit: 2 in 0.00598.
-  let zeros = 0;
-  while (zeros < MAX_RATE_PLACES && numerator * TEN ** BigInt(zeros + 1) < denominator) zeros++;
-  const places = Math.min(MAX_RATE_PLACES, Math.max(RATE_PLACES, zeros + RATE_DIGITS));
-  const scale = TEN ** BigInt(places);
-  const units = (BigInt(2) * numerator * scale + denominator) / (BigInt(2) * denominator);
-  const fraction = (units % scale).toString().padStart(places, '0').replace(/0+$/, '');
-  return fraction ? `${units / scale}.${fraction}` : (units / scale).toString();
-}
-
-/** A rate as its field and every record show it: `roundedRate`, with at least two places. */
-export function rateText(rate: string): string {
-  const [whole, fraction = ''] = roundedRate(rate).split('.');
   return `${whole}.${fraction.padEnd(2, '0')}`;
 }
 
@@ -270,9 +247,29 @@ export function crossCurrencyRateKind(
   return fromSuggestion.amountPaidMinor === amounts.amountPaidMinor ? 'suggested' : 'custom';
 }
 
-/** The fields a cross-currency payment sends beside its amount cleared. */
+/**
+ * The rate a payment keeps (#870), as the member applied it: the suggestion when it pays at it,
+ * or their rate as typed when it gives the amount paid. A rate that follows both amounts, or
+ * can't give them (a typed rate and amount paid, the amount cleared rounded), is worked out.
+ */
+function appliedRateOf(
+  currencies: PaymentCurrencies,
+  entry: CrossCurrencyEntry,
+  amounts: CrossCurrencyAmounts,
+  suggestion: RateSuggestion | null,
+  rateKind: CrossCurrencySettlementFields['rateKind'],
+): string {
+  const record = { ...currencies, amountMinor: amounts.amountClearedMinor, ...amounts };
+  if (rateKind === 'suggested' && suggestion && rateGivesPaid(record, suggestion.rate))
+    return suggestion.rate;
+  const typed = entry.drivers.includes('rate') ? plainRate(entry.rate) : null;
+  return typed && rateGivesPaid(record, typed) ? typed : amounts.appliedRate;
+}
+
+/** The fields a cross-currency payment sends beside its amount cleared, from the entry read. */
 export function crossCurrencyPaymentFields(
   currencies: PaymentCurrencies,
+  entry: CrossCurrencyEntry,
   amounts: CrossCurrencyAmounts,
   suggestion: RateSuggestion | null,
 ): CrossCurrencySettlementFields {
@@ -280,7 +277,7 @@ export function crossCurrencyPaymentFields(
   return {
     amountPaidMinor: amounts.amountPaidMinor,
     paidCurrency: currencies.paidCurrency,
-    appliedRate: amounts.appliedRate,
+    appliedRate: appliedRateOf(currencies, entry, amounts, suggestion, rateKind),
     rateKind,
     ...(suggestion
       ? {
@@ -532,6 +529,7 @@ export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
   const short = (label: string, isViewer: boolean) => (isViewer ? label : firstName(label));
   const payerShort = short(payer, payer === 'You');
   const payeeShort = payee === 'You' ? 'you' : firstName(payee);
+  const used = rateUsed(record);
   const suggestion =
     record.suggestedRate && record.rateSource && record.rateAsOf && record.rateFetchedAt
       ? {
@@ -554,9 +552,12 @@ export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
     payee,
     paid: minorMoney(record.amountPaidMinor, record.paidCurrency),
     clears: `to clear ${minorMoney(record.amountMinor, record.currency)}, a Debt in ${record.currency}`,
-    rateUsed: `${decimalMoney(rateText(record.appliedRate), record.paidCurrency)} ${per}`,
-    badge:
-      record.rateKind === 'custom'
+    // The rate the member applied, as they saw it: never one worked back from the rounded amount
+    // paid, which says its rounding itself (#870).
+    rateUsed: `${decimalMoney(rateText(used.rate), record.paidCurrency)} ${per}`,
+    badge: used.suggested
+      ? 'Suggested'
+      : record.rateKind === 'custom'
         ? 'Your rate'
         : record.rateKind === 'suggested'
           ? 'Suggested'

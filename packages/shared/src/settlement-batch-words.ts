@@ -4,7 +4,7 @@
  * and each one's rate. The events are a batch's `settlement_recorded` events, as
  * `groupSettlementBatches` collects them; nothing is looked up again or converted.
  */
-import { readCrossCurrencyRecord, rateText } from './cross-currency-payment';
+import { readCrossCurrencyRecord } from './cross-currency-payment';
 import { formatCrossCurrencySettlement, minorMoney } from './cross-currency-settlement';
 import { parseAmountMinor } from './exact-money';
 import { memberLabel } from './member-label';
@@ -23,7 +23,7 @@ export interface SettlementBatchWords {
   amounts: string;
   /** "You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00". */
   headline: string;
-  /** Each Debt it cleared, and its rate: "€20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct)". */
+  /** Each Debt it cleared, and its rate: "€20.00 at the suggested ₹92.10 per € (20 Oct)". */
   debts: string[];
   /** Where the rest of a batch a page boundary split is; null once all of it is here. */
   rest: string | null;
@@ -76,14 +76,7 @@ export function settlementBatchWords(
     paidMinor += cross.amountPaidMinor;
     paidCurrency = cross.paidCurrency;
     // The rate in the single payment's words, after "to clear": its Debt, rate and suggestion.
-    const said = formatCrossCurrencySettlement(
-      {
-        ...cross,
-        appliedRate: rateText(cross.appliedRate),
-        ...(cross.suggestedRate ? { suggestedRate: rateText(cross.suggestedRate) } : {}),
-      },
-      viewerId,
-    );
+    const said = formatCrossCurrencySettlement(cross, viewerId);
     const at = said.indexOf(` to clear ${debt}`);
     return at < 0 ? said : said.slice(at + ' to clear '.length);
   });

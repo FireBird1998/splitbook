@@ -246,7 +246,11 @@ describe('Settle up with Sam (#734)', () => {
     expect(network.sent[0].body).toMatchObject({
       settlements: [
         { amount: 1480, currency: 'INR' },
-        expect.objectContaining({ rateKind: 'custom', appliedRate: '92.5', suggestedRate: '92.1' }),
+        expect.objectContaining({
+          rateKind: 'custom',
+          appliedRate: '92.50',
+          suggestedRate: '92.1',
+        }),
       ],
     });
   });
