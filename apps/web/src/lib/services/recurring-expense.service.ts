@@ -1,10 +1,10 @@
 import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
-import mongoose from 'mongoose';
+import mongoose, { type HydratedDocument } from 'mongoose';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import ProductSwitch from '@/lib/models/ProductSwitch';
-import RecurringExpense from '@/lib/models/RecurringExpense';
+import RecurringExpense, { type IRecurringExpenseDocument } from '@/lib/models/RecurringExpense';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
 import { activityService } from './activity.service';
 import {
@@ -84,6 +84,26 @@ function assertTemplateData(group: IGroupDocument, data: TemplateData): void {
   // Recurring Expenses stay in the main currency while extra currencies are new (#710).
   assertGroupCurrency({ defaultCurrency: group.defaultCurrency }, data.currency);
   assertValidWindow(data.startsOn, data.endsOn);
+}
+
+/**
+ * The money a template adds each period, or null in its problem state: its configuration no
+ * longer validates against the Group (Tag archived, payer or split member gone, currency drift)
+ * or its stored money can't be read. Generation skips such a template without moving its marker,
+ * and the settings list shows the problem.
+ */
+function generatableMoney(
+  group: IGroupDocument,
+  template: HydratedDocument<IRecurringExpenseDocument>,
+): ReturnType<typeof readExpenseMoney> | null {
+  try {
+    assertTemplateData(group, template);
+    // Generation copies the validated, stored allocation; metadata edits and
+    // library upgrades cannot move a penny between participants retroactively.
+    return readExpenseMoney(template.toObject());
+  } catch {
+    return null;
+  }
 }
 
 function isDuplicateKeyError(err: unknown): boolean {
@@ -382,7 +402,8 @@ export class RecurringExpenseService {
    * marker could not advance, so a due Expense may be missing from Balances; a
    * template skipped in its problem state counts as finished, as it does for
    * reads. A write that checks Balances, such as leaving a Group, refuses when
-   * `complete` is false. Never throws.
+   * `complete` is false, and also while a template in its problem state
+   * includes the member (`problemTemplatesIncluding`, #257). Never throws.
    */
   async materializeDueExpenses(
     groupId: string,
@@ -449,15 +470,8 @@ export class RecurringExpenseService {
         }
         if (duePeriods.length === 0) continue;
 
-        let money: ReturnType<typeof readExpenseMoney>;
-        try {
-          assertTemplateData(group, template);
-          // Generation copies the validated, stored allocation; metadata edits and
-          // library upgrades cannot move a penny between participants retroactively.
-          money = readExpenseMoney(template.toObject());
-        } catch {
-          continue; // Problem state — visible in the settings list.
-        }
+        const money = generatableMoney(group, template);
+        if (!money) continue; // Problem state — visible in the settings list.
 
         // The unique (recurringExpense, period) index makes the inserts below
         // idempotent. Only a run that inserts needs it (the call is memoized), so a
@@ -547,6 +561,33 @@ export class RecurringExpenseService {
     }
 
     return { generated, complete };
+  }
+
+  /**
+   * The Group's recurring Expenses in their problem state that include this member, as a payer
+   * or in the split (#257). Their missed months are added only once someone repairs them, and
+   * would then fall on the members still in them, so the member stays until they're removed
+   * from each, or it is repaired and they settle their share. Only where generation runs: while
+   * recurring Expenses are off, outside a Household and in an archived Group none is listed,
+   * since none adds anything there (and the first two hide them from the settings list).
+   */
+  async problemTemplatesIncluding(
+    groupId: string,
+    memberId: string,
+  ): Promise<{ id: string; description: string }[]> {
+    if (!recurringExpensesEnabled() || !mongoose.isValidObjectId(memberId)) return [];
+    await connectDB();
+    const group = await Group.findById(groupId);
+    if (!group || group.isArchived || !getGroupTheme(group.category).recurringExpenses) return [];
+
+    const member = new mongoose.Types.ObjectId(memberId);
+    const templates = await RecurringExpense.find({
+      group: groupId,
+      $or: [{ 'paidBy.user': member }, { 'splitBetween.user': member }],
+    }).sort({ createdAt: 1, _id: 1 });
+    return templates
+      .filter((template) => !generatableMoney(group, template))
+      .map((template) => ({ id: String(template._id), description: template.description }));
   }
 }
 

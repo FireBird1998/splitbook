@@ -1,6 +1,6 @@
 import { after } from 'next/server';
 import { resumeRequestedGroupDeletions } from '@/lib/services/group-cleanup.service';
-import { leaveOpenBalance } from '@/lib/departure-refusals';
+import { leaveOpenBalance, leaveRecurringProblem } from '@/lib/departure-refusals';
 import {
   getAuthUser,
   unauthorized,
@@ -48,6 +48,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     if (err instanceof LeaveBlockedError && err.code === 'OPEN_BALANCE') {
       return leaveOpenBalance(err.balances);
+    }
+    if (err instanceof LeaveBlockedError && err.code === 'RECURRING_EXPENSE_PROBLEM') {
+      return leaveRecurringProblem(err.recurringExpenses, err.admin);
     }
     if (err instanceof Error && err.message === 'GROUP_DELETION_CONFIRMATION_REQUIRED') {
       return error(

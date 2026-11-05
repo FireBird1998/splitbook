@@ -371,7 +371,7 @@ export interface LeaveGroupState {
    * 'error' is any other failure, after which Leave Group can be tried again.
    */
   status: 'closed' | 'checking' | 'confirm' | 'leaving' | 'blocked' | 'refused' | 'error';
-  /** Why the server refused: OPEN_BALANCE, LAST_ADMIN or LEAVE_CONFLICT. */
+  /** Why the server refused: OPEN_BALANCE, LAST_ADMIN, LEAVE_CONFLICT or RECURRING_EXPENSE_PROBLEM. */
   code: string | null;
   message: string | null;
   /** This Group's Expense draft is kept on this device; leaving discards it. */

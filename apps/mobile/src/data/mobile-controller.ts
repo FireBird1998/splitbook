@@ -336,6 +336,9 @@ const leaveRefusals: Record<string, string> = {
   OPEN_BALANCE: 'Settle up before you leave this Group.',
   LAST_ADMIN: 'Make someone else an admin before you leave.',
   LEAVE_CONFLICT: 'This Group changed while you were leaving. Try again.',
+  // #257: the server's words name the recurring Expense, in its problem state, that includes them.
+  RECURRING_EXPENSE_PROBLEM:
+    'A recurring Expense still includes you. Ask an admin to remove you from it, then leave.',
   GROUP_DELETION_CONFIRMATION_REQUIRED:
     'Leaving will permanently delete this Group and its history. Confirm deletion to continue.',
   GROUP_DELETION_UNAVAILABLE:

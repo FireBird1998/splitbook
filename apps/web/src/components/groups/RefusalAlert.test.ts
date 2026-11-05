@@ -57,6 +57,15 @@ describe('the refusal on Group settings', () => {
     ]);
   });
 
+  it('names a recurring Expense that still includes the member, with nothing to go to (#257)', () => {
+    const message =
+      'Rent (recurring) still includes you. Ask an admin to remove you from it, then leave.';
+    const html = shown({ message, code: 'RECURRING_EXPENSE_PROBLEM' });
+    expect(html).toContain('role="alert"');
+    expect(text(html)).toContain(message);
+    expect(anchors(html)).toEqual([]);
+  });
+
   it('can be dismissed beside Go to Balances where the page lets it', () => {
     const refusal = { message: 'Priya Shah owes ₹300.00 in this Group.', code: 'OPEN_BALANCE' };
     expect(shown(refusal)).not.toContain('aria-label="Close"');

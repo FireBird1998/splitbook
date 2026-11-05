@@ -54,6 +54,12 @@ const refusals = {
     status: 409,
     code: 'LEAVE_CONFLICT',
   },
+  RECURRING_EXPENSE_PROBLEM: {
+    error: 'Rent (recurring) still includes you. Ask an admin to remove you from it, then leave.',
+    status: 409,
+    code: 'RECURRING_EXPENSE_PROBLEM',
+    recurringExpenses: [{ id: 'e00000000000000000000001', description: 'Rent' }],
+  },
 } as const;
 
 function fixture(memberCount = 2) {
@@ -353,6 +359,8 @@ describe('Leave Group', () => {
     ['OPEN_BALANCE', 'balances'],
     ['LAST_ADMIN', null],
     ['LEAVE_CONFLICT', null],
+    // #257: a recurring Expense in its problem state still includes the member.
+    ['RECURRING_EXPENSE_PROBLEM', null],
   ] as const)('keeps the sheet open with the server’s words for %s', async (code, check) => {
     const f = await onMembers();
     f.answer(() => Response.json(refusals[code], { status: 409 }));
@@ -371,6 +379,22 @@ describe('Leave Group', () => {
     expect(f.controller.getSnapshot()).toMatchObject({
       screen: 'members',
       leave: { status: 'closed' },
+    });
+  });
+
+  it('says a recurring Expense still includes the member when the server doesn’t (#257)', async () => {
+    const f = await onMembers();
+    f.answer(() =>
+      Response.json({ status: 409, code: 'RECURRING_EXPENSE_PROBLEM' }, { status: 409 }),
+    );
+    await f.controller.reviewLeaveGroup();
+    await f.controller.leaveGroup();
+    expect(f.controller.getSnapshot().leave).toMatchObject({
+      status: 'refused',
+      code: 'RECURRING_EXPENSE_PROBLEM',
+      message:
+        'A recurring Expense still includes you. Ask an admin to remove you from it, then leave.',
+      check: null,
     });
   });
 

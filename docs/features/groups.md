@@ -129,17 +129,21 @@ Enforced today:
 - Leaving a Group (`POST /api/groups/[id]/leave`, web Group settings and Android
   Members and Group details): the member must be settled up in every currency,
   counting the recurring Expenses already due, which are added before the check
-  (if adding them doesn't finish, the leave is refused with `LEAVE_CONFLICT`; a
-  template in its problem state doesn't hold up the leave, and its missed periods
-  are not generated for the departing member);
-  the last admin must make someone else an admin first; the last member's leaving
-  archives the Group
+  (if adding them doesn't finish, the leave is refused with `LEAVE_CONFLICT`);
+  no recurring Expense in its problem state may still include them (#257: **409**
+  `RECURRING_EXPENSE_PROBLEM`, "Rent (recurring) still includes you. Ask an admin to
+  remove you from it, then leave.", or "Remove yourself from it, then leave." for an
+  admin), since its missed months would otherwise fall on the members who stay once
+  it is repaired; the last admin must make someone else an admin first; the last
+  member's leave, once they confirm it, permanently deletes the Group and its history
 - Removing a member (`DELETE /api/groups/[id]/members/[userId]`, web Group settings):
   only when they could leave themselves (#875). They must be settled up in every
   currency, counting the recurring Expenses already due, which are added first
   (**409** `OPEN_BALANCE` names the member and what they owe or are owed, such as
   "Priya Shah owes ₹300.00 in this Group. Settle up before removing them."; an
-  unfinished catch-up is **409** `REMOVAL_CONFLICT`). The refusal stays on the
+  unfinished catch-up is **409** `REMOVAL_CONFLICT`), and in no recurring Expense in
+  its problem state (**409** `RECURRING_EXPENSE_PROBLEM`, "Rent (recurring) still
+  includes Priya Shah. Remove them from it before removing them from the Group."). The refusal stays on the
   Members card until dismissed, with Go to Balances. Activity names the member
   removed ("Alex removed Priya Shah from the group")
 - Cannot demote or remove the last admin (**409** with the reason)
