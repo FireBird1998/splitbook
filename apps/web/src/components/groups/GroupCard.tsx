@@ -28,7 +28,7 @@ import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { DashboardBalanceAmount } from '@splitbook/shared/types';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import { groupDatesLabel } from './group-dates';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 interface GroupCardProps {
   group: GroupRead;
@@ -65,7 +65,7 @@ function HouseholdMonthSpend({ groupId, currency }: { groupId: string; currency:
         variant="caption"
         fontWeight={700}
       />{' '}
-      across {summary.count ?? 0} expense{(summary.count ?? 0) === 1 ? '' : 's'}
+      across {counted(summary.count ?? 0, 'expense')}
     </Typography>
   );
 }
@@ -159,7 +159,7 @@ export default function GroupCard({
               <Chip label="Mixed currency" size="small" color="warning" variant="outlined" />
             ) : (
               <Typography variant="caption" color="text.secondary">
-                {members.length} member{members.length !== 1 ? 's' : ''}
+                {counted(members.length, 'member')}
               </Typography>
             )}
           </Stack>
@@ -254,7 +254,7 @@ export default function GroupCard({
           ))}
         </AvatarGroup>
         <Typography variant="caption" color="text.secondary">
-          {members.length} member{members.length !== 1 ? 's' : ''}
+          {counted(members.length, 'member')}
         </Typography>
       </Stack>
 

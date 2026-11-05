@@ -17,7 +17,7 @@ import {
   type ExpenseDraftValues,
 } from './validators/expense-draft';
 import type { ToReviewItem, ToReviewRead } from './to-review-read';
-import { SEPARATOR } from './separator';
+import { SEPARATOR, counted } from './separator';
 
 export type ToReviewState = 'ready' | 'duplicate' | 'needs-details' | 'on-this-phone';
 /** Device recovery stays plain data; this model never uploads it or selects it for saving. */
@@ -363,8 +363,8 @@ export function describeDraftChange(
             ? formatCurrency(row.amount, money)
             : 'percentage' in row
               ? `${row.percentage}%`
-              : 'shares' in row
-                ? `${row.shares} shares`
+              : 'shares' in row && row.shares !== undefined
+                ? counted(row.shares, 'share')
                 : '';
         return [names[row.user] ?? 'a member', part].filter(Boolean).join(' ');
       })

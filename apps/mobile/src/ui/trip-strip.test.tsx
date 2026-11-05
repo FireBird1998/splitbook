@@ -106,10 +106,15 @@ describe('Trip strip', () => {
     const strip = image(root);
     expect(strip.props.accessible).toBe(true);
     expect(strip.props.accessibilityLabel).toBe(
-      'Trip from GOA to TRI, 17 to 20 September, 3 members',
+      'Trip from GOA to TRI, 17 to 20 September, 3\u00a0members',
     );
     expect(flat(strip.props.style).borderRadius).toBe(16);
-    expect(texts(root).map((node) => node.shown)).toEqual(['GOA', 'TRI', '17–20 Sep', '3 MEMBERS']);
+    expect(texts(root).map((node) => node.shown)).toEqual([
+      'GOA',
+      'TRI',
+      '17–20 Sep',
+      '3\u00a0MEMBERS',
+    ]);
     for (const code of ['GOA', 'TRI']) expect(shown(root, code).fontFamily).toBe(fonts.mono);
     // The dates and member count are set in mono too, at the small size.
     expect(shown(root, '17–20 Sep')).toMatchObject({
@@ -117,7 +122,7 @@ describe('Trip strip', () => {
       fontSize: 13,
       lineHeight: 18,
     });
-    expect(shown(root, '3 MEMBERS').fontFamily).toBe(fonts.mono);
+    expect(shown(root, '3\u00a0MEMBERS').fontFamily).toBe(fonts.mono);
     const plane = root.find((node) => isHost(node, 'Ionicons'));
     expect(plane.props.name).toBe('airplane-outline');
   });
@@ -132,7 +137,7 @@ describe('Trip strip', () => {
     // The route takes only the width the stub leaves; the stub keeps its natural width.
     expect(holder(root, 'GOA').flex).toBe(1);
     const stub = holder(root, '17–20 Sep');
-    expect(holder(root, '3 MEMBERS')).toEqual(stub);
+    expect(holder(root, '3\u00a0MEMBERS')).toEqual(stub);
     for (const key of ['width', 'flex', 'flexGrow', 'flexShrink', 'flexBasis'])
       expect(stub).not.toHaveProperty(key);
     const perforation = flat(rules(root)[2].props.style);
@@ -158,7 +163,7 @@ describe('Trip strip', () => {
     setWindow({ fontScale: 1.3 });
     const root = render(trip());
     expect(image(root).props.accessibilityLabel).toBe(
-      'Trip from GOA to TRI, 17 to 20 September, 3 members',
+      'Trip from GOA to TRI, 17 to 20 September, 3\u00a0members',
     );
     const box = gradient(root);
     expect(box.minHeight).toBe(72);
@@ -167,7 +172,12 @@ describe('Trip strip', () => {
     expect(holder(root, '17–20 Sep')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
     // The perforation runs across, under the route.
     expect(flat(rules(root)[2].props.style)).toMatchObject({ height: 1, flexDirection: 'row' });
-    expect(texts(root).map((node) => node.shown)).toEqual(['GOA', 'TRI', '17–20 Sep', '3 MEMBERS']);
+    expect(texts(root).map((node) => node.shown)).toEqual([
+      'GOA',
+      'TRI',
+      '17–20 Sep',
+      '3\u00a0MEMBERS',
+    ]);
     expect(shown(root, '17–20 Sep').fontFamily).toBe(fonts.mono);
   });
 
@@ -192,23 +202,25 @@ describe('Trip strip', () => {
     },
   ])('shows and reads the dates $state', ({ dates, shown: date, spoken }) => {
     const root = render(trip(dates));
-    expect(image(root).props.accessibilityLabel).toBe(`Trip from GOA to TRI, ${spoken}, 3 members`);
+    expect(image(root).props.accessibilityLabel).toBe(
+      `Trip from GOA to TRI, ${spoken}, 3\u00a0members`,
+    );
     expect(shown(root, date).fontFamily).toBe(fonts.mono);
   });
 
   it('leaves the dates out until the Trip has a start date', () => {
     const root = render(trip({ startDate: null, endDate: day('2026-09-20') }));
-    expect(image(root).props.accessibilityLabel).toBe('Trip from GOA to TRI, 3 members');
-    expect(texts(root).map((node) => node.shown)).toEqual(['GOA', 'TRI', '3 MEMBERS']);
+    expect(image(root).props.accessibilityLabel).toBe('Trip from GOA to TRI, 3\u00a0members');
+    expect(texts(root).map((node) => node.shown)).toEqual(['GOA', 'TRI', '3\u00a0MEMBERS']);
   });
 
   it('counts a lone member in the singular', () => {
     const group = trip();
     const root = render({ ...group, members: group.members.slice(0, 1) });
     expect(image(root).props.accessibilityLabel).toBe(
-      'Trip from GOA to TRI, 17 to 20 September, 1 member',
+      'Trip from GOA to TRI, 17 to 20 September, 1\u00a0member',
     );
-    shown(root, '1 MEMBER');
+    shown(root, '1\u00a0MEMBER');
   });
 
   it.each(['light', 'dark'] as const)('uses the strip tokens in %s', (mode) => {
@@ -218,7 +230,7 @@ describe('Trip strip', () => {
       strip.gradient,
     );
     // Muted text falls below 4.5:1 towards the light end of the gradient.
-    for (const value of ['GOA', 'TRI', '17–20 Sep', '3 MEMBERS'])
+    for (const value of ['GOA', 'TRI', '17–20 Sep', '3\u00a0MEMBERS'])
       expect(shown(root, value).color).toBe(strip.text);
     expect(root.find((node) => isHost(node, 'Ionicons')).props.color).toBe(strip.text);
     lay(root);
@@ -234,13 +246,13 @@ describe('the Trip strip’s currencies (#730)', () => {
   it('lists the Group’s currencies under its members, main first, and says them', () => {
     const root = render(trip({ alternateCurrencies: ['EUR', 'JPY'] }));
     expect(image(root).props.accessibilityLabel).toBe(
-      'Trip from GOA to TRI, 17 to 20 September, 3 members, currencies INR, EUR and JPY',
+      'Trip from GOA to TRI, 17 to 20 September, 3\u00a0members, currencies INR, EUR and JPY',
     );
     expect(texts(root).map((node) => node.shown)).toEqual([
       'GOA',
       'TRI',
       '17–20 Sep',
-      '3 MEMBERS',
+      '3\u00a0MEMBERS',
       'INR\u00a0· EUR\u00a0· JPY',
     ]);
     expect(shown(root, 'INR\u00a0· EUR\u00a0· JPY').fontFamily).toBe(fonts.mono);
@@ -251,13 +263,13 @@ describe('the Trip strip’s currencies (#730)', () => {
   it('says two currencies with “and”, and lists one currency nowhere', () => {
     const two = render(trip({ alternateCurrencies: ['USD'] }));
     expect(image(two).props.accessibilityLabel).toBe(
-      'Trip from GOA to TRI, 17 to 20 September, 3 members, currencies INR and USD',
+      'Trip from GOA to TRI, 17 to 20 September, 3\u00a0members, currencies INR and USD',
     );
     shown(two, 'INR\u00a0· USD');
     act(() => screen?.unmount());
     const one = render(trip());
     expect(image(one).props.accessibilityLabel).toBe(
-      'Trip from GOA to TRI, 17 to 20 September, 3 members',
+      'Trip from GOA to TRI, 17 to 20 September, 3\u00a0members',
     );
   });
 

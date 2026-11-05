@@ -6,7 +6,7 @@
 import { moneyParticipantId, readStoredAmountMinor } from './exact-money';
 import type { ExpenseAllocationRead, ExpenseRead } from './expense-page-read';
 import { expensePosition, type ExpensePosition } from './expense-position';
-import { NO_BREAK_SEPARATOR } from './separator';
+import { NO_BREAK_SEPARATOR, NO_BREAK_SPACE } from './separator';
 
 /** A payer or share row in exact minor units, or null when its stored money can't be read. */
 function minorRows(expense: ExpenseRead, rows: ExpenseAllocationRead[]) {
@@ -48,13 +48,17 @@ export function listedExpensePosition(
   }
 }
 
-/** How each split method reads, as Android's form names it. */
+/**
+ * How each split method reads, as Android's form names it. A label of two words is one: a
+ * no-break space joins them, so the Expenses table's Split column never reads "By /
+ * percentage · 3" (the Designer's review of #900).
+ */
 export const SPLIT_LABELS: Record<ExpenseRead['splitMethod'], string> = {
   equal: 'Equally',
-  unequal: 'By amounts',
-  exact: 'By amounts',
-  percentage: 'By percentage',
-  shares: 'By shares',
+  unequal: `By${NO_BREAK_SPACE}amounts`,
+  exact: `By${NO_BREAK_SPACE}amounts`,
+  percentage: `By${NO_BREAK_SPACE}percentage`,
+  shares: `By${NO_BREAK_SPACE}shares`,
 };
 
 /**
@@ -84,7 +88,8 @@ export function expensePayerSummary(
   userId: string,
 ): ExpensePayerSummary {
   const payers = expense.paidBy.filter((row) => row.amount > 0);
-  if (payers.length > 1) return { label: `${payers.length} people`, personId: null, name: null };
+  if (payers.length > 1)
+    return { label: `${payers.length}${NO_BREAK_SPACE}people`, personId: null, name: null };
   const [payer] = payers.length ? payers : expense.paidBy;
   const person = payer?.user;
   const id = moneyParticipantId(person);

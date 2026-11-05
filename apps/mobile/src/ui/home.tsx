@@ -40,7 +40,7 @@ import { NotAvailableOffline } from './offline-notice';
 import { fonts, useTheme } from './theme';
 import { brandLogo, brandLogoSize } from './brand-logo';
 import { groupThemeIcons } from './group-icon';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 
 /** Leading icon tile (40) plus the row's padding and gap, so dividers start under the text. */
 const rowInset = 66;
@@ -463,8 +463,8 @@ const GroupRow = memo(function GroupRow({
   const meta = [
     descriptor.label,
     descriptor.dates === 'bounded' ? tripDates(group) : null,
-    `${count} ${count === 1 ? 'member' : 'members'}`,
-    toReview ? `${toReview} to review` : null,
+    counted(count, 'member'),
+    toReview ? `${toReview}${NO_BREAK_SPACE}to review` : null,
   ]
     .filter(Boolean)
     .join(SEPARATOR);

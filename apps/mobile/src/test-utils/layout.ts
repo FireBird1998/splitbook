@@ -396,6 +396,19 @@ const inFlow = (node: Node) =>
       typeof child !== 'string' && flatten(child.props.style).position !== 'absolute',
   );
 
+/**
+ * A count and its noun with an ordinary space between them, where a line can break: "2 members"
+ * read "2 / members" at 200% (#898). `counted` joins them with a no-break space.
+ */
+export const countApart =
+  /\b\d+ (members?|people|person|currenc(y|ies)|[Ee]xpenses?|items?|Groups?|shares?|payments?|debts?|days?)\b/;
+
+/**
+ * A sign apart from its figure: "−" or "+" then a currency, with no word joiner between them, so
+ * a line could end with the sign (#899).
+ */
+export const signApart = /[−+][€₹¥$£]/;
+
 /** The room to spare a label as wide as its words keeps after them (`CompactText`'s `spare`). */
 export const hairSpace = String.fromCodePoint(0x200a);
 

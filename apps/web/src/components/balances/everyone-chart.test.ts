@@ -36,7 +36,7 @@ describe('everyoneModel', () => {
   it('reads as the canvas draws Maple House, from owed to owes', () => {
     const model = everyoneModel(maple, { currency: 'INR', viewerId: ALEX, people });
     expect(model.settled).toBe(false);
-    expect(model.scale).toEqual({ negative: '−₹1.5K', positive: '+₹1.5K' });
+    expect(model.scale).toEqual({ negative: '−\u2060₹1.5K', positive: '+\u2060₹1.5K' });
     expect(
       model.rows.map((row) => ({
         name: row.name,
@@ -48,21 +48,21 @@ describe('everyoneModel', () => {
     ).toEqual([
       {
         name: 'Sam Chen',
-        amount: '+₹1,060.00',
+        amount: '+\u2060₹1,060.00',
         position: 'Gets back',
         settledBy: 'Gets ₹1,060.00 from you',
         barWidth: 35.33,
       },
       {
         name: 'Priya Shah',
-        amount: '+₹420.00',
+        amount: '+\u2060₹420.00',
         position: 'Gets back',
         settledBy: 'Gets ₹420.00 from you',
         barWidth: 14,
       },
       {
         name: 'You',
-        amount: '−₹1,480.00',
+        amount: '−\u2060₹1,480.00',
         position: 'Owes',
         settledBy: 'Pays Sam ₹1,060.00 and Priya ₹420.00',
         barWidth: 49.33,
@@ -163,8 +163,8 @@ describe('everyoneModel', () => {
       { userId: SAM, amountMinor: 1235 },
     ]);
     const model = everyoneModel(yen, { currency: 'JPY', viewerId: ALEX, people });
-    expect(model.rows.map((row) => row.amount)).toEqual(['+¥1,235', '¥0', '−¥1,235']);
-    expect(model.scale).toEqual({ negative: '−¥1.5K', positive: '+¥1.5K' });
+    expect(model.rows.map((row) => row.amount)).toEqual(['+\u2060¥1,235', '¥0', '−\u2060¥1,235']);
+    expect(model.scale).toEqual({ negative: '−\u2060¥1.5K', positive: '+\u2060¥1.5K' });
 
     const euro = ledgerOf([
       { userId: SAM, amountMinor: 6000 },
@@ -172,9 +172,9 @@ describe('everyoneModel', () => {
     ]);
     const rows = everyoneModel(euro, { currency: 'EUR', viewerId: SAM, people }).rows;
     expect(rows.map((row) => [row.amount, phraseText(row.settledBy)])).toEqual([
-      ['+€60.00', 'Gets €60.00 from Priya'],
+      ['+\u2060€60.00', 'Gets €60.00 from Priya'],
       ['€0.00', ''],
-      ['−€60.00', 'Pays you €60.00'],
+      ['−\u2060€60.00', 'Pays you €60.00'],
     ]);
   });
 
@@ -185,7 +185,7 @@ describe('everyoneModel', () => {
       { userId: PRIYA, amountMinor: 1 },
     ]);
     const model = everyoneModel(ledger, { currency: 'INR', viewerId: ALEX, people });
-    expect(model.scale.positive).toBe('+₹1.5K');
+    expect(model.scale.positive).toBe('+\u2060₹1.5K');
     const widths = Object.fromEntries(model.rows.map((row) => [row.name, row.barWidth]));
     expect(widths).toEqual({ 'Sam Chen': 33.33, 'Priya Shah': 1, You: 33.33 });
     // A position exactly at a round figure fills half the axis.
@@ -206,7 +206,7 @@ describe('everyoneModel', () => {
       { userId: FORMER, amountMinor: -700 },
     ]);
     const rows = everyoneModel(ledger, { currency: 'INR', viewerId: ALEX, people }).rows;
-    expect(rows.at(-1)).toMatchObject({ name: 'Former member', amount: '−₹7.00' });
+    expect(rows.at(-1)).toMatchObject({ name: 'Former member', amount: '−\u2060₹7.00' });
     expect(phraseText(rows[0].settledBy)).toBe('Gets ₹7.00 from a former member');
   });
 });

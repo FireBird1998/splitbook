@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ExpenseRead } from './expense-page-read';
-import { expensePayerSummary, expenseSplitSummary, listedExpensePosition } from './expense-row';
+import {
+  expensePayerSummary,
+  expenseSplitSummary,
+  listedExpensePosition,
+  SPLIT_LABELS,
+} from './expense-row';
 
 // Fictional members and figures only.
 const you = { _id: 'a00000000000000000000001', name: 'Alex Rivera', image: null };
@@ -159,17 +164,29 @@ describe('how a listed Expense is split', () => {
   it('names the method and how many people share it', () => {
     expect(expenseSplitSummary(electricity)).toBe('Equally\u00a0·\u00a03');
     expect(expenseSplitSummary({ ...electricity, splitMethod: 'shares' })).toBe(
-      'By shares\u00a0·\u00a03',
+      'By\u00a0shares\u00a0·\u00a03',
     );
     expect(expenseSplitSummary({ ...electricity, splitMethod: 'percentage' })).toBe(
-      'By percentage\u00a0·\u00a03',
+      'By\u00a0percentage\u00a0·\u00a03',
     );
     expect(expenseSplitSummary({ ...electricity, splitMethod: 'exact' })).toBe(
-      'By amounts\u00a0·\u00a03',
+      'By\u00a0amounts\u00a0·\u00a03',
     );
     expect(expenseSplitSummary({ ...electricity, splitMethod: 'unequal' })).toBe(
-      'By amounts\u00a0·\u00a03',
+      'By\u00a0amounts\u00a0·\u00a03',
     );
+  });
+
+  // The Designer's review of #900: beside the side panel the Split column read "By /
+  // percentage · 3". A label of two words is one: a no-break space joins them.
+  it('keeps each label whole, its words joined by a no-break space', () => {
+    expect(SPLIT_LABELS).toEqual({
+      equal: 'Equally',
+      unequal: 'By\u00a0amounts',
+      exact: 'By\u00a0amounts',
+      percentage: 'By\u00a0percentage',
+      shares: 'By\u00a0shares',
+    });
   });
 
   it('leaves out someone named with a share of nothing', () => {
@@ -181,7 +198,7 @@ describe('how a listed Expense is split', () => {
       ],
       { splitMethod: 'shares' },
     );
-    expect(expenseSplitSummary(shares)).toBe('By shares\u00a0·\u00a01');
+    expect(expenseSplitSummary(shares)).toBe('By\u00a0shares\u00a0·\u00a01');
   });
 });
 
@@ -208,7 +225,7 @@ describe('who paid a listed Expense', () => {
       [[priya, 300000]],
     );
     expect(expensePayerSummary(villa, you._id)).toEqual({
-      label: '2 people',
+      label: '2\u00a0people',
       personId: null,
       name: null,
     });

@@ -91,7 +91,7 @@ describe('describeExpenseHistory', () => {
       ]),
     );
     expect(flat(entries)).toEqual([
-      'Split By shares → Equally',
+      'Split By\u00a0shares → Equally',
       'Alex’s share €30.00 → €20.00',
       'Sam’s share Not included → €20.00',
       'Former member’s share €10.00 → Not included',

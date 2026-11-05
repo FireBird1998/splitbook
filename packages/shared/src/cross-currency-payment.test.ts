@@ -308,7 +308,7 @@ describe('the rate a payment records, as the member chose it (#870)', () => {
 describe('what the sheet says about the rate (#727)', () => {
   it('tags it: suggested, its age once old, the member’s own, or none', () => {
     expect(rateBadge('suggested', frankfurter)).toBe('Suggested');
-    expect(rateBadge('suggested', fiveDaysOld)).toBe('5 days old');
+    expect(rateBadge('suggested', fiveDaysOld)).toBe('5\u00a0days old');
     expect(rateBadge('custom', frankfurter)).toBe('Your rate');
     expect(rateBadge('custom', fiveDaysOld)).toBe('Your rate');
     expect(rateBadge('entered', null)).toBe('No suggestion');
@@ -326,7 +326,7 @@ describe('what the sheet says about the rate (#727)', () => {
       useSuggestion: null,
     });
     expect(rateNote('suggested', fiveDaysOld, 'INR', now)).toEqual({
-      text: 'Frankfurter\u00a0· rates of\u00a016\u00a0Oct, 5 days old. Today’s rates aren’t in yet.',
+      text: 'Frankfurter\u00a0· rates of\u00a016\u00a0Oct, 5\u00a0days old. Today’s rates aren’t in yet.',
       attribution: null,
       useSuggestion: null,
     });
@@ -500,7 +500,7 @@ describe('a payment’s record, as its card shows it (#727)', () => {
       },
       cleared: '€20.00',
       paidAmount: '₹1,850.00',
-      pair: { label: 'You and Sam in EUR:', before: '−€20.00', after: '€0.00' },
+      pair: { label: 'You and Sam in EUR:', before: '−\u2060€20.00', after: '€0.00' },
       unchanged: 'INR balances didn’t change. Only the Debt’s own currency moves.',
       kept: 'The rate is kept as recorded. It never changes, even when rates move later.',
     });
@@ -591,8 +591,8 @@ describe('a payment’s record, as its card shows it (#727)', () => {
     });
     expect(paymentRecord({ ...record, pairDebtAfterMinor: 500 }, alex).pair).toEqual({
       label: 'You and Sam in EUR:',
-      before: '−€20.00',
-      after: '+€5.00',
+      before: '−\u2060€20.00',
+      after: '+\u2060€5.00',
     });
   });
 });

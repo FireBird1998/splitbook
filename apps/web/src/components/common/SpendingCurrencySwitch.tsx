@@ -5,6 +5,7 @@ import MoneyText from '@/components/common/MoneyText';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import type { CurrencySpending } from '@splitbook/shared/spending-currencies';
+import { counted } from '@splitbook/shared/separator';
 
 /** The tab id for a currency, which the panel it shows names (`aria-labelledby`). */
 export const spendingTabId = (currency: string) => `spending-tab-${currency}`;
@@ -15,7 +16,7 @@ function tabName(row: CurrencySpending, main: boolean) {
   return [
     row.currency,
     ...(main ? ['main currency'] : []),
-    `${spent} spent in ${row.expenseCount} ${row.expenseCount === 1 ? 'Expense' : 'Expenses'}`,
+    `${spent} spent in ${counted(row.expenseCount, 'Expense')}`,
   ].join(', ');
 }
 

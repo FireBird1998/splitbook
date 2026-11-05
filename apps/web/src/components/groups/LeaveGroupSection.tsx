@@ -19,6 +19,7 @@ import { apiFetch } from '@/lib/utils/api-fetch';
 import { fetchWebBalances } from '@/lib/web-read';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import RefusalAlert, { refusalFrom, type Refusal } from './RefusalAlert';
+import { counted } from '@splitbook/shared/separator';
 
 interface LeaveGroupSectionProps {
   groupId: string;
@@ -121,8 +122,8 @@ export default function LeaveGroupSection({
           {waiting > 0 && (
             <Typography sx={{ mt: 2 }}>
               {deleteIfLastMember
-                ? `Your ${waiting} ${waiting === 1 ? 'item' : 'items'} in To review will be permanently deleted with ${groupName}.`
-                : `You have ${waiting} ${waiting === 1 ? 'item' : 'items'} in To review for ${groupName}. They’re kept but hidden while you’re not a member.`}
+                ? `Your ${counted(waiting, 'item')} in To review will be permanently deleted with ${groupName}.`
+                : `You have ${counted(waiting, 'item')} in To review for ${groupName}. They’re kept but hidden while you’re not a member.`}
             </Typography>
           )}
           {unsupportedNote && (

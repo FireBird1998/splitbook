@@ -1,6 +1,5 @@
 'use client';
 
-import { format } from 'date-fns';
 import type { Ref } from 'react';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
@@ -11,6 +10,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { memberLabel } from '@splitbook/shared/activity-timeline';
 import { paymentRecord, type CrossCurrencyRecord } from '@splitbook/shared/cross-currency-payment';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { recordedWhen } from './record-time';
 
 interface PaymentRecordCardProps {
   record: CrossCurrencyRecord;
@@ -23,13 +23,23 @@ interface PaymentRecordCardProps {
   onClose: () => void;
 }
 
+/**
+ * A row of the record: its name, and its value at the right. Where the value's widest part,
+ * such as a rate, "₹92.10 per €", which never breaks, or "fetched 5 Nov 17:44", doesn't fit
+ * beside the name, as at 200% text, the value takes the next line instead of running past the
+ * card (#899). It never shrinks below that part: its words wrap only at their spaces, and the
+ * rate's chip goes under the rate.
+ */
 const kvSx = {
   display: 'flex',
+  flexWrap: 'wrap',
   justifyContent: 'space-between',
   alignItems: 'flex-start',
-  gap: 2,
+  columnGap: 2,
+  rowGap: 0.5,
   py: 1.25,
   '& + &': { borderTop: 1, borderColor: 'divider' },
+  '& > dd': { flex: '1 1 0%', textAlign: 'right' },
 } as const;
 
 /**
@@ -47,7 +57,7 @@ export default function PaymentRecordCard({
 }: PaymentRecordCardProps) {
   const card = paymentRecord(record, viewerId);
   const recorder = memberLabel(recordedBy?._id, recordedBy?.name, viewerId) ?? 'a former member';
-  const when = format(new Date(recordedAt), 'EEE d MMM, HH:mm');
+  const when = recordedWhen(recordedAt);
 
   return (
     <Box
@@ -107,7 +117,11 @@ export default function PaymentRecordCard({
             <Box component="dd" sx={{ m: 0, textAlign: 'right' }}>
               <Box
                 component="span"
-                sx={(theme) => ({ ...theme.typography.money, fontWeight: 600 })}
+                sx={(theme) => ({
+                  ...theme.typography.money,
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                })}
               >
                 {card.rateUsed}
               </Box>{' '}
@@ -132,12 +146,21 @@ export default function PaymentRecordCard({
                 Suggested
               </Box>
               <Box component="dd" sx={{ m: 0, textAlign: 'right' }}>
-                <Box component="span" sx={(theme) => ({ ...theme.typography.money })}>
+                <Box
+                  component="span"
+                  sx={(theme) => ({ ...theme.typography.money, whiteSpace: 'nowrap' })}
+                >
                   {card.suggested.rate}
                 </Box>
                 <Typography
                   component="span"
-                  sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}
+                  sx={{
+                    display: 'block',
+                    fontSize: '0.75rem',
+                    color: 'text.secondary',
+                    // Only where one no-break group is wider than the whole card.
+                    overflowWrap: 'break-word',
+                  }}
                 >
                   {card.suggested.source}
                 </Typography>

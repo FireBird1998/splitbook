@@ -184,7 +184,7 @@ describe('To review quick fixes', () => {
       'You paid\u00a0· Split equally\u00a0· General',
     );
     expect(toReviewQuickFixes(pair, context).summary).toBe(
-      '2 people paid\u00a0· Split equally\u00a0· Food',
+      '2\u00a0people paid\u00a0· Split equally\u00a0· Food',
     );
   });
 

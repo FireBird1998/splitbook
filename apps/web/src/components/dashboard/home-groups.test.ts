@@ -309,7 +309,7 @@ describe('the Groups table', () => {
         'Maple House Household',
         'AR SC PS',
         '₹18,420.00',
-        '−₹1,480.00 you owe ₹1,480.00',
+        '−\u2060₹1,480.00 you owe ₹1,480.00',
         'Today, 9:14 AM',
       ],
       [
@@ -317,11 +317,11 @@ describe('the Groups table', () => {
         'AR SC PS',
         // A legacy Group in two currencies: each on its own line, its own currency first.
         '₹9,840.00 €25.00',
-        '+₹620.00 you are owed ₹620.00 +€12.50 you are owed €12.50',
+        '+\u2060₹620.00 you are owed ₹620.00 +\u2060€12.50 you are owed €12.50',
         'Yesterday, 8:02 PM',
       ],
       // Nothing spent this month: zero in the Group's own currency.
-      ['Lisbon Offsite Work', 'AR SC +2', '€0.00', '+€30.00 you are owed €30.00', '28 Aug'],
+      ['Lisbon Offsite Work', 'AR SC +2', '€0.00', '+\u2060€30.00 you are owed €30.00', '28 Aug'],
       ['Sunday Football General', 'AR SC +6', '₹3,200.00', 'Settled up', '– No changes yet'],
     ]);
     // The avatars say who is in the Group, viewer first; past three, two and "+N".
@@ -345,7 +345,7 @@ describe('the Groups table', () => {
     // A phone's row is itself the link.
     const rows = anchors(table({ layout: 'rows' }));
     expect(rows.find(({ href }) => href === `/groups/${maple}`)?.text).toBe(
-      'Maple House Household −₹1,480.00 you owe ₹1,480.00 Today, 9:14 AM',
+      'Maple House Household −\u2060₹1,480.00 you owe ₹1,480.00 Today, 9:14 AM',
     );
     expect(links.find(({ href }) => href === '/groups/new')?.text).toBe('New Group');
   });
@@ -354,9 +354,9 @@ describe('the Groups table', () => {
     const html = table({ layout: 'rows' });
     expect(html).not.toContain('<table');
     expect(phoneRows(html)).toEqual([
-      'Maple House Household −₹1,480.00 you owe ₹1,480.00 Today, 9:14 AM',
-      'Goa Friends Trip Trip · 17–20 Sep +₹620.00 you are owed ₹620.00 +€12.50 you are owed €12.50 Yesterday, 8:02 PM',
-      'Lisbon Offsite Work +€30.00 you are owed €30.00 28 Aug',
+      'Maple House Household −\u2060₹1,480.00 you owe ₹1,480.00 Today, 9:14 AM',
+      'Goa Friends Trip Trip · 17–20 Sep +\u2060₹620.00 you are owed ₹620.00 +\u2060€12.50 you are owed €12.50 Yesterday, 8:02 PM',
+      'Lisbon Offsite Work +\u2060€30.00 you are owed €30.00 28 Aug',
       'Sunday Football General Settled up – No changes yet',
     ]);
   });

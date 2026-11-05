@@ -87,10 +87,14 @@ describe('Android’s one day order (#640)', () => {
   it('puts the time after the day', () => {
     mockDeviceLocale('en-US');
     expect(spellTime(monday)).toBe('1:44 PM');
-    expect(spellMoment(monday)).toBe(`19 Oct, ${spellTime(monday)}`);
+    // A moment keeps its day and month together (the Designer's review of #899): a payment's
+    // record read "Fri 6 / Nov 2026, 2:00 AM" at 200%.
+    expect(spellMoment(monday)).toBe(`19\u00a0Oct, ${spellTime(monday)}`);
     expect(spellMoment(monday, { weekday: 'short', year: true })).toBe(
-      `Mon 19 Oct 2026, ${spellTime(monday)}`,
+      `Mon 19\u00a0Oct 2026, ${spellTime(monday)}`,
     );
+    // A day alone, as a heading spells it, is unchanged.
+    expect(spellDay(monday, { weekday: 'short' })).toBe('Mon 19 Oct');
   });
 
   it('says Today and Yesterday by this device’s days, and dates the rest', () => {

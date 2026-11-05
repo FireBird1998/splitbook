@@ -15,6 +15,7 @@ import {
   outerTexts,
   unreadText,
   wordsOf,
+  countApart,
 } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -120,12 +121,22 @@ it.each([1.5, 2])('never starts a header line with a dot at %s× text (#895)', (
   for (const words of lines) expect(words, words).not.toMatch(/(^|[ \n])·/);
 });
 
+// #898: at 200% the header then read "Household · 2 / members · INR". A count and its noun are
+// joined by a no-break space, so a line never breaks between them.
+it.each([1.5, 2])('keeps the member count with its noun at %s× text (#898)', (fontScale) => {
+  setWindow({ width: 360, height: 640, fontScale });
+  shell();
+  const lines = outerTexts(renderer!.toJSON() as ReactTestRendererJSON).map(wordsOf);
+  expect(lines).toContainEqual(expect.stringContaining('3\u00a0members'));
+  for (const words of lines) expect(words, words).not.toMatch(countApart);
+});
+
 describe('Group shell', () => {
   it('shows the Group name as the heading with its Theme, member count and currency', () => {
     const { root } = shell();
     // The first heading is the top bar's; the closed options sheet carries its own.
     expect(text(byRole(root, 'header')[0])).toBe('Maple House');
-    expect(text(root)).toContain('Household\u00a0· 3 members\u00a0· INR');
+    expect(text(root)).toContain('Household\u00a0· 3\u00a0members\u00a0· INR');
   });
 
   // #331: on the emulator every destination moved up 3dp when its progress bar went.

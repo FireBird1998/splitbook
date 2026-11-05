@@ -199,7 +199,7 @@ describe('the stat cards', () => {
       average: { ...READ.average!, spentMinor: 0 },
       change: { direction: 'up', differenceMinor: 1842000, changePercent: null },
     };
-    expect(stats(read).spent.change?.headline).toBe('+₹18,420.00');
+    expect(stats(read).spent.change?.headline).toBe('+\u2060₹18,420.00');
   });
 
   it('say there is nothing to compare in the Group’s first Month', () => {
@@ -293,7 +293,7 @@ describe('monthly spending', () => {
   it('says why the average covers fewer months than asked for', () => {
     const young: GroupInsightsRead = { ...READ, compare: 12 };
     expect(monthlySpending(young, { currentMonth: '2026-10' }).explanation).toBe(
-      'September is ₹567.00 above the 5-month average. This Group started in March 2026, so the average covers 5 months.',
+      'September is ₹567.00 above the 5-month average. This Group started in March 2026, so the average covers 5\u00a0months.',
     );
   });
 
@@ -347,7 +347,7 @@ describe('a legacy Group with Expenses in other currencies', () => {
         ],
       }),
     ).toBe(
-      'Only INR Expenses are counted here. 3 Expenses in these months are in another currency and left out, never converted: 2 in EUR (€25.50), 1 in USD ($5.00).',
+      'Only INR Expenses are counted here. 3\u00a0Expenses in these months are in another currency and left out, never converted: 2 in EUR (€25.50), 1 in USD ($5.00).',
     );
     expect(otherCurrenciesNote(READ)).toBeNull();
   });

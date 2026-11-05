@@ -6,7 +6,7 @@ import FlightOutlinedIcon from '@mui/icons-material/FlightOutlined';
 import { deriveTripCodes } from '@splitbook/shared/trip-codes';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
 import { formatCurrency } from '@splitbook/shared/currency';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 export interface TripStripAmount {
   amount: number;
@@ -126,8 +126,7 @@ export default function TripStrip({
         ? `You’re owed ${formatCurrency(balance.amount, balance.currency)}`
         : `You owe ${formatCurrency(Math.abs(balance.amount), balance.currency)}`;
 
-  const peopleLabel =
-    memberCount !== undefined ? `${memberCount} ${memberCount === 1 ? 'person' : 'people'}` : null;
+  const peopleLabel = memberCount !== undefined ? counted(memberCount, 'person', 'people') : null;
 
   const ariaLabel = [
     `${name} trip, ${from} to ${to}`,

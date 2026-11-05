@@ -181,13 +181,13 @@ describe('the search dialog’s states', () => {
     expect(options).toEqual([
       {
         id: 'search-option-0',
-        name: 'Goa Friends Trip, Trip\u00a0· 3 members',
+        name: 'Goa Friends Trip, Trip\u00a0· 3\u00a0members',
         selected: 'false',
         tabIndex: '-1',
       },
       {
         id: 'search-option-1',
-        name: 'Sam Goa Chen, In Banyan Court and 2 other Groups',
+        name: 'Sam Goa Chen, In Banyan Court and 2\u00a0other Groups',
         selected: 'true',
         tabIndex: '-1',
       },
@@ -208,7 +208,7 @@ describe('the search dialog’s states', () => {
     expect(attribute(input, 'aria-expanded')).toBe('true');
     expect(attribute(input, 'aria-controls')).toBe('search-results');
     expect(attribute(input, 'aria-activedescendant')).toBe('search-option-1');
-    expect(html).toMatch(/role="status"[^>]*>1 Group, 1 person and 2 Expenses</);
+    expect(html).toMatch(/role="status"[^>]*>1\u00a0Group, 1\u00a0person and 2\u00a0Expenses</);
   });
 
   it('results: each one links where it opens, with its details', () => {
@@ -303,7 +303,7 @@ describe('results and where they go', () => {
       groups: [{ ...READ.groups[0], memberCount: 1, category: 'unknown' }],
       people: [{ ...READ.people[0], groupCount: 1 }],
     });
-    expect(group.options[0].detail).toBe('General\u00a0· 1 member');
+    expect(group.options[0].detail).toBe('General\u00a0· 1\u00a0member');
     expect(person.options[0].detail).toBe('In Banyan Court');
   });
 
@@ -335,8 +335,12 @@ describe('results and where they go', () => {
   });
 
   it('sums up the results for screen readers', () => {
-    expect(resultsSummary(searchSections(READ))).toBe('1 Group, 1 person and 2 Expenses');
-    expect(resultsSummary(searchSections({ ...READ, groups: [], people: [] }))).toBe('2 Expenses');
+    expect(resultsSummary(searchSections(READ))).toBe(
+      '1\u00a0Group, 1\u00a0person and 2\u00a0Expenses',
+    );
+    expect(resultsSummary(searchSections({ ...READ, groups: [], people: [] }))).toBe(
+      '2\u00a0Expenses',
+    );
     expect(resultsSummary([])).toBe('No results');
   });
 });

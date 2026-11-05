@@ -57,7 +57,7 @@ for (const viewport of [
       await expect(page.getByText(validName, { exact: true })).toHaveCount(0);
       await expect(page.getByText(noGroupsYet)).toHaveCount(0);
       // Home's heading counts the Groups only from a list it could read (#306).
-      await expect(page.getByText(/\b0 Groups\b/)).toHaveCount(0);
+      await expect(page.getByText(/\b0\sGroups\b/)).toHaveCount(0);
       await expect(error).not.toContainText('members');
       // Inspect the settled error UI, after the dashboard entrance animation.
       await page.evaluate(async () => {

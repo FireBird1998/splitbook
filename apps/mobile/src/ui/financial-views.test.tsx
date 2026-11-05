@@ -266,7 +266,7 @@ describe('rendered refresh feedback', () => {
     expect(shown.match(/Refreshing…/g)).toHaveLength(1);
     expect(spinners(root())).toBe(0);
     expect(shown).toContain('Groceries');
-    expect(shown).toContain('1 expense this month');
+    expect(shown).toContain('1\u00a0expense this month');
     expect(shown).toContain('You owe₹30.00');
     // Balances wait for the Expenses with their time, in their place: the one cue says it (#219).
     expect(shown).toContain(`Updated ${refreshedLabel(verifiedAt)}`);
@@ -414,7 +414,7 @@ describe('ReadTime', () => {
     const time = new Date(2026, 8, 30, 12, 5);
     const later = new Date(2026, 9, 7, 9, 26).getTime();
     const clock = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    expect(refreshedLabel(time.getTime(), later)).toBe(`30 Sep, ${clock}`);
+    expect(refreshedLabel(time.getTime(), later)).toBe(`30\u00a0Sep, ${clock}`);
     expect(refreshedLabel(time.getTime(), time.getTime())).toBe(clock);
   });
 });

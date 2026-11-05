@@ -85,7 +85,7 @@ describe('a payment in another currency, on its card (#727)', () => {
     );
     expect(shown).toContain('Amount cleared €20.00');
     expect(shown).toContain('Amount paid ₹1,850.00');
-    expect(shown).toContain('You and Sam in EUR: −€20.00 → €0.00');
+    expect(shown).toContain('You and Sam in EUR: −\u2060€20.00 → €0.00');
     expect(shown).toContain('INR balances didn’t change. Only the Debt’s own currency moves.');
     expect(shown).toContain(
       'The rate is kept as recorded. It never changes, even when rates move later.',

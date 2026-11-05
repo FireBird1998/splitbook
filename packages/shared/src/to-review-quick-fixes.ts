@@ -1,7 +1,7 @@
 import { getCategory } from './categories';
 import { reviewNeedWords, reviewSplitMethod, type ReviewItemModel } from './to-review';
 import type { ExpenseDraftValues } from './validators/expense-draft';
-import { SEPARATOR } from './separator';
+import { NO_BREAK_SPACE, SEPARATOR } from './separator';
 
 /** Who is looking, and the Group's current members and active Tags. */
 export interface QuickFixContext {
@@ -123,7 +123,9 @@ function summarize(values: ExpenseDraftValues, context: QuickFixContext) {
       ? 'You'
       : (context.members.find((member) => member.id === id)?.name ?? 'A member');
   const paid =
-    payers.length === 1 ? `${name(payers[0].user)} paid` : `${payers.length} people paid`;
+    payers.length === 1
+      ? `${name(payers[0].user)} paid`
+      : `${payers.length}${NO_BREAK_SPACE}people paid`;
   const tag =
     (values.tagId && context.tags.find((row) => row.id === values.tagId)?.name) || values.tag || '';
   const label = categoryLabel(values);

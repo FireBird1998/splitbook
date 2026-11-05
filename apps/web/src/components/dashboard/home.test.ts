@@ -88,8 +88,8 @@ describe('Your balances', () => {
       const html = balancesCard(ready({ currencies: [INR, EUR], groupCount: 5 }), mode);
       expect(text(html)).toBe(
         'Your balances Each currency on its own. Nothing is converted. ' +
-          'INR 3 Groups Net −₹860.00 You owe ₹1,480.00 Owed to you ₹620.00 ' +
-          'EUR 1 Group Net +€42.50 You owe €0.00 Owed to you €42.50',
+          'INR 3 Groups Net −\u2060₹860.00 You owe ₹1,480.00 Owed to you ₹620.00 ' +
+          'EUR 1 Group Net +\u2060€42.50 You owe €0.00 Owed to you €42.50',
       );
       expect(html).toMatch(/<section[^>]*aria-labelledby="home-balances-heading"/);
       expect(html.match(/role="group"/g)).toHaveLength(2);
@@ -142,8 +142,8 @@ describe('Your balances', () => {
   });
 
   it('counts Groups in the singular and plural', () => {
-    expect(groupCountLabel(1)).toBe('1 Group');
-    expect(groupCountLabel(2)).toBe('2 Groups');
+    expect(groupCountLabel(1)).toBe('1\u00a0Group');
+    expect(groupCountLabel(2)).toBe('2\u00a0Groups');
   });
 });
 
@@ -342,7 +342,7 @@ describe('the heading', () => {
 
   it('leaves out what isn’t known yet', () => {
     expect(homeStatusLine(null, null)).toBe('');
-    expect(homeStatusLine(1, null)).toBe('1 Group');
+    expect(homeStatusLine(1, null)).toBe('1\u00a0Group');
     expect(homeStatusLine(null, at)).toBe('Updated 10:42 AM');
   });
 });
@@ -394,13 +394,13 @@ describe('Home', () => {
       'Groups',
       'Latest changes',
     ]);
-    expect(text(region(html, 'Your balances'))).toContain('Net −₹860.00');
+    expect(text(region(html, 'Your balances'))).toContain('Net −\u2060₹860.00');
     expect(text(region(html, 'Needs you'))).toContain('You pay Sam Chen');
     // The Groups table replaces the Group cards: each Group, with its balance from the read.
     const groups = region(html, 'Groups');
     expect(groups).toMatch(/<table\b/);
     expect(text(groups)).toContain('Maple House Household');
-    expect(text(groups)).toContain('−₹1,480.00 you owe ₹1,480.00');
+    expect(text(groups)).toContain('−\u2060₹1,480.00 you owe ₹1,480.00');
     expect(html).not.toContain('Your groups');
     // Receipts are backlogged: nothing on Home mentions them.
     expect(text(html)).not.toMatch(/receipt/i);
@@ -408,7 +408,7 @@ describe('Home', () => {
 
   it('keeps Your balances when the suggested payments can’t be read, and fails only Needs you', () => {
     const html = home({ ...BALANCES, data: { ...BALANCES.data, suggestedPayments: 'unexpected' } });
-    expect(text(region(html, 'Your balances'))).toContain('Net −₹860.00');
+    expect(text(region(html, 'Your balances'))).toContain('Net −\u2060₹860.00');
     expect(text(region(html, 'Needs you'))).toContain(
       'Suggested payments could not be loaded. Try again',
     );

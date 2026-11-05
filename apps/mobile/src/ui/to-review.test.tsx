@@ -572,7 +572,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       ),
       'an icon, not a text button',
     ).toHaveLength(0);
-    expect(text(list)).toContain('Maple House\u00a0· 4 items');
+    expect(text(list)).toContain('Maple House\u00a0· 4\u00a0items');
     // The three counts in a card, then Save and Review one at a time, full width.
     for (const label of ['ready to save', 'needs details', 'on this phone'])
       expect(text(list)).toContain(label);
@@ -698,7 +698,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       expect(text(list)).toContain('Prepared by Claude\u00a0· Today');
       expect(text(list)).not.toContain('Yesterday');
       await tap(list, 'Save 2 ready');
-      expect(text(list)).toContain('Save 2 expenses?');
+      expect(text(list)).toContain('Save 2\u00a0expenses?');
       expect(text(list)).not.toContain('Yesterday');
     }));
   it('dates an older item day first, on a US phone too (#640)', async () => {
@@ -716,7 +716,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     await signIn(f);
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     await tap(list, 'Save 2 ready');
-    expect(text(list)).toContain('Save 2 expenses?');
+    expect(text(list)).toContain('Save 2\u00a0expenses?');
     expect(text(list)).toContain('₹12.34');
     expect(text(list)).not.toContain('Some items changed');
   });
@@ -1295,7 +1295,7 @@ describe('To review quick fixes on Android (#439)', () => {
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     await tap(list, 'You for all 2');
     await settle();
-    const result = 'You set as payer on 1 item. 1 changed elsewhere and was left as it was.';
+    const result = 'You set as payer on 1\u00a0item. 1 changed elsewhere and was left as it was.';
     expect(text(list)).toContain(result);
     // Shown at the foot of the screen, not in the list that re-sorts, and announced politely.
     const [scroll] = list.root.findAll((node) => String(node.type) === 'ScrollView');
@@ -1324,7 +1324,7 @@ describe('To review quick fixes on Android (#439)', () => {
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     await tap(list, 'You for all 2');
     await settle();
-    expect(text(list)).toContain('You set as payer on 1 item');
+    expect(text(list)).toContain('You set as payer on 1\u00a0item');
     await tap(list, 'Undo');
     await settle();
     expect(f.items().find((entry) => entry.draft.id === lunch)!.draft.values).not.toHaveProperty(

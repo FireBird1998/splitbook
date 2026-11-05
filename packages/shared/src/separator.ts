@@ -17,3 +17,18 @@ export const SEPARATOR = `${NO_BREAK_SPACE}· `;
  * "Equally · 2": a line never breaks inside it (#895).
  */
 export const NO_BREAK_SEPARATOR = `${NO_BREAK_SPACE}·${NO_BREAK_SPACE}`;
+
+/**
+ * A count and its noun, "2 members" or "1 currency", joined with a no-break space so a line
+ * never breaks between them (#898). `many` defaults to the noun with an "s".
+ */
+export const counted = (count: number, one: string, many = `${one}s`) =>
+  `${count}${NO_BREAK_SPACE}${count === 1 ? one : many}`;
+
+/**
+ * A word joiner (U+2060): no width, and no line break on either side. It keeps a sign with its
+ * figure: "−€20.00" never breaks after the "−" (#899), though a line may break between two
+ * prefixes such as "−" and "€". Neither Outfit nor IBM Plex Mono maps it, and nothing draws
+ * it: browsers and Android leave out a character that is ignorable by default.
+ */
+export const WORD_JOINER = '\u2060';

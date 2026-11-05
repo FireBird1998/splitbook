@@ -192,17 +192,17 @@ describe('selecting Expenses on a computer (#610)', () => {
     show(
       createElement(SelectingTable, { listKey: 'September', expenses: EXPENSES, onOpen: vi.fn() }),
     );
-    expect(checkbox('Select all 3 Expenses').props.checked).toBe(false);
+    expect(checkbox('Select all 3\u00a0Expenses').props.checked).toBe(false);
     tick('Select Weekly groceries, 16 September');
     tick('Select Water cans, 14 September');
     expect(checkbox('Select Weekly groceries, 16 September').props.checked).toBe(true);
     expect(checkbox('Select Electricity bill, 12 September').props.checked).toBe(false);
     expect(shown()).toContain('2 selected');
-    tick('Select all 3 Expenses');
+    tick('Select all 3\u00a0Expenses');
     expect(checkbox('Select Electricity bill, 12 September').props.checked).toBe(true);
     expect(shown()).toContain('3 selected');
     // With every one selected, the header's box clears them all.
-    tick('Select all 3 Expenses');
+    tick('Select all 3\u00a0Expenses');
     expect(shown()).toContain('0 selected');
   });
 

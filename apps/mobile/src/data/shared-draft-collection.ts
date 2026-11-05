@@ -11,6 +11,7 @@ import type {
 } from '@splitbook/shared/validators/expense-draft';
 import type { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import type { ExpenseContext } from './expense-draft';
+import { counted } from '@splitbook/shared/separator';
 
 export interface SharedDraftCollectionState {
   groupId: string | null;
@@ -357,7 +358,7 @@ export function sharedDraftCollection({
         } finally {
           await refresh();
         }
-        const set = `You set as payer on ${bulk.length} ${bulk.length === 1 ? 'item' : 'items'}`;
+        const set = `You set as payer on ${counted(bulk.length, 'item')}`;
         const left = skipped
           ? `. ${skipped} changed elsewhere and ${skipped === 1 ? 'was' : 'were'} left as ${skipped === 1 ? 'it was' : 'they were'}.`
           : '';

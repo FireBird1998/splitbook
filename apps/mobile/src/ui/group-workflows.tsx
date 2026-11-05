@@ -28,7 +28,7 @@ import { useStartWhileUnfocused } from './start-while-unfocused';
 import { Copy, Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 export type GroupCreateDraft = GroupDraft;
 
@@ -682,9 +682,7 @@ export function InvitationPreview({
             </CompactText>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Icon name="people-outline" size={18} />
-              <CompactText tone="secondary">
-                {preview.memberCount} {preview.memberCount === 1 ? 'member' : 'members'}
-              </CompactText>
+              <CompactText tone="secondary">{counted(preview.memberCount, 'member')}</CompactText>
             </View>
           </View>
           <CompactText variant="small" tone="secondary">

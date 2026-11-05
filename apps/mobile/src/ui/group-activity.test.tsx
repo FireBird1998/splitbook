@@ -22,6 +22,7 @@ import {
   layoutWidth,
   middleCutEnd,
   outerTexts,
+  signApart,
   unreadText,
   wordsOf,
 } from '../test-utils/layout';
@@ -546,7 +547,7 @@ describe('an event’s detail', () => {
       minute: '2-digit',
     });
     // The time is the last run of the details line, a string inside its text.
-    expect(JSON.stringify(screen!.toJSON())).toContain(`"Wed 30 Sep 2026, ${clock}"`);
+    expect(JSON.stringify(screen!.toJSON())).toContain(`"Wed 30\u00a0Sep 2026, ${clock}"`);
   });
 });
 
@@ -800,7 +801,7 @@ describe('a payment in another currency’s record (#728)', () => {
       'by you',
       'What it changed',
       'You and Sam in EUR:',
-      '−€20.00',
+      '−\u2060€20.00',
       '€0.00',
       'INR balances didn’t change. Only the Debt’s own currency moves.',
       'The rate is kept as recorded. It never changes, even when rates move later.',
@@ -859,10 +860,23 @@ describe('a payment in another currency’s record (#728)', () => {
       unreadText(screen!.toJSON() as ReactTestRendererJSON, size.fontScale, size.width - 32),
     ).toEqual([]);
   });
+
+  // #899: at 200% "You and Sam in EUR: −€20.00" broke after the "−": a line may break between
+  // a sign and a currency's symbol. A word joiner keeps the sign with its figure.
+  it.each([1.5, 2])(
+    'keeps the Debt’s sign with its figure at %s× text, 360 dp (#899)',
+    (fontScale) => {
+      setWindow({ width: 360, height: 640, fontScale });
+      render({ state: activity({ selected: payment() }) });
+      const lines = outerTexts(screen!.toJSON() as ReactTestRendererJSON).map(wordsOf);
+      expect(lines).toContainEqual(expect.stringContaining('−\u2060€20.00 → €0.00'));
+      for (const words of lines) expect(words, words).not.toMatch(signApart);
+    },
+  );
 });
 
 // #783: an event's detail is where it is read in full, and its details line took at most two
-// lines: at 200% a payment's "You → Sam Chen · €20.00 · Wed 21 Oct 2026, 10:20 AM" needed three.
+// lines: at 200% a payment's "You → Sam Chen · €20.00 · Wed 21\u00a0Oct 2026, 10:20 AM" needed three.
 describe.each(['light', 'dark'] as const)(
   'an event’s detail at large text in %s (#783)',
   (mode) => {
@@ -919,7 +933,9 @@ describe.each(['light', 'dark'] as const)(
       const tree = screen!.toJSON() as ReactTestRendererJSON;
       const words = (node: ReactTestRendererJSON | string): string =>
         typeof node === 'string' ? node : (node.children ?? []).map(words).join('');
-      expect(words(tree)).toContain('You → Sam Chen\u00a0· €20.00\u00a0· Wed 21 Oct 2026, 10:20');
+      expect(words(tree)).toContain(
+        'You → Sam Chen\u00a0· €20.00\u00a0· Wed 21\u00a0Oct 2026, 10:20',
+      );
       // The screen's content is inset 16dp on each side.
       expect(unreadText(tree, size.fontScale, size.width - 32)).toEqual([]);
     });

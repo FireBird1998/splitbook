@@ -2,6 +2,7 @@
 
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
+import type { SxProps, Theme } from '@mui/material/styles';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import MoneyText from '@/components/common/MoneyText';
@@ -57,9 +58,12 @@ export function RepeatsIcon() {
 export function PositionText({
   position,
   currency,
+  sx,
 }: {
   position: ExpensePosition | null;
   currency: string;
+  /** Styles for the word and figure together, such as the Expenses table's stacking (#900). */
+  sx?: SxProps<Theme>;
 }) {
   if (!position)
     return (
@@ -73,14 +77,17 @@ export function PositionText({
   return (
     <Box
       component="span"
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'baseline',
-        justifyContent: 'flex-end',
-        gap: '5px',
-        whiteSpace: 'nowrap',
-        color: position.kind === 'lent' ? 'status.positive' : 'status.negative',
-      }}
+      sx={[
+        {
+          display: 'inline-flex',
+          alignItems: 'baseline',
+          justifyContent: 'flex-end',
+          gap: '5px',
+          whiteSpace: 'nowrap',
+          color: position.kind === 'lent' ? 'status.positive' : 'status.negative',
+        },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
     >
       <Box component="span" sx={{ fontSize: '0.75rem', fontWeight: 500 }}>
         <Box component="span" sx={visuallyHidden}>

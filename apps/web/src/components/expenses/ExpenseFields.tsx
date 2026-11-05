@@ -49,7 +49,7 @@ import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupTagOption } from './expense-form-helpers';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { memberLabel } from '@splitbook/shared/activity-timeline';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 
 export interface ExpenseFieldsProps {
   values: Omit<ExpenseDraftValues, 'splitMethod'> & {
@@ -222,7 +222,7 @@ export default function ExpenseFields({
   const payerSummary = !payers.length
     ? 'Who paid?'
     : multiPayerMode && payers.length > 1
-      ? `${payers.length} people paid`
+      ? `${payers.length}${NO_BREAK_SPACE}people paid`
       : `${payerName} paid`;
 
   const splitMethodLabel: Record<string, string> = {
@@ -235,8 +235,8 @@ export default function ExpenseFields({
 
   const memberSummary =
     selectedMembers.length === members.length
-      ? `All ${members.length} members`
-      : `${selectedMembers.length} of ${members.length} members`;
+      ? `All ${members.length}${NO_BREAK_SPACE}members`
+      : `${selectedMembers.length} of ${members.length}${NO_BREAK_SPACE}members`;
 
   // ─── Handlers ──────────────────────────────────────
   const handlePredefinedItem = (itemId: string) => {
@@ -999,7 +999,7 @@ export default function ExpenseFields({
                 )}
                 {splitMethod === 'shares' && sharesTotal > 0 && (
                   <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
-                    {sharesTotal} share{sharesTotal !== 1 ? 's' : ''}
+                    {counted(sharesTotal, 'share')}
                     {SEPARATOR}
                     {formatCurrency(perShareAmount, currency)}/share
                   </Box>

@@ -129,7 +129,8 @@ describe('persistent private expense Drafts', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
       code: 'DRAFT_GROUP_LIMIT',
-      error: 'You have 100 items waiting in this Group. Save or delete some before keeping more.',
+      error:
+        'You have 100\u00a0items waiting in this Group. Save or delete some before keeping more.',
     });
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(await httpList()).toHaveLength(100);

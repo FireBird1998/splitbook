@@ -20,6 +20,7 @@ import { useExpenseTableKeys } from './expense-table-keys';
 import type { ExpenseSelection } from './expense-selection';
 import type { TripDayHeading } from './expense-trip-days';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { counted } from '@splitbook/shared/separator';
 
 /** The table's columns, as the design canvas ("GroupExpenses") lays them out. */
 export const EXPENSE_TABLE_COLUMNS = [
@@ -72,7 +73,7 @@ interface ExpenseTableProps {
 }
 
 const cell = {
-  px: '10px',
+  px: '8px',
   py: '6px',
   height: 56,
   borderBottom: 1,
@@ -81,6 +82,19 @@ const cell = {
   '&:first-of-type': { pl: '20px' },
   '&:last-of-type': { pr: '20px' },
 } as const;
+
+/**
+ * The checkbox column, as narrow as MUI's small checkbox (a 20 px box in 9 px of padding), its
+ * box 20 px in from the card's edge like the day headings' words (#900).
+ */
+const checkboxCell = { ...cell, width: 11 + 38, pr: 0, '&:first-of-type': { pl: '11px' } } as const;
+
+/**
+ * Where the table is narrower than this, as beside the side panel on a 1280 px screen, the You
+ * column puts "lent" or "owe" above its figure, so every column fits and no figure is cut
+ * (#900). Wider, they share a line. Each row of a table reads the same way.
+ */
+const STACKED_POSITIONS = '@container expense-table (max-width: 759.98px)';
 
 /**
  * A Group's Expenses on a computer (#310, design canvas "GroupExpenses"): the date, the
@@ -121,6 +135,7 @@ export default function ExpenseTable({
         borderRadius: `${RADIUS.lg}px`,
         overflow: 'hidden',
         minWidth: 0,
+        container: 'expense-table / inline-size',
       }}
     >
       <Box sx={{ overflowX: 'auto' }}>
@@ -130,7 +145,8 @@ export default function ExpenseTable({
           sx={{
             width: '100%',
             // Beside the side panel (#311) a 1280 px screen leaves the table about 630 px, so
-            // who paid and the split may wrap there; the dates and money never do.
+            // who paid and the split may wrap there, and the You column stacks (#900); the
+            // dates and money never wrap. Narrower still, the table scrolls inside its card.
             minWidth: 600,
             borderCollapse: 'collapse',
             fontSize: '0.875rem',
@@ -146,11 +162,7 @@ export default function ExpenseTable({
           <thead>
             <tr>
               {selection && (
-                <Box
-                  component="th"
-                  scope="col"
-                  sx={{ ...cell, height: 'auto', py: '4px', width: 40 }}
-                >
+                <Box component="th" scope="col" sx={{ ...checkboxCell, height: 'auto', py: '4px' }}>
                   <Checkbox
                     size="small"
                     checked={selecting && ticked.length === expenses.length}
@@ -158,7 +170,7 @@ export default function ExpenseTable({
                     onChange={() => selection.onSelectAll()}
                     slotProps={{
                       input: {
-                        'aria-label': `Select all ${expenses.length} ${expenses.length === 1 ? 'Expense' : 'Expenses'}`,
+                        'aria-label': `Select all ${counted(expenses.length, 'Expense')}`,
                       },
                     }}
                   />
@@ -215,7 +227,7 @@ export default function ExpenseTable({
                     }}
                   >
                     {selection && (
-                      <Box component="td" sx={{ ...cell, width: 40 }}>
+                      <Box component="td" sx={checkboxCell}>
                         <Checkbox
                           size="small"
                           checked={chosen}
@@ -299,6 +311,13 @@ export default function ExpenseTable({
                       <PositionText
                         position={listedExpensePosition(expense, userId)}
                         currency={expense.currency}
+                        sx={{
+                          [STACKED_POSITIONS]: {
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
+                            gap: 0,
+                          },
+                        }}
                       />
                     </Box>
                   </Box>

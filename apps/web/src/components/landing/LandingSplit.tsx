@@ -17,7 +17,7 @@ import {
 import MoneyText from '@/components/common/MoneyText';
 import { PRODUCT_NAME } from '@/lib/product';
 import LandingSection, { landingCard } from './LandingSection';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 type Share = { user: string; shares?: number };
 
@@ -118,7 +118,7 @@ function GroceriesCard() {
               <Typography variant="body2">
                 {row.user}{' '}
                 <Box component="span" sx={{ color: 'text.secondary' }}>
-                  {row.shares} {row.shares === 1 ? 'share' : 'shares'}
+                  {counted(row.shares ?? 0, 'share')}
                 </Box>
               </Typography>
               <MoneyText amount={row.amount} currency="INR" tone="neutral" color="text.primary" />

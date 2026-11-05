@@ -18,14 +18,12 @@ import { groupTabHref } from '@/components/groups/group-tabs';
 import { writeExpenseListQuery } from '@/components/expenses/expense-list-query';
 import { recordPaymentHref } from '@/components/settlements/record-payment';
 import { tripDayLabel, tripDayName, tripDayShort } from './trip-days';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 
 export const money = (minor: number, currency: string) =>
   formatCurrency(toMajorAmount(minor, currency), currency);
 
-const plural = (count: number, one: string, many = `${one}s`) =>
-  `${count} ${count === 1 ? one : many}`;
-const expenses = (count: number) => plural(count, 'Expense');
+const expenses = (count: number) => counted(count, 'Expense');
 
 /** The tab's state: the read for this time zone, still loading, failed, or a Trip without Expenses. */
 export type TripCardState = 'ready' | 'loading' | 'failed' | 'empty';
@@ -48,7 +46,7 @@ export interface TripFigures {
 
 export function tripFigures(read: TripSummaryRead): TripFigures {
   const { currency } = read;
-  const days = read.dayCount > 0 ? ` over ${plural(read.dayCount, 'day')}` : '';
+  const days = read.dayCount > 0 ? ` over ${counted(read.dayCount, 'day')}` : '';
   const difference = read.youPaidMinor - read.yourShareMinor;
   return {
     heading: `Whole trip${SEPARATOR}${currency}`,
@@ -65,7 +63,7 @@ export function tripFigures(read: TripSummaryRead): TripFigures {
             : 'Not in its one Expense'
           : read.yourExpenseCount === read.expenseCount
             ? `In all ${read.expenseCount} of its Expenses`
-            : `In ${read.yourExpenseCount} of its ${read.expenseCount} Expenses`,
+            : `In ${read.yourExpenseCount} of its ${read.expenseCount}${NO_BREAK_SPACE}Expenses`,
     },
     paid: {
       text: money(read.youPaidMinor, currency),
@@ -82,7 +80,7 @@ export function tripFigures(read: TripSummaryRead): TripFigures {
       line:
         read.perPersonPerDayMinor === null
           ? 'Needs a day and someone sharing'
-          : `${plural(read.peopleCount, 'person', 'people')}${SEPARATOR}${plural(read.dayCount, 'day')}`,
+          : `${counted(read.peopleCount, 'person', 'people')}${SEPARATOR}${counted(read.dayCount, 'day')}`,
     },
   };
 }
@@ -95,7 +93,7 @@ export function otherCurrenciesNote(read: TripSummaryRead): string | null {
     (entry) =>
       `${entry.expenseCount} in ${entry.currency} (${money(entry.spentMinor, entry.currency)})`,
   );
-  return `Only ${read.currency} Expenses are counted here. ${count === 1 ? 'One Expense is' : `${count} Expenses are`} in another currency and left out, never converted: ${parts.join(', ')}.`;
+  return `Only ${read.currency} Expenses are counted here. ${count === 1 ? 'One Expense is' : `${count}${NO_BREAK_SPACE}Expenses are`} in another currency and left out, never converted: ${parts.join(', ')}.`;
 }
 
 // --- Day by day ------------------------------------------------------------------------------
@@ -203,7 +201,7 @@ export function tripDayChart(
 
   let explanation: string;
   if (read.tooManyDays && read.window)
-    explanation = `This trip runs over ${plural(read.dayCount, 'day')}, too many to draw one by one. It spent ${money(read.dailyAverageMinor ?? 0, currency)} a day on average.`;
+    explanation = `This trip runs over ${counted(read.dayCount, 'day')}, too many to draw one by one. It spent ${money(read.dailyAverageMinor ?? 0, currency)} a day on average.`;
   else if (rows.length === 0) explanation = `Nothing in ${currency} to draw day by day yet.`;
   else if (!focus) explanation = 'Nothing has been spent on these days yet.';
   else {

@@ -725,7 +725,7 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     await enter(f);
     const editor = await form(f, mode);
     expect(button(editor, 'Finish later').props.disabled).toBe(true);
-    expect(text(editor)).toContain('You have 100 items waiting in this Group.');
+    expect(text(editor)).toContain('You have 100\u00a0items waiting in this Group.');
     expect(button(editor, 'View To review')).toBeDefined();
     f.clear();
     await act(async () => {
@@ -735,7 +735,7 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     await tap(editor, 'Finish later');
     expect(f.controller.getSnapshot().screen).toBe('expense');
     expect(f.drafts.values.size).toBe(1);
-    expect(text(editor)).toContain('You have 100 items waiting in this Group.');
+    expect(text(editor)).toContain('You have 100\u00a0items waiting in this Group.');
   });
   it('replays a lost upload reply with the same identity and removes the phone copy only after acknowledgement', async () => {
     const f = fixture({ empty: true, lostUpload: true });
@@ -956,11 +956,11 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     });
     const members = await render(<Members controller={f.controller} />, mode);
     expect(text(members)).toContain(
-      'You have 4 items in To review for Maple House. They’re kept but hidden while you’re not a member.',
+      'You have 4\u00a0items in To review for Maple House. They’re kept but hidden while you’re not a member.',
     );
     await act(async () => {
       onlineManager.setOnline(false);
     });
-    expect(text(members)).toContain('You have 4 items in To review');
+    expect(text(members)).toContain('You have 4\u00a0items in To review');
   });
 });

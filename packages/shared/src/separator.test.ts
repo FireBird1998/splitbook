@@ -1,6 +1,6 @@
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { NO_BREAK_SEPARATOR, NO_BREAK_SPACE, SEPARATOR } from './separator';
+import { counted, NO_BREAK_SEPARATOR, NO_BREAK_SPACE, SEPARATOR, WORD_JOINER } from './separator';
 
 // #895: a line that wraps at a " · " with an ordinary space before the dot starts with "·". Every
 // UI text that joins its parts with " · " uses SEPARATOR, whose no-break space keeps the dot at
@@ -119,6 +119,154 @@ function plainSeparators(file: string, source: string): Finding[] {
   return findings;
 }
 
+// #898: at 200% "2 members" broke into "2 / members". A count and its noun are one: `counted`
+// joins them with a no-break space. This guard finds a count and a noun joined by a plain space,
+// as the clients write them: a choice between one and many after a count, or a noun the app
+// counts right after an expression.
+
+/** The nouns the app counts, one or many: "3 Expenses", "2 currencies", "1 person". */
+const COUNTED_NOUN =
+  /^ (Debts?|Expenses?|Groups?|Members?|Payments?|currenc(?:y|ies)|days?|debts?|expenses?|items?|members?|months?|payments?|people|person|places?|shares?|things?|ways?|Settlements?|invitations?|edits?)\b/;
+
+/** `count === 1 ? one : many`, or its `!== 1` turn: the noun chosen for a count. */
+function pluralChoice(node: ts.Node | undefined): node is ts.ConditionalExpression {
+  if (node === undefined) return false;
+  const choice = ts.isParenthesizedExpression(node) ? node.expression : node;
+  if (!ts.isConditionalExpression(choice)) return false;
+  const test = ts.isParenthesizedExpression(choice.condition)
+    ? choice.condition.expression
+    : choice.condition;
+  return (
+    ts.isBinaryExpression(test) &&
+    [ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken].includes(
+      test.operatorToken.kind,
+    ) &&
+    [test.left, test.right].some((side) => ts.isNumericLiteral(side) && side.text === '1')
+  );
+}
+
+/** An expression as written, without parentheses, casts, spaces or a `?? 0`. */
+const bare = (node: ts.Node, tree: ts.SourceFile) =>
+  node
+    .getText(tree)
+    .replace(/\s+as\s+\w+/g, '')
+    .replace(/\?\?\s*0/g, '')
+    .replace(/[()\s]/g, '');
+
+/** The condition's side that isn't the 1: the count the choice is for. */
+function choiceCount(choice: ts.ConditionalExpression): ts.Expression {
+  let test = choice.condition;
+  while (ts.isParenthesizedExpression(test)) test = test.expression;
+  const { left, right } = test as ts.BinaryExpression;
+  return ts.isNumericLiteral(left) ? right : left;
+}
+
+/**
+ * Whether an expression reads as a count by its name: a `.length`, a count or total, a number
+ * of things, or a constant such as `MAX_CUSTOM_RANGE_DAYS`.
+ */
+const COUNT_NAME =
+  /(^|\.)(length|count|total|shares|missing|groups|others|more|unreadable|edits|kept|skipped|waiting|ageDays)$|(Count|Total|Days|Months)$|^[A-Z0-9_]*(MAX|MIN|PER|DAYS|MONTHS|COUNT|LIMIT)[A-Z0-9_]*(\.(min|max|default))?$/;
+function countExpression(node: ts.Node, tree: ts.SourceFile): boolean {
+  if (ts.isParenthesizedExpression(node)) return countExpression(node.expression, tree);
+  if (ts.isBinaryExpression(node))
+    return [ts.SyntaxKind.MinusToken, ts.SyntaxKind.PlusToken].includes(node.operatorToken.kind)
+      ? countExpression(node.left, tree) || countExpression(node.right, tree)
+      : node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
+          countExpression(node.left, tree);
+  return (
+    (ts.isIdentifier(node) || ts.isPropertyAccessExpression(node)) &&
+    COUNT_NAME.test(node.getText(tree).replace(/\?\./g, '.'))
+  );
+}
+
+/**
+ * Whether `text`, between a count and the choice of its noun, is a plain space: " " before the
+ * noun, " member" before its "s", or nothing before " items".
+ */
+function plainCount(text: string | null, choice: ts.ConditionalExpression): boolean {
+  const [one, many] = [choice.whenTrue, choice.whenFalse].map((branch) =>
+    ts.isStringLiteralLike(branch) ? branch.text : null,
+  );
+  if (text === null) return false;
+  if ([one, many].includes('')) return /^ \p{L}+$/u.test(text);
+  if ([one, many].some((branch) => branch?.startsWith(' '))) return text === '';
+  return text === ' ';
+}
+
+function plainCounts(file: string, source: string): Finding[] {
+  const kind =
+    file.endsWith('.tsx') || file.endsWith('.jsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind);
+  const findings: Finding[] = [];
+  const report = (node: ts.Node, text: string) =>
+    findings.push({
+      file,
+      line: tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1,
+      text,
+    });
+  /** The count right before a choice of its noun, by what the choice compares to 1. */
+  const sameCount = (before: ts.Node | undefined, choice: ts.ConditionalExpression) =>
+    before !== undefined && bare(before, tree) === bare(choiceCount(choice), tree);
+  const visit = (node: ts.Node) => {
+    if (ts.isTemplateExpression(node)) {
+      node.templateSpans.forEach((span, index) => {
+        // `${count} ${count === 1 ? 'member' : 'members'}`, `${n} member${n !== 1 ? 's' : ''}`.
+        const previous = node.templateSpans[index - 1];
+        if (
+          previous &&
+          pluralChoice(span.expression) &&
+          sameCount(previous.expression, span.expression) &&
+          plainCount(previous.literal.text, span.expression)
+        )
+          report(span, span.expression.getText(tree));
+        // `${items.length} Expenses`, when no choice of its "s" follows.
+        const next = node.templateSpans[index + 1];
+        if (
+          COUNTED_NOUN.test(span.literal.text) &&
+          countExpression(span.expression, tree) &&
+          !(next && pluralChoice(next.expression))
+        )
+          report(span.literal, `\${${span.expression.getText(tree)}}${span.literal.text}`);
+      });
+    } else if (ts.isJsxExpression(node) && node.expression && pluralChoice(node.expression)) {
+      // {n} {n === 1 ? 'Expense' : 'Expenses'}, {n}{' '}{…}, {n} member{…}, {n}{n === 1 ? ' item' : …}.
+      const children = (node.parent as ts.JsxElement | ts.JsxFragment).children.filter(
+        (child) => !ts.isJsxText(child) || renderedJsxText(child.text) !== '',
+      );
+      const index = children.indexOf(node);
+      const before = children[index - 1];
+      const between = before && jsxChildText(before) !== null;
+      const count = between ? children[index - 2] : before;
+      const text = between ? jsxChildText(before) : '';
+      if (
+        count !== undefined &&
+        ts.isJsxExpression(count) &&
+        count.expression &&
+        sameCount(count.expression, node.expression) &&
+        plainCount(text, node.expression)
+      )
+        report(node, node.getText(tree));
+    } else if (ts.isJsxText(node)) {
+      // {total} Expenses
+      const { before, after } = renderedSiblings(node);
+      const choice = after && ts.isJsxExpression(after) && pluralChoice(after.expression);
+      if (
+        !choice &&
+        before !== undefined &&
+        ts.isJsxExpression(before) &&
+        before.expression &&
+        countExpression(before.expression, tree) &&
+        COUNTED_NOUN.test(node.text)
+      )
+        report(node, renderedJsxText(node.text));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  return findings;
+}
+
 function workspaceRoot(): string {
   let directory = ts.sys.getCurrentDirectory();
   while (!ts.sys.fileExists(`${directory}/pnpm-workspace.yaml`)) {
@@ -229,5 +377,67 @@ describe('UI text (#895)', () => {
   it.each(ALLOWED)('still needs to leave $path as it is', ({ path, why }) => {
     expect(why.length).toBeGreaterThan(0);
     expect(findings.filter(({ file }) => file.startsWith(path)).length).toBeGreaterThan(0);
+  });
+});
+
+describe('counted (#898)', () => {
+  it('joins a count and its noun with a no-break space', () => {
+    expect(counted(2, 'member')).toBe('2\u00a0members');
+    expect(counted(1, 'member')).toBe('1\u00a0member');
+    expect(counted(0, 'Expense')).toBe('0\u00a0Expenses');
+    expect(counted(2, 'currency', 'currencies')).toBe('2\u00a0currencies');
+    expect(counted(1, 'person', 'people')).toBe('1\u00a0person');
+  });
+
+  it('has a word joiner for a sign and its figure (#899)', () => {
+    expect(WORD_JOINER).toBe('\u2060');
+  });
+});
+
+describe('the plain count guard (#898)', () => {
+  const found = (source: string, file = 'sample.tsx') =>
+    plainCounts(file, source).map(({ line, text }) => ({ line, text }));
+
+  it('finds a count and its noun joined by a plain space', () => {
+    expect(found("const a = `${n} ${n === 1 ? 'member' : 'members'}`;")).toEqual([
+      { line: 1, text: "n === 1 ? 'member' : 'members'" },
+    ]);
+    expect(found('const b = `${count} ${count === 1 ? one : many}`;')).toHaveLength(1);
+    expect(found("const c = `${n} member${n !== 1 ? 's' : ''}`;")).toHaveLength(1);
+    expect(found('const d = `Save ${items.length} Expenses?`;')).toEqual([
+      { line: 1, text: '${items.length} Expenses?' },
+    ]);
+    expect(found("const e = <p>{n} {n === 1 ? 'Expense' : 'Expenses'}</p>;")).toHaveLength(1);
+    expect(
+      found("const f = <p>\n  {n}{' '}\n  {n === 1 ? 'Expense' : 'Expenses'}\n</p>;"),
+    ).toHaveLength(1);
+    expect(found("const g = <p>{list.length} member{list.length !== 1 ? 's' : ''}</p>;")).toEqual([
+      { line: 1, text: "{list.length !== 1 ? 's' : ''}" },
+    ]);
+    expect(found("const h = <p>{n}{n === 1 ? ' item' : ' items'}</p>;")).toHaveLength(1);
+    expect(found('const i = <p>{total} Expenses</p>;')).toEqual([{ line: 1, text: ' Expenses' }]);
+  });
+
+  it('passes counted, a no-break space and words that aren’t a count', () => {
+    expect(found("const a = counted(n, 'member');")).toEqual([]);
+    expect(found("const b = `${n}\\u00a0${n === 1 ? 'member' : 'members'}`;")).toEqual([]);
+    expect(found("const c = `${n === 1 ? 'needs details' : 'need details'}`;")).toEqual([]);
+    expect(found("const d = `${name} ${n === 1 ? 'owes' : 'each owe'} you`;")).toEqual([]);
+    expect(found('const e = `${days}`;')).toEqual([]);
+    expect(found("const f = <p>{counted(n, 'Expense')}</p>;")).toEqual([]);
+    expect(found('const g = <p>\n  {name}\n  Expenses\n</p>;')).toEqual([]);
+  });
+});
+
+describe('counts in UI text (#898)', () => {
+  const root = workspaceRoot();
+  const findings = uiSourceFiles(root)
+    .filter((file) => !allowed(file))
+    .flatMap((file) => plainCounts(file, ts.sys.readFile(`${root}/${file}`) ?? ''));
+
+  it('joins each count to its noun with counted or a no-break space', () => {
+    expect(
+      findings.map(({ file, line, text }) => `${file}:${line} ${JSON.stringify(text)}`),
+    ).toEqual([]);
   });
 });

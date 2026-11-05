@@ -76,7 +76,7 @@ import { refreshedLabel } from './refresh-feedback';
 import { Copy, Icon, Label, Panel, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 const categoryIcons: Record<string, IconName> = {
   food: 'restaurant-outline',
@@ -1464,7 +1464,7 @@ export function ExpenseRecordView({
           {SEPARATOR}
           {amount(row.amount)}
           {row.percentage !== undefined ? `${SEPARATOR}${row.percentage}%` : ''}
-          {row.shares !== undefined ? `${SEPARATOR}${row.shares} shares` : ''}
+          {row.shares !== undefined ? `${SEPARATOR}${counted(row.shares, 'share')}` : ''}
         </Copy>
       ))}
       <Copy>

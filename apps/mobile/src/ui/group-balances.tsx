@@ -40,7 +40,7 @@ import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
 import { CurrencyTabs } from './currency-tabs';
 import { fonts, useTheme } from './theme';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 
 /** Record's reason offline, here and on the Record payment sheet (#728). */
 export { recordNeedsConnection };
@@ -64,9 +64,7 @@ interface GroupCurrency {
 type SettleUpView = 'suggested' | 'before';
 /** Under the Debts before simplifying, when fewer payments settle them (#602, as on the web). */
 const fewerPayments = (payments: number, debts: number) =>
-  `${payments} ${payments === 1 ? 'payment settles' : 'payments settle'} the same ${debts} ${
-    debts === 1 ? 'debt' : 'debts'
-  }. Everyone ends settled up either way.`;
+  `${counted(payments, 'payment')} ${payments === 1 ? 'settles' : 'settle'} the same ${counted(debts, 'debt')}. Everyone ends settled up either way.`;
 
 /** "₹1,480.00 and €20.00", or "₹1,480.00, €20.00 and ¥8,400". */
 const andList = (words: string[]) =>
@@ -149,8 +147,8 @@ function SettleUpOffer({
         <View style={{ flex: 1, minWidth: column ?? 0, gap: 2 }}>
           <CompactText weight="semibold">
             {offer.youPay
-              ? `You owe ${offer.other} in ${count} currencies`
-              : `${offer.other} owes you in ${count} currencies`}
+              ? `You owe ${offer.other} in ${count}${NO_BREAK_SPACE}currencies`
+              : `${offer.other} owes you in ${count}${NO_BREAK_SPACE}currencies`}
           </CompactText>
           <MoneyList amounts={offer.debts} />
         </View>

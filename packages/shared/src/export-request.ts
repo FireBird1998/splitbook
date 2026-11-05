@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import { identity } from './wire-fields';
+import { NO_BREAK_SPACE } from './separator';
 
 /** What a member can add to an export, in the order a request lists them. */
 export const EXPORT_INCLUDES = ['payments', 'shares', 'deleted', 'history'] as const;
@@ -96,7 +97,7 @@ const exportQuery = z
           .transform((ids) => [...new Set(ids.map((id) => id.toLowerCase()))])
           .pipe(
             z.array(z.string()).max(EXPORT_MAX_GROUPS, {
-              message: `Export at most ${EXPORT_MAX_GROUPS} Groups at once`,
+              message: `Export at most ${EXPORT_MAX_GROUPS}${NO_BREAK_SPACE}Groups at once`,
             }),
           ),
       ),

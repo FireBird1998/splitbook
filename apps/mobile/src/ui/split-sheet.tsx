@@ -9,7 +9,7 @@ import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
 import { Badge, BottomSheet, Chip, CompactText, Money, Stepper, radius, useTap } from './compact';
 import { fonts, useTheme } from './theme';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 const choices: { id: SplitChoice; label: string; hint: string }[] = [
   { id: 'equal', label: 'Equal', hint: 'Everyone included pays the same share.' },
@@ -417,11 +417,11 @@ function SplitFooter({
   const allocated = `${amount} allocated`;
   const summary =
     draft.splitMethod === 'equal'
-      ? `${count} ${count === 1 ? 'person' : 'people'}${SEPARATOR}${allocated}`
+      ? `${counted(count, 'person', 'people')}${SEPARATOR}${allocated}`
       : draft.splitMethod === 'percentage'
         ? `100%${SEPARATOR}${allocated}`
         : draft.splitMethod === 'shares'
-          ? `${shares} ${shares === 1 ? 'share' : 'shares'}${SEPARATOR}${allocated}`
+          ? `${counted(shares, 'share')}${SEPARATOR}${allocated}`
           : allocated;
   const note = status.leftover ? roundingNote(status.leftover, spoken, money) : null;
   return (

@@ -27,6 +27,7 @@ import {
   outerTexts,
   unreadText,
   wordsOf,
+  countApart,
 } from '../test-utils/layout';
 import { refreshedLabel } from './refresh-feedback';
 import {
@@ -323,33 +324,33 @@ describe('Home Groups', () => {
     expect(
       button(
         root,
-        'Open Maple House, Household\u00a0· 3 members\u00a0· 3 to review, You owe ₹1,480.00',
+        'Open Maple House, Household\u00a0· 3\u00a0members\u00a0· 3\u00a0to review, You owe ₹1,480.00',
       ),
     ).toBeDefined();
-    expect(text(root)).toContain('Household\u00a0· 3 members\u00a0· 3 to review');
+    expect(text(root)).toContain('Household\u00a0· 3\u00a0members\u00a0· 3\u00a0to review');
   });
   it('shows the member’s balance in each Group, its first currency and +N, or Settled up', () => {
     const { root, onOpen } = view();
     expect(headers(root)).toEqual(['Groups\u00a0· 4\u200a']);
     expect(buttons(root).map((row) => row.props.accessibilityLabel)).toEqual([
       'New Group',
-      'Open Maple House, Household\u00a0· 3 members, You owe ₹1,480.00',
-      'Open Goa Friends Trip, Trip\u00a0· 17–20 Sep\u00a0· 3 members, Owed to you ₹620.00, plus 1 more currency',
+      'Open Maple House, Household\u00a0· 3\u00a0members, You owe ₹1,480.00',
+      'Open Goa Friends Trip, Trip\u00a0· 17–20 Sep\u00a0· 3\u00a0members, Owed to you ₹620.00, plus 1 more currency',
       // Not in the Home response, so nothing is claimed.
-      'Open Lisbon Offsite, Work\u00a0· 4 members',
-      'Open Sunday Football, General\u00a0· 8 members, Settled up',
+      'Open Lisbon Offsite, Work\u00a0· 4\u00a0members',
+      'Open Sunday Football, General\u00a0· 8\u00a0members, Settled up',
     ]);
     const shown = text(root);
     expect(shown).toContain('₹1,480.00you owe');
     expect(shown).toContain('₹620.00owed to you\u00a0· +1');
     expect(shown).toContain('Settled up');
-    act(() => button(root, 'Open Lisbon Offsite, Work\u00a0· 4 members').props.onPress());
+    act(() => button(root, 'Open Lisbon Offsite, Work\u00a0· 4\u00a0members').props.onPress());
     expect(onOpen).toHaveBeenCalledWith(lisbon);
   });
 
   it('opens a Group on a tap or a screen reader’s activate, never on a drag that starts on its row (#665)', () => {
     const { root, onOpen } = view();
-    const row = button(root, 'Open Lisbon Offsite, Work\u00a0· 4 members');
+    const row = button(root, 'Open Lisbon Offsite, Work\u00a0· 4\u00a0members');
     const landed = { pageX: 180, pageY: 420 };
     act(() => touchAlong(row, [landed, { pageX: 180, pageY: 330 }, { pageX: 181, pageY: 170 }]));
     expect(onOpen).not.toHaveBeenCalled();
@@ -448,6 +449,33 @@ it.each([1.5, 2])('never starts a line with a dot at %s× text (#895)', (fontSca
     .map(wordsOf);
   expect(lines.filter((words) => words.includes('·')).length).toBeGreaterThanOrEqual(6);
   for (const words of lines) expect(words, words).not.toMatch(/(^|[ \n])·/);
+});
+
+// #898: at 150% a Group's row read "Household · 3 / members". A count and its noun, and "3 to
+// review", are joined by a no-break space, so a line never breaks between them.
+it.each([1.5, 2])('keeps each count with its noun at %s× text (#898)', (fontScale) => {
+  setWindow({ width: 360, height: 640, fontScale });
+  render(
+    <HomeGroups
+      groups={{ status: 'ready', data: groupsList, message: null, loaded: true }}
+      byGroup={home().byGroup}
+      toReview={{ [groupsList[0]!.id]: 3 }}
+      newGroupLabel="New Group"
+      onNewGroup={vi.fn()}
+      onOpen={vi.fn()}
+      onRetry={vi.fn()}
+    />,
+  );
+  const lines = [renderer!.toJSON() as ReactTestRendererJSON | ReactTestRendererJSON[]]
+    .flat()
+    .flatMap(outerTexts)
+    .map(wordsOf);
+  expect(lines.filter((words) => /\d\u00a0members?/.test(words)).length).toBe(4);
+  expect(lines).toContainEqual(expect.stringContaining('3\u00a0to review'));
+  for (const words of lines) {
+    expect(words, words).not.toMatch(countApart);
+    expect(words, words).not.toMatch(/\d to review/);
+  }
 });
 
 // #639: at 200% a Group's row read "QA Eu.." and "Genera.." beside its balance. A row's name and

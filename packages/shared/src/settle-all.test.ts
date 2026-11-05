@@ -88,15 +88,15 @@ describe('settleAllOffers', () => {
   it('words the offer and the sheet as the board does', () => {
     const [offer] = settleAllOffers(buckets, ALEX, ORDER);
     expect(settleAllWords(offer)).toEqual({
-      lead: 'You owe Sam Chen in 2 currencies',
+      lead: 'You owe Sam Chen in 2\u00a0currencies',
       amounts: '₹1,480.00 and €20.00',
       offer: 'One payment can clear both.',
       action: 'Settle both',
       title: 'Settle up with Sam Chen',
       intro:
-        'You owe Sam Chen in 2 currencies. One payment can clear both; each Debt keeps its own rate.',
+        'You owe Sam Chen in 2\u00a0currencies. One payment can clear both; each Debt keeps its own rate.',
       payColumn: 'You pay',
-      note: 'Records 2 Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.',
+      note: 'Records 2\u00a0Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.',
     });
     const [owed] = settleAllOffers(
       [
@@ -108,12 +108,12 @@ describe('settleAllOffers', () => {
       ORDER,
     );
     expect(settleAllWords(owed)).toMatchObject({
-      lead: 'Sam Chen owes you in 3 currencies',
+      lead: 'Sam Chen owes you in 3\u00a0currencies',
       amounts: '₹500.00, €12.50 and ¥900',
       offer: 'One payment can clear them all.',
       action: 'Settle all',
       intro:
-        'Sam Chen owes you in 3 currencies. One payment can clear them all; each Debt keeps its own rate.',
+        'Sam Chen owes you in 3\u00a0currencies. One payment can clear them all; each Debt keeps its own rate.',
       payColumn: 'Sam Chen pays',
     });
   });

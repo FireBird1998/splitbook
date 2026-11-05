@@ -26,6 +26,7 @@ import {
   type CrossCurrencySettlementFields,
 } from './cross-currency-settlement';
 import { NO_BREAK_SPACE, SEPARATOR } from './separator';
+import { withSign } from './money';
 
 export { rateText, roundedRate } from './cross-currency-settlement';
 
@@ -299,7 +300,9 @@ export function rateBadge(
 ): string {
   if (!suggestion || kind === 'entered') return 'No suggestion';
   if (kind === 'custom') return 'Your rate';
-  return suggestion.ageDays > OLD_AFTER_DAYS ? `${suggestion.ageDays} days old` : 'Suggested';
+  return suggestion.ageDays > OLD_AFTER_DAYS
+    ? `${suggestion.ageDays}${NO_BREAK_SPACE}days old`
+    : 'Suggested';
 }
 
 /**
@@ -365,7 +368,7 @@ export function rateNote(
   return {
     text:
       suggestion.ageDays > OLD_AFTER_DAYS
-        ? `${lead}, ${suggestion.ageDays} days old. Today’s rates aren’t in yet.`
+        ? `${lead}, ${suggestion.ageDays}${NO_BREAK_SPACE}days old. Today’s rates aren’t in yet.`
         : `${lead}${SEPARATOR}fetched${NO_BREAK_SPACE}${fetchedWhen(suggestion.fetchedAt, now)}`,
     attribution,
     useSuggestion: null,
@@ -445,10 +448,13 @@ export function readCrossCurrencyRecord(value: unknown): CrossCurrencyRecord | n
   return read.success ? read.data : null;
 }
 
-/** "−€20.00", "€0.00" or "+€5.00": a signed amount in a Debt's currency. */
+/**
+ * "−€20.00", "€0.00" or "+€5.00": a signed amount in a Debt's currency, its sign kept with its
+ * figure (#899).
+ */
 function signedMoney(minor: number, currency: string): string {
   if (minor === 0) return formatCurrency(0, currency);
-  return `${minor < 0 ? '−' : '+'}${minorMoney(Math.abs(minor), currency)}`;
+  return withSign(minor < 0 ? '−' : '+', minorMoney(Math.abs(minor), currency));
 }
 
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;

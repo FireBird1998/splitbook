@@ -105,9 +105,9 @@ test('the Trip strip shows its balance on one line, sign and amount together, wi
   });
   await enterAsPersona(page, 'alex');
   for (const [amount, text] of [
-    [null, /^[+−]₹[\d,]+\.\d{2}$/],
-    [1_000_000, '+₹1,000,000.00'],
-    [-10_000_000, '−₹10,000,000.00'],
+    [null, /^[+−]\u2060₹[\d,]+\.\d{2}$/],
+    [1_000_000, '+\u2060₹1,000,000.00'],
+    [-10_000_000, '−\u2060₹10,000,000.00'],
   ] as const) {
     balance = amount;
     for (const width of [1440, 360]) {

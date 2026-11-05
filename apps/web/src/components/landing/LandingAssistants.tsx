@@ -18,6 +18,7 @@ import { RADIUS } from '@/lib/theme/tokens';
 import { PRODUCT_NAME } from '@/lib/product';
 import type { LandingSectionLink } from './LandingPage';
 import LandingSection, { landingCard } from './LandingSection';
+import { NO_BREAK_SPACE } from '@splitbook/shared/separator';
 
 /** The section's link in the top bar, while assistants are available. */
 export function assistantsSections(live: WhatsLive): LandingSectionLink[] {
@@ -199,7 +200,7 @@ function statementsOf(canPrepare: boolean) {
           {
             icon: MoveToInboxOutlinedIcon,
             title: 'Tell it what you spent',
-            text: `With a separate OK, which starts switched off, it prepares up to ${DRAFTS_PER_REQUEST} items at a time in To review.`,
+            text: `With a separate OK, which starts switched off, it prepares up to ${DRAFTS_PER_REQUEST}${NO_BREAK_SPACE}items at a time in To review.`,
           },
           {
             icon: TaskAltOutlinedIcon,

@@ -54,7 +54,7 @@ import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import { recentDay } from './day-format';
 import { ChangeCurrencySheet, UnlistedCurrencySheet, type UnlistedItem } from './review-currency';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 
 const offlineMessage =
   'You’re offline. What Claude prepared and what you set aside show up when you’re back online';
@@ -926,9 +926,7 @@ export function ToReviewList({
         <TopBar
           title="To review"
           subtitle={`${groupName}${SEPARATOR}${
-            model.counts.total === 0
-              ? 'nothing waiting'
-              : `${model.counts.total} ${model.counts.total === 1 ? 'item' : 'items'}`
+            model.counts.total === 0 ? 'nothing waiting' : counted(model.counts.total, 'item')
           }`}
           prominent={false}
           leading={{
@@ -1099,7 +1097,7 @@ export function ToReviewList({
                           <Banner
                             tone="info"
                             title="Who paid?"
-                            message={`${payers.length} items still need a payer.`}
+                            message={`${payers.length}${NO_BREAK_SPACE}items still need a payer.`}
                           >
                             <CompactButton
                               label={`You for all ${payers.length}`}
@@ -1299,7 +1297,7 @@ export function ToReviewList({
           visible={!!collection.confirmation}
           title={
             collection.confirmation
-              ? `Save ${collection.confirmation.items.length} ${collection.confirmation.items.length === 1 ? 'expense' : 'expenses'}?`
+              ? `Save ${counted(collection.confirmation.items.length, 'expense')}?`
               : 'Save ready expenses?'
           }
           subtitle={groupName}

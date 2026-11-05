@@ -21,7 +21,7 @@ import TableCell from '@mui/material/TableCell';
 import type { ExportPreview } from '@splitbook/shared/export-preview';
 import { exportWindowSlug } from '@splitbook/shared/export-request';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 export type PreviewState =
   | { status: 'idle'; message: string }
@@ -438,9 +438,9 @@ export default function ExportPreviewPanel({
                 {group.name}: {[group.currency, ...group.alternateCurrencies].join(', ')}
               </li>
             ))}
-            <li>{data.counts.members} Members</li>
+            <li>{counted(data.counts.members, 'Member')}</li>
             <li>
-              {data.counts.expenses} {data.counts.expenses === 1 ? 'Expense' : 'Expenses'}
+              {counted(data.counts.expenses, 'Expense')}
               {data.earliestMonth
                 ? ` since ${new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${data.earliestMonth}-15T12:00:00Z`))}`
                 : ''}
@@ -448,15 +448,12 @@ export default function ExportPreviewPanel({
             </li>
             {data.paymentsIncluded && (
               <li>
-                {data.counts.payments} {data.counts.payments === 1 ? 'Payment' : 'Payments'},
-                including both amounts, currencies and stored rates
+                {counted(data.counts.payments, 'Payment')}, including both amounts, currencies and
+                stored rates
               </li>
             )}
             {data.deletedExpensesIncluded && (
-              <li>
-                {data.counts.deletedExpenses} Deleted{' '}
-                {data.counts.deletedExpenses === 1 ? 'Expense' : 'Expenses'}
-              </li>
+              <li>{counted(data.counts.deletedExpenses, 'Deleted Expense', 'Deleted Expenses')}</li>
             )}
           </Box>
           <Typography variant="body2" color="text.secondary">

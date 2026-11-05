@@ -56,6 +56,7 @@ import {
   settleAllOffers,
   settleAllPayCurrencies,
 } from '@splitbook/shared/settle-all';
+import { NO_BREAK_SPACE } from '@splitbook/shared/separator';
 
 interface BalancesViewProps {
   groupId: string;
@@ -645,8 +646,9 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           <Typography
             sx={{ m: 0, px: 2.5, pt: 1.5, pb: 2, fontSize: '0.875rem', color: 'text.secondary' }}
           >
-            After {debts.length === 1 ? 'this payment' : `these ${debts.length} payments`}, everyone
-            in {group.name} is settled up in {currency}.
+            After{' '}
+            {debts.length === 1 ? 'this payment' : `these ${debts.length}${NO_BREAK_SPACE}payments`}
+            , everyone in {group.name} is settled up in {currency}.
           </Typography>
         </>
       )}

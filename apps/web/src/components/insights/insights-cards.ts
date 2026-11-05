@@ -18,7 +18,8 @@ import type {
 import type { ChangeDirection } from '@splitbook/shared/insights';
 import { monthLabel } from '@/components/dashboard/spending-chart';
 import { averageName, monthsSpan, signedPercent } from './group-insights';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
+import { withSign } from '@splitbook/shared/money';
 
 /** A card's state on the tab: the read's, or `failed` when the card's own data is malformed. */
 export type InsightsCardState = 'ready' | 'loading' | 'failed' | 'empty';
@@ -26,7 +27,7 @@ export type InsightsCardState = 'ready' | 'loading' | 'failed' | 'empty';
 const money = (minor: number, currency: string) =>
   formatCurrency(toMajorAmount(minor, currency), currency);
 const signedMoney = (minor: number, currency: string) =>
-  `${minor > 0 ? '+' : minor < 0 ? '−' : ''}${money(Math.abs(minor), currency)}`;
+  withSign(minor > 0 ? '+' : minor < 0 ? '−' : '', money(Math.abs(minor), currency));
 
 /** A share of the largest value, 0–100, for a bar's length or a tick's place. */
 const share = (value: number, largest: number) =>
@@ -259,9 +260,7 @@ export function recurringModel(
     currency,
     subtitle:
       addedInMonth.count > 0
-        ? `${money(addedInMonth.spentMinor, currency)}${SEPARATOR}${addedInMonth.count} of ${count} ${
-            count === 1 ? 'Expense' : 'Expenses'
-          } in ${monthName}`
+        ? `${money(addedInMonth.spentMinor, currency)}${SEPARATOR}${addedInMonth.count} of ${counted(count, 'Expense')} in ${monthName}`
         : `None added in ${monthName}`,
     rows: part.templates.map((template) => ({
       id: template.id,

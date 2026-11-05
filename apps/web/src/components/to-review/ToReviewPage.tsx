@@ -45,7 +45,7 @@ import { memberLabel } from '@splitbook/shared/activity-timeline';
 import { ReviewFacts } from './ReviewDetails';
 import ToReviewPanel, { type ReviewPanelHandle } from './ToReviewPanel';
 import ReviewRow from './ReviewRow';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 
 type Confirmation = {
   reviews: DraftReview[];
@@ -268,7 +268,7 @@ export default function ToReviewPage({
       } finally {
         await refresh();
       }
-      const text = `You set as payer on ${kept.length} ${kept.length === 1 ? 'item' : 'items'}`;
+      const text = `You set as payer on ${counted(kept.length, 'item')}`;
       const left = skipped
         ? `. ${skipped} changed elsewhere and ${skipped === 1 ? 'was' : 'were'} left as ${skipped === 1 ? 'it was' : 'they were'}.`
         : '';
@@ -538,7 +538,7 @@ export default function ToReviewPage({
         <Alert severity="info">
           {unreadable === 1
             ? '1 item couldn’t be shown.'
-            : `${unreadable} items couldn’t be shown.`}
+            : `${unreadable}${NO_BREAK_SPACE}items couldn’t be shown.`}
         </Alert>
       )}
       {!online && (
@@ -711,7 +711,8 @@ export default function ToReviewPage({
                               <Box component="span" sx={{ fontWeight: 600 }}>
                                 Who paid?
                               </Box>{' '}
-                              {payers.length} items still need a payer.
+                              {payers.length}
+                              {NO_BREAK_SPACE}items still need a payer.
                             </Typography>
                             <Button
                               variant="outlined"

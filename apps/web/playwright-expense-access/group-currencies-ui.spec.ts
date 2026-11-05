@@ -99,8 +99,8 @@ for (const scheme of ['light', 'dark'] as const) {
     ).toBeVisible();
     await expect(currencies(page).getByText('3 of 4', { exact: true })).toBeVisible();
     await expect(rows(page)).toHaveText([
-      /^EUR\s*Euro\s*In use\s*1 Expense\s· 1 Settlement\s· added by you, \d+ \w+\s*Remove$/,
-      /^JPY\s*Japanese Yen\s*In use\s*2 Expenses\s· 2 items in To review\s· whole amounts only\s· added by you, \d+ \w+\s*Remove$/,
+      /^EUR\s*Euro\s*In use\s*1\sExpense\s· 1\sSettlement\s· added by you, \d+ \w+\s*Remove$/,
+      /^JPY\s*Japanese Yen\s*In use\s*2\sExpenses\s· 2\sitems in To review\s· whole amounts only\s· added by you, \d+ \w+\s*Remove$/,
       /^GBP\s*British Pound\s*Nothing uses it\s· added by you, \d+ \w+\s*Remove$/,
     ]);
     await currencies(page).scrollIntoViewIfNeeded();

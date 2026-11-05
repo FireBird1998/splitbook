@@ -426,7 +426,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     await tap(home, 'Review 2, one at a time');
     const run = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     expect(text(run)).toContain('Maple House');
-    expect(text(run)).toContain('Review\u00a0· 1 of 2\u00a0· across 2 Groups');
+    expect(text(run)).toContain('Review\u00a0· 1 of 2\u00a0· across 2\u00a0Groups');
     await tap(run, 'Skip for now');
     expect(text(run)).toContain('Goa Friends Trip');
     expect(text(run)).toContain('Review\u00a0· 2 of 2');
@@ -774,7 +774,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     expect(text(tree)).toContain('One thing left before you can save: who paid');
     // Its tile asks for the payer as for a missing one, never "2 people" for one person twice.
-    expect(text(tree)).not.toContain('2 people');
+    expect(text(tree)).not.toContain('2\u00a0people');
     expect(text(tree)).toContain('The same person is listed twice. Choose who paid.');
     expect(text(tree)).not.toContain('didn’t know who paid');
     // The tile still asks for the payer, and saving stays off until they're chosen.
@@ -919,7 +919,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       .find((modal) =>
         modal
           .findAll((node) => String(node.type) === 'Text')
-          .some((node) => node.children.join('') === 'Maple House\u00a0· 3 currencies'),
+          .some((node) => node.children.join('') === 'Maple House\u00a0· 3\u00a0currencies'),
       );
     expect(sheet).toBeDefined();
     expect(
@@ -1105,8 +1105,8 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       );
     }
     const tree = await render(<Members />, mode);
-    expect(text(tree)).toContain('You have 1 item in To review for Maple House');
-    expect(text(tree)).not.toContain('1 items');
+    expect(text(tree)).toContain('You have 1\u00a0item in To review for Maple House');
+    expect(text(tree)).not.toContain('1\u00a0items');
   });
   it('keeps typing entered during its own delayed post-write read', async () => {
     const f = fixture({ one: true });

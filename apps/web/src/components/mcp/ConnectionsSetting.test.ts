@@ -225,7 +225,7 @@ describe('Disconnect in Settings', () => {
         ),
       );
     });
-    expect(textOf(renderer!.root)).toContain('1 of 2 Groups');
+    expect(textOf(renderer!.root)).toContain('1 of 2\u00a0Groups');
   });
 
   it('revokes the assistant whose Disconnect was pressed, not the first one listed', async () => {

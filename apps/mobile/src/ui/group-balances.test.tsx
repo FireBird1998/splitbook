@@ -829,7 +829,7 @@ describe('Balances, one currency at a time (#725)', () => {
     ]);
     // Each tab's words keep a hair space to spare (#639).
     expect(text(root).replaceAll(hairSpace, '')).toContain(
-      'INR\u00a0· main−₹1,480.00EUR−€20.00JPY+¥8,400',
+      'INR\u00a0· main−\u2060₹1,480.00EUR−\u2060€20.00JPY+\u2060¥8,400',
     );
   });
 
@@ -941,7 +941,7 @@ describe('Balances, one currency at a time (#725)', () => {
     it('offers to settle both with Sam in one payment, on every currency’s tab', () => {
       const { root, onSettleAll } = settleAll(buckets());
       const shown = text(root);
-      expect(shown).toContain('You owe Sam Chen in 2 currencies');
+      expect(shown).toContain('You owe Sam Chen in 2\u00a0currencies');
       // Each amount in the money face, as every other amount is (#868); read as one line.
       const [amounts] = labelled(root, '₹1,480.00 and €20.00');
       expect(
@@ -967,13 +967,13 @@ describe('Balances, one currency at a time (#725)', () => {
       });
       const { root, onSettleAll } = settleAll([owed(eur), owed(tripInr()), jpy]);
       // Sam owes Alex in all three now.
-      expect(text(root)).toContain('Sam Chen owes you in 3 currencies');
+      expect(text(root)).toContain('Sam Chen owes you in 3\u00a0currencies');
       expect(labelled(root, '₹1,480.00, €20.00 and ¥8,400')).toHaveLength(1);
       act(() => labelled(root, 'Settle all with Sam Chen')[0]!.props.onPress());
       expect(onSettleAll).toHaveBeenCalledWith(sam, you);
       act(() => screen?.unmount());
       const single = settleAll([tripInr(), jpy]);
-      expect(text(single.root)).not.toContain('in 2 currencies');
+      expect(text(single.root)).not.toContain('in 2\u00a0currencies');
       expect(labelled(single.root, 'Settle both with Sam Chen')).toHaveLength(0);
     });
 
@@ -1088,7 +1088,7 @@ describe.each(['light', 'dark'] as const)('a settled currency’s tab in %s (#77
     expect(flatten(words!.props.style)).toMatchObject({ color: theme.text });
     expect(flatten(words!.props.style).fontFamily).not.toBe(fonts.mono);
     // The tab beside it keeps its amount.
-    expect(text(labelled(root, 'EUR, you owe €20.00')[0]!)).toContain('−€20.00');
+    expect(text(labelled(root, 'EUR, you owe €20.00')[0]!)).toContain('−\u2060€20.00');
   });
 });
 
@@ -1148,7 +1148,7 @@ describe('Settle up, suggested or before simplifying (#612)', () => {
     ],
     debts: [{ from: samChen, to: alex, amount: 8400 }],
   };
-  const note = '2 payments settle the same 3 debts. Everyone ends settled up either way.';
+  const note = '2\u00a0payments settle the same 3\u00a0debts. Everyone ends settled up either way.';
   const view = (
     data: GroupCurrencyBalance[],
     props: Partial<Parameters<typeof GroupBalancesView>[0]> = {},
@@ -1273,7 +1273,7 @@ describe('Settle up, suggested or before simplifying (#612)', () => {
     expect(labelled(root, 'You owe Priya Shah, ₹1,480.00')).toHaveLength(1);
     expect(labelled(root, 'Priya Shah owes Sam Chen, ₹1,480.00')).toHaveLength(1);
     expect(text(root)).toContain(
-      '1 payment settles the same 2 debts. Everyone ends settled up either way.',
+      '1\u00a0payment settles the same 2\u00a0debts. Everyone ends settled up either way.',
     );
   });
 
