@@ -22,6 +22,7 @@ import {
 } from './test-utils/native';
 import { GroupExpensesView } from './ui/group-expenses';
 import { GroupActivity } from './ui/group-activity';
+import { confirmSheetIn, confirmSheetOpen } from './test-utils/confirm-sheet';
 
 // The real App tree renders through the shared host stand-ins; only native modules are replaced.
 // What the mocked `./runtime` serves: the controller under test and the appearance.
@@ -185,6 +186,8 @@ function backend() {
     clear: async () => creations.clear(),
   };
   const clock = { now: new Date(2026, 8, 27, 12).getTime() };
+  /** Every request that isn't a read, as "METHOD path". */
+  const writes: string[] = [];
   let handler: Handler = () => undefined;
   const boot = () =>
     createMobileController(
@@ -242,6 +245,7 @@ function backend() {
         },
         fetch: async (url, init) => {
           const path = new URL(url).pathname + new URL(url).search;
+          if (init.method && init.method !== 'GET') writes.push(`${init.method} ${path}`);
           const override = handler(path, init);
           if (override) return override;
           if (path.endsWith('/sign-in'))
@@ -294,6 +298,7 @@ function backend() {
       return boot();
     },
     clock,
+    writes,
     creations,
     device,
     drafts,
@@ -431,6 +436,23 @@ async function renderApp(handler?: Handler) {
     },
     /** Android reports the app returning to the foreground. */
     foreground: () => emitAppState('active'),
+    /** The ConfirmSheet open now (#646). */
+    asked: () => confirmSheetIn(root()),
+    /** Whether a ConfirmSheet is open. */
+    asking: () => confirmSheetOpen(root()),
+    /** Answers the open ConfirmSheet: its red action, its Cancel or Keep, Back or a tap outside. */
+    answer: (how: 'action' | 'cancel' | 'back' | 'outside') =>
+      settle(
+        Promise.resolve().then(() => {
+          const sheet = confirmSheetIn(root());
+          return {
+            action: sheet.pressAction,
+            cancel: sheet.pressCancel,
+            back: sheet.pressBack,
+            outside: sheet.pressOutside,
+          }[how]();
+        }),
+      ),
     /**
      * Android recreates the activity, as a font size or dark mode change does (#634): React
      * Native unmounts the App and mounts it again in the same JavaScript runtime, over the same
@@ -751,13 +773,34 @@ describe('App Settings sign-out', () => {
     expect(panel).toContain('unresolved payment records and save recovery keys');
 
     await app.press('Sign out');
-    const [title, message] = vi.mocked(Alert.alert).mock.calls.at(-1)!;
+    const { title, message } = app.asked();
     expect(title).toBe('Sign out on this device?');
     const [, cleared, advice] = /^Your (.+) will be cleared\. (.+)$/.exec(message!)!;
     expect(panel).toContain(`Sign-out clears your ${cleared} from this device.`);
     // Any interrupted save, not only a Group creation.
     expect(panel).toContain(advice);
     expect(advice).toContain('If a save was interrupted');
+  });
+
+  // #646: the app's own sheet, not a stock dialog; only its red action signs out.
+  it('asks in a sheet, where Back, a tap outside and Cancel keep the member signed in', async () => {
+    const app = await renderApp();
+    await app.press('Account and settings');
+    const before = app.writes.length;
+    for (const how of ['back', 'outside', 'cancel'] as const) {
+      await app.press('Sign out');
+      expect(Alert.alert).not.toHaveBeenCalled();
+      expect(app.asked().labels).toEqual(['Cancel', 'Cancel', 'Sign out']);
+      await app.answer(how);
+      expect(app.asking()).toBe(false);
+      expect(app.writes).toHaveLength(before);
+      expect(app.controller.getSnapshot().auth.status).toBe('authenticated');
+    }
+    await app.press('Sign out');
+    await app.answer('action');
+    expect(app.asking()).toBe(false);
+    expect(app.writes.slice(before)).toEqual(['POST /api/auth/sign-out']);
+    expect(app.controller.getSnapshot().auth.status).not.toBe('authenticated');
   });
 
   it('sends to the web only what Android can’t do, and Tags are managed here (#640)', async () => {
@@ -779,10 +822,7 @@ describe('App Settings sign-out', () => {
     });
     await app.press('Account and settings');
     await app.press('Sign out');
-    const [, , buttons] = vi.mocked(Alert.alert).mock.calls.at(-1)!;
-    await settle(
-      Promise.resolve(buttons!.find((button) => button.text === 'Sign out')!.onPress!()),
-    );
+    await app.answer('action');
     expect(app.text()).toContain('Couldn’t sign out of the server');
     expect(app.text()).not.toContain('Sam Chen');
     expect(app.text()).not.toContain('Maple House');
@@ -819,10 +859,7 @@ describe('App Settings sign-out', () => {
       );
       await app.press('Account and settings');
       await app.press('Sign out');
-      const [, , buttons] = vi.mocked(Alert.alert).mock.calls.at(-1)!;
-      await settle(
-        Promise.resolve(buttons!.find((button) => button.text === 'Sign out')!.onPress!()),
-      );
+      await app.answer('action');
       await app.press('Continue');
       expect(app.text()).not.toContain('Your invitation is saved');
 
@@ -860,14 +897,51 @@ describe('App Group being created', () => {
     expect(app.text()).toContain('The Group may have been created.');
     expect(app.creations.size).toBe(1);
 
+    const writes = app.writes.length;
+    // Back, as Cancel, keeps the form and its saved submission (#646).
     await app.press('Discard this form');
-    const [title, , choices] = vi.mocked(Alert.alert).mock.lastCall!;
-    expect(title).toBe('Discard this Group form?');
+    expect(app.asked()).toMatchObject({
+      title: 'Discard this Group form?',
+      cancel: 'Cancel',
+      action: 'Discard',
+    });
+    expect(app.asked().message).toContain('sends nothing');
+    await app.answer('back');
+    expect(app.asking()).toBe(false);
     expect(app.text()).toContain('The Group may have been created.');
     expect(app.creations.size).toBe(1);
-    await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
+    await app.press('Discard this form');
+    await app.answer('action');
     expect(app.text()).not.toContain('The Group may have been created.');
     expect(app.creations.size).toBe(0);
+    expect(app.writes).toHaveLength(writes);
+  });
+
+  // #646: the app's own sheet; Back and Keep editing keep the entries.
+  it('asks in a sheet before the Group form’s Cancel clears it', async () => {
+    const app = await renderApp();
+    app.controller.startCreate();
+    app.controller.updateCreation({ name: 'Cabin Weekend' });
+    await settle();
+    for (const how of ['back', 'cancel'] as const) {
+      await app.press('Cancel');
+      expect(Alert.alert).not.toHaveBeenCalled();
+      expect(app.asked()).toMatchObject({
+        title: 'Discard this Group form?',
+        message: 'Your unsaved entries will be cleared.',
+        cancel: 'Keep editing',
+        action: 'Discard',
+      });
+      await app.answer(how);
+      expect(app.asking()).toBe(false);
+      expect(app.controller.getSnapshot()).toMatchObject({
+        screen: 'create',
+        creation: { draft: { name: 'Cabin Weekend' } },
+      });
+    }
+    await app.press('Cancel');
+    await app.answer('action');
+    expect(app.controller.getSnapshot().creation.draft.name).toBe('');
   });
 
   it('opens a new Group on “No expenses yet”, without a pull (#189)', async () => {
@@ -1215,13 +1289,21 @@ describe('App return from an Expense', () => {
     await app.press('Back to Group');
     expect(app.text()).toContain('Draft: Kept for later');
 
+    const before = app.writes.length;
     await app.press('Discard draft');
-    const [title, , choices] = vi.mocked(Alert.alert).mock.lastCall!;
-    expect(title).toBe('Discard this expense draft?');
-    expect(choices!.map((choice) => choice.text)).toEqual(['Keep draft', 'Discard']);
+    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(app.asked().title).toBe('Discard this expense draft?');
+    expect(app.asked().labels).toEqual(['Keep draft', 'Keep draft', 'Discard']);
+    // A tap outside keeps it (#646).
+    await app.answer('outside');
+    expect(app.asking()).toBe(false);
     expect(app.text()).toContain('Draft: Kept for later');
-    await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
+    expect(app.drafts.size).toBe(1);
+    await app.press('Discard draft');
+    await app.answer('action');
     expect(app.text()).not.toContain('Draft: Kept for later');
+    expect(app.drafts.size).toBe(0);
+    expect(app.writes).toHaveLength(before);
     expect(app.pressable('Add expense').props.accessibilityRole).toBe('button');
   });
 
@@ -1238,13 +1320,16 @@ describe('App return from an Expense', () => {
         await app.press('Open Maple House');
         await app.press('Add expense');
         await app.type('Description, required', 'Weekly groceries');
+        const before = app.writes.length;
         await app.press('Expense options');
         await app.press(`Discard ${word}, Removes these entries from this device`);
 
-        const [title, message, choices] = vi.mocked(Alert.alert).mock.lastCall!;
-        expect(title).toBe(`Discard this expense ${word}?`);
-        expect(message).toBe('Your saved entries will be removed from this device.');
-        expect(choices!.map((choice) => choice.text)).toEqual([`Keep ${word}`, 'Discard']);
+        expect(app.asked()).toMatchObject({
+          title: `Discard this expense ${word}?`,
+          message: 'Your saved entries will be removed from this device.',
+          cancel: `Keep ${word}`,
+          action: 'Discard',
+        });
         const description = () =>
           app
             .root()
@@ -1254,9 +1339,19 @@ describe('App return from an Expense', () => {
                 node.props.accessibilityLabel === 'Description, required',
             ).props.value;
         expect(description()).toBe('Weekly groceries');
-        await settle(
-          Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()),
-        );
+        // Its Keep, and Android Back, keep the entries (#646).
+        await app.answer('cancel');
+        expect(description()).toBe('Weekly groceries');
+        await app.press('Expense options');
+        await app.press(`Discard ${word}, Removes these entries from this device`);
+        await app.answer('back');
+        expect(app.asking()).toBe(false);
+        expect(description()).toBe('Weekly groceries');
+        expect(app.drafts.size).toBe(1);
+        await app.press('Expense options');
+        await app.press(`Discard ${word}, Removes these entries from this device`);
+        await app.answer('action');
+        expect(app.writes).toHaveLength(before);
         // Discarding opens the form again, empty.
         expect(description()).toBe('');
       } finally {
@@ -2409,21 +2504,24 @@ it('asks before discarding a lost Group’s unconfirmed Expense and sends nothin
   await settle(app.controller.refresh('retry'));
   expect(app.text()).toContain('check the Group’s Expenses before saving again');
   await app.press('Discard unconfirmed save');
-  const [, message, choices] = vi.mocked(Alert.alert).mock.lastCall!;
-  expect(message).toContain('may already be recorded');
+  expect(app.asked().message).toContain('may already be recorded');
   expect(app.drafts.size).toBe(1);
-  expect(choices!.find((choice) => choice.text === 'Cancel')).toBeDefined();
+  expect(app.asked().cancel).toBe('Cancel');
+  // Cancel keeps the save and its retry identity (#646).
+  const writes = app.writes.length;
+  await app.answer('cancel');
+  expect(app.drafts.size).toBe(1);
+  await app.press('Discard unconfirmed save');
   app.device.failDraftRemoval = true;
-  await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
+  await app.answer('action');
   expect(app.drafts.size).toBe(1);
   expect(app.text()).toContain('Could not remove this Group');
   app.device.failDraftRemoval = false;
   await app.press('Discard unconfirmed save');
-  const retryChoices = vi.mocked(Alert.alert).mock.lastCall![2]!;
-  await settle(
-    Promise.resolve(retryChoices.find((choice) => choice.text === 'Discard')!.onPress!()),
-  );
+  await app.answer('action');
   expect(app.drafts.size).toBe(0);
+  // Discarding sends nothing.
+  expect(app.writes).toHaveLength(writes);
   expect(app.controller.getSnapshot().screen).toBe('groups');
 });
 
@@ -2459,12 +2557,12 @@ it.each([
       await settle(app.controller.saveExpense());
       await app.press('Discard unconfirmed save');
 
-      const [title, message, choices] = vi.mocked(Alert.alert).mock.lastCall!;
+      const { title, message, labels } = app.asked();
       expect(title).toBe('Discard this unconfirmed save?');
       expect(message).toBe(
         `Check this Group’s Expenses first. If this Expense is already there, discard this save and don’t save the ${word} again. If it isn’t, discard this save, then correct the ${word} and save it. Discarding sends nothing.`,
       );
-      expect(choices!.map((choice) => choice.text)).toEqual(['Cancel', 'Discard']);
+      expect(labels).toEqual(['Cancel', 'Cancel', 'Discard']);
     } finally {
       vi.unstubAllEnvs();
     }
@@ -2498,13 +2596,61 @@ it('asks before discarding a lost Group’s unconfirmed payment', async () => {
   denied = true;
   await settle(app.controller.refresh('retry'));
   await app.press('Discard unconfirmed payment');
-  const [, message, choices] = vi.mocked(Alert.alert).mock.lastCall!;
-  expect(message).toContain('may already be recorded');
+  expect(app.asked().title).toBe('Discard this unconfirmed payment?');
+  expect(app.asked().message).toContain('may already be recorded');
   expect(app.payments.size).toBe(1);
-  expect(choices!.find((choice) => choice.text === 'Cancel')).toBeDefined();
-  await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
+  // Back keeps the payment's retry (#646).
+  const writes = app.writes.length;
+  await app.answer('back');
+  expect(app.asking()).toBe(false);
+  expect(app.payments.size).toBe(1);
+  await app.press('Discard unconfirmed payment');
+  await app.answer('action');
   expect(app.payments.size).toBe(0);
+  expect(app.writes).toHaveLength(writes);
   expect(app.controller.getSnapshot().screen).toBe('groups');
+});
+
+// #646: the app's own sheet; Keep my version, Back or a tap outside keep the member's version.
+it('asks in a sheet before using the saved version, and only its action takes it', async () => {
+  const app = await renderApp();
+  const id = september._id;
+  const record = { ...september, revision: 0, notes: '', isDeleted: false, editHistory: [] };
+  const theirs = { ...record, description: 'September groceries and milk', revision: 1 };
+  let saved = record;
+  app.use((path, init) => {
+    if (path !== `/api/groups/${groupId}/expenses/${id}`) return undefined;
+    if (init.method === 'PATCH') {
+      saved = theirs;
+      return json({ code: 'STALE_REVISION', status: 409 }, 409);
+    }
+    return json({ status: 200, data: saved });
+  });
+  await settle(app.controller.openExpense(groupId, id));
+  await settle(app.controller.editExpense());
+  await settle(app.controller.updateExpenseDraft({ description: 'Mine' }));
+  await settle(app.controller.saveExpense());
+  const writes = app.writes.length;
+  for (const how of ['cancel', 'back', 'outside'] as const) {
+    await app.press('Use the saved version');
+    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(app.asked()).toMatchObject({
+      title: 'Use the saved version?',
+      message: 'Your version is removed from this device.',
+      cancel: 'Keep my version',
+      action: 'Use saved version',
+    });
+    await app.answer(how);
+    expect(app.asking()).toBe(false);
+    expect(app.controller.getSnapshot().expense.draft?.description).toBe('Mine');
+  }
+  await app.press('Use the saved version');
+  await app.answer('action');
+  expect(app.controller.getSnapshot().expense).toMatchObject({
+    status: 'detail',
+    draft: { description: 'September groceries and milk' },
+  });
+  expect(app.writes).toHaveLength(writes);
 });
 
 describe('Android Group Tag management', () => {
@@ -2750,18 +2896,22 @@ describe('Android Tag correction and close behavior', () => {
       .findAll((node) => (node.type as unknown) === 'Modal')
       .find((node) => node.props.visible && node.props.transparent);
     act(() => sheet!.props.onRequestClose());
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Discard this name?',
-      expect.any(String),
-      expect.arrayContaining([
-        expect.objectContaining({ text: 'Keep editing' }),
-        expect.objectContaining({ text: 'Discard' }),
-      ]),
-    );
+    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(confirmSheetIn(app.root())).toMatchObject({
+      title: 'Discard this name?',
+      message: 'Your new name isn’t saved.',
+      cancel: 'Keep editing',
+      action: 'Discard',
+    });
     expect(app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.value).toBe('Villa');
     expect(app.server.submitted).toEqual([]);
-    const buttons = vi.mocked(Alert.alert).mock.calls.at(-1)![2]!;
-    act(() => buttons.find((button) => button.text === 'Discard')!.onPress!());
+    // Back on the question keeps the name, and the name's sheet (#646).
+    act(() => confirmSheetIn(app.root()).pressBack());
+    await settle();
+    expect(confirmSheetOpen(app.root())).toBe(false);
+    expect(app.root().findByProps({ accessibilityLabel: 'Tag name' }).props.value).toBe('Villa');
+    act(() => sheet!.props.onRequestClose());
+    act(() => confirmSheetIn(app.root()).pressAction());
     await settle();
     // The sheet closed; Tags stays open until its own Close.
     expect(app.text()).toContain('Active\u00a0· 0');

@@ -1,14 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Pressable,
-  ScrollView,
-  TextInput,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   buildToReview,
@@ -45,6 +37,7 @@ import {
   TopBar,
   denseHitSlop,
   touch,
+  useConfirm,
   useTap,
 } from './compact';
 import { Icon } from './primitives';
@@ -102,6 +95,7 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
     sameSelection,
   );
   const theme = useTheme();
+  const [confirm, confirmation] = useConfirm();
   if (
     !snapshot.run ||
     !snapshot.user ||
@@ -110,14 +104,13 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
     return null;
   const close = () => {
     if (!controller.getSnapshot().toReview.run?.unkept) return void controller.closeReviewRun();
-    Alert.alert(
-      'Leave without your latest changes?',
-      'These changes have not been kept. The last kept details stay in To review.',
-      [
-        { text: 'Keep editing', style: 'cancel' },
-        { text: 'Leave without changes', onPress: () => void controller.closeReviewRun() },
-      ],
-    );
+    confirm({
+      title: 'Leave without your latest changes?',
+      message: 'These changes have not been kept. The last kept details stay in To review.',
+      action: 'Leave without changes',
+      cancel: 'Keep editing',
+      onConfirm: () => void controller.closeReviewRun(),
+    });
   };
   return (
     <Modal visible animationType="slide" onRequestClose={close}>
@@ -133,6 +126,7 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
             close={close}
           />
         </KeyboardAvoidingView>
+        {confirmation}
       </SafeAreaView>
     </Modal>
   );

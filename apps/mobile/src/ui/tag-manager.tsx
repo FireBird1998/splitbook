@@ -2,7 +2,6 @@ import type { TextInputInstance, ScrollViewInstance, ViewInstance } from 'react-
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import {
   AccessibilityInfo,
-  Alert,
   Keyboard,
   Modal,
   RefreshControl,
@@ -40,6 +39,7 @@ import {
   Snackbar,
   TopBar,
   progressHeight,
+  useConfirm,
 } from './compact';
 import { useStartWhileUnfocused } from './start-while-unfocused';
 import { fonts, useTheme } from './theme';
@@ -277,12 +277,16 @@ export function TagManager({
     if (!busy) setWorking(null);
   }, [busy]);
 
+  const [confirm, confirmation] = useConfirm();
   const discard = (then: () => void) => {
     if (manager.dirty())
-      Alert.alert('Discard this name?', 'Your new name isn’t saved.', [
-        { text: 'Keep editing', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: then },
-      ]);
+      confirm({
+        title: 'Discard this name?',
+        message: 'Your new name isn’t saved.',
+        action: 'Discard',
+        cancel: 'Keep editing',
+        onConfirm: then,
+      });
     else then();
   };
   const close = () => discard(onClose);
@@ -840,6 +844,8 @@ export function TagManager({
             <CompactText>Members can pick it on new Expenses again.</CompactText>
           )}
         </BottomSheet>
+        {/* After the name's sheet, so it opens over it. */}
+        {confirmation}
       </SafeAreaView>
     </Modal>
   );

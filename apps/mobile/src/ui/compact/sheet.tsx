@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import type { TextInstance } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import {
+  AccessibilityInfo,
   Animated,
   KeyboardAvoidingView,
   Modal,
@@ -33,6 +35,8 @@ export function BottomSheet({
   doneIcon,
   dismissLabel = `Close ${title}, keeping your entries`,
   dismissible = true,
+  titleRef,
+  onShow,
   children,
   footer,
 }: {
@@ -60,6 +64,10 @@ export function BottomSheet({
   dismissLabel?: string;
   /** False while the sheet can't close, e.g. while it's saving: nothing closes it, and a swipe springs back. */
   dismissible?: boolean;
+  /** The title, as for a sheet that moves the screen reader to it when it opens. */
+  titleRef?: Ref<TextInstance>;
+  /** Called once the sheet is on screen. */
+  onShow?: () => void;
   children: ReactNode;
   footer?: ReactNode;
 }) {
@@ -112,6 +120,7 @@ export function BottomSheet({
       animationType="slide"
       statusBarTranslucent
       onRequestClose={dismiss}
+      onShow={onShow}
     >
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Pressable
@@ -170,6 +179,7 @@ export function BottomSheet({
                 <View style={{ flex: 1, minWidth: column ?? 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <CompactText
+                      ref={titleRef}
                       variant="title"
                       accessibilityRole="header"
                       numberOfLines={column ? 0 : titleLines}
@@ -219,4 +229,73 @@ export function BottomSheet({
       </KeyboardAvoidingView>
     </Modal>
   );
+}
+
+/** What a ConfirmSheet asks: one destructive action, and the safe way out. */
+export type Confirmation = {
+  title: string;
+  message: string;
+  /** The destructive action, in red, such as "Discard". */
+  action: string;
+  /** The safe way out, such as "Keep editing". Back, a tap outside and a swipe down choose it. */
+  cancel: string;
+  onConfirm: () => void;
+};
+
+/**
+ * The app's own confirm, in place of a stock dialog (#646): a title, a short message, the red
+ * action in the footer and the safe way out as the header's action, as To review's Delete asks.
+ * Back, a tap outside and a swipe down cancel; nothing but the red action confirms. The screen
+ * reader moves to the title when it opens. It answers once: a second tap does nothing.
+ */
+export function ConfirmSheet({
+  title,
+  message,
+  action,
+  cancel,
+  onConfirm,
+  onCancel,
+}: Confirmation & { onCancel: () => void }) {
+  const heading = useRef<TextInstance>(null);
+  const answered = useRef(false);
+  const answer = (then: () => void) => () => {
+    if (answered.current) return;
+    answered.current = true;
+    then();
+  };
+  return (
+    <BottomSheet
+      visible
+      title={title}
+      titleRef={heading}
+      onShow={() => {
+        if (heading.current) AccessibilityInfo.sendAccessibilityEvent(heading.current, 'focus');
+      }}
+      doneLabel={cancel}
+      dismissLabel={cancel}
+      onDone={answer(onCancel)}
+      footer={<CompactButton label={action} destructive block onPress={answer(onConfirm)} />}
+    >
+      <CompactText>{message}</CompactText>
+    </BottomSheet>
+  );
+}
+
+/**
+ * Asks with a ConfirmSheet: `ask(confirmation)` opens it, and the screen renders `sheet`, which
+ * is mounted only while it asks, so a screen that isn't asking renders nothing more.
+ */
+export function useConfirm() {
+  const [asking, ask] = useState<Confirmation | null>(null);
+  const sheet = asking ? (
+    <ConfirmSheet
+      {...asking}
+      onCancel={() => ask(null)}
+      onConfirm={() => {
+        ask(null);
+        asking.onConfirm();
+      }}
+    />
+  ) : null;
+  return [ask as (confirmation: Confirmation) => void, sheet] as const;
 }
