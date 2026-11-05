@@ -40,6 +40,7 @@ import {
   headingBeside,
   headingLine,
   useLargeText,
+  useLargestText,
   useTap,
 } from './compact';
 import { useTheme } from './theme';
@@ -791,6 +792,9 @@ export function SaveBar({
   /** More under Save, in the bar itself, such as Finish later and what it does. */
   children?: ReactNode;
 }) {
+  // From 150% the amount goes under the words: beside "CHF 2,500.50" at 200% on a 360 dp phone,
+  // Save read "Save ex / pense" (#867), as Record payment's did (#639).
+  const largest = useLargestText();
   return (
     <ActionBar>
       {/* Above Save: the bar grows upward from the bottom of the screen, so Save stays put. */}
@@ -802,6 +806,7 @@ export function SaveBar({
       <CompactButton
         label={label}
         amount={amount}
+        amountBelow={largest}
         busy={busy}
         block
         disabled={blocked !== null}

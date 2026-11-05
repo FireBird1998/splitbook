@@ -1443,3 +1443,56 @@ describe.each(['light', 'dark'] as const)('an Expense row’s cut title in %s (#
     expect(cutRow).toBe(layoutHeight(short!, fontScale, 360 - 34));
   });
 });
+
+// #867, from the Tester's #710 device pass: at 200% on a 360 dp phone the Household's month read
+// "Oct / ober / 2026", squeezed between its arrows and "All time". Where they can't share a line,
+// All time goes onto a line of its own at the row's end, and the month keeps a line wide enough for
+// its longest word.
+describe.each(['light', 'dark'] as const)('the Month bar at 200% in %s (#867)', (mode) => {
+  it.each([
+    { fontScale: 1.3, month: '2026-09' },
+    { fontScale: 2, month: '2026-09' },
+    { fontScale: 2, month: '2026-11' },
+    { fontScale: 2, month: null },
+  ])('never breaks a word of the month, $fontScale× text, month $month', (size) => {
+    setWindow({ width: 360, height: 640, fontScale: size.fontScale });
+    act(() => {
+      screen = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <GroupExpensesView
+            group={group()}
+            currentUserId={you}
+            state={financial({ data: [] }, size.month)}
+            kept={null}
+            savedExpenseId={null}
+            now={now}
+            onSelectMonth={vi.fn()}
+            onRefreshExpenses={vi.fn()}
+            onLoadMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onOpenExpense={vi.fn()}
+            onResumeDraft={vi.fn()}
+            onDiscardDraft={vi.fn()}
+          />
+        </ThemeContext.Provider>,
+      );
+    });
+    const [bar] = findHosts(
+      screen!.toJSON() as ReactTestRendererJSON,
+      (props, type) => type === 'View' && flatten(props.style).minHeight === 56,
+    );
+    // The bar sits in a Card 16 dp in from the screen's edges, inside its 1 dp border.
+    expect(unreadText(bar!, size.fontScale, 360 - 34)).toEqual([]);
+  });
+
+  it('keeps All time beside the month where they fit, at 100%', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1 });
+    view({ state: financial({ data: [] }) });
+    const [bar] = findHosts(
+      screen!.toJSON() as ReactTestRendererJSON,
+      (props, type) => type === 'View' && flatten(props.style).minHeight === 56,
+    );
+    expect(unreadText(bar!, 1, 360 - 34)).toEqual([]);
+    expect(layoutHeight(bar!, 1, 360 - 34)).toBe(56);
+  });
+});

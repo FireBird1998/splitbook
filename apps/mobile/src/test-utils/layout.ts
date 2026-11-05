@@ -62,6 +62,10 @@ export function layoutHeight(
       return box(number(node.props.size));
     case 'ActivityIndicator':
       return box(node.props.size === 'large' ? 36 : 20);
+    case 'TextInput':
+      // A one-line field scrolls what it can't show, so its height is its own.
+      if (width !== undefined) watch?.input?.(node, width - horizontal(style));
+      break;
   }
   const children = inFlow(node);
   /** The room inside this box, when its own width is known. */
@@ -89,6 +93,8 @@ export function layoutHeight(
         ? number(flatten(child.props.style).minWidth)
         : childWidth(child, true, inner, fontScale)!,
     );
+  /** How much of what its line leaves a child that isn't flexible takes (flexGrow). */
+  const grow = (child: Node) => (flexible(child) ? 0 : number(flatten(child.props.style).flexGrow));
   /** How much a child gives up when its line overflows (flexShrink). */
   const shrink = (child: Node) =>
     flexible(child) ? 0 : number(flatten(child.props.style).flexShrink);
@@ -104,8 +110,12 @@ export function layoutHeight(
     const share = Math.max(0, left) / Math.max(1, members.length - fixed.length);
     const over = members.reduce((sum, child) => sum + span(child), gaps) - inner!;
     const giving = members.reduce((sum, child) => sum + shrink(child) * span(child), 0);
+    // Without a flexible child, what the line leaves goes to the children that grow.
+    const growing =
+      members.length > fixed.length ? 0 : members.reduce((sum, child) => sum + grow(child), 0);
     const width = (child: Node) => {
       if (flexible(child)) return Math.max(share, span(child));
+      if (over < 0 && growing > 0) return span(child) + (-over * grow(child)) / growing;
       if (over <= 0 || giving <= 0) return span(child);
       return Math.max(0, span(child) - (over * shrink(child) * span(child)) / giving);
     };
@@ -117,11 +127,15 @@ export function layoutHeight(
   if (row && inner !== undefined) {
     if (style.flexWrap !== 'wrap') return box(line(children));
     // Lines of children, each as wide as it would be on its own; a flexible child starts at
-    // its minimum width, so one without a minimum never starts a line.
+    // its minimum width, so one without a minimum never starts a line. So does a view that grows:
+    // on the emulator, a view with flexGrow beside a chip or a button kept to their line and
+    // shrank, its text breaking, until it had a minWidth (#867).
     const lines: Node[][] = [];
     let used = -1;
     for (const child of children) {
-      const width = span(child);
+      const own = flatten(child.props.style);
+      const grows = child.type === 'View' && number(own.flexGrow) > 0;
+      const width = grows ? Math.min(inner, number(own.minWidth)) : span(child);
       if (used < 0 || used + across + width > inner) {
         lines.push([child]);
         used = width;
@@ -189,16 +203,19 @@ interface LayoutWatch {
   text?: (node: Node, room: number) => void;
   /** A row whose children run `by` dp past its edge, even after shrinking. */
   overflow?: (row: Node, by: number) => void;
+  /** A text field, and the room inside its box its text lays out in. */
+  input?: (node: Node, room: number) => void;
 }
 
 /**
  * The texts in a tree that don't read in full, as `layoutHeight` lays it out `width` wide at
  * this text size: one that needs more lines than it may take (`numberOfLines`), so its end is
  * cut; one with a word wider than its line, which Android breaks in two ("ALL-T / IME"); and
- * each text in a row whose children run past its edge. Each says why. Empty when every text
- * reads in full. With `cutOnce`, a text may end at its line limit, as a long name does below
- * 150% text (#332): only broken words and rows run past count. The widths are estimates (see
- * `layoutWidth`), so check close calls on a device.
+ * each text in a row whose children run past its edge; and a one-line field whose text is wider
+ * than the field, which scrolls the rest out of sight ("CHF 00.50", #867). Each says why. Empty
+ * when every text reads in full. With `cutOnce`, a text may end at its line limit, as a long name
+ * does below 150% text (#332): only broken words and rows run past count. The widths are
+ * estimates (see `layoutWidth`), so check close calls on a device.
  */
 export function unreadText(
   node: Node | null,
@@ -234,6 +251,13 @@ export function unreadText(
         found.add(
           `"${words(text).replaceAll(hairSpace, '')}" runs ${Math.round(by)}dp past its row`,
         );
+    },
+    input: (field, room) => {
+      const value = String(field.props.value ?? '');
+      if (!value || field.props.multiline) return;
+      const line = { type: 'Text', props: { style: field.props.style }, children: [value] };
+      const by = textWidth(line as Node, fontScale) - room;
+      if (by > 0.5) found.add(`"${value}" runs ${Math.round(by)}dp past its field`);
     },
   });
   return [...found];

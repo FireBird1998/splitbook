@@ -15,7 +15,8 @@ import { mockDeviceLocale } from '../test-utils/device-locale';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { AmountDescriptionCard, WhoOwesWhat, expenseDateLabel } = await import('./expense-form');
+const { AmountDescriptionCard, SaveBar, WhoOwesWhat, expenseDateLabel } =
+  await import('./expense-form');
 
 const people = ['Alex Rao', 'Sam Chen', 'Priya Shah', 'Jo Park', 'Kim Lee'];
 const ids = people.map((_, index) => `a0000000000000000000000${index + 1}`);
@@ -228,8 +229,8 @@ describe('Amount focus ring', () => {
       );
     return {
       onLeave,
-      // The row holding the currency and the input.
-      ring: () => input().parent!.props.style,
+      // The row holding the currency and the amount, which keeps the input with its symbol.
+      ring: () => input().parent!.parent!.props.style,
       focus: () => act(() => input().props.onFocus()),
       blur: () => act(() => input().props.onBlur()),
     };
@@ -306,5 +307,86 @@ describe.each(['light', 'dark'] as const)('the Who owes what heading in %s (#876
     const [title, badge] = (row.children ?? []) as ReactTestRendererJSON[];
     const one = Math.max(layoutHeight(title!, 1, card), layoutHeight(badge!, 1, card));
     expect(layoutHeight(row, 1, card)).toBe(one + 12);
+  });
+});
+
+// #867, from the Tester's #710 device pass: at 200% on a 360 dp phone, 2500.50 in Swiss francs
+// showed only "CHF 00.50": the chip and the "CHF" before the amount left the field too little
+// room. The amount, with its symbol, moves under the chip where it doesn't fit beside it.
+describe.each(['light', 'dark'] as const)('the Amount field at large text in %s (#867)', (mode) => {
+  function card(currency: string, fontScale: number, amount = '2500.50') {
+    setWindow({ width: 360, height: 640, fontScale });
+    act(() => {
+      renderer = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <AmountDescriptionCard
+            draft={{ ...draft(amount), currency }}
+            locked={false}
+            errors={{}}
+            amountRef={() => undefined}
+            descriptionRef={() => undefined}
+            section={() => () => undefined}
+            onChange={() => undefined}
+            onLeave={() => undefined}
+            onAmountDone={() => undefined}
+            onCurrency={() => undefined}
+          />
+        </ThemeContext.Provider>,
+      );
+    });
+    return renderer!.toJSON() as ReactTestRendererJSON;
+  }
+  /** The row that holds the currency and the amount, inside its focus ring. */
+  const field = (tree: ReactTestRendererJSON) =>
+    findHosts(
+      tree,
+      (props, type) => type === 'View' && flatten(props.style).marginHorizontal === -10,
+    )[0]!;
+  // The Card sits 16 dp in from the screen's edges.
+  const screenWidth = 360 - 32;
+
+  it.each([
+    { currency: 'CHF', fontScale: 2 },
+    { currency: 'CHF', fontScale: 1.3 },
+    { currency: 'INR', fontScale: 2 },
+    { currency: 'EUR', fontScale: 2 },
+  ])('shows the whole of 2500.50 in $currency at $fontScale× text, 360 dp', (size) => {
+    const tree = card(size.currency, size.fontScale);
+    expect(unreadText(tree, size.fontScale, screenWidth)).toEqual([]);
+  });
+
+  it('keeps the amount beside the chip where it fits, and moves it under where it doesn’t', () => {
+    const height = (fontScale: number, amount: string) =>
+      layoutHeight(field(card('CHF', fontScale, amount)), fontScale, screenWidth);
+    // At 100% 2500.50 fits beside the chip, on the one line a short amount takes.
+    expect(height(1, '2500.50')).toBe(height(1, '5'));
+    // At 200% it doesn't: the amount takes a line of its own, under the chip.
+    expect(height(2, '2500.50')).toBeGreaterThan(height(2, '5'));
+  });
+});
+
+// #867: at 200% on a 360 dp phone, the sticky Save read "Save ex / pense" beside "CHF 2,500.50".
+// From 150% the amount goes under the words, as Record payment's does (#639).
+describe.each(['light', 'dark'] as const)('the Save bar at large text in %s (#867)', (mode) => {
+  function bar(fontScale: number, amount: string) {
+    setWindow({ width: 360, height: 640, fontScale });
+    act(() => {
+      renderer = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <SaveBar label="Save expense" amount={amount} blocked={null} onSave={() => undefined} />
+        </ThemeContext.Provider>,
+      );
+    });
+    return renderer!.toJSON() as ReactTestRendererJSON;
+  }
+
+  it.each([
+    { fontScale: 1, amount: 'CHF 2,500.50' },
+    { fontScale: 1.3, amount: 'CHF 2,500.50' },
+    { fontScale: 1.5, amount: 'CHF 2,500.50' },
+    { fontScale: 2, amount: 'CHF 2,500.50' },
+    { fontScale: 2, amount: '₹1,24,999.50' },
+  ])('never breaks "Save expense" inside a word, $fontScale× text, $amount', (size) => {
+    expect(unreadText(bar(size.fontScale, size.amount), size.fontScale, 360)).toEqual([]);
   });
 });

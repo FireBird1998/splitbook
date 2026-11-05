@@ -91,7 +91,7 @@ After every test the stand-ins return to the file's defaults and their recorded 
 
 ### Layout at large text
 
-`src/test-utils/layout.ts` estimates how a rendered tree lays out from its styles: `layoutHeight` and `layoutWidth`, and `unreadText`, which lists each text that doesn't read in full (one that needs more lines than it may take, a word wider than its line, a row its children run past). A large-text check renders a screen at each of `largeTextWindows` (360×640 and 412×915 dp, at 130% and 200%) and expects `unreadText` to be empty; at 130% it passes `cutOnce`, as a long name in a row may still end at its line there (#332, #639). The widths come from character counts, so a device check follows for anything close to a line's end.
+`src/test-utils/layout.ts` estimates how a rendered tree lays out from its styles: `layoutHeight` and `layoutWidth`, and `unreadText`, which lists each text that doesn't read in full (one that needs more lines than it may take, a word wider than its line, a row its children run past, a one-line field whose value runs past it). In a wrapping row a view that grows starts a line by its `minWidth`, as Yoga does on the device (#867). A large-text check renders a screen at each of `largeTextWindows` (360×640 and 412×915 dp, at 130% and 200%) and expects `unreadText` to be empty; at 130% it passes `cutOnce`, as a long name in a row may still end at its line there (#332, #639). The widths come from character counts, so a device check follows for anything close to a line's end.
 
 ## Android invitation links
 
