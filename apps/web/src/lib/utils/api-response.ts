@@ -17,7 +17,7 @@ import { RECURRING_EXPENSES_OFF } from '@/lib/recurring-expenses-switch';
 import {
   AuthDatabaseWatch,
   DatabaseUnavailableError,
-  isDatabaseUnreachable,
+  isDatabaseNoAnswer,
 } from '@/lib/mongodb-client';
 import {
   CurrencyInUseError,
@@ -177,7 +177,10 @@ export function serverError(err?: unknown) {
       return error(messages.STALE_REVISION[0], 409, 'STALE_REVISION');
     if (messages[err.message]) return error(...messages[err.message], err.message);
   }
-  if (isDatabaseUnreachable(err)) return databaseUnavailable(err);
+  // An operation that ran out of its time got no answer either: a save's transaction whose
+  // connection kept dropping can end that way rather than on the dropped connection. Its retry
+  // with the same Idempotency-Key or revision records it once (ADR 0004).
+  if (isDatabaseNoAnswer(err)) return databaseUnavailable(err);
   console.error('Server error:', err);
   return internalServerError();
 }
