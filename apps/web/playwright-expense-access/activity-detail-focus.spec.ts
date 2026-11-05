@@ -96,6 +96,32 @@ function paymentRows(page: Page) {
   };
 }
 
+/** The first ancestor whose padding box cuts off the element's box grown by `reach` px, if any. */
+function clippedBy(element: Locator, reach: number) {
+  return element.evaluate((node, reach) => {
+    const box = node.getBoundingClientRect();
+    for (
+      let parent = node.parentElement;
+      parent && parent !== document.body;
+      parent = parent.parentElement
+    ) {
+      const style = getComputedStyle(parent);
+      if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+      const edge = parent.getBoundingClientRect();
+      const top = edge.top + parent.clientTop;
+      const left = edge.left + parent.clientLeft;
+      if (
+        box.top - reach < top ||
+        box.left - reach < left ||
+        box.right + reach > left + parent.clientWidth ||
+        box.bottom + reach > top + parent.clientHeight
+      )
+        return `${parent.tagName.toLowerCase()}.${parent.className}`;
+    }
+    return null;
+  }, reach);
+}
+
 const card = (page: Page) => page.getByRole('region', { name: 'Payment', exact: true });
 
 /** Tabbed to, as a keyboard reaches it: from the control before it. */
@@ -175,6 +201,43 @@ for (const [layout, options] of [
         await expect(row).toBeInViewport();
       });
     }
+
+    test('a payment row reaches as far past its column on the left as on the right, its words where they were (#882)', async ({
+      page,
+      ledger,
+    }) => {
+      await openActivity(page, ledger, await twoPayments(ledger));
+      for (const row of Object.values(paymentRows(page))) {
+        await tabTo(page, row);
+        await expect(row).toHaveCSS('outline-style', 'solid');
+        const measured = await row.evaluate((element) => {
+          const column = element.parentElement!.getBoundingClientRect();
+          const box = element.getBoundingClientRect();
+          // The icon, then the words: as in a row that opens nothing, from the column's edges.
+          const [icon, words] = [...element.children].map((child) => child.getBoundingClientRect());
+          return {
+            left: Math.round(column.left - box.left),
+            right: Math.round(box.right - column.right),
+            iconFromColumn: Math.round(icon!.left - column.left),
+            wordsToColumn: Math.round(column.right - words!.right),
+          };
+        });
+        expect(measured).toEqual({ left: 8, right: 8, iconFromColumn: 0, wordsToColumn: 0 });
+        // Its tint and ring are whole on both sides.
+        expect(await clippedBy(row, 4)).toBeNull();
+      }
+      // A row that opens nothing starts its icon at the column's edge too.
+      const plain = page
+        .getByText(/^Sam Chen added “Dinner in EUR”/)
+        .locator('xpath=ancestor::*[2]');
+      expect(
+        await plain.evaluate(
+          (element) =>
+            element.firstElementChild!.getBoundingClientRect().left -
+            element.parentElement!.getBoundingClientRect().left,
+        ),
+      ).toBe(0);
+    });
 
     test('opening another row moves focus to its card, and the open row closes its own (#852)', async ({
       page,

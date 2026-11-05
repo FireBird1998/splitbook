@@ -255,7 +255,9 @@ export default function ActivityView({ groupId, viewerId }: ActivityViewProps) {
                   sx={[
                     {
                       ...rowSx,
-                      width: '100%',
+                      // 8 px past the column on both sides, for its tint and ring, with its words
+                      // where a row that opens nothing has them (#882).
+                      width: 'calc(100% + 16px)',
                       justifyContent: 'flex-start',
                       textAlign: 'left',
                       px: 1,
