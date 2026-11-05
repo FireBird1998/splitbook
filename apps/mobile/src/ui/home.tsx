@@ -20,6 +20,8 @@ import {
   CompactButton,
   CompactText,
   Divider,
+  headingBeside,
+  headingLine,
   IconButton,
   IconTile,
   ListRow,
@@ -153,25 +155,30 @@ function CurrencyRow({ bucket }: { bucket: HomeCurrencyBalance }) {
         {figures.map((figure) => (
           <View
             key={figure.label}
+            // At large text a figure that doesn't fit beside its label goes under it, at the
+            // row's end, as a heading's note does: beside it at 200% on a 360 dp phone,
+            // "₹11,387.77" ran past the card's padding and the card hid its last digit (#890).
             style={
               large
-                ? {
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'baseline',
-                    gap: 8,
-                  }
+                ? { ...headingLine, alignItems: 'baseline', columnGap: 8, rowGap: 2 }
                 : { flex: 1, minWidth: 0 }
             }
           >
-            <CompactText variant="small" tone="secondary">
+            <CompactText
+              variant="small"
+              tone="secondary"
+              spare={large}
+              style={large ? headingBeside : undefined}
+            >
               {figure.label}
             </CompactText>
-            {/* Nothing owed either way is neutral, never coral or mint. */}
+            {/* Nothing owed either way is neutral, never coral or mint. A figure wider than the
+                card on a line of its own shrinks to fit, so every digit shows. */}
             <Money
               size="balance"
               tone={getMoneyTone(figure.value) === 'neutral' ? 'secondary' : figure.tone}
               adjustsFontSizeToFit
+              style={large ? { flexShrink: 1 } : undefined}
             >
               {figure.shown}
             </Money>
@@ -254,16 +261,10 @@ export const HomeBalances = memo(function HomeBalances({
       <Card
         padded
         header={
-          <View
-            style={{
-              minHeight: status,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-              flexWrap: 'wrap',
-            }}
-          >
-            <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
+          // Where the time can't share the heading's line, it goes under it, at the row's end: at
+          // 200% on a 360 dp phone the heading broke inside a word, "YOUR BALANC / ES" (#890).
+          <View style={{ ...headingLine, minHeight: status, gap: 8 }}>
+            <CompactText variant="overline" accessibilityRole="header" spare style={headingBeside}>
               Your balances
             </CompactText>
             {state.data !== null ? (

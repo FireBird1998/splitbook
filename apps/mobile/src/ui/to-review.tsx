@@ -42,6 +42,7 @@ import {
   headingLine,
   touch,
   useLargeText,
+  useLargestText,
   useTap,
 } from './compact';
 import { useDismissAfter } from './group-snackbar';
@@ -170,6 +171,10 @@ function ItemRow({
   // At large text the amount goes under the title, on a line of its own: beside it, a narrow
   // column would break the number in two (₹1,4 / 80.00).
   const large = useLargeText();
+  // From 150% the title takes the lines it needs, and what follows the text, such as Continue,
+  // goes onto a line of its own at the row's end: beside it at 200% on a 360 dp phone, the title
+  // read "Descr / iption n…" and the amount "CHF 2,…" (#639, #891).
+  const whole = useLargestText();
   // A drag that starts on the row never opens it (#665).
   const tap = useTap();
   const values = item.accountItem?.draft.values ?? item.deviceItem?.values;
@@ -190,7 +195,7 @@ function ItemRow({
     <>
       <SourceTile item={item} />
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <CompactText weight="semibold" numberOfLines={2}>
+        <CompactText weight="semibold" numberOfLines={whole ? 0 : 2}>
           {values?.description ||
             (retained
               ? 'Save awaiting confirmation'
@@ -213,14 +218,21 @@ function ItemRow({
           </CompactText>
         )}
       </View>
-      <View style={{ alignItems: 'flex-end', gap: 1 }}>
-        {!large && shownAmount ? <Money>{shownAmount}</Money> : null}
-        {trailing ? (
-          <CompactText variant="small" weight="semibold" tone="brand">
-            {trailing}
-          </CompactText>
-        ) : null}
-      </View>
+      {whole && !trailing ? null : (
+        // As wide as the row from 150%, so it starts a line of its own, at the row's end.
+        <View
+          style={
+            whole ? { width: '100%', alignItems: 'flex-end' } : { alignItems: 'flex-end', gap: 1 }
+          }
+        >
+          {!large && shownAmount ? <Money>{shownAmount}</Money> : null}
+          {trailing ? (
+            <CompactText variant="small" weight="semibold" tone="brand">
+              {trailing}
+            </CompactText>
+          ) : null}
+        </View>
+      )}
     </>
   );
   const row = {
@@ -230,6 +242,11 @@ function ItemRow({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 12,
+    // From 150% Continue wraps onto a line of its own; a row of one line is still centred in its
+    // height, as without wrapping.
+    ...(whole
+      ? { flexWrap: 'wrap' as const, alignContent: 'center' as const, rowGap: 4 }
+      : undefined),
   };
   if (!onPress) return <View style={row}>{content}</View>;
   return (
