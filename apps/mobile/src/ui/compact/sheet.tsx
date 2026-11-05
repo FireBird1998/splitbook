@@ -13,9 +13,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { CompactButton, IconButton } from './controls';
-import { useTextColumn } from './layout';
-import { radius, shouldDismissSheet } from './scale';
+import { useLineBox, useTextColumn } from './layout';
+import { radius, shouldDismissSheet, touch } from './scale';
 import { CompactText } from './text';
+
+/**
+ * The room above and below the header's action: a one-line title and its action (a 44 dp text
+ * button, or a 48 dp ×) fill the header's 56 dp, where they sat when the header centred them.
+ */
+const headerEdge = (action: number) => (56 - action) / 2;
 
 /**
  * A bottom sheet over the current screen: handle, header with Done, a scrolling body and a pinned
@@ -73,6 +79,10 @@ export function BottomSheet({
 }) {
   const theme = useTheme();
   const column = useTextColumn();
+  // The header's action keeps its centre on the title's first line, however many lines the
+  // title takes (#646): whichever of the two is shorter starts lower by half the difference.
+  const action = doneIcon ? touch.min : touch.dense;
+  const lift = (useLineBox('title').height - action) / 2;
   const doneButton = doneIcon ? (
     <IconButton icon={doneIcon} label={doneLabel} disabled={!dismissible} onPress={onDone} />
   ) : (
@@ -167,16 +177,18 @@ export function BottomSheet({
                 style={{
                   minHeight: 56,
                   flexDirection: 'row',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   gap: 8,
+                  paddingTop: headerEdge(action),
+                  paddingBottom: headerEdge(action),
                   paddingLeft: 20,
                   paddingRight: 8,
                   // At 200% on a 360dp phone, "Keep editing" beside "Finish this expense
                   // later?" broke "expense" in two (#639).
-                  ...(column ? { flexWrap: 'wrap', alignContent: 'center', rowGap: 0 } : {}),
+                  ...(column ? { flexWrap: 'wrap', alignContent: 'flex-start', rowGap: 0 } : {}),
                 }}
               >
-                <View style={{ flex: 1, minWidth: column ?? 0 }}>
+                <View style={{ flex: 1, minWidth: column ?? 0, marginTop: Math.max(0, -lift) }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <CompactText
                       ref={titleRef}
@@ -196,7 +208,14 @@ export function BottomSheet({
                   ) : null}
                 </View>
                 {/* On a line of its own, Done keeps to the header's end. */}
-                {column ? <View style={{ marginLeft: 'auto' }}>{doneButton}</View> : doneButton}
+                <View
+                  style={{
+                    marginTop: Math.max(0, lift),
+                    ...(column ? { marginLeft: 'auto' } : {}),
+                  }}
+                >
+                  {doneButton}
+                </View>
               </View>
             </View>
             <ScrollView

@@ -5,7 +5,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { findHosts, largeTextWindows, unreadText } from '../../test-utils/layout';
+import { findHosts, flatten, largeTextWindows, unreadText } from '../../test-utils/layout';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setWindow, spring } from '../../test-utils/native';
 
@@ -258,6 +258,64 @@ describe('Bottom sheet titles read in full (#639)', () => {
       }
     },
   );
+});
+
+// #646 (Designer): the header centred its action on the whole title block, so beside a title
+// that wraps, "Settle up with Sam Chen" at 200%, × or Cancel sat between its lines. The action
+// keeps to the title's first line, and a one-line title stays where it was.
+const { lineBox, touch } = await import('./scale');
+describe('Bottom sheet header action keeps to the title’s first line (#646)', () => {
+  const headerRow = () =>
+    findHosts(renderer!.toJSON(), (props) => props.testID === 'sheet-drag-area')[0]!
+      .children![1] as ReactTestRendererJSON;
+  const top = (style: unknown) => {
+    const flat = flatten(style);
+    return Number(flat.marginTop ?? 0);
+  };
+  function open(title: string, subtitle?: string) {
+    act(() => {
+      renderer = create(
+        <BottomSheet visible title={title} subtitle={subtitle} doneLabel="Close" onDone={vi.fn()}>
+          <CompactText>Body</CompactText>
+        </BottomSheet>,
+      );
+    });
+    const row = headerRow();
+    const children = row.children as ReactTestRendererJSON[];
+    const [titleBlock, action] = [children[0]!, children[children.length - 1]!];
+    const button = findHosts(action, (props) => props.accessibilityLabel === 'Close')[0]!;
+    const rowStyle = flatten(row.props.style);
+    const edge = Number(rowStyle.paddingTop ?? 0);
+    return {
+      rowStyle,
+      titleTop: edge + top(titleBlock.props.style),
+      actionTop: edge + top(action.props.style),
+      actionHeight: Number(flatten(button.props.style).minHeight),
+    };
+  }
+  it.each([1, 1.3, 2])('at %s× text, beside a title that wraps or a subtitle', (fontScale) => {
+    setWindow({ width: 360, height: 640, fontScale });
+    for (const [title, subtitle] of [
+      ['Settle up with Sam Chen and the rest of the Flat 4B household'],
+      ['Rename Tag', 'Currently Groceries'],
+      ['Tag'],
+    ] as [string, string?][]) {
+      const { rowStyle, titleTop, actionTop, actionHeight } = open(title, subtitle);
+      expect(rowStyle.alignItems, title).toBe('flex-start');
+      expect(actionHeight).toBe(touch.dense);
+      const firstLine = titleTop + lineBox('title', fontScale).height / 2;
+      expect(actionTop + actionHeight / 2, title).toBeCloseTo(firstLine, 5);
+      act(() => renderer!.unmount());
+      renderer = undefined;
+    }
+  });
+  it('keeps a one-line title where it was at 100%: 16 dp down a 56 dp header', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1 });
+    const { rowStyle, titleTop, actionTop, actionHeight } = open('Tag');
+    expect(titleTop).toBe(16);
+    expect(rowStyle.minHeight).toBe(56);
+    expect(actionTop + actionHeight + Number(rowStyle.paddingBottom ?? 0)).toBe(56);
+  });
 });
 
 const { ConfirmSheet, useConfirm } = await import('./index');
