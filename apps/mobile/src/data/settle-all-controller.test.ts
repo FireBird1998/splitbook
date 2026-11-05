@@ -351,6 +351,67 @@ describe('settling up in several currencies at once (#734)', () => {
     });
   });
 
+  // #872: Alex owes Sam only in extra currencies, €20.00 and ¥2,500; Pay in still offers rupees.
+  it('pays Debts only in extra currencies in the main currency, first, each at its own rate (#872)', async () => {
+    const { controller, batches, sent } = await opened(({ pathname, searchParams }) => {
+      if (pathname === `/api/groups/${groupId}/balances`)
+        return json({
+          status: 200,
+          data: {
+            byCurrency: [
+              {
+                currency: 'EUR',
+                balances: [],
+                debts: [{ from: people[0], to: people[1], amount: 20 }],
+              },
+              {
+                currency: 'JPY',
+                balances: [],
+                debts: [{ from: people[0], to: people[1], amount: 2500 }],
+              },
+            ],
+          },
+        });
+      if (pathname === `/api/groups/${groupId}/rates` && searchParams.get('from') === 'JPY')
+        return rates(frankfurter('JPY', searchParams.get('to') ?? '', '0.56'));
+      return undefined;
+    });
+    expect(sent).toContain(`GET /api/groups/${groupId}/rates?from=EUR&to=INR`);
+    expect(sent).toContain(`GET /api/groups/${groupId}/rates?from=JPY&to=INR`);
+    expect(controller.getSnapshot().settlement.batch).toMatchObject({
+      paidCurrency: 'INR',
+      debts: [
+        { currency: 'EUR', amount: 20 },
+        { currency: 'JPY', amount: 2500 },
+      ],
+    });
+    await controller.recordSettlement();
+    expect(batches[0]?.body).toEqual({
+      paidBy: alex,
+      paidTo: sam,
+      paidCurrency: 'INR',
+      settlements: [
+        {
+          amount: 20,
+          currency: 'EUR',
+          amountPaidMinor: 184200,
+          appliedRate: '92.1',
+          rateKind: 'suggested',
+          ...fromFrankfurter,
+        },
+        {
+          amount: 2500,
+          currency: 'JPY',
+          amountPaidMinor: 140000,
+          appliedRate: '0.56',
+          rateKind: 'suggested',
+          ...fromFrankfurter,
+          suggestedRate: '0.56',
+        },
+      ],
+    });
+  });
+
   it('pays in the other currency: its own Debt needs no rate, the other one its own', async () => {
     const { controller, batches, sent } = await opened();
     await controller.choosePaidCurrency('EUR');
@@ -371,7 +432,8 @@ describe('settling up in several currencies at once (#734)', () => {
       rateKind: 'suggested',
       suggestedRate: '0.010858',
     });
-    expect(String(row?.appliedRate)).toMatch(/^0\.0108581081/);
+    // The rate kept is the suggestion the member paid at (#870).
+    expect(row?.appliedRate).toBe('0.010858');
     expect(plain).toEqual({ amount: 20, currency: 'EUR' });
   });
 
@@ -389,7 +451,7 @@ describe('settling up in several currencies at once (#734)', () => {
         amount: 20,
         currency: 'EUR',
         amountPaidMinor: 185000,
-        appliedRate: '92.5',
+        appliedRate: '92.50',
         rateKind: 'custom',
         ...fromFrankfurter,
       },
@@ -417,7 +479,7 @@ describe('settling up in several currencies at once (#734)', () => {
         amount: 20,
         currency: 'EUR',
         amountPaidMinor: 184800,
-        appliedRate: '92.4',
+        appliedRate: '92.40',
         rateKind: 'entered',
       },
     ]);
@@ -449,7 +511,7 @@ describe('settling up in several currencies at once (#734)', () => {
         amount: 20,
         currency: 'EUR',
         amountPaidMinor: 184800,
-        appliedRate: '92.4',
+        appliedRate: '92.40',
         rateKind: 'custom',
         ...fromFrankfurter,
       },

@@ -5,6 +5,7 @@ import {
   readSettleAll,
   settleAllDebtsBetween,
   settleAllOffers,
+  settleAllPayCurrencies,
   settleAllRates,
   settleAllWords,
 } from './settle-all';
@@ -169,7 +170,8 @@ describe('readSettleAll', () => {
     expect(read.amounts!.totalPaidMinor).toBe(333000);
     expect(read.amounts!.settlements[1]).toMatchObject({
       rateKind: 'custom',
-      appliedRate: '92.5',
+      // As typed (#870).
+      appliedRate: '92.50',
       suggestedRate: '92.1',
     });
   });
@@ -199,6 +201,37 @@ describe('readSettleAll', () => {
     expect(entered.amounts!.settlements[1]).not.toHaveProperty('suggestedRate');
   });
 
+  it('pays in the main currency with no Debt in it, each Debt at its own rate (#872)', () => {
+    const extras = [
+      { currency: 'EUR', amountMinor: 2000 },
+      { currency: 'JPY', amountMinor: 8400 },
+    ];
+    const read = readSettleAll({
+      debts: extras,
+      paidCurrency: 'INR',
+      rates: {
+        EUR: { state: { status: 'ready', suggestion: frankfurter }, custom: null },
+        JPY: {
+          state: { status: 'ready', suggestion: { ...frankfurter, rate: '0.550764' } },
+          custom: null,
+        },
+      },
+    });
+    expect(read.waiting).toBeNull();
+    expect(read.lines.map(({ currency, kind, paidMinor }) => [currency, kind, paidMinor])).toEqual([
+      ['EUR', 'suggested', 184200],
+      ['JPY', 'suggested', 462642],
+    ]);
+    expect(read.amounts).toMatchObject({
+      paidCurrency: 'INR',
+      totalPaidMinor: 646842,
+      settlements: [
+        { currency: 'EUR', amount: 20, paidCurrency: 'INR', appliedRate: '92.1' },
+        { currency: 'JPY', amount: 8400, paidCurrency: 'INR', appliedRate: '0.550764' },
+      ],
+    });
+  });
+
   it('pays in another of the Debts’ currencies, each at its own rate', () => {
     const read = readSettleAll({
       debts: twoDebts,
@@ -215,6 +248,31 @@ describe('readSettleAll', () => {
       expect.objectContaining({ currency: 'EUR', paidMinor: 2000, kind: 'same' }),
     ]);
     expect(read.amounts!.totalPaidMinor).toBe(3607);
+  });
+});
+
+// #872, the Designer's rule: the main currency first, then each Debt's own.
+describe('settleAllPayCurrencies', () => {
+  it('offers the main currency first, then each Debt’s own, once each', () => {
+    expect(settleAllPayCurrencies(twoDebts, ORDER, 'INR')).toEqual(['INR', 'EUR']);
+    // Debts only in extra currencies can still be paid in the main one.
+    const extrasOnly = [
+      { currency: 'EUR', amountMinor: 2000 },
+      { currency: 'PLN', amountMinor: 6000 },
+      { currency: 'CZK', amountMinor: 25000 },
+    ];
+    expect(settleAllPayCurrencies(extrasOnly, ['INR', 'EUR', 'JPY', 'PLN', 'CZK'], 'INR')).toEqual([
+      'INR',
+      'EUR',
+      'PLN',
+      'CZK',
+    ]);
+  });
+
+  it('leaves out a listed currency no Debt is in, and a Debt’s the Group no longer lists', () => {
+    expect(
+      settleAllPayCurrencies([{ currency: 'EUR' }, { currency: 'GBP' }], ORDER, 'INR'),
+    ).toEqual(['INR', 'EUR']);
   });
 });
 

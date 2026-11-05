@@ -129,6 +129,33 @@ describe('cross-currency Settlement wording (#727)', () => {
     rateAsOf: '2026-10-21',
     rateFetchedAt: '2026-10-21T00:15:00Z',
   };
+  // #870, the Designer's wording: the suggested rate is said once when it's the one used.
+  it('says the suggestion once when the rate used is the suggested one (#870)', () => {
+    const atSuggestion = {
+      ...record,
+      amountPaidMinor: 184200,
+      appliedRate: '92.1',
+      rateKind: 'suggested' as const,
+    };
+    expect(formatCrossCurrencySettlement(atSuggestion)).toBe(
+      'Sam paid Alex ₹1,842.00 to clear €20.00 at the suggested ₹92.10 per € (21 Oct)',
+    );
+    expect(
+      formatCrossCurrencySettlement({ ...atSuggestion, rateSource: 'exchange-rate-api' }),
+    ).toBe(
+      'Sam paid Alex ₹1,842.00 to clear €20.00 at the suggested ₹92.10 per € (21 Oct) · Rates By Exchange Rate API',
+    );
+    // An older record keeps a rate worked back from ₹5,049.84: rounding explains it.
+    expect(
+      formatCrossCurrencySettlement({
+        ...atSuggestion,
+        amountMinor: 5483,
+        amountPaidMinor: 504984,
+        appliedRate: '92.099945285427685574',
+      }),
+    ).toBe('Sam paid Alex ₹5,049.84 to clear €54.83 at the suggested ₹92.10 per € (21 Oct)');
+  });
+
   it('formats both stored amounts, the applied rate and the dated suggestion', () => {
     expect(formatCrossCurrencySettlement(record)).toBe(
       'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct)',
@@ -173,7 +200,7 @@ describe('cross-currency Settlement wording (#727)', () => {
         appliedRate: '157.5',
         rateKind: 'entered',
       }),
-    ).toBe('Sam paid Alex ¥3,150 to clear €20.00 at ¥157.5 per €; no rate suggested');
+    ).toBe('Sam paid Alex ¥3,150 to clear €20.00 at ¥157.50 per €; no rate suggested');
     expect(formatCrossCurrencySettlement({ ...record, rateSource: 'exchange-rate-api' })).toBe(
       'Sam paid Alex ₹1,850.00 to clear €20.00 at ₹92.50 per €, suggested ₹92.10 (21 Oct) · Rates By Exchange Rate API',
     );
@@ -195,7 +222,7 @@ describe('cross-currency Settlement wording (#727)', () => {
         appliedRate: '0.166666666666666667',
         rateKind: 'entered',
       }),
-    ).toContain('at ₹0.166666666666666667 per €');
+    ).toContain('at ₹0.166667 per €');
     expect(
       formatCrossCurrencySettlement({ ...record, amountPaidMinor: 9007199254740991 }),
     ).toContain('₹90,071,992,547,409.91');

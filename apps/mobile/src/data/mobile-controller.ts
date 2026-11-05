@@ -64,6 +64,7 @@ import {
   settlementFields,
   settlementSuggestion,
   recordNeedsConnection,
+  recordWhileOffline,
   recordWaitsForRate,
   validateSettlementDraft,
   type PendingPayment,
@@ -73,6 +74,7 @@ import {
   type SettlementField,
 } from './settlement';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
+import { settleAllPayCurrencies } from '@splitbook/shared/settle-all';
 import {
   assertSettlementMembers,
   assertSettlementAuthorization,
@@ -468,7 +470,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let pendingReviewGroup: string | null = null;
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
-  const tagRebinders = new Set<() => void>();
+  /**
+   * Observers outside the query modules: a Tag watch and an open Draft collection. Retiring their
+   * queries moves each to its successor, which reads again (#865).
+   */
+  const observerRebinders = new Set<() => void>();
   /**
    * Groups with a Tag change kept on this device that is neither confirmed nor refused: their
    * Tags are shown but never saved (#638). Seeded at each start from the kept changes, then kept
@@ -1498,7 +1504,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     expenseQueries.rebind();
     activityQueries.rebind();
     toReviewQueries.rebind();
-    for (const rebind of tagRebinders) rebind();
+    for (const rebind of observerRebinders) rebind();
   };
   const retirement = savedCopyRetirement({
     lease: accountStorage,
@@ -4671,11 +4677,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           : snapshot.settlement.attempt
             ? 'uncertain'
             : 'error';
-      // Storage problems say so, rather than pointing at the connection.
+      // Storage problems say so, rather than pointing at the connection. With nothing stored, a
+      // phone that can't reach Splitbook is offline, and says so in the offline tone (#868).
       const reason =
-        error instanceof RequestError || error instanceof DeviceStorageError
-          ? error.message
-          : 'Couldn’t check the latest balances. Close this and try again when you’re connected.';
+        status === 'error' && error instanceof RequestError && error.networkFailure
+          ? recordWhileOffline
+          : error instanceof RequestError || error instanceof DeviceStorageError
+            ? error.message
+            : 'Couldn’t check the latest balances. Close this and try again when you’re connected.';
       publish({
         ...snapshot,
         settlement: {
@@ -4940,8 +4949,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /**
    * Settle up (#734, board "Settle both currencies at once"): one payment, in one currency, for
    * every Debt the payer owes the other in two currencies or more, each at its own rate. It is
-   * paid in the main currency when one of the Debts is in it, else the first of them the Group
-   * lists; the rates for the others are looked up live.
+   * paid in the Group's main currency, the first Pay in offers, even when no Debt is in it (#872);
+   * the rates for the Debts in other currencies are looked up live.
    */
   const selectSettleAll = async (paidBy: string, paidTo: string) => {
     const state = snapshot.settlement,
@@ -4959,12 +4968,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     const debts = debtsBetween(state.balances, state.group, paidBy, paidTo);
-    const listed = groupCurrencies(state.group);
-    const payable = debts.map(({ currency }) => currency).filter((c) => listed.includes(c));
-    if (debts.length < 2 || !payable.length) return;
-    const paidCurrency = payable.includes(state.group.defaultCurrency)
-      ? state.group.defaultCurrency
-      : payable[0]!;
+    const [paidCurrency] = settleAllPayCurrencies(
+      debts,
+      groupCurrencies(state.group),
+      state.group.defaultCurrency,
+    );
+    if (debts.length < 2 || !paidCurrency) return;
     const asked = ++rateRequest;
     publish({
       ...snapshot,
@@ -5023,15 +5032,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }),
     );
   };
-  /** Pay the settle-up in another of its Debts' currencies: each rate starts afresh. */
+  /**
+   * Pay the settle-up in another currency Pay in offers, the main one or a Debt's (#872): each
+   * rate starts afresh.
+   */
   const payBatchIn = async (paidCurrency: string) => {
     const state = snapshot.settlement,
       batch = state.batch;
     if (!batch || !state.group || !state.groupId || !state.draft) return;
     if (
       batch.paidCurrency === paidCurrency ||
-      !batch.debts.some(({ currency }) => currency === paidCurrency) ||
-      !groupCurrencies(state.group).includes(paidCurrency)
+      !settleAllPayCurrencies(
+        batch.debts,
+        groupCurrencies(state.group),
+        state.group.defaultCurrency,
+      ).includes(paidCurrency)
     )
       return;
     const asked = ++rateRequest;
@@ -5298,6 +5313,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           cross && pair && reading?.status === 'valid'
             ? crossCurrencyPaymentFields(
                 pair,
+                cross.entry,
                 reading.amounts,
                 cross.rate.status === 'ready' ? cross.rate.suggestion : null,
               )
@@ -7473,9 +7489,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         const stop = () => {
           unsubscribe();
           observer.destroy();
-          tagRebinders.delete(rebind);
+          observerRebinders.delete(rebind);
         };
-        tagRebinders.add(rebind);
+        observerRebinders.add(rebind);
         return stop;
       },
     };
@@ -7598,6 +7614,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       online: () => !snapshot.offline.active && onlineManager.isOnline(),
       now,
       changed: () => toReviewQueries.refresh(),
+      // A Group read retired, as adding a currency retires it, reads its items and context again.
+      rebindWith: (rebind) => {
+        observerRebinders.add(rebind);
+        return () => observerRebinders.delete(rebind);
+      },
       read: () => snapshot.sharedDraftCollection,
       publish: (value) => publish({ ...snapshot, sharedDraftCollection: value }),
     });

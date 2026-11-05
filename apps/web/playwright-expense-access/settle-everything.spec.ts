@@ -164,7 +164,8 @@ for (const scheme of ['light', 'dark'] as const) {
       name: /You paid Sam Chen ₹3,322\.00 to clear ₹1,480\.00 and €20\.00/,
     });
     await expect(row).toHaveCount(1);
-    await expect(row).toContainText('€20.00 at ₹92.10 per €, suggested ₹92.10');
+    // Said once when it's the rate used (#870).
+    await expect(row).toContainText('€20.00 at the suggested ₹92.10 per €');
     await row.click();
     await expect(page.getByRole('region', { name: 'Payment' })).toContainText(/Paid\s*₹3,322\.00/);
     await shoot(page, testInfo, `activity-${scheme}`);
@@ -247,4 +248,93 @@ test('a Debt that changes while Settle up is open is shown again, never overpaid
       ?.balances.find((row: { user: { _id: string } }) => row.user._id === alex)?.balance ?? 0;
   // Settled in both, never owed back: and the yen Debt the other way is as it was.
   expect([alexIn('INR'), alexIn('EUR'), alexIn('JPY')]).toEqual([0, 0, 8400]);
+});
+
+// #872: Alex owes Sam only in extra currencies, €20.00 and ¥2,500. Pay in still offers rupees,
+// the Group's main currency, first, and one payment in rupees clears both at their own rates.
+test('Debts only in extra currencies can be settled in the main currency, first in Pay in (#872)', async ({
+  page,
+  ledger,
+}, testInfo) => {
+  const group = (
+    await dataOf(
+      await ledger.alex.post('/api/groups', {
+        data: {
+          name: `Lisbon & Tokyo ${randomUUID().slice(0, 6)}`,
+          category: 'trip',
+          defaultCurrency: 'INR',
+          alternateCurrencies: ['EUR', 'JPY'],
+        },
+      }),
+      201,
+    )
+  )._id as string;
+  await joinGroup(ledger.alex, ledger.sam, group);
+  for (const [description, amount, currency] of [
+    ['Pastéis de nata', 40, 'EUR'],
+    ['Ramen', 5000, 'JPY'],
+  ] as const)
+    await dataOf(
+      await ledger.sam.post(`/api/groups/${group}/expenses`, {
+        data: {
+          description,
+          amount,
+          currency,
+          category: 'food',
+          tag: 'Food',
+          date: new Date().toISOString(),
+          paidBy: [{ user: sam, amount }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: alex }, { user: sam }],
+        },
+      }),
+      201,
+    );
+  await page.route('**/api/groups/*/rates?**', (route) => {
+    const from = new URL(route.request().url()).searchParams.get('from');
+    return route.fulfill({
+      json: {
+        data: {
+          suggestion: { ...frankfurter, from, rate: from === 'JPY' ? '0.56' : '92.1' },
+        },
+        status: 200,
+      },
+    });
+  });
+  await page.context().addCookies((await ledger.alex.storageState()).cookies);
+  await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${group}?tab=balances`);
+
+  await page.getByRole('button', { name: 'Settle both with Sam Chen' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Settle up with Sam Chen' });
+  const payIn = sheet.getByRole('radiogroup', { name: 'Pay in' });
+  await expect(payIn.getByRole('radio')).toHaveText(['INR', 'EUR', 'JPY']);
+  await expect(payIn.getByRole('radio', { name: 'INR' })).toBeChecked();
+  await expect(sheet.getByRole('row')).toHaveText([
+    /Debt\s*Rate\s*You pay/,
+    /EUR\s*€20\.00\s*₹92\.10 per €\s*Frankfurter.*Change\s*₹1,842\.00/,
+    /JPY\s*¥2,500\s*₹0\.56 per ¥\s*Frankfurter.*Change\s*₹1,400\.00/,
+    /Total\s*₹3,242\.00/,
+  ]);
+  await shoot(page, testInfo, 'extras-only-sheet');
+
+  await sheet.getByRole('button', { name: 'Record ₹3,242.00' }).click();
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: 'Recorded. You paid Sam Chen ₹3,242.00 to clear €20.00 and ¥2,500.' }),
+  ).toBeVisible();
+  // One Settlement per Debt, each paid in rupees; only each Debt's own currency moved.
+  expect(await settlementsOf(ledger, group)).toEqual(
+    expect.arrayContaining([
+      { currency: 'EUR', amount: 20, amountPaidMinor: 184200, paidCurrency: 'INR' },
+      { currency: 'JPY', amount: 2500, amountPaidMinor: 140000, paidCurrency: 'INR' },
+    ]),
+  );
+  expect(await settlementsOf(ledger, group)).toHaveLength(2);
+  const balances = await dataOf(await ledger.alex.get(`/api/groups/${group}/balances`));
+  const alexIn = (code: string) =>
+    balances.byCurrency
+      .find((row: { currency: string }) => row.currency === code)
+      ?.balances.find((row: { user: { _id: string } }) => row.user._id === alex)?.balance ?? 0;
+  expect([alexIn('INR'), alexIn('EUR'), alexIn('JPY')]).toEqual([0, 0, 0]);
 });

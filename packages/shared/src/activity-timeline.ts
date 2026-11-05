@@ -8,7 +8,7 @@ import {
   extraCurrencyChangeDetail,
   extraCurrencyChangeWords,
 } from './group-currency-settings';
-import { rateText, readCrossCurrencyRecord } from './cross-currency-payment';
+import { readCrossCurrencyRecord } from './cross-currency-payment';
 import { formatCrossCurrencySettlement } from './cross-currency-settlement';
 
 export interface ActivityLike {
@@ -90,16 +90,9 @@ export function formatActivityHeadline(activity: ActivityLike, viewerId?: string
     case 'settlement_recorded': {
       // A Debt paid in another currency says both amounts and the rate (#727).
       const cross = readCrossCurrencyRecord(meta);
-      // Rates to at most six places, as the sheet and the payment's card show them.
-      if (cross)
-        return formatCrossCurrencySettlement(
-          {
-            ...cross,
-            appliedRate: rateText(cross.appliedRate),
-            ...(cross.suggestedRate ? { suggestedRate: rateText(cross.suggestedRate) } : {}),
-          },
-          viewerId,
-        );
+      // Rates as the sheet and the payment's card show them, the suggestion said once when it's
+      // the rate used (#870).
+      if (cross) return formatCrossCurrencySettlement(cross, viewerId);
       const amount =
         typeof meta.amount === 'number' && typeof meta.currency === 'string'
           ? formatCurrency(meta.amount, meta.currency)

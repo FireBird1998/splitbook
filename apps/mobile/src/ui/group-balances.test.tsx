@@ -942,7 +942,16 @@ describe('Balances, one currency at a time (#725)', () => {
       const { root, onSettleAll } = settleAll(buckets());
       const shown = text(root);
       expect(shown).toContain('You owe Sam Chen in 2 currencies');
-      expect(shown).toContain('₹1,480.00 and €20.00');
+      // Each amount in the money face, as every other amount is (#868); read as one line.
+      const [amounts] = labelled(root, '₹1,480.00 and €20.00');
+      expect(
+        amounts!
+          .findAll((node) => (node.type as unknown) === 'Text' && node !== amounts)
+          .map((node) => [node.children.join(''), flatten(node.props.style).fontFamily]),
+      ).toEqual([
+        ['₹1,480.00', fonts.mono],
+        ['€20.00', fonts.mono],
+      ]);
       const [button] = labelled(root, 'Settle both with Sam Chen');
       act(() => button!.props.onPress());
       expect(onSettleAll).toHaveBeenCalledWith(you, sam);
@@ -959,7 +968,7 @@ describe('Balances, one currency at a time (#725)', () => {
       const { root, onSettleAll } = settleAll([owed(eur), owed(tripInr()), jpy]);
       // Sam owes Alex in all three now.
       expect(text(root)).toContain('Sam Chen owes you in 3 currencies');
-      expect(text(root)).toContain('₹1,480.00, €20.00 and ¥8,400');
+      expect(labelled(root, '₹1,480.00, €20.00 and ¥8,400')).toHaveLength(1);
       act(() => labelled(root, 'Settle all with Sam Chen')[0]!.props.onPress());
       expect(onSettleAll).toHaveBeenCalledWith(sam, you);
       act(() => screen?.unmount());

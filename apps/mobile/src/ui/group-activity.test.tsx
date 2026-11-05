@@ -1006,7 +1006,7 @@ describe('a payment that settled several Debts at once (#734)', () => {
     const rows = buttons(root).filter((label) => label?.includes('Sam Chen'));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toContain(whole);
-    expect(rows[0]).toContain('€20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct)');
+    expect(rows[0]).toContain('€20.00 at the suggested ₹92.10 per € (20 Oct)');
     expect(text(root)).not.toContain('recorded a payment');
     act(() => button(root, rows[0]!)[0]!.props.onPress());
     // The row is where the payment is in the feed: at its newest event.

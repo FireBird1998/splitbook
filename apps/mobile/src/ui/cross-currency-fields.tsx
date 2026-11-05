@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import { getCurrency } from '@splitbook/shared/currency';
+import { currencyPrefix } from '@splitbook/shared/currency';
 import {
   clearedPart,
   paidRounding,
@@ -22,7 +22,8 @@ import { Badge, Banner, CompactButton, CompactText, radius } from './compact';
 import { FieldError } from './group-workflows';
 import { fonts, useTheme } from './theme';
 
-const symbol = (currency: string) => getCurrency(currency)?.symbol ?? currency;
+/** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#868). */
+const symbol = currencyPrefix;
 
 /** What the rate's line says while there is no suggestion to tell of. */
 const lookingUp = 'Looking up a suggested rate…';

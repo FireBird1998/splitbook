@@ -194,6 +194,39 @@ describe('Settle up with Sam (#734)', () => {
     expect(on.onRecord).toHaveBeenCalled();
   });
 
+  // #872: with Debts only in euros and yen, Pay in still offers rupees, first.
+  it('offers the main currency first in Pay in, then each Debt’s own (#872)', () => {
+    const extras = paying({
+      debts: [
+        { currency: 'EUR', amount: 20 },
+        { currency: 'JPY', amount: 2500 },
+      ],
+      rates: {
+        EUR: { rate: { status: 'ready', suggestion: frankfurter }, custom: null },
+        JPY: {
+          rate: { status: 'ready', suggestion: { ...frankfurter, rate: '0.56' } },
+          custom: null,
+        },
+      },
+    });
+    const { root } = render(state(extras, { balances: [debt('EUR', 20), debt('JPY', 2500)] }));
+    const radios = one(root, 'Pay in')
+      .findAll((node) => typeof node.type === 'string' && node.props.accessibilityRole === 'radio')
+      .map((radio) => [radio.props.accessibilityLabel, radio.props.accessibilityState?.checked]);
+    expect(radios).toEqual([
+      ['INR', true],
+      ['EUR', false],
+      ['JPY', false],
+    ]);
+    expect(
+      one(root, 'EUR Debt €20.00 at ₹92.10 per €, suggested, Frankfurter, 20 Oct. Pays ₹1,842.00'),
+    ).toBeDefined();
+    expect(
+      one(root, 'JPY Debt ¥2,500 at ₹0.56 per ¥, suggested, Frankfurter, 20 Oct. Pays ₹1,400.00'),
+    ).toBeDefined();
+    expect(record(root).props.accessibilityLabel).toBe('Record ₹3,242.00');
+  });
+
   it('changes one Debt’s rate to the member’s own, with the suggestion beside it', () => {
     const { root, on } = render(state(paying()));
     act(() => one(root, 'Change the rate for the EUR Debt').props.onPress());

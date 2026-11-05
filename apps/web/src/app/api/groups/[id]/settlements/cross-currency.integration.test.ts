@@ -511,6 +511,26 @@ describe('cross-currency Settlement HTTP contract (#727)', () => {
         ?.balances.find((row) => row.user._id === sam)?.balance,
     ).toBe(1);
   });
+  // #870: Sam pays part of the €20.00, €14.83, at the suggested ₹92.10: ₹1,365.843 is ₹1,365.84.
+  // The rate kept is the one applied, not ₹92.099933 worked back from the rounded amount paid.
+  it('keeps the rate as the member applied it, when it gives the amount paid (#870)', async () => {
+    const id = await trip(true);
+    const atSuggestion = {
+      ...payment,
+      amount: 14.83,
+      amountPaidMinor: 136584,
+      appliedRate: '92.1',
+      rateKind: 'suggested',
+    };
+    const saved = await record(id, atSuggestion, 'cross-currency-0003');
+    expect(saved.status).toBe(201);
+    expect(saved.body.data).toMatchObject({ amountPaidMinor: 136584, appliedRate: '92.1' });
+    // A rate that doesn't give the amount paid is still refused.
+    expect(
+      (await record(id, { ...atSuggestion, appliedRate: '92.2' }, 'cross-currency-0004')).status,
+    ).toBe(422);
+  });
+
   it.each([
     { amountPaidMinor: undefined },
     { paidCurrency: undefined },

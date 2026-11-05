@@ -17,9 +17,15 @@ import {
   minorMoney,
   EXCHANGE_RATE_API_ATTRIBUTION,
   rateFraction,
+  rateGivesPaid,
+  rateText,
+  rateUsed,
+  roundedRate,
   type CrossCurrencyAmounts,
   type CrossCurrencySettlementFields,
 } from './cross-currency-settlement';
+
+export { rateText, roundedRate } from './cross-currency-settlement';
 
 export type CrossCurrencyField = 'cleared' | 'rate' | 'paid';
 
@@ -31,7 +37,10 @@ export interface PaymentCurrencies {
 
 /** A suggested rate, as the Group's rate read answers it (#726). */
 export interface RateSuggestion {
-  /** Units of the paid currency for one unit of the Debt's, as a decimal string. */
+  /**
+   * Units of the paid currency for one unit of the Debt's, as a decimal string, read rounded as
+   * rates show (`roundedRate`): the field, Use, the amount paid and the record all have this one.
+   */
   rate: string;
   source: 'frankfurter' | 'exchange-rate-api' | 'mixed';
   asOf: string;
@@ -57,8 +66,6 @@ export type CrossCurrencyReading =
 
 /** A suggestion older than this many days shows its age. */
 const OLD_AFTER_DAYS = 1;
-/** A worked-out rate shows at most this many places; the exact one is what is recorded. */
-const RATE_PLACES = 6;
 
 const FIELDS: CrossCurrencyField[] = ['cleared', 'rate', 'paid'];
 const TEN = BigInt(10);
@@ -73,19 +80,10 @@ function amountText(minor: number, currency: string): string {
     : units.toString();
 }
 
-/** A suggested rate as its field shows it: exactly as suggested, with at least two places. */
+/** A suggested rate as its field shows it: as read (already rounded), with at least two places. */
 export function suggestedRateText(rate: string): string {
   const [whole, fraction = ''] = rate.split('.');
   return `${whole}.${fraction.padEnd(2, '0')}`;
-}
-
-/** A rate as its field shows it: at least two places, at most six, rounded half up. */
-export function rateText(rate: string): string {
-  const { numerator, denominator } = rateFraction(rate);
-  const scale = TEN ** BigInt(RATE_PLACES);
-  const units = (BigInt(2) * numerator * scale + denominator) / (BigInt(2) * denominator);
-  const fraction = (units % scale).toString().padStart(RATE_PLACES, '0').replace(/0+$/, '');
-  return `${units / scale}.${fraction.padEnd(2, '0')}`;
 }
 
 type RateReading =
@@ -205,7 +203,7 @@ export function startCrossCurrencyEntry(
   return follow(
     {
       cleared: clearedText,
-      // Exactly as suggested: the amount paid follows the suggestion itself, never a rounding.
+      // As suggested, and as read: the amount paid follows the rate the field shows (#873).
       rate: suggestion ? suggestedRateText(suggestion.rate) : '',
       paid: '',
       drivers: suggestion ? ['cleared', 'rate'] : ['cleared'],
@@ -249,9 +247,29 @@ export function crossCurrencyRateKind(
   return fromSuggestion.amountPaidMinor === amounts.amountPaidMinor ? 'suggested' : 'custom';
 }
 
-/** The fields a cross-currency payment sends beside its amount cleared. */
+/**
+ * The rate a payment keeps (#870), as the member applied it: the suggestion when it pays at it,
+ * or their rate as typed when it gives the amount paid. A rate that follows both amounts, or
+ * can't give them (a typed rate and amount paid, the amount cleared rounded), is worked out.
+ */
+function appliedRateOf(
+  currencies: PaymentCurrencies,
+  entry: CrossCurrencyEntry,
+  amounts: CrossCurrencyAmounts,
+  suggestion: RateSuggestion | null,
+  rateKind: CrossCurrencySettlementFields['rateKind'],
+): string {
+  const record = { ...currencies, amountMinor: amounts.amountClearedMinor, ...amounts };
+  if (rateKind === 'suggested' && suggestion && rateGivesPaid(record, suggestion.rate))
+    return suggestion.rate;
+  const typed = entry.drivers.includes('rate') ? plainRate(entry.rate) : null;
+  return typed && rateGivesPaid(record, typed) ? typed : amounts.appliedRate;
+}
+
+/** The fields a cross-currency payment sends beside its amount cleared, from the entry read. */
 export function crossCurrencyPaymentFields(
   currencies: PaymentCurrencies,
+  entry: CrossCurrencyEntry,
   amounts: CrossCurrencyAmounts,
   suggestion: RateSuggestion | null,
 ): CrossCurrencySettlementFields {
@@ -259,7 +277,7 @@ export function crossCurrencyPaymentFields(
   return {
     amountPaidMinor: amounts.amountPaidMinor,
     paidCurrency: currencies.paidCurrency,
-    appliedRate: amounts.appliedRate,
+    appliedRate: appliedRateOf(currencies, entry, amounts, suggestion, rateKind),
     rateKind,
     ...(suggestion
       ? {
@@ -369,13 +387,19 @@ const rateReadSchema = z.object({
   }),
 });
 
-/** The Group's rate read (#726): its suggestion, or none and why. */
+/**
+ * The Group's rate read (#726): its suggestion, or none and why. The suggestion's rate is read as
+ * rates show (#873), whichever source it's from, so the sheet's field, its Use link and the
+ * amount paid all follow the rate the member sees.
+ */
 export function parseRateSuggestionResponse(payload: unknown): {
   suggestion: RateSuggestion | null;
   reason: string | null;
 } {
   const { data } = rateReadSchema.parse(payload);
-  return { suggestion: data.suggestion, reason: data.suggestion ? null : (data.reason ?? null) };
+  return data.suggestion
+    ? { suggestion: { ...data.suggestion, rate: roundedRate(data.suggestion.rate) }, reason: null }
+    : { suggestion: null, reason: data.reason ?? null };
 }
 
 /** A recorded payment in another currency, as its Activity metadata and its read keep it. */
@@ -505,6 +529,7 @@ export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
   const short = (label: string, isViewer: boolean) => (isViewer ? label : firstName(label));
   const payerShort = short(payer, payer === 'You');
   const payeeShort = payee === 'You' ? 'you' : firstName(payee);
+  const used = rateUsed(record);
   const suggestion =
     record.suggestedRate && record.rateSource && record.rateAsOf && record.rateFetchedAt
       ? {
@@ -527,9 +552,12 @@ export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
     payee,
     paid: minorMoney(record.amountPaidMinor, record.paidCurrency),
     clears: `to clear ${minorMoney(record.amountMinor, record.currency)}, a Debt in ${record.currency}`,
-    rateUsed: `${decimalMoney(rateText(record.appliedRate), record.paidCurrency)} ${per}`,
-    badge:
-      record.rateKind === 'custom'
+    // The rate the member applied, as they saw it: never one worked back from the rounded amount
+    // paid, which says its rounding itself (#870).
+    rateUsed: `${decimalMoney(rateText(used.rate), record.paidCurrency)} ${per}`,
+    badge: used.suggested
+      ? 'Suggested'
+      : record.rateKind === 'custom'
         ? 'Your rate'
         : record.rateKind === 'suggested'
           ? 'Suggested'

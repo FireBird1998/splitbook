@@ -46,16 +46,18 @@ export function calculateSettlementBatch(
     if (currency !== input.paidCurrency) {
       const choice = input.rates[currency];
       if (!choice) invalid(`Enter a rate for ${currency}`);
+      const rate = choice.rateKind === 'suggested' ? choice.suggestedRate : choice.rate;
       const calculated = calculateCrossCurrencySettlement({
         currency,
         paidCurrency: input.paidCurrency,
         amountClearedMinor: amountMinor,
-        rate: choice.rateKind === 'suggested' ? choice.suggestedRate : choice.rate,
+        rate,
       });
       fields = {
         paidCurrency: input.paidCurrency,
         amountPaidMinor: calculated.amountPaidMinor,
-        appliedRate: calculated.appliedRate,
+        // Each Debt keeps its rate as chosen, which gives its amount paid (#870).
+        appliedRate: rate,
         rateKind: choice.rateKind,
         ...(choice.rateKind !== 'entered'
           ? {

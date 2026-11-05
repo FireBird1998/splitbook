@@ -17,9 +17,14 @@ import {
   needsAmount,
   type ReviewNeed,
 } from '@splitbook/shared/to-review';
-import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
+import {
+  formatCurrency,
+  formatCurrencyAsEntered,
+  getCurrency,
+  getCurrencyPrecision,
+} from '@splitbook/shared/currency';
+import { expenseCurrencyChoices } from '@splitbook/shared/group-currencies';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import { groupNounTitle } from '@splitbook/shared/group-themes';
 import { toDateParam } from '@splitbook/shared/date';
 import type { MobileController } from '../data/mobile-controller';
 import { reviewForm, reviewFormChange } from '../data/review-form';
@@ -49,7 +54,14 @@ import {
   OptionalDetails,
 } from './expense-form';
 import { DateSheet } from './date-sheet';
-import { CurrencyBadge, RequiredFieldLabel, useDescriptionPlaceholder } from './expense-inputs';
+import {
+  CurrencyBadge,
+  CurrencyChip,
+  CurrencySymbol,
+  RequiredFieldLabel,
+  useDescriptionPlaceholder,
+} from './expense-inputs';
+import { CurrencySheet } from './currency-sheet';
 import { clockTime } from './activity-format';
 import { recentDay, spellDay } from './day-format';
 import { PayerSheet, paidBySummary } from './payer-sheet';
@@ -61,6 +73,17 @@ import { reviewedItemsLine } from './review-run-copy';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
 /** As entered, never rounded: the Needs line says when it has too many decimals (#537). */
+/**
+ * An amount as its field shows it, with its currency's places, as Add expense does: 18.4 in euros
+ * is "18.40" (#874). One with more places than the currency has stays as entered (#537).
+ */
+function amountText(amount: string, currency: string) {
+  if (!/^\d+(?:\.\d+)?$/.test(amount)) return amount;
+  const places = getCurrency(currency) ? getCurrencyPrecision(currency) : 2;
+  const [whole, fraction = ''] = amount.split('.');
+  return fraction.length >= places ? amount : `${whole}.${fraction.padEnd(places, '0')}`;
+}
+
 function money(amount: number | undefined, currency: string | undefined) {
   if (amount === undefined || !currency) return 'Amount needed';
   return formatCurrencyAsEntered(amount, currency);
@@ -291,7 +314,7 @@ function ReviewRunContent({
   const selected = state.items[state.index];
   const [invalid, setInvalid] = useState<string | null>(null);
   const [typedAmount, setTypedAmount] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<'date' | 'payers' | 'split' | 'tag' | null>(null);
+  const [sheet, setSheet] = useState<'date' | 'payers' | 'split' | 'tag' | 'currency' | null>(null);
   const descriptionStart = useStartWhileUnfocused();
   const descriptionPlaceholder = useDescriptionPlaceholder();
   if (!selected) {
@@ -417,6 +440,16 @@ function ReviewRunContent({
     )
     .join(' · ');
   const field = { color: theme.text, paddingVertical: 4, paddingHorizontal: 0 };
+  // The item's own currency beside the Amount, main or extra, and Add expense's picker to change
+  // it, with every currency the Group lists; nothing is converted (#874).
+  const places = getCurrencyPrecision(form.currency);
+  const currencyChoices = state.context
+    ? expenseCurrencyChoices(
+        state.context.group,
+        state.context.group.latestExpenseCurrency,
+        form.currency,
+      )
+    : null;
   return (
     <>
       <RunScreen
@@ -497,16 +530,26 @@ function ReviewRunContent({
           <View style={{ gap: 6 }}>
             <RequiredFieldLabel text="Amount" invalid={needsAmount(model.needs)} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              {groupCurrency && (values.currency || groupCurrency) === groupCurrency && (
-                <CurrencyBadge currency={groupCurrency} recorded={false} />
+              {currencyChoices && currencyChoices.length > 1 ? (
+                <>
+                  <CurrencyChip
+                    currency={form.currency}
+                    locked={locked}
+                    onPress={() => setSheet('currency')}
+                  />
+                  <CurrencySymbol currency={form.currency} />
+                </>
+              ) : (
+                <CurrencyBadge currency={form.currency} recorded={false} />
               )}
               <TextInput
-                key={`amount:${state.changed?.after.revision ?? 0}`}
-                accessibilityLabel="Amount"
-                value={typedAmount ?? form.amount}
+                // A new keypad is a new field: Android keeps the decimal key otherwise (#866).
+                key={`amount:${state.changed?.after.revision ?? 0}:${places === 0 ? 'whole' : 'decimal'}`}
+                accessibilityLabel={`Amount, ${getCurrency(form.currency)?.name ?? form.currency}`}
+                value={typedAmount ?? amountText(form.amount, form.currency)}
                 editable={!locked}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
+                keyboardType={places === 0 ? 'number-pad' : 'decimal-pad'}
+                placeholder={places === 0 ? '0' : `0.${'0'.repeat(places)}`}
                 placeholderTextColor={theme.textMuted}
                 selectionColor={theme.brand.main}
                 onChangeText={(amount) => {
@@ -543,16 +586,6 @@ function ReviewRunContent({
             </View>
           </View>
         </Card>
-        {/* Another currency can only change to the Group's. */}
-        {groupCurrency && values.currency && values.currency !== groupCurrency && (
-          <CompactButton
-            label={`Use ${groupCurrency}, the ${groupNounTitle(selected.category)}’s currency`}
-            variant="tonal"
-            block
-            disabled={locked}
-            onPress={() => change({ currency: groupCurrency })}
-          />
-        )}
         <ExpenseTiles
           locked={locked}
           errors={{
@@ -692,6 +725,21 @@ function ReviewRunContent({
           </Banner>
         )}
       </RunScreen>
+      {sheet === 'currency' && state.context && currencyChoices && (
+        <CurrencySheet
+          visible
+          groupName={state.context.group.name}
+          choices={currencyChoices}
+          currency={form.currency}
+          locked={locked}
+          offline={offline}
+          onChoose={(currency) => {
+            change({ currency });
+            setSheet(null);
+          }}
+          onDone={() => setSheet(null)}
+        />
+      )}
       {sheet === 'date' && (
         <DateSheet
           visible

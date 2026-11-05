@@ -73,6 +73,7 @@ export function sharedDraftCollection({
   online = () => true,
   now = Date.now,
   changed = async () => {},
+  rebindWith = () => () => {},
 }: {
   client: Client;
   queryClient: QueryClient;
@@ -85,8 +86,15 @@ export function sharedDraftCollection({
   online?(): boolean;
   now?(): number;
   changed?(): Promise<void>;
+  /**
+   * Registers a rebind for while the collection is open, and returns its release. Retiring the
+   * Group's reads (adding a currency does) removes this query; the observer then moves to its
+   * successor and reads again, so Refresh items and the fix sheets see the Group as it is (#865).
+   */
+  rebindWith?(rebind: () => void): () => void;
 }) {
   let stop: (() => void) | undefined;
+  let release: (() => void) | undefined;
   let mounted = false;
   const update = (patch: Partial<SharedDraftCollectionState>) => {
     if (mounted && current()) publish({ ...read(), ...patch });
@@ -107,6 +115,8 @@ export function sharedDraftCollection({
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,
   });
+  /** The observer on the query its key now names, enabled while online. */
+  const bind = () => observer.setOptions({ ...observer.options, enabled: online() });
   const refresh = async () => {
     if (!online()) return;
     const result = await observer.refetch();
@@ -179,6 +189,7 @@ export function sharedDraftCollection({
         busy: false,
         pending: true,
       });
+      release = rebindWith(bind);
       stop = observer.subscribe((result) => {
         if (!mounted || !current()) return;
         if (result.error) {
@@ -218,13 +229,12 @@ export function sharedDraftCollection({
         );
       return () => {
         mounted = false;
+        release?.();
         stop?.();
         observer.destroy();
       };
     },
-    connectivityChanged() {
-      observer.setOptions({ ...observer.options, enabled: online() });
-    },
+    connectivityChanged: bind,
     refresh: () => run(refresh),
     select(id: string) {
       if (!read().busy) update({ selected: toggle(read().selected, id), reviews: [] });

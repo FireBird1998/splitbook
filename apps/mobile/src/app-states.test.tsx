@@ -3204,20 +3204,28 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     await settle();
   });
 
-  // Item 4: after a network failure the sheet showed only "Could not reach Splitbook…".
+  // Item 4: after a network failure the sheet showed only "Could not reach Splitbook…". The phone
+  // is offline, so it says so in the offline tone, as #807's rule has it (#868).
   it('offers Try again on the sheet when its check can’t reach Splitbook, keeping the figures, and sends nothing', async () => {
     const { phone, app } = await onBalances();
     phone.network.online = false;
     app.tap('Record your payment to Sam Chen');
     await settle();
+    const offline = 'You’re offline. Recording a payment needs a connection.';
     expect(controller().getSnapshot().settlement).toMatchObject({
       status: 'error',
       draft: null,
       attempt: null,
-      message: unreachable,
+      message: offline,
     });
     // Said plainly, not as a payment that may be recorded: nothing was sent.
-    expect(shown()).toContain(unreachable);
+    expect(shown()).toContain(offline);
+    expect(shown()).not.toContain(unreachable);
+    // In the offline banner's tone: a summary, never an alert in error red.
+    const banner = findHosts(sheet(), (props) =>
+      ['alert', 'summary'].includes(String(props.accessibilityRole)),
+    ).find((node) => words(node).includes(offline));
+    expect(banner?.props.accessibilityRole).toBe('summary');
     expect(shown()).not.toContain('Payment not confirmed');
     expect(inSheet('You pay Sam Chen. Suggested ₹30.00.')).toHaveLength(1);
     expect(inSheet('Amount paid, required')[0]!.props.editable).toBe(false);
@@ -3233,7 +3241,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     void retry.props.onPress();
     await balances.reached;
     await settle();
-    expect(shown()).not.toContain(unreachable);
+    expect(shown()).not.toContain(offline);
     expect(progress()).toEqual(['Checking the latest balances']);
     expect(inSheet('You pay Sam Chen. Suggested ₹30.00.')).toHaveLength(1);
     expect(button('Record payment ₹30.00')!.props.accessibilityState).toEqual({
@@ -3309,7 +3317,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     // Activity says both amounts and the rate, and the payment's record what it changed.
     await app.press('Activity');
     const row =
-      'You paid Sam Chen ₹1,842.00 to clear €20.00, at ₹92.10 per €, suggested ₹92.10 (20 Oct)';
+      'You paid Sam Chen ₹1,842.00 to clear €20.00, at the suggested ₹92.10 per € (20 Oct)';
     const [opens] = app.hosts(
       (p) => p.accessibilityRole === 'button' && String(p.accessibilityLabel).startsWith(row),
     );
@@ -3339,7 +3347,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     await app.press('Open Lisbon Offsite, Work · 2 members');
     await app.press('Balances');
     expect(app.text()).toContain('You owe Sam Chen in 2 currencies');
-    expect(app.text()).toContain('₹30.00 and €20.00');
+    expect(app.hosts((p) => p.accessibilityLabel === '₹30.00 and €20.00')).toHaveLength(1);
     await app.press('Settle both with Sam Chen');
     const settling = () =>
       findHosts(screen!.toJSON(), (props, type) => type === 'Modal' && props.visible === true).find(

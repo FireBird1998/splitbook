@@ -2,7 +2,11 @@ import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '../currency';
 import { currencyCode } from '../wire-fields';
 import { MAX_EXPENSE_AMOUNT, parseAmountMinor } from '../exact-money';
-import { calculateCrossCurrencySettlement, rateFraction } from '../cross-currency-settlement';
+import {
+  calculateCrossCurrencySettlement,
+  rateFraction,
+  rateGivesPaid,
+} from '../cross-currency-settlement';
 
 const rate = z.string().refine((value) => {
   try {
@@ -79,10 +83,25 @@ export const createSettlementSchema = z
         amountClearedMinor,
         amountPaidMinor: data.amountPaidMinor,
       });
+      // The rate as the member applied it gives the amount paid (#870); one worked out from the
+      // two amounts, as older apps send it, is kept too.
       const supplied = rateFraction(data.appliedRate);
       const derived = rateFraction(computed.appliedRate);
-      if (supplied.numerator * derived.denominator !== derived.numerator * supplied.denominator)
-        throw new Error('The applied rate must be derived from the two recorded amounts');
+      if (
+        supplied.numerator * derived.denominator !== derived.numerator * supplied.denominator &&
+        !rateGivesPaid(
+          {
+            currency: data.currency,
+            paidCurrency: data.paidCurrency,
+            amountMinor: amountClearedMinor,
+            amountPaidMinor: data.amountPaidMinor,
+          },
+          data.appliedRate,
+        )
+      )
+        throw new Error(
+          'The applied rate must give the paid amount, or be derived from the two recorded amounts',
+        );
       const provenance = [data.suggestedRate, data.rateSource, data.rateAsOf, data.rateFetchedAt];
       if (data.rateKind === 'entered') {
         if (provenance.some((value) => value !== undefined))

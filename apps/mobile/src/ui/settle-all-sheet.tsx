@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import { getCurrency } from '@splitbook/shared/currency';
+import { currencyPrefix } from '@splitbook/shared/currency';
 import {
   rateText,
   suggestedRateText,
@@ -9,9 +9,11 @@ import {
 import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
+import { settleAllPayCurrencies } from '@splitbook/shared/settle-all';
 import { acceptsNumericText } from '../data/field-feedback';
 import {
   readBatchPayment,
+  recordWhileOffline,
   type BatchLine,
   type RateState,
   type SettlementState,
@@ -39,7 +41,8 @@ import {
 } from './payment-words';
 import { fonts, useTheme } from './theme';
 
-const symbol = (currency: string) => getCurrency(currency)?.symbol ?? currency;
+/** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#868). */
+const symbol = currencyPrefix;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** "20 Oct", from a provider's calendar date, whatever the phone's time zone. */
 const rateDay = (asOf: string) => {
@@ -316,11 +319,14 @@ export function SettleAllSheet({
       : null;
   const waiting = reading?.waiting ?? null;
   const count = legs.length;
+  // The main currency first, then each Debt's own (#872).
   const payCurrencies =
     batch && state.group
-      ? batch.debts
-          .map(({ currency }) => currency)
-          .filter((currency) => groupCurrencies(state.group!).includes(currency))
+      ? settleAllPayCurrencies(
+          batch.debts,
+          groupCurrencies(state.group),
+          state.group.defaultCurrency,
+        )
       : [];
   const retrying = checking && attempt !== null;
   // What it pays in all, as Record and the total say it.
@@ -393,7 +399,10 @@ export function SettleAllSheet({
           message={state.message ?? 'This payment may already be recorded.'}
         />
       ) : status === 'blocked' || status === 'error' ? (
-        <Banner tone="error" message={state.message ?? 'This payment can’t be recorded.'} />
+        <Banner
+          tone={state.message === recordWhileOffline ? 'offline' : 'error'}
+          message={state.message ?? 'This payment can’t be recorded.'}
+        />
       ) : state.message && state.message !== waiting ? (
         <Banner tone={batch ? 'warning' : 'info'} message={state.message} />
       ) : null}

@@ -38,6 +38,7 @@ import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import { objectId, toMobileGroup } from './dto';
 import { emptyExpenseHistory, type ExpenseHistoryState } from './activity';
 import type { GroupReturnContext, MobileGroup } from './types';
+import { expenseRecoveryWords } from './expense-recovery-words';
 
 // Historical missing identities are local read/delete-recovery keys, never API identities.
 const draftMemberId = z.union([objectId, z.string().regex(/^former-(payer|participant)-\d+$/)]);
@@ -391,7 +392,10 @@ function amountError(draft: ExpenseDraft, context: ExpenseContext | null) {
     // A Group with extra currencies offers them; one with only its main currency offers that.
     return group.alternateCurrencies.length
       ? `This Group no longer uses ${currency}. Pick one of its currencies.`
-      : `This draft uses ${currency}, but the Group now uses ${group.defaultCurrency}. Choose Use ${group.defaultCurrency}, then review the amount.`;
+      : // In the words of the notice above it: an item, with To review on (#868).
+        expenseRecoveryWords(
+          `This draft uses ${currency}, but the Group now uses ${group.defaultCurrency}. Choose Use ${group.defaultCurrency}, then review the amount.`,
+        );
   return moneyAmountError(draft.amount, currency);
 }
 function memberName(draft: ExpenseDraft, id: string) {

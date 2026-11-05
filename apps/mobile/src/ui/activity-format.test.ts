@@ -748,10 +748,10 @@ describe('a payment that settled several Debts at once (#734)', () => {
     });
     expect(line.details.map((detail) => detail.text)).toEqual([
       '₹1,480.00, same currency, no rate',
-      '€20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct)',
+      '€20.00 at the suggested ₹92.10 per € (20 Oct)',
     ]);
     expect(spokenActivity(line, '10:20')).toBe(
-      'You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00, ₹1,480.00, same currency, no rate, €20.00 at ₹92.10 per €, suggested ₹92.10 (20 Oct), 10:20',
+      'You paid Sam Chen ₹3,322.00 to clear ₹1,480.00 and €20.00, ₹1,480.00, same currency, no rate, €20.00 at the suggested ₹92.10 per € (20 Oct), 10:20',
     );
   });
 
