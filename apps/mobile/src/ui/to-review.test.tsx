@@ -146,6 +146,11 @@ function fixture(
     fullList?: boolean;
     /** Adding a currency is refused: another member filled Maple House's list first. */
     refuseAdd?: boolean;
+    /**
+     * London tea, £12.40, and NYC bagels, $18.25, in Maple House, which lists INR with these extra
+     * currencies (#865): neither GBP nor USD is listed.
+     */
+    teaAndBagels?: string[];
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -194,6 +199,15 @@ function fixture(
     extras = options.fullList ? ['EUR', 'JPY', 'GBP', 'USD'] : ['EUR', 'JPY'];
     const dinner = row(7, 'Dinner in Zürich', options.francAmount ?? 86);
     items = [review({ ...dinner, values: { ...dinner.values, currency: 'CHF' } })];
+  }
+  if (options.teaAndBagels) {
+    extras = [...options.teaAndBagels];
+    const tea = row(8, 'London tea', 12.4),
+      bagels = row(9, 'NYC bagels', 18.25);
+    items = [
+      review({ ...tea, values: { ...tea.values, currency: 'GBP' } }),
+      review({ ...bagels, values: { ...bagels.values, currency: 'USD' } }),
+    ];
   }
   /** The server's review now, against the Group's currencies (#732). */
   const reviewed = (item: DraftReview): DraftReview => {
@@ -282,7 +296,7 @@ function fixture(
         : json({ status: 200, data: { ...group, alternateCurrencies: extras } });
     // Any member adds a currency to the Group (#721).
     if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST') {
-      if (options.refuseAdd) {
+      if (options.refuseAdd || extras.length >= 4) {
         extras = ['EUR', 'JPY', 'GBP', 'USD'];
         return json(
           {
@@ -450,6 +464,10 @@ function fixture(
     items: () => items,
     clear: () => {
       items = [];
+    },
+    /** Another member adds a currency to Maple House, on the web. */
+    addElsewhere: (currency: string) => {
+      extras = [...extras, currency];
     },
   };
 }
@@ -1588,6 +1606,88 @@ describe('an item in a currency the Group doesn’t list (#733)', () => {
     expect(words(dialog(list, 'Dinner in Zürich'))).toContain(
       'A Group can have at most 4 extra currencies.',
     );
+  });
+
+  // #865: an Add fix changes the Group's currencies, and the next item's sheet knows it.
+  async function teaAndBagels(extras: string[]) {
+    const f = fixture({ teaAndBagels: extras });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.openToReview(groupId);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const list = await render(
+      <ToReviewList controller={f.controller} groupId={groupId} />,
+      'light',
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    return { f, list };
+  }
+  const settleFor = (ms: number) =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
+  const currencyAdds = (f: ReturnType<typeof fixture>) =>
+    f.calls.filter((call) => call === `POST /api/groups/${groupId}/currencies`).length;
+
+  it('after Add, the next item’s sheet counts the currency just added (#865)', async () => {
+    const { f, list } = await teaAndBagels(['EUR', 'JPY']);
+    await tap(list, 'Review London tea');
+    expect(words(dialog(list, 'London tea'))).toContain(
+      'Adding lets everyone use GBP, the 3rd of 4 extra currencies.',
+    );
+    await tap(list, 'Add GBP to Maple House');
+    await settleFor(30);
+    expect(dialog(list, 'London tea')).toBeNull();
+    await tap(list, 'Review NYC bagels');
+    expect(words(dialog(list, 'NYC bagels'))).toContain(
+      'Adding lets everyone use USD, the 4th of 4 extra currencies.',
+    );
+    // Add at the limit: the 4th is the last one a Group can have, and it's added.
+    await tap(list, 'Add USD to Maple House');
+    await settleFor(30);
+    expect(currencyAdds(f)).toBe(2);
+    expect(dialog(list, 'NYC bagels')).toBeNull();
+    expect(text(list)).not.toContain('Currency not listed');
+  });
+
+  it('after Add fills the list, the next item’s sheet offers only Change, with the currency just added (#865)', async () => {
+    const { f, list } = await teaAndBagels(['EUR', 'JPY', 'CHF']);
+    await tap(list, 'Review London tea');
+    await tap(list, 'Add GBP to Maple House');
+    await settleFor(30);
+    await tap(list, 'Review NYC bagels');
+    expect(words(dialog(list, 'NYC bagels'))).toContain(
+      'Maple House already has 4 extra currencies, the most a Group can have. An admin can remove one nothing uses in Group settings.',
+    );
+    expect(button(list, 'Add USD to Maple House')).toBeUndefined();
+    await tap(list, 'Change currency');
+    await tap(list, 'GBP, British Pound');
+    await tap(list, 'Use GBP');
+    await settleFor(30);
+    expect(f.puts.at(-1)?.values).toMatchObject({ amount: 18.25, currency: 'GBP' });
+    expect(currencyAdds(f)).toBe(1);
+  });
+
+  it('Refresh items reads the Group’s currencies again, after an Add too (#865)', async () => {
+    const { f, list } = await teaAndBagels(['EUR', 'JPY']);
+    await tap(list, 'Review London tea');
+    await tap(list, 'Add GBP to Maple House');
+    await settleFor(30);
+    // Then another member adds CHF on the web, which fills the list.
+    f.addElsewhere('CHF');
+    await tap(list, 'Refresh items');
+    await settleFor(30);
+    await tap(list, 'Review NYC bagels');
+    expect(words(dialog(list, 'NYC bagels'))).toContain(
+      'Maple House already has 4 extra currencies, the most a Group can have.',
+    );
+    expect(button(list, 'Add USD to Maple House')).toBeUndefined();
+    await tap(list, 'Change currency');
+    expect(button(list, 'GBP, British Pound')).toBeDefined();
+    expect(button(list, 'CHF, Swiss Franc')).toBeDefined();
   });
 
   it('fixes the item as it is now, when it changed elsewhere while its sheet was open', async () => {

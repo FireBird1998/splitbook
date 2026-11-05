@@ -468,7 +468,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let pendingReviewGroup: string | null = null;
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
-  const tagRebinders = new Set<() => void>();
+  /**
+   * Observers outside the query modules: a Tag watch and an open Draft collection. Retiring their
+   * queries moves each to its successor, which reads again (#865).
+   */
+  const observerRebinders = new Set<() => void>();
   /**
    * Groups with a Tag change kept on this device that is neither confirmed nor refused: their
    * Tags are shown but never saved (#638). Seeded at each start from the kept changes, then kept
@@ -1498,7 +1502,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     expenseQueries.rebind();
     activityQueries.rebind();
     toReviewQueries.rebind();
-    for (const rebind of tagRebinders) rebind();
+    for (const rebind of observerRebinders) rebind();
   };
   const retirement = savedCopyRetirement({
     lease: accountStorage,
@@ -7473,9 +7477,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         const stop = () => {
           unsubscribe();
           observer.destroy();
-          tagRebinders.delete(rebind);
+          observerRebinders.delete(rebind);
         };
-        tagRebinders.add(rebind);
+        observerRebinders.add(rebind);
         return stop;
       },
     };
@@ -7598,6 +7602,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       online: () => !snapshot.offline.active && onlineManager.isOnline(),
       now,
       changed: () => toReviewQueries.refresh(),
+      // A Group read retired, as adding a currency retires it, reads its items and context again.
+      rebindWith: (rebind) => {
+        observerRebinders.add(rebind);
+        return () => observerRebinders.delete(rebind);
+      },
       read: () => snapshot.sharedDraftCollection,
       publish: (value) => publish({ ...snapshot, sharedDraftCollection: value }),
     });
