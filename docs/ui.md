@@ -490,6 +490,18 @@ in a `HomeSlot` of its width.
   takes `insetKeyboardFocusRing`: the outline inside its edge, without the halo, as an Expense
   card's row does; or the parent stops clipping, as the currency tabs' Tabs do, which wrap and
   never scroll
+- Page numbers focused from the keyboard draw the ring too, on MUI's `Mui-focusVisible`, so a
+  click draws none (#848). Checkboxes, radios and switches have their label right against them,
+  where a ring outside would cross its first letter: they take `insetFocusRing`, inside their own
+  padding. A switch's focus sits on its small thumb button, so the ring goes inside the whole
+  switch, round at its ends. A chart's `svg` draws the ring on `:focus-visible`, over x-charts'
+  `outline: none`
+- Tab skips a chart: it sits in an `aria-hidden` box beside a table with its numbers, so its
+  `svg`, which Chromium makes a Tab stop because it clips, takes `tabIndex={-1}` (#881)
+- A row that opens a card beside it moves focus to the card's heading, and closing the card puts
+  focus back on the row, as Activity's payment rows do (#852)
+- A currency tab is never wider than its row; at large text its amount wraps under the words,
+  whole (#854)
 - Screen reader labels on icon-only buttons
 
 Enforced by `playwright/theme-a11y.spec.ts`, which runs **axe-core** across four

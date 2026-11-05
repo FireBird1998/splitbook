@@ -4,6 +4,7 @@ import { Alert, Button, Link, Paper, Tabs, Tab, ThemeProvider } from '@mui/mater
 import { createTheme, getContrastRatio, getLuminance, hexToRgb } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { createAppTheme } from './createAppTheme';
+import { insetFocusRing } from './focus-ring';
 import ErrorState from '@/components/common/ErrorState';
 
 /** A `#rrggbb` colour's hue, in degrees. */
@@ -48,6 +49,36 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
         Object.keys(root(name)).filter((selector) => selector.includes('focusVisible')),
         name,
       ).toEqual([]);
+  });
+
+  it('rings a page number or chart focused from the keyboard, a checkbox, radio or switch inside its edge, and none on a click (#848)', () => {
+    const theme = createAppTheme(mode);
+    const baseline = theme.components?.MuiCssBaseline?.styleOverrides;
+    const ring = (
+      (typeof baseline === 'function' ? baseline(theme) : baseline) as Record<string, object>
+    )[':focus-visible'];
+    const root = (name: string) => {
+      const overrides = (
+        theme.components as Record<string, { styleOverrides?: { root?: unknown } }>
+      )[name]?.styleOverrides?.root;
+      return (typeof overrides === 'function' ? overrides({ theme }) : (overrides ?? {})) as Record<
+        string,
+        unknown
+      >;
+    };
+    // Each keyed to MUI's keyboard focus class, which a mouse click doesn't set.
+    expect(root('MuiPaginationItem')['&.Mui-focusVisible']).toEqual(ring);
+    // A label sits right against these, so the ring is drawn inside their padding.
+    expect(root('MuiCheckbox')['&.Mui-focusVisible']).toEqual(insetFocusRing(theme));
+    expect(root('MuiRadio')['&.Mui-focusVisible']).toEqual(insetFocusRing(theme));
+    // The switch's focus is on its small thumb button: the ring goes inside the whole switch,
+    // as round at its ends as the track.
+    expect(root('MuiSwitch')['&:has(.Mui-focusVisible)']).toEqual({
+      ...insetFocusRing(theme),
+      borderRadius: 999,
+    });
+    // The chart's svg turns its outline off on focus; the ring comes back for the keyboard.
+    expect(root('MuiChartsSurface')['&:focus-visible']).toEqual(ring);
   });
 
   it('lets a bordered text field’s own border show its focus, with no second ring; a button keeps the ring (#823)', () => {

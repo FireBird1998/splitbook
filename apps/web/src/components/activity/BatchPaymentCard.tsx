@@ -1,6 +1,7 @@
 'use client';
 
 import { format } from 'date-fns';
+import type { Ref } from 'react';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
@@ -16,6 +17,8 @@ interface BatchPaymentCardProps {
   recordedBy: { _id?: string; name?: string } | null | undefined;
   recordedAt: string;
   viewerId: string;
+  /** The heading, which takes focus as the card opens (#852). */
+  headingRef?: Ref<HTMLHeadingElement>;
   onClose: () => void;
 }
 
@@ -29,6 +32,7 @@ export default function BatchPaymentCard({
   recordedBy,
   recordedAt,
   viewerId,
+  headingRef,
   onClose,
 }: BatchPaymentCardProps) {
   const recorder = memberLabel(recordedBy?._id, recordedBy?.name, viewerId) ?? 'a former member';
@@ -52,9 +56,19 @@ export default function BatchPaymentCard({
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, px: 2.5, pt: 2, pb: 1 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
+            ref={headingRef}
             id="payment-record-heading"
             component="h2"
-            sx={{ m: 0, fontSize: '1rem', fontWeight: 600, color: 'text.primary' }}
+            tabIndex={-1}
+            sx={{
+              m: 0,
+              // Room for its focus ring above the caption.
+              mb: 0.5,
+              width: 'fit-content',
+              fontSize: '1rem',
+              fontWeight: 600,
+              color: 'text.primary',
+            }}
           >
             Payment
           </Typography>

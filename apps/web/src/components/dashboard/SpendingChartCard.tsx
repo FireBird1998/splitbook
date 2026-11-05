@@ -247,6 +247,9 @@ function SpendingColumns({ model }: { model: SpendingChartModel }) {
     <RowsContext.Provider value={context}>
       <Box ref={measure} aria-hidden="true" data-testid="spending-columns">
         <BarChart
+          // The box is hidden from assistive technology, and the table has the numbers. Chromium
+          // makes the svg a Tab stop because it clips, which would be an empty one (#881).
+          tabIndex={-1}
           height={PLOT_HEIGHT}
           hideLegend
           skipAnimation

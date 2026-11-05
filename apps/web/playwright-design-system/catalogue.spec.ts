@@ -182,3 +182,43 @@ test('a mouse click on a button, toggle button or chip draws no ring; Tab does (
     await expect(control, name).toHaveCSS('outline-style', 'solid');
   }
 });
+
+test('a radio clicked draws no ring; Tabbed to, the ring is inside its round box, clear of its label, and nothing moves (#848)', async ({
+  page,
+}) => {
+  await page.goto('/dev/design-system');
+  const group = page.getByRole('radiogroup', { name: 'Sample split' });
+  const radio = group.getByRole('radio', { name: 'Split by shares' });
+  const round = radio.locator('xpath=ancestor::span[contains(@class,"MuiRadio-root")][1]');
+  const layout = () =>
+    group.evaluate((element) =>
+      [...element.querySelectorAll('label')].map((label) => {
+        const { x, y, width, height } = label.getBoundingClientRect();
+        return { x: x + window.scrollX, y: y + window.scrollY, width, height };
+      }),
+    );
+  const before = await layout();
+  await radio.click();
+  await expect(radio).toBeChecked();
+  await expect(radio).toBeFocused();
+  await expect(round).toHaveCSS('outline-style', 'none');
+  // Out and back in from the keyboard: Tab enters the group at its checked radio.
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(radio).toBeFocused();
+  await expect(round).toHaveCSS('outline-style', 'solid');
+  await expect(round).toHaveCSS('outline-width', '2px');
+  // Inside the box: drawn outside, it crossed the label's first letter.
+  await expect(round).toHaveCSS('outline-offset', '-2px');
+  await expect(round).toHaveCSS('box-shadow', 'none');
+  await expect(round).toHaveCSS('border-radius', '50%');
+  expect(
+    await round.evaluate((element) => {
+      const label = element.closest('label')!.querySelector('.MuiFormControlLabel-label')!;
+      const style = getComputedStyle(element);
+      const reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+      return element.getBoundingClientRect().right + reach - label.getBoundingClientRect().left;
+    }),
+  ).toBeLessThanOrEqual(0);
+  expect(await layout()).toEqual(before);
+});

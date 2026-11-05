@@ -60,7 +60,11 @@ export default function BalanceCurrencySwitch({
         id: balanceTabId(tab.currency),
         accessibleName: tabName(tab),
         figure: (
-          <Box component="span" sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
+          // Where the tab is too narrow for both, the amount goes under the words whole (#854).
+          <Box
+            component="span"
+            sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 0.75 }}
+          >
             <Box component="span" sx={{ fontSize: '0.8125rem', fontWeight: 500 }}>
               {position(tab)}
             </Box>
