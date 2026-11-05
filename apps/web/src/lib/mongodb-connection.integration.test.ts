@@ -96,7 +96,9 @@ describe('the app’s one MongoDB client (#826)', () => {
     // Both fail first, so the client's first connect has failed whatever is asserted next.
     const read = await timed(() => connectDB());
     const signedIn = await timed(signIn);
-    expect(read.error?.name).toMatch(/ServerSelectionError$/);
+    // No server in 5 s leaves no time for the one retry (#862): its failure, caused by the driver's.
+    expect(read.error?.name).toBe('DatabaseUnavailableError');
+    expect((read.error?.cause as Error).name).toMatch(/ServerSelectionError$/);
     expect(read.took).toBeLessThan(8_000);
     expect(signedIn.value).not.toBe(200);
     expect(signedIn.took).toBeLessThan(8_000);

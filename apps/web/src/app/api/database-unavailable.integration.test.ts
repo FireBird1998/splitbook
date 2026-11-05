@@ -1,14 +1,16 @@
 /**
- * #826, #858: what a member's request meets when the database drops, through the real routes with
- * a real session, against a real replica set reached through a proxy this file interrupts
- * (`database-proxy.ts`). Its database is `splitbook-test-database-unavailable`.
+ * #826, #858, #862: what a member's request meets when the database briefly drops, through the
+ * real routes with a real session, against a real replica set reached through a proxy this file
+ * interrupts (`database-proxy.ts`). Its database is `splitbook-test-database-unavailable`.
  *
- * The owner's decision of 2026-11-05: the request answers "Couldn't reach Splitbook. Try again."
- * within about 5 s, never after a 30 s hang or as "Internal server error". A save is never
- * recorded twice (ADR 0004): its retry, with the same Idempotency-Key, records it once.
+ * The owner's decision of 2026-11-05: a request tries once more, and if that fails too, it
+ * answers "Couldn't reach Splitbook. Try again." within about 5 s, never after a 30 s hang or as
+ * "Internal server error". A save is never recorded twice (ADR 0004): its retry, with the same
+ * Idempotency-Key, records it once.
  */
 
 import { MongoClient } from 'mongodb';
+import mongoose from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { connectDB } from '@/lib/db';
 import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
@@ -121,6 +123,54 @@ afterAll(async () => {
   await disconnectSignedIn(db);
   await direct.close();
   await database.close();
+});
+
+describe('a database that briefly drops (#862)', () => {
+  // mongodb 7.7 failed this at once, in 0.2–0.5 s, where 7.0 waited and answered at about 1 s.
+  it('a blip of about 1 s is ridden out: the first read after the pool went idle answers, at about 1 s', async () => {
+    await idlePool();
+    database.refuse();
+    const blip = setTimeout(() => database.restore(), 1_000);
+    try {
+      const read = await timed(listExpenses);
+      expect(read.value).toMatchObject({ status: 200, body: { data: { expenses: [] } } });
+      expect(read.took).toBeGreaterThanOrEqual(1_000);
+      expect(read.took).toBeLessThan(2_500);
+    } finally {
+      clearTimeout(blip);
+      database.restore();
+    }
+  }, 30_000);
+
+  it('a database that keeps turning connections away is answered after the one retry, within about 2 s', async () => {
+    await idlePool();
+    database.refuse();
+    try {
+      const read = await timed(listExpenses);
+      expect(read.value).toEqual(unavailable);
+      expect(read.took).toBeGreaterThanOrEqual(1_000);
+      expect(read.took).toBeLessThan(3_000);
+    } finally {
+      database.restore();
+    }
+  }, 30_000);
+});
+
+describe('the check before a request opens a connection (#862)', () => {
+  it('pings only when the pool went idle, once for calls made together, and never while it is warm', async () => {
+    const command = vi.spyOn(mongoose.mongo.Db.prototype, 'command');
+    const pings = () => command.mock.calls.filter(([sent]) => 'ping' in sent).length;
+    try {
+      await idlePool();
+      const reads = await Promise.all([listExpenses(), listExpenses()]);
+      expect(reads.map((read) => read.status)).toEqual([200, 200]);
+      expect(pings()).toBe(1);
+      expect(await listExpenses()).toMatchObject({ status: 200 });
+      expect(pings()).toBe(1);
+    } finally {
+      command.mockRestore();
+    }
+  }, 30_000);
 });
 
 describe('a database that went away (#826, #858)', () => {

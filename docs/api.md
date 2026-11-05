@@ -55,8 +55,12 @@ an id that isn't one with `422` `VALIDATION_ERROR`, and the Tag routes answer
 both with `400` `INVALID_TAG_COMMAND`.
 
 **A database Splitbook can't reach answers `503` `DATABASE_UNAVAILABLE` (#826).**
-A request that can't reach the database answers within about 5 s, never after
-the driver's old 30 s or as "Internal server error":
+Before a request opens a connection on a pool that went idle, the server pings
+the database, and tries once more 1 s later if it gets no answer, so a blip of
+about a second goes unseen (#862). The ping writes nothing, so a save still runs
+once, after the database answered. A request that still can't reach it, or whose
+database drops mid-request, answers within about 5 s, never after the driver's
+old 30 s or as "Internal server error":
 `{ "error": "Couldn’t reach Splitbook. Try again.", "code": "DATABASE_UNAVAILABLE", "status": 503 }`.
 Every route answers it, Better Auth's under `/api/auth/*` included. A write that
 answers it may or may not be recorded, since its connection can drop mid-save:

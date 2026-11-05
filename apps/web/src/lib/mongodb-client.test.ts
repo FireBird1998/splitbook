@@ -151,9 +151,14 @@ function refusedConnection() {
   return error;
 }
 
-// The owner's decision of 2026-11-05 (#826): "Couldn't reach Splitbook. Try again." within about
-// 5 s.
+// The owner's decision of 2026-11-05 (#826, #858, #862): one retry, then "Couldn't reach
+// Splitbook. Try again." within about 5 s.
 describe('a database that can’t be reached', () => {
+  it('is tried once more after 1 s, and answered within 5 s', async () => {
+    const { DATABASE_RETRY } = await freshServer();
+    expect(DATABASE_RETRY).toEqual({ afterMs: 1_000, answerWithinMs: 5_000 });
+  });
+
   it('is a DatabaseUnavailableError in the owner’s words, with a code and a digest a page keeps', async () => {
     const { DatabaseUnavailableError } = await freshServer();
     const cause = refusedConnection();
@@ -226,5 +231,94 @@ describe('a database that can’t be reached', () => {
   ])('never counts %s as unreachable', async (_, make) => {
     const { isDatabaseUnreachable } = await freshServer();
     expect(isDatabaseUnreachable(make())).toBe(false);
+  });
+});
+
+describe('the one retry (withDatabaseRetry)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** Runs `retried` to its end on the fake clock: what it settled to, when, and each try's start. */
+  async function run(attempts: Array<(deadline: number) => Promise<string>>) {
+    const { withDatabaseRetry, DatabaseUnavailableError } = await freshServer();
+    const started = Date.now();
+    const tries: { at: number; deadline: number }[] = [];
+    let result: { value?: string; error?: unknown; at?: number } = {};
+    const pending = withDatabaseRetry((deadline) => {
+      tries.push({ at: Date.now() - started, deadline: deadline - started });
+      return attempts[tries.length - 1](deadline);
+    }).then(
+      (value) => (result = { value, at: Date.now() - started }),
+      (error: unknown) => (result = { error, at: Date.now() - started }),
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+    await pending;
+    return { ...result, tries, unavailable: result.error instanceof DatabaseUnavailableError };
+  }
+
+  const failsAfter = (ms: number, error: () => unknown) => () =>
+    new Promise<string>((_, reject) => setTimeout(() => reject(error()), ms));
+  const answers =
+    (ms = 10) =>
+    () =>
+      new Promise<string>((resolve) => setTimeout(() => resolve('answered'), ms));
+
+  it('runs once when the database answers', async () => {
+    const outcome = await run([answers(20)]);
+    expect(outcome.unavailable).toBe(false);
+    expect(outcome).toMatchObject({ value: 'answered', at: 20 });
+    expect(outcome.tries).toEqual([{ at: 0, deadline: 5_000 }]);
+  });
+
+  it('rides out a blip: a refusal is tried once more 1 s later, by the same deadline', async () => {
+    const outcome = await run([failsAfter(200, refusedConnection), answers(10)]);
+    expect(outcome).toMatchObject({ value: 'answered', at: 1_210 });
+    expect(outcome.tries).toEqual([
+      { at: 0, deadline: 5_000 },
+      { at: 1_200, deadline: 5_000 },
+    ]);
+  });
+
+  it('a second failure is a DatabaseUnavailableError, and nothing runs a third time', async () => {
+    const second = refusedConnection();
+    const outcome = await run([failsAfter(300, refusedConnection), failsAfter(300, () => second)]);
+    expect(outcome.unavailable).toBe(true);
+    expect((outcome.error as Error).cause).toBe(second);
+    expect(outcome.at).toBe(1_600);
+    expect(outcome.tries).toHaveLength(2);
+  });
+
+  it('no retry when it couldn’t finish within 5 s: a server that wasn’t found in 5 s is answered then', async () => {
+    const outcome = await run([
+      failsAfter(
+        5_000,
+        () =>
+          new mongoose.mongo.MongoServerSelectionError('Server selection timed out after 5000 ms', {
+            servers: new Map(),
+          } as never),
+      ),
+      answers(),
+    ]);
+    expect(outcome.unavailable).toBe(true);
+    expect(outcome.at).toBe(5_000);
+    expect(outcome.tries).toHaveLength(1);
+  });
+
+  it('any other error is the caller’s, as it is, with no retry', async () => {
+    const refusal = new Error('FORBIDDEN');
+    const outcome = await run([failsAfter(50, () => refusal), answers()]);
+    expect(outcome.error).toBe(refusal);
+    expect(outcome.tries).toHaveLength(1);
+  });
+
+  it('a ping whose own time ran out counts as no answer', async () => {
+    const outcome = await run([
+      failsAfter(
+        400,
+        () => new mongoose.mongo.MongoOperationTimeoutError('Timed out during connection checkout'),
+      ),
+      answers(),
+    ]);
+    expect(outcome).toMatchObject({ value: 'answered', at: 1_410 });
   });
 });
