@@ -72,8 +72,13 @@ interface ExpenseTableProps {
   selection?: Pick<ExpenseSelection, 'selected' | 'onSelect' | 'onSelectAll'>;
 }
 
+/**
+ * A cell: 5 px each side, so 10 px between columns. Beside the side panel on a 1280 px screen
+ * the demo Trip's columns then fit with room to spare on macOS and Linux alike, whose fonts
+ * draw a little wider (#900).
+ */
 const cell = {
-  px: '8px',
+  px: '5px',
   py: '6px',
   height: 56,
   borderBottom: 1,
@@ -84,10 +89,12 @@ const cell = {
 } as const;
 
 /**
- * The checkbox column, as narrow as MUI's small checkbox (a 20 px box in 9 px of padding), its
- * box 20 px in from the card's edge like the day headings' words (#900).
+ * The checkbox column, as narrow as its checkbox: MUI's small one, a 20 px box, here in 4 px
+ * of padding (a 28 px target), the box 20 px in from the card's edge like the day headings'
+ * words (#900).
  */
-const checkboxCell = { ...cell, width: 11 + 38, pr: 0, '&:first-of-type': { pl: '11px' } } as const;
+const checkboxCell = { ...cell, width: 16 + 28, pr: 0, '&:first-of-type': { pl: '16px' } } as const;
+const checkboxSx = { p: '4px' } as const;
 
 /**
  * Where the table is narrower than this, as beside the side panel on a 1280 px screen, the You
@@ -165,6 +172,7 @@ export default function ExpenseTable({
                 <Box component="th" scope="col" sx={{ ...checkboxCell, height: 'auto', py: '4px' }}>
                   <Checkbox
                     size="small"
+                    sx={checkboxSx}
                     checked={selecting && ticked.length === expenses.length}
                     indeterminate={selecting && ticked.length < expenses.length}
                     onChange={() => selection.onSelectAll()}
@@ -230,6 +238,7 @@ export default function ExpenseTable({
                       <Box component="td" sx={checkboxCell}>
                         <Checkbox
                           size="small"
+                          sx={checkboxSx}
                           checked={chosen}
                           onClick={keepToCheckbox}
                           onChange={() => selection.onSelect(expense._id)}

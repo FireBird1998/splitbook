@@ -7,7 +7,7 @@ import { visuallyHidden } from '@/components/common/visually-hidden';
 import type { TripDayHeading } from './expense-trip-days';
 
 const cell = {
-  px: '8px',
+  px: '5px',
   pt: '14px',
   pb: '4px',
   height: 34,

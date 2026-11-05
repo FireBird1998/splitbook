@@ -326,6 +326,18 @@ test('the Trip’s Expenses table shows every column whole beside the side panel
       ];
     });
     for (const where of outside) cut.push(`${width}px: ${where}`);
+    // With room to spare: the columns at their narrowest leave at least 16 px, as fonts draw a
+    // little wider on Linux than on macOS (#901's CI run).
+    const slack = await table.evaluate((element) => {
+      const room = element.parentElement!.clientWidth;
+      element.style.width = 'min-content';
+      element.style.minWidth = '0';
+      const narrowest = element.getBoundingClientRect().width;
+      element.style.width = '';
+      element.style.minWidth = '';
+      return Math.floor(room - narrowest);
+    });
+    if (slack < 16) cut.push(`${width}px: only ${slack}px to spare`);
     // Each split, such as "By percentage · 3", on one line.
     for (const cell of await table.getByRole('cell', { name: /^(Equally|By\s)/ }).all()) {
       const lines = await drawnLines(cell);
