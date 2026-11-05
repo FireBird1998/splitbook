@@ -99,7 +99,6 @@ export function startingExpenseCurrency(
 export interface ExpenseCurrencyChoice {
   code: string;
   name: string;
-  symbol: string;
   note: 'Your latest Expense here' | 'Main currency' | 'This Expense’s currency' | null;
 }
 
@@ -122,7 +121,6 @@ export function expenseCurrencyChoices(
     return {
       code,
       name: currency?.name ?? code,
-      symbol: currency?.symbol ?? code,
       note:
         code === group.defaultCurrency
           ? 'Main currency'

@@ -403,6 +403,32 @@ describe('an unconfirmed payment in another currency (#728)', () => {
     expect(one(root, 'Amount cleared, required').props.editable).toBe(false);
     expect(labelled(root, 'Retry payment')).toHaveLength(1);
   });
+
+  // #884: the zloty is named by its code here too, as its amounts are: never "per zł".
+  it('names a currency without a symbol by its code in what it paid as (#884)', () => {
+    const { root } = render(
+      state(null, {
+        status: 'uncertain',
+        attempt: { key: 'settlement-key-1', body: '{}' },
+        draft: {
+          paidBy: you,
+          paidTo: sam,
+          currency: 'PLN',
+          amount: '60',
+          note: '',
+          paid: {
+            amountPaidMinor: 124958,
+            paidCurrency: 'INR',
+            appliedRate: '20.826267',
+            rateKind: 'custom',
+          },
+        },
+      }),
+    );
+    const shown = text(root);
+    expect(shown).toContain('Paid as ₹1,249.58 at ₹20.826267 per PLN');
+    expect(shown).not.toContain('zł');
+  });
 });
 
 // The boards draw "Pay in rupees" at 130% and in dark: at 130% and 200% on 360 and 412dp phones,

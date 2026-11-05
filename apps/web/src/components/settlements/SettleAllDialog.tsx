@@ -17,7 +17,7 @@ import {
   suggestedRateText,
 } from '@splitbook/shared/cross-currency-payment';
 import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
-import { getCurrency } from '@splitbook/shared/currency';
+import { currencyPrefix } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { useRateSuggestion, type RateSuggestionState } from '@/lib/hooks/use-rate-suggestion';
 import {
@@ -73,7 +73,8 @@ export interface SettleAllDialogProps {
   onRefresh: () => void;
 }
 
-const symbolOf = (currency: string) => getCurrency(currency)?.symbol ?? currency;
+/** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#884). */
+const symbolOf = currencyPrefix;
 /** "₹92.10 per €": units of the paying currency for one unit of the Debt's. */
 const perUnit = (rate: string, paidCurrency: string, currency: string) =>
   `${decimalMoney(rateText(rate), paidCurrency)} per ${symbolOf(currency)}`;

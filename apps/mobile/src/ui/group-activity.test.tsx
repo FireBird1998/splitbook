@@ -740,6 +740,44 @@ describe('a payment in another currency’s record (#728)', () => {
       (node) => typeof node.type === 'string' && node.props.accessibilityLabel === label,
     );
 
+  // #884: "PLN 60.00 at ₹20.826267 per zł" named one currency two ways in one line.
+  it('names a currency without a symbol by its code, in its row and its record (#884)', () => {
+    const zloty = payment({
+      amount: 60,
+      amountMinor: 6000,
+      currency: 'PLN',
+      amountPaidMinor: 124958,
+      appliedRate: '20.826267',
+      suggestedRate: '20.826267',
+      rateKind: 'suggested',
+      pairDebtBeforeMinor: -6000,
+    });
+    const { root, update } = render({ state: activity({ events: [zloty] }) });
+    // The row reads the whole payment, its rate included.
+    const row = buttons(root).find((label) => label?.includes('Sam Chen'))!;
+    expect(row).toContain('PLN\u00a060.00, at the suggested ₹20.826267 per PLN (20 Oct)');
+    update({ state: activity({ events: [zloty], selected: zloty }) });
+    const record = text(root);
+    expect(record).toContain('to clear PLN\u00a060.00, a Debt in PLN');
+    expect(record).toContain('₹20.826267 per PLN');
+    for (const shown of [row, record]) expect(shown).not.toContain('zł');
+  });
+
+  // #884, the Designer's check: "PLN 60.00 PLN" said the code twice; "€20.00 EUR" says it once.
+  it('names an amount’s currency beside it only where the amount doesn’t already (#884)', () => {
+    const zloty = payment({
+      amount: 60,
+      amountMinor: 6000,
+      currency: 'PLN',
+      amountPaidMinor: 124800,
+      appliedRate: '20.8',
+    });
+    const { root, update } = render({ state: activity({ events: [zloty], selected: zloty }) });
+    expect(text(root)).toContain('Amount clearedPLN\u00a060.00Amount paid₹1,248.00INR');
+    update({ state: activity({ selected: payment() }) });
+    expect(text(root)).toContain('Amount cleared€20.00EURAmount paid₹1,850.00INR');
+  });
+
   it('shows both amounts, the rate used beside the suggestion, and what it changed', () => {
     const { root } = render({ state: activity({ selected: payment() }) });
     const shown = text(root);

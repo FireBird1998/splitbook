@@ -1,5 +1,5 @@
 import { memberLabel } from './member-label';
-import { getCurrency, getCurrencyPrecision } from './currency';
+import { currencyPrefix, getCurrency, getCurrencyPrecision } from './currency';
 import { assertSafeMinorAmount, MoneyValidationError } from './exact-money';
 
 /** Exactly two entered values. Amounts are integer minor units of their named currency. */
@@ -257,7 +257,8 @@ export function formatCrossCurrencySettlement(
     : paidTo
       ? `Paid to ${recipient}`
       : 'Paid';
-  const clearedSymbol = getCurrency(record.currency)?.symbol ?? record.currency;
+  // As formatCurrency names it before an amount: "per €", or "per PLN" for the zloty (#884).
+  const clearedSymbol = currencyPrefix(record.currency);
   const money = (rate: string) => decimalMoney(rateText(rate), record.paidCurrency);
   const used = rateUsed(record);
   const lead = `${people} ${minorMoney(record.amountPaidMinor, record.paidCurrency)} to clear ${minorMoney(record.amountMinor, record.currency)} at`;

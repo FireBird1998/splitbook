@@ -143,6 +143,34 @@ describe('the Expense’s currency, beside its amount (#719)', () => {
     expect(html).not.toMatch(/<label[^>]*>Currency</);
   });
 
+  // #884: "PLN ▾ 60.00" and "CHF ▾ 86.00", never "PLN ▾ zł 60.00" or "CHF ▾ CHF 86.00".
+  it.each([
+    ['PLN', null],
+    ['CHF', null],
+    ['EUR', '€'],
+  ])(
+    'shows %s’s prefix beside the chip only where it isn’t the code the chip says',
+    (code, prefix) => {
+      const html = render('60', {
+        currency: code,
+        currencyChoices: expenseCurrencyChoices(
+          { defaultCurrency: 'INR', alternateCurrencies: [code] },
+          code,
+          code,
+        ),
+      });
+      const button = currencyButton.exec(html)![0];
+      // What the amount's start shows after the chip: its prefix, or nothing.
+      const after = html.split(button)[1].split('</button>').slice(1).join('</button>');
+      const beside =
+        /^(?:<style[^>]*>[^<]*<\/style>)?<span[^>]*aria-hidden="true"[^>]*>([^<]*)<\/span>/.exec(
+          after,
+        )?.[1] ?? null;
+      expect(beside).toBe(prefix);
+      expect(html).not.toContain('zł');
+    },
+  );
+
   it('splits whole yen, and refuses part of a yen in the board’s words', () => {
     const choices = expenseCurrencyChoices(trip, null, 'JPY');
     expect(text(render('2500', { currency: 'JPY', currencyChoices: choices }))).toContain(

@@ -29,7 +29,7 @@
  * so no time zone can move a day.
  */
 import { wholeAmountWords } from './amount-entry';
-import { CURRENCIES, formatCurrency, getCurrency, getCurrencyPrecision } from './currency';
+import { CURRENCIES, currencyPrefix, formatCurrency, getCurrencyPrecision } from './currency';
 import {
   MAX_EXPENSE_AMOUNT,
   MoneyValidationError,
@@ -547,8 +547,10 @@ function amountCandidates(tokens: Token[], marks: Marks): AmountCandidate[] {
   return candidates;
 }
 
+/** "₹2400", or "PLN 2400": the currency as its amounts name it (#884), as a member may type it. */
 function example(currency: string): string {
-  return `${getCurrency(currency)?.symbol ?? `${currency} `}2400`;
+  const prefix = currencyPrefix(currency);
+  return /[A-Za-z]$/.test(prefix) ? `${prefix} 2400` : `${prefix}2400`;
 }
 
 interface AmountRead {

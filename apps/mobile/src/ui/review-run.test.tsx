@@ -837,6 +837,48 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(f.saves).toHaveLength(1);
     expect(tally(tree)).toContain('Saved 1');
   });
+  // #884: beside its chip, a currency's prefix shows only where it isn't the code the chip says:
+  // "PLN ▾ 60.00" and "CHF ▾ 86.00", never "PLN ▾ zł 60.00" or "CHF ▾ CHF 86.00"; "EUR ▾ € 18.40".
+  it.each([
+    ['PLN', 'Polish Zloty', 60, ''],
+    ['CHF', 'Swiss Franc', 86, ''],
+    ['EUR', 'Euro', 18.4, '€'],
+  ])(
+    'shows %s’s amount beside its chip with the prefix it lacks (#884)',
+    async (code, name, value, prefix) => {
+      const f = fixture({ one: true, extras: [code] });
+      const draft = f.items()[0].draft;
+      draft.values = {
+        ...draft.values,
+        amount: value,
+        currency: code,
+        paidBy: [{ user: user.id, amount: value }],
+      };
+      await signIn(f);
+      await act(async () => {
+        await f.controller.startReviewRun();
+      });
+      const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+      // The row the chip sits in, with the Amount: the chip, the prefix (or nothing), the amount.
+      let row = button(tree, `Currency, ${code}, ${name}. Change currency`);
+      while (
+        !row.findAll(
+          (node) =>
+            String(node.type) === 'TextInput' &&
+            String(node.props.accessibilityLabel).startsWith('Amount'),
+        ).length
+      )
+        row = row.parent!;
+      // TalkBack hears the currency with the chip and the amount, so the prefix is hidden from it.
+      const beside = row
+        .findAll(
+          (node) => String(node.type) === 'Text' && node.props.accessibilityElementsHidden === true,
+        )
+        .map((node) => node.children.join(''));
+      expect(beside).toEqual(prefix ? [prefix] : []);
+      expect(text(tree)).not.toContain('zł');
+    },
+  );
   // #874: Pasteis box, €18.40, in Maple House, which lists INR and EUR.
   it('shows an extra-currency item in its own currency, and changes it with Add expense’s picker (#874)', async () => {
     const f = fixture({ one: true, extras: ['EUR', 'JPY'] });

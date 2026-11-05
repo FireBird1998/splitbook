@@ -7,6 +7,7 @@ import {
   readCrossCurrencyRecord,
   type CrossCurrencyRecord,
 } from '@splitbook/shared/cross-currency-payment';
+import { prefixBesideChip } from '@splitbook/shared/currency';
 import {
   groupSettlementBatches,
   type SettlementBatchActivityItem,
@@ -740,18 +741,23 @@ function PaymentRecord({
           </>
         ) : null}
         <Divider />
+        {/* The code beside an amount only where the amount doesn't already say it (#884). */}
         <RecordRow label="Amount cleared">
           <CompactText style={mono}>{card.cleared}</CompactText>
-          <CompactText variant="caption" tone="secondary">
-            {record.currency}
-          </CompactText>
+          {prefixBesideChip(record.currency) ? (
+            <CompactText variant="caption" tone="secondary">
+              {record.currency}
+            </CompactText>
+          ) : null}
         </RecordRow>
         <Divider />
         <RecordRow label="Amount paid">
           <CompactText style={mono}>{card.paidAmount}</CompactText>
-          <CompactText variant="caption" tone="secondary">
-            {record.paidCurrency}
-          </CompactText>
+          {prefixBesideChip(record.paidCurrency) ? (
+            <CompactText variant="caption" tone="secondary">
+              {record.paidCurrency}
+            </CompactText>
+          ) : null}
         </RecordRow>
         <Divider />
         <RecordRow label="Recorded">

@@ -53,6 +53,24 @@ function render(changes: Partial<CrossCurrencyRecord> = {}, viewerId = ALEX) {
   return { html, text: text(html) };
 }
 
+// #884: "PLN 60.00 at ₹20.826267 per zł" named one currency two ways.
+describe('a payment in a currency without a symbol, on its card (#884)', () => {
+  it('names the currency by its code in its amounts and its rates', () => {
+    const { text: shown } = render({
+      currency: 'PLN',
+      amountMinor: 6000,
+      amountPaidMinor: 124958,
+      appliedRate: '20.826267',
+      suggestedRate: '20.826267',
+      rateKind: 'suggested',
+      pairDebtBeforeMinor: -6000,
+    });
+    expect(shown).toContain('Paid ₹1,249.58 to clear PLN 60.00, a Debt in PLN');
+    expect(shown).toContain('Rate used ₹20.826267 per PLN');
+    expect(shown).not.toContain('zł');
+  });
+});
+
 describe('a payment in another currency, on its card (#727)', () => {
   it('shows who paid whom, both amounts, the rate and the suggestion, and what moved', () => {
     const { html, text: shown } = render();

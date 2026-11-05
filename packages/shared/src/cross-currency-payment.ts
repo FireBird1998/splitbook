@@ -7,7 +7,7 @@
 import { format } from 'date-fns';
 import { z } from 'zod';
 import { readAmountEntry } from './amount-entry';
-import { formatCurrency, getCurrency, getCurrencyPrecision, wholeUnit } from './currency';
+import { currencyPrefix, formatCurrency, getCurrencyPrecision, wholeUnit } from './currency';
 import { toMajorAmount } from './exact-money';
 import { crossCurrencySettlementReadShape } from './validators/settlement';
 import { memberLabel } from './member-label';
@@ -523,7 +523,8 @@ export function crossCurrencySummary({
  * Debt between the two before and after, and that nothing else moved.
  */
 export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
-  const per = `per ${getCurrency(record.currency)?.symbol ?? record.currency}`;
+  // As its amounts name it: "per €", or "per PLN" for the zloty (#884).
+  const per = `per ${currencyPrefix(record.currency)}`;
   const payer = memberLabel(record.paidBy, record.paidByName, viewerId) ?? 'Former member';
   const payee = memberLabel(record.paidTo, record.paidToName, viewerId) ?? 'Former member';
   const short = (label: string, isViewer: boolean) => (isViewer ? label : firstName(label));

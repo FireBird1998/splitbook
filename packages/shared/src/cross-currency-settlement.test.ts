@@ -208,6 +208,36 @@ describe('cross-currency Settlement wording (#727)', () => {
       'Rates By Exchange Rate API',
     );
   });
+  // #884: a currency with no symbol of its own in English is named by its code, as its amounts.
+  it('names a currency without a symbol by its code, as its amounts are (#884)', () => {
+    const zloty = {
+      paidBy: 'sam',
+      paidByName: 'Sam',
+      paidTo: 'alex',
+      paidToName: 'Alex',
+      currency: 'PLN',
+      amountMinor: 6000,
+      paidCurrency: 'INR',
+      amountPaidMinor: 124958,
+      appliedRate: '20.826267',
+      rateKind: 'entered' as const,
+    };
+    expect(formatCrossCurrencySettlement(zloty)).toBe(
+      'Sam paid Alex ₹1,249.58 to clear PLN\u00a060.00 at ₹20.826267 per PLN; no rate suggested',
+    );
+    expect(
+      formatCrossCurrencySettlement({
+        ...zloty,
+        currency: 'EUR',
+        amountMinor: 2000,
+        paidCurrency: 'CZK',
+        amountPaidMinor: 50000,
+        appliedRate: '25',
+      }),
+    ).toBe(
+      'Sam paid Alex CZK\u00a0500.00 to clear €20.00 at CZK\u00a025.00 per €; no rate suggested',
+    );
+  });
   it('formats stored decimal rates and large minor amounts without floating-point rounding', () => {
     expect(
       formatCrossCurrencySettlement({

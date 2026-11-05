@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
-import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
+import { currencyPrefix, formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { rateText } from '@splitbook/shared/cross-currency-payment';
 import { decimalMoney, minorMoney, rateUsed } from '@splitbook/shared/cross-currency-settlement';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
@@ -250,7 +250,7 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
                               payment.amountPaidMinor,
                               payment.paidCurrency,
                             )} at {decimalMoney(rateText(rateOf(payment)), payment.paidCurrency)}{' '}
-                            per {getCurrency(payment.currency)?.symbol ?? payment.currency}
+                            per {currencyPrefix(payment.currency)}
                           </Box>
                         )}
                     </Box>

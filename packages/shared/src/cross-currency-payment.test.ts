@@ -460,6 +460,28 @@ describe('a payment’s record, as its card shows it (#727)', () => {
     pairDebtAfterMinor: 0,
   };
 
+  // #884: "PLN 60.00 at ₹20.826267 per zł" named one currency two ways.
+  it('names a currency without a symbol by its code in its rates (#884)', () => {
+    const zloty = paymentRecord(
+      {
+        ...record,
+        currency: 'PLN',
+        amountMinor: 6000,
+        amountPaidMinor: 124958,
+        appliedRate: '20.826267',
+        suggestedRate: '20.826267',
+        rateKind: 'suggested',
+        pairDebtBeforeMinor: -6000,
+      },
+      alex,
+    );
+    expect(zloty).toMatchObject({
+      clears: 'to clear PLN\u00a060.00, a Debt in PLN',
+      rateUsed: '₹20.826267 per PLN',
+      suggested: { rate: '₹20.826267 per PLN' },
+    });
+    expect(JSON.stringify(zloty)).not.toContain('zł');
+  });
   it('shows both amounts, the rate used and the suggestion, and what moved', () => {
     expect(paymentRecord(record, alex)).toEqual({
       payer: 'You',

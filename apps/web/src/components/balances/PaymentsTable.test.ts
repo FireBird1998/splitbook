@@ -191,6 +191,28 @@ describe('a payment that cleared a Debt in another currency (#727)', () => {
     expect(rows(html)[0][2]).toBe('€20.00 paid as ₹1,850.00 at ₹92.50 per €');
   });
 
+  // #884: "PLN 60.00 paid as … per zł" named one currency two ways.
+  it('names a currency without a symbol by its code, as its amounts are (#884)', () => {
+    const inRupees: PaymentRead = {
+      _id: 'd00000000000000000000011',
+      paidBy: ALEX,
+      paidTo: SAM,
+      amount: 60,
+      currency: 'PLN',
+      amountPaidMinor: 124958,
+      paidCurrency: 'INR',
+      appliedRate: '20.826267',
+      rateKind: 'custom',
+      note: '',
+      createdAt: '2026-10-21T04:50:00.000Z',
+      createdBy: ALEX,
+    };
+
+    const { html } = render({ status: 'ready', payments: [inRupees] });
+
+    expect(rows(html)[0][2]).toBe('PLN 60.00 paid as ₹1,249.58 at ₹20.826267 per PLN');
+  });
+
   // #870: €54.83 at the suggested ₹92.10 paid ₹5,049.84; the older record kept ₹92.099945.
   it('shows an older payment at the suggestion at the suggested rate, not one worked back', () => {
     const atSuggestion: PaymentRead = {

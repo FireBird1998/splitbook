@@ -355,9 +355,11 @@ describe.each(['light', 'dark'] as const)('the Amount field at large text in %s 
     expect(unreadText(tree, size.fontScale, screenWidth)).toEqual([]);
   });
 
+  // Since #884 a franc's amount has no "CHF" beside its chip, which already says CHF; Canadian
+  // dollars keep a prefix as wide ("CA$"), so the move under the chip is checked with them.
   it('keeps the amount beside the chip where it fits, and moves it under where it doesn’t', () => {
     const height = (fontScale: number, amount: string) =>
-      layoutHeight(field(card('CHF', fontScale, amount)), fontScale, screenWidth);
+      layoutHeight(field(card('CAD', fontScale, amount)), fontScale, screenWidth);
     // At 100% 2500.50 fits beside the chip, on the one line a short amount takes.
     expect(height(1, '2500.50')).toBe(height(1, '5'));
     // At 200% it doesn't: the amount takes a line of its own, under the chip.

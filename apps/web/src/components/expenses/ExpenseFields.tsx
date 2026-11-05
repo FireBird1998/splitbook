@@ -25,6 +25,7 @@ import {
   getCurrency,
   formatCurrency,
   getCurrencyPrecision,
+  prefixBesideChip,
   wholeUnit,
 } from '@splitbook/shared/currency';
 import { parseDecimalUnits, sumMinorAmounts, toMajorAmount } from '@splitbook/shared/exact-money';
@@ -145,8 +146,9 @@ export default function ExpenseFields({
   const chosen = choices.find((choice) => choice.code === currency) ?? {
     code: currency,
     name: known?.name ?? currency,
-    symbol: known?.symbol ?? currency,
   };
+  // Beside the chip, the prefix only where it isn't the code the chip says (#884).
+  const prefix = prefixBesideChip(chosen.code);
   // A Group in one currency still opens the picker to add one (#722).
   const changeable = choices.length > 1 || !!addCurrency;
   const [currencyMenu, setCurrencyMenu] = useState<HTMLElement | null>(null);
@@ -400,16 +402,18 @@ export default function ExpenseFields({
                         >
                           {chosen.code}
                         </Button>
-                        <Box
-                          component="span"
-                          aria-hidden="true"
-                          sx={(theme) => ({
-                            ...(theme.typography.money as React.CSSProperties),
-                            color: 'text.secondary',
-                          })}
-                        >
-                          {chosen.symbol}
-                        </Box>
+                        {prefix && (
+                          <Box
+                            component="span"
+                            aria-hidden="true"
+                            sx={(theme) => ({
+                              ...(theme.typography.money as React.CSSProperties),
+                              color: 'text.secondary',
+                            })}
+                          >
+                            {prefix}
+                          </Box>
+                        )}
                       </InputAdornment>
                     ),
                   },

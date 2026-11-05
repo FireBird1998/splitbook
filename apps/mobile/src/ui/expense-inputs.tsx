@@ -1,7 +1,7 @@
 import type { TextInputInstance, ViewInstance } from 'react-native';
 import { memo, useState, type Ref } from 'react';
 import { Pressable, TextInput, View, useWindowDimensions } from 'react-native';
-import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
+import { getCurrency, getCurrencyPrecision, prefixBesideChip } from '@splitbook/shared/currency';
 import type { ExpenseDraft, ExpenseField } from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
 import { Field, FieldError } from './group-workflows';
@@ -136,10 +136,13 @@ const LOCK_SIZE = 20;
 const AMOUNT_GAP = 10;
 
 /**
- * The currency's symbol beside the chip, as the board draws it; TalkBack already hears the
- * currency. Memoized with the chip, so typing an amount never renders it again.
+ * The currency's prefix beside the chip, as the board draws it: formatCurrency's, and nothing
+ * where that is the code the chip already says ("PLN ▾ 60.00", "EUR ▾ € 60.00", #884). TalkBack
+ * already hears the currency. Memoized with the chip, so typing an amount never renders it again.
  */
 export const CurrencySymbol = memo(function CurrencySymbol({ currency }: { currency: string }) {
+  const prefix = prefixBesideChip(currency);
+  if (!prefix) return null;
   return (
     <CompactText
       tone="secondary"
@@ -147,7 +150,7 @@ export const CurrencySymbol = memo(function CurrencySymbol({ currency }: { curre
       importantForAccessibility="no"
       style={{ fontFamily: fonts.mono, fontSize: SYMBOL_SIZE }}
     >
-      {getCurrency(currency)?.symbol ?? ''}
+      {prefix}
     </CompactText>
   );
 });
@@ -197,7 +200,8 @@ export function AmountField({
   const amountFocused = focusedPlaces === places;
   const window = useWindowDimensions();
   const placeholder = places === 0 ? '0' : `0.${'0'.repeat(places)}`;
-  const symbol = onCurrency ? (getCurrency(draft.currency)?.symbol ?? '') : '';
+  // What CurrencySymbol draws beside the chip: nothing where the chip already says the code (#884).
+  const symbol = onCurrency ? prefixBesideChip(draft.currency) : '';
   const input = {
     color: theme.text,
     paddingVertical: 4,

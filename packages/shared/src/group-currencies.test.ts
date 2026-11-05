@@ -85,9 +85,9 @@ describe('the currency a new Expense starts in (#719)', () => {
 describe('the currencies an Expense can be in, as its form offers them (#719)', () => {
   it('puts the member’s latest Expense’s first, then the main currency, then the others', () => {
     expect(expenseCurrencyChoices(trip, 'JPY', 'JPY')).toEqual([
-      { code: 'JPY', name: 'Japanese Yen', symbol: '¥', note: 'Your latest Expense here' },
-      { code: 'INR', name: 'Indian Rupee', symbol: '₹', note: 'Main currency' },
-      { code: 'EUR', name: 'Euro', symbol: '€', note: null },
+      { code: 'JPY', name: 'Japanese Yen', note: 'Your latest Expense here' },
+      { code: 'INR', name: 'Indian Rupee', note: 'Main currency' },
+      { code: 'EUR', name: 'Euro', note: null },
     ]);
     expect(expenseCurrencyChoices(trip, null, 'INR').map((choice) => choice.code)).toEqual([
       'INR',
@@ -98,10 +98,10 @@ describe('the currencies an Expense can be in, as its form offers them (#719)', 
 
   it('keeps an edited Expense’s own currency when the Group no longer lists it', () => {
     expect(expenseCurrencyChoices(trip, 'EUR', 'USD')).toEqual([
-      { code: 'EUR', name: 'Euro', symbol: '€', note: 'Your latest Expense here' },
-      { code: 'INR', name: 'Indian Rupee', symbol: '₹', note: 'Main currency' },
-      { code: 'JPY', name: 'Japanese Yen', symbol: '¥', note: null },
-      { code: 'USD', name: 'US Dollar', symbol: '$', note: 'This Expense’s currency' },
+      { code: 'EUR', name: 'Euro', note: 'Your latest Expense here' },
+      { code: 'INR', name: 'Indian Rupee', note: 'Main currency' },
+      { code: 'JPY', name: 'Japanese Yen', note: null },
+      { code: 'USD', name: 'US Dollar', note: 'This Expense’s currency' },
     ]);
   });
 });
