@@ -2,7 +2,7 @@ import Typography from '@mui/material/Typography';
 /** Backup-specific explanation, independent of the CSV preview. */
 export default function BackupOption() {
   return (
-    <Typography color="text.secondary">
+    <Typography variant="body2" color="text.secondary">
       One JSON file holds all chosen Groups, exact minor units, stored payers and shares, Tags and
       member names, including each Group’s extra currencies. Cross-currency payments keep both
       amounts and their stored rates. Backups cover all time. Contact fields are omitted and
