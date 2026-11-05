@@ -122,6 +122,8 @@ function fixture(
     flag?: boolean;
     /** The kind the To review read names for the Group (#596). */
     category?: 'trip' | 'home';
+    /** Maple House's extra currencies (#874). */
+    extras?: string[];
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -187,6 +189,7 @@ function fixture(
                     groupId: id,
                     groupName: id === groupId ? group.name : 'Goa Friends Trip',
                     currency: 'INR',
+                    ...(options.extras ? { alternateCurrencies: options.extras } : {}),
                     ...(options.category && id === groupId ? { category: options.category } : {}),
                     count: own.length,
                     items: own,
@@ -211,7 +214,7 @@ function fixture(
     if (path === `/api/groups/${groupId}`)
       return denied
         ? json({ error: 'Forbidden', status: 403 }, 403)
-        : json({ status: 200, data: group });
+        : json({ status: 200, data: { ...group, alternateCurrencies: options.extras ?? [] } });
     const editing = items.find((item) => path.endsWith(`/drafts/${item.draft.id}`));
     if (editing && init.method === 'PUT') {
       editing.draft = {
@@ -586,8 +589,11 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     for (const name of ['Amount', 'Description']) {
+      // TalkBack hears the Amount's currency with it: "Amount, Indian Rupee" (#874).
       const input = tree.root.find(
-        (node) => String(node.type) === 'TextInput' && node.props.accessibilityLabel === name,
+        (node) =>
+          String(node.type) === 'TextInput' &&
+          String(node.props.accessibilityLabel).split(',')[0] === name,
       );
       // The field around the box starts with its visible label and Required mark, above the
       // box (Amount's sits in a row with the Group's currency, #512).
@@ -716,7 +722,9 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     });
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     const amount = tree.root.find(
-      (node) => String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Amount',
+      (node) =>
+        String(node.type) === 'TextInput' &&
+        node.props.accessibilityLabel === 'Amount, Indian Rupee',
     );
     expect(amount.props.value).toBe('10.555');
     for (const shown of ['₹10.56', 'Amount needed']) expect(text(tree)).not.toContain(shown);
@@ -810,7 +818,9 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     ).toHaveLength(1);
     expect(
       tree.root.find(
-        (node) => String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Amount',
+        (node) =>
+          String(node.type) === 'TextInput' &&
+          node.props.accessibilityLabel === 'Amount, Indian Rupee',
       ).props.value,
     ).toBe('12.34');
     expect(text(tree)).not.toContain('Use INR as currency');
@@ -821,6 +831,97 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(f.saves).toHaveLength(1);
     expect(tally(tree)).toContain('Saved 1');
   });
+  // #874: Pasteis box, €18.40, in Maple House, which lists INR and EUR.
+  it('shows an extra-currency item in its own currency, and changes it with Add expense’s picker (#874)', async () => {
+    const f = fixture({ one: true, extras: ['EUR', 'JPY'] });
+    const pasteis = f.items()[0].draft;
+    pasteis.values = {
+      ...pasteis.values,
+      description: 'Pasteis box',
+      amount: 18.4,
+      currency: 'EUR',
+      paidBy: [{ user: user.id, amount: 18.4 }],
+    };
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    const amount = () =>
+      tree.root.find(
+        (node) =>
+          String(node.type) === 'TextInput' &&
+          String(node.props.accessibilityLabel).startsWith('Amount'),
+      );
+
+    // The item's own currency beside the Amount, with its minor digits, as Add expense shows it.
+    expect(button(tree, 'Currency, EUR, Euro. Change currency')).toBeDefined();
+    expect(text(tree)).toContain('€');
+    expect(amount().props).toMatchObject({
+      value: '18.40',
+      keyboardType: 'decimal-pad',
+      accessibilityLabel: 'Amount, Euro',
+    });
+    expect(text(tree)).not.toContain('Use INR');
+    expect(button(tree, 'Save expense').props.disabled).toBe(false);
+
+    await tap(tree, 'Currency, EUR, Euro. Change currency');
+    const sheet = tree.root
+      .findAll((node) => String(node.type) === 'Modal' && node.props.visible === true)
+      .find((modal) =>
+        modal
+          .findAll((node) => String(node.type) === 'Text')
+          .some((node) => node.children.join('') === 'Maple House · 3 currencies'),
+      );
+    expect(sheet).toBeDefined();
+    expect(
+      sheet!
+        .findAll(
+          (node) => String(node.type) === 'Pressable' && node.props.accessibilityRole === 'radio',
+        )
+        .map((node) => [node.props.accessibilityLabel, node.props.accessibilityState?.checked]),
+    ).toEqual([
+      ['INR, Indian Rupee, main currency', false],
+      ['EUR, Euro', true],
+      ['JPY, Japanese Yen, whole amounts only', false],
+    ]);
+    expect(text(tree)).toContain(
+      'Changing the currency keeps the number you typed. Nothing is converted.',
+    );
+    await tap(tree, 'INR, Indian Rupee, main currency');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    // Only the currency changed; the amount stays as entered.
+    expect(f.items()[0].draft.values).toMatchObject({ amount: 18.4, currency: 'INR' });
+    expect(button(tree, 'Currency, INR, Indian Rupee. Change currency')).toBeDefined();
+  });
+
+  it('shows a yen item whole, on the number pad (#874)', async () => {
+    const f = fixture({ one: true, extras: ['EUR', 'JPY'] });
+    const ramen = f.items()[0].draft;
+    ramen.values = {
+      ...ramen.values,
+      description: 'Ramen',
+      amount: 5,
+      currency: 'JPY',
+      paidBy: [{ user: user.id, amount: 5 }],
+    };
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    expect(button(tree, 'Currency, JPY, Japanese Yen. Change currency')).toBeDefined();
+    expect(
+      tree.root.find(
+        (node) =>
+          String(node.type) === 'TextInput' &&
+          node.props.accessibilityLabel === 'Amount, Japanese Yen',
+      ).props,
+    ).toMatchObject({ value: '5', keyboardType: 'number-pad', placeholder: '0' });
+  });
+
   it('says an item in another currency needs the Group currency, not the expense details (#567)', async () => {
     const f = fixture({ one: true });
     f.items()[0].draft.values!.currency = 'USD';
@@ -833,8 +934,14 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
 
     expect(text(tree)).toContain('One thing left before you can save: the Group currency');
     expect(text(tree)).not.toContain('the expense details');
-    expect(button(tree, 'Use INR, the Group’s currency').props.disabled).toBe(false);
+    // Its own currency beside the Amount, and Add expense's picker to change it (#874).
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
+    await tap(tree, 'Currency, USD, US Dollar. Change currency');
+    await tap(tree, 'INR, Indian Rupee, main currency');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(f.items()[0].draft.values).toMatchObject({ amount: 12.34, currency: 'INR' });
   });
   it.each([
     ['trip', 'Trip'],
@@ -852,7 +959,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
 
       expect(text(tree)).toContain(`One thing left before you can save: the ${noun} currency`);
-      expect(button(tree, `Use INR, the ${noun}’s currency`).props.disabled).toBe(false);
+      expect(button(tree, 'Currency, USD, US Dollar. Change currency').props.disabled).toBe(false);
     },
   );
   it('shows the shared change note from a newer read, and never saves an unseen version', async () => {
@@ -876,9 +983,11 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(text(tree)).toContain('You’re seeing the latest version.');
     expect(
       tree.root.findAll(
-        (node) => String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Amount',
+        (node) =>
+          String(node.type) === 'TextInput' &&
+          node.props.accessibilityLabel === 'Amount, Indian Rupee',
       )[0].props.value,
-    ).toBe('24');
+    ).toBe('24.00');
     const current = f.items()[0].draft;
     f.items()[0].draft = {
       ...current,

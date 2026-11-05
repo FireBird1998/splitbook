@@ -91,7 +91,7 @@ export const CurrencyBadge = memo(function CurrencyBadge({
  * The currency beside the amount, as a chip that opens the Currency sheet (#720, board "Pick the
  * currency"): "Currency, JPY, Japanese Yen. Change currency".
  */
-const CurrencyChip = memo(function CurrencyChip({
+export const CurrencyChip = memo(function CurrencyChip({
   currency,
   locked,
   onPress,
@@ -133,7 +133,7 @@ const CurrencyChip = memo(function CurrencyChip({
  * The currency's symbol beside the chip, as the board draws it; TalkBack already hears the
  * currency. Memoized with the chip, so typing an amount never renders it again.
  */
-const CurrencySymbol = memo(function CurrencySymbol({ currency }: { currency: string }) {
+export const CurrencySymbol = memo(function CurrencySymbol({ currency }: { currency: string }) {
   return (
     <CompactText
       tone="secondary"
