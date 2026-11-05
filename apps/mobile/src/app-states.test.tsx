@@ -2467,19 +2467,19 @@ describe('A Group says what is true, without jumps (#219)', () => {
     // The Group's Expenses were read since: Home's figures say in place that they're updating,
     // where their time was, from the first frame back, and the top bar stays quiet.
     expect(frames.length).toBeGreaterThan(1);
-    for (const frame of frames) expect(frame).toContain('Your balancesUpdating…');
-    expect(seen()).toContain('Your balancesUpdating…');
+    for (const frame of frames) expect(frame).toContain('Your balances\u200aUpdating…');
+    expect(seen()).toContain('Your balances\u200aUpdating…');
     // Nothing fades from the old time into it.
     expect(fading().filter((text) => text.startsWith('Updated'))).toEqual([]);
     expect(app.content().outside).not.toContain('Refreshing');
     expect(contentHeight()).toBe(height);
-    expect(seen()).toContain('Your balancesUpdating…');
+    expect(seen()).toContain('Your balances\u200aUpdating…');
     expect(seen()).not.toContain('Updated');
     expect(app.content().outside).not.toContain('Refreshing');
     figures.release();
     await settle();
     expect(contentHeight()).toBe(height);
-    expect(seen()).toContain(`Your balancesUpdated ${refreshedLabel(phone.clock.now)}`);
+    expect(seen()).toContain(`Your balances\u200aUpdated ${refreshedLabel(phone.clock.now)}`);
   });
 
   // B1 and S2: after a payment, Balances and then Home say the figures shown are being updated.
@@ -2534,13 +2534,13 @@ describe('A Group says what is true, without jumps (#219)', () => {
       // so in place, and the top bar stays quiet.
       app.tap('Back to Home');
       await settle();
-      expect(seen()).toContain('Your balancesUpdating…');
+      expect(seen()).toContain('Your balances\u200aUpdating…');
       expect(seen()).not.toContain(`Updated ${readAt}`);
       expect(app.content().outside).not.toContain('Refreshing');
       expect(contentHeight(scale)).toBe(home);
       figures.release();
       await settle(recording);
-      expect(seen()).toContain(`Your balancesUpdated ${refreshedLabel(phone.clock.now)}`);
+      expect(seen()).toContain(`Your balances\u200aUpdated ${refreshedLabel(phone.clock.now)}`);
     },
   );
 
@@ -2753,7 +2753,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await figures.reached;
     await settle();
     expect(controller().getSnapshot().home).toMatchObject({ status: 'loading', stale: true });
-    expect(seen()).toContain(`Your balancesUpdated ${readAt}`);
+    expect(seen()).toContain(`Your balances\u200aUpdated ${readAt}`);
     expect(seen()).not.toContain('Updating');
     figures.release();
     await settle();

@@ -17,7 +17,17 @@ import type {
 import { ContinueDrafts, HomeBalances, HomeGroups, HomeTopBar } from './home';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { ThemeContext } from './theme';
-import { flatten, hairSpace, labelRuns, largeTextWindows, unreadText } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  hairSpace,
+  labelRuns,
+  largeTextWindows,
+  layoutHeight,
+  outerTexts,
+  unreadText,
+  wordsOf,
+} from '../test-utils/layout';
 import { refreshedLabel } from './refresh-feedback';
 import {
   activateWithScreenReader,
@@ -200,7 +210,8 @@ describe('Home balances', () => {
     (fontScale) => {
       setWindow({ fontScale });
       const root = render(<HomeBalances state={home()} onRefresh={vi.fn()} />);
-      expect(headers(root)).toContain('Your balances');
+      // A heading beside the time keeps a hair space to spare (#639).
+      expect(headers(root)).toContain('Your balances\u200a');
       expect(text(root)).toContain(`Updated ${refreshedLabel(at.getTime())}`);
       expect(announced(root)).toEqual([
         'INR: You owe ₹1,480.00, Owed to you ₹620.00',
@@ -446,6 +457,61 @@ describe.each(['light', 'dark'] as const)(
           cutOnce: size.fontScale < 1.5,
         }),
       ).toEqual([]);
+    });
+  },
+);
+
+// #890: at 200% on a 360 dp phone, Your balances' "Owed to you" figure ran through the card's
+// padding to its border, and the card hid the rest: "₹11,387.77" read "₹11,387.7", a wrong figure
+// with no "…". Its header broke inside a word, "YOUR BALANC / ES", beside "Updated …". A figure
+// that doesn't fit beside its label goes under it, at the row's end, and the time goes onto a line
+// of its own where it can't share the header's, as To review's note does (#876).
+describe.each(['light', 'dark'] as const)(
+  'Home’s Your balances at large text in %s (#890)',
+  (mode) => {
+    const figure = '₹11,387.77';
+    const balances = (size: { width: number; fontScale: number }) => {
+      setWindow({ ...size, height: 640 });
+      act(() => {
+        renderer = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <HomeBalances
+              state={home({ data: [{ currency: 'INR', youOwe: 11387.77, youAreOwed: 11387.77 }] })}
+              onRefresh={vi.fn()}
+            />
+          </ThemeContext.Provider>,
+        );
+      });
+      return renderer!.toJSON() as ReactTestRendererJSON;
+    };
+    /** The header's row: "Your balances" and the time beside or under it. */
+    const headerRow = (tree: ReactTestRendererJSON) =>
+      findHosts(tree, (_props, type) => type === 'View').find((node) =>
+        (node.children ?? []).some(
+          (child) => typeof child !== 'string' && child.props.accessibilityRole === 'header',
+        ),
+      )!;
+
+    it.each(largeTextWindows)(
+      'shows every digit of a 10-character figure and the whole header, $width dp at $fontScale× text',
+      (size) => {
+        expect(figure).toHaveLength(10);
+        const tree = balances(size);
+        expect(outerTexts(tree).filter((text) => wordsOf(text) === figure)).toHaveLength(2);
+        // Home's content is inset 16dp on each side.
+        expect(unreadText(tree, size.fontScale, size.width - 32)).toEqual([]);
+      },
+    );
+
+    it('keeps each figure beside its label, and the time beside the header, at 100%', () => {
+      const tree = balances({ width: 360, fontScale: 1 });
+      expect(unreadText(tree, 1, 360 - 32)).toEqual([]);
+      // The card's border and padding leave 298dp.
+      const row = headerRow(tree);
+      const tallest = Math.max(
+        ...(row.children as ReactTestRendererJSON[]).map((child) => layoutHeight(child, 1, 298)),
+      );
+      expect(layoutHeight(row, 1, 298)).toBe(tallest);
     });
   },
 );
