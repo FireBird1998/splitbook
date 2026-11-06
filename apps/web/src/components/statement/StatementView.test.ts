@@ -130,7 +130,7 @@ describe('a whole-trip statement', () => {
       'Every recorded payment, including those before and after the trip.',
     );
     expect(payments).toContain(
-      'Tue 22 Sep 2026, 17:30 After the trip Alex Rivera Sam Chen ₹400.00 Settled after returning home Alex Rivera',
+      'Tue 22 Sep 2026, 5:30 PM After the trip Alex Rivera Sam Chen ₹400.00 Settled after returning home Alex Rivera',
     );
     expect(render(true)).toContain('Payments ₹400.00 1 payment');
   });
@@ -311,8 +311,9 @@ function tripHtml(statement = buildStatement(TRIP, { timeZone: 'Asia/Kolkata' })
 describe('the statement’s table cells', () => {
   it('writes a payment’s date and time as a reader would, never as ISO (#646)', () => {
     const html = tripHtml();
-    // In the statement's own time zone, day and month kept together, on one line.
-    expect(html).toMatch(/class="statement-when">Tue 22\u00a0Sep 2026, 17:30</);
+    // In the statement's own time zone, day and month kept together, on one line, on the web's
+    // 12-hour clock with the time kept beside AM or PM.
+    expect(html).toMatch(/class="statement-when">Tue 22\u00a0Sep 2026, 5:30\u00a0PM</);
     expect(html).not.toContain('2026-09-22T17:30:00+05:30');
   });
 

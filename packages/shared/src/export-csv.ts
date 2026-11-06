@@ -114,14 +114,16 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /**
- * A moment as a reader writes it on a printed statement (#646): "Fri 6 Nov 2026, 03:21", in
- * the time zone's wall clock on a 24-hour clock, with the year, as a statement is a document.
- * The day and month are joined by a no-break space so they never part.
+ * A moment as a reader writes it on a printed statement (#646): "Fri 6 Nov 2026, 7:32 AM", in
+ * the time zone's wall clock on the web's 12-hour clock, with the year, as a statement is a
+ * document. No-break spaces join the day to its month and the time to AM or PM, so neither
+ * pair parts. Exports keep their exact ISO times (`zonedTimestamp`).
  */
 export function zonedDateTime(at: Date | string, timeZone: string): string {
   const { year, month, day, hour, minute } = zonedParts(new Date(at), timeZone);
   const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
-  return `${weekday} ${day}${NO_BREAK_SPACE}${MONTHS[month - 1]} ${year}, ${pad(hour)}:${pad(minute)}`;
+  const time = `${hour % 12 || 12}:${pad(minute)}${NO_BREAK_SPACE}${hour < 12 ? 'AM' : 'PM'}`;
+  return `${weekday} ${day}${NO_BREAK_SPACE}${MONTHS[month - 1]} ${year}, ${time}`;
 }
 
 /**
