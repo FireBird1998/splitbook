@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Children, Fragment, isValidElement, type ReactNode } from 'react';
 import type { GroupDestination } from '../../data/types';
 import { Pressable, View } from 'react-native';
 import { useTheme } from '../theme';
@@ -22,7 +22,9 @@ import { CompactText } from './text';
  * line each and everything is centred in the bar. At large text, where the title and its Group
  * wrap, they keep their centre on the title's first line, as a sheet's header keeps Done (#646):
  * at 200% on a 360dp phone, Back and ⋮ centred on "Expense" and its Group's three lines while
- * Edit, a button that keeps to its row's top, sat on "Expense" (#939).
+ * Edit, a button that keeps to its row's top, sat on "Expense" (#939). Each action centres in a
+ * touch target's height, so one shorter than an icon, as the DEV badge or a dense Done, keeps to
+ * the same line rather than its row's top (#939: the badge sat 11 dp above Back at 130%).
  */
 export function TopBar({
   title,
@@ -47,7 +49,9 @@ export function TopBar({
   const theme = useTheme();
   const column = useTextColumn();
   // At large text, whichever of the title's first line and an action is shorter starts lower by
-  // half the difference, so their centres meet.
+  // half the difference, so their centres meet. Room inside the title's box, not a margin: in the
+  // row a status wraps in, Yoga centres the title by its own height, so a margin moved it down by
+  // half and the title sat above × and ⋮ (#939).
   const firstLine = useLineBox(prominent ? 'title' : 'heading').height;
   const lift = column ? (firstLine - touch.min) / 2 : 0;
   const heading = (
@@ -56,7 +60,7 @@ export function TopBar({
         flex: 1,
         minWidth: column && status ? column : 0,
         paddingHorizontal: 4,
-        marginTop: Math.max(0, -lift),
+        paddingTop: Math.max(0, -lift),
       }}
     >
       <CompactText
@@ -123,14 +127,27 @@ export function TopBar({
           </>
         )}
         {actions ? (
-          // A row of their own, so an action that keeps to its row's top, as a button does,
-          // keeps to the others' line.
+          // A row of their own, each centred in a touch target's height, so an action that keeps
+          // to its row's top, as a button does, or is shorter than an icon, keeps to the line.
           <View style={{ ...beside, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-            {actions}
+            {eachAction(actions).map((action, index) => (
+              <View key={index} style={{ minHeight: touch.min, justifyContent: 'center' }}>
+                {action}
+              </View>
+            ))}
           </View>
         ) : null}
       </View>
     </View>
+  );
+}
+
+/** Each action on its own, out of the fragments that group them. */
+function eachAction(actions: ReactNode): ReactNode[] {
+  return Children.toArray(actions).flatMap((action) =>
+    isValidElement<{ children?: ReactNode }>(action) && action.type === Fragment
+      ? eachAction(action.props.children)
+      : [action],
   );
 }
 

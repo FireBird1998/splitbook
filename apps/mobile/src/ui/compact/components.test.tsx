@@ -9,6 +9,7 @@ import {
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  barCentres,
   findHosts,
   flatten,
   hairSpace,
@@ -60,7 +61,7 @@ const {
   textVariants,
 } = await import('./index');
 const { ThemeContext } = await import('../theme');
-const { Text } = await import('react-native');
+const { Text, View } = await import('react-native');
 
 let renderer: ReactTestRenderer | undefined;
 afterEach(() => {
@@ -932,6 +933,109 @@ describe('a part on a line of its own keeps to the row’s end (#639)', () => {
       expect(style.justifyContent).toBe('flex-end');
     },
   );
+});
+
+// #939, QA's device pass: from 130% text Back, the title's first line and the actions share a
+// centre, but the DEV badge Settings and Connected assistants show, shorter than a 48 dp icon,
+// sat at the top of the actions' row, 11 dp above Back at 130% on a 412 dp phone (118 px against
+// 147). Every action, whatever its height (a badge, a text button, an icon), centres on Back's
+// line, and below large text nothing moves: all of them on the bar's middle, 32 dp down.
+describe('a top bar’s actions centre on its title’s first line, whatever their height (#939)', () => {
+  const noop = () => undefined;
+  /** The environment badge, as the App's Settings and Connected assistants show it. */
+  const environment = (
+    <View testID="environment" style={{ marginRight: 12 }}>
+      <Badge label="DEV" />
+    </View>
+  );
+  /** Each bar, the parts it centres, and where its title's first line centres at 100%. */
+  const bars: [string, ReactElement, string[], number][] = [
+    [
+      'Settings, with the DEV badge',
+      <TopBar
+        key="settings"
+        title="Settings"
+        leading={{ kind: 'back', label: 'Back to Home', onPress: noop }}
+        actions={environment}
+      />,
+      ['Back to Home', 'environment'],
+      32,
+    ],
+    [
+      'Connected assistants, with the DEV badge',
+      <TopBar
+        key="assistants"
+        title="Connected assistants"
+        subtitle="Account · Alex Rivera"
+        leading={{ kind: 'back', label: 'Back to Settings', onPress: noop }}
+        actions={environment}
+      />,
+      ['Back to Settings', 'environment'],
+      24,
+    ],
+    [
+      'Choose currency, with Done',
+      <TopBar
+        key="currency"
+        title="Choose currency"
+        actions={<CompactButton label="Done" variant="text" dense onPress={noop} />}
+      />,
+      ['Done'],
+      32,
+    ],
+    [
+      'Add expense, with a status',
+      <TopBar
+        key="expense"
+        title="Add expense"
+        subtitle="Goa Friends Trip · CHF"
+        prominent={false}
+        leading={{ kind: 'close', label: 'Back to Group', onPress: noop }}
+        status={<Badge label="Kept on this phone" />}
+        actions={<IconButton icon="ellipsis-vertical-outline" label="Options" onPress={noop} />}
+      />,
+      ['Back to Group', 'Options'],
+      24,
+    ],
+  ];
+  const centres = (width: number, fontScale: number, names: string[]) =>
+    barCentres(
+      renderer!.toJSON() as ReactTestRendererJSON,
+      fontScale,
+      width,
+      Object.fromEntries(
+        names.map((name) => [
+          name,
+          (node: ReactTestRendererJSON) =>
+            node.props.accessibilityLabel === name || node.props.testID === name,
+        ]),
+      ),
+    );
+
+  it.each(
+    bars.flatMap(([name, bar, parts]) =>
+      [
+        [412, 1.3],
+        [360, 2],
+      ].map(([width, fontScale]) => [name, width!, fontScale!, bar, parts] as const),
+    ),
+  )('%s, %s dp at %s× text', (_name, width, fontScale, bar, parts) => {
+    setWindow({ width, fontScale });
+    render(bar);
+    const found = centres(width, fontScale, parts);
+    const [first, ...rest] = parts;
+    expect(Object.keys(found).sort()).toEqual(['title', ...parts].sort());
+    for (const part of ['title', ...rest])
+      expect(Math.abs(found[part]! - found[first!]!), part).toBeLessThanOrEqual(1);
+  });
+
+  it.each(bars)('%s, unchanged at 100% on a 412 dp phone', (_name, bar, parts, title) => {
+    setWindow({ width: 412, fontScale: 1 });
+    render(bar);
+    const found = centres(412, 1, parts);
+    for (const part of parts) expect(found[part], part).toBe(32);
+    expect(found.title).toBe(title);
+  });
 });
 
 // #921: Android breaks a line after a hyphen only where the app gives it a zero-width space, as
