@@ -272,6 +272,57 @@ describe('By Tag', () => {
     amounts.forEach((amount) => expect(amount.value('white-space')).toBe('nowrap'));
   });
 
+  it('keeps at least 12 px between a Tag name and its first amount, however long the name (#951)', () => {
+    const markup = render({ initialView: 'table' });
+    // A body row is one <th> (the Tag name, first child) and then three <td>s (the amounts),
+    // so `:first-of-type` and `:last-of-type` both match the name, and `:first-of-type` the
+    // first amount. Which of each cell's nested rules apply where it sits in the row:
+    type Place = Record<
+      ':first-child' | ':last-child' | ':first-of-type' | ':last-of-type',
+      boolean
+    >;
+    const NAME: Place = {
+      ':first-child': true,
+      ':last-child': false,
+      ':first-of-type': true,
+      ':last-of-type': true,
+    };
+    const FIRST_AMOUNT: Place = {
+      ':first-child': false,
+      ':last-child': false,
+      ':first-of-type': true,
+      ':last-of-type': false,
+    };
+    const applies = (selector: string, place: Place) => {
+      const pseudo = selector.trim();
+      if (!(pseudo in place)) throw new Error(`Unexpected rule on a By Tag cell: ${selector}`);
+      return place[pseudo as keyof Place];
+    };
+    const padding = (
+      cell: ReturnType<typeof stylesOf>[number],
+      side: 'left' | 'right',
+      place: Place,
+    ) => {
+      let value = cell.value(`padding-${side}`) ?? '0px';
+      for (const rule of cell.nested) {
+        if (!applies(rule.selector, place)) continue;
+        const set = new RegExp(`(?:^|;)padding-${side}:([^;]+)`).exec(rule.body)?.[1];
+        if (set) value = set;
+      }
+      return Number.parseFloat(value);
+    };
+    const names = stylesOf(markup, 'by-tag-name');
+    const amounts = stylesOf(markup, 'by-tag-amount');
+    expect(names).toHaveLength(4);
+    names.forEach((name, row) => {
+      const firstAmount = amounts[row * 3];
+      // The name may fill its column (one long word), and the amount is right-aligned in its
+      // own, so in the narrowest table only the two paddings keep the texts apart.
+      const between = padding(name, 'right', NAME) + padding(firstAmount, 'left', FIRST_AMOUNT);
+      expect(between).toBeGreaterThanOrEqual(12);
+    });
+  });
+
   it('has no average columns or ticks in the Group’s first Month', () => {
     const markup = render({ read: FIRST, initialView: 'table' });
     expect(tableRows(markup)[0]).toEqual(['Tag', 'September']);

@@ -257,12 +257,20 @@ function TagTable({ model, hidden = false }: { model: ByTagModel; hidden?: boole
     borderBottom: 1,
     borderColor: 'divider',
     textAlign: 'left',
-    '&:first-of-type': { pl: 0 },
-    '&:last-of-type': { pr: 0 },
   } as const;
+  // The table's outer edges sit flush with the card's text, so the first column has no left
+  // padding and the last no right padding. Set per column, not with `:first-of-type` and
+  // `:last-of-type` (#951): in a body row the Tag name is the only <th> and the first amount
+  // the first <td>, so those took the padding off both sides of the edge they share, and a
+  // one-word name that fills its column ran into its amount. (`:first-child` fails as well:
+  // the server writes each cell's <style> into the row ahead of it.) The name and the amount
+  // now keep 12 px between them, however long the name.
+  const first = { ...cell, pl: 0 } as const;
   const number = { ...cell, textAlign: 'right', whiteSpace: 'nowrap' } as const;
+  const lastNumber = { ...number, pr: 0 } as const;
   const money = (theme: { typography: { money: object } }) => ({ ...theme.typography.money });
   const withAverage = model.averageName !== null;
+  const monthCell = withAverage ? number : lastNumber;
   const frame = hidden
     ? { sx: visuallyHidden }
     : {
@@ -297,10 +305,10 @@ function TagTable({ model, hidden = false }: { model: ByTagModel; hidden?: boole
         </Box>
         <thead>
           <tr>
-            <Box component="th" scope="col" sx={cell}>
+            <Box component="th" scope="col" sx={first}>
               Tag
             </Box>
-            <Box component="th" scope="col" sx={number}>
+            <Box component="th" scope="col" sx={monthCell}>
               {model.monthName}
             </Box>
             {withAverage ? (
@@ -308,7 +316,7 @@ function TagTable({ model, hidden = false }: { model: ByTagModel; hidden?: boole
                 <Box component="th" scope="col" sx={number}>
                   {model.averageName}
                 </Box>
-                <Box component="th" scope="col" sx={number}>
+                <Box component="th" scope="col" sx={lastNumber}>
                   Change
                 </Box>
               </>
@@ -323,7 +331,7 @@ function TagTable({ model, hidden = false }: { model: ByTagModel; hidden?: boole
                 scope="row"
                 className="by-tag-name"
                 sx={{
-                  ...cell,
+                  ...first,
                   fontWeight: 400,
                   color: row.untagged ? 'text.secondary' : 'text.primary',
                   fontStyle: row.untagged ? 'italic' : 'normal',
@@ -336,7 +344,7 @@ function TagTable({ model, hidden = false }: { model: ByTagModel; hidden?: boole
               <Box
                 component="td"
                 className="by-tag-amount"
-                sx={[number, money, { color: 'text.primary' }]}
+                sx={[monthCell, money, { color: 'text.primary' }]}
               >
                 {row.spentText}
               </Box>
@@ -352,7 +360,7 @@ function TagTable({ model, hidden = false }: { model: ByTagModel; hidden?: boole
                   <Box
                     component="td"
                     className="by-tag-amount"
-                    sx={[number, money, { color: 'text.secondary' }]}
+                    sx={[lastNumber, money, { color: 'text.secondary' }]}
                   >
                     {row.changeText}
                   </Box>
