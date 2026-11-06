@@ -263,8 +263,14 @@ export const ExpenseTiles = memo(function ExpenseTiles({
  * "Who owes what": each person's paid amount and share, an "Adds up" badge and the totals.
  * With more than four people it shows three and "Show all".
  */
-/** Under an equal split whose shares differ by the smallest unit. */
+/** A saved Expense's record, under an equal split whose shares differ by the smallest unit. */
 export const sharesDifferNote = 'Shares differ by the smallest unit so the whole amount is shared.';
+/**
+ * The form, under every equal split: true before the amount and whatever it is, so the note never
+ * comes or goes as the amount is typed (#941). "smallest unit" is kept on one line.
+ */
+export const sharesMayDifferNote =
+  'If it doesn’t divide evenly, shares differ by the smallest\u00a0unit.';
 
 const AllocationHeading = memo(function AllocationHeading({
   savedLabel,
@@ -471,30 +477,35 @@ export const waitsForAmount = (
 ) => !allocation && (!!amountCorrection || !!amountError(draft.amount, draft.currency));
 
 /**
- * The room Who owes what's totals keep, unseen and unread: the sum line at the widest amount the
- * currency allows (`widest`, its digits all "0", Outfit's widest), and, for an equal split, the
- * note, which an amount may bring: with one member too, so a member the Group check adds moves
- * Notes by their row alone. Android lays it out as it would the totals, so no amount takes more
- * lines than it keeps: before, at 200% on a 360 dp phone, "Enter an amount first." took one line,
- * "₹900.00 paid = ₹900.00 shared." two, and the note more, so typing the amount moved Category and
- * notes (#941). The totals are drawn over it (`totalsOver`).
+ * The room the sum line keeps, unseen and unread: the line at the widest amount the currency
+ * allows (`widest`, its digits all "0", Outfit's widest). Android lays it out as it would the sum
+ * line, so no amount takes more lines than it keeps: before, at 200% on a 360 dp phone, "Enter an
+ * amount first." took one line and "₹900.00 paid = ₹900.00 shared." two, so typing the amount
+ * moved Category and notes (#941). The sum line is drawn over it (`sumLineOver`).
  */
-const TotalsRoom = memo(function TotalsRoom({ widest, note }: { widest: string; note: boolean }) {
+const TotalsRoom = memo(function TotalsRoom({ widest }: { widest: string }) {
   return (
     <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={{ gap: 4, opacity: 0 }}
+      style={{ opacity: 0 }}
     >
       <CompactText variant="small">
         {widest} paid = {widest} shared.
       </CompactText>
-      {note ? <CompactText variant="caption">{sharesDifferNote}</CompactText> : null}
     </View>
   );
 });
-/** The totals, over the room `TotalsRoom` keeps for them inside the footer's padding. */
-const totalsOver = { position: 'absolute', top: 14, left: 14, right: 14, gap: 4 } as const;
+/** An equal split's note, the same at every amount, so typing one doesn't render it again. */
+const SharesMayDiffer = memo(function SharesMayDiffer() {
+  return (
+    <CompactText variant="caption" tone="muted">
+      {sharesMayDifferNote}
+    </CompactText>
+  );
+});
+/** The sum line, over the room `TotalsRoom` keeps for it. */
+const sumLineOver = { position: 'absolute', top: 0, left: 0, right: 0 } as const;
 
 export const WhoOwesWhat = memo(function WhoOwesWhat({
   draft,
@@ -684,6 +695,7 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
             borderTopWidth: 1,
             borderTopColor: theme.border,
             padding: 14,
+            gap: 4,
           }}
         >
           {saved ? (
@@ -692,27 +704,24 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
             </CompactText>
           ) : (
             <>
-              {/* The room the widest amount and the note would take (#941). */}
-              <TotalsRoom
-                widest={money(maxExpenseAmountMinor(draft.currency)).replace(/\d/g, '0')}
-                note={draft.splitMethod === 'equal'}
-              />
-              <View style={totalsOver}>
-                {allocation ? (
-                  <CompactText variant="small">
-                    {money(allocation.amountMinor)} paid = {money(allocation.amountMinor)} shared.
-                  </CompactText>
-                ) : (
-                  <CompactText variant="small" tone="secondary">
-                    {corrected ? 'Correct the amount first.' : 'Enter an amount first.'}
-                  </CompactText>
-                )}
-                {rounded ? (
-                  <CompactText variant="caption" tone="secondary">
-                    {sharesDifferNote}
-                  </CompactText>
-                ) : null}
+              <View>
+                {/* The room the widest amount's sum line would take (#941). */}
+                <TotalsRoom
+                  widest={money(maxExpenseAmountMinor(draft.currency)).replace(/\d/g, '0')}
+                />
+                <View style={sumLineOver}>
+                  {allocation ? (
+                    <CompactText variant="small">
+                      {money(allocation.amountMinor)} paid = {money(allocation.amountMinor)} shared.
+                    </CompactText>
+                  ) : (
+                    <CompactText variant="small" tone="secondary">
+                      {corrected ? 'Correct the amount first.' : 'Enter an amount first.'}
+                    </CompactText>
+                  )}
+                </View>
               </View>
+              {draft.splitMethod === 'equal' ? <SharesMayDiffer /> : null}
             </>
           )}
         </View>
