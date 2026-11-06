@@ -272,7 +272,8 @@ export function unreadText(
  * lays the tree out `width` wide at this text size: one list for each row that `match` picks, in
  * order. A row that wraps (`flexWrap: 'wrap'`) starts a line again at its left padding where a
  * child no longer fits, as `layoutHeight` breaks it; so whether "Share" sits beside "Paid" or under
- * it, and where (#932). The widths are estimates (see `layoutWidth`).
+ * it, and where (#932). A column's children each start at its left padding (#937). The widths are
+ * estimates (see `layoutWidth`).
  */
 export function rowStarts(
   node: Node | null,
@@ -293,6 +294,7 @@ export function rowStarts(
       let used = -1;
       return inFlow(row).map((child) => {
         const own = widths.get(child) ?? 0;
+        if (style.flexDirection !== 'row') return left;
         const wraps = style.flexWrap === 'wrap' && used >= 0 && used + across + own > inner;
         const start = used < 0 || wraps ? 0 : used + across;
         used = start + own;

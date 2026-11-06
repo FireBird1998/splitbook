@@ -1,4 +1,4 @@
-import type { ViewInstance, TextInputInstance, TextStyle } from 'react-native';
+import type { ViewInstance, TextInputInstance, TextStyle, ViewStyle } from 'react-native';
 import {
   createContext,
   memo,
@@ -398,6 +398,18 @@ export function stackedFigure(figures: readonly string[], width: number, fontSca
 type PairStyles = { label?: TextStyle; figure?: TextStyle };
 
 /**
+ * The row the stacked pairs share under a name, "Paid ₹…" then "Share ₹…": beside each other where
+ * they fit, Share under Paid where they don't (`stackedPairStyles`). The record's skeleton keeps it.
+ */
+export const stackedPairsRow = {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  columnGap: 16,
+  rowGap: 2,
+  paddingLeft: 36,
+} as const;
+
+/**
  * How each stacked pair, "Paid ₹…" and "Share ₹…", is laid out under a name, from everyone's Paid
  * figures and everyone's Share figures ("–" for nothing), so every row lays its pairs out alike:
  * - Side by side where both fit, each figure as wide as the widest of its kind (`stackedFigure`):
@@ -407,7 +419,9 @@ type PairStyles = { label?: TextStyle; figure?: TextStyle };
  * - Where a label and the widest figure can't share a line, as for CHF 10,000,000.00 at 200% on a
  *   360 dp phone, each figure is as wide as itself: a dash stays beside "Paid" rather than drop to
  *   a line of its own at the card's edge, and a figure that goes under its label starts where the
- *   label does (#932). Share is under Paid in every row there already.
+ *   label does (#932). The pairs then go under each other (`row`) whatever their widths: a row
+ *   whose Paid and Share are both short, "Paid –" and "Share ₹1.00", would otherwise fit them on
+ *   one line while the others stack (#937).
  * The labels' widths are Outfit's, never less than Android draws them, so a pair is never
  * narrower than this takes it to be, and Share is under Paid wherever this says it is.
  */
@@ -416,7 +430,7 @@ export function stackedPairStyles(
   share: readonly string[],
   width: number,
   fontScale: number,
-): Record<'Paid' | 'Share', PairStyles> {
+): Record<'Paid' | 'Share', PairStyles> & { row?: ViewStyle } {
   const room = width - 2 * 16 - 2 - 2 * 14 - 36;
   const gap = amountPair.columnGap;
   const caption = scaledSp(Number(textVariants.caption.fontSize), fontScale);
@@ -436,7 +450,8 @@ export function stackedPairStyles(
   if (beside <= room) return { Paid: { figure: figures.Paid }, Share: { figure: figures.Share } };
   const labelWidth = Math.max(label('Paid'), label('Share'));
   const figureWidth = Math.max(figures.Paid.minWidth, figures.Share.minWidth);
-  if (labelWidth + gap + figureWidth > room) return { Paid: {}, Share: {} };
+  if (labelWidth + gap + figureWidth > room)
+    return { Paid: {}, Share: {}, row: { flexDirection: 'column', alignItems: 'flex-start' } };
   const under = {
     label: { minWidth: labelWidth },
     figure: { minWidth: figureWidth, textAlign: 'right' as const },
@@ -602,15 +617,7 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
               )}
             </View>
             {stacked ? (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
-                  columnGap: 16,
-                  rowGap: 2,
-                  paddingLeft: 36,
-                }}
-              >
+              <View style={[stackedPairsRow, pairs!.row]}>
                 {(
                   [
                     ['Paid', paidMinor],

@@ -75,6 +75,7 @@ import {
   amountPair,
   sharesDifferNote,
   stackedPairStyles,
+  stackedPairsRow,
 } from './expense-form';
 import { RefreshStatus } from './financial-views';
 import type { MobileExpense } from '../data/types';
@@ -937,15 +938,7 @@ export function ExpenseRecordSkeleton({
             </View>
             {stacked ? (
               // Their amounts, under the name, wrap as the record's do: these are its texts.
-              <View
-                style={{
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
-                  columnGap: 16,
-                  rowGap: 2,
-                  paddingLeft: 36,
-                }}
-              >
+              <View style={[stackedPairsRow, pairs.row]}>
                 {(
                   [
                     ['Paid', person.paid],
