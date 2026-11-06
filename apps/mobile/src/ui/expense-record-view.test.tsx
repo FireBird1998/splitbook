@@ -1078,6 +1078,27 @@ describe('compact Expense record, opening', () => {
     },
   );
 
+  // QA on the device (#925): opened cold at 200% on a 360 dp phone, the skeleton's headline read
+  // "CHF 2,345,6\u2026" over the record that then showed it whole: the record's amount shrinks to fit,
+  // and the skeleton's didn't.
+  it.each([360, 412])(
+    'shows every digit of the amount in the skeleton\u2019s headline, %sdp at 2\u00d7 text',
+    async (width) => {
+      setWindow({ width, fontScale: 2 });
+      await act(async () => {
+        screen = create(
+          editor(
+            { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.office },
+            recordOutline(listRow(ids.office), alex.id),
+          ),
+        );
+      });
+      const [headline] = cards();
+      expect(wordsOf(headline!)).toContain('CHF\u00a010,000,000.00');
+      expect(unreadText(headline!, 2, width - 32)).toEqual([]);
+    },
+  );
+
   // On the emulator, Tea stall's badge drew "You owe Sam" without "₹416.67" each time its
   // measure came from React Native's cache, as on opening it again: the label measured 115.37dp
   // in its 115.43dp, and Android, laying the text out again to draw it, needed a fraction of a

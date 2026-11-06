@@ -798,7 +798,13 @@ export function ExpenseRecordSkeleton({
             marginTop: 12,
           }}
         >
-          {known(<Money size="form">{record.amount}</Money>, 'center')}
+          {/* Shrinks to fit, as the record's amount does, rather than cut it (#925). */}
+          {known(
+            <Money size="form" adjustsFontSizeToFit>
+              {record.amount}
+            </Money>,
+            'center',
+          )}
           {record.badge ? (
             outline ? (
               <Badge label={record.badge.label} tone={record.badge.tone} />
