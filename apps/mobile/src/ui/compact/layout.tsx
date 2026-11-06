@@ -20,10 +20,13 @@ import {
   largeTextColumn,
   lineBox,
   radius,
+  scaledSp,
   space,
+  textVariants,
   type LineKind,
+  type TextVariant,
 } from './scale';
-import { CompactText, Money, type TextTone } from './text';
+import { CompactText, Money, widestSemiboldWord, type TextTone } from './text';
 import { useTap } from './tap';
 
 export const useLargeText = () => isLargeText(useWindowDimensions().fontScale);
@@ -36,11 +39,23 @@ export const useShortWindow = () => isShortWindow(useWindowDimensions().height);
 
 /**
  * At large text, the least room a line's text keeps beside what follows it (`largeTextColumn`);
- * undefined below large text, where lines keep their compact shape.
+ * undefined below large text, where lines keep their compact shape. Given the `words` the line
+ * wraps, set in SemiBold at `variant`'s size, it keeps room for their widest word too, so what
+ * follows goes onto a line of its own rather than a long name breaking inside a word: at 200% on
+ * a 360 dp phone, "You pay Priyamvada Venkataraghavan-Subramaniam" broke "Venkataraghavan-"
+ * (237 dp) in a 218 dp column beside its Record (#921). That room is never more than the line's
+ * row has, the window's width less `inset` (what the screen, its Card and the row's own padding
+ * take across): a word wider than its row breaks anyway, and a column wider than its row ran past
+ * the screen's edge, cut ("Settle up with Priyamv", QA's device check of #921).
  */
-export const useTextColumn = () => {
-  const { fontScale } = useWindowDimensions();
-  return isLargeText(fontScale) ? largeTextColumn(fontScale) : undefined;
+export const useTextColumn = (words?: string, variant: TextVariant = 'body', inset = 0) => {
+  const { fontScale, width } = useWindowDimensions();
+  if (!isLargeText(fontScale)) return undefined;
+  const least = largeTextColumn(fontScale);
+  const widest = words === undefined ? null : widestSemiboldWord(words);
+  if (widest === null) return least;
+  const size = scaledSp(Number(textVariants[variant].fontSize), fontScale);
+  return Math.max(least, Math.min(Math.ceil(widest * size) + 1, width - inset));
 };
 
 /** The height one line of `kind` takes at the current text size; see `lineBox`. */

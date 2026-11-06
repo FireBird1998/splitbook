@@ -12,7 +12,10 @@ afterEach(() => {
   screen = null;
 });
 
-function render() {
+function render({
+  email = 'alex@example.test',
+  origin = 'http://127.0.0.1:4100',
+}: { email?: string; origin?: string } = {}) {
   const onAppearanceChange = vi.fn();
   act(() => {
     screen = create(
@@ -20,7 +23,7 @@ function render() {
         user={{
           id: 'a00000000000000000000001',
           name: 'Alex Rivera',
-          email: 'alex@example.test',
+          email,
           image: null,
         }}
         appearance="system"
@@ -30,8 +33,8 @@ function render() {
         onRetryPreference={vi.fn()}
         environment={{
           label: 'Local',
-          apiOrigin: 'http://127.0.0.1:4100',
-          webOrigin: 'http://127.0.0.1:4100',
+          apiOrigin: origin,
+          webOrigin: origin,
         }}
         onOpenWeb={vi.fn()}
         onSignOut={vi.fn()}
@@ -62,5 +65,23 @@ describe('Appearance', () => {
     act(() => activateWithScreenReader(radio('Light')));
     expect(onAppearanceChange).toHaveBeenLastCalledWith('light');
     expect(onAppearanceChange).toHaveBeenCalledTimes(2);
+  });
+});
+
+// #921 QA: a line that may wrap gets a zero-width space after each hyphen between letters, so
+// Android can break it there. Text the reader can select and copy must copy as it reads: an email
+// or an origin with a hyphen in it copied with an invisible U+200B inside, which breaks the address
+// wherever it is pasted (a mail app, a browser, a name field the server then stores).
+describe('Account and server text copies as it reads (#921)', () => {
+  it('keeps a selectable email and origin as they are, with no zero-width space', () => {
+    const email = 'priya.venkataraghavan-subramaniam@split-book.test';
+    const origin = 'https://splitbook-staging.example.test';
+    render({ email, origin });
+    const strings = (node: ReactTestInstance): string[] =>
+      node.children.flatMap((child) => (typeof child === 'string' ? [child] : strings(child)));
+    const copied = screen!.root
+      .findAll((node) => (node.type as unknown) === 'Text' && node.props.selectable === true)
+      .map((node) => strings(node).join(''));
+    expect(copied).toEqual([email, origin, origin]);
   });
 });

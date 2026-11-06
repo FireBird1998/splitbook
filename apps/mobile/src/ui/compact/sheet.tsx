@@ -23,6 +23,9 @@ import { CompactText } from './text';
  */
 const headerEdge = (action: number) => (56 - action) / 2;
 
+/** The header's padding at its sides: room for the title's start, and Done's touch target's end. */
+const headerPadding = { left: 20, right: 8 } as const;
+
 /**
  * A bottom sheet over the current screen: handle, header with Done, a scrolling body and a pinned
  * footer for totals and status. Swipe-down, tapping outside and Back all behave like Done, so
@@ -78,7 +81,10 @@ export function BottomSheet({
   footer?: ReactNode;
 }) {
   const theme = useTheme();
-  const column = useTextColumn();
+  // At large text the title keeps room for its widest word, or Done goes under it: at 200% on a
+  // 360 dp phone, "Venkataraghavan-" needs 299 dp, and beside the × it had 276 (#921). Never more
+  // than the header has across, inside its padding.
+  const column = useTextColumn(title, 'title', headerPadding.left + headerPadding.right);
   // The header's action keeps its centre on the title's first line, however many lines the
   // title takes (#646): whichever of the two is shorter starts lower by half the difference.
   const action = doneIcon ? touch.min : touch.dense;
@@ -181,8 +187,8 @@ export function BottomSheet({
                   gap: 8,
                   paddingTop: headerEdge(action),
                   paddingBottom: headerEdge(action),
-                  paddingLeft: 20,
-                  paddingRight: 8,
+                  paddingLeft: headerPadding.left,
+                  paddingRight: headerPadding.right,
                   // At 200% on a 360dp phone, "Keep editing" beside "Finish this expense
                   // later?" broke "expense" in two (#639).
                   ...(column ? { flexWrap: 'wrap', alignContent: 'flex-start', rowGap: 0 } : {}),
