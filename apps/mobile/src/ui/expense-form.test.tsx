@@ -132,6 +132,45 @@ describe('Who owes what', () => {
     expect(text(root).match(/Paid/g)).toHaveLength(3);
     for (const amount of amounts(root)) expect(amount.lines || 0).toBe(0);
   });
+
+  // #911: the table sits above Category and notes, so typing the amount mustn't move Notes. At
+  // 200% a longer figure can wrap its own line, as any amount's length can; that is QA's to shoot.
+  it.each([1, 1.3])(
+    'is as tall before the amount as with it, with a dash for each figure, at %sx text',
+    (fontScale) => {
+      setWindow({ width: 360, height: 640, fontScale });
+      onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+      const members = ids.slice(0, 3);
+      act(() => {
+        renderer = create(
+          <WhoOwesWhat
+            draft={draft('', members)}
+            allocation={null}
+            problem="Enter a valid amount to see who owes what."
+            waiting
+            name={(id) => people[ids.indexOf(id)]}
+            currentUserId={ids[0]}
+            money={(minor) => `₹${(minor / 100).toFixed(2)}`}
+          />,
+        );
+      });
+      const waiting = renderer!.root;
+      expect(rows(waiting)).toEqual([
+        'You: paid and share wait for the amount',
+        'Sam Chen: paid nothing, share waits for the amount',
+        'Priya Shah: paid nothing, share waits for the amount',
+      ]);
+      expect(text(waiting)).toContain('No amount');
+      expect(text(waiting)).toContain('Enter an amount first.');
+      expect(text(waiting)).not.toContain('Adds up');
+      const before = layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, 328);
+      act(() => renderer!.unmount());
+      table(draft('90.00', members));
+      expect(layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, 328)).toBe(
+        before,
+      );
+    },
+  );
 });
 
 describe('Expense date label', () => {
@@ -488,4 +527,31 @@ describe('Save’s reason it is unavailable (#646)', () => {
     );
     expect(flatten(reason.props.style).textAlign).toBe('center');
   });
+});
+
+// #911, the Designer's polish: an amount with a correction beside it asks for the correction, not
+// for an amount, and the "No amount" badge carries no "working" dots.
+it('asks to correct the amount when one is corrected beside the field, and its badge has no icon (#911)', () => {
+  let renderer: ReactTestRenderer;
+  act(() => {
+    renderer = create(
+      <WhoOwesWhat
+        draft={draft('12.345', ids.slice(0, 2))}
+        allocation={null}
+        problem="Correct the amount to see who owes what."
+        waiting
+        corrected
+        name={(id) => people[ids.indexOf(id)]}
+        currentUserId={ids[0]}
+        money={(minor) => `₹${(minor / 100).toFixed(2)}`}
+      />,
+    );
+  });
+  expect(text(renderer!.root)).toContain('Correct the amount first.');
+  expect(text(renderer!.root)).not.toContain('Enter an amount first.');
+  const badges = renderer!.root.findAll(
+    (node) => node.props.label === 'No amount' && 'icon' in node.props,
+  );
+  expect(badges.every((node) => node.props.icon === undefined)).toBe(true);
+  act(() => renderer!.unmount());
 });

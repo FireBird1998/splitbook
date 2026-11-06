@@ -1570,6 +1570,201 @@ describe('compact Expense form', () => {
       }
     },
   );
+  // #911: Who owes what follows the Date, Paid by, Split and Tag tiles and comes before
+  // Category and notes, as boards 06, 08 and 23 draw it. TalkBack reads the screen in this order.
+  const sam = {
+    id: 'a00000000000000000000002',
+    name: 'Sam',
+    email: 'sam@example.test',
+    image: null,
+  };
+  const withSam = {
+    ...group,
+    members: [...group.members, { user: { ...sam, _id: sam.id }, role: 'member', joinedAt: iso }],
+  };
+  /** The form's markers in screen order: tiles, table rows, its controls and Category and notes. */
+  const formOrder = (root: ReactTestInstance) =>
+    root
+      .findAll((node) => typeof node.type === 'string')
+      .flatMap((node) => {
+        const label = String(node.props.accessibilityLabel ?? '');
+        if (isHost(node, 'Text') && text(node).startsWith('Who owes what'))
+          return ['Who owes what'];
+        if (node.props.accessible === true && / paid .*, share /.test(label))
+          return [label.split(':')[0]];
+        if (!isHost(node, 'Pressable') && !isHost(node, 'TextInput')) return [];
+        if (label === 'Category and notes, optional') return ['Category and notes'];
+        const tile = /^(Date|Paid by|Split|Tag)(, required)?:/.exec(label);
+        if (tile) return [tile[1]];
+        return [`control: ${label}`];
+      })
+      .filter((marker, index, all) => {
+        // Only what lies between the first tile and Category and notes.
+        const first = all.indexOf('Date');
+        const last = all.indexOf('Category and notes');
+        return index >= first && index <= last;
+      });
+  it.each(['Add expense', 'editing an Expense'])(
+    'puts Who owes what after the tiles and before Category and notes on %s',
+    async (task) => {
+      const ui = await render(async (controller) => {
+        await controller.openExpense(groupId, task === 'Add expense' ? undefined : expenseId);
+        if (task !== 'Add expense') await controller.editExpense();
+      });
+      if (task === 'Add expense') await ui.type('Amount, Indian Rupee, required', '10');
+      expect(formOrder(ui.root())).toEqual([
+        'Date',
+        'Paid by',
+        'Split',
+        'Tag',
+        'Who owes what',
+        'You',
+        'Category and notes',
+      ]);
+    },
+  );
+  it.each([1, 1.3])(
+    'draws Who owes what from the saved members while the Group is checked, then updates it in place at %sx text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      vi.useFakeTimers({ toFake: ['Date'] });
+      let hold = false;
+      let release: () => void = () => undefined;
+      let opening: Promise<void> | undefined;
+      try {
+        // This phone knows the Group with Alex alone; the check finds Sam has joined.
+        const form = await render((controller) => controller.openGroup(groupId), {
+          readGroup: () =>
+            hold
+              ? new Promise((resolve) => {
+                  release = () => resolve(json({ status: 200, data: withSam }));
+                })
+              : Promise.resolve(json({ status: 200, data: group })),
+        });
+        hold = true;
+        vi.setSystemTime(Date.now() + 31_000);
+        await act(async () => {
+          opening = form.controller.openExpense(groupId);
+        });
+        await settle();
+        expect(form.controller.getSnapshot().expense.contextCheck?.status).toBe('checking');
+        // Before an amount, the table already holds its place.
+        expect(formOrder(form.root())).toContain('Who owes what');
+        await form.type('Amount, Indian Rupee, required', '12.34');
+        await form.press('Category and notes, optional');
+        // The saved copy's members, with nothing in the table to press while the check runs.
+        expect(formOrder(form.root())).toEqual([
+          'Date',
+          'Paid by',
+          'Split',
+          'Tag',
+          'Who owes what',
+          'You',
+          'Category and notes',
+        ]);
+        for (const label of ['Paid by', 'Split'])
+          expect(form.tile(label).props.accessibilityState.disabled).toBe(true);
+        const labels = ['Amount, Indian Rupee, required', 'Description, required', 'Notes'];
+        const inputs = labels.map(form.input);
+        const tops = () => {
+          const layout = screen!.toJSON();
+          return labels.map((label) =>
+            inputTop(Array.isArray(layout) ? (layout[0] ?? null) : layout, label, scale),
+          );
+        };
+        const before = tops();
+        await act(async () => {
+          release();
+          await opening;
+        });
+        await settle();
+        expect(form.controller.getSnapshot().expense.contextCheck).toBeUndefined();
+        // The table updates where it is: Sam's row is the only thing added above Notes.
+        expect(formOrder(form.root())).toEqual([
+          'Date',
+          'Paid by',
+          'Split',
+          'Tag',
+          'Who owes what',
+          'You',
+          'Sam',
+          'Category and notes',
+        ]);
+        expect(labels.map(form.input)).toEqual(inputs);
+        const tree = screen!.toJSON();
+        const [row] = findHosts(tree, (props) =>
+          String(props.accessibilityLabel).startsWith('Sam: paid nothing, share'),
+        );
+        const added = layoutHeight(row!, scale, 360);
+        const [amountTop, descriptionTop, notesTop] = tops();
+        expect([amountTop, descriptionTop]).toEqual(before.slice(0, 2));
+        expect(notesTop).toBeCloseTo(before[2]! + added, 6);
+        expect(form.writes).toEqual([]);
+      } finally {
+        release();
+        await opening;
+        vi.useRealTimers();
+        setWindow({ fontScale: 1 });
+      }
+    },
+  );
+  // #911 QA: an amount that can't be used yet keeps the table's shape, as no amount does. A
+  // sub-unit amount passes through "0" and "0." as it is typed, and an Amount left empty or saved
+  // empty is corrected beside the field; none of them may fold the table and move Notes.
+  it.each([1, 1.3])(
+    'keeps Notes where it is while the amount is typed in part, left empty or saved empty, at %sx text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      try {
+        const ui = await render((controller) => controller.openExpense(groupId));
+        const amount = 'Amount, Indian Rupee, required';
+        await ui.press('Category and notes, optional');
+        // From the table's first row, so the corrections above it (the banner, and the line under
+        // the Amount) don't count as a move: only what the table does below its rows.
+        const top = (
+          node: ReactTestRendererJSON | string | null,
+          match: (props: Record<string, unknown>) => boolean,
+        ): number | null => {
+          if (!node || typeof node === 'string') return null;
+          if (match(node.props)) return 0;
+          const style = flatten(node.props.style);
+          let before = Number(style.paddingTop ?? style.paddingVertical ?? style.padding ?? 0);
+          for (const child of node.children ?? []) {
+            const within = top(child, match);
+            if (within !== null) return before + within;
+            if (style.flexDirection !== 'row')
+              before += layoutHeight(child, scale, 360) + Number(style.gap ?? 0);
+          }
+          return null;
+        };
+        const notes = () => {
+          const layout = screen!.toJSON();
+          const form = Array.isArray(layout) ? (layout[0] ?? null) : layout;
+          return (
+            inputTop(form, 'Notes', scale)! -
+            top(form, (props) => String(props.accessibilityLabel).startsWith('You: paid'))!
+          );
+        };
+        const empty = notes();
+        for (const partial of ['0', '0.', '.']) {
+          await ui.type(amount, partial);
+          expect(text(ui.root())).toContain('No amount');
+          expect(notes()).toBeCloseTo(empty, 6);
+        }
+        await ui.type(amount, '');
+        await ui.leave(amount);
+        expect(ui.controller.getSnapshot().expense.validation.errors.amount).toBeTruthy();
+        expect(notes()).toBeCloseTo(empty, 6);
+        await ui.press('Save expense');
+        expect(ui.controller.getSnapshot().expense.validation.submitted).toBe(true);
+        expect(text(ui.root())).toContain('No amount');
+        expect(notes()).toBeCloseTo(empty, 6);
+        expect(ui.writes).toEqual([]);
+      } finally {
+        setWindow({ fontScale: 1 });
+      }
+    },
+  );
   const openSheet = (root: ReactTestInstance, title: string) =>
     root
       .findAll((node) => isHost(node, 'Modal') && node.props.visible === true)
@@ -1756,7 +1951,18 @@ describe('compact Expense form', () => {
 
   it('shows who owes what as soon as the amount is valid, and names it on Save', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
-    expect(text(ui.root())).toContain('Enter a valid amount to see who owes what.');
+    // Before an amount, the table already has its rows, a dash for each figure (#911).
+    expect(text(ui.root())).toContain('Enter an amount first.');
+    expect(text(ui.root())).toContain('No amount');
+    expect(
+      ui
+        .root()
+        .findAll(
+          (node) =>
+            isHost(node, 'View') &&
+            node.props.accessibilityLabel === 'You: paid and share wait for the amount',
+        ),
+    ).toHaveLength(1);
     expect(ui.pressable('Save expense').props.accessibilityLabel).toBe('Save expense');
     await ui.type('Amount, Indian Rupee, required', '250.50');
     expect(
