@@ -2625,10 +2625,11 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await storage.reached;
     await settle();
     expect(app.text()).toContain('Payment recorded');
-    // Neither the Expenses nor Balances have been asked for since the payment.
+    // Balances haven't been asked for since the payment. The Expenses are, beside the Group, since
+    // they never wait on this phone's storage after a change (#912); Balances follow both.
     const sent = phone.sent.slice(before);
     const since = sent.slice(sent.indexOf(`POST /api/groups/${maple}/settlements`) + 1);
-    expect(since.filter((request) => /\/(expenses\?|balances$)/.test(request))).toEqual([]);
+    expect(since.filter((request) => /\/balances$/.test(request))).toEqual([]);
     expect(seen()).toContain('All-time balance\u00a0· INRUpdating…You owe₹30.00');
     expect(seen()).toContain('Settle up\u200aRecord once updated');
     // Nothing fades from the old time or caption into these: neither is drawn at any opacity
