@@ -43,7 +43,7 @@ import type { GroupRead } from '@splitbook/shared/group-read';
 import { fetchWebBalances, fetchWebRead } from '@/lib/web-read';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import { samePair, type SettlementAttempt } from '@/lib/settlement-attempts';
-import { PersonAvatar } from './TabCard';
+import PaymentRow from './PaymentRow';
 import BalanceCurrencySwitch, { BALANCES_PANEL_ID, balanceTabId } from './BalanceCurrencySwitch';
 import PaymentsTable, { type PaymentRead, type PaymentsState } from './PaymentsTable';
 import EveryoneCard, { type EveryoneState } from './EveryoneCard';
@@ -483,6 +483,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
       currency={currency}
       viewerId={userId}
       debts={(shownBucket ?? read)?.debtsBeforeSimplifying}
+      suggested={debts}
       suggestedCount={debts.length}
     >
       {debts.length === 0 ? (
@@ -537,108 +538,64 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                         : `Then ${firstName(debt.from.name)} is settled up`
                       : 'Either of you can record it';
               return (
-                <Box
-                  component="li"
+                <PaymentRow
                   key={`${debt.from._id}-${debt.to._id}-${index}`}
-                  sx={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    gap: 1.5,
-                    minHeight: 60,
-                    px: 2.5,
-                    py: 1,
-                    bgcolor: inForm ? 'tint.brand' : 'transparent',
-                    '& + li': { borderTop: 1, borderColor: 'divider' },
-                  }}
-                >
-                  <Box aria-hidden sx={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                    <PersonAvatar name={debt.from.name} />
-                    <Box
-                      component="svg"
-                      viewBox="0 0 24 24"
-                      sx={{
-                        width: 16,
-                        height: 16,
-                        fill: 'none',
-                        stroke: 'currentColor',
-                        strokeWidth: 1.8,
-                        strokeLinecap: 'round',
-                        strokeLinejoin: 'round',
-                        color: 'text.disabled',
-                      }}
-                    >
-                      <path d="M5 12h14M13 6l6 6-6 6" />
-                    </Box>
-                    <PersonAvatar name={debt.to.name} />
-                  </Box>
-                  <Box
-                    sx={{
-                      flex: '1 1 160px',
-                      minWidth: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '1px',
-                    }}
-                  >
-                    <Typography
-                      sx={{ m: 0, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}
-                    >
-                      {title}
-                    </Typography>
-                    <Typography sx={{ m: 0, fontSize: '0.75rem', color: 'text.secondary' }}>
-                      {sub}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 'auto' }}>
-                    <MoneyText
-                      amount={debt.amount}
-                      currency={currency}
-                      tone="neutral"
-                      sx={{ fontSize: '1rem', fontWeight: 500 }}
-                    />
-                    {recordable && (
-                      <Button
-                        variant={inForm ? 'outlined' : 'contained'}
-                        disableElevation
-                        aria-label={
-                          debt.from._id === userId
-                            ? `Record your payment to ${debt.to.name}`
-                            : `Record ${debt.from.name}’s payment to you`
-                        }
-                        onClick={() =>
-                          openForm({
-                            from: debt.from._id,
-                            to: debt.to._id,
-                            amount:
-                              amountMinor === null ? '' : amountInputText(amountMinor, currency),
-                            purpose: 'record',
-                            focus: 'amount',
-                          })
-                        }
-                        sx={{
-                          minHeight: 40,
-                          borderRadius: '12px',
-                          px: 2,
-                          flexShrink: 0,
-                          ...(inForm
-                            ? {
-                                bgcolor: 'background.paper',
-                                borderColor: 'border.strong',
-                                color: 'text.primary',
-                              }
-                            : {
-                                bgcolor: 'tint.brand',
-                                color: 'primary.main',
-                                '&:hover': { bgcolor: 'tint.brand' },
-                              }),
-                        }}
-                      >
-                        Record
-                      </Button>
-                    )}
-                  </Box>
-                </Box>
+                  fromName={debt.from.name}
+                  toName={debt.to.name}
+                  title={title}
+                  sub={sub}
+                  highlighted={inForm}
+                  end={
+                    <>
+                      <MoneyText
+                        amount={debt.amount}
+                        currency={currency}
+                        tone="neutral"
+                        sx={{ fontSize: '1rem', fontWeight: 500 }}
+                      />
+                      {recordable && (
+                        <Button
+                          variant={inForm ? 'outlined' : 'contained'}
+                          disableElevation
+                          aria-label={
+                            debt.from._id === userId
+                              ? `Record your payment to ${debt.to.name}`
+                              : `Record ${debt.from.name}’s payment to you`
+                          }
+                          onClick={() =>
+                            openForm({
+                              from: debt.from._id,
+                              to: debt.to._id,
+                              amount:
+                                amountMinor === null ? '' : amountInputText(amountMinor, currency),
+                              purpose: 'record',
+                              focus: 'amount',
+                            })
+                          }
+                          sx={{
+                            minHeight: 40,
+                            borderRadius: '12px',
+                            px: 2,
+                            flexShrink: 0,
+                            ...(inForm
+                              ? {
+                                  bgcolor: 'background.paper',
+                                  borderColor: 'border.strong',
+                                  color: 'text.primary',
+                                }
+                              : {
+                                  bgcolor: 'tint.brand',
+                                  color: 'primary.main',
+                                  '&:hover': { bgcolor: 'tint.brand' },
+                                }),
+                          }}
+                        >
+                          Record
+                        </Button>
+                      )}
+                    </>
+                  }
+                />
               );
             })}
           </Box>

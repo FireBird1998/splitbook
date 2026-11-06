@@ -8,8 +8,12 @@
  * with (1, 6 or 12). The average never includes the Month itself.
  */
 import { CURRENCY_CODES, formatCurrency } from '@splitbook/shared/currency';
-import { toMajorAmount } from '@splitbook/shared/exact-money';
-import type { GroupInsightsRead } from '@splitbook/shared/group-insights-read';
+import { assertSafeMinorAmount, toMajorAmount } from '@splitbook/shared/exact-money';
+import {
+  readGroupInsightsByTag,
+  type GroupInsightsByTagRead,
+  type GroupInsightsRead,
+} from '@splitbook/shared/group-insights-read';
 import { COMPARE_MONTHS, type ChangeDirection } from '@splitbook/shared/insights';
 import { addMonths, isMonthKey } from '@splitbook/shared/zoned-calendar';
 import { monthLabel } from '@/components/dashboard/spending-chart';
@@ -258,6 +262,8 @@ export interface MonthlyRow {
   /** Major units, for plotting. */
   spent: number;
   spentText: string;
+  /** Spent minus the average of the earlier Months, signed ("+₹567.00"); null with no average. */
+  vsAverageText: string | null;
   shareText: string;
   expenseCount: number;
 }
@@ -279,11 +285,64 @@ export interface MonthlySpending {
     shortName: string;
     /** "6-month average" or "Month before": the table's last row. */
     rowLabel: string;
+    /** "vs 6-month average" or "vs August": the table's column of differences. */
+    vsLabel: string;
   } | null;
   /** One sentence on the Month against the average. */
   explanation: string;
+  /** The amount in that sentence ("₹472.50"), shown in the mono figure style; null if none. */
+  explanationFigure: string | null;
   /** The tooltip's line for the Month: "₹472.50 above the 6-month average". */
   focusComparison: string | null;
+}
+
+/**
+ * Each Month's Spent minus the average of the earlier Months (#646): the one average the
+ * table's footer, the line and the stat card show, which never includes the Month the tab is on.
+ * Exact minor units; every entry is null when there is nothing earlier to average.
+ */
+export function monthDifferencesMinor(read: GroupInsightsRead): (number | null)[] {
+  const average = read.average;
+  return read.months.map((entry) =>
+    average ? assertSafeMinorAmount(entry.spentMinor - average.spentMinor) : null,
+  );
+}
+
+/** Names this many Tags in a list; any more are counted. */
+const NAMED_TAGS = 3;
+
+/** "Household", "Household and Utilities", "A, B, C and 2 other Tags". */
+function tagList(names: string[]): string {
+  if (names.length > NAMED_TAGS) {
+    const rest = names.length - NAMED_TAGS;
+    return `${names.slice(0, NAMED_TAGS).join(', ')} and ${rest} other ${rest === 1 ? 'Tag' : 'Tags'}`;
+  }
+  return names.length === 1
+    ? names[0]
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * Which Tags rose and fell against their own average of the earlier Months, the biggest change
+ * first, from the By Tag read: "Household and Utilities rose; Groceries and Dining fell."
+ * Null when no Tag has an average, or none is above or below it.
+ */
+export function tagChangeSentence(part: GroupInsightsByTagRead): string | null {
+  const changed = part.tags
+    .filter((tag) => tag.averageMinor !== null && tag.differenceMinor)
+    .map((tag) => ({
+      name: tag.name ?? 'Untagged Expenses',
+      difference: assertSafeMinorAmount(tag.differenceMinor ?? 0),
+    }))
+    // Stable: equal changes keep the read's order.
+    .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+  const rose = changed.filter((tag) => tag.difference > 0).map((tag) => tag.name);
+  const fell = changed.filter((tag) => tag.difference < 0).map((tag) => tag.name);
+  const clauses = [
+    rose.length ? `${tagList(rose)} rose` : null,
+    fell.length ? `${tagList(fell)} fell` : null,
+  ].filter(Boolean);
+  return clauses.length ? `${clauses.join('; ')}.` : null;
 }
 
 /** The monthly spending card's rows, average and sentence. */
@@ -292,6 +351,7 @@ export function monthlySpending(
   { currentMonth }: { currentMonth: string },
 ): MonthlySpending {
   const { currency } = read;
+  const differences = monthDifferencesMinor(read);
   const rows = read.months.map(
     (entry, index): MonthlyRow => ({
       month: entry.month,
@@ -300,6 +360,7 @@ export function monthlySpending(
       focus: index === read.months.length - 1,
       spent: toMajorAmount(entry.spentMinor, currency),
       spentText: money(entry.spentMinor, currency),
+      vsAverageText: differences[index] === null ? null : signedMoney(differences[index], currency),
       shareText: money(entry.yourShareMinor, currency),
       expenseCount: entry.expenseCount,
     }),
@@ -315,6 +376,7 @@ export function monthlySpending(
           name,
           shortName: read.average.monthCount === 1 ? name : `${read.average.monthCount}-month avg`,
           rowLabel,
+          vsLabel: `vs ${name}`,
         }
       : null;
 
@@ -322,6 +384,7 @@ export function monthlySpending(
   const against = name ? (read.average?.monthCount === 1 ? name : `the ${name}`) : null;
   let explanation: string;
   let focusComparison: string | null = null;
+  let explanationFigure: string | null = null;
   if (!read.change || !against) {
     explanation =
       read.firstMonth !== null && read.month <= read.firstMonth
@@ -336,8 +399,13 @@ export function monthlySpending(
     } else {
       const side = read.change.direction === 'up' ? 'above' : 'below';
       explanation = `${soFar}${month} is ${difference} ${side} ${against}.`;
+      explanationFigure = difference;
       focusComparison = `${difference} ${side} ${against}`;
     }
+    // Which Tags moved, from the By Tag read on the same page; a malformed one adds nothing.
+    const byTag = readGroupInsightsByTag(read);
+    const tags = byTag.ok ? tagChangeSentence(byTag.value) : null;
+    if (tags) explanation += ` ${tags}`;
     // Asked for more Months than the Group has had: say why the average covers fewer.
     const counted = read.average?.monthCount ?? 0;
     if (read.firstMonth !== null && counted < read.compare)
@@ -350,6 +418,7 @@ export function monthlySpending(
     subtitle: `${currency}${SEPARATOR}${monthsSpan(read.months.map((entry) => entry.month))}${SEPARATOR}whole Group`,
     average,
     explanation,
+    explanationFigure,
     focusComparison,
   };
 }

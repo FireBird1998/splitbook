@@ -13,15 +13,17 @@ import MoneyText from '@/components/common/MoneyText';
 import { getCurrency } from '@splitbook/shared/currency';
 import { displayMajorAmount } from '@splitbook/shared/exact-money';
 import { getSemanticTokens } from '@/lib/theme/tokens';
-import { zonedTimestamp } from '@splitbook/shared/export-csv';
+import { zonedDateTime } from '@splitbook/shared/export-csv';
 import { categoryLabel } from '@splitbook/shared/categories';
 import ExportPaymentDescription from '@/components/export/ExportPaymentDescription';
+import BrandLogo from '@/components/layout/BrandLogo';
 import {
   isEmptyStatementCurrency,
   type OutsideTrip,
   type Statement,
 } from '@splitbook/shared/statement';
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
+import { statementSummary } from './statement-summary';
 
 const light = getSemanticTokens('light');
 /** A whole trip's Expenses and Payments outside the Trip's dates. */
@@ -30,13 +32,69 @@ const OUTSIDE_TRIP: Record<OutsideTrip, string> = {
   after: 'After the trip',
 };
 const expenses = (count: number) => counted(count, 'Expense');
+
+/**
+ * What a column holds, and so how its cells lay out (#646). Figures and dates never wrap, so
+ * "₹54,000.00" and "2026-06-05" never break across lines; figures are right-aligned. Only free
+ * text (an Expense's description, a payment's note or its cross-currency sentence) wraps; names
+ * wrap only between words. A table wider than the sheet scrolls on screen, never in print.
+ */
+type ColumnKind = 'text' | 'wrap' | 'sentence' | 'date' | 'money' | 'people';
+const COLUMN_SX = {
+  text: { whiteSpace: 'normal' },
+  wrap: { whiteSpace: 'normal', overflowWrap: 'anywhere', minWidth: '10em' },
+  sentence: { whiteSpace: 'normal', minWidth: '14em' },
+  date: { whiteSpace: 'nowrap' },
+  money: { whiteSpace: 'nowrap', textAlign: 'right' },
+  people: { whiteSpace: 'nowrap' },
+} as const satisfies Record<ColumnKind, object>;
+interface Column {
+  label: string;
+  kind: ColumnKind;
+}
+const column = (label: string, kind: ColumnKind): Column => ({ label, kind });
+
+function Cell({
+  kind,
+  row = false,
+  children,
+}: {
+  kind: ColumnKind;
+  /** The row's header cell. */
+  row?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <TableCell
+      className={`statement-${kind}`}
+      {...(row ? { component: 'th', scope: 'row' } : {})}
+      sx={COLUMN_SX[kind]}
+    >
+      {children}
+    </TableCell>
+  );
+}
+
+/** A name with its amount, on one line, in Paid by and Share. */
+function PersonAmount({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <Box
+      className="statement-line"
+      sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5, whiteSpace: 'nowrap' }}
+    >
+      <span>{name}</span>
+      {children}
+    </Box>
+  );
+}
+
 function StatementTable({
   title,
-  headers,
+  columns,
   children,
 }: {
   title: string;
-  headers: string[];
+  columns: Column[];
   children: ReactNode;
 }) {
   return (
@@ -53,9 +111,16 @@ function StatementTable({
       <Table size="small">
         <TableHead>
           <TableRow>
-            {headers.map((header) => (
-              <TableCell key={header} component="th" scope="col">
-                {header}
+            {columns.map(({ label, kind }) => (
+              // As the Export preview heads its tables: on one line, aligned with the column.
+              <TableCell
+                key={label}
+                component="th"
+                scope="col"
+                className={`statement-${kind}`}
+                sx={[COLUMN_SX[kind], { whiteSpace: 'nowrap' }]}
+              >
+                {label}
               </TableCell>
             ))}
           </TableRow>
@@ -82,8 +147,17 @@ export default function StatementView({ statement }: { statement: Statement }) {
       sx={{
         bgcolor: 'background.paper',
         color: 'text.primary',
-        p: { xs: 2, md: 3 },
-        borderRadius: 2,
+        // On screen, an A4 sheet: 210 mm wide, at least 297 mm tall, with the print margin.
+        boxSizing: 'border-box',
+        width: '100%',
+        maxWidth: '210mm',
+        minHeight: { md: '297mm' },
+        mx: 'auto',
+        p: { xs: 2, sm: 3, md: '15mm' },
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: '4px',
+        boxShadow: 2,
         '--statement-print-paper': light.surface,
         '--statement-print-text': light.text,
         '--statement-print-border': light.border,
@@ -98,6 +172,9 @@ export default function StatementView({ statement }: { statement: Statement }) {
           },
         }}
       />
+      <Box className="statement-logo" sx={{ display: 'flex', mb: 2 }}>
+        <BrandLogo height={24} />
+      </Box>
       <Typography component="h1" variant="h4">
         {statement.name}
         {SEPARATOR}Statement
@@ -124,6 +201,85 @@ export default function StatementView({ statement }: { statement: Statement }) {
   );
 }
 
+/** The summary as a row of figures, each label above its value, as the Export preview has it. */
+function SummaryRow({ bucket }: { bucket: Statement['currencies'][number] }) {
+  const currency = bucket.currency;
+  return (
+    <Box
+      component="dl"
+      aria-label={`${currency} summary`}
+      className="statement-summary"
+      // One ruled strip, a rule above and below and a divider between figures, as the board's
+      // summary strip; stacked on a phone, the dividers run across.
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
+        m: 0,
+        mb: 1.5,
+        borderTop: 1,
+        borderBottom: 1,
+        borderColor: 'divider',
+        '& > * + *': {
+          borderColor: 'divider',
+          borderStyle: 'solid',
+          borderWidth: { xs: '1px 0 0', sm: '0 0 0 1px' },
+        },
+      }}
+    >
+      {statementSummary(bucket).map((figure) => (
+        <Box
+          key={figure.label}
+          className="statement-summary-item"
+          sx={{ px: 2, py: 1.25, minWidth: 0 }}
+        >
+          <Typography
+            component="dt"
+            className="statement-summary-label"
+            sx={{
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: 'text.secondary',
+            }}
+          >
+            {figure.label}
+          </Typography>
+          <Box component="dd" sx={{ m: 0, mt: 0.5 }}>
+            {'count' in figure ? (
+              <Typography
+                component="span"
+                sx={(theme) => ({
+                  ...theme.typography.money,
+                  fontSize: '1.25rem',
+                  fontWeight: 600,
+                })}
+              >
+                {figure.count}
+              </Typography>
+            ) : (
+              <MoneyText
+                amount={displayMajorAmount(figure.amountMinor, currency)}
+                currency={currency}
+                tone="neutral"
+                sx={{ fontSize: '1.25rem', fontWeight: 600 }}
+              />
+            )}
+            {'note' in figure ? (
+              <Typography
+                component="span"
+                sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}
+              >
+                {figure.note}
+              </Typography>
+            ) : null}
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 function CurrencySection({
   bucket,
   statement,
@@ -143,7 +299,14 @@ function CurrencySection({
   // A currency Splitbook no longer supports has no position, so no one's figures here (#820).
   const inBalances = !!getCurrency(currency);
   const amount = (minor: number) => (
-    <MoneyText amount={displayMajorAmount(minor, currency)} currency={currency} tone="neutral" />
+    <MoneyText
+      className="statement-amount"
+      amount={displayMajorAmount(minor, currency)}
+      currency={currency}
+      tone="neutral"
+      // Never "₹54,000. / 00": MoneyText may break anywhere elsewhere, never on the statement.
+      sx={{ whiteSpace: 'nowrap', overflowWrap: 'normal' }}
+    />
   );
   return (
     <Box component="section" aria-label={`${currency} statement`} sx={{ mt: 3 }}>
@@ -154,8 +317,7 @@ function CurrencySection({
         Amounts stay in their own currencies; never converted.
       </Typography>
       <Section title="Summary">
-        <Typography>Spent: {amount(bucket.spentMinor)}</Typography>
-        <Typography>Expenses: {bucket.expenseCount}</Typography>
+        <SummaryRow bucket={bucket} />
         {(['before', 'after'] as const).map((part) => {
           const outside = part === 'before' ? bucket.beforeTrip : bucket.afterTrip;
           return outside ? (
@@ -166,11 +328,6 @@ function CurrencySection({
             </Typography>
           ) : null;
         })}
-        <Typography>
-          Payments: {bucket.payments.length}
-          {SEPARATOR}
-          {amount(bucket.paymentTotalMinor)}
-        </Typography>
       </Section>
       {inBalances ? null : (
         <Typography sx={{ mt: 2 }}>
@@ -185,46 +342,58 @@ function CurrencySection({
             </Typography>
             <StatementTable
               title="People’s contributions"
-              headers={['Person', 'Paid', 'Share', 'Net']}
+              columns={[
+                column('Member', 'text'),
+                column('Paid', 'money'),
+                column('Share', 'money'),
+                column('Net', 'money'),
+              ]}
             >
               {bucket.people.map((person) => (
                 <TableRow key={person.id}>
-                  <TableCell component="th" scope="row">
+                  <Cell kind="text" row>
                     {person.name}
-                  </TableCell>
-                  <TableCell>{amount(person.paidMinor)}</TableCell>
-                  <TableCell>{amount(person.shareMinor)}</TableCell>
-                  <TableCell>{amount(person.netMinor)}</TableCell>
+                  </Cell>
+                  <Cell kind="money">{amount(person.paidMinor)}</Cell>
+                  <Cell kind="money">{amount(person.shareMinor)}</Cell>
+                  <Cell kind="money">{amount(person.netMinor)}</Cell>
                 </TableRow>
               ))}
             </StatementTable>
           </Section>
           <Section title="Balances and suggested payments">
-            <Typography color="text.secondary">
-              Current all-time positions, including every recorded payment. These match Balances;
-              the period changes spending only.
-            </Typography>
-            <StatementTable title="Current balances" headers={['Person', 'Balance']}>
-              {bucket.people.map((person) => (
-                <TableRow key={person.id}>
-                  <TableCell component="th" scope="row">
-                    {person.name}
-                  </TableCell>
-                  <TableCell>{amount(person.balanceMinor)}</TableCell>
-                </TableRow>
-              ))}
-            </StatementTable>
-            {bucket.suggestedPayments.length ? (
-              <Box component="ul">
-                {bucket.suggestedPayments.map((row) => (
-                  <li key={`${row.from}-${row.to}`}>
-                    {name(row.from)} pays {name(row.to)} {amount(row.amountMinor)}
-                  </li>
+            {/* In print, the balances and their Suggested payments stay on one page, with the
+                sentence that opens them, so the heading never prints apart from them (#646). */}
+            <Box className="statement-keep-together">
+              <Typography color="text.secondary">
+                Current all-time positions, including every recorded payment. These match Balances;
+                the period changes spending only.
+              </Typography>
+              <StatementTable
+                title="Current balances"
+                columns={[column('Member', 'text'), column('Balance', 'money')]}
+              >
+                {bucket.people.map((person) => (
+                  <TableRow key={person.id}>
+                    <Cell kind="text" row>
+                      {person.name}
+                    </Cell>
+                    <Cell kind="money">{amount(person.balanceMinor)}</Cell>
+                  </TableRow>
                 ))}
-              </Box>
-            ) : (
-              <Typography>Settled up.</Typography>
-            )}
+              </StatementTable>
+              {bucket.suggestedPayments.length ? (
+                <Box component="ul" aria-label={`${currency} suggested payments`}>
+                  {bucket.suggestedPayments.map((row) => (
+                    <li key={`${row.from}-${row.to}`}>
+                      {name(row.from)} pays {name(row.to)} {amount(row.amountMinor)}
+                    </li>
+                  ))}
+                </Box>
+              ) : (
+                <Typography>Settled up.</Typography>
+              )}
+            </Box>
           </Section>
         </>
       ) : null}
@@ -232,41 +401,47 @@ function CurrencySection({
         {bucket.expenses.length ? (
           <StatementTable
             title="Expense details"
-            headers={['Date', 'Expense', 'Paid by', 'Amount', 'Shares']}
+            columns={[
+              column('Date', 'date'),
+              column('Description', 'wrap'),
+              column('Paid by', 'people'),
+              column('Amount', 'money'),
+              column('Share', 'people'),
+            ]}
           >
             {bucket.expenses.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>
-                  {row.date}
+                <Cell kind="date">
+                  <span className="statement-when">{row.date}</span>
                   {row.outsideTrip ? (
                     <Typography variant="caption" component="div">
                       {OUTSIDE_TRIP[row.outsideTrip]}
                     </Typography>
                   ) : null}
-                </TableCell>
-                <TableCell component="th" scope="row">
+                </Cell>
+                <Cell kind="wrap" row>
                   {row.description}
                   <Typography variant="caption" component="div">
                     {categoryLabel(row.category)}
                     {SEPARATOR}
                     {row.tag}
                   </Typography>
-                </TableCell>
-                <TableCell>
+                </Cell>
+                <Cell kind="people">
                   {row.paidBy.map((person) => (
-                    <div key={person.userId}>
-                      {name(person.userId)} {amount(person.amountMinor)}
-                    </div>
+                    <PersonAmount key={person.userId} name={name(person.userId)}>
+                      {amount(person.amountMinor)}
+                    </PersonAmount>
                   ))}
-                </TableCell>
-                <TableCell>{amount(row.amountMinor)}</TableCell>
-                <TableCell>
+                </Cell>
+                <Cell kind="money">{amount(row.amountMinor)}</Cell>
+                <Cell kind="people">
                   {row.splitBetween.map((person) => (
-                    <div key={person.userId}>
-                      {name(person.userId)} {amount(person.amountMinor)}
-                    </div>
+                    <PersonAmount key={person.userId} name={name(person.userId)}>
+                      {amount(person.amountMinor)}
+                    </PersonAmount>
                   ))}
-                </TableCell>
+                </Cell>
               </TableRow>
             ))}
           </StatementTable>
@@ -283,33 +458,43 @@ function CurrencySection({
         {bucket.payments.length ? (
           <StatementTable
             title="Dated payments"
-            headers={['Date and time', 'From', 'To', 'Amount', 'Note', 'Recorded by']}
+            columns={[
+              column('Date and time', 'date'),
+              column('From', 'text'),
+              column('To', 'text'),
+              column('Amount', 'money'),
+              column('Note', 'wrap'),
+              column('Recorded by', 'text'),
+            ]}
           >
             {bucket.payments.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>
-                  {zonedTimestamp(row.at, statement.timeZone)}
+                <Cell kind="date">
+                  <span className="statement-when">
+                    {zonedDateTime(row.at, statement.timeZone)}
+                  </span>
                   {row.outsideTrip ? (
                     <Typography variant="caption" component="div">
                       {OUTSIDE_TRIP[row.outsideTrip]}
                     </Typography>
                   ) : null}
-                </TableCell>
-                <TableCell>{name(row.fromId)}</TableCell>
-                <TableCell>{name(row.toId)}</TableCell>
-                <TableCell>
-                  {row.description ? (
+                </Cell>
+                <Cell kind="text">{name(row.fromId)}</Cell>
+                <Cell kind="text">{name(row.toId)}</Cell>
+                {/* A cross-currency payment's sentence wraps between its words, like text. */}
+                {row.description ? (
+                  <Cell kind="sentence">
                     <ExportPaymentDescription
                       description={row.description}
                       currency={row.currency}
                       paidCurrency={row.paidCurrency}
                     />
-                  ) : (
-                    amount(row.amountMinor)
-                  )}
-                </TableCell>
-                <TableCell>{row.note}</TableCell>
-                <TableCell>{name(row.recordedById)}</TableCell>
+                  </Cell>
+                ) : (
+                  <Cell kind="money">{amount(row.amountMinor)}</Cell>
+                )}
+                <Cell kind="wrap">{row.note}</Cell>
+                <Cell kind="text">{name(row.recordedById)}</Cell>
               </TableRow>
             ))}
           </StatementTable>

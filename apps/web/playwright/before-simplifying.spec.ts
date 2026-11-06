@@ -42,14 +42,28 @@ test('Household switches between Suggested payments and Debts before simplifying
   await expect(list).toBeVisible();
   await expect(card.getByText(/Record one once it’s paid/)).toHaveCount(0);
   await expect(list.getByRole('listitem')).toHaveCount(before.length);
+  await expect(
+    card.getByText(`${read.currency} · the ${before.length} debts as the Expenses left them`),
+  ).toBeVisible();
+  // Each Debt as a Suggested row (#646): what it becomes, from the Suggested payment between
+  // the same two people the same way round, else settled by the other payments.
+  const suggested: Pair[] = read.debts;
   for (const debt of before) {
     const payer = debt.from._id === DEMO_PERSONA_IDS.alex ? 'You owe' : `${debt.from.name} owes`;
     const payee = debt.to._id === DEMO_PERSONA_IDS.alex ? 'you' : debt.to.name;
-    await expect(
-      list.getByText(`${payer} ${payee} ${formatCurrency(debt.amount, read.currency)}`, {
-        exact: true,
-      }),
-    ).toBeVisible();
+    const row = list
+      .getByRole('listitem')
+      .filter({ has: page.getByText(`${payer} ${payee}`, { exact: true }) });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText(formatCurrency(debt.amount, read.currency));
+    const same = suggested.find(
+      (payment) => payment.from._id === debt.from._id && payment.to._id === debt.to._id,
+    );
+    await expect(row).toContainText(
+      same
+        ? `Becomes ${formatCurrency(same.amount, read.currency)} after simplifying`
+        : 'Settled by the other payments',
+    );
   }
   await expect(card.getByRole('button', { name: /^Record/ })).toHaveCount(0);
   await expect(card.getByText(note, { exact: true })).toBeVisible();

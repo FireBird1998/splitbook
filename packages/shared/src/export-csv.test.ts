@@ -14,6 +14,7 @@ import {
   formatMinorAmount,
   serializeCsv,
   zonedDay,
+  zonedDateTime,
   zonedTimestamp,
   type ExpenseCsvOptions,
   type ExportExpense,
@@ -145,6 +146,37 @@ describe('days and times', () => {
     expect(zonedTimestamp(at, 'UTC')).toBe('2026-08-31T20:00:00+00:00');
     expect(zonedTimestamp(new Date('2026-12-31T23:59:59.900Z'), 'Pacific/Kiritimati')).toBe(
       '2027-01-01T13:59:59+14:00',
+    );
+  });
+
+  // #646: the printed statement's payment times, as a reader writes them, not ISO, on the
+  // web's 12-hour clock. A no-break space keeps the time with AM or PM, as day with month.
+  it('writes a payment’s moment as a statement reads it, with the year, in the viewer’s zone', () => {
+    const nbsp = '\u00a0';
+    const at = new Date('2026-11-05T21:51:00Z');
+    expect(zonedDateTime(at, 'Asia/Kolkata')).toBe(`Fri 6${nbsp}Nov 2026, 3:21${nbsp}AM`);
+    expect(zonedDateTime(at, 'America/New_York')).toBe(`Thu 5${nbsp}Nov 2026, 4:51${nbsp}PM`);
+    expect(zonedDateTime('2026-09-22T12:00:00.000Z', 'Asia/Kolkata')).toBe(
+      `Tue 22${nbsp}Sep 2026, 5:30${nbsp}PM`,
+    );
+    expect(zonedDateTime('2026-11-06T02:02:00Z', 'Asia/Kolkata')).toBe(
+      `Fri 6${nbsp}Nov 2026, 7:32${nbsp}AM`,
+    );
+    expect(zonedDateTime('2026-11-06T13:45:00Z', 'Asia/Kolkata')).toBe(
+      `Fri 6${nbsp}Nov 2026, 7:15${nbsp}PM`,
+    );
+    // Just after midnight is 12 AM, just after noon 12 PM; into the next year where the zone is.
+    expect(zonedDateTime('2026-03-01T18:35:00Z', 'Asia/Kolkata')).toBe(
+      `Mon 2${nbsp}Mar 2026, 12:05${nbsp}AM`,
+    );
+    expect(zonedDateTime('2026-03-02T06:35:00Z', 'Asia/Kolkata')).toBe(
+      `Mon 2${nbsp}Mar 2026, 12:05${nbsp}PM`,
+    );
+    expect(zonedDateTime('2026-03-02T05:29:00Z', 'Asia/Kolkata')).toBe(
+      `Mon 2${nbsp}Mar 2026, 10:59${nbsp}AM`,
+    );
+    expect(zonedDateTime(new Date('2026-12-31T23:59:59.900Z'), 'Pacific/Kiritimati')).toBe(
+      `Fri 1${nbsp}Jan 2027, 1:59${nbsp}PM`,
     );
   });
 

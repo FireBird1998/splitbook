@@ -279,6 +279,25 @@ test('the Table view shows each month, the average row, and passes axe', async (
     ...read.months.map((entry) => money(entry.spentMinor, read.currency)),
     money(read.average!.spentMinor, read.currency),
   ]);
+  // Each Month against the same average, signed (#646); the average's own row has "–".
+  await expect(table.getByRole('columnheader')).toHaveText([
+    'Month',
+    'Spent',
+    'vs 6-month average',
+    'Your share',
+  ]);
+  const versus = await table
+    .locator('tbody tr, tfoot tr')
+    .evaluateAll((rows) => rows.map((row) => row.children[2]?.textContent?.trim() ?? ''));
+  expect(versus).toEqual([
+    ...read.months.map((entry) => {
+      const difference = entry.spentMinor - read.average!.spentMinor;
+      const sign = difference > 0 ? '+' : difference < 0 ? '−' : '';
+      // withSign joins the sign to its figure with a word joiner (#899).
+      return `${sign}${sign ? '\u2060' : ''}${money(Math.abs(difference), read.currency)}`;
+    }),
+    '–',
+  ]);
   // The average leaves the Month out: it is the earlier months' average, rounded half up.
   const earlier = read.months.slice(0, -1).map((entry) => entry.spentMinor);
   expect(read.average!.spentMinor).toBe(

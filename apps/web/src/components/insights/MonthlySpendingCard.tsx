@@ -90,7 +90,7 @@ export default function MonthlySpendingCard({
             <MonthlyTable model={model} />
           )}
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1.75 }}>
-            {model.explanation}
+            <Explanation text={model.explanation} figure={model.explanationFigure} />
           </Typography>
         </HomeCardBody>
       ) : state === 'empty' ? (
@@ -104,6 +104,25 @@ export default function MonthlySpendingCard({
         <HomeCardLoading label="Loading monthly spending" blocks={1} height={PLOT_HEIGHT} />
       )}
     </HomeCard>
+  );
+}
+
+/** The sentence under the chart, its amount in the mono figure style. */
+function Explanation({ text, figure }: { text: string; figure: string | null }) {
+  const at = figure ? text.indexOf(figure) : -1;
+  if (!figure || at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <Box
+        component="span"
+        className="monthly-explanation-figure"
+        sx={(theme) => ({ ...theme.typography.money, whiteSpace: 'nowrap' })}
+      >
+        {figure}
+      </Box>
+      {text.slice(at + figure.length)}
+    </>
   );
 }
 
@@ -343,8 +362,9 @@ function MonthlyColumns({ model }: { model: MonthlySpending }) {
 }
 
 /**
- * The same numbers as the chart: a row per Month with its Spent and the member's share, then
- * the average of the earlier Months. Hidden, it is what assistive technology reads in the
+ * The same numbers as the chart: a row per Month with its Spent, its difference from the
+ * average (signed, "–" on the average's own row) and the member's share, then the average of
+ * the earlier Months. Hidden, it is what assistive technology reads in the
  * Chart view. Shown, it scrolls sideways inside the card when it must, and takes focus so the
  * keyboard can scroll it.
  */
@@ -390,7 +410,9 @@ function MonthlyTable({ model, hidden = false }: { model: MonthlySpending; hidde
       >
         <Box component="caption" id={captionId} sx={visuallyHidden}>
           The whole Group’s spending in {model.currency}, by month, with your share
-          {model.average ? ` and the ${model.average.rowLabel.toLowerCase()}` : ''}
+          {model.average
+            ? ` and the ${model.average.rowLabel.toLowerCase()}, with each month’s difference from it`
+            : ''}
         </Box>
         <thead>
           <tr>
@@ -400,6 +422,11 @@ function MonthlyTable({ model, hidden = false }: { model: MonthlySpending; hidde
             <Box component="th" scope="col" sx={number}>
               Spent
             </Box>
+            {model.average ? (
+              <Box component="th" scope="col" className="monthly-vs-average" sx={number}>
+                {model.average.vsLabel}
+              </Box>
+            ) : null}
             <Box component="th" scope="col" sx={number}>
               Your share
             </Box>
@@ -420,9 +447,23 @@ function MonthlyTable({ model, hidden = false }: { model: MonthlySpending; hidde
               >
                 {row.long}
               </Box>
-              <Box component="td" sx={[number, money, figure(row.focus)]}>
+              <Box component="td" className="monthly-spent" sx={[number, money, figure(row.focus)]}>
                 {row.spentText}
               </Box>
+              {model.average ? (
+                // A difference, so quieter than the figures either side of it.
+                <Box
+                  component="td"
+                  className="monthly-vs-average"
+                  sx={[
+                    number,
+                    money,
+                    { color: 'text.secondary', fontWeight: row.focus ? 600 : 500 },
+                  ]}
+                >
+                  {row.vsAverageText ?? '–'}
+                </Box>
+              ) : null}
               <Box component="td" sx={[number, money, figure(row.focus)]}>
                 {row.shareText}
               </Box>
@@ -441,6 +482,13 @@ function MonthlyTable({ model, hidden = false }: { model: MonthlySpending; hidde
               </Box>
               <Box component="td" sx={[number, money, { color: 'text.primary' }]}>
                 {model.average.spentText}
+              </Box>
+              <Box
+                component="td"
+                className="monthly-vs-average"
+                sx={[number, money, { color: 'text.secondary' }]}
+              >
+                –
               </Box>
               <Box component="td" sx={[number, money, { color: 'text.primary' }]}>
                 {model.average.shareText}
