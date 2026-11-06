@@ -22,7 +22,7 @@ import type { ExportPreview } from '@splitbook/shared/export-preview';
 import { exportWindowSlug } from '@splitbook/shared/export-request';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { SEPARATOR } from '@splitbook/shared/separator';
-import { statementDay } from '@splitbook/shared/export-csv';
+import { statementDay, zonedDateTime } from '@splitbook/shared/export-csv';
 
 export type PreviewState =
   | { status: 'idle'; message: string }
@@ -39,13 +39,44 @@ export function previewPeriod(data: Pick<ExportPreview, 'from' | 'to'>) {
       )
     : `${statementDay(data.from)} – ${statementDay(data.to)}`;
 }
+/** A money column of a statement preview table: its figures right-aligned, on one line. */
+const MONEY = 'export-statement-money';
+/** A statement preview cell under its first line: the Expense's Tag. */
+const CAPTION = 'export-statement-caption';
+
+/**
+ * A statement preview's tables fit the Export card (#916), as the statement's compact tables fit
+ * its page (statement.css, #910): the statement's small type and padding, the table as wide as
+ * the card, and its text columns wrapping so every figure stays in view. Money stays on one line,
+ * right-aligned, with room before the column after it (#907).
+ */
+const COMPACT_SX = {
+  width: '100%',
+  '& td, & th': {
+    fontSize: '0.75rem',
+    lineHeight: 1.4,
+    p: '4px 6px',
+    verticalAlign: 'top',
+  },
+  '& td *, & th *': { fontSize: 'inherit' },
+  '& td:first-child, & th:first-child': { pl: 0 },
+  '& td:last-child, & th:last-child': { pr: 0 },
+  '& thead th': { whiteSpace: 'nowrap' },
+  [`& .${MONEY}`]: { textAlign: 'right', whiteSpace: 'nowrap' },
+  [`& .${MONEY} + :not(.${MONEY})`]: { pl: '14px' },
+  [`& .${CAPTION}`]: { display: 'block', fontSize: '0.6875rem', color: 'text.secondary' },
+} as const;
+
 function PreviewTable({
   label,
   headers,
+  money,
   children,
 }: {
   label: string;
   headers: string[];
+  /** A statement preview table's money columns, by header: the table is compact (#916). */
+  money?: string[];
   children: ReactNode;
 }) {
   return (
@@ -62,12 +93,20 @@ function PreviewTable({
       <Table
         size="small"
         aria-label={label}
-        sx={{ minWidth: 'max-content', '& td, & th': { whiteSpace: 'nowrap' } }}
+        sx={
+          money ? COMPACT_SX : { minWidth: 'max-content', '& td, & th': { whiteSpace: 'nowrap' } }
+        }
       >
         <TableHead>
           <TableRow>
             {headers.map((header, i) => (
-              <TableCell key={i} component="th" scope="col" sx={{ whiteSpace: 'nowrap' }}>
+              <TableCell
+                key={i}
+                component="th"
+                scope="col"
+                className={money?.includes(header) ? MONEY : undefined}
+                sx={{ whiteSpace: 'nowrap' }}
+              >
                 {header}
               </TableCell>
             ))}
@@ -78,20 +117,31 @@ function PreviewTable({
     </Box>
   );
 }
-/** The Statement’s generation instant in the export’s chosen zone, day first. */
-function generatedTime(at: string, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZone,
-  }).formatToParts(new Date(at));
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((each) => each.type === type)!.value;
-  return `${part('day')} ${part('month')} ${part('year')} at ${part('hour')}:${part('minute')} ${part('dayPeriod')}`;
+
+/**
+ * A name and its amount in Paid by or Share, as the statement writes them: on one line where
+ * the card has room, the amount under the name where it hasn't, never cut off (#916). A wrapped
+ * amount keeps to the column's right edge with the other figures, and each person is set a
+ * little apart, so an amount never reads as the next person's.
+ */
+function PersonAmount({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <Box
+      className="statement-preview-person"
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        columnGap: 1.5,
+        '& > *': { whiteSpace: 'nowrap' },
+        '& > *:last-child': { marginLeft: 'auto' },
+        '& + &': { marginTop: '4px' },
+      }}
+    >
+      <span>{name}</span>
+      {children}
+    </Box>
+  );
 }
 
 const formats = { csv: 'CSV', json: 'Full backup', statement: 'Statement' } as const;
@@ -169,7 +219,7 @@ export default function ExportPreviewPanel({
             {SEPARATOR}
             {data.statement.defaultCurrency}
             {SEPARATOR}
-            Generated {generatedTime(data.generatedAt, data.timeZone)} ({data.timeZone})
+            Generated {zonedDateTime(data.generatedAt, data.timeZone)} ({data.timeZone})
           </Typography>
           {data.statement.currencies.map((bucket) => {
             if (isEmptyStatementCurrency(bucket)) {
@@ -236,6 +286,7 @@ export default function ExportPreviewPanel({
                     <PreviewTable
                       label={`${bucket.currency} period contributions`}
                       headers={['Member', 'Paid', 'Share', 'Net']}
+                      money={['Paid', 'Share', 'Net']}
                     >
                       {bucket.people.map((person) => (
                         <TableRow key={person.id}>
@@ -244,7 +295,7 @@ export default function ExportPreviewPanel({
                           </TableCell>
                           {[person.paidMinor, person.shareMinor, person.netMinor].map(
                             (minor, i) => (
-                              <TableCell key={i}>
+                              <TableCell key={i} className={MONEY}>
                                 <MoneyText
                                   amount={displayMajorAmount(minor, bucket.currency)}
                                   currency={bucket.currency}
@@ -267,13 +318,14 @@ export default function ExportPreviewPanel({
                       <PreviewTable
                         label={`${bucket.currency} current balances`}
                         headers={['Member', 'Balance']}
+                        money={['Balance']}
                       >
                         {bucket.people.map((person) => (
                           <TableRow key={person.id}>
                             <TableCell component="th" scope="row">
                               {person.name}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className={MONEY}>
                               <MoneyText
                                 amount={displayMajorAmount(person.balanceMinor, bucket.currency)}
                                 currency={bucket.currency}
@@ -327,7 +379,7 @@ export default function ExportPreviewPanel({
                           }}
                         >
                           <Typography variant="body2" color="text.secondary">
-                            {generatedTime(payment.at, data.timeZone)}
+                            {zonedDateTime(payment.at, data.timeZone)}
                           </Typography>
                           <Box sx={{ my: 0.5 }}>
                             {payment.description ? (
@@ -365,38 +417,49 @@ export default function ExportPreviewPanel({
                   <Box sx={{ mt: 2 }}>
                     <PreviewTable
                       label={`${bucket.currency} first Expenses`}
-                      headers={['Date', 'Description', 'Tag', 'Amount', 'Paid by', 'Share']}
+                      headers={['Date', 'Description', 'Paid by', 'Amount', 'Share']}
+                      money={['Amount']}
                     >
-                      {bucket.expenses.map((expense) => (
-                        <TableRow key={expense.id}>
-                          <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                            {statementDay(expense.date)}
-                          </TableCell>
-                          <TableCell>{expense.description}</TableCell>
-                          <TableCell>{expense.tag}</TableCell>
+                      {bucket.expenses.map((expense) => {
+                        const people = (allocations: typeof expense.paidBy) => (
                           <TableCell>
-                            <MoneyText
-                              amount={displayMajorAmount(expense.amountMinor, bucket.currency)}
-                              currency={bucket.currency}
-                              tone="neutral"
-                            />
+                            {allocations.map((person) => (
+                              <PersonAmount key={person.userId} name={name(person.userId)}>
+                                <MoneyText
+                                  amount={displayMajorAmount(person.amountMinor, bucket.currency)}
+                                  currency={bucket.currency}
+                                  tone="neutral"
+                                />
+                              </PersonAmount>
+                            ))}
                           </TableCell>
-                          {[expense.paidBy, expense.splitBetween].map((allocations, index) => (
-                            <TableCell key={index}>
-                              {allocations.map((person) => (
-                                <Box key={person.userId}>
-                                  {name(person.userId)}{' '}
-                                  <MoneyText
-                                    amount={displayMajorAmount(person.amountMinor, bucket.currency)}
-                                    currency={bucket.currency}
-                                    tone="neutral"
-                                  />
-                                </Box>
-                              ))}
+                        );
+                        return (
+                          <TableRow key={expense.id}>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                              {statementDay(expense.date)}
                             </TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
+                            {/* As the statement heads a row with its Description, the Tag under it. */}
+                            <TableCell
+                              component="th"
+                              scope="row"
+                              sx={{ minWidth: '6em', overflowWrap: 'anywhere' }}
+                            >
+                              {expense.description}
+                              <span className={CAPTION}>{expense.tag}</span>
+                            </TableCell>
+                            {people(expense.paidBy)}
+                            <TableCell className={MONEY}>
+                              <MoneyText
+                                amount={displayMajorAmount(expense.amountMinor, bucket.currency)}
+                                currency={bucket.currency}
+                                tone="neutral"
+                              />
+                            </TableCell>
+                            {people(expense.splitBetween)}
+                          </TableRow>
+                        );
+                      })}
                     </PreviewTable>
                   </Box>
                 )}

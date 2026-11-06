@@ -4,7 +4,7 @@ import { act, create, type ReactTestInstance } from 'react-test-renderer';
 import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
-import { text } from '@/lib/test-utils/markup';
+import { stylesOf, text } from '@/lib/test-utils/markup';
 import { exportPreviewSchema, type ExportPreview } from '@splitbook/shared/export-preview';
 import { buildStatement } from '@splitbook/shared/statement';
 import { buildStatementPreview } from '@splitbook/shared/export-preview';
@@ -111,8 +111,8 @@ it('shows only backup contents and states the accepted backup omission', () => {
 });
 
 it.each([
-  ['UTC', '19 Oct 2026 at 6:00 AM'],
-  ['Pacific/Pago_Pago', '18 Oct 2026 at 7:00 PM'],
+  ['UTC', 'Mon 19 Oct 2026, 6:00 AM'],
+  ['Pacific/Pago_Pago', 'Sun 18 Oct 2026, 7:00 PM'],
 ])(
   'renders statement balances, Suggested payments and Expense allocations in %s',
   (timeZone, generated) => {
@@ -640,4 +640,169 @@ it('writes a statement preview’s period and Expense dates as the statement doe
   // Day and month joined by a no-break space, as on the printed statement (text() folds it).
   expect(html).toContain('1\u00A0Sep 2026 – 20\u00A0Sep 2026');
   expect(html).toContain('>14\u00A0Sep 2026<');
+});
+
+// #916: the statement preview writes its payment and generated times as the statement writes a
+// payment's time, "Fri 6 Nov 2026, 12:40 PM" (zonedDateTime), in the export's time zone.
+it('writes a statement preview’s payment and generated times as the statement does (#916)', () => {
+  const statement = buildStatement(
+    {
+      id: 'maple',
+      name: 'Maple House',
+      theme: 'home',
+      currency: 'INR',
+      tags: [],
+      names: { a: 'Alex', s: 'Sam' },
+      members: [
+        { id: 'a', name: 'Alex' },
+        { id: 's', name: 'Sam' },
+      ],
+      expenses: [],
+      settlements: [
+        {
+          id: 'p',
+          at: '2026-11-06T07:10:00Z',
+          fromId: 's',
+          toId: 'a',
+          recordedById: 's',
+          currency: 'INR',
+          amountMinor: 2000,
+        },
+      ],
+    },
+    { timeZone: 'Asia/Kolkata' },
+  );
+  const html = render({
+    status: 'ready',
+    data: {
+      format: 'statement',
+      groupNames: [statement.name],
+      generatedAt: '2026-11-06T18:35:00Z',
+      from: null,
+      to: null,
+      timeZone: 'Asia/Kolkata',
+      empty: false,
+      statement: buildStatementPreview(statement),
+    },
+  });
+  const page = text(html);
+  expect(page).toContain('Fri 6 Nov 2026, 12:40 PM Sam paid Alex ₹20.00');
+  expect(page).toContain('Generated Sat 7 Nov 2026, 12:05 AM (Asia/Kolkata)');
+  expect(page).not.toMatch(/\d{4} at \d/);
+});
+
+// #916: the statement preview's Expenses fit the Export card as the statement's do: its columns in
+// the statement's order, with the Tag under the Description rather than a column of its own.
+it('lays out a statement preview’s Expenses as the statement does, Tag under the Description (#916)', () => {
+  const statement = buildStatement(
+    {
+      id: 'maple',
+      name: 'Maple House',
+      theme: 'home',
+      currency: 'INR',
+      members: [
+        { id: 'alice', name: 'Alice Tester' },
+        { id: 'bob', name: 'Bob Tester' },
+      ],
+      names: { alice: 'Alice Tester', bob: 'Bob Tester' },
+      tags: [],
+      expenses: [
+        {
+          id: 'expense',
+          date: '2026-09-14T00:00:00.000Z',
+          description: 'Groceries',
+          category: 'food',
+          tag: 'Food',
+          currency: 'INR',
+          amountMinor: 7006,
+          splitMethod: 'equal',
+          paidBy: [{ userId: 'alice', amountMinor: 7006 }],
+          splitBetween: [
+            { userId: 'alice', amountMinor: 3503 },
+            { userId: 'bob', amountMinor: 3503 },
+          ],
+        },
+      ],
+      settlements: [],
+    },
+    { timeZone: 'UTC' },
+  );
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(statement),
+    },
+  });
+  const table = /<table\b[^>]*aria-label="INR first Expenses"[^>]*>([\s\S]*?)<\/table>/.exec(html);
+  expect(table).not.toBeNull();
+  const headers = [...table![1].matchAll(/<th\b[^>]*scope="col"[^>]*>([^<]*)<\/th>/g)].map(
+    ([, header]) => header,
+  );
+  expect(headers).toEqual(['Date', 'Description', 'Paid by', 'Amount', 'Share']);
+  // The Description heads its row, its Tag beneath it.
+  expect(text(table![1])).toContain(
+    '14 Sep 2026 Groceries Food Alice Tester ₹70.06 ₹70.06 Alice Tester ₹35.03 Bob Tester ₹35.03',
+  );
+  expect(table![1]).toMatch(/<th\b[^>]*scope="row"[^>]*>Groceries</);
+});
+
+// #916, the Designer's polish: when a Share or Paid by amount wraps under its name in the narrow
+// card, it keeps to the column's right edge with the other figures, and each person is set a
+// little apart, so an amount never reads as the next person's.
+it('keeps a wrapped amount on the right and sets each person apart (#916)', () => {
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(
+        buildStatement(
+          {
+            id: 'maple',
+            name: 'Maple House',
+            theme: 'home',
+            currency: 'INR',
+            members: [
+              { id: 'alice', name: 'Alice Tester' },
+              { id: 'bob', name: 'Bob Tester' },
+            ],
+            names: { alice: 'Alice Tester', bob: 'Bob Tester' },
+            tags: [],
+            expenses: [
+              {
+                id: 'expense',
+                date: '2026-09-14T00:00:00.000Z',
+                description: 'Groceries',
+                category: 'food',
+                tag: 'Food',
+                currency: 'INR',
+                amountMinor: 7006,
+                splitMethod: 'equal',
+                paidBy: [{ userId: 'alice', amountMinor: 7006 }],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 3503 },
+                  { userId: 'bob', amountMinor: 3503 },
+                ],
+              },
+            ],
+            settlements: [],
+          },
+          { timeZone: 'UTC' },
+        ),
+      ),
+    },
+  });
+  const people = stylesOf(html, 'statement-preview-person');
+  // Paid by's one person and Share's two.
+  expect(people).toHaveLength(3);
+  for (const person of people) {
+    expect(person.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('')).toMatch(
+      />\*:last-child\{[^}]*margin-left:auto/,
+    );
+  }
+  expect(
+    people[0].nested.some((rule) => rule.selector.includes('+') && /margin-top:/.test(rule.body)),
+  ).toBe(true);
 });
