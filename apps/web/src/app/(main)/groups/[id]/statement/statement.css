@@ -27,19 +27,46 @@
     border-color: var(--statement-print-border) !important;
     box-shadow: none !important;
   }
+  /* The on-screen A4 sheet gives way to the printed page and its margins. */
   .statement-paper {
     padding: 0 !important;
     border: 0 !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+  }
+  /* The logo in one ink, whatever the theme: the light artwork, all its paths in black. Its
+     box stays clear: the paper's background would turn black with it and print a block. */
+  .statement-logo img {
+    display: none !important;
+  }
+  .statement-logo img:first-child {
+    display: block !important;
+    background: transparent !important;
+    filter: brightness(0);
+  }
+  .statement-summary > div {
+    break-inside: avoid;
   }
   .statement-paper section {
     border: 0 !important;
     padding: 0 !important;
   }
-  .statement-paper h2 {
+  /* A heading stays with what follows it, never alone at the foot of a page. */
+  .statement-paper h2,
+  .statement-paper h3 {
     break-after: avoid;
+    page-break-after: avoid;
   }
   .statement-paper tr {
     break-inside: avoid;
+  }
+  /* A currency's balances and its Suggested payments start on the same page. A block taller
+     than a page can't avoid a break, so the browser breaks it as it would any other. */
+  .statement-keep-together {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .statement-paper thead {
     display: table-header-group;
@@ -47,8 +74,20 @@
   .statement-table-region {
     overflow: visible !important;
   }
+  /* Every column fits the 180 mm between A4's margins: 9 pt throughout, amounts too (they
+     never wrap), with tighter cell padding. Only Description and Note wrap. */
   .statement-paper table {
     width: 100%;
     font-size: 9pt;
+  }
+  .statement-paper table * {
+    font-size: inherit !important;
+  }
+  .statement-paper table .MuiTypography-caption {
+    font-size: 7.5pt !important;
+  }
+  .statement-paper th,
+  .statement-paper td {
+    padding: 3pt 4pt !important;
   }
 }

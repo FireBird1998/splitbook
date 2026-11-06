@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { GroupInsightsRead } from '@splitbook/shared/group-insights-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { SEPTEMBER_DETAIL } from '@/lib/test-utils/insights-month-detail';
-import { anchors, text } from '@/lib/test-utils/markup';
+import { anchors, stylesOf, text } from '@/lib/test-utils/markup';
 import GroupInsightsView, { type GroupInsightsViewProps } from './GroupInsightsView';
 
 /*
@@ -15,6 +15,10 @@ import GroupInsightsView, { type GroupInsightsViewProps } from './GroupInsightsV
  */
 
 const GROUP = 'c00000000000000000000001';
+const LIGHT = createAppTheme('light');
+/** As MUI writes `text.secondary` and the money font into the page. */
+const SECONDARY_TEXT = (LIGHT.vars ?? LIGHT).palette.text.secondary;
+const MONO = (LIGHT.typography.money as { fontFamily: string }).fontFamily.replace(/,\s+/g, ',');
 const ALEX = 'a00000000000000000000001';
 const PRIYA = 'a00000000000000000000003';
 
@@ -199,31 +203,59 @@ describe('monthly spending', () => {
   it('has a table with a row per Month and an average row', () => {
     const html = render({ initialView: 'table' });
     expect(tableRows(html)).toEqual([
-      ['Month', 'Spent', 'Your share'],
-      ['March 2026', '₹15,000.00', '₹5,000.00'],
-      ['April 2026', '₹16,980.00', '₹5,000.00'],
-      ['May 2026', '₹17,640.00', '₹5,000.00'],
-      ['June 2026', '₹19,210.00', '₹5,000.00'],
-      ['July 2026', '₹18,050.00', '₹5,000.00'],
-      ['August 2026', '₹17,385.00', '₹5,000.00'],
-      ['September 2026', '₹18,420.00', '₹6,140.00'],
-      ['6-month average', '₹17,377.50', '₹5,000.00'],
+      ['Month', 'Spent', 'vs 6-month average', 'Your share'],
+      ['March 2026', '₹15,000.00', '−₹2,377.50', '₹5,000.00'],
+      ['April 2026', '₹16,980.00', '−₹397.50', '₹5,000.00'],
+      ['May 2026', '₹17,640.00', '+₹262.50', '₹5,000.00'],
+      ['June 2026', '₹19,210.00', '+₹1,832.50', '₹5,000.00'],
+      ['July 2026', '₹18,050.00', '+₹672.50', '₹5,000.00'],
+      ['August 2026', '₹17,385.00', '+₹7.50', '₹5,000.00'],
+      ['September 2026', '₹18,420.00', '+₹1,042.50', '₹6,140.00'],
+      ['6-month average', '₹17,377.50', '–', '₹5,000.00'],
     ]);
     expect(html).toMatch(/<tfoot>[\s\S]*6-month average[\s\S]*<\/tfoot>/);
     // Monthly spending's table is the page's first; By Tag and Who paid have their own.
     const monthly = /<table\b[\s\S]*?<\/table>/.exec(html)?.[0] ?? '';
     expect(monthly.match(/scope="row"/g)).toHaveLength(8);
     expect(text(html)).toContain(
-      'The whole Group’s spending in INR, by month, with your share and the 6-month average',
+      'The whole Group’s spending in INR, by month, with your share and the 6-month average, with each month’s difference from it',
     );
     expect(text(html)).toContain('INR · March to September 2026 · whole Group');
     expect(text(html)).toContain('September is ₹1,042.50 above the 6-month average.');
   });
 
+  it('draws the vs-average column in the secondary text colour (#646)', () => {
+    const html = render({ initialView: 'table' });
+    const cells = stylesOf(html, 'monthly-vs-average');
+    // Its heading (secondary, as every heading is, from the table's head), seven Months and the
+    // average row's "–".
+    expect(cells).toHaveLength(9);
+    for (const cell of cells.filter((cell) => !cell.heading))
+      expect(cell.value('color')).toBe(SECONDARY_TEXT);
+    // The Spent beside it stays in the primary colour.
+    expect(stylesOf(html, 'monthly-spent').map((cell) => cell.value('color'))).not.toContain(
+      SECONDARY_TEXT,
+    );
+  });
+
+  it('sets the sentence’s amount in the mono figure style (#646)', () => {
+    const html = render({ initialView: 'chart' });
+    const figures = stylesOf(html, 'monthly-explanation-figure');
+    expect(figures).toHaveLength(1);
+    expect(figures[0].value('font-family')).toBe(MONO);
+    expect(html).toMatch(/class="[^"]*monthly-explanation-figure[^"]*"[^>]*>₹1,042\.50</);
+  });
+
+  it('says under the chart which Tags rose and fell, from the By Tag read (#646)', () => {
+    expect(text(render({ initialView: 'chart' }))).toContain(
+      'September is ₹1,042.50 above the 6-month average. Untagged Expenses, Household and Utilities rose; Groceries fell.',
+    );
+  });
+
   it('hides the chart from assistive technology and gives it the same table', () => {
     const html = render({ initialView: 'chart' });
     expect(html).toMatch(/<div[^>]*aria-hidden="true"[^>]*data-testid="monthly-columns"/);
-    expect(tableRows(html).at(-1)).toEqual(['6-month average', '₹17,377.50', '₹5,000.00']);
+    expect(tableRows(html).at(-1)).toEqual(['6-month average', '₹17,377.50', '–', '₹5,000.00']);
     expect(html).toMatch(/aria-pressed="true"[^>]*>Chart</);
   });
 
@@ -237,7 +269,10 @@ describe('monthly spending', () => {
     };
     const html = render({ read: first, initialView: 'table' });
     expect(html).not.toContain('<tfoot');
-    expect(tableRows(html)).toHaveLength(2);
+    expect(tableRows(html)).toEqual([
+      ['Month', 'Spent', 'Your share'],
+      ['September 2026', '₹18,420.00', '₹6,140.00'],
+    ]);
   });
 });
 

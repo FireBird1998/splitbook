@@ -15,6 +15,7 @@ import { getCurrency, getCurrencyPrecision } from './currency';
 import { expenseDay } from './expense-day';
 import { assertSafeMinorAmount, moneyParticipantId, readLegacyAmountMinor } from './exact-money';
 import type { SplitMethod } from './types';
+import { NO_BREAK_SPACE } from './separator';
 import {
   EXCHANGE_RATE_API_ATTRIBUTION,
   type CrossCurrencySettlementFields,
@@ -107,6 +108,20 @@ function zonedParts(at: Date, timeZone: string) {
 export function zonedDay(at: Date | string, timeZone: string): string {
   const { year, month, day } = zonedParts(new Date(at), timeZone);
   return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * A moment as a reader writes it on a printed statement (#646): "Fri 6 Nov 2026, 03:21", in
+ * the time zone's wall clock on a 24-hour clock, with the year, as a statement is a document.
+ * The day and month are joined by a no-break space so they never part.
+ */
+export function zonedDateTime(at: Date | string, timeZone: string): string {
+  const { year, month, day, hour, minute } = zonedParts(new Date(at), timeZone);
+  const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  return `${weekday} ${day}${NO_BREAK_SPACE}${MONTHS[month - 1]} ${year}, ${pad(hour)}:${pad(minute)}`;
 }
 
 /**

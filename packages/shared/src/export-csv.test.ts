@@ -14,6 +14,7 @@ import {
   formatMinorAmount,
   serializeCsv,
   zonedDay,
+  zonedDateTime,
   zonedTimestamp,
   type ExpenseCsvOptions,
   type ExportExpense,
@@ -145,6 +146,24 @@ describe('days and times', () => {
     expect(zonedTimestamp(at, 'UTC')).toBe('2026-08-31T20:00:00+00:00');
     expect(zonedTimestamp(new Date('2026-12-31T23:59:59.900Z'), 'Pacific/Kiritimati')).toBe(
       '2027-01-01T13:59:59+14:00',
+    );
+  });
+
+  // #646: the printed statement's payment times, as a reader writes them, not ISO.
+  it('writes a payment’s moment as a statement reads it, with the year, in the viewer’s zone', () => {
+    const nbsp = '\u00a0';
+    const at = new Date('2026-11-05T21:51:00Z');
+    expect(zonedDateTime(at, 'Asia/Kolkata')).toBe(`Fri 6${nbsp}Nov 2026, 03:21`);
+    expect(zonedDateTime(at, 'America/New_York')).toBe(`Thu 5${nbsp}Nov 2026, 16:51`);
+    expect(zonedDateTime('2026-09-22T12:00:00.000Z', 'Asia/Kolkata')).toBe(
+      `Tue 22${nbsp}Sep 2026, 17:30`,
+    );
+    // Just after midnight, on a 24-hour clock, and into the next year where the zone is.
+    expect(zonedDateTime('2026-03-01T18:35:00Z', 'Asia/Kolkata')).toBe(
+      `Mon 2${nbsp}Mar 2026, 00:05`,
+    );
+    expect(zonedDateTime(new Date('2026-12-31T23:59:59.900Z'), 'Pacific/Kiritimati')).toBe(
+      `Fri 1${nbsp}Jan 2027, 13:59`,
     );
   });
 

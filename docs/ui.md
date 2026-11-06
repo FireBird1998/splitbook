@@ -431,6 +431,12 @@ in exact minor units, who paid, the split, the date and a Tag.
 | `RecordPaymentForm`   | Record payment for the Debt in the currency shown: parties-only pairs, suggestion, overpayment tick, unconfirmed saves, and Pay in (#727) |
 | `CrossCurrencyFields` | A Debt paid in another currency: amount cleared, rate and amount paid, linked; the rate's tag, source and age (#727)                      |
 | `PaymentsTable`       | Payments: date and time, from → to, amount (and what it was paid as, at what rate), note and who recorded it                              |
+| `PaymentRow`          | Settle up's row: payer → payee initials, a title with a line under it, then the amount; Suggested and Before simplifying share it (#646)  |
+
+Before simplifying shows each Debt as a `PaymentRow`, with "Becomes ₹X after simplifying" when a
+Suggested payment runs between the same two people, the same way round, in the same currency, else
+"Settled by the other payments" (`@splitbook/shared/debt-after-simplifying`). Its switch sits in
+the card header's action slot.
 
 The suggestion, the overpayment check and the positions after come from the shared settlement
 preview (`@splitbook/shared/settlement-preview`). The UI says "Record payment" and "Payments";

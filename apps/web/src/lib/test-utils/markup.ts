@@ -107,3 +107,31 @@ export function text(html: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+/*
+ * The rules MUI writes for each element marked with a class: its own rule's declarations (the
+ * last of each property wins, as in the browser), the selectors nested under it, and whether
+ * it is a column heading (`scope="col"`).
+ */
+export function stylesOf(html: string, marker: string) {
+  const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('');
+  return [...html.matchAll(/<[a-z]+\b[^>]*\bclass="([^"]*)"[^>]*>/g)]
+    .map((match) => ({ tag: match[0], classes: match[1].split(' ') }))
+    .filter(({ classes }) => classes.includes(marker))
+    .map(({ tag, classes }) => {
+      const hash = classes.find((name) => name.startsWith('css-'));
+      const rules = hash
+        ? [...css.matchAll(new RegExp(`\\.${hash}([^{]*)\\{([^}]*)\\}`, 'g'))].map(
+            ([, selector, body]) => ({ selector, body }),
+          )
+        : [];
+      const own = rules.find((rule) => rule.selector === '')?.body ?? '';
+      const value = (property: string) =>
+        [...own.matchAll(new RegExp(`(?:^|;)${property}:([^;]+)`, 'g'))].at(-1)?.[1];
+      return {
+        value,
+        nested: rules.filter((rule) => rule.selector !== ''),
+        heading: tag.includes('scope="col"'),
+      };
+    });
+}

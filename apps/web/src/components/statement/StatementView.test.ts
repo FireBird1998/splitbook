@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
@@ -5,9 +7,9 @@ import { describe, expect, it } from 'vitest';
 import { buildStatement } from '@splitbook/shared/statement';
 import type { BackupExpenseInput, BackupGroupInput } from '@splitbook/shared/export-backup';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
-import { text } from '@/lib/test-utils/markup';
+import { images, stylesOf, text } from '@/lib/test-utils/markup';
 import StatementView from './StatementView';
-import { zonedTimestamp } from '@splitbook/shared/export-csv';
+import { statementSummary } from './statement-summary';
 
 /*
  * A whole-trip statement (#319, opened from Share wrap-up), rendered as the server renders it:
@@ -15,6 +17,9 @@ import { zonedTimestamp } from '@splitbook/shared/export-csv';
  * names them (#316), "Before the trip" and "After the trip". Fictional people and figures.
  */
 
+const STATEMENT_CSS = fileURLToPath(
+  new URL('../../app/(main)/groups/[id]/statement/statement.css', import.meta.url),
+);
 const ALEX = 'a00000000000000000000001';
 const SAM = 'a00000000000000000000002';
 
@@ -97,7 +102,7 @@ describe('a whole-trip statement', () => {
     expect(page).toContain('Ferry to the islands · Statement');
     expect(page).toContain('2026-09-17 – 2026-09-20 · INR · Asia/Kolkata');
     expect(page).toContain('Whole trip, including Expenses before and after the Trip’s dates.');
-    expect(page).toContain('Spent: ₹1,840.00');
+    expect(page).toContain('Spent ₹1,840.00 Expenses 3 Payments ₹400.00 1 payment');
     expect(page).toContain('Before the trip: ₹600.00 · 1 Expense, counted in Spent');
     expect(page).toContain('After the trip: ₹40.00 · 1 Expense, counted in Spent');
     expect(page).toContain('2026-08-30 Before the trip Ferry tickets, booked early');
@@ -116,7 +121,7 @@ describe('a whole-trip statement', () => {
     const page = render(false);
     expect(page).toContain('All time');
     expect(page).not.toMatch(/Before the trip|After the trip|Whole trip/);
-    expect(page).toContain('Spent: ₹1,840.00');
+    expect(page).toContain('Spent ₹1,840.00 Expenses 3 Payments ₹400.00 1 payment');
   });
 
   it('lists and marks a post-trip Payment with its recorder and whole-trip scope', () => {
@@ -125,9 +130,80 @@ describe('a whole-trip statement', () => {
       'Every recorded payment, including those before and after the trip.',
     );
     expect(payments).toContain(
-      `${zonedTimestamp(TRIP.settlements[0].at, 'Asia/Kolkata')} After the trip Alex Rivera Sam Chen ₹400.00 Settled after returning home Alex Rivera`,
+      'Tue 22 Sep 2026, 17:30 After the trip Alex Rivera Sam Chen ₹400.00 Settled after returning home Alex Rivera',
     );
-    expect(render(true)).toContain('Payments: 1 · ₹400.00');
+    expect(render(true)).toContain('Payments ₹400.00 1 payment');
+  });
+});
+
+// #646 (W2): the printed statement as the board draws it: the 24 px logo above the title, a row
+// of figures for the summary, and the Export preview's table headings.
+describe('the printed statement’s look', () => {
+  const html = () =>
+    renderToStaticMarkup(
+      createElement(
+        ThemeProvider,
+        { theme: createAppTheme('light') },
+        createElement(StatementView, {
+          statement: buildStatement(TRIP, { timeZone: 'Asia/Kolkata' }),
+        }),
+      ),
+    );
+
+  it('has the 24 px logo, light and dark, above the title', () => {
+    const page = html();
+    const logos = images(page);
+    expect(logos.map((logo) => [logo.src, logo.alt, logo.style.height])).toEqual([
+      [expect.stringContaining('logo-light.svg'), 'Splitbook', '24px'],
+      [expect.stringContaining('logo-dark.svg'), 'Splitbook', '24px'],
+    ]);
+    expect(page.indexOf('logo-light.svg')).toBeLessThan(page.indexOf('<h1'));
+    expect(page).toContain('class="statement-logo');
+  });
+
+  it('shows the summary as a row of figures, not “Spent:” lines', () => {
+    const page = html();
+    expect(page).toContain('aria-label="INR summary"');
+    expect(text(page)).not.toMatch(/Spent:|Expenses:|Payments:/);
+  });
+
+  it('heads its tables as the Export preview does: Member, Paid, Share and Net', () => {
+    const page = text(html());
+    expect(page).toContain('Member Paid Share Net');
+    expect(page).toContain('Member Balance');
+    expect(page).not.toContain('Person');
+  });
+});
+
+describe('the statement summary’s figures (#646, W2)', () => {
+  it('gives Spent, the Expense count and the payments’ total with their count, exact', () => {
+    const [bucket] = buildStatement(TRIP, { timeZone: 'Asia/Kolkata' }).currencies;
+    expect(statementSummary(bucket)).toEqual([
+      { label: 'Spent', amountMinor: 184000 },
+      { label: 'Expenses', count: 3 },
+      { label: 'Payments', amountMinor: 40000, note: '1 payment' },
+    ]);
+  });
+
+  it('counts several payments, and none', () => {
+    const [bucket] = buildStatement(
+      {
+        ...TRIP,
+        settlements: [TRIP.settlements[0], { ...TRIP.settlements[0], id: 'p2', amountMinor: 5 }],
+      },
+      { timeZone: 'Asia/Kolkata' },
+    ).currencies;
+    expect(statementSummary(bucket)[2]).toEqual({
+      label: 'Payments',
+      amountMinor: 40005,
+      note: '2 payments',
+    });
+    const [none] = buildStatement({ ...TRIP, settlements: [] }).currencies;
+    expect(statementSummary(none)[2]).toEqual({
+      label: 'Payments',
+      amountMinor: 0,
+      note: 'No payments',
+    });
   });
 });
 
@@ -216,5 +292,132 @@ describe('a statement with an Expense in a currency Splitbook no longer supports
     expect(dem).not.toContain('Settled up.');
     expect(dem).not.toContain('Paid, Share and Net');
     expect(dem).not.toContain('Balances and suggested payments');
+  });
+});
+
+function tripHtml(statement = buildStatement(TRIP, { timeZone: 'Asia/Kolkata' })) {
+  return renderToStaticMarkup(
+    createElement(
+      ThemeProvider,
+      { theme: createAppTheme('light') },
+      createElement(StatementView, { statement }),
+    ),
+  );
+}
+
+// #646 follow-up: on the real A4 sheet "₹54,000.00" broke as "₹54,000. / 00" and a date as
+// "2026-06- / 05". Figures and dates never wrap; number columns are right-aligned; only the
+// free text (Description, Note) wraps, and on screen a wide table scrolls inside the sheet.
+describe('the statement’s table cells', () => {
+  it('writes a payment’s date and time as a reader would, never as ISO (#646)', () => {
+    const html = tripHtml();
+    // In the statement's own time zone, day and month kept together, on one line.
+    expect(html).toMatch(/class="statement-when">Tue 22\u00a0Sep 2026, 17:30</);
+    expect(html).not.toContain('2026-09-22T17:30:00+05:30');
+  });
+
+  it('keeps each currency’s balances and Suggested payments together in print (#646)', () => {
+    const html = tripHtml();
+    const blocks = [...html.matchAll(/class="statement-keep-together[^"]*"[^>]*>/g)];
+    expect(blocks).toHaveLength(1);
+    const block = html.slice(blocks[0].index);
+    const end = block.indexOf('</section>');
+    expect(block.indexOf('aria-label="Current balances"')).toBeGreaterThan(-1);
+    expect(block.indexOf('aria-label="Current balances"')).toBeLessThan(end);
+    expect(block.indexOf('aria-label="INR suggested payments"')).toBeGreaterThan(-1);
+    expect(block.indexOf('aria-label="INR suggested payments"')).toBeLessThan(end);
+    const css = readFileSync(STATEMENT_CSS, 'utf8');
+    const print = css.slice(css.indexOf('@media print'));
+    expect(print).toMatch(/\.statement-keep-together\s*\{[^}]*break-inside:\s*avoid/);
+  });
+
+  it('keeps every amount on one line, right-aligned, header and cells alike', () => {
+    const money = stylesOf(tripHtml(), 'statement-money');
+    // Paid, Share, Net and Balance per person, each table's headers, and every Amount.
+    expect(money.length).toBeGreaterThan(10);
+    for (const cell of money) {
+      expect(cell.value('white-space')).toBe('nowrap');
+      expect(cell.value('text-align')).toBe('right');
+    }
+  });
+
+  it('never breaks inside a figure, as MoneyText may elsewhere', () => {
+    const amounts = stylesOf(tripHtml(), 'statement-amount');
+    expect(amounts.length).toBeGreaterThan(10);
+    for (const amount of amounts) {
+      expect(amount.value('white-space')).toBe('nowrap');
+      expect(amount.value('overflow-wrap')).toBe('normal');
+    }
+  });
+
+  it('keeps each date and date-time on one line', () => {
+    const dates = stylesOf(tripHtml(), 'statement-date');
+    // The Expenses' and Payments' headers, 3 Expense dates and 1 Payment's.
+    expect(dates).toHaveLength(6);
+    for (const cell of dates) expect(cell.value('white-space')).toBe('nowrap');
+  });
+
+  it('keeps each name beside its amount in Paid by and Share', () => {
+    const lines = stylesOf(tripHtml(), 'statement-line');
+    // 3 Expenses: one payer and two shares each.
+    expect(lines).toHaveLength(9);
+    for (const line of lines) {
+      expect(line.value('white-space')).toBe('nowrap');
+      expect(line.value('display')).toBe('flex');
+    }
+  });
+
+  it('lets only Description wrap in the Expenses table', () => {
+    const html = tripHtml();
+    const expenses = html.slice(html.indexOf('aria-label="Expense details"'));
+    const headers = [...expenses.matchAll(/<th class="([^"]*)"[^>]*scope="col"[^>]*>([^<]*)</g)]
+      .slice(0, 5)
+      .map(([, classes, label]) => [
+        label,
+        /statement-(date|wrap|people|money)/.exec(classes)?.[1],
+      ]);
+    expect(headers).toEqual([
+      ['Date', 'date'],
+      ['Description', 'wrap'],
+      ['Paid by', 'people'],
+      ['Amount', 'money'],
+      ['Share', 'people'],
+    ]);
+    // Its cells wrap; its heading, like every heading, stays on one line.
+    const wrapping = stylesOf(html, 'statement-wrap').filter((cell) => !cell.heading);
+    expect(wrapping).toHaveLength(4);
+    for (const cell of wrapping) expect(cell.value('white-space')).toBe('normal');
+    // So on screen a table wider than the sheet scrolls inside it, never squeezing a figure.
+    const regions = stylesOf(html, 'statement-table-region');
+    expect(regions).toHaveLength(4);
+    for (const region of regions) expect(region.value('overflow-x')).toBe('auto');
+  });
+});
+
+// #646 follow-up: the summary is one ruled strip with dividers and small uppercase labels, as
+// the board's summary strip, not three rounded cards.
+describe('the summary strip', () => {
+  it('is one ruled strip, with a divider between figures and no rounded cards', () => {
+    const html = tripHtml();
+    const [strip] = stylesOf(html, 'statement-summary');
+    expect(strip.value('border-top')).toBe('1px solid');
+    expect(strip.value('border-bottom')).toBe('1px solid');
+    expect(strip.value('border-radius')).toBeUndefined();
+    expect(strip.nested.some((rule) => /^>\*\+\*/.test(rule.selector))).toBe(true);
+    const items = stylesOf(html, 'statement-summary-item');
+    expect(items).toHaveLength(3);
+    for (const item of items) {
+      expect(item.value('border-radius')).toBeUndefined();
+      expect(item.value('border')).toBeUndefined();
+    }
+  });
+
+  it('labels each figure in small uppercase', () => {
+    const labels = stylesOf(tripHtml(), 'statement-summary-label');
+    expect(labels).toHaveLength(3);
+    for (const label of labels) {
+      expect(label.value('text-transform')).toBe('uppercase');
+      expect(label.value('font-size')).toBe('0.6875rem');
+    }
   });
 });

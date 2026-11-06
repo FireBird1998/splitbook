@@ -4,13 +4,16 @@ import {
   insightsHref,
   insightsStats,
   monthSteps,
+  monthDifferencesMinor,
   monthlySpending,
   monthsSpan,
   otherCurrenciesNote,
   payersLine,
   readInsightsAddress,
   signedPercent,
+  tagChangeSentence,
 } from './group-insights';
+import { SEPTEMBER_DETAIL } from '@/lib/test-utils/insights-month-detail';
 
 /*
  * The Insights tab's words and figures (#314), from a fictional Household's read. Month names
@@ -274,10 +277,13 @@ describe('monthly spending', () => {
       name: '5-month average',
       shortName: '5-month avg',
       rowLabel: '5-month average',
+      vsLabel: 'vs 5-month average',
     });
     expect(model.subtitle).toBe('INR\u00a0· April to September 2026\u00a0· whole Group');
     expect(model.explanation).toBe('September is ₹567.00 above the 5-month average.');
     expect(model.focusComparison).toBe('₹567.00 above the 5-month average');
+    // The amount the card sets in the mono figure style (#646).
+    expect(model.explanationFigure).toBe('₹567.00');
   });
 
   it('says "so far" of the current Month, and says when it matches', () => {
@@ -329,10 +335,161 @@ describe('monthly spending', () => {
     expect(model.explanation).toBe(
       'September is this Group’s first month, so there is nothing earlier to compare it with yet.',
     );
+    expect(model.explanationFigure).toBeNull();
   });
 
   it('spans a window across the year with both years', () => {
     expect(monthsSpan(['2025-10', '2025-11', '2026-09'])).toBe('October 2025 to September 2026');
+  });
+});
+
+describe('the table’s “vs average” column (#646, W4a)', () => {
+  it('gives each Month’s Spent minus the average of the earlier Months, signed, the footer’s', () => {
+    // The average is ₹17,853.00 (1785300), the earlier Months' average the footer shows.
+    expect(monthDifferencesMinor(READ)).toEqual([
+      1698000 - 1785300,
+      1764000 - 1785300,
+      1921000 - 1785300,
+      1805000 - 1785300,
+      1738500 - 1785300,
+      1842000 - 1785300,
+    ]);
+    const model = monthlySpending(READ, { currentMonth: '2026-10' });
+    expect(model.rows.map((row) => row.vsAverageText)).toEqual([
+      '−₹873.00',
+      '−₹213.00',
+      '+₹1,357.00',
+      '+₹197.00',
+      '−₹468.00',
+      '+₹567.00',
+    ]);
+    expect(model.average?.vsLabel).toBe('vs 5-month average');
+  });
+
+  it('agrees with the read’s own difference for the Month', () => {
+    expect(monthDifferencesMinor(READ).at(-1)).toBe(READ.change!.differenceMinor);
+  });
+
+  it('says ₹0.00, unsigned, for a Month that matches the average', () => {
+    const level: GroupInsightsRead = {
+      ...READ,
+      months: [month('2026-08', 1785300), month('2026-09', 1785300)],
+      compare: 1,
+      average: { monthCount: 1, spentMinor: 1785300, yourShareMinor: 0, youPaidMinor: 0 },
+    };
+    const model = monthlySpending(level, { currentMonth: '2026-10' });
+    expect(model.rows.map((row) => row.vsAverageText)).toEqual(['₹0.00', '₹0.00']);
+    expect(model.average?.vsLabel).toBe('vs August');
+  });
+
+  it('has nothing to compare in a first Month with no earlier Months', () => {
+    const first: GroupInsightsRead = {
+      ...READ,
+      firstMonth: '2026-09',
+      months: READ.months.slice(-1),
+      average: null,
+      change: null,
+    };
+    expect(monthDifferencesMinor(first)).toEqual([null]);
+    expect(monthlySpending(first, { currentMonth: '2026-10' }).rows[0].vsAverageText).toBeNull();
+  });
+});
+
+describe('the sentence on which Tags rose and fell (#646, W4b)', () => {
+  const tag = (
+    name: string | null,
+    differenceMinor: number | null,
+    extra: { spentMinor?: number } = {},
+  ) => ({
+    tagId: name,
+    name,
+    spentMinor: extra.spentMinor ?? 100000,
+    expenseCount: 2,
+    averageMinor: differenceMinor === null ? null : 100000,
+    differenceMinor,
+    direction:
+      differenceMinor === null
+        ? null
+        : differenceMinor > 0
+          ? ('up' as const)
+          : differenceMinor < 0
+            ? ('down' as const)
+            : ('level' as const),
+    changePercent: differenceMinor === null ? null : differenceMinor / 1000,
+  });
+
+  it('names the Tags above and below their own average, the biggest change first', () => {
+    expect(
+      tagChangeSentence({
+        earlierMonths: ['2026-08'],
+        tags: [
+          tag('Groceries', -22700),
+          tag('Household', 48000),
+          tag('Rent', 0),
+          tag('Utilities', 42200),
+          tag('Dining', -31000),
+        ],
+      }),
+    ).toBe('Household and Utilities rose; Dining and Groceries fell.');
+  });
+
+  it('builds the board’s sentence under the chart from the By Tag read on the page', () => {
+    const earlierMonths = READ.months.slice(0, -1).map((entry) => entry.month);
+    const read = {
+      ...READ,
+      byTag: { ...SEPTEMBER_DETAIL.byTag, earlierMonths },
+    } as GroupInsightsRead;
+    expect(monthlySpending(read, { currentMonth: '2026-10' }).explanation).toBe(
+      'September is ₹567.00 above the 5-month average. Untagged Expenses, Household and Utilities rose; Groceries fell.',
+    );
+  });
+
+  it('says only what rose when nothing fell', () => {
+    expect(
+      tagChangeSentence({
+        earlierMonths: ['2026-08'],
+        tags: [tag('Household', 48000), tag('Rent', 0), tag('Travel', null)],
+      }),
+    ).toBe('Household rose.');
+  });
+
+  it('says only what fell when nothing rose', () => {
+    expect(tagChangeSentence({ earlierMonths: ['2026-08'], tags: [tag('Dining', -100)] })).toBe(
+      'Dining fell.',
+    );
+  });
+
+  it('keeps a long list short', () => {
+    expect(
+      tagChangeSentence({
+        earlierMonths: ['2026-08'],
+        tags: [tag('A', 5), tag('B', 4), tag('C', 3), tag('D', 2), tag('E', 1)],
+      }),
+    ).toBe('A, B, C and 2 other Tags rose.');
+  });
+
+  it('leaves the clause out when no Tag has an average, or none changed', () => {
+    expect(
+      tagChangeSentence({ earlierMonths: [], tags: [tag('Household', null), tag(null, null)] }),
+    ).toBeNull();
+    expect(
+      tagChangeSentence({ earlierMonths: ['2026-08'], tags: [tag('Household', 0)] }),
+    ).toBeNull();
+    const read = {
+      ...READ,
+      byTag: {
+        earlierMonths: READ.months.slice(0, -1).map((entry) => entry.month),
+        tags: [tag('Household', null), tag('Rent', 0)],
+      },
+    } as GroupInsightsRead;
+    expect(monthlySpending(read, { currentMonth: '2026-10' }).explanation).toBe(
+      'September is ₹567.00 above the 5-month average.',
+    );
+    // A malformed By Tag part fails only its own card; the sentence just leaves Tags out.
+    const malformed = { ...READ, byTag: { tags: 'nope' } } as unknown as GroupInsightsRead;
+    expect(monthlySpending(malformed, { currentMonth: '2026-10' }).explanation).toBe(
+      'September is ₹567.00 above the 5-month average.',
+    );
   });
 });
 
