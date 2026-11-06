@@ -391,6 +391,53 @@ describe('Who owes what', () => {
     }
   });
 
+  // #937, following #932: at 200% on a 360 dp phone, ₹1,000,000.00 is too wide to line up beside
+  // "Paid", so the figures keep their own widths. Split by amounts, a member who paid nothing and
+  // owes ₹1.00 then fit "Paid – Share ₹1.00" on one line while every other row put Share under
+  // Paid. Share sits under Paid in every row there, and "Paid –" stays on one line.
+  it('puts Share under Paid in every row beside a Paid too wide to line up, 360dp at 2× text (#937)', () => {
+    setWindow({ width: 360, height: 780, fontScale: 2 });
+    onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+    const members = ids.slice(0, 3);
+    const value: ExpenseDraft = {
+      ...draft('1000000.00', members),
+      splitMethod: 'unequal',
+      splitValues: { [ids[0]!]: '499999.00', [ids[1]!]: '1.00', [ids[2]!]: '500000.00' },
+    };
+    act(() => {
+      renderer = create(
+        <WhoOwesWhat
+          draft={value}
+          allocation={expenseMoney(value)}
+          problem=""
+          name={(id) => people[ids.indexOf(id)]!}
+          currentUserId={ids[0]}
+          money={(minor) => formatCurrency(minor / 100, 'INR')}
+        />,
+      );
+    });
+    const json = renderer!.toJSON() as ReactTestRendererJSON;
+    const shown = stackedPairs(json, 2, 360 - 32);
+    expect(shown.map(({ words }) => words.replaceAll(' ', ' '))).toEqual([
+      'Paid₹1,000,000.00',
+      'Share₹499,999.00',
+      'Paid–',
+      'Share₹1.00',
+      'Paid–',
+      'Share₹500,000.00',
+    ]);
+    const rows = rowStarts(json, 2, 360 - 32, (row) => {
+      const style = flatten(row.props.style);
+      return style.flexWrap === 'wrap' && style.paddingLeft === 36;
+    });
+    expect(rows).toEqual(Array(3).fill([36, 36]));
+    for (const pair of shown.filter(({ words }) => words.endsWith('–'))) {
+      expect(pair.lines).toBe(1);
+      expect(pair.start).toBeGreaterThan(0);
+    }
+    expect(unreadText(json, 2, 360 - 32)).toEqual([]);
+  });
+
   // #932, QA on the emulator: Android draws the table's money face 0.6 em a character, its letter
   // spacing narrowing nothing ("₹1,250.00" took 185 px at 412 dp 100%, "CHF 10,000,000.00" 349 px,
   // against 181 and 340 estimated). The widest figure outgrew the width every row was given, and

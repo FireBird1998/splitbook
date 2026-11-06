@@ -55,6 +55,7 @@ const ids = {
   groceries: 'b00000000000000000000009',
   marks: 'b00000000000000000000010',
   office: 'b00000000000000000000011',
+  generator: 'b00000000000000000000012',
 };
 const iso = '2026-09-29T14:32:00.000Z';
 const group = {
@@ -200,6 +201,16 @@ const records: Record<string, Record<string, unknown>> = {
     paidBy: [row(priya, 1_000_000_000)],
     splitBetween: [row(alex, 500_000_000), row(priya, 500_000_000)],
     createdBy: person(priya),
+  }),
+  // The Designer's case (#937): ₹1,000,000.00 Alex paid, split by amounts, Sam owing ₹1.00.
+  [ids.generator]: expense(ids.generator, {
+    description: 'Generator',
+    amount: 1_000_000,
+    amountMinor: 100_000_000,
+    splitMethod: 'unequal',
+    paidBy: [row(alex, 100_000_000)],
+    splitBetween: [row(alex, 49_999_900), row(sam, 100), row(priya, 50_000_000)],
+    createdBy: alex.id,
   }),
   [ids.weekly]: expense(ids.weekly, {
     description: 'Weekly groceries',
@@ -1287,6 +1298,41 @@ describe('compact Expense record, opening', () => {
     check(cards()[1]!);
     act(() => screen?.unmount());
     await render(open(ids.office));
+    check(cards()[1]!);
+  });
+
+  // #937, following #932: at 200% on a 360 dp phone ₹1,000,000.00 is too wide to line up beside
+  // "Paid", so the figures keep their own widths, and Sam, who paid nothing and owes ₹1.00, read
+  // "Paid – Share ₹1.00" on one line while the other rows put Share under Paid. Share sits under
+  // Paid in every row, in the record and in its skeleton.
+  it('puts Share under Paid in every row beside ₹1,000,000.00, in the record and its skeleton (#937)', async () => {
+    setWindow({ width: 360, fontScale: 2 });
+    const check = (card: ReactTestRendererJSON) => {
+      expect(stackedPairs(card, 2, 360 - 32).map(({ words }) => words)).toEqual([
+        'Paid₹1,000,000.00',
+        'Share₹499,999.00',
+        'Paid–',
+        'Share₹1.00',
+        'Paid–',
+        'Share₹500,000.00',
+      ]);
+      const rows = rowStarts(card, 2, 360 - 32, (pairs) => {
+        const style = flatten(pairs.props.style);
+        return style.flexWrap === 'wrap' && style.paddingLeft === 36;
+      });
+      expect(rows).toEqual(Array(3).fill([36, 36]));
+    };
+    await act(async () => {
+      screen = create(
+        editor(
+          { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.generator },
+          recordOutline(listRow(ids.generator), alex.id),
+        ),
+      );
+    });
+    check(cards()[1]!);
+    act(() => screen?.unmount());
+    await render(open(ids.generator));
     check(cards()[1]!);
   });
 
