@@ -22,6 +22,7 @@ The product's promise: a member's ledger is exact, recorded once, and only ever 
 
 - **Android flows declare their transitions** in `apps/mobile/src/data/flow-transitions.ts`, and the controller snapshot is the only client-state store (ADR 0006).
 - **Pure domain logic lives in `@splitbook/shared`**, so web and Android compute money the same way (ADR 0002).
+- **A web model registers every model its schema's `ref`s name,** so a cold server instance can populate it whatever route loaded it first (#947). `apps/web/src/app/api/route-models.test.ts` checks every API route.
 
 ## Tests
 

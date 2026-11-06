@@ -7,6 +7,11 @@ import {
   type ICreationRequest,
   type IPendingActivity,
 } from '@/lib/financial-write';
+// `populate()` finds the model a `ref` names in Mongoose's registry, not through an import, and a
+// fresh server instance loads only its route's modules. So this model registers every model its
+// schema refers to, and any route that loads it can populate it (#947, #186).
+import '@/lib/models/Group';
+import '@/lib/models/User';
 
 export interface ISettlementDocument extends Partial<CrossCurrencySettlementFields> {
   _id: mongoose.Types.ObjectId;
