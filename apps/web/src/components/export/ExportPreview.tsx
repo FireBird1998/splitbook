@@ -464,11 +464,17 @@ export default function ExportPreviewPanel({
                               sx={{ minWidth: '6em', overflowWrap: 'anywhere' }}
                             >
                               {expense.description}
-                              <span className={CAPTION}>
+                              {/* A long Description may break anywhere; its caption breaks
+                                  between words, never inside one (#929). */}
+                              <Box
+                                component="span"
+                                className={CAPTION}
+                                sx={{ overflowWrap: 'normal' }}
+                              >
                                 {categoryLabel(expense.category)}
                                 {SEPARATOR}
                                 {expense.tag}
-                              </span>
+                              </Box>
                             </TableCell>
                             {/* One payer paid the Amount: their name alone (#918). */}
                             {people(expense.paidBy, expense.paidBy.length > 1)}

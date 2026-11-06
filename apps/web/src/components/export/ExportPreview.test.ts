@@ -1015,3 +1015,57 @@ it('lets a long name wrap in Paid by and Share, and keeps an everyday one and it
     expect(rules).not.toMatch(/>\*\{[^}]*white-space:nowrap/);
   }
 });
+
+// #929: the Description cell may break a long word anywhere, and its "Category · Tag" caption
+// took that too, so at 1280 "Accommodation" broke as "Accommodati / on". The caption breaks only
+// between its words and after the separator, never inside a word, as the statement's does.
+it('breaks the Category · Tag caption only between words, never inside one (#929)', () => {
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(
+        buildStatement(
+          {
+            id: 'maple',
+            name: 'Maple House',
+            theme: 'home',
+            currency: 'INR',
+            members: [
+              { id: 'alice', name: 'Alice Tester' },
+              { id: 'bob', name: 'Bob Tester' },
+            ],
+            names: { alice: 'Alice Tester', bob: 'Bob Tester' },
+            tags: [],
+            expenses: [
+              {
+                id: 'stay',
+                date: '2026-09-14T00:00:00.000Z',
+                description: 'Guesthouse',
+                category: 'accommodation',
+                tag: 'Beachfront',
+                currency: 'INR',
+                amountMinor: 1800000,
+                splitMethod: 'equal',
+                paidBy: [{ userId: 'alice', amountMinor: 1800000 }],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 900000 },
+                  { userId: 'bob', amountMinor: 900000 },
+                ],
+              },
+            ],
+            settlements: [],
+          },
+          { timeZone: 'UTC' },
+        ),
+      ),
+    },
+  });
+  const table = /<table\b[^>]*aria-label="INR first Expenses"[^>]*>([\s\S]*?)<\/table>/.exec(html);
+  expect(text(table![1])).toContain('Guesthouse Accommodation · Beachfront');
+  const [caption, ...others] = stylesOf(html, 'export-statement-caption');
+  expect(others).toEqual([]);
+  expect(caption.value('overflow-wrap')).toBe('normal');
+  expect(caption.value('word-break')).toBeUndefined();
+});

@@ -450,7 +450,14 @@ function CurrencySection({
                 </Cell>
                 <Cell kind="wrap" row>
                   {row.description}
-                  <Typography variant="caption" component="div">
+                  {/* A long Description may break anywhere; its caption breaks between words,
+                      never inside one (#929). */}
+                  <Typography
+                    variant="caption"
+                    component="div"
+                    className="statement-caption"
+                    sx={{ overflowWrap: 'normal' }}
+                  >
                     {categoryLabel(row.category)}
                     {SEPARATOR}
                     {row.tag}

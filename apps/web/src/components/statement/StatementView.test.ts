@@ -603,3 +603,29 @@ it('lets a long name wrap in Paid by and Share, and keeps an everyday one and ev
   expect(amounts.length).toBeGreaterThan(10);
   for (const amount of amounts) expect(amount.value('white-space')).toBe('nowrap');
 });
+
+// #929: the Description cell may break a long word anywhere (#646), and its "Category · Tag"
+// caption took that too, so "Accommodation" could break as "Accommodati / on". The caption
+// breaks only between its words and after the separator, never inside a word.
+it('breaks the Category · Tag caption only between words, never inside one (#929)', () => {
+  const html = tripHtml(
+    buildStatement(
+      {
+        ...TRIP,
+        expenses: [
+          expense('e1', '2026-09-18', 'Island guesthouse', 120000, ['accommodation', 'Beachfront']),
+          expense('e2', '2026-09-19', 'Snorkelling', 60000, ['entertainment', 'Excursions']),
+        ],
+      },
+      { timeZone: 'Asia/Kolkata' },
+    ),
+  );
+  expect(text(html)).toContain('Island guesthouse Accommodation · Beachfront');
+  expect(text(html)).toContain('Snorkelling Entertainment · Excursions');
+  const captions = stylesOf(html, 'statement-caption');
+  expect(captions).toHaveLength(2);
+  for (const caption of captions) {
+    expect(caption.value('overflow-wrap')).toBe('normal');
+    expect(caption.value('word-break')).toBeUndefined();
+  }
+});

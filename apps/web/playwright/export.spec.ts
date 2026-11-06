@@ -243,6 +243,7 @@ test('preview follows Groups, period, include and format choices with recovery',
  * #928: with a long hyphenated name, as a member may have, the name wraps in Paid by and Share
  * between its words and after its hyphen, never inside a word, and Share stays in the card. The
  * preview is read as served, with Priya's name made long, so no seeded name changes.
+ * #929: a Category or a Tag under a Description, "Accommodation", never breaks inside a word.
  */
 test('the statement preview’s tables fit the card at 1280 and 900, a long name and every figure in view', async ({
   page,
@@ -286,15 +287,17 @@ test('the statement preview’s tables fit the card at 1280 and 900, a long name
         const walker = document.createTreeWalker(region, NodeFilter.SHOW_TEXT);
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
           const text = node.textContent ?? '';
-          if (!/\d/.test(text) && text !== longName) continue;
+          const caption = !!node.parentElement?.closest('.export-statement-caption');
+          if (!/\d/.test(text) && text !== longName && !caption) continue;
           const range = document.createRange();
           range.selectNodeContents(node);
           for (const rect of range.getClientRects()) {
             if (!inside(box, rect) || !inside(cardBox, rect))
               found.push(`${name}: “${text}” at ${rect.left}–${rect.right}`);
           }
-          if (text !== longName) continue;
-          // Where the name breaks onto a new line, the line before ends at a space or a hyphen.
+          if (text !== longName && !caption) continue;
+          // Where the name or a "Category · Tag" caption (#929) breaks onto a new line, the line
+          // before ends at a space or a hyphen.
           let top: number | undefined;
           for (let i = 0; i < text.length; i += 1) {
             range.setStart(node, i);
