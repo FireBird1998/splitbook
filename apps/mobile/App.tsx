@@ -57,6 +57,8 @@ import {
   SkeletonRows,
   TopBar,
   progressHeight,
+  useConfirm,
+  type Confirmation,
 } from './src/ui/compact';
 import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
@@ -469,6 +471,7 @@ function TaskScreen() {
   );
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
   const theme = useTheme();
+  const [confirm, confirmation] = useConfirm();
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
   const feedback = state.feedback;
   const scroll = useRef<ScrollViewInstance>(null);
@@ -611,18 +614,13 @@ function TaskScreen() {
                 });
               }}
               onSignOut={() =>
-                Alert.alert(
-                  'Sign out on this device?',
-                  `Your ${signOutClears} will be cleared. ${signOutInterruptedSave}`,
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Sign out',
-                      style: 'destructive',
-                      onPress: () => void controller.signOut(),
-                    },
-                  ],
-                )
+                confirm({
+                  title: 'Sign out on this device?',
+                  message: `Your ${signOutClears} will be cleared. ${signOutInterruptedSave}`,
+                  action: 'Sign out',
+                  cancel: 'Cancel',
+                  onConfirm: () => void controller.signOut(),
+                })
               }
             />
           ) : state.screen === 'assistants' ? (
@@ -649,14 +647,13 @@ function TaskScreen() {
               onShowStatus={showWhole}
               onCheckGroups={() => void controller.checkCreatedGroups()}
               onDiscard={() =>
-                Alert.alert('Discard this Group form?', 'Your unsaved entries will be cleared.', [
-                  { text: 'Keep editing', style: 'cancel' },
-                  {
-                    text: 'Discard',
-                    style: 'destructive',
-                    onPress: () => void controller.discardCreation(),
-                  },
-                ])
+                confirm({
+                  title: 'Discard this Group form?',
+                  message: 'Your unsaved entries will be cleared.',
+                  action: 'Discard',
+                  cancel: 'Keep editing',
+                  onConfirm: () => void controller.discardCreation(),
+                })
               }
             />
           ) : (
@@ -701,6 +698,7 @@ function TaskScreen() {
           onDismiss={controller.dismissAssistantsSnackbar}
         />
       ) : null}
+      {confirmation}
     </>
   );
 }
@@ -743,6 +741,7 @@ const HomeScreen = memo(function HomeScreen() {
     sameSelection,
   );
   const state = selected;
+  const [confirm, confirmation] = useConfirm();
   const toReview = useMemo(
     () =>
       Object.fromEntries(
@@ -829,18 +828,14 @@ const HomeScreen = memo(function HomeScreen() {
             onCheck={() => void controller.checkCreatedGroups()}
             onResume={controller.resumeCreationAfterCheck}
             onDiscard={() =>
-              Alert.alert(
-                'Discard this Group form?',
-                'This Group may already be created. Check your Groups first. Discarding removes this form and its saved submission from this device, and sends nothing.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Discard',
-                    style: 'destructive',
-                    onPress: () => void controller.discardCreation(),
-                  },
-                ],
-              )
+              confirm({
+                title: 'Discard this Group form?',
+                message:
+                  'This Group may already be created. Check your Groups first. Discarding removes this form and its saved submission from this device, and sends nothing.',
+                action: 'Discard',
+                cancel: 'Cancel',
+                onConfirm: () => void controller.discardCreation(),
+              })
             }
           />
         )}
@@ -870,23 +865,23 @@ const HomeScreen = memo(function HomeScreen() {
       {state.homeSnackbar ? (
         <HomeSnackbar notice={state.homeSnackbar} onDismiss={controller.dismissSnackbar} />
       ) : null}
+      {confirmation}
     </>
   );
 });
 
 /**
- * Asks before an Expense's entries are removed from this device, in the To review rollout's words
- * when it is on, as the controls that open it are (#674).
+ * What to ask before an Expense's entries are removed from this device, in the To review
+ * rollout's words when it is on, as the controls that open it are (#674).
  */
-function confirmDraftDiscard(discard: () => void) {
-  Alert.alert(
-    expenseRecoveryWords('Discard this expense draft?'),
-    'Your saved entries will be removed from this device.',
-    [
-      { text: expenseRecoveryWords('Keep draft'), style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: discard },
-    ],
-  );
+function draftDiscard(discard: () => void): Confirmation {
+  return {
+    title: expenseRecoveryWords('Discard this expense draft?'),
+    message: 'Your saved entries will be removed from this device.',
+    action: 'Discard',
+    cancel: expenseRecoveryWords('Keep draft'),
+    onConfirm: discard,
+  };
 }
 
 /** Shares the open Group's invitation link through Android's share sheet. */
@@ -960,6 +955,7 @@ function GroupScreen() {
       sameSelection({ ...a, feedback: null }, { ...b, feedback: null }) &&
       sameSelection(a.feedback, b.feedback),
   );
+  const [confirm, confirmation] = useConfirm();
   const feedback = state.feedback;
   // The top bar keeps the Group's name and actions while it is first read.
   const known = shownGroup(state);
@@ -1128,13 +1124,15 @@ function GroupScreen() {
       : null;
   const discardDraft = useCallback(
     () =>
-      confirmDraftDiscard(
-        () =>
-          void controller.discardKeptDraft().then((discarded) => {
-            if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
-          }),
+      confirm(
+        draftDiscard(
+          () =>
+            void controller.discardKeptDraft().then((discarded) => {
+              if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
+            }),
+        ),
       ),
-    [],
+    [confirm],
   );
   const selectMonth = useCallback((month: string | null) => void controller.selectMonth(month), []);
   const chooseTripCurrency = useCallback(
@@ -1471,22 +1469,19 @@ function GroupScreen() {
           onRestoreBatchRate={controller.restoreBatchRate}
           onOpenLink={openOutside}
           onDiscard={() =>
-            Alert.alert(
-              'Discard this unconfirmed payment?',
-              'This payment may already be recorded. Discarding removes its retry from this device and sends nothing. If access returns, check the Group’s payments before recording it again.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Discard',
-                  style: 'destructive',
-                  onPress: () => void controller.discardUnconfirmedSettlement(),
-                },
-              ],
-            )
+            confirm({
+              title: 'Discard this unconfirmed payment?',
+              message:
+                'This payment may already be recorded. Discarding removes its retry from this device and sends nothing. If access returns, check the Group’s payments before recording it again.',
+              action: 'Discard',
+              cancel: 'Cancel',
+              onConfirm: () => void controller.discardUnconfirmedSettlement(),
+            })
           }
           onClose={() => void controller.back()}
         />
       ) : null}
+      {confirmation}
     </GroupShell>
   );
 }
@@ -1567,73 +1562,72 @@ const ExpenseScreen = memo(function ExpenseScreen() {
     () => (state.row ? recordOutline(state.row, state.auth.user?.id) : null),
     [state.row, state.auth.user?.id],
   );
+  const [confirm, confirmation] = useConfirm();
   return (
-    <ControllerExpenseEditor
-      controller={controller}
-      kept={!!groupId && state.keptDraft?.groupId === groupId}
-      currentUserId={state.auth.user?.id}
-      outline={outline}
-      notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
-      emptyNotice={
-        state.offline.active || state.offline.message ? (
-          <OfflineNotice state={state.offline} savedShown={false} />
-        ) : null
-      }
-      offline={state.offline.active}
-      onClose={() => void controller.back()}
-      onEdit={() => void controller.editExpense()}
-      onReviewDelete={controller.reviewExpenseDeletion}
-      onCancelDelete={controller.cancelExpenseDeletion}
-      onDelete={() => void controller.deleteExpense()}
-      onReconcile={() => void controller.reconcileExpense()}
-      onReviewLatest={() => void controller.reviewLatestExpense()}
-      onRefresh={() => void controller.refresh()}
-      onLoadOlderHistory={() => void controller.loadOlderExpenseHistory()}
-      onLoadNewerHistory={() => void controller.loadNewerExpenseHistory()}
-      onRetryHistory={() => void controller.refreshExpenseHistory()}
-      onViewMonth={() => void controller.viewRecordMonth()}
-      onAcceptCurrent={() =>
-        Alert.alert('Use the saved version?', 'Your version is removed from this device.', [
-          { text: 'Keep my version', style: 'cancel' },
-          {
-            text: 'Use saved version',
-            onPress: () => void controller.acceptCurrentExpense(),
-          },
-        ])
-      }
-      onChange={(patch) => void controller.updateExpenseDraft(patch)}
-      onLeaveField={controller.touchExpenseField}
-      onSave={() => void controller.saveExpense()}
-      onResume={controller.resumeExpenseDraft}
-      onRetry={() =>
-        state.expense.contextCheck
-          ? void controller.refresh()
-          : state.expense.groupId &&
-            void controller.openExpense(
-              state.expense.groupId,
-              state.expense.requestedExpenseId ?? undefined,
-            )
-      }
-      // In the To review rollout's words when it is on, as the form around it is (#683).
-      onDiscardUnconfirmed={() =>
-        Alert.alert(
-          expenseRecoveryWords('Discard this unconfirmed save?'),
-          expenseRecoveryWords(
-            state.expense.accessLost
-              ? 'This Expense save or change may already be recorded. Discarding removes it from this device and sends nothing. If access returns, check the Group’s Expenses before saving again.'
-              : 'Check this Group’s Expenses first. If this Expense is already there, discard this save and don’t save the draft again. If it isn’t, discard this save, then correct the draft and save it. Discarding sends nothing.',
-          ),
-          [
-            { text: expenseRecoveryWords('Cancel'), style: 'cancel' },
-            {
-              text: expenseRecoveryWords('Discard'),
-              style: 'destructive',
-              onPress: () => void controller.discardUnconfirmedExpense(),
-            },
-          ],
-        )
-      }
-      onDiscard={() => confirmDraftDiscard(() => void controller.discardExpenseDraft())}
-    />
+    <>
+      <ControllerExpenseEditor
+        controller={controller}
+        kept={!!groupId && state.keptDraft?.groupId === groupId}
+        currentUserId={state.auth.user?.id}
+        outline={outline}
+        notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
+        emptyNotice={
+          state.offline.active || state.offline.message ? (
+            <OfflineNotice state={state.offline} savedShown={false} />
+          ) : null
+        }
+        offline={state.offline.active}
+        onClose={() => void controller.back()}
+        onEdit={() => void controller.editExpense()}
+        onReviewDelete={controller.reviewExpenseDeletion}
+        onCancelDelete={controller.cancelExpenseDeletion}
+        onDelete={() => void controller.deleteExpense()}
+        onReconcile={() => void controller.reconcileExpense()}
+        onReviewLatest={() => void controller.reviewLatestExpense()}
+        onRefresh={() => void controller.refresh()}
+        onLoadOlderHistory={() => void controller.loadOlderExpenseHistory()}
+        onLoadNewerHistory={() => void controller.loadNewerExpenseHistory()}
+        onRetryHistory={() => void controller.refreshExpenseHistory()}
+        onViewMonth={() => void controller.viewRecordMonth()}
+        onAcceptCurrent={() =>
+          confirm({
+            title: 'Use the saved version?',
+            message: 'Your version is removed from this device.',
+            action: 'Use saved version',
+            cancel: 'Keep my version',
+            onConfirm: () => void controller.acceptCurrentExpense(),
+          })
+        }
+        onChange={(patch) => void controller.updateExpenseDraft(patch)}
+        onLeaveField={controller.touchExpenseField}
+        onSave={() => void controller.saveExpense()}
+        onResume={controller.resumeExpenseDraft}
+        onRetry={() =>
+          state.expense.contextCheck
+            ? void controller.refresh()
+            : state.expense.groupId &&
+              void controller.openExpense(
+                state.expense.groupId,
+                state.expense.requestedExpenseId ?? undefined,
+              )
+        }
+        // In the To review rollout's words when it is on, as the form around it is (#683).
+        onDiscardUnconfirmed={() =>
+          confirm({
+            title: expenseRecoveryWords('Discard this unconfirmed save?'),
+            message: expenseRecoveryWords(
+              state.expense.accessLost
+                ? 'This Expense save or change may already be recorded. Discarding removes it from this device and sends nothing. If access returns, check the Group’s Expenses before saving again.'
+                : 'Check this Group’s Expenses first. If this Expense is already there, discard this save and don’t save the draft again. If it isn’t, discard this save, then correct the draft and save it. Discarding sends nothing.',
+            ),
+            action: expenseRecoveryWords('Discard'),
+            cancel: expenseRecoveryWords('Cancel'),
+            onConfirm: () => void controller.discardUnconfirmedExpense(),
+          })
+        }
+        onDiscard={() => confirm(draftDiscard(() => void controller.discardExpenseDraft()))}
+      />
+      {confirmation}
+    </>
   );
 });

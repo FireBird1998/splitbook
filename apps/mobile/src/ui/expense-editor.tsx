@@ -764,6 +764,8 @@ function ExpenseTask({
     !draft.original ? (
       <FinishLater controller={controller} />
     ) : null;
+  // What Finish later says, to know whether Save fits beside it on a short window (#646).
+  const besideLater = state.finishLaterPending ? 'Check again' : 'Finish later';
   const tagName = (id: string) =>
     !id
       ? 'No Tag'
@@ -883,19 +885,14 @@ function ExpenseTask({
             <Banner
               tone="error"
               title={`${invalid.length === 1 ? 'One thing' : `${invalid.length}${NO_BREAK_SPACE}things`} to fix before saving`}
-              message={expenseRecoveryWords('Your draft is kept. Go to each one:')}
-            >
-              {invalid.map((field) => (
-                <CompactButton
-                  key={field}
-                  label={expenseFieldLabels[field]}
-                  accessibilityLabel={`Go to ${expenseFieldLabels[field]}`}
-                  variant="text"
-                  dense
-                  onPress={() => goTo(field)}
-                />
-              ))}
-            </Banner>
+              message={`${expenseRecoveryWords('Your draft is kept.')} Fix`}
+              // Each name is a link to its field, spoken as "Go to Amount".
+              links={invalid.map((field) => ({
+                name: expenseFieldLabels[field],
+                label: `Go to ${expenseFieldLabels[field]}`,
+                onPress: () => goTo(field),
+              }))}
+            />
           ) : null}
           <AmountDescriptionCard
             controller={controller}
@@ -1117,6 +1114,7 @@ function ExpenseTask({
             blocked={checking ? checkingMessage : offline ? 'Checking needs a connection.' : null}
             onSave={state.attempt ? onSave : onReconcile}
             secondary={onClose && { label: 'Keep for later', onPress: onClose }}
+            beside={besideLater}
           >
             {later}
           </SaveBar>
@@ -1145,6 +1143,7 @@ function ExpenseTask({
             secondary={
               reviewing ? { label: 'Go to What’s different', onPress: showReview } : undefined
             }
+            beside={besideLater}
           >
             {later}
           </SaveAction>

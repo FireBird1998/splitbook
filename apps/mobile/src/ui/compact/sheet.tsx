@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import type { TextInstance } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import {
+  AccessibilityInfo,
   Animated,
   KeyboardAvoidingView,
   Modal,
@@ -11,9 +13,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { CompactButton, IconButton } from './controls';
-import { useTextColumn } from './layout';
-import { radius, shouldDismissSheet } from './scale';
+import { useLineBox, useTextColumn } from './layout';
+import { radius, shouldDismissSheet, touch } from './scale';
 import { CompactText } from './text';
+
+/**
+ * The room above and below the header's action: a one-line title and its action (a 44 dp text
+ * button, or a 48 dp ×) fill the header's 56 dp, where they sat when the header centred them.
+ */
+const headerEdge = (action: number) => (56 - action) / 2;
 
 /**
  * A bottom sheet over the current screen: handle, header with Done, a scrolling body and a pinned
@@ -33,6 +41,8 @@ export function BottomSheet({
   doneIcon,
   dismissLabel = `Close ${title}, keeping your entries`,
   dismissible = true,
+  titleRef,
+  onShow,
   children,
   footer,
 }: {
@@ -60,11 +70,19 @@ export function BottomSheet({
   dismissLabel?: string;
   /** False while the sheet can't close, e.g. while it's saving: nothing closes it, and a swipe springs back. */
   dismissible?: boolean;
+  /** The title, as for a sheet that moves the screen reader to it when it opens. */
+  titleRef?: Ref<TextInstance>;
+  /** Called once the sheet is on screen. */
+  onShow?: () => void;
   children: ReactNode;
   footer?: ReactNode;
 }) {
   const theme = useTheme();
   const column = useTextColumn();
+  // The header's action keeps its centre on the title's first line, however many lines the
+  // title takes (#646): whichever of the two is shorter starts lower by half the difference.
+  const action = doneIcon ? touch.min : touch.dense;
+  const lift = (useLineBox('title').height - action) / 2;
   const doneButton = doneIcon ? (
     <IconButton icon={doneIcon} label={doneLabel} disabled={!dismissible} onPress={onDone} />
   ) : (
@@ -112,6 +130,7 @@ export function BottomSheet({
       animationType="slide"
       statusBarTranslucent
       onRequestClose={dismiss}
+      onShow={onShow}
     >
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Pressable
@@ -158,18 +177,21 @@ export function BottomSheet({
                 style={{
                   minHeight: 56,
                   flexDirection: 'row',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   gap: 8,
+                  paddingTop: headerEdge(action),
+                  paddingBottom: headerEdge(action),
                   paddingLeft: 20,
                   paddingRight: 8,
                   // At 200% on a 360dp phone, "Keep editing" beside "Finish this expense
                   // later?" broke "expense" in two (#639).
-                  ...(column ? { flexWrap: 'wrap', alignContent: 'center', rowGap: 0 } : {}),
+                  ...(column ? { flexWrap: 'wrap', alignContent: 'flex-start', rowGap: 0 } : {}),
                 }}
               >
-                <View style={{ flex: 1, minWidth: column ?? 0 }}>
+                <View style={{ flex: 1, minWidth: column ?? 0, marginTop: Math.max(0, -lift) }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <CompactText
+                      ref={titleRef}
                       variant="title"
                       accessibilityRole="header"
                       numberOfLines={column ? 0 : titleLines}
@@ -186,7 +208,14 @@ export function BottomSheet({
                   ) : null}
                 </View>
                 {/* On a line of its own, Done keeps to the header's end. */}
-                {column ? <View style={{ marginLeft: 'auto' }}>{doneButton}</View> : doneButton}
+                <View
+                  style={{
+                    marginTop: Math.max(0, lift),
+                    ...(column ? { marginLeft: 'auto' } : {}),
+                  }}
+                >
+                  {doneButton}
+                </View>
               </View>
             </View>
             <ScrollView
@@ -219,4 +248,73 @@ export function BottomSheet({
       </KeyboardAvoidingView>
     </Modal>
   );
+}
+
+/** What a ConfirmSheet asks: one destructive action, and the safe way out. */
+export type Confirmation = {
+  title: string;
+  message: string;
+  /** The destructive action, in red, such as "Discard". */
+  action: string;
+  /** The safe way out, such as "Keep editing". Back, a tap outside and a swipe down choose it. */
+  cancel: string;
+  onConfirm: () => void;
+};
+
+/**
+ * The app's own confirm, in place of a stock dialog (#646): a title, a short message, the red
+ * action in the footer and the safe way out as the header's action, as To review's Delete asks.
+ * Back, a tap outside and a swipe down cancel; nothing but the red action confirms. The screen
+ * reader moves to the title when it opens. It answers once: a second tap does nothing.
+ */
+export function ConfirmSheet({
+  title,
+  message,
+  action,
+  cancel,
+  onConfirm,
+  onCancel,
+}: Confirmation & { onCancel: () => void }) {
+  const heading = useRef<TextInstance>(null);
+  const answered = useRef(false);
+  const answer = (then: () => void) => () => {
+    if (answered.current) return;
+    answered.current = true;
+    then();
+  };
+  return (
+    <BottomSheet
+      visible
+      title={title}
+      titleRef={heading}
+      onShow={() => {
+        if (heading.current) AccessibilityInfo.sendAccessibilityEvent(heading.current, 'focus');
+      }}
+      doneLabel={cancel}
+      dismissLabel={cancel}
+      onDone={answer(onCancel)}
+      footer={<CompactButton label={action} destructive block onPress={answer(onConfirm)} />}
+    >
+      <CompactText>{message}</CompactText>
+    </BottomSheet>
+  );
+}
+
+/**
+ * Asks with a ConfirmSheet: `ask(confirmation)` opens it, and the screen renders `sheet`, which
+ * is mounted only while it asks, so a screen that isn't asking renders nothing more.
+ */
+export function useConfirm() {
+  const [asking, ask] = useState<Confirmation | null>(null);
+  const sheet = asking ? (
+    <ConfirmSheet
+      {...asking}
+      onCancel={() => ask(null)}
+      onConfirm={() => {
+        ask(null);
+        asking.onConfirm();
+      }}
+    />
+  ) : null;
+  return [ask as (confirmation: Confirmation) => void, sheet] as const;
 }

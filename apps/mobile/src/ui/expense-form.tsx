@@ -1,5 +1,5 @@
 import type { ViewInstance, TextInputInstance } from 'react-native';
-import { memo, useState, type ReactNode, type Ref } from 'react';
+import { createContext, memo, useState, type ReactNode, type Ref } from 'react';
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { EXPENSE_CATEGORIES, getCategory } from '@splitbook/shared/categories';
 import { formatCurrency, wholeUnit } from '@splitbook/shared/currency';
@@ -39,10 +39,13 @@ import {
   TileGrid,
   headingBeside,
   headingLine,
+  scaledSp,
   useLargeText,
   useLargestText,
+  useShortWindow,
   useTap,
 } from './compact';
+import { outfitWidth } from './compact/outfit-metrics';
 import { useTheme } from './theme';
 import { SEPARATOR } from '@splitbook/shared/separator';
 
@@ -771,7 +774,59 @@ export function ActionBar({ children }: { children: ReactNode }) {
   );
 }
 
-/** Pinned under the form, above the keyboard; it names the amount once that is valid. */
+/**
+ * Whether what's under Save sits beside it, in one row: Finish later lays itself out as the
+ * row's start, with Save taking the rest (#646).
+ */
+export const SaveBarRow = createContext(false);
+
+/**
+ * Outfit SemiBold's widths, taken as Regular's (`outfitWidth`) times this: Finish later measured
+ * 115 dp wide on an emulator at 100%, 18 dp of padding each side.
+ */
+const SEMIBOLD = 1.08;
+
+/**
+ * How Save fits beside what goes in its row (#646), worked out from the widths of their words at
+ * this text size: on one line with its amount; with the amount under its words, still beside it,
+ * where both don't fit on one line ("Save expense ₹1,249.50" at 360 dp read "Save / expense");
+ * or not at all, so the row stacks, where even its words don't fit (or their width isn't known).
+ */
+export function saveBeside({
+  label,
+  amount,
+  beside,
+  width,
+  fontScale,
+}: {
+  label: string;
+  amount?: string;
+  /** The words of what sits beside Save, such as "Finish later". */
+  beside: string;
+  width: number;
+  fontScale: number;
+}): 'inline' | 'below' | 'stacked' {
+  const size = scaledSp(15, fontScale);
+  const [words, other] = [outfitWidth(label), outfitWidth(beside)];
+  if (words === null || other === null) return 'stacked';
+  // The bar's padding, the row's gap, the button beside Save and Save's own padding.
+  const room = width - 2 * 16 - 8 - (other * SEMIBOLD * size + 2 * 18) - 2 * 18;
+  const wordsWidth = words * SEMIBOLD * size;
+  // IBM Plex Mono's advance is 0.6 of its size, less the money face's letter spacing.
+  const money = amount ? [...amount].length * (0.6 * size - 0.3) : 0;
+  if (wordsWidth + (amount ? 8 + money : 0) <= room) return 'inline';
+  if (amount && Math.max(wordsWidth, money) <= room) return 'below';
+  return 'stacked';
+}
+
+/**
+ * Pinned under the form, above the keyboard; it names the amount once that is valid. On a short
+ * window (`useShortWindow`), what's under Save, such as Finish later, goes beside it in one row,
+ * so the bar takes about 76 dp and the form keeps "Who owes what" in view at 360×640 (#646).
+ * From 130% text the two don't fit side by side, so they stay stacked. Save's words never break:
+ * an amount that doesn't fit beside them goes under them, and words that don't fit beside Finish
+ * later stack the row (`saveBeside`).
+ */
 export function SaveBar({
   label,
   amount,
@@ -779,6 +834,7 @@ export function SaveBar({
   blocked,
   onSave,
   secondary,
+  beside = 'Finish later',
   children,
 }: {
   label: string;
@@ -792,32 +848,58 @@ export function SaveBar({
   secondary?: { label: string; onPress: () => void };
   /** More under Save, in the bar itself, such as Finish later and what it does. */
   children?: ReactNode;
+  /** The words of what goes beside Save on a short window, to know whether both fit. */
+  beside?: string;
 }) {
   // From 150% the amount goes under the words: beside "CHF 2,500.50" at 200% on a 360 dp phone,
   // Save read "Save ex / pense" (#867), as Record payment's did (#639).
   const largest = useLargestText();
+  const short = useShortWindow();
+  const large = useLargeText();
+  const { width, fontScale } = useWindowDimensions();
+  const fit =
+    short && !large && children ? saveBeside({ label, amount, beside, width, fontScale }) : null;
+  const row = fit !== null && fit !== 'stacked';
+  const save = (
+    <CompactButton
+      label={label}
+      amount={amount}
+      amountBelow={largest || fit === 'below'}
+      busy={busy}
+      block
+      disabled={blocked !== null}
+      hint={blocked ?? undefined}
+      onPress={onSave}
+    />
+  );
+  const other = secondary ? (
+    <CompactButton label={secondary.label} variant="text" block onPress={secondary.onPress} />
+  ) : null;
   return (
     <ActionBar>
       {/* Above Save: the bar grows upward from the bottom of the screen, so Save stays put. */}
+      {/* Centred, as the notes under it are, such as what Finish later does offline (#646). */}
       {blocked ? (
-        <CompactText variant="small" tone="secondary">
+        <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
           {blocked}
         </CompactText>
       ) : null}
-      <CompactButton
-        label={label}
-        amount={amount}
-        amountBelow={largest}
-        busy={busy}
-        block
-        disabled={blocked !== null}
-        hint={blocked ?? undefined}
-        onPress={onSave}
-      />
-      {secondary ? (
-        <CompactButton label={secondary.label} variant="text" block onPress={secondary.onPress} />
-      ) : null}
-      {children}
+      {row ? (
+        <>
+          {/* What goes beside Save starts the row; a note of its own takes a line above it. */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 8, rowGap: 6 }}>
+            <SaveBarRow.Provider value>{children}</SaveBarRow.Provider>
+            <View style={{ flex: 1 }}>{save}</View>
+          </View>
+          {other}
+        </>
+      ) : (
+        <>
+          {save}
+          {other}
+          {children}
+        </>
+      )}
     </ActionBar>
   );
 }

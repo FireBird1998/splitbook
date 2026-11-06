@@ -14,6 +14,7 @@ import { createMobileController, type MobileController } from '../data/mobile-co
 import type { MobileFetch } from '../data/types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 import { setWindow, touchAlong } from '../test-utils/native';
+import { findHosts, flatten, layoutHeight, unreadText } from '../test-utils/layout';
 import { ThemeContext } from './theme';
 import { ToReviewHomeCard, ToReviewList } from './to-review';
 import { ControllerExpenseEditor } from './controller-expense-editor';
@@ -411,8 +412,13 @@ function fixture(
     },
   };
 }
-async function render(element: ReactElement, mode: 'light' | 'dark') {
-  setWindow({ width: 360, height: 780, fontScale: 1.3 });
+type Window = { width: number; height: number; fontScale: number };
+async function render(
+  element: ReactElement,
+  mode: 'light' | 'dark',
+  window: Window = { width: 360, height: 780, fontScale: 1.3 },
+) {
+  setWindow(window);
   let tree!: ReactTestRenderer;
   await act(async () => {
     tree = create(
@@ -508,7 +514,7 @@ function Members({ controller }: { controller: MobileController }) {
     />
   );
 }
-async function form(f: ReturnType<typeof fixture>, mode: 'light' | 'dark') {
+async function form(f: ReturnType<typeof fixture>, mode: 'light' | 'dark', window?: Window) {
   return render(
     <ControllerExpenseEditor
       controller={f.controller}
@@ -530,6 +536,7 @@ async function form(f: ReturnType<typeof fixture>, mode: 'light' | 'dark') {
       onClose={() => void f.controller.closeExpense()}
     />,
     mode,
+    window,
   );
 }
 async function enter(f: ReturnType<typeof fixture>) {
@@ -962,5 +969,120 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
       onlineManager.setOnline(false);
     });
     expect(text(members)).toContain('You have 4\u00a0items in To review');
+  });
+});
+
+// #646 A11: on a 360×640 phone the stacked bar took about 150 dp, so "Who owes what" was out of
+// sight. Below 700 dp of height, Finish later sits beside Save, without its note.
+describe.each(['light', 'dark'] as const)('The Save bar on a short window in %s (#646)', (mode) => {
+  const short = (fontScale: number) => ({ width: 360, height: 640, fontScale });
+  /** The bar: the one view on its surface with a line along its top. */
+  const barOf = (editor: ReactTestRenderer) => {
+    const [bar] = findHosts(
+      editor.toJSON(),
+      (props, type) => type === 'View' && flatten(props.style).borderTopWidth === 1,
+    ).filter(
+      (node) =>
+        findHosts(node, (props) => props.accessibilityLabel === 'Finish later').length === 1,
+    );
+    return bar!;
+  };
+  /** Where each of Save and Finish later sits: the row it shares, if any. */
+  const row = (editor: ReactTestRenderer) => {
+    const later = button(editor, 'Finish later');
+    let node = later.parent;
+    while (node && String(node.type) !== 'View') node = node.parent;
+    const style = flatten(node?.props.style);
+    return style.flexDirection === 'row' ? node : null;
+  };
+  const save = (editor: ReactTestRenderer) =>
+    editor.root.find(
+      (node) =>
+        String(node.type) === 'Pressable' &&
+        String(node.props.accessibilityLabel).startsWith('Save expense'),
+    );
+  const note = 'Keeps it in To review. Only you can see it.';
+
+  it('at 100% puts Finish later and a wider Save in one row of about 76 dp, without the note', async () => {
+    const f = fixture({ empty: true });
+    await signIn(f);
+    await enter(f);
+    const editor = await form(f, mode, short(1));
+    const shared = row(editor);
+    expect(shared, 'Finish later in a row').toBeTruthy();
+    expect(shared!.findAll((node) => node === save(editor))).toHaveLength(1);
+    // Finish later first, tonal and as wide as its words; Save takes the rest of the row.
+    const labels = shared!
+      .findAll((node) => String(node.type) === 'Pressable' && !!node.props.accessibilityLabel)
+      .map((node) => String(node.props.accessibilityLabel));
+    expect(labels[0]).toBe('Finish later');
+    expect(labels[1]).toMatch(/^Save expense/);
+    let holder = save(editor).parent;
+    while (holder && String(holder.type) !== 'View') holder = holder.parent;
+    expect(flatten(holder!.props.style).flex).toBe(1);
+    expect(text(editor)).not.toContain(note);
+    const bar = barOf(editor);
+    expect(layoutHeight(bar, 1, 360)).toBeLessThanOrEqual(76);
+    expect(unreadText(bar, 1, 360)).toEqual([]);
+    await tap(editor, 'Finish later');
+    expect(f.controller.getSnapshot().snackbar?.message).toBe('Kept in To review');
+  });
+
+  it.each([1.3, 2])(
+    'at %s× text stacks them, Save first, still without the note',
+    async (scale) => {
+      const f = fixture({ empty: true });
+      await signIn(f);
+      await enter(f);
+      const editor = await form(f, mode, short(scale));
+      expect(row(editor)).toBeNull();
+      const bar = barOf(editor);
+      const labels = findHosts(
+        bar,
+        (props, type) => type === 'Pressable' && !!props.accessibilityLabel,
+      ).map((node) => String(node.props.accessibilityLabel));
+      expect(labels.findIndex((label) => label.startsWith('Save expense'))).toBeLessThan(
+        labels.indexOf('Finish later'),
+      );
+      expect(text(editor)).not.toContain(note);
+      expect(unreadText(bar, scale, 360, { cutOnce: true })).toEqual([]);
+    },
+  );
+
+  it('offline, says what Finish later does instead, on a line above the row', async () => {
+    const f = fixture({ empty: true });
+    await signIn(f);
+    await enter(f);
+    await act(async () => {
+      onlineManager.setOnline(false);
+    });
+    try {
+      const editor = await form(f, mode, short(1));
+      const shared = row(editor)!;
+      const words = shared
+        .findAll((node) => String(node.type) === 'Text')
+        .map((node) => node.children.filter((child) => typeof child === 'string').join(''));
+      expect(words).toContain(
+        'You’re offline, so it stays on this phone. It shows in To review as “On this phone”.',
+      );
+      const offlineNote = shared.find(
+        (node) =>
+          String(node.type) === 'Text' && node.children.join('').startsWith('You’re offline'),
+      );
+      expect(flatten(offlineNote.props.style).width).toBe('100%');
+    } finally {
+      await act(async () => {
+        onlineManager.setOnline(true);
+      });
+    }
+  });
+
+  it('keeps a taller window as it was: stacked, with the note', async () => {
+    const f = fixture({ empty: true });
+    await signIn(f);
+    await enter(f);
+    const editor = await form(f, mode, { width: 360, height: 780, fontScale: 1 });
+    expect(row(editor)).toBeNull();
+    expect(text(editor)).toContain(note);
   });
 });

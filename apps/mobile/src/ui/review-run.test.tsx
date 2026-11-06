@@ -11,6 +11,8 @@ import { createMobileController, type MobileController } from '../data/mobile-co
 import type { MobileFetch } from '../data/types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
+import { confirmSheetIn, confirmSheetOpen } from '../test-utils/confirm-sheet';
+import { Alert } from 'react-native';
 import { ThemeContext } from './theme';
 import { clockTime } from './activity-format';
 import { ToReviewHomeCard, ToReviewOverlay } from './to-review';
@@ -1248,6 +1250,71 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       expect(f.items()[0].draft.values!.description).toBe('Queued correction');
     } finally {
       release();
+    }
+  });
+  // #646: the app's own sheet, not a stock dialog. Only its red action leaves; the last kept
+  // details stay in To review, and leaving sends nothing.
+  it('asks in a sheet before leaving unkept changes; Back, a tap outside and Keep editing stay', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    let release!: () => void;
+    f.holdPut(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const input = () =>
+      tree.root.findAll(
+        (node) =>
+          String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Description',
+      )[0];
+    try {
+      await act(async () => {
+        input().props.onChangeText('First correction');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await act(async () => {
+        input().props.onChangeText('Queued correction');
+        onlineManager.setOnline(false);
+        release();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+      expect(f.controller.getSnapshot().toReview.run?.unkept).toBeTruthy();
+      const puts = f.calls.filter((call) => call.startsWith('PUT')).length;
+      for (const how of ['pressCancel', 'pressBack', 'pressOutside'] as const) {
+        await tap(tree, 'Close review');
+        expect(Alert.alert).not.toHaveBeenCalled();
+        expect(confirmSheetIn(tree.root)).toMatchObject({
+          title: 'Leave without your latest changes?',
+          message: 'These changes have not been kept. The last kept details stay in To review.',
+          cancel: 'Keep editing',
+          action: 'Leave without changes',
+        });
+        await act(async () => confirmSheetIn(tree.root)[how]());
+        expect(confirmSheetOpen(tree.root)).toBe(false);
+        expect(input().props.value).toBe('Queued correction');
+        expect(f.controller.getSnapshot().toReview.run).not.toBeNull();
+      }
+      // The run's own Back asks the same.
+      await act(async () =>
+        tree.root.find((node) => String(node.type) === 'Modal').props.onRequestClose(),
+      );
+      expect(confirmSheetIn(tree.root).title).toBe('Leave without your latest changes?');
+      await act(async () => {
+        confirmSheetIn(tree.root).pressAction();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(f.controller.getSnapshot().toReview.run).toBeNull();
+      expect(tree.toJSON()).toBeNull();
+      expect(f.items()[0].draft.values!.description).toBe('First correction');
+      expect(f.calls.filter((call) => call.startsWith('PUT'))).toHaveLength(puts);
+    } finally {
+      release();
+      onlineManager.setOnline(true);
     }
   });
 });

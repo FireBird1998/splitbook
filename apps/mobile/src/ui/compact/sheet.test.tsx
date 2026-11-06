@@ -5,7 +5,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { findHosts, largeTextWindows, unreadText } from '../../test-utils/layout';
+import { findHosts, flatten, largeTextWindows, unreadText } from '../../test-utils/layout';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setWindow, spring } from '../../test-utils/native';
 
@@ -258,4 +258,170 @@ describe('Bottom sheet titles read in full (#639)', () => {
       }
     },
   );
+});
+
+// #646 (Designer): the header centred its action on the whole title block, so beside a title
+// that wraps, "Settle up with Sam Chen" at 200%, × or Cancel sat between its lines. The action
+// keeps to the title's first line, and a one-line title stays where it was.
+const { lineBox, touch } = await import('./scale');
+describe('Bottom sheet header action keeps to the title’s first line (#646)', () => {
+  const headerRow = () =>
+    findHosts(renderer!.toJSON(), (props) => props.testID === 'sheet-drag-area')[0]!
+      .children![1] as ReactTestRendererJSON;
+  const top = (style: unknown) => {
+    const flat = flatten(style);
+    return Number(flat.marginTop ?? 0);
+  };
+  function open(title: string, subtitle?: string) {
+    act(() => {
+      renderer = create(
+        <BottomSheet visible title={title} subtitle={subtitle} doneLabel="Close" onDone={vi.fn()}>
+          <CompactText>Body</CompactText>
+        </BottomSheet>,
+      );
+    });
+    const row = headerRow();
+    const children = row.children as ReactTestRendererJSON[];
+    const [titleBlock, action] = [children[0]!, children[children.length - 1]!];
+    const button = findHosts(action, (props) => props.accessibilityLabel === 'Close')[0]!;
+    const rowStyle = flatten(row.props.style);
+    const edge = Number(rowStyle.paddingTop ?? 0);
+    return {
+      rowStyle,
+      titleTop: edge + top(titleBlock.props.style),
+      actionTop: edge + top(action.props.style),
+      actionHeight: Number(flatten(button.props.style).minHeight),
+    };
+  }
+  it.each([1, 1.3, 2])('at %s× text, beside a title that wraps or a subtitle', (fontScale) => {
+    setWindow({ width: 360, height: 640, fontScale });
+    for (const [title, subtitle] of [
+      ['Settle up with Sam Chen and the rest of the Flat 4B household'],
+      ['Rename Tag', 'Currently Groceries'],
+      ['Tag'],
+    ] as [string, string?][]) {
+      const { rowStyle, titleTop, actionTop, actionHeight } = open(title, subtitle);
+      expect(rowStyle.alignItems, title).toBe('flex-start');
+      expect(actionHeight).toBe(touch.dense);
+      const firstLine = titleTop + lineBox('title', fontScale).height / 2;
+      expect(actionTop + actionHeight / 2, title).toBeCloseTo(firstLine, 5);
+      act(() => renderer!.unmount());
+      renderer = undefined;
+    }
+  });
+  it('keeps a one-line title where it was at 100%: 16 dp down a 56 dp header', () => {
+    setWindow({ width: 360, height: 640, fontScale: 1 });
+    const { rowStyle, titleTop, actionTop, actionHeight } = open('Tag');
+    expect(titleTop).toBe(16);
+    expect(rowStyle.minHeight).toBe(56);
+    expect(actionTop + actionHeight + Number(rowStyle.paddingBottom ?? 0)).toBe(56);
+  });
+});
+
+const { ConfirmSheet, useConfirm } = await import('./index');
+const { AccessibilityInfo } = await import('react-native');
+const { getSemanticTokens } = await import('@splitbook/shared/design-tokens');
+const { confirmSheetIn, confirmSheetOpen } = await import('../../test-utils/confirm-sheet');
+
+describe('ConfirmSheet, the app’s own confirm (#646)', () => {
+  const confirmation = {
+    title: 'Discard this name?',
+    message: 'Your new name isn’t saved.',
+    action: 'Discard',
+    cancel: 'Keep editing',
+  };
+  function ask() {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    act(() => {
+      renderer = create(
+        <ConfirmSheet {...confirmation} onConfirm={onConfirm} onCancel={onCancel} />,
+        // The title's node, as Android hands it to the screen reader.
+        { createNodeMock: (element) => ({ element }) },
+      );
+    });
+    return { root: renderer!.root, onConfirm, onCancel };
+  }
+
+  it('shows the title as a heading, the message, Keep in the header and the red action', () => {
+    const { root } = ask();
+    const sheet = confirmSheetIn(root);
+    expect(sheet.heading.props.children).toBe('Discard this name?');
+    expect(
+      root
+        .findAll((node) => isHost(node, 'Text'))
+        .some((node) => node.props.children === 'Your new name isn’t saved.'),
+    ).toBe(true);
+    // The scrim, the header's Keep editing, then Discard: each with its spoken label.
+    expect(sheet.labels).toEqual(['Keep editing', 'Keep editing', 'Discard']);
+    const red = getSemanticTokens('light').status.negative;
+    expect(sheet.actionButton.props.style({ pressed: false }).backgroundColor).toBe(red);
+    expect(sheet.modal.props.visible).toBe(true);
+    expect(root.find((node) => node.props.accessibilityViewIsModal === true)).toBeDefined();
+  });
+
+  it('moves the screen reader to its title once it is on screen', () => {
+    const { root } = ask();
+    vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mockClear();
+    const sheet = confirmSheetIn(root);
+    act(() => sheet.modal.props.onShow());
+    const [[node, event]] = vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mock
+      .calls as unknown as [[{ element: { props: Record<string, unknown> } }, string]];
+    expect(event).toBe('focus');
+    expect(node.element.props).toMatchObject({
+      accessibilityRole: 'header',
+      children: 'Discard this name?',
+    });
+  });
+
+  it.each(['pressCancel', 'pressBack', 'pressOutside'] as const)(
+    '%s cancels, and never confirms',
+    (how) => {
+      const { root, onConfirm, onCancel } = ask();
+      act(() => confirmSheetIn(root)[how]());
+      expect(onCancel).toHaveBeenCalledOnce();
+      expect(onConfirm).not.toHaveBeenCalled();
+    },
+  );
+
+  it('a swipe down cancels, and never confirms', () => {
+    const { root, onConfirm, onCancel } = ask();
+    release(root, { dy: 200, vy: 2, dx: 0 });
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('answers once: a second tap on its action, or Back after it, does nothing', () => {
+    const { root, onConfirm, onCancel } = ask();
+    const sheet = confirmSheetIn(root);
+    act(() => sheet.pressAction());
+    act(() => sheet.pressAction());
+    act(() => sheet.pressBack());
+    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('useConfirm mounts nothing until it asks, and closes once answered', () => {
+    const onConfirm = vi.fn();
+    let open: (() => void) | undefined;
+    function Screen() {
+      const [confirm, sheet] = useConfirm();
+      open = () => confirm({ ...confirmation, onConfirm });
+      return sheet;
+    }
+    act(() => {
+      renderer = create(<Screen />);
+    });
+    const root = renderer!.root;
+    expect(confirmSheetOpen(root)).toBe(false);
+    expect(root.findAll((node) => isHost(node, 'Modal'))).toEqual([]);
+    act(() => open!());
+    act(() => confirmSheetIn(root).pressBack());
+    expect(confirmSheetOpen(root)).toBe(false);
+    expect(onConfirm).not.toHaveBeenCalled();
+    act(() => open!());
+    act(() => confirmSheetIn(root).pressAction());
+    expect(confirmSheetOpen(root)).toBe(false);
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
 });
