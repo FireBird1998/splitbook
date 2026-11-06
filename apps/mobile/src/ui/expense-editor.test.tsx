@@ -658,6 +658,32 @@ describe('rendered Expense corrections', () => {
     }
   });
 
+  // At 200% on a 360 dp phone the sentence broke "Fix / Amount, / Description and Tag." onto
+  // separate lines where a text would keep "Amount, Description": "and" was glued to the name
+  // before it. Each word wraps on its own, and a comma or full stop stays with its name.
+  it('wraps the sentence between words, as a text does', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await ui.press('Save expense');
+    const sentence = ui
+      .root()
+      .find(
+        (node) =>
+          isHost(node, 'View') &&
+          node.props.accessible &&
+          String(node.props.accessibilityLabel).includes(' Fix '),
+      );
+    const words = (node: ReactTestInstance): string =>
+      node.children
+        .map((child) => (typeof child === 'string' ? child : words(child)))
+        .join('')
+        .replaceAll(hairSpace, '');
+    // The row's own items: each wraps as one piece.
+    const items = sentence.children
+      .filter((child): child is ReactTestInstance => typeof child !== 'string')
+      .map((child) => words(child).trim());
+    expect(items.slice(-4)).toEqual(['Amount,', 'Description', 'and', 'Tag.']);
+  });
+
   it('waits until a field is left before showing its correction', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     const border = () => {

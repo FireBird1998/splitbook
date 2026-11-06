@@ -1,4 +1,4 @@
-import { createContext, type ReactNode } from 'react';
+import { Fragment, createContext, type ReactNode } from 'react';
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
@@ -65,28 +65,37 @@ function LinkedSentence({
         </CompactText>
       ))}
       {links.map((link, index) => (
-        <View key={link.name} style={{ flexDirection: 'row' }}>
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={link.label}
-            onPress={link.onPress}
-            style={{
-              paddingVertical: vertical,
-              marginVertical: -vertical,
-            }}
-          >
-            <CompactText
-              variant="small"
-              weight="semibold"
-              style={{ color: linkColor, textDecorationLine: 'underline' }}
+        // A comma or full stop stays with its name; "and" is a word of its own, so the sentence
+        // wraps between words as a text does (#646).
+        <Fragment key={link.name}>
+          <View style={{ flexDirection: 'row' }}>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={link.label}
+              onPress={link.onPress}
+              style={{
+                paddingVertical: vertical,
+                marginVertical: -vertical,
+              }}
             >
-              {link.name}
+              <CompactText
+                variant="small"
+                weight="semibold"
+                style={{ color: linkColor, textDecorationLine: 'underline' }}
+              >
+                {link.name}
+              </CompactText>
+            </Pressable>
+            <CompactText variant="small" style={{ color }}>
+              {index === links.length - 1 ? '.' : index === links.length - 2 ? ' ' : ', '}
             </CompactText>
-          </Pressable>
-          <CompactText variant="small" style={{ color }}>
-            {after(index)}
-          </CompactText>
-        </View>
+          </View>
+          {index === links.length - 2 ? (
+            <CompactText variant="small" style={{ color }}>
+              and{' '}
+            </CompactText>
+          ) : null}
+        </Fragment>
       ))}
     </View>
   );
