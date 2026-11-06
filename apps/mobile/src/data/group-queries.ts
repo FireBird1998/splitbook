@@ -1180,24 +1180,30 @@ export function createGroupQueries(session: GroupSession) {
         () => view === opened && !opened.lost,
       );
       reading.catch(() => undefined);
-      await preview(owner, opened).catch(() => undefined);
       // With the Month known, from this view, a saved copy or the Groups list, its Expenses are
       // read beside the Group: neither waits for the other. They show only once the Group's check
       // passes (`projectExpenses`). Balances still follow both, since each read can add due
       // recurring Expenses (M1-5, AMEND-1).
-      const listed = session.snapshot().groups.data.find(({ id }) => id === opened.groupId);
-      if (opened.household === null && listed && lists(listed)) decide(listed);
-      const list = view === opened ? shownList() : null,
-        shown = onScreen();
-      if (list && shown && shown.destination !== 'activity') {
+      const beside = () => {
+        const list = view === opened ? shownList() : null,
+          shown = onScreen();
+        if (!list || !shown || shown.destination === 'activity') return null;
         const listing = readNow<Pages>(
           listOptions(list, fresh),
           owner,
           () => opened.checked && sameMonth(list)(),
         );
-        early = { hash: hashKey(list), reading: listing };
-        early.reading.catch(() => undefined);
-      }
+        listing.catch(() => undefined);
+        return { hash: hashKey(list), reading: listing };
+      };
+      // After a change written here (a confirmed save), the Month shown is read at once, not
+      // after this phone's saved copies are looked up: on a phone each lookup waits its turn on
+      // the account's storage, and the change has already removed the ledger's copies (#912).
+      if (opened.change !== 0) early = beside();
+      await preview(owner, opened).catch(() => undefined);
+      const listed = session.snapshot().groups.data.find(({ id }) => id === opened.groupId);
+      if (opened.household === null && listed && lists(listed)) decide(listed);
+      early ??= beside();
       let answer: Envelope;
       try {
         answer = await reading;

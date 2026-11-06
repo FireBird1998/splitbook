@@ -95,6 +95,29 @@ function fixture() {
     created: 0,
     /** How long each GET takes to answer, in ms of the fake clock; 0 answers at once. */
     delay: 0,
+    /** How long a GET of Maple House or its Expenses takes instead, when set (#912). */
+    groupDelay: 0,
+    listDelay: 0,
+    /** Maple House's Group read, or its Expense list read, refuses Alex with this status. */
+    refuseGroup: 0,
+    refuseList: 0,
+    /** Runs once a new Expense of Maple House is saved: the server for the reads after it. */
+    afterSave: null as null | (() => void),
+    /**
+     * A recurring Expense of Maple House that has fallen due. The Group read and the Expense list
+     * read both add it before they answer, as the web's do, and only once (its unique period).
+     */
+    due: null as null | ReturnType<typeof expenseRow>,
+    /** How many times a read added the due recurring Expense. */
+    materialized: 0,
+  };
+  /** Adds the due recurring Expense, as the first read of either kind to reach the server does. */
+  const materialize = (id: string) => {
+    if (id !== mapleId || !server.due) return;
+    server.rows['2026-09'] = [server.due, ...server.rows['2026-09']];
+    server.owe += 1;
+    server.materialized += 1;
+    server.due = null;
   };
   let cookie: string | null = null,
     owner: string | null = null,
@@ -104,8 +127,13 @@ function fixture() {
     disk = new Map<string, unknown>(),
     drafts = new Map<string, unknown>(),
     attempts = new Map<string, unknown>();
-  /** What the saved-copy databases can't do: remove a row, or read one of them. */
-  const device = { failRemoval: false, unreadableRow: false };
+  /**
+   * What the saved-copy databases can't do: remove a row, or read one of them. `storageDelay`:
+   * how long each read of a stored record takes, in ms of the fake clock, as SQLite on a phone.
+   */
+  const device = { failRemoval: false, unreadableRow: false, storageDelay: 0 };
+  const slow = () =>
+    device.storageDelay ? new Promise((resolve) => setTimeout(resolve, device.storageDelay)) : null;
   /** Writes of rows held part-way, as on a slow disk, by path. */
   const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [];
   const pause = async (path: string) => {
@@ -131,7 +159,10 @@ function fixture() {
   let connectionState: ConnectionState | null = null;
   const connection = new Set<(state: ConnectionState) => void>();
   const records = (map: Map<string, unknown>) => ({
-    load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
+    load: async (account: string, key: string) => {
+      await slow();
+      return structuredClone(map.get(account + key) ?? null);
+    },
     save: async (account: string, key: string, value: unknown) => {
       map.set(account + key, structuredClone(value));
     },
@@ -234,6 +265,9 @@ function fixture() {
     if (!id || !group) return json({}, 404);
     if (server.revoked.has(id)) return json({}, 403);
     if (path === `/api/groups/${id}` && server.failGroup) return json({}, 500);
+    if (path === `/api/groups/${id}` && id === mapleId && server.refuseGroup)
+      return json({}, server.refuseGroup);
+    if (path === `/api/groups/${id}` && method === 'GET') materialize(id);
     if (path === `/api/groups/${id}`)
       return json({
         status: 200,
@@ -248,6 +282,8 @@ function fixture() {
         data: { activities: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } },
       });
     if (path.startsWith(`/api/groups/${id}/expenses?`)) {
+      if (id === mapleId && server.refuseList) return json({}, server.refuseList);
+      materialize(id);
       const number = pageOf(path);
       if (id === mapleId && monthOf(path) === '2026-09' && number === server.failPage)
         return json({}, 500);
@@ -371,9 +407,23 @@ function fixture() {
           const method = init.method ?? 'GET';
           calls.push({ method, path, account: signedIn(init).id, at: Date.now() });
           if (server.offline) throw new TypeError('Network request failed');
-          if (server.delay && method === 'GET')
-            await new Promise((resolve) => setTimeout(resolve, server.delay));
+          const wait =
+            method !== 'GET' || !server.delay
+              ? 0
+              : path === maplePath && server.groupDelay
+                ? server.groupDelay
+                : path.startsWith(`${maplePath}/expenses?`) && server.listDelay
+                  ? server.listDelay
+                  : server.delay;
+          if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
           if (method !== 'GET') held.forEach((request) => (request.afterWrite = false));
+          if (method === 'POST' && path === `${maplePath}/expenses` && server.afterSave) {
+            const reply = respond(path, init),
+              after = server.afterSave;
+            server.afterSave = null;
+            after();
+            return reply;
+          }
           const index = held.findIndex(
             (request) =>
               !request.afterWrite &&
@@ -1686,6 +1736,188 @@ describe('opening and refreshing a Group read independent things together', () =
       },
     });
     expect(await timed(f, () => controller.refresh('pull'))).toEqual(together);
+  });
+
+  describe('after a confirmed Save (#912)', () => {
+    /** Each GET's label and when it was sent, from `timed`'s lines. */
+    const times = (sent: string[]) =>
+      sent.map((line) => {
+        const [label, at] = line.split(' at ');
+        return { label, at: Number(at) };
+      });
+    /**
+     * Alex saves a new September Expense from Maple House's Expenses, on a phone whose storage
+     * takes 200 ms a read, as SQLite does. Returns the GETs from the Save's start and every
+     * snapshot published meanwhile.
+     */
+    async function saved(f: ReturnType<typeof fixture>) {
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(mapleId);
+      await controller.openExpense(mapleId);
+      await controller.updateExpenseDraft({
+        description: 'Fresh groceries',
+        amount: '12',
+        tagId,
+        date: '2026-09-14',
+      });
+      const states: MobileSnapshot[] = [];
+      controller.subscribe(() => states.push(controller.getSnapshot()));
+      f.device.storageDelay = 200;
+      const reads = await timed(f, () => controller.saveExpense());
+      f.device.storageDelay = 0;
+      return { controller, states, sent: times(reads.sent) };
+    }
+    /**
+     * The refresh after the Save: its Group read (the second; the first is Save's check), its
+     * Expense read, then Balances and Home, each with when it was sent.
+     */
+    const refresh = (sent: { label: string; at: number }[]) => {
+      const group = sent.filter(({ label }) => label === 'group')[1];
+      return {
+        group,
+        expenses: sent.find(({ label }) => label === 'expenses 2026-09 p1'),
+        balances: sent.find(({ label }) => label === 'balances'),
+        home: sent.find(({ label }) => label === homePath),
+      };
+    };
+    const orders = [
+      ['the Group answers first', 400, 1_000],
+      ['the Expenses answer first', 1_000, 400],
+    ] as const;
+
+    it.each(orders)(
+      'reads the Group and its first Expenses page together, then Balances, then Home, when %s',
+      async (_, groupDelay, listDelay) => {
+        const f = fixture();
+        f.server.groupDelay = groupDelay;
+        f.server.listDelay = listDelay;
+        const { controller, states, sent } = await saved(f);
+        const { group, expenses, balances, home } = refresh(sent);
+        expect(sent.map(({ label }) => label)).toEqual([
+          'group',
+          'group',
+          'expenses 2026-09 p1',
+          'balances',
+          homePath,
+        ]);
+        // Together: neither waits for the other, nor for this phone's storage.
+        expect(expenses!.at).toBe(group!.at);
+        // Balances follow both answers, since each read can add a due recurring Expense (M1-5);
+        // Home follows Balances.
+        expect(balances!.at).toBeGreaterThanOrEqual(
+          Math.max(group!.at + groupDelay, expenses!.at + listDelay),
+        );
+        expect(home!.at).toBeGreaterThanOrEqual(balances!.at + delay);
+        const done = controller.getSnapshot();
+        expect(done).toMatchObject({
+          screen: 'group',
+          detail: { status: 'ready' },
+          snackbar: { message: 'Expense saved · Fresh groceries' },
+          financial: {
+            expenses: { status: 'ready' },
+            balances: { status: 'ready', data: [{ debts: [{ amount: 31 }] }] },
+          },
+        });
+        expect(listed(done)[0]).toBe('Fresh groceries');
+        expect(done.snackbar?.expenseId).toBe(done.financial.expenses.data[0].id);
+        // The message never showed beside a list or Balances shown as current without the save.
+        expect(
+          states.filter(
+            (state) =>
+              state.snackbar?.message.startsWith('Expense saved') &&
+              ((state.financial.expenses.status === 'ready' &&
+                listed(state)[0] !== 'Fresh groceries') ||
+                (state.financial.balances.status === 'ready' &&
+                  !state.financial.balances.changed &&
+                  state.financial.balances.data?.[0]?.debts[0]?.amount !== 31)),
+          ),
+        ).toEqual([]);
+      },
+    );
+
+    it('shows the Expenses, and Balances after them, when the Group read fails beside them', async () => {
+      const f = fixture();
+      f.server.listDelay = 400;
+      f.server.afterSave = () => (f.server.failGroup = true);
+      const { controller, sent } = await saved(f);
+      const { group, expenses, balances, home } = refresh(sent);
+      expect(expenses!.at).toBe(group!.at);
+      expect(balances!.at).toBeGreaterThanOrEqual(group!.at + delay);
+      expect(home!.at).toBeGreaterThan(balances!.at);
+      const done = controller.getSnapshot();
+      expect(done).toMatchObject({
+        detail: { status: 'error', id: mapleId },
+        financial: {
+          expenses: { status: 'ready' },
+          balances: { status: 'ready', data: [{ debts: [{ amount: 31 }] }] },
+        },
+      });
+      expect(listed(done)[0]).toBe('Fresh groceries');
+    });
+
+    it.each([
+      ['the Group read', 403, 'refuseGroup', 'denied'],
+      ['the Group read', 404, 'refuseGroup', 'error'],
+      ['the Expense read', 403, 'refuseList', 'denied'],
+      // The Group itself answered, so its details stay; its ledger goes, as before #912.
+      ['the Expense read', 404, 'refuseList', 'ready'],
+    ] as const)(
+      'forgets the Group, and reads no Balances, when %s answers %i after it',
+      async (_, status, refuse, shows) => {
+        const f = fixture();
+        // The other read answers first, so the refusal lands after it.
+        f.server.groupDelay = refuse === 'refuseGroup' ? 1_000 : 400;
+        f.server.listDelay = refuse === 'refuseList' ? 1_000 : 400;
+        f.server.afterSave = () => (f.server[refuse] = status);
+        const { controller, sent } = await saved(f);
+        const { group, expenses, balances } = refresh(sent);
+        expect(expenses!.at).toBe(group!.at);
+        expect(balances).toBeUndefined();
+        expect(controller.getSnapshot()).toMatchObject({
+          detail: { status: shows, id: mapleId },
+          financial: { groupId: null, expenses: { data: [] }, balances: { data: null } },
+        });
+        if (shows !== 'ready') expect(controller.getSnapshot().detail.data).toBeNull();
+        expect(controller.getSnapshot().groups.data.map(({ id }) => id)).not.toContain(mapleId);
+        // Nothing of the Group stays on this phone, including an answer that landed before it;
+        // after a missing Expense list, only the Group's own copy, which answered (as before #912).
+        await settle();
+        expect(f.savedRows(maplePath).map(({ path }) => path)).toEqual(
+          refuse === 'refuseList' && status === 404 ? [maplePath] : [],
+        );
+      },
+    );
+
+    it.each(orders)(
+      'lists a recurring Expense both reads add once, and Balances count it once, when %s',
+      async (_, groupDelay, listDelay) => {
+        const f = fixture();
+        f.server.groupDelay = groupDelay;
+        f.server.listDelay = listDelay;
+        // Rent falls due once the Save is answered: the next read of either kind adds it.
+        f.server.afterSave = () => (f.server.due = expenseRow('2026-09', 950, 'Rent'));
+        const { controller, sent } = await saved(f);
+        const { group, expenses, balances, home } = refresh(sent);
+        expect(expenses!.at).toBe(group!.at);
+        expect(balances!.at).toBeGreaterThanOrEqual(
+          Math.max(group!.at + groupDelay, expenses!.at + listDelay),
+        );
+        expect(home!.at).toBeGreaterThan(balances!.at);
+        expect(f.server.materialized).toBe(1);
+        const done = controller.getSnapshot();
+        expect(listed(done).filter((row) => row === 'Rent')).toEqual(['Rent']);
+        expect(listed(done).filter((row) => row === 'Fresh groceries')).toEqual([
+          'Fresh groceries',
+        ]);
+        // 30 owed before, 1 for the save and 1 for Rent, counted once.
+        expect(done.financial.balances).toMatchObject({
+          status: 'ready',
+          data: [{ debts: [{ amount: 32 }] }],
+        });
+        expect(done.home.data).toMatchObject([{ currency: 'INR', youOwe: 32, youAreOwed: 0 }]);
+      },
+    );
   });
 
   it('never shows or keeps Expenses read beside a Group that then refuses the member', async () => {
