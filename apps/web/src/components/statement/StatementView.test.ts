@@ -391,6 +391,27 @@ describe('the statement’s table cells', () => {
     }
   });
 
+  // #943: at 1280 the Summary's "CHF 20,000,000.00" Spent broke as "CHF 20,000,000.0 / 0": its
+  // figures kept MoneyText's break-anywhere. A Summary figure stays whole; a tile is never
+  // narrower than its figure, and the strip wraps between tiles instead.
+  it('never breaks inside a Summary figure; the strip wraps between its tiles (#943)', () => {
+    const html = tripHtml();
+    const figures = stylesOf(html, 'statement-summary-figure');
+    // Spent and the payments' total.
+    expect(figures).toHaveLength(2);
+    for (const figure of figures) {
+      expect(figure.value('white-space')).toBe('nowrap');
+      expect(figure.value('overflow-wrap')).toBe('normal');
+    }
+    const [strip] = stylesOf(html, 'statement-summary');
+    expect(strip.value('display')).toBe('flex');
+    expect(strip.value('flex-wrap')).toBe('wrap');
+    const tiles = stylesOf(html, 'statement-summary-item');
+    expect(tiles).toHaveLength(3);
+    // A tile's least width is its content's: its figure, whole.
+    for (const tile of tiles) expect(tile.value('min-width')).toBeUndefined();
+  });
+
   it('keeps each date and date-time on one line', () => {
     const dates = stylesOf(tripHtml(), 'statement-date');
     // The Expenses' and Payments' headers, 3 Expense dates and 1 Payment's.
@@ -509,12 +530,16 @@ describe('the summary strip', () => {
     expect(strip.value('border-top')).toBe('1px solid');
     expect(strip.value('border-bottom')).toBe('1px solid');
     expect(strip.value('border-radius')).toBeUndefined();
-    expect(strip.nested.some((rule) => /^>\*\+\*/.test(rule.selector))).toBe(true);
+    // Each tile rules its left and top (#943, so a wrapped row is ruled too); the strip's top
+    // rule covers the first row's, and its clip hides the rule left of a row's first tile.
+    expect(strip.value('clip-path')).toBe('inset(0 -100vw 0 1px)');
     const items = stylesOf(html, 'statement-summary-item');
     expect(items).toHaveLength(3);
     for (const item of items) {
       expect(item.value('border-radius')).toBeUndefined();
       expect(item.value('border')).toBeUndefined();
+      expect(item.value('border-width')).toBe('1px 0 0 1px');
+      expect(item.value('margin-top')).toBe('-1px');
     }
   });
 

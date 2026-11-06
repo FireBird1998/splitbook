@@ -404,6 +404,76 @@ it('shows each currency and both stored payment amounts in the statement preview
   );
 });
 
+// #943: as on the statement, no figure in a statement preview breaks inside its number (MoneyText
+// may break anywhere elsewhere): its Summary, tables, Suggested payments and payments list alike.
+it('never breaks inside a figure in the statement preview (#943)', () => {
+  const statement = buildStatement({
+    id: 'g',
+    name: 'Fictional chalet',
+    theme: 'trip',
+    currency: 'CHF',
+    tags: [],
+    names: { a: 'Alex', s: 'Sam' },
+    members: [
+      { id: 'a', name: 'Alex' },
+      { id: 's', name: 'Sam' },
+    ],
+    expenses: [
+      {
+        id: 'e',
+        date: '2026-10-20T00:00:00.000Z',
+        description: 'Chalet',
+        category: 'accommodation',
+        tag: 'Stay',
+        currency: 'CHF',
+        amountMinor: 2_000_000_000,
+        splitMethod: 'equal',
+        paidBy: [
+          { userId: 'a', amountMinor: 1_000_000_000 },
+          { userId: 's', amountMinor: 1_000_000_000 },
+        ],
+        splitBetween: [
+          { userId: 'a', amountMinor: 500_000_000 },
+          { userId: 's', amountMinor: 1_500_000_000 },
+        ],
+      },
+    ],
+    settlements: [
+      {
+        id: 'p',
+        at: '2026-10-21T12:00:00Z',
+        fromId: 's',
+        toId: 'a',
+        recordedById: 's',
+        currency: 'CHF',
+        amountMinor: 100_000_000,
+      },
+    ],
+  });
+  const html = render({
+    status: 'ready',
+    data: {
+      format: 'statement',
+      groupNames: [statement.name],
+      generatedAt: '2026-10-21T12:00:00Z',
+      from: null,
+      to: null,
+      timeZone: 'UTC',
+      empty: false,
+      statement: buildStatementPreview(statement),
+    },
+  });
+  expect(text(html)).toContain('CHF 20,000,000.00');
+  const amounts = stylesOf(html, 'export-statement-amount');
+  // Spent and Payments; Paid, Share and Net for 2; 2 balances; 1 Suggested payment; 1 payment;
+  // the Expense's 2 payers, its Amount and its 2 shares.
+  expect(amounts).toHaveLength(17);
+  for (const amount of amounts) {
+    expect(amount.value('white-space')).toBe('nowrap');
+    expect(amount.value('overflow-wrap')).toBe('normal');
+  }
+});
+
 // #820: a statement preview with an Expense in a currency Splitbook no longer supports shows its
 // Spent as stored, with its code, never converted.
 it('previews a statement with an Expense in a currency Splitbook no longer supports', () => {

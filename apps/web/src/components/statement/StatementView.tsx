@@ -256,6 +256,9 @@ export default function StatementView({ statement }: { statement: Statement }) {
   );
 }
 
+/** Never "₹54,000. / 00": MoneyText may break anywhere elsewhere, never on the statement. */
+const WHOLE_FIGURE = { whiteSpace: 'nowrap', overflowWrap: 'normal' } as const;
+
 /** The summary as a row of figures, each label above its value, as the Export preview has it. */
 function SummaryRow({ bucket }: { bucket: Statement['currencies'][number] }) {
   const currency = bucket.currency;
@@ -265,27 +268,34 @@ function SummaryRow({ bucket }: { bucket: Statement['currencies'][number] }) {
       aria-label={`${currency} summary`}
       className="statement-summary"
       // One ruled strip, a rule above and below and a divider between figures, as the board's
-      // summary strip; stacked on a phone, the dividers run across.
+      // summary strip; stacked on a phone, the dividers run across. A tile is never narrower than
+      // its figure, kept whole (#943): where three don't fit side by side, the strip wraps between
+      // tiles. Each tile rules its left and top; the strip's own top rule covers the first row's,
+      // and the clip hides the left rule of whichever tile starts a row, never a figure.
       sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
+        display: 'flex',
+        flexWrap: 'wrap',
         m: 0,
         mb: 1.5,
         borderTop: 1,
         borderBottom: 1,
         borderColor: 'divider',
-        '& > * + *': {
-          borderColor: 'divider',
-          borderStyle: 'solid',
-          borderWidth: { xs: '1px 0 0', sm: '0 0 0 1px' },
-        },
+        clipPath: 'inset(0 -100vw 0 1px)',
       }}
     >
       {statementSummary(bucket).map((figure) => (
         <Box
           key={figure.label}
           className="statement-summary-item"
-          sx={{ px: 2, py: 1.25, minWidth: 0 }}
+          sx={{
+            flex: { xs: '1 1 100%', sm: '1 1 0' },
+            px: 2,
+            py: 1.25,
+            mt: '-1px',
+            borderStyle: 'solid',
+            borderColor: 'divider',
+            borderWidth: '1px 0 0 1px',
+          }}
         >
           <Typography
             component="dt"
@@ -314,10 +324,12 @@ function SummaryRow({ bucket }: { bucket: Statement['currencies'][number] }) {
               </Typography>
             ) : (
               <MoneyText
+                className="statement-summary-figure"
                 amount={displayMajorAmount(figure.amountMinor, currency)}
                 currency={currency}
                 tone="neutral"
-                sx={{ fontSize: '1.25rem', fontWeight: 600 }}
+                // Whole, as the tables' amounts: never "CHF 20,000,000.0 / 0" (#943).
+                sx={{ fontSize: '1.25rem', fontWeight: 600, ...WHOLE_FIGURE }}
               />
             )}
             {'note' in figure ? (
@@ -362,8 +374,7 @@ function CurrencySection({
       amount={displayMajorAmount(minor, currency)}
       currency={currency}
       tone="neutral"
-      // Never "₹54,000. / 00": MoneyText may break anywhere elsewhere, never on the statement.
-      sx={{ whiteSpace: 'nowrap', overflowWrap: 'normal' }}
+      sx={WHOLE_FIGURE}
     />
   );
   return (
