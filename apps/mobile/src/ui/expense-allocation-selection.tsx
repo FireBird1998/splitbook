@@ -3,7 +3,7 @@ import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { expenseMoney } from '../data/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
-import { WhoOwesWhat } from './expense-form';
+import { WhoOwesWhat, waitsForAmount } from './expense-form';
 import { useMobileSnapshot } from './use-mobile-snapshot';
 
 type Allocation = ReturnType<typeof expenseMoney>;
@@ -39,8 +39,8 @@ export const SelectedWhoOwesWhat = memo(function SelectedWhoOwesWhat({
       return {
         draft,
         allocation,
-        // No amount yet, and nothing to correct: the table keeps its shape (#911).
-        waiting: !expense.validation.errors.amount && !draft.amount,
+        // No amount the table can use yet: it keeps its shape (#911).
+        waiting: waitsForAmount(draft, allocation, expense.validation.errors.amount),
         problem: expense.validation.errors.amount
           ? 'Correct the amount to see who owes what.'
           : draft.amount

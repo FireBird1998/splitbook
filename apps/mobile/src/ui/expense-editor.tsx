@@ -83,6 +83,7 @@ import {
   SaveBar,
   WhatsDifferent,
   WhoOwesWhat,
+  waitsForAmount,
   expenseDateLabel,
   splitSummary,
 } from './expense-form';
@@ -973,7 +974,7 @@ function ExpenseTask({
                       ? allocationError
                       : 'Enter a valid amount to see who owes what.'
                 }
-                waiting={!errors.amount && !draft.amount}
+                waiting={waitsForAmount(draft, allocation, errors.amount)}
                 name={name}
                 currentUserId={currentUserId}
                 money={money}

@@ -1708,6 +1708,63 @@ describe('compact Expense form', () => {
       }
     },
   );
+  // #911 QA: an amount that can't be used yet keeps the table's shape, as no amount does. A
+  // sub-unit amount passes through "0" and "0." as it is typed, and an Amount left empty or saved
+  // empty is corrected beside the field; none of them may fold the table and move Notes.
+  it.each([1, 1.3])(
+    'keeps Notes where it is while the amount is typed in part, left empty or saved empty, at %sx text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      try {
+        const ui = await render((controller) => controller.openExpense(groupId));
+        const amount = 'Amount, Indian Rupee, required';
+        await ui.press('Category and notes, optional');
+        // From the table's first row, so the corrections above it (the banner, and the line under
+        // the Amount) don't count as a move: only what the table does below its rows.
+        const top = (
+          node: ReactTestRendererJSON | string | null,
+          match: (props: Record<string, unknown>) => boolean,
+        ): number | null => {
+          if (!node || typeof node === 'string') return null;
+          if (match(node.props)) return 0;
+          const style = flatten(node.props.style);
+          let before = Number(style.paddingTop ?? style.paddingVertical ?? style.padding ?? 0);
+          for (const child of node.children ?? []) {
+            const within = top(child, match);
+            if (within !== null) return before + within;
+            if (style.flexDirection !== 'row')
+              before += layoutHeight(child, scale, 360) + Number(style.gap ?? 0);
+          }
+          return null;
+        };
+        const notes = () => {
+          const layout = screen!.toJSON();
+          const form = Array.isArray(layout) ? (layout[0] ?? null) : layout;
+          return (
+            inputTop(form, 'Notes', scale)! -
+            top(form, (props) => String(props.accessibilityLabel).startsWith('You: paid'))!
+          );
+        };
+        const empty = notes();
+        for (const partial of ['0', '0.', '.']) {
+          await ui.type(amount, partial);
+          expect(text(ui.root())).toContain('No amount');
+          expect(notes()).toBeCloseTo(empty, 6);
+        }
+        await ui.type(amount, '');
+        await ui.leave(amount);
+        expect(ui.controller.getSnapshot().expense.validation.errors.amount).toBeTruthy();
+        expect(notes()).toBeCloseTo(empty, 6);
+        await ui.press('Save expense');
+        expect(ui.controller.getSnapshot().expense.validation.submitted).toBe(true);
+        expect(text(ui.root())).toContain('No amount');
+        expect(notes()).toBeCloseTo(empty, 6);
+        expect(ui.writes).toEqual([]);
+      } finally {
+        setWindow({ fontScale: 1 });
+      }
+    },
+  );
   const openSheet = (root: ReactTestInstance, title: string) =>
     root
       .findAll((node) => isHost(node, 'Modal') && node.props.visible === true)

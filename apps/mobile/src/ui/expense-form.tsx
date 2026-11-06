@@ -49,6 +49,7 @@ import { outfitWidth } from './compact/outfit-metrics';
 import { useTheme } from './theme';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import { enteredPayers } from '@splitbook/shared/payer-remainder';
+import { amountError } from '../data/field-feedback';
 
 type Allocation = ReturnType<typeof expenseMoney>;
 type SectionRef = (field: ExpenseField) => (node: ViewInstance | null) => void;
@@ -324,6 +325,17 @@ const AllocationPersonLabel = memo(function AllocationPersonLabel({
     </>
   );
 });
+/**
+ * Whether Who owes what waits for the amount, keeping its rows with a dash for each figure: there
+ * is no amount it can use yet, whether none, one typed in part (a sub-unit amount passes through
+ * "0" and "0.") or one corrected beside the field. Folding the table there would move Notes
+ * (#911). A usable amount that the split can't share keeps its own message.
+ */
+export const waitsForAmount = (
+  draft: Pick<ExpenseDraft, 'amount' | 'currency'>,
+  allocation: Allocation | null,
+  amountCorrection: string | undefined,
+) => !allocation && (!!amountCorrection || !!amountError(draft.amount, draft.currency));
 export const WhoOwesWhat = memo(function WhoOwesWhat({
   draft,
   allocation,
