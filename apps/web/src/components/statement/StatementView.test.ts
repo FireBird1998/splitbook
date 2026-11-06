@@ -326,6 +326,16 @@ describe('the statement’s table cells', () => {
     expect(block.indexOf('aria-label="Current balances"')).toBeLessThan(end);
     expect(block.indexOf('aria-label="INR suggested payments"')).toBeGreaterThan(-1);
     expect(block.indexOf('aria-label="INR suggested payments"')).toBeLessThan(end);
+    // The section's opening sentence goes with them: left outside, it and the heading above it
+    // could print at the foot of one page with the balances on the next. Nothing but the block
+    // follows the heading, whose own break-after keeps it with the block.
+    const heading = html.indexOf('>Balances and suggested payments</h3>');
+    expect(heading).toBeGreaterThan(-1);
+    expect(html.slice(heading + '>Balances and suggested payments</h3>'.length)).toMatch(
+      /^<div class="statement-keep-together/,
+    );
+    expect(block.indexOf('Current all-time positions')).toBeGreaterThan(-1);
+    expect(block.indexOf('Current all-time positions')).toBeLessThan(end);
     const css = readFileSync(STATEMENT_CSS, 'utf8');
     const print = css.slice(css.indexOf('@media print'));
     expect(print).toMatch(/\.statement-keep-together\s*\{[^}]*break-inside:\s*avoid/);

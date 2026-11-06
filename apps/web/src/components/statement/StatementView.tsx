@@ -362,12 +362,13 @@ function CurrencySection({
             </StatementTable>
           </Section>
           <Section title="Balances and suggested payments">
-            <Typography color="text.secondary">
-              Current all-time positions, including every recorded payment. These match Balances;
-              the period changes spending only.
-            </Typography>
-            {/* In print, the balances and their Suggested payments stay on one page (#646). */}
+            {/* In print, the balances and their Suggested payments stay on one page, with the
+                sentence that opens them, so the heading never prints apart from them (#646). */}
             <Box className="statement-keep-together">
+              <Typography color="text.secondary">
+                Current all-time positions, including every recorded payment. These match Balances;
+                the period changes spending only.
+              </Typography>
               <StatementTable
                 title="Current balances"
                 columns={[column('Member', 'text'), column('Balance', 'money')]}
