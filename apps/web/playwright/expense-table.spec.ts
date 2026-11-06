@@ -207,9 +207,11 @@ test('computers get the table, with exact positions; phones keep the cards', asy
       /^\w{3} \d{1,2} \w{3}/,
       'Seafood dinner at AnjunaFood',
       'PSPriya Shah',
-      'By percentage · 3',
+      // A split is kept whole with no-break spaces (#895); "owe" and its figure are lines apart
+      // in a stacked table, so a space parts them in the text (#942).
+      /^By[\s ]percentage[\s ]·[\s ]3$/,
       '₹3,600.00',
-      /you\s*owe₹1,440\.00/,
+      /^you\s*owe[\s ]₹1,440\.00$/,
     ]);
   }
 

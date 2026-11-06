@@ -169,6 +169,30 @@ describe('Payments', () => {
   });
 });
 
+// #944: an empty Note's "No note" is visually hidden with position: absolute. With no positioned
+// box between it and the page, it kept its place in a table wider than the screen and widened
+// the whole page: at 390 px, Maple House's Balances scrolled 478 px sideways into blank space.
+// The table's scroll box is positioned, so the hidden text stays inside it with its cell.
+it('keeps each cell’s visually hidden text inside the table’s scroll box (#944)', () => {
+  const { html } = render({ status: 'ready', payments });
+  const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)]
+    .map(([, rules]) => rules)
+    .join('');
+  const ownRule = (tag: string) => {
+    const hash = /\bclass="[^"]*\b(css-[\w-]+)/.exec(tag)?.[1];
+    return new RegExp(`(?:^|\\})\\.${hash}\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+  };
+  const box = /<div\b[^>]*aria-label="Payments table"[^>]*>/.exec(html)![0];
+  const inside = html.slice(html.indexOf(box));
+  // The hidden words are there, absolutely positioned.
+  const hidden = [...inside.matchAll(/(<span\b[^>]*>)(No note|Not known)<\/span>/g)];
+  expect(hidden.map(([, , words]) => words)).toEqual(['No note', 'No note', 'Not known']);
+  for (const [, tag] of hidden) expect(ownRule(tag)).toContain('position:absolute');
+  // And the scroll box holds them.
+  expect(ownRule(box)).toContain('overflow-x:auto');
+  expect(ownRule(box)).toContain('position:relative');
+});
+
 describe('a payment that cleared a Debt in another currency (#727)', () => {
   it('shows the amount cleared, then what was paid and at what rate', () => {
     const inRupees: PaymentRead = {

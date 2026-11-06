@@ -48,6 +48,8 @@ vi.mock('swr', async (original) => {
 });
 
 const { default: ExpenseTable, expenseDayLabel } = await import('./ExpenseTable');
+const { chooseExpenseTableLayout } = await import('./expense-table-layout');
+type ExpenseTableLayout = import('./expense-table-layout').ExpenseTableLayout;
 const { default: ExpenseCard } = await import('./ExpenseCard');
 const { default: ExpenseDetails } = await import('./ExpenseDetails');
 const { default: ExpenseListView } = await import('./ExpenseListView');
@@ -305,6 +307,248 @@ describe('the Expense table', () => {
     expect(open).not.toMatch(/colspan/i);
     expect(rows(open)).toHaveLength(4);
     expect(controlsInsideButtons(open)).toEqual([]);
+  });
+});
+
+// #942: beside the side panel at 1280 px, the table needed 665 px in a 626 px card with Priya
+// renamed "Priyamvada Venkataraghavan-Subramaniam", and 673 px with two Expenses of
+// CHF 10,000,000.00, so the You column went behind a scroller and every figure in it was cut. A
+// name already wraps between its words and after a hyphen, and an amount and a split stay whole;
+// so in a narrow table the Date puts its weekday above the day and Paid by the initials above the
+// name, as You puts "lent" or "owe" above its figure (#900). Wide, each keeps one line.
+describe('the Expense table beside the side panel (#942)', () => {
+  const LONG = { ...PRIYA, name: 'Priyamvada Venkataraghavan-Subramaniam' };
+  const wide = [
+    expense(1, 'Monthly staples — rice, dal, oil', 'Groceries', LONG, [
+      [ALEX, 62150],
+      [SAM, 62150],
+      [LONG, 62150],
+    ]),
+    expense(
+      2,
+      'Security deposit',
+      'Housing',
+      SAM,
+      [
+        [ALEX, 500000000],
+        [SAM, 500000000],
+      ],
+      { currency: 'CHF' },
+    ),
+  ];
+  const html = render(
+    createElement(ExpenseTable, {
+      expenses: wide,
+      userId: ALEX._id,
+      recurringExpensesEnabled: false,
+      label: 'Expenses, September 2026',
+      caption: 'Expenses in September 2026, newest first.',
+      openId: null,
+      onToggle: vi.fn(),
+      panelId: 'expense-panel',
+    }),
+  );
+  const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)]
+    .map(([, rules]) => rules)
+    .join('');
+  const hashOf = (tag: string) => /\bclass="[^"]*\b(css-[\w-]+)/.exec(tag)?.[1] ?? 'none';
+  /** An element's own declarations, wherever the table is. */
+  const own = (tag: string) =>
+    new RegExp(`(?:^|\\})\\.${hashOf(tag)}\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+  /** An element's declarations under a selector on something around it, joined. */
+  const within = (around: string, tag: string) =>
+    [
+      ...css.matchAll(
+        new RegExp(`(?<=^|\\})${around} \\.${hashOf(tag)}((?::[\\w-]+)*)\\{([^}]*)\\}`, 'g'),
+      ),
+    ]
+      .map(([, pseudo, rules]) => (pseudo ? `${pseudo}{${rules}}` : rules))
+      .join(';');
+  /**
+   * An element's declarations in a stacked table, as beside the side panel at 1280: measured,
+   * the table says so in its `data-layout`, "stacked", or "tight" (stacked, closer together).
+   */
+  const narrow = (tag: string) =>
+    within('\\[data-layout\\]:not\\(\\[data-layout="inline"\\]\\)', tag);
+  /** An element's declarations in a table narrower than 760 px, whatever its layout (#900). */
+  const under760 = (tag: string) =>
+    new RegExp(
+      `@container expense-table \\(max-width: ?759\\.98px\\)\\{\\.${hashOf(tag)}\\{([^}]*)\\}\\}`,
+    ).exec(css)?.[1] ?? '';
+  /** An element's declarations in a tight table. */
+  const tight = (tag: string) => within('\\[data-layout="tight"\\]', tag);
+  /** An element's declarations once the table is scrolled from its start. */
+  const scrolled = (tag: string) => within('\\[data-scrolled\\]', tag);
+  const tableTag = /<table\b[^>]*>/.exec(html)![0];
+  const scrollBox = /<div\b[^>]*>(?=(?:<style[^>]*>[^<]*<\/style>)*<table)/.exec(html)![0];
+  const cells = [...html.matchAll(/<tr\b[^>]*data-expense-id[^>]*>([\s\S]*?)<\/tr>/g)].map(
+    ([, row]) =>
+      [...row.matchAll(/(<td\b[^>]*>)([\s\S]*?)<\/td>/g)].map(([, td, inner]) => ({ td, inner })),
+  );
+
+  it('reads every row as before: the whole date, the whole name, each amount whole', () => {
+    expect(rows(html)).toEqual([
+      [
+        expenseDayLabel(wide[0].date),
+        'Monthly staples — rice, dal, oil Groceries',
+        'PV Priyamvada Venkataraghavan-Subramaniam',
+        'Equally · 3',
+        '₹1,864.50',
+        'you owe ₹621.50',
+      ],
+      [
+        expenseDayLabel(wide[1].date),
+        'Security deposit Housing',
+        'SC Sam Chen',
+        'Equally · 2',
+        'CHF 10,000,000.00',
+        'you owe CHF 5,000,000.00',
+      ],
+    ]);
+    for (const row of cells) expect(own(row[4].td)).toContain('white-space:nowrap');
+  });
+
+  it('puts the weekday above the day in a narrow table, and keeps them on one line in a wide one', () => {
+    for (const [date] of cells) {
+      const parts = [...date.inner.matchAll(/<span\b[^>]*>/g)].map(([tag]) => tag);
+      expect(parts).toHaveLength(2);
+      for (const part of parts) {
+        expect(narrow(part)).toContain('display:block');
+        expect(own(part)).not.toContain('display:block');
+      }
+      expect(own(date.td)).toContain('white-space:nowrap');
+    }
+  });
+
+  it('puts the payer’s initials above their name in a narrow table, the name wrapping only between words', () => {
+    for (const row of cells) {
+      const label = /<span\b[^>]*>/.exec(row[2].inner)![0];
+      expect(own(label)).toContain('display:inline-flex');
+      expect(narrow(label)).toContain('flex-direction:column');
+      expect(narrow(label)).toContain('align-items:flex-start');
+      // Never inside a word, and free to wrap between words and after a hyphen.
+      for (const rules of [own(label), narrow(label), own(row[2].td)]) {
+        expect(rules).not.toMatch(/white-space:nowrap|overflow-wrap:anywhere|word-break/);
+      }
+    }
+  });
+
+  // With that name and CHF 10,000,000.00 together, the table still needed 676 px of 624: Amount
+  // and You were 150 and 157 px wide, each the width of "CHF 10,000,000.00" or
+  // "CHF 5,000,000.00" on one line. In a narrow table the code goes above its figure in Amount,
+  // and beside "owe" or "lent" in You, so each figure starts a line of its own, whole.
+  it('puts a currency code above its figure in a narrow table, the figure whole on its own line', () => {
+    /** The figure's own element in a cell, and what the cell reads before it. */
+    const figureIn = (inner: string, figure: string) => {
+      const match = new RegExp(`(<span\\b[^>]*>)${figure.replace(/[.$]/g, '\\$&')}</span>`).exec(
+        inner,
+      );
+      expect(match, `${figure} in its own span`).not.toBeNull();
+      return { tag: match![1], before: text(inner.slice(0, match!.index)) };
+    };
+    const [rupees, francs] = cells;
+    for (const [row, amount, position, word] of [
+      [rupees, '₹1,864.50', '₹621.50', 'you owe'],
+      [francs, '10,000,000.00', '5,000,000.00', 'you owe CHF'],
+    ] as const) {
+      const shown = figureIn(row[4].inner, amount);
+      const owed = figureIn(row[5].inner, position);
+      // The code (where the currency has no symbol) is on the line above; a symbol stays.
+      expect(shown.before).toBe(amount.startsWith('₹') ? '' : 'CHF');
+      expect(owed.before).toBe(word);
+      for (const { tag } of [shown, owed]) {
+        expect(narrow(tag)).toContain('display:block');
+        expect(own(tag)).not.toContain('display:block');
+      }
+      // You's word, code and figure share no flex column any more: its figure is the block.
+      const label = /<span\b[^>]*>/.exec(row[5].inner)![0];
+      expect(narrow(label)).toContain('display:block');
+      expect(narrow(label)).not.toContain('flex-direction:column');
+      // Never broken inside: each figure's cell keeps its lines whole.
+      expect(own(row[4].td)).toContain('white-space:nowrap');
+      expect(own(label)).toContain('white-space:nowrap');
+    }
+  });
+
+  // The Designer's review: a fixed 760 px breakpoint stacked by the card's width, not by what
+  // its rows need. At 1440 a long name, a split "By percentage" and two Expenses of
+  // CHF 10,000,000.00 needed 802 px on one line in a 784 px card, so You (pinned) covered the
+  // end of Amount ("CHF 10,000,000."), though stacked they fit with 132 px to spare; and at
+  // 1280 a Group of short names, which fit as before #942 (605 px of 624), was stacked anyway.
+  // The table now measures its rows: inline (as before #942) if they fit, else stacked, else
+  // tight. Only You's "owe" above its figure (#900) still goes by the 760 px breakpoint.
+  it('stacks the Date, Paid by and Amount by what the rows need, not by the card’s width', () => {
+    const [row] = cells;
+    const stacked = [
+      ...[...row[0].inner.matchAll(/<span\b[^>]*>/g)].map(([tag]) => tag),
+      /<span\b[^>]*>/.exec(row[2].inner)![0],
+      /<span\b[^>]*>(?=₹1,864\.50<)/.exec(row[4].inner)![0],
+    ];
+    for (const tag of stacked) {
+      expect(narrow(tag)).toMatch(/display:block|flex-direction:column/);
+      expect(under760(tag)).toBe('');
+    }
+    // You's word above its figure in every table narrower than 760 px, as before #942 (#900).
+    const position = /<span\b[^>]*>/.exec(row[5].inner)![0];
+    expect(under760(position)).toContain('display:block');
+    // Until it is measured (and on the server), the table has no layout, so it is inline.
+    expect(tableTag).not.toContain('data-layout');
+    const fitting = (...fit: ExpenseTableLayout[]) =>
+      chooseExpenseTableLayout((layout) => fit.includes(layout));
+    expect(fitting('inline', 'stacked', 'tight')).toBe('inline');
+    expect(fitting('stacked', 'tight')).toBe('stacked');
+    expect(fitting('tight')).toBe('tight');
+    expect(fitting()).toBe('tight');
+    const tried: string[] = [];
+    chooseExpenseTableLayout((layout) => (tried.push(layout), false));
+    expect(tried).toEqual(['inline', 'stacked', 'tight']);
+  });
+
+  // The Designer's review: stacked, Paid by took only what its longest word needs, Description
+  // took the rest, and "Sam Chen" went on two lines under the initials, so an everyday row had
+  // three lines where it had two ("SC" beside "Sam / Chen"). Stacked, Paid by is now at least
+  // as wide as a two-word name; a longer name wraps between its words as before.
+  it('keeps a short name on one line under the initials in a stacked table', () => {
+    for (const row of cells) {
+      const label = /<span\b[^>]*>/.exec(row[2].inner)![0];
+      const floor = /(?:^|;)min-width:([\d.]+)px/.exec(narrow(label));
+      expect(floor, 'a minimum width when stacked').not.toBeNull();
+      expect(Number(floor![1])).toBeGreaterThanOrEqual(88);
+      // Not wider than the long name's longest part needs, so its table fits as before.
+      expect(Number(floor![1])).toBeLessThanOrEqual(110);
+      expect(own(label)).not.toMatch(/min-width/);
+    }
+  });
+
+  // With a split "By percentage" too, even the stacked columns need 652 px of 624 at 1280. The
+  // pinned You then covered the end of Amount at rest ("CHF 10,000,000.0", header "Amou"). Tight,
+  // the columns are closer together, so they fit; where even that can't fit, the table scrolls
+  // with nothing pinned at rest, and You stays at the card's edge only once it is scrolled.
+  it('pins You only once a table that can’t fit is scrolled, so it covers nothing at rest', () => {
+    const header = /<th\b[^>]*>(?=You<\/th>)/.exec(html)![0];
+    for (const tag of [header, ...cells.map((row) => row[5].td)]) {
+      expect(own(tag)).not.toMatch(/position:sticky/);
+      expect(scrolled(tag)).toMatch(/position:sticky/);
+      expect(scrolled(tag)).toContain('right:0');
+      expect(scrolled(tag)).toContain('background-color:#ffffff');
+      expect(scrolled(tag)).not.toMatch(/(?:^|;)(?:min-|max-)?width:|(?:^|;)display:|margin/);
+    }
+    expect(scrollBox).not.toContain('data-scrolled');
+    // An edge while there is more of the table to its right, where the browser can tell.
+    expect(own(scrollBox)).toContain('container-type:scroll-state');
+    expect(css).toMatch(
+      new RegExp(
+        `@container expense-table-scroll scroll-state\\(scrollable: ?right\\)\\{\\[data-scrolled\\] \\.${hashOf(header)}\\{box-shadow:inset 1px 0 0 `,
+      ),
+    );
+  });
+
+  it('puts the columns closer together in a tight table, the card’s edges too', () => {
+    for (const tag of [...cells[0].map(({ td }) => td)]) {
+      expect(tight(tag)).toMatch(/padding-left:3px;padding-right:3px/);
+    }
+    expect(tight(cells[0][0].td)).toContain(':first-of-type{padding-left:12px');
+    expect(tight(cells[0][5].td)).toContain(':last-of-type{padding-right:12px');
   });
 });
 

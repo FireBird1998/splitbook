@@ -59,11 +59,14 @@ export function PositionText({
   position,
   currency,
   sx,
+  figureSx,
 }: {
   position: ExpensePosition | null;
   currency: string;
   /** Styles for the word and figure together, such as the Expenses table's stacking (#900). */
   sx?: SxProps<Theme>;
+  /** Styles for the figure apart from the word and any currency code (#942); see MoneyText. */
+  figureSx?: SxProps<Theme>;
 }) {
   if (!position)
     return (
@@ -95,18 +98,40 @@ export function PositionText({
         </Box>
         {position.kind}
       </Box>
-      <MoneyText amount={position.amount} currency={currency} color="inherit" variant="body2" />
+      {/* In a row, the gap parts them; as lines (with figureSx), this space does (#942). */}
+      {figureSx !== undefined && ' '}
+      <MoneyText
+        amount={position.amount}
+        currency={currency}
+        color="inherit"
+        variant="body2"
+        figureSx={figureSx}
+      />
     </Box>
   );
 }
 
 /**
  * Who paid, with their initials (design canvas `.gx-payer`): "You", a name or "2 people". A
- * long name may wrap beside the initials when the table sits beside the side panel (#311).
+ * long name may wrap beside the initials, between its words and after a hyphen (#311); the
+ * Expenses table may put the initials above the name instead (#942).
  */
-export function PayerLabel({ payer }: { payer: ExpensePayerSummary }) {
+export function PayerLabel({
+  payer,
+  sx,
+}: {
+  payer: ExpensePayerSummary;
+  /** Styles for the initials and name together, such as the Expenses table's stacking (#942). */
+  sx?: SxProps<Theme>;
+}) {
   return (
-    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+    <Box
+      component="span"
+      sx={[
+        { display: 'inline-flex', alignItems: 'center', gap: 1 },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
+    >
       <Avatar
         aria-hidden
         sx={{

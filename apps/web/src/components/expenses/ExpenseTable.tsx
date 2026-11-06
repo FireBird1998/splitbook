@@ -1,9 +1,10 @@
 'use client';
 import PreparedBy from './PreparedBy';
 
-import { Fragment } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
+import type { Theme } from '@mui/material/styles';
 import { format } from 'date-fns';
 import MoneyText from '@/components/common/MoneyText';
 import { visuallyHidden } from '@/components/common/visually-hidden';
@@ -16,6 +17,7 @@ import {
 } from '@splitbook/shared/expense-row';
 import { ExpenseTag, PayerLabel, PositionText, RepeatsIcon } from './expense-row-parts';
 import TripDayRow from './TripDayRow';
+import { useExpenseTableLayout } from './expense-table-layout';
 import { useExpenseTableKeys } from './expense-table-keys';
 import type { ExpenseSelection } from './expense-selection';
 import type { TripDayHeading } from './expense-trip-days';
@@ -75,7 +77,10 @@ interface ExpenseTableProps {
 /**
  * A cell: 5 px each side, so 10 px between columns. Beside the side panel on a 1280 px screen
  * the demo Trip's columns then fit with room to spare on macOS and Linux alike, whose fonts
- * draw a little wider (#900).
+ * draw a little wider (#900). In a tight table (`useExpenseTableLayout`), 3 px each side and
+ * 12 px at the card's edges: where even the stacked columns need more than the card, as a long
+ * name, a split "By percentage" and CHF 10,000,000.00 all at once did beside the side panel at
+ * 1280 (652 px of 624), they then fit, and nothing is cut (#942).
  */
 const cell = {
   px: '5px',
@@ -86,6 +91,12 @@ const cell = {
   verticalAlign: 'middle',
   '&:first-of-type': { pl: '20px' },
   '&:last-of-type': { pr: '20px' },
+  // Tight: after the rules it narrows, so it wins at the card's edges too.
+  '[data-layout="tight"] &': {
+    px: '3px',
+    '&:first-of-type': { pl: '12px' },
+    '&:last-of-type': { pr: '12px' },
+  },
 } as const;
 
 /**
@@ -93,7 +104,13 @@ const cell = {
  * of padding (a 28 px target), the box 20 px in from the card's edge like the day headings'
  * words (#900).
  */
-const checkboxCell = { ...cell, width: 16 + 28, pr: 0, '&:first-of-type': { pl: '16px' } } as const;
+const checkboxCell = {
+  ...cell,
+  width: 16 + 28,
+  pr: 0,
+  '&:first-of-type': { pl: '16px' },
+  '[data-layout="tight"] &': { '&:first-of-type': { pl: '8px' } },
+} as const;
 const checkboxSx = { p: '4px' } as const;
 
 /**
@@ -101,7 +118,83 @@ const checkboxSx = { p: '4px' } as const;
  * column puts "lent" or "owe" above its figure, so every column fits and no figure is cut
  * (#900). Wider, they share a line. Each row of a table reads the same way.
  */
-const STACKED_POSITIONS = '@container expense-table (max-width: 759.98px)';
+const NARROW = '@container expense-table (max-width: 759.98px)';
+
+/**
+ * Where the table's rows don't fit its card even so (measured, `useExpenseTableLayout`), as with
+ * a long name beside the side panel on a 1280 px screen, four cells put their parts one above
+ * the other, so every column fits and no figure is cut: the You column puts "lent" or "owe"
+ * above its figure at any width, the Date its weekday above the day, Paid by the payer's
+ * initials above their name, and Amount and You a currency code above its figure, "CHF" over
+ * "10,000,000.00" and "owe CHF" over "5,000,000.00" (#942). A symbol stays with its figure
+ * ("₹621.50"). Where the rows fit, each shares a line, as before. Each row of a table reads the
+ * same way, and each cell reads as before: "Wed 30 Sep", "CHF 10,000,000.00".
+ *
+ * These gave way because nothing else can: a split ("By percentage · 2"), a figure and each word
+ * of a name stay whole, and a long name already wraps between its words and after a hyphen, as
+ * on the statement (#928). Beside its initials, "Priyamvada Venkataraghavan-Subramaniam" made
+ * Paid by 161 px and the table 665 px in a 626 px card; two Expenses of CHF 10,000,000.00 made
+ * it 673 px, as Amount and You were each as wide as "CHF 10,000,000.00"; both together, 713 px.
+ * A fixed breakpoint (760 px) stacked a Group of short names that fit, and left wide a table
+ * that didn't (802 px of 784 at 1440), so the layout is measured instead.
+ */
+const STACKED = '[data-layout]:not([data-layout="inline"]) &';
+
+/** One part of a stacked cell: on its own line in a stacked table, in line otherwise. */
+const stackedLine = { [STACKED]: { display: 'block' } } as const;
+
+/** One part of a You cell: on its own line in a narrow table (#900) or a stacked one (#942). */
+const positionLine = { [NARROW]: { display: 'block' }, [STACKED]: { display: 'block' } } as const;
+
+/**
+ * The table's scroll box, named so a cell can ask whether there is more of the table to its
+ * right (#942).
+ */
+const SCROLL_BOX = 'expense-table-scroll';
+
+/**
+ * The You column: where even a tight table needs more than its card, the table scrolls, and once
+ * it is scrolled from its start You stays at the card's right edge with its figures whole while
+ * the other columns pass under it (#942). At rest nothing is pinned, so You covers no figure of
+ * Amount, as it did with a long name, a split "By percentage" and CHF 10,000,000.00 at once
+ * ("CHF 10,000,000.0"). An edge shows while a column is under it, where the browser can tell
+ * (scroll-state queries). A table that fits never scrolls, so it lays out exactly as before.
+ */
+const pinnedYou = {
+  '[data-scrolled] &': {
+    position: 'sticky',
+    right: 0,
+    zIndex: 1,
+    bgcolor: 'background.paper',
+    [`@container ${SCROLL_BOX} scroll-state(scrollable: right)`]: {
+      boxShadow: (theme: Theme) => `inset 1px 0 0 ${theme.palette.divider}`,
+    },
+  },
+} as const;
+
+/**
+ * Paid by, stacked: at least as wide as a two-word name ("Sam Chen" is 63 px, "Alex Rivera"
+ * 70 px, with room for wider fonts), so it sits on one line under the initials and a row keeps
+ * two lines, as beside them. Without it Description took the room, and "Sam" and "Chen" took a
+ * line each (#942). A longer name is wider than this anyway ("Venkataraghavan-" is 127 px), so
+ * its table needs no more room.
+ */
+const PAYER_MIN_WIDTH = 92;
+
+/** "Wed 30 Sep": in a narrow table "Wed" above "30 Sep", still read as one date (#942). */
+function DayLabel({ label }: { label: string }) {
+  const [weekday, ...day] = label.split(' ');
+  return (
+    <>
+      <Box component="span" sx={stackedLine}>
+        {weekday}
+      </Box>{' '}
+      <Box component="span" sx={stackedLine}>
+        {day.join(' ')}
+      </Box>
+    </>
+  );
+}
 
 /**
  * A Group's Expenses on a computer (#310, design canvas "GroupExpenses"): the date, the
@@ -131,6 +224,10 @@ export default function ExpenseTable({
   const selecting = ticked.length > 0;
   // A click on the checkbox ticks it, and never opens the row too.
   const keepToCheckbox = (event: { stopPropagation: () => void }) => event.stopPropagation();
+  const scrollBox = useRef<HTMLDivElement>(null);
+  const table = useRef<HTMLTableElement>(null);
+  useExpenseTableLayout(scrollBox, table, expenses);
+  const [scrolled, setScrolled] = useState(false);
   return (
     <Box
       component="section"
@@ -145,15 +242,29 @@ export default function ExpenseTable({
         container: 'expense-table / inline-size',
       }}
     >
-      <Box sx={{ overflowX: 'auto' }}>
+      {/* Positioned, so the cells' visually hidden "you" is clipped here with its cell and
+          never widens the page (#944). */}
+      <Box
+        ref={scrollBox}
+        data-scrolled={scrolled || undefined}
+        onScroll={(event) => setScrolled(event.currentTarget.scrollLeft > 0)}
+        sx={{
+          position: 'relative',
+          overflowX: 'auto',
+          containerName: SCROLL_BOX,
+          containerType: 'scroll-state',
+        }}
+      >
         <Box
           component="table"
+          ref={table}
           onKeyDown={onKeyDown}
           sx={{
             width: '100%',
             // Beside the side panel (#311) a 1280 px screen leaves the table about 630 px, so
-            // who paid and the split may wrap there, and the You column stacks (#900); the
-            // dates and money never wrap. Narrower still, the table scrolls inside its card.
+            // who paid may wrap there, and where the rows don't fit on one line the Date, Paid by,
+            // Amount and You columns stack (#900, #942); money and splits never wrap. Where even
+            // a tight table doesn't fit, it scrolls inside its card.
             minWidth: 600,
             borderCollapse: 'collapse',
             fontSize: '0.875rem',
@@ -198,6 +309,7 @@ export default function ExpenseTable({
                     fontWeight: 600,
                     color: 'text.secondary',
                     whiteSpace: 'nowrap',
+                    ...(column === 'You' ? pinnedYou : {}),
                   }}
                 >
                   {column}
@@ -255,7 +367,7 @@ export default function ExpenseTable({
                         color: 'text.secondary',
                       }}
                     >
-                      {expenseDayLabel(expense.date, now)}
+                      <DayLabel label={expenseDayLabel(expense.date, now)} />
                     </Box>
                     <Box component="td" sx={cell}>
                       {/* The row's click opens it; the button is how a keyboard does. */}
@@ -299,7 +411,17 @@ export default function ExpenseTable({
                       </Box>
                     </Box>
                     <Box component="td" sx={cell}>
-                      <PayerLabel payer={expensePayerSummary(expense, userId)} />
+                      <PayerLabel
+                        payer={expensePayerSummary(expense, userId)}
+                        sx={{
+                          [STACKED]: {
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            gap: '2px',
+                            minWidth: PAYER_MIN_WIDTH,
+                          },
+                        }}
+                      />
                       <PreparedBy value={expense.preparedBy} inline />
                     </Box>
                     <Box
@@ -314,19 +436,15 @@ export default function ExpenseTable({
                         currency={expense.currency}
                         tone="neutral"
                         variant="body2"
+                        figureSx={stackedLine}
                       />
                     </Box>
-                    <Box component="td" sx={{ ...cell, textAlign: 'right' }}>
+                    <Box component="td" sx={{ ...cell, textAlign: 'right', ...pinnedYou }}>
                       <PositionText
                         position={listedExpensePosition(expense, userId)}
                         currency={expense.currency}
-                        sx={{
-                          [STACKED_POSITIONS]: {
-                            flexDirection: 'column',
-                            alignItems: 'flex-end',
-                            gap: 0,
-                          },
-                        }}
+                        sx={positionLine}
+                        figureSx={positionLine}
                       />
                     </Box>
                   </Box>

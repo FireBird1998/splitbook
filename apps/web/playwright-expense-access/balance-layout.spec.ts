@@ -70,3 +70,32 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await openAddExpense(page);
   });
 }
+
+// #944: at 390 px an empty Note's visually hidden "No note" sat outside the Payments table's
+// scroll box, where the table is wider than the screen, and widened the whole page: Maple House's
+// Balances scrolled 478 px sideways into blank space. Only the table scrolls sideways.
+test('phone: a payment without a note never makes the Balances page scroll sideways (#944)', async ({
+  page,
+  ledger,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await dataOf(
+    await ledger.priya.post(`/api/groups/${ledger.groupB}/settlements`, {
+      data: { paidTo: DEMO_PERSONA_IDS.sam, amount: 25, currency: 'INR' },
+    }),
+    201,
+  );
+  await page.context().addCookies((await ledger.sam.storageState()).cookies);
+  await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${ledger.groupB}?tab=balances`);
+  const payments = page.getByRole('region', { name: 'Payments table', exact: true });
+  await expect(payments.getByText('No note', { exact: true }).first()).toBeAttached();
+  // The table is wider than the screen, and scrolls inside its own box.
+  expect(await payments.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
+    true,
+  );
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+  ).toBeLessThanOrEqual(0);
+  await page.mouse.wheel(400, 0);
+  expect(await page.evaluate(() => window.scrollX)).toBe(0);
+});

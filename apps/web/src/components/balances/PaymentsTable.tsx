@@ -135,6 +135,11 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
           aria-label="Payments table"
           tabIndex={0}
           sx={{
+            // Positioned, so each cell's visually hidden text ("No note", "Not known", " to ")
+            // is clipped here with its cell. Unpositioned, an empty Note's "No note" kept its
+            // place in a table wider than the screen and widened the whole page: at 390 px,
+            // Maple House's Balances scrolled 478 px sideways (#944).
+            position: 'relative',
             overflowX: 'auto',
             pb: 1,
             borderBottomLeftRadius: '16px',

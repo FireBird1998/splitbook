@@ -391,8 +391,21 @@ link, `/groups/[id]?search=…`, fills the search.
   side panel, #311), and no control sits inside another.
 - Every column of the table shows whole (#900). Where the table is narrower
   than 760 px, as beside the side panel on a 1280 px screen, the You column puts
-  "lent" or "owe" above its figure; narrower than its columns need, it scrolls
-  inside its card. A money column is never cut.
+  "lent" or "owe" above its figure. Where its rows still don't fit (measured,
+  not a breakpoint: a long name, a split "By percentage", CHF 10,000,000.00),
+  the table is stacked at any width: the Date puts its weekday above the day,
+  Paid by the payer's initials above their name (at least 92 px wide, so a
+  two-word name stays on one line), and Amount and You a currency code above
+  its figure ("CHF" over "10,000,000.00", "owe CHF" over "5,000,000.00"; a
+  symbol, as in "₹621.50", stays with its figure) (#942). Where even that
+  doesn't fit, the columns move closer together (6 px apart, 12 px from the
+  card's edges). A long name wraps between its words and after a hyphen, never
+  inside a word, and a figure and a split stay whole; each cell still reads as
+  one phrase. A table that fits looks as it did before #942. Narrower than even
+  its tight columns, it scrolls inside its card; at rest nothing is pinned, so
+  no column covers another, and once scrolled You stays at the card's right
+  edge while the other columns pass under it, with an edge where the browser
+  can tell (scroll-state queries). A figure is never broken or covered.
 - Positions ("you lent ₹833.00", "you owe ₹953.33") come from the shared
   `expense-row` module over the stored minor units, in the status colours,
   which reach 4.5:1 on every surface a row has, light and dark.
@@ -525,6 +538,9 @@ in a `HomeSlot` of its width.
   focus back on the row, as Activity's payment rows do (#852)
 - A currency tab is never wider than its row; at large text its amount wraps under the words,
   whole (#854)
+- A table that scrolls sideways does so in a box with `position: relative`, so the visually
+  hidden text in its cells (`position: absolute`) stays in that box. Unpositioned, a hidden
+  "No note" in the Payments table widened the whole Balances page at 390 px (#944)
 - Screen reader labels on icon-only buttons
 
 Enforced by `playwright/theme-a11y.spec.ts`, which runs **axe-core** across four

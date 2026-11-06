@@ -1,5 +1,7 @@
 'use client';
 
+import Box from '@mui/material/Box';
+import type { SxProps, Theme } from '@mui/material/styles';
 import Typography, { type TypographyProps } from '@mui/material/Typography';
 import {
   formatCurrencyWithMinus,
@@ -18,6 +20,21 @@ interface MoneyTextProps extends Omit<TypographyProps, 'children'> {
   signed?: boolean;
   /** Defaults to 'auto' (sign-based). Pass 'neutral' to opt out of coloring. */
   tone?: MoneyTone | 'auto';
+  /**
+   * Styles for the figure on its own. Given, the figure is an element apart from a currency code
+   * written before it ("CHF" in "CHF 10,000,000.00"), so a narrow table can put the code above
+   * it (#942); a symbol ("₹621.50") stays with its figure. Read aloud, it is one amount still.
+   */
+  figureSx?: SxProps<Theme>;
+}
+
+/**
+ * "CHF 10,000,000.00" as its code and its figure; null for "₹621.50", whose symbol is part of
+ * its figure, and for a signed amount, whose sign comes before the code.
+ */
+export function codeAndFigure(text: string): { code: string; figure: string } | null {
+  const match = /^([A-Z]{3})[ \u00a0](\d[\d,.]*)$/.exec(text);
+  return match ? { code: match[1]!, figure: match[2]! } : null;
 }
 
 const TONE_COLORS: Record<MoneyTone, string> = {
@@ -38,12 +55,14 @@ export default function MoneyText({
   variant = 'body2',
   color,
   sx,
+  figureSx,
   ...props
 }: MoneyTextProps) {
   const resolvedTone = tone === 'auto' ? getMoneyTone(amount) : tone;
   const text = signed
     ? formatSignedCurrency(amount, currency)
     : formatCurrencyWithMinus(amount, currency);
+  const parts = figureSx === undefined ? null : codeAndFigure(text);
 
   return (
     <Typography
@@ -56,7 +75,17 @@ export default function MoneyText({
       ]}
       {...props}
     >
-      {text}
+      {figureSx === undefined ? (
+        text
+      ) : (
+        <>
+          {/* A plain space: where the code goes above, it ends that line and is not drawn. */}
+          {parts && `${parts.code} `}
+          <Box component="span" sx={figureSx}>
+            {parts ? parts.figure : text}
+          </Box>
+        </>
+      )}
     </Typography>
   );
 }
