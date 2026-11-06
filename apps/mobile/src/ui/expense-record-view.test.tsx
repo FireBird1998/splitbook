@@ -1236,6 +1236,68 @@ describe('compact Expense record, opening', () => {
     },
   );
 
+  // #939, the Designer's check of #935: at 200% on a 360 dp phone Edit sat on the "Expense" line
+  // and Back and ⋮ lower, centred on "Expense" and the Group's lines together. The bar's actions
+  // share one centre, in the skeleton the record opens over and in the record, at every size.
+  it.each([
+    [360, 2, 'Maple House'],
+    [360, 2, 'Goa Friends Trip'],
+    [412, 1, 'Maple House'],
+    [412, 1, 'Goa Friends Trip'],
+  ] as const)(
+    'puts Back, Edit and ⋮ on one line, %sdp at %s× text in %s (#939)',
+    async (width, fontScale, groupName) => {
+      setWindow({ width, fontScale });
+      const labels = ['Back to Group', 'Edit expense', 'Expense options'];
+      /** Each action's vertical centre, in dp from the top of the screen. */
+      const centres = () => {
+        const laid = layoutTops(
+          screen!.toJSON() as ReactTestRendererJSON,
+          fontScale,
+          width,
+          (node) => labels.includes(node.props.accessibilityLabel as string),
+        );
+        return labels.map((label) => {
+          const action = laid.find(({ node }) => node.props.accessibilityLabel === label);
+          expect(action, label).toBeDefined();
+          return action!.top + action!.height / 2;
+        });
+      };
+      const together = ([back, ...others]: number[]) => {
+        for (const centre of others) expect(Math.abs(centre - back!)).toBeLessThanOrEqual(1);
+      };
+      await act(async () => {
+        screen = create(
+          <ExpenseEditor
+            {...editor(
+              { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.bill },
+              recordOutline(listRow(ids.bill), alex.id),
+            ).props}
+            groupName={groupName}
+            onClose={() => undefined}
+          />,
+        );
+      });
+      const skeleton = centres();
+      together(skeleton);
+      act(() => screen?.unmount());
+      const ui = await render(open(ids.bill));
+      const shown = ui.controller.getSnapshot().expense;
+      const named = {
+        ...shown,
+        context: { ...shown.context!, group: { ...shown.context!.group, name: groupName } },
+      };
+      act(() => screen?.unmount());
+      await act(async () => {
+        screen = create(<ExpenseEditor {...editor(named).props} onClose={() => undefined} />);
+      });
+      expect(text(screen!.root)).toContain(groupName);
+      const record = centres();
+      together(record);
+      expect(record).toEqual(skeleton);
+    },
+  );
+
   // #925, the Designer's release check: at 200% on a 360 dp phone, Who owes what clipped "Paid
   // CHF 10,000,000.(" at the card's edge. The amount goes under its label, in the record and in
   // the skeleton it opens over, whose pairs are the record's texts.

@@ -304,11 +304,15 @@ export function rowStarts(
 }
 
 /**
- * How far down its tree each node that `match` picks starts, in dp from the top of `node`, as
- * `layoutHeight` lays it out `width` wide at this text size: columns stacked with their padding,
- * borders, margins and gaps, and a scroll view's content from its content container's padding.
- * A row's children start at its top. Absolutely positioned children take no room, as there, and
- * aren't measured. Enough to see that a notice arriving moves nothing else on a screen (#932).
+ * How far down its tree each node that `match` picks starts, in dp from the top of `node`, and
+ * how tall it is, as `layoutHeight` lays it out `width` wide at this text size: columns stacked
+ * with their padding, borders, margins and gaps, and a scroll view's content from its content
+ * container's padding. In a row that doesn't wrap, each child starts where its `alignSelf`, or
+ * the row's `alignItems`, puts it: at the row's top, its centre or its end. A wrapping row's
+ * children start at its top. Each child lays out as wide as `layoutHeight` gave it. Absolutely
+ * positioned children take no room, as there, and aren't measured. Enough to see that a notice
+ * arriving moves nothing else on a screen (#932), and that a top bar's actions share a line
+ * (#939).
  */
 export function layoutTops(
   node: Node | null,
@@ -316,9 +320,12 @@ export function layoutTops(
   width: number,
   match: (node: Node) => boolean,
 ) {
-  const found: { node: Node; top: number }[] = [];
+  const found: { node: Node; top: number; height: number }[] = [];
+  // The width each box lays out in, as `layoutHeight` shares a row out among its children.
+  const widths = new Map<Node, number>();
+  layoutHeight(node, fontScale, width, { node: (each, room) => widths.set(each, room) });
   const walk = (each: Node, top: number, room: number) => {
-    if (match(each)) found.push({ node: each, top });
+    if (match(each)) found.push({ node: each, top, height: layoutHeight(each, fontScale, room) });
     if (each.type === 'Text' || each.type === 'AnimatedText') return;
     const style = flatten(each.props.style);
     if (style.display === 'none') return;
@@ -331,16 +338,32 @@ export function layoutTops(
       edge(style, 'Top', 'padding') +
       number(style.borderTopWidth ?? style.borderWidth) +
       edge(content, 'Top', 'padding');
+    /** The height a row's children align in: the row's own, inside its padding and borders. */
+    const across =
+      row && style.flexWrap !== 'wrap'
+        ? layoutHeight(each, fontScale, room) -
+          edge(style, 'Top', 'padding') -
+          edge(style, 'Bottom', 'padding') -
+          vertical(style)
+        : 0;
     inFlow(each).forEach((child, index) => {
       const own = flatten(child.props.style);
-      const childRoom = childWidth(child, row, inner, fontScale)!;
+      const childRoom = widths.get(child) ?? childWidth(child, row, inner, fontScale)!;
+      const height = layoutHeight(child, fontScale, childRoom);
+      const outer = height + edge(own, 'Top', 'margin') + edge(own, 'Bottom', 'margin');
+      const align =
+        own.alignSelf === undefined || own.alignSelf === 'auto' ? style.alignItems : own.alignSelf;
+      const offset =
+        across === 0
+          ? 0
+          : align === 'center'
+            ? (across - outer) / 2
+            : align === 'flex-end'
+              ? across - outer
+              : 0;
       if (!row && index > 0) y += gap;
-      walk(child, y + edge(own, 'Top', 'margin'), childRoom);
-      if (!row)
-        y +=
-          layoutHeight(child, fontScale, childRoom) +
-          edge(own, 'Top', 'margin') +
-          edge(own, 'Bottom', 'margin');
+      walk(child, y + offset + edge(own, 'Top', 'margin'), childRoom);
+      if (!row) y += outer;
     });
   };
   if (node) walk(node, 0, width);

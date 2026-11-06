@@ -568,7 +568,11 @@ describe('opening an Expense: what is already known shows at once (loading-state
       (props, type) =>
         type === 'View' && props.style !== undefined && flatten(props.style).minHeight === 64,
     )[0]!;
-    const parts = (bar.children ?? []).filter(
+    // The bar holds one row: back, the title and the Group, the status and the actions (#939).
+    const [row] = (bar.children ?? []).filter(
+      (child): child is ReactTestRendererJSON => typeof child !== 'string',
+    );
+    const parts = (row!.children ?? []).filter(
       (child): child is ReactTestRendererJSON => typeof child !== 'string',
     );
     const titles = parts.find((part) => flatten(part.props.style).flex === 1)!;
@@ -586,7 +590,7 @@ describe('opening an Expense: what is already known shows at once (loading-state
         width -
         Number(style.paddingLeft) -
         Number(style.paddingRight) -
-        Number(style.gap) * (parts.length - 1) -
+        Number(flatten(row!.props.style).gap) * (parts.length - 1) -
         parts
           .filter((part) => part !== titles)
           .reduce((sum, part) => sum + layoutWidth(part, scale, width), 0) -
