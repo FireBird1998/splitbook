@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildStatement } from './statement';
-import { buildCsvPreviews, buildStatementPreview } from './export-preview';
+import {
+  buildCsvPreviews,
+  buildStatementPreview,
+  exportPreviewSchema,
+  statementPreviewSchema,
+} from './export-preview';
 import { serializeCsv, type CsvTable } from './export-csv';
 
 /** A reply with this one file. */
@@ -65,6 +70,32 @@ describe('export preview content', () => {
     expect(period.currencies[0].spentMinor).toBe(0);
     expect(period.currencies[0].people.map((p) => p.balanceMinor)).toEqual([30, -30]);
     expect(period.currencies[0].suggestedPayments).toEqual(inr.suggestedPayments);
+  });
+
+  // #918: the preview names each Expense's Category under its Description, as the statement does.
+  it('carries each Expense’s Category with its Tag, and the reply’s schema keeps it', () => {
+    const statement = buildStatementPreview(buildStatement(group));
+    expect(statement.currencies[0].expenses[0]).toMatchObject({ category: 'food', tag: 'Meals' });
+    const reply = exportPreviewSchema.parse({
+      format: 'statement',
+      groupNames: ['Preview Trip'],
+      generatedAt: '2026-09-03T00:00:00.000Z',
+      from: null,
+      to: null,
+      timeZone: 'UTC',
+      empty: false,
+      statement,
+    });
+    if (reply.format !== 'statement') throw new Error('Expected a statement preview');
+    expect(reply.statement.currencies[0].expenses[0].category).toBe('food');
+    // An Expense without its Category is no preview.
+    const withoutCategory = { ...statement.currencies[0].expenses[0], category: undefined };
+    expect(
+      statementPreviewSchema.shape.statement.safeParse({
+        ...statement,
+        currencies: [{ ...statement.currencies[0], expenses: [withoutCategory] }],
+      }).success,
+    ).toBe(false);
   });
 
   it('CSV Text preserves the full download bytes beyond the five table rows', () => {

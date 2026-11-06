@@ -537,3 +537,29 @@ it('writes a negative figure with the app’s “−” kept to its figure, and 
   expect(page).toContain('Member Balance Alex Rivera ₹1,320.00 Sam Chen −\u2060₹1,320.00');
   expect(page).not.toMatch(/-₹/);
 });
+
+// #918: with one payer, Paid by names them and no more, since Amount beside it has the same
+// figure; with several, each payer keeps their own amount.
+it('names a single payer in Paid by without the Amount, and gives several payers each theirs (#918)', () => {
+  const shared = {
+    ...expense('e4', '2026-09-19', 'Snorkelling trip', 90000, ['entertainment', 'Fun']),
+    paidBy: [
+      { userId: ALEX, amountMinor: 60000 },
+      { userId: SAM, amountMinor: 30000 },
+    ],
+  };
+  const page = text(
+    tripHtml(
+      buildStatement(
+        { ...TRIP, expenses: [...TRIP.expenses, shared] },
+        { timeZone: 'Asia/Kolkata' },
+      ),
+    ),
+  );
+  expect(page).toContain(
+    '18 Sep 2026 Island guesthouse Food & Drink · Food Alex Rivera ₹1,200.00 Alex Rivera ₹600.00 Sam Chen ₹600.00',
+  );
+  expect(page).toContain(
+    'Snorkelling trip Entertainment · Fun Alex Rivera ₹600.00 Sam Chen ₹300.00 ₹900.00 Alex Rivera ₹450.00 Sam Chen ₹450.00',
+  );
+});

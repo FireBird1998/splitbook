@@ -155,6 +155,7 @@ it.each([
                   id: 'expense',
                   date: '2026-09-01',
                   description: 'Groceries',
+                  category: 'food',
                   tag: 'Food',
                   amountMinor: 1001,
                   paidBy: [{ userId: 'alice', amountMinor: 1001 }],
@@ -741,9 +742,10 @@ it('lays out a statement preview’s Expenses as the statement does, Tag under t
     ([, header]) => header,
   );
   expect(headers).toEqual(['Date', 'Description', 'Paid by', 'Amount', 'Share']);
-  // The Description heads its row, its Tag beneath it.
+  // The Description heads its row, "Category · Tag" beneath it (#918); the one payer is named
+  // without the Amount (#918).
   expect(text(table![1])).toContain(
-    '14 Sep 2026 Groceries Food Alice Tester ₹70.06 ₹70.06 Alice Tester ₹35.03 Bob Tester ₹35.03',
+    '14 Sep 2026 Groceries Food & Drink · Food Alice Tester ₹70.06 Alice Tester ₹35.03 Bob Tester ₹35.03',
   );
   expect(table![1]).toMatch(/<th\b[^>]*scope="row"[^>]*>Groceries</);
 });
@@ -805,4 +807,78 @@ it('keeps a wrapped amount on the right and sets each person apart (#916)', () =
   expect(
     people[0].nested.some((rule) => rule.selector.includes('+') && /margin-top:/.test(rule.body)),
   ).toBe(true);
+});
+
+// #918: the preview's Expenses read as the statement's do: "Category · Tag" under the Description,
+// and Paid by naming a single payer without repeating the Amount beside it; several payers each
+// keep their amount.
+it('names the Category with the Tag, and a single payer without the Amount, as the statement does (#918)', () => {
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(
+        buildStatement(
+          {
+            id: 'maple',
+            name: 'Maple House',
+            theme: 'home',
+            currency: 'INR',
+            members: [
+              { id: 'alice', name: 'Alice Tester' },
+              { id: 'bob', name: 'Bob Tester' },
+            ],
+            names: { alice: 'Alice Tester', bob: 'Bob Tester' },
+            tags: [],
+            expenses: [
+              {
+                id: 'e1',
+                date: '2026-09-14T00:00:00.000Z',
+                description: 'Groceries',
+                category: 'food',
+                tag: 'Weekly shop',
+                currency: 'INR',
+                amountMinor: 1800000,
+                splitMethod: 'equal',
+                paidBy: [{ userId: 'alice', amountMinor: 1800000 }],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 900000 },
+                  { userId: 'bob', amountMinor: 900000 },
+                ],
+              },
+              {
+                id: 'e2',
+                date: '2026-09-15T00:00:00.000Z',
+                description: 'Sofa',
+                category: 'housing',
+                tag: 'Furniture',
+                currency: 'INR',
+                amountMinor: 3000000,
+                splitMethod: 'equal',
+                paidBy: [
+                  { userId: 'alice', amountMinor: 2000000 },
+                  { userId: 'bob', amountMinor: 1000000 },
+                ],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 1500000 },
+                  { userId: 'bob', amountMinor: 1500000 },
+                ],
+              },
+            ],
+            settlements: [],
+          },
+          { timeZone: 'UTC' },
+        ),
+      ),
+    },
+  });
+  const table = /<table\b[^>]*aria-label="INR first Expenses"[^>]*>([\s\S]*?)<\/table>/.exec(html);
+  expect(table).not.toBeNull();
+  expect(text(table![1])).toContain(
+    '14 Sep 2026 Groceries Food & Drink · Weekly shop Alice Tester ₹18,000.00 Alice Tester ₹9,000.00 Bob Tester ₹9,000.00',
+  );
+  expect(text(table![1])).toContain(
+    '15 Sep 2026 Sofa Housing · Furniture Alice Tester ₹20,000.00 Bob Tester ₹10,000.00 ₹30,000.00',
+  );
 });
