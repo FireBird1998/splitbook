@@ -402,6 +402,10 @@ function fixture(
     hang: (path: string, stage: 'headers' | 'body') => {
       hung.set(path, stage);
     },
+    /** Its replies arrive again. */
+    unhang: (path: string) => {
+      hung.delete(path);
+    },
     writes: () => writes,
     /** Every request sent so far, as `METHOD /path`. */
     requests: () => [...requests],
@@ -870,6 +874,76 @@ describe('account-scoped offline financial views', () => {
         auth: { status: 'signed-out', user: null },
         detail: { data: null },
       });
+    });
+    /** Opens Add expense on a Group last verified 31 s ago, and lets its live check time out. */
+    async function checkTimedOut(savedGroup: boolean) {
+      const timers = manualTimer();
+      const f = fixture({ timer: timers.timer }),
+        controller = f.create();
+      await controller.signIn('alex');
+      if (savedGroup) await controller.openGroup(groupId);
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
+      f.hang(path, 'headers');
+      const before = f.requests().length;
+      const opening = controller.openExpense(groupId);
+      await vi.waitFor(() => expect(f.requests().slice(before)).toContain(`GET ${path}`));
+      if (savedGroup) await controller.updateExpenseDraft({ description: 'Dinner', amount: '12' });
+      timers.elapse(20_000);
+      await opening;
+      await vi.waitFor(() =>
+        expect(controller.getSnapshot().expense.contextCheck?.status).not.toBe('checking'),
+      );
+      return { f, controller, restore: () => clock.mockRestore() };
+    }
+    it('keeps a new Expense on its saved Group, offline as ADR 0006 has it, when its Group check times out; Retry checks it again', async () => {
+      const { f, controller, restore } = await checkTimedOut(true);
+      try {
+        // A timeout is "can't reach Splitbook": the saved Group, the offline banner, and Save
+        // waiting for a connection, with the entries kept and Retry Group check offered.
+        expect(controller.getSnapshot()).toMatchObject({
+          offline: { active: true },
+          expense: {
+            status: 'editing',
+            contextCheck: { status: 'saved', saved: true },
+            draft: { description: 'Dinner', amount: '12' },
+            message: null,
+          },
+        });
+        f.unhang(path);
+        await controller.refresh();
+        expect(controller.getSnapshot()).toMatchObject({
+          offline: { active: false },
+          expense: {
+            status: 'editing',
+            contextCheck: undefined,
+            draft: { description: 'Dinner', amount: '12' },
+            message: null,
+          },
+        });
+      } finally {
+        restore();
+      }
+    });
+    it('drops a timed-out check’s “not saved on this device” once Try again verifies the Group (#922)', async () => {
+      const { f, controller, restore } = await checkTimedOut(false);
+      try {
+        expect(controller.getSnapshot()).toMatchObject({
+          offline: { active: true },
+          expense: {
+            contextCheck: { status: 'failed' },
+            message: 'This view was not saved on this device. Connect to load it.',
+          },
+        });
+        f.unhang(path);
+        await controller.refresh();
+        // The Group is verified and the form opens: nothing still asks to connect.
+        expect(controller.getSnapshot()).toMatchObject({
+          offline: { active: false },
+          expense: { status: 'editing', contextCheck: undefined, message: null },
+        });
+      } finally {
+        restore();
+      }
     });
   });
   describe('a gateway in front of Splitbook that can’t reach it (#231)', () => {
