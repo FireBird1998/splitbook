@@ -48,6 +48,8 @@ vi.mock('swr', async (original) => {
 });
 
 const { default: ExpenseTable, expenseDayLabel } = await import('./ExpenseTable');
+const { chooseExpenseTableLayout } = await import('./expense-table-layout');
+type ExpenseTableLayout = import('./expense-table-layout').ExpenseTableLayout;
 const { default: ExpenseCard } = await import('./ExpenseCard');
 const { default: ExpenseDetails } = await import('./ExpenseDetails');
 const { default: ExpenseListView } = await import('./ExpenseListView');
@@ -353,11 +355,32 @@ describe('the Expense table beside the side panel (#942)', () => {
   /** An element's own declarations, wherever the table is. */
   const own = (tag: string) =>
     new RegExp(`(?:^|\\})\\.${hashOf(tag)}\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
-  /** An element's declarations in a table narrower than 760 px, as beside the side panel. */
+  /** An element's declarations under a selector on something around it, joined. */
+  const within = (around: string, tag: string) =>
+    [
+      ...css.matchAll(
+        new RegExp(`(?<=^|\\})${around} \\.${hashOf(tag)}((?::[\\w-]+)*)\\{([^}]*)\\}`, 'g'),
+      ),
+    ]
+      .map(([, pseudo, rules]) => (pseudo ? `${pseudo}{${rules}}` : rules))
+      .join(';');
+  /**
+   * An element's declarations in a stacked table, as beside the side panel at 1280: measured,
+   * the table says so in its `data-layout`, "stacked", or "tight" (stacked, closer together).
+   */
   const narrow = (tag: string) =>
+    within('\\[data-layout\\]:not\\(\\[data-layout="inline"\\]\\)', tag);
+  /** An element's declarations in a table narrower than 760 px, whatever its layout (#900). */
+  const under760 = (tag: string) =>
     new RegExp(
       `@container expense-table \\(max-width: ?759\\.98px\\)\\{\\.${hashOf(tag)}\\{([^}]*)\\}\\}`,
     ).exec(css)?.[1] ?? '';
+  /** An element's declarations in a tight table. */
+  const tight = (tag: string) => within('\\[data-layout="tight"\\]', tag);
+  /** An element's declarations once the table is scrolled from its start. */
+  const scrolled = (tag: string) => within('\\[data-scrolled\\]', tag);
+  const tableTag = /<table\b[^>]*>/.exec(html)![0];
+  const scrollBox = /<div\b[^>]*>(?=(?:<style[^>]*>[^<]*<\/style>)*<table)/.exec(html)![0];
   const cells = [...html.matchAll(/<tr\b[^>]*data-expense-id[^>]*>([\s\S]*?)<\/tr>/g)].map(
     ([, row]) =>
       [...row.matchAll(/(<td\b[^>]*>)([\s\S]*?)<\/td>/g)].map(([, td, inner]) => ({ td, inner })),
@@ -447,29 +470,85 @@ describe('the Expense table beside the side panel (#942)', () => {
     }
   });
 
-  // With a split "By percentage" too, the stacked columns still need 652 px of 624, so the table
-  // scrolls; You then stays at the card's right edge, on the card's colour, the other columns
-  // passing under it. At 1440 the same three need 802 px of a wide table's 784, and You was cut
-  // there, so the pin holds at every width. Sticky moves a cell only once it would pass the
-  // card's edge, so a table that fits lays out as before: the pin sets no size, no padding and
-  // no display of its own.
-  it('keeps You at the card’s right edge in a table of any width that scrolls', () => {
+  // The Designer's review: a fixed 760 px breakpoint stacked by the card's width, not by what
+  // its rows need. At 1440 a long name, a split "By percentage" and two Expenses of
+  // CHF 10,000,000.00 needed 802 px on one line in a 784 px card, so You (pinned) covered the
+  // end of Amount ("CHF 10,000,000."), though stacked they fit with 132 px to spare; and at
+  // 1280 a Group of short names, which fit as before #942 (605 px of 624), was stacked anyway.
+  // The table now measures its rows: inline (as before #942) if they fit, else stacked, else
+  // tight. Only You's "owe" above its figure (#900) still goes by the 760 px breakpoint.
+  it('stacks the Date, Paid by and Amount by what the rows need, not by the card’s width', () => {
+    const [row] = cells;
+    const stacked = [
+      ...[...row[0].inner.matchAll(/<span\b[^>]*>/g)].map(([tag]) => tag),
+      /<span\b[^>]*>/.exec(row[2].inner)![0],
+      /<span\b[^>]*>(?=₹1,864\.50<)/.exec(row[4].inner)![0],
+    ];
+    for (const tag of stacked) {
+      expect(narrow(tag)).toMatch(/display:block|flex-direction:column/);
+      expect(under760(tag)).toBe('');
+    }
+    // You's word above its figure in every table narrower than 760 px, as before #942 (#900).
+    const position = /<span\b[^>]*>/.exec(row[5].inner)![0];
+    expect(under760(position)).toContain('display:block');
+    // Until it is measured (and on the server), the table has no layout, so it is inline.
+    expect(tableTag).not.toContain('data-layout');
+    const fitting = (...fit: ExpenseTableLayout[]) =>
+      chooseExpenseTableLayout((layout) => fit.includes(layout));
+    expect(fitting('inline', 'stacked', 'tight')).toBe('inline');
+    expect(fitting('stacked', 'tight')).toBe('stacked');
+    expect(fitting('tight')).toBe('tight');
+    expect(fitting()).toBe('tight');
+    const tried: string[] = [];
+    chooseExpenseTableLayout((layout) => (tried.push(layout), false));
+    expect(tried).toEqual(['inline', 'stacked', 'tight']);
+  });
+
+  // The Designer's review: stacked, Paid by took only what its longest word needs, Description
+  // took the rest, and "Sam Chen" went on two lines under the initials, so an everyday row had
+  // three lines where it had two ("SC" beside "Sam / Chen"). Stacked, Paid by is now at least
+  // as wide as a two-word name; a longer name wraps between its words as before.
+  it('keeps a short name on one line under the initials in a stacked table', () => {
+    for (const row of cells) {
+      const label = /<span\b[^>]*>/.exec(row[2].inner)![0];
+      const floor = /(?:^|;)min-width:([\d.]+)px/.exec(narrow(label));
+      expect(floor, 'a minimum width when stacked').not.toBeNull();
+      expect(Number(floor![1])).toBeGreaterThanOrEqual(88);
+      // Not wider than the long name's longest part needs, so its table fits as before.
+      expect(Number(floor![1])).toBeLessThanOrEqual(110);
+      expect(own(label)).not.toMatch(/min-width/);
+    }
+  });
+
+  // With a split "By percentage" too, even the stacked columns need 652 px of 624 at 1280. The
+  // pinned You then covered the end of Amount at rest ("CHF 10,000,000.0", header "Amou"). Tight,
+  // the columns are closer together, so they fit; where even that can't fit, the table scrolls
+  // with nothing pinned at rest, and You stays at the card's edge only once it is scrolled.
+  it('pins You only once a table that can’t fit is scrolled, so it covers nothing at rest', () => {
     const header = /<th\b[^>]*>(?=You<\/th>)/.exec(html)![0];
     for (const tag of [header, ...cells.map((row) => row[5].td)]) {
-      expect(own(tag)).toMatch(/position:sticky/);
-      expect(own(tag)).toContain('right:0');
-      expect(own(tag)).toContain('background-color:#ffffff');
-      expect(narrow(tag)).not.toMatch(/position|right:|background-color/);
-      expect(own(tag)).not.toMatch(/(?:^|;)(?:min-|max-)?width:|(?:^|;)display:|margin/);
+      expect(own(tag)).not.toMatch(/position:sticky/);
+      expect(scrolled(tag)).toMatch(/position:sticky/);
+      expect(scrolled(tag)).toContain('right:0');
+      expect(scrolled(tag)).toContain('background-color:#ffffff');
+      expect(scrolled(tag)).not.toMatch(/(?:^|;)(?:min-|max-)?width:|(?:^|;)display:|margin/);
     }
+    expect(scrollBox).not.toContain('data-scrolled');
     // An edge while there is more of the table to its right, where the browser can tell.
-    const scrollBox = /<div\b[^>]*>(?=(?:<style[^>]*>[^<]*<\/style>)*<table)/.exec(html)![0];
     expect(own(scrollBox)).toContain('container-type:scroll-state');
     expect(css).toMatch(
       new RegExp(
-        `@container expense-table-scroll scroll-state\\(scrollable: ?right\\)\\{\\.${hashOf(header)}\\{box-shadow:inset 1px 0 0 `,
+        `@container expense-table-scroll scroll-state\\(scrollable: ?right\\)\\{\\[data-scrolled\\] \\.${hashOf(header)}\\{box-shadow:inset 1px 0 0 `,
       ),
     );
+  });
+
+  it('puts the columns closer together in a tight table, the card’s edges too', () => {
+    for (const tag of [...cells[0].map(({ td }) => td)]) {
+      expect(tight(tag)).toMatch(/padding-left:3px;padding-right:3px/);
+    }
+    expect(tight(cells[0][0].td)).toContain(':first-of-type{padding-left:12px');
+    expect(tight(cells[0][5].td)).toContain(':last-of-type{padding-right:12px');
   });
 });
 

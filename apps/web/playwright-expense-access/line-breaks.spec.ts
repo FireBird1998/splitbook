@@ -446,6 +446,67 @@ async function brokenAmounts(table: Locator) {
   return broken;
 }
 
+/**
+ * Each text in the Amount and You columns (headers too) that is covered or cut where it ends:
+ * what the page draws at its last glyph isn't its own cell, or that glyph is past the card. A
+ * pinned You once covered the end of Amount ("CHF 10,000,000.0", header "Amou") (#942).
+ */
+function coveredFigures(table: Locator) {
+  return table.evaluate((element) => {
+    const card = element.closest('section')!.getBoundingClientRect();
+    const headers = [...element.querySelectorAll('thead th')];
+    const at = (name: string) => headers.findIndex((th) => th.textContent?.trim() === name);
+    const columns = [at('Amount'), at('You')];
+    const problems: string[] = [];
+    for (const row of element.querySelectorAll('tr')) {
+      const cells = [...row.children].filter((cell) => /^T[HD]$/.test(cell.tagName));
+      for (const cell of columns.map((column) => cells[column]).filter(Boolean)) {
+        const walker = document.createTreeWalker(cell!, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const text = node.textContent!.trim();
+          // Skip what is read aloud only ("you", "nothing to settle").
+          if (!text || getComputedStyle(node.parentElement!).position === 'absolute') continue;
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          for (const box of [...range.getClientRects()].filter((rect) => rect.width > 1)) {
+            const drawn = document.elementFromPoint(box.right - 1, box.top + box.height / 2);
+            if (box.right > card.right + 0.5) problems.push(`${JSON.stringify(text)} cut`);
+            else if (!drawn || !cell!.contains(drawn))
+              problems.push(`${JSON.stringify(text)} covered`);
+          }
+        }
+      }
+    }
+    return problems;
+  });
+}
+
+/**
+ * Each Paid by drawn in more than two lines, counting the initials where they sit on a line of
+ * their own: stacked, "SC" over "Sam Chen", as beside it "SC Sam / Chen" (#942). The long name
+ * may take more.
+ */
+function tallPayers(table: Locator) {
+  return table.evaluate((element, long) => {
+    const headers = [...element.querySelectorAll('thead th')];
+    const column = headers.findIndex((th) => th.textContent?.trim() === 'Paid by');
+    const tall: string[] = [];
+    for (const row of element.querySelectorAll('tbody tr')) {
+      const cell = [...row.children].filter((child) => child.tagName === 'TD')[column];
+      const label = cell?.querySelector(':scope > span');
+      const name = [...(label?.childNodes ?? [])].find((node) => node.nodeType === Node.TEXT_NODE);
+      if (!label || !name || name.textContent === long) continue;
+      const range = document.createRange();
+      range.selectNodeContents(name);
+      const tops = new Set([...range.getClientRects()].map((box) => Math.round(box.top)));
+      const initials = label.querySelector(':scope > div')!.getBoundingClientRect();
+      const lines = tops.size + (initials.bottom <= Math.min(...tops) + 1 ? 1 : 0);
+      if (lines > 2) tall.push(`${JSON.stringify(name.textContent)} in ${lines} lines`);
+    }
+    return tall;
+  }, LONG_NAME);
+}
+
 /** How the long name is drawn: each line whole words of it, broken after a space or hyphen. */
 async function brokenName(table: Locator) {
   const words = new Set(LONG_NAME.split(/\s+|(?<=-)/));
@@ -485,7 +546,9 @@ async function brokenName(table: Locator) {
 // The name wraps only between its words and after its hyphen; each figure is whole on its own
 // line, a code such as "CHF" above it; and nothing scrolls. The long-name Group has the
 // Household's widest rows (a ₹54,000.00 rent, "By shares", "By percentage"): without the
-// narrow table's stacking it needs about 660 px.
+// table's stacking it needs about 660 px. The Designer's review: stacked, "Sam Chen" took a line
+// a word under the initials, three lines where it had two; a short name now takes two at most,
+// in the long-name Group's other rows and in a Group of short names alike.
 test('the Expenses table keeps You in its card with a long name, CHF 10,000,000.00 or both (#942)', async ({
   page,
   ledger,
@@ -539,14 +602,37 @@ test('the Expenses table keeps You in its card with a long name, CHF 10,000,000.
     tenMillion('Security deposit', priya, [alex, priya]),
     tenMillion('Renovation fund', alex, [alex, sam]),
   ]);
+  const everyday = await groupWith(ledger, 'Everyday', [
+    {
+      description: 'Monthly staples — rice, dal, oil',
+      amount: 1864.5,
+      currency: 'INR',
+      paidBy: [{ user: priya, amount: 1864.5 }],
+      splitMethod: 'equal',
+      splitBetween: [{ user: alex }, { user: sam }, { user: priya }],
+    },
+    {
+      description: 'House-warming party snacks',
+      amount: 3240,
+      currency: 'INR',
+      paidBy: [{ user: sam, amount: 3240 }],
+      splitMethod: 'shares',
+      splitBetween: [
+        { user: alex, shares: 1 },
+        { user: sam, shares: 2 },
+        { user: priya, shares: 1 },
+      ],
+    },
+  ]);
   await withLongName(page, named);
   await withLongName(page, both);
 
   const cut: string[] = [];
-  for (const [group, shown] of [
-    [named, LONG_NAME],
-    [large, /CHF\s10,000,000\.00/],
-    [both, LONG_NAME],
+  for (const [group, shown, where] of [
+    [named, LONG_NAME, 'long name'],
+    [large, /CHF\s10,000,000\.00/, 'CHF'],
+    [both, LONG_NAME, 'both'],
+    [everyday, 'Sam Chen', 'everyday'],
   ] as const) {
     await page.setViewportSize({ width: 1280, height: 900 });
     await open(page, ledger, `/groups/${group}`);
@@ -555,11 +641,12 @@ test('the Expenses table keeps You in its card with a long name, CHF 10,000,000.
     for (const width of [1280, 1366, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await expect(table.getByRole('columnheader', { name: 'You' })).toBeVisible();
-      const where = group === named ? 'long name' : group === large ? 'CHF' : 'both';
       for (const problem of [
         ...(await pastTheCard(table)),
         ...(await brokenAmounts(table)),
-        ...(group === large ? [] : await brokenName(table)),
+        ...(await coveredFigures(table)),
+        ...(await tallPayers(table)),
+        ...(shown === LONG_NAME ? await brokenName(table) : []),
       ])
         cut.push(`${where} ${width}px: ${problem}`);
     }
@@ -569,9 +656,11 @@ test('the Expenses table keeps You in its card with a long name, CHF 10,000,000.
 
 // #942: with the long name, a split "By percentage" and CHF 10,000,000.00 all at once, the
 // columns need more than the card beside the side panel at 1280 px even stacked (652 px of 624
-// in Chromium on macOS), so the table scrolls; at 1440 px, in a wide table on one line, they
-// need 802 px of 784, and it scrolls too. At either width You stays at the card's right edge,
-// its figures whole, while the other columns pass under it.
+// in Chromium on macOS); at 1440 px, on one line, they needed 802 px of 784. The table scrolled
+// at both, and You, pinned at the card's edge, covered the end of Amount at rest: header "Amou",
+// figure "CHF 10,000,000.0" (the Designer's review). Now the table stacks where its rows need it
+// (fitting at 1440) and moves its columns closer where even that can't fit (614 px at 1280), so
+// at rest nothing scrolls and no figure is covered or cut; scrolled, You is still whole.
 test('You stays in view with a long name, a split By percentage and CHF 10,000,000.00 at once (#942)', async ({
   page,
   ledger,
@@ -597,7 +686,9 @@ test('You stays in view with a long name, a split By percentage and CHF 10,000,0
       }, scrolled);
       for (const problem of [
         ...(await pastTheCard(table, 'You')),
-        ...(await brokenAmounts(table.getByRole('cell', { name: /^you (owe|lent)/ }))),
+        ...(scrolled ? [] : await coveredFigures(table)),
+        ...(await brokenAmounts(table)),
+        ...(await tallPayers(table)),
         ...(await brokenName(table)),
       ])
         cut.push(`${width}px ${scrolled ? 'scrolled' : 'at rest'}: ${problem}`);

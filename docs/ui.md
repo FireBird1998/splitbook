@@ -391,17 +391,21 @@ link, `/groups/[id]?search=…`, fills the search.
   side panel, #311), and no control sits inside another.
 - Every column of the table shows whole (#900). Where the table is narrower
   than 760 px, as beside the side panel on a 1280 px screen, the You column puts
-  "lent" or "owe" above its figure, the Date its weekday above the day, Paid by
-  the payer's initials above their name, and Amount and You a currency code
-  above its figure ("CHF" over "10,000,000.00", "owe CHF" over "5,000,000.00";
-  a symbol, as in "₹621.50", stays with its figure) (#942). A long name wraps
-  between its words and after a hyphen, never inside a word, and a figure and a
-  split stay whole; each cell still reads as one phrase. Narrower than its
-  columns need, it scrolls inside its card, and at any width You stays at the
-  card's right edge while the other columns pass under it, with an edge where
-  the browser can tell (scroll-state queries). A table that fits looks exactly
-  as before: the pin only moves You once it would pass the card's edge. A figure
-  is never broken.
+  "lent" or "owe" above its figure. Where its rows still don't fit (measured,
+  not a breakpoint: a long name, a split "By percentage", CHF 10,000,000.00),
+  the table is stacked at any width: the Date puts its weekday above the day,
+  Paid by the payer's initials above their name (at least 92 px wide, so a
+  two-word name stays on one line), and Amount and You a currency code above
+  its figure ("CHF" over "10,000,000.00", "owe CHF" over "5,000,000.00"; a
+  symbol, as in "₹621.50", stays with its figure) (#942). Where even that
+  doesn't fit, the columns move closer together (6 px apart, 12 px from the
+  card's edges). A long name wraps between its words and after a hyphen, never
+  inside a word, and a figure and a split stay whole; each cell still reads as
+  one phrase. A table that fits looks as it did before #942. Narrower than even
+  its tight columns, it scrolls inside its card; at rest nothing is pinned, so
+  no column covers another, and once scrolled You stays at the card's right
+  edge while the other columns pass under it, with an edge where the browser
+  can tell (scroll-state queries). A figure is never broken or covered.
 - Positions ("you lent ₹833.00", "you owe ₹953.33") come from the shared
   `expense-row` module over the stored minor units, in the status colours,
   which reach 4.5:1 on every surface a row has, light and dark.
