@@ -13,6 +13,7 @@ import {
   expenseDay,
   formatMinorAmount,
   serializeCsv,
+  statementDay,
   zonedDay,
   zonedDateTime,
   zonedTimestamp,
@@ -177,6 +178,19 @@ describe('days and times', () => {
     );
     expect(zonedDateTime(new Date('2026-12-31T23:59:59.900Z'), 'Pacific/Kiritimati')).toBe(
       `Fri 1${nbsp}Jan 2027, 1:59${nbsp}PM`,
+    );
+  });
+
+  // #907: an Expense's date and a statement's period are calendar days, written as the web
+  // writes a date, day joined to its month, and as the payments' times write theirs.
+  it('writes a calendar day as a statement reads it, with the year, never shifted by a zone', () => {
+    const nbsp = ' ';
+    expect(statementDay('2026-09-14')).toBe(`14${nbsp}Sep 2026`);
+    expect(statementDay('2027-01-02')).toBe(`2${nbsp}Jan 2027`);
+    expect(statementDay('2026-12-31')).toBe(`31${nbsp}Dec 2026`);
+    // A payment's time writes its day the same way.
+    expect(zonedDateTime('2026-09-14T06:30:00Z', 'Asia/Kolkata')).toBe(
+      `Mon ${statementDay('2026-09-14')}, 12:00${nbsp}PM`,
     );
   });
 

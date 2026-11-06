@@ -113,6 +113,21 @@ export function zonedDay(at: Date | string, timeZone: string): string {
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+function readableDay(year: number, month: number, day: number): string {
+  return `${day}${NO_BREAK_SPACE}${MONTHS[month - 1]} ${year}`;
+}
+
+/**
+ * A calendar day (`YYYY-MM-DD`) as a printed statement writes it (#907): "14 Sep 2026", the
+ * web's day, short month and year, with a no-break space joining day to month. For an Expense's
+ * date and a statement's period, calendar days that no time zone moves (#437). Exports keep
+ * the exact `YYYY-MM-DD`.
+ */
+export function statementDay(day: string): string {
+  const [year, month, date] = day.slice(0, 10).split('-').map(Number);
+  return readableDay(year, month, date);
+}
+
 /**
  * A moment as a reader writes it on a printed statement (#646): "Fri 6 Nov 2026, 7:32 AM", in
  * the time zone's wall clock on the web's 12-hour clock, with the year, as a statement is a
@@ -123,7 +138,7 @@ export function zonedDateTime(at: Date | string, timeZone: string): string {
   const { year, month, day, hour, minute } = zonedParts(new Date(at), timeZone);
   const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
   const time = `${hour % 12 || 12}:${pad(minute)}${NO_BREAK_SPACE}${hour < 12 ? 'AM' : 'PM'}`;
-  return `${weekday} ${day}${NO_BREAK_SPACE}${MONTHS[month - 1]} ${year}, ${time}`;
+  return `${weekday} ${readableDay(year, month, day)}, ${time}`;
 }
 
 /**
