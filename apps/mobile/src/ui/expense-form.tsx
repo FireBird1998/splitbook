@@ -45,13 +45,17 @@ import {
   Money,
   SelectorTile,
   TileGrid,
+  avatarSize,
   headingBeside,
   headingLine,
+  isLargeText,
   scaledSp,
+  textVariants,
   useLargeText,
   useLargestText,
   useShortWindow,
   useTap,
+  widestRegularWord,
 } from './compact';
 import { outfitWidth } from './compact/outfit-metrics';
 import { useTheme } from './theme';
@@ -307,7 +311,7 @@ const AllocationColumns = memo(function AllocationColumns() {
           key={heading}
           variant="caption"
           tone="secondary"
-          style={{ minWidth: 84, textAlign: 'right' }}
+          style={{ minWidth: amountColumn, textAlign: 'right' }}
         >
           {heading}
         </CompactText>
@@ -333,6 +337,30 @@ const AllocationPersonLabel = memo(function AllocationPersonLabel({
     </>
   );
 });
+/** The least width of Who owes what's Paid and Share columns: "₹1,24,999.50" in the table face. */
+const amountColumn = 84;
+
+/**
+ * Whether Who owes what puts each person's Paid and Share under their name, as the record's
+ * skeleton does too: at large text, on a narrow screen, and where a word of a name is wider than
+ * the room beside the two columns, the window less the screen's gutter, the Card's border, the
+ * row's padding, the avatar and the three gaps. At 100% on a 412 dp phone that room is 126 dp, and
+ * "Venkataraghavan-" (129 dp) broke inside the word, "Priyamvada Venk / ataraghavan-S…" (#926);
+ * under it, the name has the row's width and breaks only at a space or after its hyphen. `names`
+ * are everyone's, those behind Show all too, and not the amounts, so the table keeps its shape
+ * when the amount comes or the list opens (#911). A name whose widths aren't known here keeps the
+ * columns.
+ */
+export function allocationStacked(names: readonly string[], width: number, fontScale: number) {
+  if (isLargeText(fontScale) || width < 360) return true;
+  const room = width - 2 * 16 - 2 - 2 * 14 - avatarSize.small - 3 * 10 - 2 * amountColumn;
+  const size = scaledSp(Number(textVariants.body.fontSize), fontScale);
+  return names.some((name) => {
+    const widest = widestRegularWord(name);
+    return widest !== null && Math.ceil(widest * size) + 1 > room;
+  });
+}
+
 /**
  * A label and its amount in the stacked Who owes what, "Paid CHF 10,000,000.00": on one line where
  * they fit, the amount under the label where they don't (#925). The record's skeleton keeps it.
@@ -387,10 +415,7 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
 }) {
   const theme = useTheme();
   const [all, setAll] = useState(false);
-  // At large text or on a narrow screen, each person's amounts sit under their name.
-  const large = useLargeText();
-  const { width } = useWindowDimensions();
-  const stacked = large || width < 360;
+  const { width, fontScale } = useWindowDimensions();
   const person = (id: string) => (id === currentUserId ? 'You' : name(id));
   if (!allocation && !waiting)
     return (
@@ -420,6 +445,9 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
     (a, b) => Number(b === currentUserId) - Number(a === currentUserId),
   );
   const shown = people.length > 4 && !all ? people.slice(0, 3) : people;
+  // At large text, on a narrow screen, or beside a word too wide for the room the amounts leave,
+  // each person's amounts sit under their name (#926).
+  const stacked = allocationStacked(people.map(person), width, fontScale);
   const shareValues = allocation ? allocation.splitBetween.map((row) => row.amountMinor) : [];
   const rounded =
     draft.splitMethod === 'equal' &&
@@ -427,7 +455,7 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
     Math.max(...shareValues) !== Math.min(...shareValues);
   // Wide enough for "₹1,24,999.50" in the table face. Money is never cut short: a longer
   // amount widens its column, and names wrap instead.
-  const column = { minWidth: 84, alignItems: 'flex-end' as const };
+  const column = { minWidth: amountColumn, alignItems: 'flex-end' as const };
   const amount = (minor: number | null | undefined) =>
     minor === undefined ? (
       <CompactText tone="muted">–</CompactText>

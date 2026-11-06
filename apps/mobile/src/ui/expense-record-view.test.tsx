@@ -1051,6 +1051,36 @@ describe('compact Expense record, opening', () => {
     },
   );
 
+  // #926: at 100% on a 412 dp phone, Who owes what puts each person's amounts under their name
+  // where a word of a name is wider than the room beside them. The skeleton, from the names the
+  // list row holds, does the same, so the record takes its place without moving.
+  it('lays its Who owes what skeleton out as the record does for a long name, 412dp at 1× text (#926)', async () => {
+    setWindow({ width: 412, fontScale: 1 });
+    const long = 'Priyamvada Venkataraghavan-Subramaniam';
+    const row = listRow(ids.bill);
+    const rename = (list: typeof row.paidBy) =>
+      list.map((entry) =>
+        entry.user.id === priya.id ? { ...entry, user: { ...entry.user, name: long } } : entry,
+      );
+    const skeleton = async (outline: RecordOutline) => {
+      act(() => screen?.unmount());
+      await act(async () => {
+        screen = create(
+          editor(
+            { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.bill },
+            outline,
+          ),
+        );
+      });
+      const [, owes] = cards();
+      return wordsOf(owes!).match(/Paid/g)?.length ?? 0;
+    };
+    const renamed = { ...row, paidBy: rename(row.paidBy), splitBetween: rename(row.splitBetween) };
+    expect(await skeleton(recordOutline(renamed, alex.id))).toBe(3);
+    // Everyday names keep the columns, whose headings the skeleton draws as one bar.
+    expect(await skeleton(recordOutline(row, alex.id))).toBe(0);
+  });
+
   // #925, the Designer's release check: at 200% on a 360 dp phone, Who owes what clipped "Paid
   // CHF 10,000,000.(" at the card's edge. The amount goes under its label, in the record and in
   // the skeleton it opens over, whose pairs are the record's texts.
