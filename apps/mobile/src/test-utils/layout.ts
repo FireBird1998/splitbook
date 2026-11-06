@@ -240,7 +240,7 @@ export function unreadText(
       const widest = Math.max(
         0,
         ...runs(text, {}).flatMap(({ characters, style }) =>
-          characters.split(/\s+/).map((word) => runWidth(word, style, scale)),
+          characters.split(lineBreaks).map((word) => runWidth(word, style, scale)),
         ),
       );
       if (widest > room + 0.5)
@@ -412,6 +412,20 @@ export const signApart = /[−+][€₹¥$£]/;
 /** The room to spare a label as wide as its words keeps after them (`CompactText`'s `spare`). */
 export const hairSpace = String.fromCodePoint(0x200a);
 
+/** A zero-width space: where `CompactText` lets a line break after a hyphen (#921). */
+export const breakHere = String.fromCodePoint(0x200b);
+
+/** `text` without its zero-width spaces (`breakHere`): the words a reader sees. */
+export const unbroken = (text: string) => text.replaceAll(breakHere, '');
+
+/**
+ * Where Android may break a line between words: white space, or a zero-width space. Not after a
+ * hyphen: React Native turns hyphenation off, and Android's line breaker leaves a break after a
+ * hyphen to hyphenation, so "Venkataraghavan-Subramaniam" is one word, broken where its line ran
+ * out (#921).
+ */
+const lineBreaks = /[\s\u200b]+/;
+
 /**
  * The phones and text sizes the large-text checks lay screens out at (#639): 360×640 and
  * 412×915 dp, each at 130% and at 200% text.
@@ -450,6 +464,8 @@ export function labelRuns(root: ReactTestInstance, label: string) {
 function outfitAdvance(character: string) {
   // A hair space, as a badge keeps after its label: 4px of a 32px label there.
   if (character === hairSpace) return 0.125;
+  // Drawing nothing, a zero-width space has no width.
+  if (character === breakHere) return 0;
   if (character === '…') return 0.85;
   if ('iljtfr'.includes(character)) return 0.22;
   if ('mw'.includes(character)) return 0.8;

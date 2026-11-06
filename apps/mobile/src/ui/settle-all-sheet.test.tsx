@@ -16,7 +16,7 @@ import {
   type SettlementState,
 } from '../data/settlement';
 import type { GroupCurrencyBalance, MobileGroup } from '../data/types';
-import { findHosts, largeTextWindows, unreadText } from '../test-utils/layout';
+import { findHosts, largeTextWindows, unreadText, wordsOf } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
@@ -367,6 +367,39 @@ describe.each(['light', 'dark'] as const)('Settle up at large text in %s (#734)'
     const tree = screen!.toJSON() as ReactTestRendererJSON;
     const [frame] = findHosts(tree, (_props, type) => type === 'SafeAreaView');
     const [top, body, footer] = frame!.children as ReactTestRendererJSON[];
+    expect(unreadText(top!, size.fontScale, size.width)).toEqual([]);
+    expect(unreadText(body!, size.fontScale, size.width)).toEqual([]);
+    expect(unreadText(footer!, size.fontScale, size.width)).toEqual([]);
+  });
+});
+
+// A long hyphenated name breaks after its hyphen at 200%, never inside a word: Android drew the
+// title "Settle up with Priyamvada Venkataraghavan-S / ubramaniam" and the body "Venkat /
+// araghavan-Subramaniam" (#921).
+describe('Settle up with a long hyphenated name (#921)', () => {
+  const long = 'Priyamvada Venkataraghavan-Subramaniam';
+  const named = (): SettlementState => {
+    const settlement = state(paying());
+    const members = settlement.group!.members.map((member) =>
+      member.user.id === sam ? { ...member, user: { ...member.user, name: long } } : member,
+    );
+    return {
+      ...settlement,
+      group: { ...settlement.group!, members },
+      balances: settlement.balances.map((balance) => ({
+        ...balance,
+        debts: balance.debts.map((owed) => ({ ...owed, to: { ...owed.to, name: long } })),
+      })),
+    };
+  };
+  it.each(largeTextWindows)('breaks only between words, $width dp at $fontScale× text', (size) => {
+    setWindow(size);
+    render(named());
+    const tree = screen!.toJSON() as ReactTestRendererJSON;
+    const [frame] = findHosts(tree, (_props, type) => type === 'SafeAreaView');
+    const [top, body, footer] = frame!.children as ReactTestRendererJSON[];
+    expect(wordsOf(top!)).toContain('Venkataraghavan');
+    expect(wordsOf(body!)).toContain('Venkataraghavan');
     expect(unreadText(top!, size.fontScale, size.width)).toEqual([]);
     expect(unreadText(body!, size.fontScale, size.width)).toEqual([]);
     expect(unreadText(footer!, size.fontScale, size.width)).toEqual([]);

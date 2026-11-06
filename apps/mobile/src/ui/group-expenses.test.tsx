@@ -28,6 +28,7 @@ import {
   middleCutEnd,
   outerTexts,
   tailCutOverrun,
+  unbroken,
   unreadText,
   wordsOf,
   countApart,
@@ -192,10 +193,12 @@ afterEach(() => {
 });
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
 const text = (root: ReactTestInstance) =>
-  root
-    .findAll((node) => isHost(node, 'Text'))
-    .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
-    .join('');
+  unbroken(
+    root
+      .findAll((node) => isHost(node, 'Text'))
+      .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+      .join(''),
+  );
 const labelled = (root: ReactTestInstance, label: string) =>
   root.findAll((node) => typeof node.type === 'string' && node.props.accessibilityLabel === label);
 const buttons = (root: ReactTestInstance) =>
@@ -1240,10 +1243,12 @@ describe('an assistant’s credit on an Expense row (#751)', () => {
     root.find(
       (node) =>
         isHost(node, 'Text') &&
-        node.children
-          .filter((child) => typeof child === 'string')
-          .join('')
-          .trimEnd() === `prepared by ${host}`,
+        unbroken(
+          node.children
+            .filter((child) => typeof child === 'string')
+            .join('')
+            .trimEnd(),
+        ) === `prepared by ${host}`,
     );
   /** The issue's second host, 120 characters, ending in the same domain. */
   const long =
@@ -1419,10 +1424,12 @@ describe.each(['light', 'dark'] as const)(
           nativeEvent: { layout: { x: 0, y: 0, width: 246, height: 16 } },
         });
       });
-      const shown = credit()
-        .children.filter((child) => typeof child === 'string')
-        .join('')
-        .trimEnd();
+      const shown = unbroken(
+        credit()
+          .children.filter((child) => typeof child === 'string')
+          .join('')
+          .trimEnd(),
+      );
       if (fontScale < 1.5) {
         expect(shown).toMatch(/^prepared by [^…]*[^.]…[^.][^…]*example\.test$/);
       } else {

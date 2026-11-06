@@ -113,6 +113,25 @@ const wideningPairs: Record<string, number> = {
   '|/': 14,
 };
 
+/**
+ * Outfit SemiBold's advances, the titles' face, as `asciiAdvances` has Regular's: for the widest
+ * word of a sheet's title, which the title's column keeps room for (#921). From
+ * Outfit_600SemiBold.ttf; a test checks them against it.
+ */
+const semiboldAdvances = [
+  195, 274, 441, 652, 594, 671, 680, 246, 304, 304, 490, 555, 280, 462, 295, 393, 660, 367, 553,
+  550, 604, 553, 568, 525, 555, 568, 281, 275, 555, 555, 555, 503, 747, 715, 631, 686, 747, 602,
+  578, 778, 721, 280, 513, 688, 556, 850, 727, 800, 616, 820, 640, 569, 629, 696, 705, 992, 707,
+  679, 598, 345, 393, 345, 459, 493, 308, 588, 588, 492, 588, 541, 419, 579, 562, 248, 257, 528,
+  247, 867, 562, 569, 588, 588, 434, 444, 389, 528, 523, 769, 523, 526, 466, 334, 291, 334, 555,
+];
+
+/** A character's advance in Outfit SemiBold, in ems; undefined outside printable ASCII. */
+export function outfitSemiboldAdvance(character: string): number | undefined {
+  const code = character.codePointAt(0)!;
+  return code >= 0x20 && code <= 0x7e ? semiboldAdvances[code - 0x20]! / 1000 : undefined;
+}
+
 /** A character's advance in Outfit Regular, in ems; undefined when it isn't known here. */
 export function outfitAdvance(character: string): number | undefined {
   const code = character.codePointAt(0)!;

@@ -1,5 +1,15 @@
 import type { TextInstance, ViewInstance } from 'react-native';
-import { useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
+import {
+  Fragment,
+  cloneElement,
+  isValidElement,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import {
   Animated,
   StyleSheet,
@@ -14,7 +24,7 @@ import {
 import type { SemanticTokens } from '@splitbook/shared/design-tokens';
 import { fonts, useTheme } from '../theme';
 import { useStatusFade } from './motion';
-import { outfitSteps, outfitWidth } from './outfit-metrics';
+import { outfitSemiboldAdvance, outfitSteps, outfitWidth } from './outfit-metrics';
 import { moneySizes, scaledSp, textVariants, type MoneySize, type TextVariant } from './scale';
 
 export type TextTone =
@@ -75,6 +85,66 @@ export const hairSpace = String.fromCodePoint(0x200a);
  * font whose "…" is at least half an em.
  */
 export const ellipsisRoom = String.fromCodePoint(0xa0).repeat(2);
+
+/** A zero-width space (U+200B): where a line may break, drawing nothing. */
+export const breakHere = String.fromCodePoint(0x200b);
+
+/**
+ * `text` with a place to break after each hyphen between two letters, as in a double-barrelled
+ * name. React Native's text view turns Android's hyphenation off, and Android's line breaker
+ * leaves a break after a hyphen to that hyphenation (Minikin's WordBreaker never breaks after
+ * U+002D or U+2010 itself), so "Venkataraghavan-Subramaniam" was one word. A word wider than its
+ * line Android breaks wherever the line runs out: the Settle up sheet read "Venkat /
+ * araghavan-Subramaniam" at 200% (#921). Turning hyphenation on would break other words too
+ * ("Settle- / ments"), so a zero-width space after the hyphen (`breakHere`) gives the line that
+ * one break, and only there.
+ */
+export const breakAfterHyphens = (text: string) =>
+  text.replace(/(?<=\p{L})[-\u2010](?=\p{L})/gu, `$&${breakHere}`);
+
+/**
+ * The widest word of `text` in Outfit SemiBold, the face of titles, in ems: its words as its lines
+ * break them, at white space and after a hyphen between letters (`breakAfterHyphens`). An
+ * accented letter is as wide as its letter; kerning is left out (a few hundredths of an em). Null
+ * when a character's width isn't known here, as for a script the font doesn't draw (#921).
+ */
+export function widestSemiboldWord(text: string): number | null {
+  let widest = 0;
+  for (const word of breakAfterHyphens(text).split(/[\s\u200b]+/)) {
+    let width = 0;
+    for (const character of word.normalize('NFD').replace(/\p{M}/gu, '')) {
+      const advance = outfitSemiboldAdvance(character);
+      if (advance === undefined) return null;
+      width += advance;
+    }
+    widest = Math.max(widest, width);
+  }
+  return widest;
+}
+
+/**
+ * A text's strings with their breaks after hyphens (`breakAfterHyphens`), those of the texts and
+ * fragments nested in it too, as an Activity line's actor is (#921); the rest as is.
+ */
+function withHyphenBreaks(children: ReactNode): ReactNode {
+  if (typeof children === 'string') return breakAfterHyphens(children);
+  if (Array.isArray(children)) {
+    const parts = children.map(withHyphenBreaks);
+    if (parts.every((part, index) => part === children[index])) return children;
+    // A list made anew keys its parts by their place, as React keys a text's own parts.
+    return parts.map((part, index) =>
+      isValidElement(part) && part.key === null ? cloneElement(part, { key: index }) : part,
+    );
+  }
+  if (
+    isValidElement<{ children?: ReactNode }>(children) &&
+    (children.type === Text || children.type === Fragment)
+  ) {
+    const inner = withHyphenBreaks(children.props.children);
+    return inner === children.props.children ? children : cloneElement(children, undefined, inner);
+  }
+  return children;
+}
 
 /**
  * `text` cut in the middle to fit `room` dp in Outfit Regular at `size` dp, with its room for the
@@ -202,7 +272,7 @@ export function CompactText({
   weight,
   spare = false,
   style,
-  children,
+  children: words,
   ...props
 }: TextProps & {
   /** The text itself, as for a heading the screen reader is moved to. */
@@ -229,8 +299,10 @@ export function CompactText({
     style,
   ];
   const cutInMiddle = props.numberOfLines === 1 && props.ellipsizeMode === 'middle';
-  if (cutInMiddle && !spare && typeof children === 'string')
-    return <MiddleCutLine {...props} look={look} text={children} />;
+  if (cutInMiddle && !spare && typeof words === 'string')
+    return <MiddleCutLine {...props} look={look} text={words} />;
+  // A line that may wrap breaks after a hyphen, not inside a word (#921).
+  const children = withHyphenBreaks(words);
   const cutAtTail = (props.numberOfLines ?? 0) > 0 && (props.ellipsizeMode ?? 'tail') === 'tail';
   if (cutAtTail)
     return (

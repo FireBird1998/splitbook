@@ -16,7 +16,15 @@ import {
   recordWaitsForDetails,
 } from './group-balances';
 import type { PendingPayment } from '../data/settlement';
-import { findHosts, flatten, largeTextWindows, outerTexts, unreadText } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  largeTextWindows,
+  outerTexts,
+  unbroken,
+  unreadText,
+  wordsOf,
+} from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { hairSpace } from './compact';
 import { refreshedLabel } from './refresh-feedback';
@@ -103,10 +111,12 @@ afterEach(() => {
 });
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
 const text = (root: ReactTestInstance) =>
-  root
-    .findAll((node) => isHost(node, 'Text'))
-    .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
-    .join('');
+  unbroken(
+    root
+      .findAll((node) => isHost(node, 'Text'))
+      .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+      .join(''),
+  );
 const labelled = (root: ReactTestInstance, label: string) =>
   root.findAll((node) => typeof node.type === 'string' && node.props.accessibilityLabel === label);
 const render = (element: React.ReactElement) => {
@@ -675,7 +685,8 @@ describe('Balances at 100% text keep their shape (#639)', () => {
   const least = (tree: ReactTestRendererJSON, words: string) => {
     const holders = findHosts(tree, (props) => flatten(props.style).flex === 1).filter((node) =>
       [node, ...findHosts(node, (_props, type) => type === 'Text')].some(
-        (text) => text.type === 'Text' && (text.children ?? []).join('').startsWith(words),
+        (text) =>
+          text.type === 'Text' && unbroken((text.children ?? []).join('')).startsWith(words),
       ),
     );
     return flatten(holders.at(-1)!.props.style).minWidth ?? 0;
@@ -1542,6 +1553,49 @@ describe.each(['light', 'dark'] as const)('Settle up at large text in %s (#612)'
       expect(flatten(row('Sam Chen owes Priya Shah, ₹180.00').props.style).alignItems).toBe(
         size.rows,
       );
+    },
+  );
+});
+
+// A long hyphenated name in a Suggested payment breaks after its hyphen at 200%, never inside a
+// word: "You pay Priyamvada Venkataraghavan-Subramaniam" had a 218 dp column beside its Record on
+// a 360 dp phone, and "Venkataraghavan-" needs 237 dp. Record goes under the payment instead (#921).
+describe('a Suggested payment to a long hyphenated name (#921)', () => {
+  const long = person(sam, 'Priyamvada Venkataraghavan-Subramaniam');
+  const alex = person(you, 'Alex Rivera');
+  it.each(largeTextWindows.filter(({ fontScale }) => fontScale === 2))(
+    'breaks only between words, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      render(
+        <ThemeContext.Provider value={getSemanticTokens('light')}>
+          <GroupBalancesView
+            group={group('trip')}
+            currentUserId={you}
+            state={financial({
+              data: [
+                {
+                  currency: 'INR',
+                  balances: [
+                    { user: alex, balance: -1480 },
+                    { user: long, balance: 1480 },
+                  ],
+                  debts: [{ from: alex, to: long, amount: 1480 }],
+                },
+              ],
+            })}
+            pending={null}
+            offline={false}
+            onRecord={vi.fn()}
+            onCheckPayment={vi.fn()}
+            onRefreshBalances={() => undefined}
+          />
+        </ThemeContext.Provider>,
+      );
+      const tree = screen!.toJSON() as ReactTestRendererJSON;
+      expect(unbroken(wordsOf(tree))).toContain('You pay Priyamvada Venkataraghavan-Subramaniam');
+      // The screen's content is inset 16dp on each side.
+      expect(unreadText(tree, size.fontScale, size.width - 32)).toEqual([]);
     },
   );
 });

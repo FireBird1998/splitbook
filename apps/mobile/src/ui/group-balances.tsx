@@ -652,8 +652,9 @@ function PaymentRow({
   children?: ReactNode;
 }) {
   const theme = useTheme();
-  const column = useTextColumn();
   const whole = useLargestText();
+  // From 150% the title wraps, keeping room for its widest word (#921).
+  const column = useTextColumn(whole ? title : undefined);
   // From 130% text the row runs several lines: its avatars keep beside the first, at the top,
   // as an Activity row's does (#792), centred on that line.
   const top = useLargeText();

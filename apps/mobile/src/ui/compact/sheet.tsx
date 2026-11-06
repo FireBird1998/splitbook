@@ -78,7 +78,9 @@ export function BottomSheet({
   footer?: ReactNode;
 }) {
   const theme = useTheme();
-  const column = useTextColumn();
+  // At large text the title keeps room for its widest word, or Done goes under it: at 200% on a
+  // 360 dp phone, "Venkataraghavan-" needs 299 dp, and beside the × it had 276 (#921).
+  const column = useTextColumn(title, 'title');
   // The header's action keeps its centre on the title's first line, however many lines the
   // title takes (#646): whichever of the two is shorter starts lower by half the difference.
   const action = doneIcon ? touch.min : touch.dense;

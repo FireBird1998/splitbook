@@ -158,6 +158,21 @@ function kerningOf(font: Buffer) {
   };
 }
 
+const semibold = fontFile(fonts.semibold);
+const semiboldGlyphs = glyphsOf(semibold);
+const semiboldTables = tablesOf(semibold);
+
+/** Outfit SemiBold's advance for a character, in ems, read from the font itself (#921). */
+export function outfitSemiboldAdvance(character: string) {
+  const glyph = semiboldGlyphs.get(character.codePointAt(0)!) ?? 0;
+  const longMetrics = semibold.readUInt16BE(semiboldTables.get('hhea')! + 34);
+  const unitsPerEm = semibold.readUInt16BE(semiboldTables.get('head')! + 18);
+  return (
+    semibold.readUInt16BE(semiboldTables.get('hmtx')! + Math.min(glyph, longMetrics - 1) * 4) /
+    unitsPerEm
+  );
+}
+
 const regular = fontFile(fonts.regular);
 const regularGlyphs = glyphsOf(regular);
 const regularKerning = kerningOf(regular);

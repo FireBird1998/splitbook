@@ -5,7 +5,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { findHosts, flatten, layoutHeight, unreadText } from './test-utils/layout';
+import { findHosts, flatten, layoutHeight, unbroken, unreadText } from './test-utils/layout';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
@@ -371,10 +371,12 @@ async function renderApp(handler?: Handler) {
   const root = () => screen!.root;
   const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
   const text = () =>
-    root()
-      .findAll((node) => isHost(node, 'Text'))
-      .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
-      .join('');
+    unbroken(
+      root()
+        .findAll((node) => isHost(node, 'Text'))
+        .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+        .join(''),
+    );
   const pressable = (label: string) =>
     root().find(
       (node) =>

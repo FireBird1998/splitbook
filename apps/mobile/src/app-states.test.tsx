@@ -17,6 +17,7 @@ import {
   flatten,
   layoutHeight,
   layoutWidth,
+  unbroken,
   unreadText,
   wordsOf,
 } from './test-utils/layout';
@@ -2123,7 +2124,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
             ? ''
             : (node.children ?? []).map(words).join('');
   const seen = () =>
-    words(findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!);
+    unbroken(words(findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!));
   /**
    * What the screen's statuses are fading out (#331): text a reader may still see for a moment
    * beside what replaced it.

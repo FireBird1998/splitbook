@@ -23,6 +23,7 @@ import {
   middleCutEnd,
   outerTexts,
   signApart,
+  unbroken,
   unreadText,
   wordsOf,
 } from '../test-utils/layout';
@@ -78,10 +79,12 @@ afterEach(() => {
 });
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
 const text = (root: ReactTestInstance) =>
-  root
-    .findAll((node) => isHost(node, 'Text'))
-    .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
-    .join('');
+  unbroken(
+    root
+      .findAll((node) => isHost(node, 'Text'))
+      .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+      .join(''),
+  );
 const pressables = (root: ReactTestInstance) => root.findAll((node) => isHost(node, 'Pressable'));
 const buttons = (root: ReactTestInstance) =>
   pressables(root).map((node) => node.props.accessibilityLabel as string);
@@ -644,10 +647,12 @@ describe('an assistant’s credit in an Activity row (#751)', () => {
     root.find(
       (node) =>
         isHost(node, 'Text') &&
-        node.children
-          .filter((child) => typeof child === 'string')
-          .join('')
-          .trimEnd() === `prepared by ${host}`,
+        unbroken(
+          node.children
+            .filter((child) => typeof child === 'string')
+            .join('')
+            .trimEnd(),
+        ) === `prepared by ${host}`,
     );
 
   it('takes a line of its own, cut in the middle so the domain stays, with the whole name read aloud', () => {
@@ -987,7 +992,7 @@ describe.each(['light', 'dark'] as const)(
           nativeEvent: { layout: { x: 0, y: 0, width: 254, height: 16 } },
         });
       });
-      const shown = [credit().props.children].flat().join('').trimEnd();
+      const shown = unbroken([credit().props.children].flat().join('').trimEnd());
       if (fontScale < 1.5) {
         expect(shown).toMatch(/^prepared by [^…]*[^.]…[^.][^…]*example\.test$/);
       } else {
@@ -1383,6 +1388,32 @@ describe.each(['light', 'dark'] as const)('Activity rows at large text in %s (#8
         const details = lines(said).find(({ words }) => words.includes('3:18 PM'))!;
         expect(Number(details.text.props.numberOfLines)).toBe(2);
       }
+    },
+  );
+});
+
+// An actor's long hyphenated name, set in its own run in the headline, breaks after its hyphen at
+// 200%, never inside a word, in the list and in the event's details (#921).
+describe('an Activity line by a long hyphenated name (#921)', () => {
+  const long = 'Priyamvada Venkataraghavan-Subramaniam';
+  const theirs: ActivityEvent = {
+    ...event(1),
+    actor: { _id: 'a00000000000000000000002', name: long },
+  };
+  it.each(largeTextWindows.filter(({ fontScale }) => fontScale === 2))(
+    'breaks only between words, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      render({ state: activity({ events: [theirs] }) });
+      const list = screen!.toJSON() as ReactTestRendererJSON;
+      expect(unbroken(wordsOf(list))).toContain(`${long} added`);
+      // The list lies in a Card 16 dp in, inside its 1 dp border.
+      expect(unreadText(list, size.fontScale, size.width - 34)).toEqual([]);
+      act(() => screen!.unmount());
+      render({ state: activity({ selected: theirs }) });
+      const details = screen!.toJSON() as ReactTestRendererJSON;
+      expect(unbroken(wordsOf(details))).toContain(long);
+      expect(unreadText(details, size.fontScale, size.width - 32)).toEqual([]);
     },
   );
 });

@@ -6,6 +6,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ceilingsFile, harnessCeilings, measures } from '../scripts/ceilings';
 import { createMobileController } from './data/mobile-controller';
+import { unbroken } from './test-utils/layout';
 import { emitAppState } from './test-utils/native';
 
 /**
@@ -639,7 +640,7 @@ async function renderApp(options?: {
     shows: (text: string) =>
       root()
         .findAll((node) => isHost(node, 'Text'))
-        .some((node) => node.children.some((child) => String(child).includes(text))),
+        .some((node) => node.children.some((child) => unbroken(String(child)).includes(text))),
     /** The value of the text field with this label. */
     value: (label: string) =>
       root().find((node) => isHost(node, 'TextInput') && node.props.accessibilityLabel === label)

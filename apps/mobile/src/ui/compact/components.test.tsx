@@ -17,17 +17,20 @@ import {
   layoutHeight,
   middleCutEnd,
   tailCutOverrun,
+  unbroken,
   unreadText,
   wordsOf,
 } from '../../test-utils/layout';
 import { outfitRegularWidth } from '../../test-utils/app-font';
-import { outfitAdvance } from './outfit-metrics';
+import { outfitAdvance, outfitSemiboldAdvance } from './outfit-metrics';
 import { activateWithScreenReader, setWindow, touchAlong } from '../../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const {
   Badge,
+  breakAfterHyphens,
+  widestSemiboldWord,
   Banner,
   Chip,
   CompactAvatar,
@@ -56,6 +59,7 @@ const {
   textVariants,
 } = await import('./index');
 const { ThemeContext } = await import('../theme');
+const { Text } = await import('react-native');
 
 let renderer: ReactTestRenderer | undefined;
 afterEach(() => {
@@ -929,6 +933,72 @@ describe('a part on a line of its own keeps to the row’s end (#639)', () => {
   );
 });
 
+// #921: Android breaks a line after a hyphen only where the app gives it a zero-width space, as
+// React Native turns hyphenation off; a word wider than its line it breaks where the line runs
+// out, as the Settle up sheet broke "Venkat / araghavan-Subramaniam" at 200%.
+describe('a long hyphenated name breaks after its hyphen, never inside a word (#921)', () => {
+  const long = 'Priyamvada Venkataraghavan-Subramaniam';
+  it('gives a line a break after each hyphen between letters, and nowhere else', () => {
+    render(<CompactText>{`${long} paid for Wi-Fi: −₹5, 2026-11-06, -x`}</CompactText>);
+    expect((renderer!.toJSON() as ReactTestRendererJSON).children).toEqual([
+      'Priyamvada Venkataraghavan-\u200bSubramaniam paid for Wi-\u200bFi: −₹5, 2026-11-06, -x',
+    ]);
+    expect(breakAfterHyphens('Ramachandran‐Vaidyanathan')).toBe('Ramachandran‐\u200bVaidyanathan');
+  });
+
+  it('and in the texts nested in it, as an Activity line’s actor is', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    render(
+      <CompactText>
+        <Text style={{ fontFamily: 'Outfit_600SemiBold' }}>{long}</Text> added{' '}
+        <>
+          {'Wi-Fi'} <Text>{['Tea-stall', ' run']}</Text>
+        </>
+      </CompactText>,
+    );
+    expect(unbroken(wordsOf(renderer!.toJSON() as ReactTestRendererJSON))).toBe(
+      `${long} added Wi-Fi Tea-stall run`,
+    );
+    expect(wordsOf(renderer!.toJSON() as ReactTestRendererJSON)).toBe(
+      'Priyamvada Venkataraghavan-\u200bSubramaniam added Wi-\u200bFi Tea-\u200bstall run',
+    );
+    // React warns of nothing, such as a list without keys.
+    expect(
+      errors.mock.calls.filter(([message]) => !String(message).includes('deprecated')),
+    ).toEqual([]);
+    errors.mockRestore();
+  });
+
+  it('measures a title’s widest word as its lines break it, in Outfit SemiBold', () => {
+    const width = (word: string) =>
+      [...word].reduce((sum, character) => sum + outfitSemiboldAdvance(character)!, 0);
+    expect(widestSemiboldWord(long)).toBeCloseTo(width('Venkataraghavan-'), 6);
+    expect(widestSemiboldWord('Zoë Ånström')).toBeCloseTo(width('Anstrom'), 6);
+    // A script the app's font doesn't draw is measured by Android alone.
+    expect(widestSemiboldWord('प्रिया')).toBeNull();
+  });
+
+  it.each(largeTextWindows.filter(({ fontScale }) => fontScale >= 1.5))(
+    'a row’s title with an amount, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      render(
+        <ListRow
+          leading={<CompactAvatar name={long} />}
+          title={long}
+          meta="Member"
+          trailing={<RowAmount amount="₹1,480.00" tone="positive" caption="owed to you" />}
+        />,
+      );
+      const row = renderer!.toJSON() as ReactTestRendererJSON;
+      expect(unbroken(wordsOf(row))).toContain(long);
+      // A row in a Card: the screen's 16dp inset and the Card's 1dp border on each side. From
+      // 150% its amount has a line of its own, so the name has the row's width to break in.
+      expect(unreadText(row, size.fontScale, size.width - 34)).toEqual([]);
+    },
+  );
+});
+
 // #639 device check: at 200% and density 420, Home's "New Group" put its "+" on a line of its own
 // above the words, with room to spare beside them: a button that wrapped its parts tipped over on
 // a fraction of a pixel. A button keeps its icon and words on one line, and its words wrap inside
@@ -976,7 +1046,10 @@ describe('a line cut in the middle keeps its end inside its box (#766)', () => {
         {credit}
       </CompactText>,
     );
-    expect((renderer!.toJSON() as ReactTestRendererJSON).children).toEqual([credit]);
+    // Its only change: a line may break after a hyphen, not inside a word (#921).
+    expect((renderer!.toJSON() as ReactTestRendererJSON).children).toEqual([
+      breakAfterHyphens(credit),
+    ]);
   });
 });
 

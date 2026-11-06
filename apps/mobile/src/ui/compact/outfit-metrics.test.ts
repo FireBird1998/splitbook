@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { outfitRegularWidth } from '../../test-utils/app-font';
-import { outfitAdvance, outfitWidening } from './outfit-metrics';
+import { outfitRegularWidth, outfitSemiboldAdvance } from '../../test-utils/app-font';
+import {
+  outfitAdvance,
+  outfitSemiboldAdvance as semiboldAdvance,
+  outfitWidening,
+} from './outfit-metrics';
 
 // #770: the widths the app cuts a line by are Outfit Regular's own, read from the font file.
 describe('Outfit Regular’s widths for a line the app cuts (#770)', () => {
@@ -28,5 +32,15 @@ describe('Outfit Regular’s widths for a line the app cuts (#770)', () => {
           Math.max(0, kerning),
         );
       }
+  });
+});
+
+// #921: a sheet's title keeps room for its widest word, measured in Outfit SemiBold's own widths.
+describe('Outfit SemiBold’s advances for a title’s widest word (#921)', () => {
+  it('has each printable ASCII character’s advance', () => {
+    for (let code = 0x20; code < 0x7f; code++) {
+      const character = String.fromCharCode(code);
+      expect(semiboldAdvance(character), character).toBe(outfitSemiboldAdvance(character));
+    }
   });
 });
