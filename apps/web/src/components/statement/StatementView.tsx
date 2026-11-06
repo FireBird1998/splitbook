@@ -23,6 +23,7 @@ import {
   type Statement,
 } from '@splitbook/shared/statement';
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
+import { nameMayWrap } from './person-name';
 import { statementSummary } from './statement-summary';
 
 const light = getSemanticTokens('light');
@@ -36,8 +37,9 @@ const expenses = (count: number) => counted(count, 'Expense');
 /**
  * What a column holds, and so how its cells lay out (#646). Figures and dates never wrap, so
  * "₹54,000.00" and "5 Jun 2026" never break across lines; figures are right-aligned. Only free
- * text (an Expense's description, a payment's note or its cross-currency sentence) wraps; names
- * wrap only between words. A table wider than the sheet scrolls on screen, never in print.
+ * text (an Expense's description, a payment's note or its cross-currency sentence) wraps; a long
+ * name wraps between words and after a hyphen, never inside one (#928). A table wider than the
+ * sheet scrolls on screen, never in print.
  */
 type ColumnKind = 'text' | 'wrap' | 'sentence' | 'date' | 'money' | 'people';
 const COLUMN_SX = {
@@ -85,8 +87,10 @@ function Cell({
 }
 
 /**
- * A name with its amount, on one line, in Paid by and Share. A single payer has no amount: it is
- * the Expense's Amount, in the next column (#918).
+ * A name beside its amount in Paid by and Share. A long name wraps between its words and after a
+ * hyphen, never inside a word, so it can't push Share past the sheet or the page; an everyday
+ * one stays on one line, and the amount never wraps (#928). A single
+ * payer has no amount: it is the Expense's Amount, in the next column (#918).
  */
 function PersonAmount({ name, children }: { name: string; children?: ReactNode }) {
   return (
@@ -94,7 +98,13 @@ function PersonAmount({ name, children }: { name: string; children?: ReactNode }
       className="statement-line"
       sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5, whiteSpace: 'nowrap' }}
     >
-      <span>{name}</span>
+      <Box
+        component="span"
+        className="statement-name"
+        sx={{ whiteSpace: nameMayWrap(name) ? 'normal' : 'nowrap' }}
+      >
+        {name}
+      </Box>
       {children}
     </Box>
   );

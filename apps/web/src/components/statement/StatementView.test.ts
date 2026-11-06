@@ -307,7 +307,8 @@ function tripHtml(statement = buildStatement(TRIP, { timeZone: 'Asia/Kolkata' })
 
 // #646 follow-up: on the real A4 sheet "₹54,000.00" broke as "₹54,000. / 00" and a date as
 // "2026-06- / 05". Figures and dates never wrap; number columns are right-aligned; only the
-// free text (Description, Note) wraps, and on screen a wide table scrolls inside the sheet.
+// free text (Description, Note) and a long name (#928) wrap, and on screen a wide table scrolls
+// inside the sheet.
 describe('the statement’s table cells', () => {
   it('writes a payment’s date and time as a reader would, never as ISO (#646)', () => {
     const html = tripHtml();
@@ -562,4 +563,43 @@ it('names a single payer in Paid by without the Amount, and gives several payers
   expect(page).toContain(
     'Snorkelling trip Entertainment · Fun Alex Rivera ₹600.00 Sam Chen ₹300.00 ₹900.00 Alex Rivera ₹450.00 Sam Chen ₹450.00',
   );
+});
+
+// #928: a long name such as "Priyamvada Venkataraghavan-Subramaniam" stayed on one line in Paid by
+// and Share, so the Expenses table grew past the sheet: on screen Share scrolled, and in print
+// (which never scrolls) it ran past the page's margin. A long name wraps between its words and
+// after its hyphen, never inside a word, beside its amount, which stays on one line. An everyday
+// name stays whole, as #646 sets it, however long the Description beside it.
+it('lets a long name wrap in Paid by and Share, and keeps an everyday one and every amount whole (#928)', () => {
+  const longName = 'Priyamvada Venkataraghavan-Subramaniam';
+  const html = tripHtml(
+    buildStatement(
+      {
+        ...TRIP,
+        members: [TRIP.members[0], { id: SAM, name: longName }],
+        names: { ...TRIP.names, [SAM]: longName },
+      },
+      { timeZone: 'Asia/Kolkata' },
+    ),
+  );
+  expect(text(html)).toContain(
+    `Island guesthouse Food & Drink · Food Alex Rivera ₹1,200.00 Alex Rivera ₹600.00 ${longName} ₹600.00`,
+  );
+  // 3 Expenses: one payer (Alex) and two shares each, one of them the long name's.
+  const names = stylesOf(html, 'statement-name');
+  expect(names).toHaveLength(9);
+  const written = [...html.matchAll(/class="[^"]*statement-name[^"]*"[^>]*>([^<]*)</g)].map(
+    ([, name]) => name,
+  );
+  expect(written.filter((name) => name === longName)).toHaveLength(3);
+  names.forEach((name, i) => {
+    // Never inside a word.
+    expect(name.value('overflow-wrap')).toBeUndefined();
+    expect(name.value('word-break')).toBeUndefined();
+    expect(name.value('white-space')).toBe(written[i] === longName ? 'normal' : 'nowrap');
+  });
+  // The amounts never wrap.
+  const amounts = stylesOf(html, 'statement-amount');
+  expect(amounts.length).toBeGreaterThan(10);
+  for (const amount of amounts) expect(amount.value('white-space')).toBe('nowrap');
 });

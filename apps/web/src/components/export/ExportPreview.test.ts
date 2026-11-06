@@ -940,3 +940,78 @@ it('keeps a single payer’s name on the left of Paid by (#918)', () => {
   expect(pushes).toBeGreaterThanOrEqual(0);
   expect(rules.indexOf('>*:only-child{')).toBeGreaterThan(pushes);
 });
+
+// #928: on one line, "Priyamvada Venkataraghavan-Subramaniam" widened Paid by and pushed Share
+// out of the card. A long name wraps between its words and after its hyphen, never inside a word,
+// as the Member tables above do; an everyday name stays whole, and an amount never wraps.
+it('lets a long name wrap in Paid by and Share, and keeps an everyday one and its amount whole (#928)', () => {
+  const longName = 'Priyamvada Venkataraghavan-Subramaniam';
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(
+        buildStatement(
+          {
+            id: 'maple',
+            name: 'Maple House',
+            theme: 'home',
+            currency: 'INR',
+            members: [
+              { id: 'alice', name: 'Alice Tester' },
+              { id: 'priya', name: longName },
+            ],
+            names: { alice: 'Alice Tester', priya: longName },
+            tags: [],
+            expenses: [
+              {
+                id: 'sofa',
+                date: '2026-09-15',
+                description: 'Sofa',
+                category: 'housing',
+                tag: 'Furniture',
+                currency: 'INR',
+                amountMinor: 3000000,
+                splitMethod: 'equal',
+                paidBy: [
+                  { userId: 'alice', amountMinor: 2000000 },
+                  { userId: 'priya', amountMinor: 1000000 },
+                ],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 1500000 },
+                  { userId: 'priya', amountMinor: 1500000 },
+                ],
+              },
+            ],
+            settlements: [],
+          },
+          { timeZone: 'UTC' },
+        ),
+      ),
+    },
+  });
+  const table = /<table\b[^>]*aria-label="INR first Expenses"[^>]*>([\s\S]*?)<\/table>/.exec(html);
+  expect(text(table![1])).toContain(
+    `Alice Tester ₹20,000.00 ${longName} ₹10,000.00 ₹30,000.00 Alice Tester ₹15,000.00 ${longName} ₹15,000.00`,
+  );
+  // Two payers and two shares, in order: Alice, the long name, Alice, the long name.
+  const names = stylesOf(html, 'statement-preview-name');
+  expect(names.map((name) => name.value('white-space'))).toEqual([
+    'nowrap',
+    'normal',
+    'nowrap',
+    'normal',
+  ]);
+  for (const name of names) {
+    // Never inside a word.
+    expect(name.value('overflow-wrap')).toBeUndefined();
+    expect(name.value('word-break')).toBeUndefined();
+  }
+  // What is not the name, the amount, stays on one line; nothing else holds the name to one.
+  for (const person of stylesOf(html, 'statement-preview-person')) {
+    const rules = person.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('');
+    expect(rules).toMatch(/>:not\(\.statement-preview-name\)\{[^}]*white-space:nowrap/);
+    expect(rules).not.toMatch(/>\*\{[^}]*white-space:nowrap/);
+  }
+});

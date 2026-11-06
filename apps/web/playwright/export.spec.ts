@@ -240,11 +240,23 @@ test('preview follows Groups, period, include and format choices with recovery',
  * #916: the printable statement's preview fits its card at 1280 and at the `md` breakpoint (900):
  * no statement preview table scrolls, and every figure in them, a date or an amount, sits inside
  * its table and the card. A phone width may still scroll, so the desktop projects check this.
+ * #928: with a long hyphenated name, as a member may have, the name wraps in Paid by and Share
+ * between its words and after its hyphen, never inside a word, and Share stays in the card. The
+ * preview is read as served, with Priya's name made long, so no seeded name changes.
  */
-test('the statement preview’s tables fit the card at 1280 and 900, every figure in view', async ({
+test('the statement preview’s tables fit the card at 1280 and 900, a long name and every figure in view', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name.startsWith('mobile'), 'A phone-width preview may scroll.');
+  const longName = 'Priyamvada Venkataraghavan-Subramaniam';
+  await page.route('**/api/export?**', async (route) => {
+    if (new URL(route.request().url()).searchParams.get('preview') !== '1') return route.continue();
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      body: (await response.text()).replaceAll('Priya Shah', longName),
+    });
+  });
   await enterAsPersona(page, 'alex');
   for (const width of [1280, 900]) {
     await page.setViewportSize({ width, height: 900 });
@@ -252,14 +264,14 @@ test('the statement preview’s tables fit the card at 1280 and 900, every figur
     await page.getByLabel('Period', { exact: true }).selectOption('all');
     await page.getByRole('radio', { name: 'Printable statement', exact: true }).check();
     const preview = page.getByRole('region', { name: 'Preview', exact: true });
-    await expect(
-      preview.getByRole('table', { name: 'INR first Expenses', exact: true }),
-    ).toBeVisible();
+    const expenses = preview.getByRole('table', { name: 'INR first Expenses', exact: true });
+    await expect(expenses).toBeVisible();
+    await expect(expenses).toContainText(longName);
     // The statement's time, "Fri 6 Nov 2026, 12:40 PM" (zonedDateTime).
     await expect(preview).toContainText(
       /Generated (Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}\s[A-Z][a-z]{2} \d{4}, \d{1,2}:\d{2}\s[AP]M/,
     );
-    const misfits = await preview.evaluate((card) => {
+    const misfits = await preview.evaluate((card, longName) => {
       const found: string[] = [];
       const inside = (outer: DOMRect, inner: DOMRect) =>
         inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5;
@@ -273,17 +285,30 @@ test('the statement preview’s tables fit the card at 1280 and 900, every figur
         const box = region.getBoundingClientRect();
         const walker = document.createTreeWalker(region, NodeFilter.SHOW_TEXT);
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-          if (!/\d/.test(node.textContent ?? '')) continue;
+          const text = node.textContent ?? '';
+          if (!/\d/.test(text) && text !== longName) continue;
           const range = document.createRange();
           range.selectNodeContents(node);
           for (const rect of range.getClientRects()) {
             if (!inside(box, rect) || !inside(cardBox, rect))
-              found.push(`${name}: “${node.textContent}” at ${rect.left}–${rect.right}`);
+              found.push(`${name}: “${text}” at ${rect.left}–${rect.right}`);
+          }
+          if (text !== longName) continue;
+          // Where the name breaks onto a new line, the line before ends at a space or a hyphen.
+          let top: number | undefined;
+          for (let i = 0; i < text.length; i += 1) {
+            range.setStart(node, i);
+            range.setEnd(node, i + 1);
+            const rect = range.getClientRects()[0];
+            if (!rect) continue;
+            if (top !== undefined && rect.top > top + 1 && !/[ -]/.test(text[i - 1]))
+              found.push(`${name}: “${text}” breaks inside a word, before “${text.slice(i)}”`);
+            top = rect.top;
           }
         }
       }
       return found;
-    });
+    }, longName);
     expect(misfits, `at ${width} px`).toEqual([]);
   }
 });
