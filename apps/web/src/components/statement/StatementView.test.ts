@@ -402,6 +402,25 @@ describe('the statement’s table cells', () => {
     expect(regions).toHaveLength(4);
     for (const region of regions) expect(region.value('overflow-x')).toBe('auto');
   });
+
+  // #646: the on-screen A4 sheet leaves print's 180 mm for its tables, and at full screen type
+  // the Expenses table was wider: "$413.50" showed as "$413" behind a hidden scrollbar. From the
+  // md breakpoint the sheet's tables take print's type and padding; a phone's still scroll.
+  it('sets the sheet’s tables as print does, on screen from md', () => {
+    const css = readFileSync(STATEMENT_CSS, 'utf8');
+    const md = createAppTheme('light').breakpoints.values.md;
+    const query = `@media print, screen and (min-width: ${md}px)`;
+    expect(css).toContain(query);
+    const block = css.slice(css.indexOf(query));
+    const rule = (selector: string) =>
+      new RegExp(`${selector.replace(/[.*]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(block)?.[1] ?? '';
+    expect(rule('.statement-paper table')).toMatch(/font-size:\s*9pt/);
+    expect(rule('.statement-paper table *')).toMatch(/font-size:\s*inherit/);
+    expect(rule('.statement-paper td')).toMatch(/padding:\s*3pt 4pt/);
+    // Print keeps no copy of its own that could drift from the screen's.
+    const print = css.slice(css.indexOf('@media print {'), css.indexOf(query));
+    expect(print).not.toMatch(/font-size:\s*9pt/);
+  });
 });
 
 // #646 follow-up: the summary is one ruled strip with dividers and small uppercase labels, as

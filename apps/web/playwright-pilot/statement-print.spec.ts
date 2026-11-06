@@ -1,6 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Browser, type TestInfo } from '@playwright/test';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
-import { enterAsPersona } from '../playwright/fixtures';
+import { enterAsPersona, isPhone, type PersonaKey } from '../playwright/fixtures';
 
 test('statement print uses clean A4 light colours in every theme', async ({ page }) => {
   await enterAsPersona(page, 'alex');
@@ -132,4 +132,135 @@ test('statement print keeps every amount and date on one line at A4 width', asyn
   expect(report.checked).toBeGreaterThan(10);
   expect(report.wrapped).toEqual([]);
   expect(report.overflowing).toEqual([]);
+});
+
+/** A persona's own signed-in page, beside the test's. */
+async function personaPage(browser: Browser, testInfo: TestInfo, persona: PersonaKey) {
+  const context = await browser.newContext({ baseURL: testInfo.project.use.baseURL });
+  const page = await context.newPage();
+  await enterAsPersona(page, persona);
+  return page;
+}
+
+// #646: on screen the statement is an A4 sheet, 180 mm between its margins. At full screen type
+// the Expenses table, with a name and an amount on each Paid by and Share line, was wider than
+// that: it scrolled, the macOS scrollbar hid, and readers saw "$413" for $413.50. From the md
+// breakpoint the sheet's tables take print's type and padding, so every figure shows, unscrolled.
+test('on screen the statement’s tables fit the A4 sheet at 1280 and at md', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.skip(isPhone(testInfo), 'On a phone a wide table scrolls inside the sheet.');
+  await enterAsPersona(page, 'alex');
+  const response = await page.request.post('/api/groups', {
+    data: {
+      name: 'Kerala and Singapore statement',
+      category: 'trip',
+      defaultCurrency: 'INR',
+      alternateCurrencies: ['USD'],
+    },
+  });
+  expect(response.status()).toBe(201);
+  const id = (await response.json()).data._id;
+  const invite = await page.request.post(`/api/groups/${id}/invite-link`, { data: {} });
+  expect(invite.status(), await invite.text()).toBe(201);
+  const code = (await invite.json()).data.inviteCode;
+  const sam = await personaPage(browser, testInfo, 'sam');
+  const priya = await personaPage(browser, testInfo, 'priya');
+  for (const member of [sam, priya]) {
+    const joined = await member.request.post(`/api/join/${code}`);
+    expect(joined.status(), await joined.text()).toBe(201);
+  }
+  // Each member pays one of each currency's equal Expenses and shares all three, and the INR
+  // payment goes back the other way, so the test leaves everyone settled: later tests read the
+  // personas' real balances.
+  const everyone = [DEMO_PERSONA_IDS.alex, DEMO_PERSONA_IDS.sam, DEMO_PERSONA_IDS.priya];
+  for (const [currency, amount, descriptions] of [
+    [
+      'INR',
+      154000.5,
+      [
+        'Houseboat for the whole group, all meals and two nights on the backwaters, booked early',
+        'Homestay in Munnar, three rooms for three nights with breakfast',
+        'Kathakali tickets and the green room tour before the show',
+      ],
+    ],
+    [
+      'USD',
+      1240.5,
+      [
+        'Singapore hotel, two nights near the river, with the late check-out',
+        'Night safari tickets',
+        'Chilli crab',
+      ],
+    ],
+  ] as const) {
+    for (const [index, description] of descriptions.entries()) {
+      const expense = await page.request.post(`/api/groups/${id}/expenses`, {
+        data: {
+          description,
+          date: '2026-09-15',
+          amount,
+          currency,
+          category: 'food',
+          tag: 'General',
+          paidBy: [{ user: everyone[index], amount }],
+          splitMethod: 'equal',
+          splitBetween: everyone.map((user) => ({ user })),
+        },
+      });
+      expect(expense.status(), await expense.text()).toBe(201);
+    }
+  }
+  for (const [payer, from, to] of [
+    [sam, DEMO_PERSONA_IDS.sam, DEMO_PERSONA_IDS.alex],
+    [page, DEMO_PERSONA_IDS.alex, DEMO_PERSONA_IDS.sam],
+  ] as const) {
+    const payment = await payer.request.post(`/api/groups/${id}/settlements`, {
+      data: {
+        paidBy: from,
+        paidTo: to,
+        amount: 25000,
+        currency: 'INR',
+        note: 'Houseboat, my part',
+      },
+      headers: {
+        'Idempotency-Key': `statement-screen-${from}-${testInfo.project.name}-${Date.now()}`,
+      },
+    });
+    expect(payment.status(), await payment.text()).toBe(201);
+  }
+  await Promise.all([sam.context().close(), priya.context().close()]);
+
+  // 1280, a laptop's screen; 900, MUI's md, where the sheet takes its 15 mm margins.
+  for (const width of [1280, 900]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/groups/${id}/statement?tz=Asia%2FKolkata`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      'Kerala and Singapore statement · Statement',
+    );
+    await expect(page.locator('.statement-paper')).toContainText('₹51,333.50');
+    await page.evaluate(() => document.fonts.ready);
+    const tables = await page.locator('.statement-paper').evaluate((paper) =>
+      [...paper.querySelectorAll('section[aria-label$=" statement"]')].flatMap((section) =>
+        [...section.querySelectorAll('.statement-table-region')].map((region) => {
+          const right = region.getBoundingClientRect().right;
+          return {
+            table: `${section.getAttribute('aria-label')}: ${region.getAttribute('aria-label')}`,
+            scrolls: region.scrollWidth > region.clientWidth,
+            // A figure past the region's edge is cut off however the region scrolls.
+            cut: [...region.querySelectorAll('.statement-amount')].filter(
+              (amount) => amount.getBoundingClientRect().right > right + 0.5,
+            ).length,
+          };
+        }),
+      ),
+    );
+    // Two currencies, each with contributions, balances, Expenses and (INR) payments.
+    expect(tables.length, `${width}px`).toBe(7);
+    expect(
+      tables.filter((table) => table.scrolls || table.cut),
+      `${width}px`,
+    ).toEqual([]);
+  }
 });

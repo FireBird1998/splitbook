@@ -74,8 +74,13 @@
   .statement-table-region {
     overflow: visible !important;
   }
-  /* Every column fits the 180 mm between A4's margins: 9 pt throughout, amounts too (they
-     never wrap), with tighter cell padding. Only Description and Note wrap. */
+}
+
+/* Every column fits the 180 mm between A4's margins: 9 pt throughout, amounts too (they never
+   wrap), with tighter cell padding. Only Description and Note wrap. In print, and on screen from
+   md (MUI's 900 px), where the A4 sheet leaves its tables the same 180 mm (#646). Below md the
+   sheet is the screen's width and a wide table scrolls inside it. */
+@media print, screen and (min-width: 900px) {
   .statement-paper table {
     width: 100%;
     font-size: 9pt;
