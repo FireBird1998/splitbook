@@ -25,6 +25,7 @@ import {
   labelRuns,
   largeTextWindows,
   layoutHeight,
+  layoutWidth,
   middleCutEnd,
   outerTexts,
   tailCutOverrun,
@@ -1231,6 +1232,94 @@ describe.each(['light', 'dark'] as const)('Expense rows at large text in %s (#63
           cutOnce: size.fontScale < 1.5,
         }),
       ).toEqual([]);
+  });
+});
+
+// #925, the Designer's release check: at 200% on a 360 dp phone, a CHF 10,000,000.00 Expense's
+// caption read "you owe CHF 10,000,000…": the row's caption was held to one line. It wraps, so the
+// amount goes onto a line of its own, as the Expense record's badge does.
+describe.each(['light', 'dark'] as const)('a large Expense in the list in %s (#925)', (mode) => {
+  // Priya paid CHF 10,000,000.00 for an office fit-out, all of it Alex's share.
+  const office: MobileExpense = {
+    ...expense(
+      'e00000000000000000000009',
+      'Office fit-out',
+      30,
+      [[priya, 1_000_000_000]],
+      [[you, 1_000_000_000]],
+    ),
+    currency: 'CHF',
+  };
+  const list = (size: { width: number; fontScale: number }, data = [office]) => {
+    setWindow({ ...size, height: 640 });
+    act(() => {
+      screen = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <GroupExpensesView
+            group={{ ...group(), defaultCurrency: 'CHF' }}
+            currentUserId={you}
+            state={financial({ data, summary: null })}
+            kept={null}
+            savedExpenseId={null}
+            now={now}
+            onSelectMonth={vi.fn()}
+            onRefreshExpenses={vi.fn()}
+            onLoadMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onOpenExpense={vi.fn()}
+            onResumeDraft={vi.fn()}
+            onDiscardDraft={vi.fn()}
+          />
+        </ThemeContext.Provider>,
+      );
+    });
+    return findHosts(
+      screen!.toJSON(),
+      (props, type) => type === 'Pressable' && flatten(props.style).minHeight === 60,
+    ) as ReactTestRendererJSON[];
+  };
+  /** A row's caption: what the member owes or lent. */
+  const caption = (row: ReactTestRendererJSON) =>
+    outerTexts(row).find((text) => /^you (owe|lent) /.test(wordsOf(text)))!;
+
+  it.each([
+    { width: 360, fontScale: 2 },
+    { width: 412, fontScale: 2 },
+  ])('shows every digit of what the member owes, $width dp at $fontScale× text', (size) => {
+    const [row] = list(size);
+    expect(wordsOf(caption(row!))).toMatch(/^you owe CHF\u00a010,000,000\.00/);
+    // Each row lies in a Card inset 16dp from the screen's edges, inside its 1dp border.
+    expect(unreadText(row!, size.fontScale, size.width - 34)).toEqual([]);
+  });
+
+  it('puts the amount on a line of its own under “you owe”, at 200% on 360 dp', () => {
+    const [row] = list({ width: 360, fontScale: 2 });
+    const line = caption(row!);
+    expect(line.props.numberOfLines).toBeUndefined();
+    // The words and the amount keep apart only where a line may break: after "owe".
+    expect(wordsOf(line)).toContain('CHF\u00a010,000,000.00');
+  });
+
+  it.each([
+    { width: 360, fontScale: 1 },
+    { width: 412, fontScale: 1 },
+    { width: 360, fontScale: 1.3 },
+    { width: 412, fontScale: 1.3 },
+  ])('keeps an ordinary caption on one line, $width dp at $fontScale× text', (size) => {
+    const rows = list(size, [groceries, electricity, lunch, villa]);
+    const captions = rows.flatMap((row) =>
+      outerTexts(row).filter((text) => /^you (owe|lent) /.test(wordsOf(text))),
+    );
+    // Alex has no part in the beach shack lunch.
+    expect(captions).toHaveLength(3);
+    // Narrower than the row inside its Card's border and padding: one line, wherever it sits.
+    for (const line of captions)
+      expect(layoutWidth(line, size.fontScale)).toBeLessThan(size.width - 34 - 28);
+    expect(
+      rows.flatMap((row) =>
+        unreadText(row, size.fontScale, size.width - 34, { cutOnce: size.fontScale < 1.5 }),
+      ),
+    ).toEqual([]);
   });
 });
 
