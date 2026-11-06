@@ -120,17 +120,22 @@ function PreviewTable({
 
 /**
  * A name and its amount in Paid by or Share, as the statement writes them: on one line where
- * the card has room, the amount under the name where it hasn't, never cut off (#916).
+ * the card has room, the amount under the name where it hasn't, never cut off (#916). A wrapped
+ * amount keeps to the column's right edge with the other figures, and each person is set a
+ * little apart, so an amount never reads as the next person's.
  */
 function PersonAmount({ name, children }: { name: string; children: ReactNode }) {
   return (
     <Box
+      className="statement-preview-person"
       sx={{
         display: 'flex',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
         columnGap: 1.5,
         '& > *': { whiteSpace: 'nowrap' },
+        '& > *:last-child': { marginLeft: 'auto' },
+        '& + &': { marginTop: '4px' },
       }}
     >
       <span>{name}</span>

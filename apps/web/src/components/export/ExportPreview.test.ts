@@ -4,7 +4,7 @@ import { act, create, type ReactTestInstance } from 'react-test-renderer';
 import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
-import { text } from '@/lib/test-utils/markup';
+import { stylesOf, text } from '@/lib/test-utils/markup';
 import { exportPreviewSchema, type ExportPreview } from '@splitbook/shared/export-preview';
 import { buildStatement } from '@splitbook/shared/statement';
 import { buildStatementPreview } from '@splitbook/shared/export-preview';
@@ -746,4 +746,63 @@ it('lays out a statement preview’s Expenses as the statement does, Tag under t
     '14 Sep 2026 Groceries Food Alice Tester ₹70.06 ₹70.06 Alice Tester ₹35.03 Bob Tester ₹35.03',
   );
   expect(table![1]).toMatch(/<th\b[^>]*scope="row"[^>]*>Groceries</);
+});
+
+// #916, the Designer's polish: when a Share or Paid by amount wraps under its name in the narrow
+// card, it keeps to the column's right edge with the other figures, and each person is set a
+// little apart, so an amount never reads as the next person's.
+it('keeps a wrapped amount on the right and sets each person apart (#916)', () => {
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(
+        buildStatement(
+          {
+            id: 'maple',
+            name: 'Maple House',
+            theme: 'home',
+            currency: 'INR',
+            members: [
+              { id: 'alice', name: 'Alice Tester' },
+              { id: 'bob', name: 'Bob Tester' },
+            ],
+            names: { alice: 'Alice Tester', bob: 'Bob Tester' },
+            tags: [],
+            expenses: [
+              {
+                id: 'expense',
+                date: '2026-09-14T00:00:00.000Z',
+                description: 'Groceries',
+                category: 'food',
+                tag: 'Food',
+                currency: 'INR',
+                amountMinor: 7006,
+                splitMethod: 'equal',
+                paidBy: [{ userId: 'alice', amountMinor: 7006 }],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 3503 },
+                  { userId: 'bob', amountMinor: 3503 },
+                ],
+              },
+            ],
+            settlements: [],
+          },
+          { timeZone: 'UTC' },
+        ),
+      ),
+    },
+  });
+  const people = stylesOf(html, 'statement-preview-person');
+  // Paid by's one person and Share's two.
+  expect(people).toHaveLength(3);
+  for (const person of people) {
+    expect(person.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('')).toMatch(
+      />\*:last-child\{[^}]*margin-left:auto/,
+    );
+  }
+  expect(
+    people[0].nested.some((rule) => rule.selector.includes('+') && /margin-top:/.test(rule.body)),
+  ).toBe(true);
 });
