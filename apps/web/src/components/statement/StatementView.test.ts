@@ -678,4 +678,10 @@ it('lets a long name-and-amount line wrap, and keeps an everyday one whole (#928
     const rules = line.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('');
     expect(rules).toMatch(/>\.statement-amount\{[^}]*margin-left:auto/);
   }
+  // A wrapped line is set apart from the person after it, as the preview's are (#928), so an
+  // amount on its own line never reads as the next name's.
+  for (const line of [lines[1], lines[3]]) {
+    const rules = line.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('');
+    expect(rules).toMatch(/\+\*\{[^}]*margin-top:4px/);
+  }
 });

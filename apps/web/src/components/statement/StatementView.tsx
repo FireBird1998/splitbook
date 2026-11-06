@@ -114,7 +114,14 @@ function PersonAmount({
         gap: 1.5,
         whiteSpace: 'nowrap',
         ...(mayWrap
-          ? { flexWrap: 'wrap', rowGap: 0, '& > .statement-amount': { marginLeft: 'auto' } }
+          ? {
+              flexWrap: 'wrap',
+              rowGap: 0,
+              '& > .statement-amount': { marginLeft: 'auto' },
+              // Set apart from the person after it, so an amount on its own line never reads as
+              // the next name's (#928).
+              '& + *': { marginTop: '4px' },
+            }
           : {}),
       }}
     >
