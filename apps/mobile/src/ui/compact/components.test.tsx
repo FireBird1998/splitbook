@@ -982,6 +982,11 @@ describe('a long hyphenated name breaks after its hyphen, never inside a word (#
       [...word].reduce((sum, character) => sum + outfitSemiboldAdvance(character)!, 0);
     expect(widestSemiboldWord(long)).toBeCloseTo(width('Venkataraghavan-'), 6);
     expect(widestSemiboldWord('Zoë Ånström')).toBeCloseTo(width('Anstrom'), 6);
+    // Android breaks a line after a slash before a letter, as in a Group named
+    // "Kochi/Alleppey/Munnar": its widest word is "Alleppey/", not all of it (QA).
+    expect(widestSemiboldWord('Kochi/Alleppey/Munnar')).toBeCloseTo(width('Alleppey/'), 6);
+    // Not before a digit, as in a date.
+    expect(widestSemiboldWord('Rent 2026/11/06')).toBeCloseTo(width('2026/11/06'), 6);
     // A script the app's font doesn't draw is measured by Android alone.
     expect(widestSemiboldWord('प्रिया')).toBeNull();
   });

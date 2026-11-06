@@ -16,7 +16,7 @@ import {
   type SettlementState,
 } from '../data/settlement';
 import type { GroupCurrencyBalance, MobileGroup } from '../data/types';
-import { findHosts, largeTextWindows, unreadText, wordsOf } from '../test-utils/layout';
+import { findHosts, flatten, largeTextWindows, unreadText, wordsOf } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
@@ -404,4 +404,44 @@ describe('Settle up with a long hyphenated name (#921)', () => {
     expect(unreadText(body!, size.fontScale, size.width)).toEqual([]);
     expect(unreadText(footer!, size.fontScale, size.width)).toEqual([]);
   });
+});
+
+// QA's device check of #921: a name of one word wider than the sheet ("Priyamvada
+// Venkataraghavansubramaniam", 506 dp at 200%) made the title's column wider than its header,
+// so the title ran past the sheet's edge and was cut ("Settle up with Priyamv"). A word that wide
+// breaks anyway; the title's column is never wider than its header.
+describe('Settle up with a name wider than the sheet (#921)', () => {
+  const long = 'Priyamvada Venkataraghavansubramaniam';
+  const named = (): SettlementState => {
+    const settlement = state(paying());
+    const members = settlement.group!.members.map((member) =>
+      member.user.id === sam ? { ...member, user: { ...member.user, name: long } } : member,
+    );
+    return {
+      ...settlement,
+      group: { ...settlement.group!, members },
+      balances: settlement.balances.map((balance) => ({
+        ...balance,
+        debts: balance.debts.map((owed) => ({ ...owed, to: { ...owed.to, name: long } })),
+      })),
+    };
+  };
+  it.each(largeTextWindows)(
+    'keeps its title inside the sheet, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      render(named());
+      const tree = screen!.toJSON() as ReactTestRendererJSON;
+      const [header] = findHosts(tree, (props, type) => {
+        const style = flatten(props.style);
+        return type === 'View' && style.flexDirection === 'row' && style.paddingLeft === 20;
+      });
+      const { paddingLeft, paddingRight } = flatten(header!.props.style);
+      const [title] = header!.children as ReactTestRendererJSON[];
+      expect(wordsOf(title!)).toContain('Venkataraghavansubramaniam');
+      expect(flatten(title!.props.style).minWidth).toBeLessThanOrEqual(
+        size.width - Number(paddingLeft) - Number(paddingRight),
+      );
+    },
+  );
 });

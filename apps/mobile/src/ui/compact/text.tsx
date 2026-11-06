@@ -104,13 +104,14 @@ export const breakAfterHyphens = (text: string) =>
 
 /**
  * The widest word of `text` in Outfit SemiBold, the face of titles, in ems: its words as its lines
- * break them, at white space and after a hyphen between letters (`breakAfterHyphens`). An
- * accented letter is as wide as its letter; kerning is left out (a few hundredths of an em). Null
- * when a character's width isn't known here, as for a script the font doesn't draw (#921).
+ * break them, at white space, after a hyphen between letters (`breakAfterHyphens`) and after a
+ * slash before a letter ("Kochi/ Alleppey/"). An accented letter is as wide as its letter; kerning
+ * is left out (a few hundredths of an em). Null when a character's width isn't known here, as for a
+ * script the font doesn't draw (#921).
  */
 export function widestSemiboldWord(text: string): number | null {
   let widest = 0;
-  for (const word of breakAfterHyphens(text).split(/[\s\u200b]+/)) {
+  for (const word of breakAfterHyphens(text).split(/[\s\u200b]+|(?<=\/)(?=\p{L})/u)) {
     let width = 0;
     for (const character of word.normalize('NFD').replace(/\p{M}/gu, '')) {
       const advance = outfitSemiboldAdvance(character);

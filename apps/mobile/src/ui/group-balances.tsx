@@ -28,6 +28,7 @@ import {
   SkeletonText,
   StatusText,
   scaledSp,
+  space,
   textVariants,
   useLargeText,
   useLargestText,
@@ -634,6 +635,9 @@ function SettleUp({
   );
 }
 
+/** A Suggested payment's or a Debt's padding at its sides, inside its Card. */
+const paymentRowPadding = 14;
+
 /**
  * A Suggested payment or a Debt: who pays whom, read as one with its amount in the text colour,
  * and Record after a payment's.
@@ -653,8 +657,13 @@ function PaymentRow({
 }) {
   const theme = useTheme();
   const whole = useLargestText();
-  // From 150% the title wraps, keeping room for its widest word (#921).
-  const column = useTextColumn(whole ? title : undefined);
+  // From 150% the title wraps, keeping room for its widest word (#921), and no more than the row
+  // has: the screen's gutter, its Card's border and the row's own padding on each side.
+  const column = useTextColumn(
+    whole ? title : undefined,
+    'body',
+    2 * (space.gutter + 1 + paymentRowPadding),
+  );
   // From 130% text the row runs several lines: its avatars keep beside the first, at the top,
   // as an Activity row's does (#792), centred on that line.
   const top = useLargeText();
@@ -667,7 +676,7 @@ function PaymentRow({
         alignItems: top ? 'flex-start' : 'center',
         gap: 10,
         paddingVertical: 8,
-        paddingHorizontal: 14,
+        paddingHorizontal: paymentRowPadding,
         // At large text, Record goes onto a line of its own where it would leave the payment
         // less than `largeTextColumn`: at 200% on a 360dp phone the amount read "₹1,0…" beside
         // it (#639).

@@ -1599,3 +1599,58 @@ describe('a Suggested payment to a long hyphenated name (#921)', () => {
     },
   );
 });
+
+// QA's device check of #921: a name of one word wider than the row ("Priyamvada
+// Venkataraghavansubramaniam") made the payment's column wider than its row, so "You pay ..." ran
+// past the Card's edge and was cut ("Venkataraghavansubram"). A word that wide breaks anyway; the
+// column is never wider than its row.
+describe('a Suggested payment to a name wider than its row (#921)', () => {
+  const long = person(sam, 'Priyamvada Venkataraghavansubramaniam');
+  const alex = person(you, 'Alex Rivera');
+  it.each(largeTextWindows.filter(({ fontScale }) => fontScale === 2))(
+    'keeps the payment inside its row, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      render(
+        <ThemeContext.Provider value={getSemanticTokens('light')}>
+          <GroupBalancesView
+            group={group('trip')}
+            currentUserId={you}
+            state={financial({
+              data: [
+                {
+                  currency: 'INR',
+                  balances: [
+                    { user: alex, balance: -1480 },
+                    { user: long, balance: 1480 },
+                  ],
+                  debts: [{ from: alex, to: long, amount: 1480 }],
+                },
+              ],
+            })}
+            pending={null}
+            offline={false}
+            onRecord={vi.fn()}
+            onCheckPayment={vi.fn()}
+            onRefreshBalances={() => undefined}
+          />
+        </ThemeContext.Provider>,
+      );
+      const tree = screen!.toJSON() as ReactTestRendererJSON;
+      const [payment] = findHosts(
+        tree,
+        (props) =>
+          typeof props.accessibilityLabel === 'string' &&
+          props.accessibilityLabel.startsWith('You pay Priyamvada'),
+      );
+      const [row] = findHosts(tree, (_props, type) => type === 'View').filter((node) =>
+        (node.children ?? []).includes(payment!),
+      );
+      const { paddingHorizontal } = flatten(row!.props.style);
+      // The screen's 16 dp inset and the Card's 1 dp border on each side.
+      expect(flatten(payment!.props.style).minWidth).toBeLessThanOrEqual(
+        size.width - 34 - 2 * Number(paddingHorizontal),
+      );
+    },
+  );
+});
