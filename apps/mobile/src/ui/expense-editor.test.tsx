@@ -9,6 +9,7 @@ import {
 import {
   findHosts,
   flatten,
+  hairSpace,
   largeTextWindows,
   layoutHeight,
   layoutWidth,
@@ -28,6 +29,7 @@ import { expenseDateLabel } from './expense-form';
 import { ExpenseRecordView } from './expense-record-view';
 import { OfflineNotice } from './offline-notice';
 import { expenseRecoveryWords } from './expense-recovery-copy';
+import { lineBox } from './compact/scale';
 
 const { AccessibilityInfo } = await import('react-native');
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -328,7 +330,7 @@ async function render(
   const link = (label: string) =>
     root().find(
       (node) =>
-        isHost(node, 'Text') &&
+        typeof node.type === 'string' &&
         node.props.accessibilityRole === 'link' &&
         node.props.accessibilityLabel === label,
     );
@@ -584,31 +586,34 @@ describe('rendered Expense corrections', () => {
     expect(ui.focusCount('Amount, Indian Rupee, required')).toBe(1);
   });
 
-  // #646 A9: one sentence, as the board has it, with each field's name a link to it.
+  // #646 A9: one sentence, as the board has it, with each field's name a link to it. Android
+  // speaks a link nested in a text by its words alone and gives it only the line's height, so each
+  // name is a link of its own in the sentence's row: "Go to Amount", 48 dp tall to touch.
   it('says what to fix in one sentence, each name a link that goes to its field', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     await ui.press('Save expense');
     const banner = () =>
       ui.root().find((node) => isHost(node, 'View') && node.props.accessibilityRole === 'alert');
-    // The banner's sentence: one text, its field names nested in it.
+    const said = expenseRecoveryWords('Your draft is kept. Fix Amount, Description and Tag.');
+    // The sentence is read whole, then each link on its own.
     const sentence = () =>
       banner().find(
-        (node) =>
-          isHost(node, 'Text') &&
-          node.props.accessibilityRole !== 'link' &&
-          node.findAll((child) => isHost(child, 'Text') && child.props.accessibilityRole === 'link')
-            .length > 0,
+        (node) => isHost(node, 'View') && node.props.accessible && node.props.accessibilityLabel,
       );
     const words = (node: ReactTestInstance): string =>
-      node.children.map((child) => (typeof child === 'string' ? child : words(child))).join('');
-    expect(words(sentence())).toBe(
-      expenseRecoveryWords('Your draft is kept. Fix Amount, Description and Tag.'),
-    );
+      node.children
+        .map((child) => (typeof child === 'string' ? child : words(child)))
+        .join('')
+        .replaceAll(hairSpace, '');
+    expect(sentence().props.accessibilityLabel).toBe(said);
+    expect(words(sentence())).toBe(said);
     expect(text(banner())).not.toContain('Go to each one');
-    // No buttons under it: the names are the way to each field.
-    expect(banner().findAll((node) => isHost(node, 'Pressable'))).toEqual([]);
+    // No link nested in a text: Android would speak it as "Amount", not "Go to Amount".
+    expect(
+      banner().findAll((node) => isHost(node, 'Text') && node.props.accessibilityRole === 'link'),
+    ).toEqual([]);
     const links = sentence().findAll(
-      (node) => isHost(node, 'Text') && node.props.accessibilityRole === 'link',
+      (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'link',
     );
     expect(links.map((node) => [words(node), node.props.accessibilityLabel])).toEqual([
       ['Amount', 'Go to Amount'],
@@ -625,6 +630,32 @@ describe('rendered Expense corrections', () => {
     expect(words(sentence())).toBe(
       expenseRecoveryWords('Your draft is kept. Fix Description and Tag.'),
     );
+  });
+
+  // Each link's touch box is 48 dp tall at any text size, yet takes only its line's room in the
+  // sentence: its padding is given back by a negative margin. It is as wide as its words, so the
+  // names either side of a comma don't overlap.
+  it.each([1, 1.3, 2])('gives each link a 48 dp tall touch box at %s× text', async (fontScale) => {
+    setWindow({ fontScale });
+    onTestFinished(() => setWindow({ fontScale: 1 }));
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await ui.press('Save expense');
+    const links = ui
+      .root()
+      .findAll((node) => typeof node.type === 'string' && node.props.accessibilityRole === 'link');
+    expect(links.map((node) => node.props.accessibilityLabel)).toEqual([
+      'Go to Amount',
+      'Go to Description',
+      'Go to Tag',
+    ]);
+    const line = lineBox('small', fontScale).height;
+    for (const node of links) {
+      const style = flatten(node.props.style);
+      const vertical = Number(style.paddingVertical);
+      expect(line + 2 * vertical, node.props.accessibilityLabel).toBeCloseTo(48, 5);
+      expect(style.marginVertical).toBe(-vertical);
+      expect([style.paddingHorizontal, style.marginHorizontal]).toEqual([undefined, undefined]);
+    }
   });
 
   it('waits until a field is left before showing its correction', async () => {

@@ -1,8 +1,8 @@
 import { createContext, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
-import { radius, touch } from './scale';
+import { lineBox, radius, touch } from './scale';
 import { CompactText } from './text';
 
 export type BannerTone = 'info' | 'warning' | 'error' | 'offline';
@@ -21,6 +21,77 @@ const bannerIcons: Record<BannerTone, IconName> = {
   offline: 'cloud-offline-outline',
 };
 
+/** A place a sentence names, as a link to it: its words, and what a screen reader says. */
+export interface SentenceLink {
+  name: string;
+  label: string;
+  onPress: () => void;
+}
+
+/**
+ * A sentence that ends in links, joined as "A, B and C": "Fix Amount, Description and Tag."
+ * Android speaks a link nested in a text by its words alone ("Amount", never "Go to Amount") and
+ * gives it only the line's height to touch, so the sentence is a row of words and each link a
+ * control of its own, spoken as its label, its touch box 48 dp tall. Its padding is given back by
+ * a negative margin, so it takes only its line's room. It reaches no wider than its words, so the
+ * names either side of a comma never overlap. A screen reader reads the sentence whole, then each
+ * link.
+ */
+function LinkedSentence({
+  lead,
+  links,
+  color,
+  linkColor,
+}: {
+  lead: string;
+  links: SentenceLink[];
+  color: string;
+  linkColor: string;
+}) {
+  const { fontScale } = useWindowDimensions();
+  const vertical = Math.max(0, (touch.min - lineBox('small', fontScale).height) / 2);
+  const after = (index: number) =>
+    index === links.length - 1 ? '.' : index === links.length - 2 ? ' and ' : ', ';
+  const sentence = `${lead} ${links.map((link, index) => link.name + after(index)).join('')}`;
+  return (
+    <View
+      accessible
+      accessibilityLabel={sentence}
+      style={{ flexDirection: 'row', flexWrap: 'wrap' }}
+    >
+      {lead.split(' ').map((word, index) => (
+        <CompactText key={index} variant="small" style={{ color }}>
+          {`${word} `}
+        </CompactText>
+      ))}
+      {links.map((link, index) => (
+        <View key={link.name} style={{ flexDirection: 'row' }}>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={link.label}
+            onPress={link.onPress}
+            style={{
+              paddingVertical: vertical,
+              marginVertical: -vertical,
+            }}
+          >
+            <CompactText
+              variant="small"
+              weight="semibold"
+              style={{ color: linkColor, textDecorationLine: 'underline' }}
+            >
+              {link.name}
+            </CompactText>
+          </Pressable>
+          <CompactText variant="small" style={{ color }}>
+            {after(index)}
+          </CompactText>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /**
  * A compact message in context. Info marks an ordinary draft; warning marks a save that may
  * already be recorded or a conflict; error lists corrections; offline marks saved figures.
@@ -32,6 +103,7 @@ export function Banner({
   tone,
   title,
   message,
+  links,
   standing = false,
   heading = false,
   trailing,
@@ -41,8 +113,10 @@ export function Banner({
   title?: string;
   /** The title heads what follows, such as a duplicate's details: read as a heading. */
   heading?: boolean;
-  /** Text, or text runs such as a sentence with links in it. */
-  message: ReactNode;
+  /** With `links`, the words before them, such as "Your draft is kept. Fix". */
+  message: string;
+  /** Links that end the message as one sentence: "Fix Amount, Description and Tag." */
+  links?: SentenceLink[];
   /** A notice that stays on the screen, e.g. an unconfirmed payment: announced politely. */
   standing?: boolean;
   /** Beside the title, such as a draft's amount. */
@@ -86,13 +160,22 @@ export function Banner({
             {trailing}
           </View>
         ) : null}
-        <CompactText
-          variant="small"
-          tone="secondary"
-          style={title ? undefined : { color: colors[1] }}
-        >
-          {message}
-        </CompactText>
+        {links?.length ? (
+          <LinkedSentence
+            lead={message}
+            links={links}
+            color={title ? theme.textSecondary : colors[1]}
+            linkColor={colors[1]}
+          />
+        ) : (
+          <CompactText
+            variant="small"
+            tone="secondary"
+            style={title ? undefined : { color: colors[1] }}
+          >
+            {message}
+          </CompactText>
+        )}
         {children ? (
           // Its actions go onto a second line where large text leaves no room beside each other,
           // as "Resume draft" and "Discard draft" do at 130% on a 360dp phone (#664).
