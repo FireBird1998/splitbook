@@ -259,6 +259,9 @@ export default function StatementView({ statement }: { statement: Statement }) {
 /** Never "₹54,000. / 00": MoneyText may break anywhere elsewhere, never on the statement. */
 const WHOLE_FIGURE = { whiteSpace: 'nowrap', overflowWrap: 'normal' } as const;
 
+/** Printed even with background graphics off: the Summary strip's dividers are backgrounds. */
+const KEEP_BACKGROUND = { printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' } as const;
+
 /** The summary as a row of figures, each label above its value, as the Export preview has it. */
 function SummaryRow({ bucket }: { bucket: Statement['currencies'][number] }) {
   const currency = bucket.currency;
@@ -270,37 +273,40 @@ function SummaryRow({ bucket }: { bucket: Statement['currencies'][number] }) {
       // One ruled strip, a rule above and below and a divider between figures, as the board's
       // summary strip; stacked on a phone, the dividers run across. A tile is never narrower than
       // its figure, kept whole (#943): where three don't fit side by side, the strip wraps between
-      // tiles. Each tile rules its left and top 1 px outside its own box: between tiles the rule
-      // lands on its neighbour's last pixel, while at a row's start (and above the first row) it
-      // falls outside the strip, whose clip hides it at any subpixel offset, DPR or zoom. The
-      // strip has no padding, so its clip edge is where a row starts; it is never narrower than
-      // its widest tile, so the clip never reaches a figure. `clip`, not `hidden`: no scroll
-      // container, so nothing can scroll it and print fragments it as before.
+      // tiles. The dividers are the strip's own background, the rule colour, showing through its
+      // 1 px gaps, between tiles and between rows; each tile covers it with the sheet's surface.
+      // So no rule exists at a row's start at all, and nothing is hidden by clipping, which
+      // anti-aliased a hidden rule back in at fractional zoom. Every row is filled edge to edge
+      // (tiles grow), and the strip is never narrower than its widest tile, so the background
+      // shows only in the gaps. Its top and bottom rules stay borders, with the background
+      // clipped inside them. From sm the first tile's basis is 1 px more than the others', so the
+      // two dividers fall at W/3 and 2W/3, where the old three-column grid drew them. Print keeps
+      // the background (print-color-adjust here; statement.css repaints it for paper).
       sx={{
         display: 'flex',
         flexWrap: 'wrap',
+        gap: '1px',
         m: 0,
         mb: 1.5,
         minWidth: 'min-content',
-        overflow: 'clip',
+        bgcolor: 'divider',
+        backgroundClip: 'padding-box',
         borderTop: 1,
         borderBottom: 1,
         borderColor: 'divider',
+        ...KEEP_BACKGROUND,
       }}
     >
-      {statementSummary(bucket).map((figure) => (
+      {statementSummary(bucket).map((figure, index) => (
         <Box
           key={figure.label}
           className="statement-summary-item"
           sx={{
-            flex: { xs: '1 1 100%', sm: '1 1 0' },
+            flex: { xs: '1 1 100%', sm: index === 0 ? '1 1 1px' : '1 1 0' },
             px: 2,
             py: 1.25,
-            mt: '-1px',
-            ml: '-1px',
-            borderStyle: 'solid',
-            borderColor: 'divider',
-            borderWidth: '1px 0 0 1px',
+            bgcolor: 'background.paper',
+            ...KEEP_BACKGROUND,
           }}
         >
           <Typography
