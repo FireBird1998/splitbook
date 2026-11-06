@@ -55,6 +55,7 @@ const {
   TopBar,
   ellipsisRoom,
   moneySizes,
+  moneyWidth,
   scaledSp,
   textVariants,
 } = await import('./index');
@@ -1333,6 +1334,32 @@ describe('a line cut at its tail draws its "…" inside its box (#785)', () => {
         ).toBeLessThanOrEqual(0);
       act(() => renderer?.unmount());
     }
+  });
+});
+
+// #945, following #932's measurements on the emulator (412 dp, 420 dpi, 100%): Android draws the
+// money face 0.6 em a character, its letter spacing narrowing nothing. "₹1,250.00" in the table's
+// size took 185 px and "CHF 10,000,000.00" 349 px, where 0.6 em less the letter spacing gave 181
+// and 340. Every caller of `moneyWidth` decides from it whether an amount fits whole.
+describe('moneyWidth is as wide as Android draws an amount (#945)', () => {
+  /** px per dp at 420 dpi. */
+  const density = 420 / 160;
+  it.each([
+    ['₹1,250.00', 185],
+    ['CHF\u00a010,000,000.00', 349],
+  ])('measures %s at %s px, at 420 dpi and 1× text', (amount, drawn) => {
+    expect(Math.abs(moneyWidth(amount, 'table', 1) * density - drawn)).toBeLessThanOrEqual(1);
+  });
+
+  it('never measures an amount narrower than its characters at 0.6 em, at any size or text size', () => {
+    for (const size of ['form', 'balance', 'list', 'table'] as const)
+      for (const fontScale of [1, 1.15, 1.3, 1.5, 2]) {
+        const em = scaledSp(Number(moneySizes[size].fontSize), fontScale);
+        expect(
+          moneyWidth('₹1,234,567.89', size, fontScale),
+          `${size} ${fontScale}`,
+        ).toBeGreaterThanOrEqual(13 * 0.6 * em);
+      }
   });
 });
 
