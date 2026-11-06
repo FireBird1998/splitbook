@@ -492,16 +492,18 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
     </Money>
   );
   // Stacked, each kind of figure is as wide as the widest in the table, everyone's, so "Share"
-  // starts at one x in every row (#932).
+  // starts at one x in every row (#932). Never narrower than the currency's zero, the shortest an
+  // amount is written: Share then sits beside or under the dashes before the amount as it will
+  // beside or under the shortest amount, and typing one doesn't move Notes (#911).
   const figures = stacked
     ? {
         Paid: stackedFigure(
-          people.map((id) => figure(paid.get(id))),
+          [money(0), ...people.map((id) => figure(paid.get(id)))],
           width,
           fontScale,
         ),
         Share: stackedFigure(
-          people.map((id) => figure(shares.has(id) ? shares.get(id)! : 0)),
+          [money(0), ...people.map((id) => figure(shares.has(id) ? shares.get(id)! : 0))],
           width,
           fontScale,
         ),

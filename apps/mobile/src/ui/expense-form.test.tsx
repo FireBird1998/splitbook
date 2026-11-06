@@ -232,6 +232,36 @@ describe('Who owes what', () => {
     },
   );
 
+  // #932, QA on the emulator at 200% on a 360 dp phone: stacked, the dashes before the amount left
+  // Share beside "Paid –" in every row, and ₹9.00, as short as an INR amount is written, put Share
+  // under Paid in all three: typing it moved Notes 93 dp down (31 dp before #932). A figure still to
+  // come keeps the width of the currency's zero, so the shortest amount moves nothing.
+  it('is as tall before the amount as with the shortest one, stacked at 2x text on 360 dp (#932)', () => {
+    setWindow({ width: 360, height: 780, fontScale: 2 });
+    onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+    const members = ids.slice(0, 3);
+    const render = (value: ExpenseDraft, waiting: boolean) =>
+      act(() => {
+        renderer?.unmount();
+        renderer = create(
+          <WhoOwesWhat
+            draft={value}
+            allocation={waiting ? null : expenseMoney(value)}
+            problem="Enter a valid amount to see who owes what."
+            waiting={waiting}
+            name={(id) => people[ids.indexOf(id)]!}
+            currentUserId={ids[0]}
+            money={(minor) => `₹${(minor / 100).toFixed(2)}`}
+          />,
+        );
+      });
+    const height = () => layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, 2, 328);
+    render(draft('', members), true);
+    const before = height();
+    render(draft('9.00', members), false);
+    expect(height()).toBe(before);
+  });
+
   // #932, the Designer's review of #926: stacked, "Share" started wherever each row's Paid ended,
   // about 40 dp further right in the You row than under the others, and "Paid –" sat about 2 dp
   // lower than "Share ₹…". At 200% on a 360 dp phone, Share went under the You row's Paid and
