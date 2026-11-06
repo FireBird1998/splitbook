@@ -940,3 +940,191 @@ it('keeps a single payer’s name on the left of Paid by (#918)', () => {
   expect(pushes).toBeGreaterThanOrEqual(0);
   expect(rules.indexOf('>*:only-child{')).toBeGreaterThan(pushes);
 });
+
+// #928: on one line, "Priyamvada Venkataraghavan-Subramaniam" widened Paid by and pushed Share
+// out of the card. A long name wraps between its words and after its hyphen, never inside a word,
+// as the Member tables above do; an everyday name stays whole, and an amount never wraps.
+it('lets a long name wrap in Paid by and Share, and keeps an everyday one and its amount whole (#928)', () => {
+  const longName = 'Priyamvada Venkataraghavan-Subramaniam';
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(
+        buildStatement(
+          {
+            id: 'maple',
+            name: 'Maple House',
+            theme: 'home',
+            currency: 'INR',
+            members: [
+              { id: 'alice', name: 'Alice Tester' },
+              { id: 'priya', name: longName },
+            ],
+            names: { alice: 'Alice Tester', priya: longName },
+            tags: [],
+            expenses: [
+              {
+                id: 'sofa',
+                date: '2026-09-15',
+                description: 'Sofa',
+                category: 'housing',
+                tag: 'Furniture',
+                currency: 'INR',
+                amountMinor: 3000000,
+                splitMethod: 'equal',
+                paidBy: [
+                  { userId: 'alice', amountMinor: 2000000 },
+                  { userId: 'priya', amountMinor: 1000000 },
+                ],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 1500000 },
+                  { userId: 'priya', amountMinor: 1500000 },
+                ],
+              },
+            ],
+            settlements: [],
+          },
+          { timeZone: 'UTC' },
+        ),
+      ),
+    },
+  });
+  const table = /<table\b[^>]*aria-label="INR first Expenses"[^>]*>([\s\S]*?)<\/table>/.exec(html);
+  expect(text(table![1])).toContain(
+    `Alice Tester ₹20,000.00 ${longName} ₹10,000.00 ₹30,000.00 Alice Tester ₹15,000.00 ${longName} ₹15,000.00`,
+  );
+  // Two payers and two shares, in order: Alice, the long name, Alice, the long name.
+  const names = stylesOf(html, 'statement-preview-name');
+  expect(names.map((name) => name.value('white-space'))).toEqual([
+    'nowrap',
+    'normal',
+    'nowrap',
+    'normal',
+  ]);
+  for (const name of names) {
+    // Never inside a word.
+    expect(name.value('overflow-wrap')).toBeUndefined();
+    expect(name.value('word-break')).toBeUndefined();
+  }
+  // What is not the name, the amount, stays on one line; nothing else holds the name to one.
+  for (const person of stylesOf(html, 'statement-preview-person')) {
+    const rules = person.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('');
+    expect(rules).toMatch(/>:not\(\.statement-preview-name\)\{[^}]*white-space:nowrap/);
+    expect(rules).not.toMatch(/>\*\{[^}]*white-space:nowrap/);
+  }
+});
+
+// #929: the Description cell may break a long word anywhere, and its "Category · Tag" caption
+// took that too, so at 1280 "Accommodation" broke as "Accommodati / on". The caption breaks only
+// between its words and after the separator, never inside a word, as the statement's does.
+it('breaks the Category · Tag caption only between words, never inside one (#929)', () => {
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(
+        buildStatement(
+          {
+            id: 'maple',
+            name: 'Maple House',
+            theme: 'home',
+            currency: 'INR',
+            members: [
+              { id: 'alice', name: 'Alice Tester' },
+              { id: 'bob', name: 'Bob Tester' },
+            ],
+            names: { alice: 'Alice Tester', bob: 'Bob Tester' },
+            tags: [],
+            expenses: [
+              {
+                id: 'stay',
+                date: '2026-09-14T00:00:00.000Z',
+                description: 'Guesthouse',
+                category: 'accommodation',
+                tag: 'Beachfront',
+                currency: 'INR',
+                amountMinor: 1800000,
+                splitMethod: 'equal',
+                paidBy: [{ userId: 'alice', amountMinor: 1800000 }],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 900000 },
+                  { userId: 'bob', amountMinor: 900000 },
+                ],
+              },
+            ],
+            settlements: [],
+          },
+          { timeZone: 'UTC' },
+        ),
+      ),
+    },
+  });
+  const table = /<table\b[^>]*aria-label="INR first Expenses"[^>]*>([\s\S]*?)<\/table>/.exec(html);
+  expect(text(table![1])).toContain('Guesthouse Accommodation · Beachfront');
+  const [caption, ...others] = stylesOf(html, 'export-statement-caption');
+  expect(others).toEqual([]);
+  expect(caption.value('overflow-wrap')).toBe('normal');
+  expect(caption.value('word-break')).toBeUndefined();
+});
+
+// #928: below 21 characters a name stayed on one line beside its amount. A line of 25
+// characters or more, a name with its written amount, lets the name wrap between its words, as
+// the statement does; an everyday line stays whole.
+it('lets the name in a long name-and-amount line wrap, and keeps an everyday one whole (#928)', () => {
+  const name = 'Venkataraghavans';
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(
+        buildStatement(
+          {
+            id: 'maple',
+            name: 'Maple House',
+            theme: 'home',
+            currency: 'INR',
+            members: [
+              { id: 'alice', name: 'Alice Tester' },
+              { id: 'venkat', name },
+            ],
+            names: { alice: 'Alice Tester', venkat: name },
+            tags: [],
+            expenses: [
+              {
+                id: 'stay',
+                date: '2026-09-15',
+                description: 'Houseboat',
+                category: 'accommodation',
+                tag: 'General',
+                currency: 'INR',
+                amountMinor: 10266700,
+                splitMethod: 'equal',
+                paidBy: [
+                  { userId: 'alice', amountMinor: 5133350 },
+                  { userId: 'venkat', amountMinor: 5133350 },
+                ],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 5133350 },
+                  { userId: 'venkat', amountMinor: 5133350 },
+                ],
+              },
+            ],
+            settlements: [],
+          },
+          { timeZone: 'UTC' },
+        ),
+      ),
+    },
+  });
+  const table = /<table\b[^>]*aria-label="INR first Expenses"[^>]*>([\s\S]*?)<\/table>/.exec(html);
+  expect(text(table![1])).toContain(
+    `Alice Tester ₹51,333.50 ${name} ₹51,333.50 ₹102,667.00 Alice Tester ₹51,333.50 ${name} ₹51,333.50`,
+  );
+  expect(
+    stylesOf(html, 'statement-preview-name').map((style) => style.value('white-space')),
+  ).toEqual(['nowrap', 'normal', 'nowrap', 'normal']);
+});

@@ -12,6 +12,7 @@ import TableCell from '@mui/material/TableCell';
 import MoneyText from '@/components/common/MoneyText';
 import { getCurrency } from '@splitbook/shared/currency';
 import { displayMajorAmount } from '@splitbook/shared/exact-money';
+import { formatCurrencyWithMinus } from '@splitbook/shared/money';
 import { getSemanticTokens } from '@/lib/theme/tokens';
 import { statementDay, zonedDateTime } from '@splitbook/shared/export-csv';
 import { categoryLabel } from '@splitbook/shared/categories';
@@ -23,6 +24,7 @@ import {
   type Statement,
 } from '@splitbook/shared/statement';
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
+import { lineMayWrap } from './person-name';
 import { statementSummary } from './statement-summary';
 
 const light = getSemanticTokens('light');
@@ -36,8 +38,9 @@ const expenses = (count: number) => counted(count, 'Expense');
 /**
  * What a column holds, and so how its cells lay out (#646). Figures and dates never wrap, so
  * "₹54,000.00" and "5 Jun 2026" never break across lines; figures are right-aligned. Only free
- * text (an Expense's description, a payment's note or its cross-currency sentence) wraps; names
- * wrap only between words. A table wider than the sheet scrolls on screen, never in print.
+ * text (an Expense's description, a payment's note or its cross-currency sentence) wraps; a long
+ * name wraps between words and after a hyphen, never inside one (#928). A table wider than the
+ * sheet scrolls on screen, never in print.
  */
 type ColumnKind = 'text' | 'wrap' | 'sentence' | 'date' | 'money' | 'people';
 const COLUMN_SX = {
@@ -85,16 +88,50 @@ function Cell({
 }
 
 /**
- * A name with its amount, on one line, in Paid by and Share. A single payer has no amount: it is
- * the Expense's Amount, in the next column (#918).
+ * A name beside its amount in Paid by and Share. An everyday line stays whole, and the amount
+ * never wraps. A long line (lineMayWrap: the name with its written amount) may wrap, so it can't
+ * push Share past the sheet or the page: the name between its words and after a hyphen, never
+ * inside a word, and the amount under it at the column's right edge (#928). A single payer has
+ * no amount: it is the Expense's Amount, in the next column (#918).
  */
-function PersonAmount({ name, children }: { name: string; children?: ReactNode }) {
+function PersonAmount({
+  name,
+  amount,
+  children,
+}: {
+  name: string;
+  /** The amount as written beside the name, if any. */
+  amount?: string;
+  children?: ReactNode;
+}) {
+  const mayWrap = lineMayWrap(name, amount);
   return (
     <Box
       className="statement-line"
-      sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5, whiteSpace: 'nowrap' }}
+      sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 1.5,
+        whiteSpace: 'nowrap',
+        ...(mayWrap
+          ? {
+              flexWrap: 'wrap',
+              rowGap: 0,
+              '& > .statement-amount': { marginLeft: 'auto' },
+              // Set apart from the person after it, so an amount on its own line never reads as
+              // the next name's (#928).
+              '& + *': { marginTop: '4px' },
+            }
+          : {}),
+      }}
     >
-      <span>{name}</span>
+      <Box
+        component="span"
+        className="statement-name"
+        sx={{ whiteSpace: mayWrap ? 'normal' : 'nowrap' }}
+      >
+        {name}
+      </Box>
       {children}
     </Box>
   );
@@ -316,6 +353,9 @@ function CurrencySection({
   const name = (id: string) => statement.names[id] ?? 'Former member';
   // A currency Splitbook no longer supports has no position, so no one's figures here (#820).
   const inBalances = !!getCurrency(currency);
+  /** An amount as MoneyText writes it, "₹51,333.50". */
+  const written = (minor: number) =>
+    formatCurrencyWithMinus(displayMajorAmount(minor, currency), currency);
   const amount = (minor: number) => (
     <MoneyText
       className="statement-amount"
@@ -440,7 +480,14 @@ function CurrencySection({
                 </Cell>
                 <Cell kind="wrap" row>
                   {row.description}
-                  <Typography variant="caption" component="div">
+                  {/* A long Description may break anywhere; its caption breaks between words,
+                      never inside one (#929). */}
+                  <Typography
+                    variant="caption"
+                    component="div"
+                    className="statement-caption"
+                    sx={{ overflowWrap: 'normal' }}
+                  >
                     {categoryLabel(row.category)}
                     {SEPARATOR}
                     {row.tag}
@@ -448,7 +495,11 @@ function CurrencySection({
                 </Cell>
                 <Cell kind="people">
                   {row.paidBy.map((person) => (
-                    <PersonAmount key={person.userId} name={name(person.userId)}>
+                    <PersonAmount
+                      key={person.userId}
+                      name={name(person.userId)}
+                      amount={row.paidBy.length > 1 ? written(person.amountMinor) : undefined}
+                    >
                       {row.paidBy.length > 1 ? amount(person.amountMinor) : null}
                     </PersonAmount>
                   ))}
@@ -456,7 +507,11 @@ function CurrencySection({
                 <Cell kind="money">{amount(row.amountMinor)}</Cell>
                 <Cell kind="people">
                   {row.splitBetween.map((person) => (
-                    <PersonAmount key={person.userId} name={name(person.userId)}>
+                    <PersonAmount
+                      key={person.userId}
+                      name={name(person.userId)}
+                      amount={written(person.amountMinor)}
+                    >
                       {amount(person.amountMinor)}
                     </PersonAmount>
                   ))}

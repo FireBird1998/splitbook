@@ -307,7 +307,8 @@ function tripHtml(statement = buildStatement(TRIP, { timeZone: 'Asia/Kolkata' })
 
 // #646 follow-up: on the real A4 sheet "₹54,000.00" broke as "₹54,000. / 00" and a date as
 // "2026-06- / 05". Figures and dates never wrap; number columns are right-aligned; only the
-// free text (Description, Note) wraps, and on screen a wide table scrolls inside the sheet.
+// free text (Description, Note) and a long name (#928) wrap, and on screen a wide table scrolls
+// inside the sheet.
 describe('the statement’s table cells', () => {
   it('writes a payment’s date and time as a reader would, never as ISO (#646)', () => {
     const html = tripHtml();
@@ -562,4 +563,125 @@ it('names a single payer in Paid by without the Amount, and gives several payers
   expect(page).toContain(
     'Snorkelling trip Entertainment · Fun Alex Rivera ₹600.00 Sam Chen ₹300.00 ₹900.00 Alex Rivera ₹450.00 Sam Chen ₹450.00',
   );
+});
+
+// #928: a long name such as "Priyamvada Venkataraghavan-Subramaniam" stayed on one line in Paid by
+// and Share, so the Expenses table grew past the sheet: on screen Share scrolled, and in print
+// (which never scrolls) it ran past the page's margin. A long name wraps between its words and
+// after its hyphen, never inside a word, beside its amount, which stays on one line. An everyday
+// name stays whole, as #646 sets it, however long the Description beside it.
+it('lets a long name wrap in Paid by and Share, and keeps an everyday one and every amount whole (#928)', () => {
+  const longName = 'Priyamvada Venkataraghavan-Subramaniam';
+  const html = tripHtml(
+    buildStatement(
+      {
+        ...TRIP,
+        members: [TRIP.members[0], { id: SAM, name: longName }],
+        names: { ...TRIP.names, [SAM]: longName },
+      },
+      { timeZone: 'Asia/Kolkata' },
+    ),
+  );
+  expect(text(html)).toContain(
+    `Island guesthouse Food & Drink · Food Alex Rivera ₹1,200.00 Alex Rivera ₹600.00 ${longName} ₹600.00`,
+  );
+  // 3 Expenses: one payer (Alex) and two shares each, one of them the long name's.
+  const names = stylesOf(html, 'statement-name');
+  expect(names).toHaveLength(9);
+  const written = [...html.matchAll(/class="[^"]*statement-name[^"]*"[^>]*>([^<]*)</g)].map(
+    ([, name]) => name,
+  );
+  expect(written.filter((name) => name === longName)).toHaveLength(3);
+  names.forEach((name, i) => {
+    // Never inside a word.
+    expect(name.value('overflow-wrap')).toBeUndefined();
+    expect(name.value('word-break')).toBeUndefined();
+    expect(name.value('white-space')).toBe(written[i] === longName ? 'normal' : 'nowrap');
+  });
+  // The amounts never wrap.
+  const amounts = stylesOf(html, 'statement-amount');
+  expect(amounts.length).toBeGreaterThan(10);
+  for (const amount of amounts) expect(amount.value('white-space')).toBe('nowrap');
+});
+
+// #929: the Description cell may break a long word anywhere (#646), and its "Category · Tag"
+// caption took that too, so "Accommodation" could break as "Accommodati / on". The caption
+// breaks only between its words and after the separator, never inside a word.
+it('breaks the Category · Tag caption only between words, never inside one (#929)', () => {
+  const html = tripHtml(
+    buildStatement(
+      {
+        ...TRIP,
+        expenses: [
+          expense('e1', '2026-09-18', 'Island guesthouse', 120000, ['accommodation', 'Beachfront']),
+          expense('e2', '2026-09-19', 'Snorkelling', 60000, ['entertainment', 'Excursions']),
+        ],
+      },
+      { timeZone: 'Asia/Kolkata' },
+    ),
+  );
+  expect(text(html)).toContain('Island guesthouse Accommodation · Beachfront');
+  expect(text(html)).toContain('Snorkelling Entertainment · Excursions');
+  const captions = stylesOf(html, 'statement-caption');
+  expect(captions).toHaveLength(2);
+  for (const caption of captions) {
+    expect(caption.value('overflow-wrap')).toBe('normal');
+    expect(caption.value('word-break')).toBeUndefined();
+  }
+});
+
+// #928: below 21 characters a name stayed on one line beside its amount, so "Venkataraghavans"
+// beside "₹51,333.50" in each payer's line pushed the Expenses table past the A4 page. A line of
+// 25 characters or more, a name with its written amount, may wrap: the name between its words,
+// and the amount under it, at the column's right edge. An everyday line stays whole (#646).
+it('lets a long name-and-amount line wrap, and keeps an everyday one whole (#928)', () => {
+  const name = 'Venkataraghavans';
+  const html = tripHtml(
+    buildStatement(
+      {
+        ...TRIP,
+        members: [TRIP.members[0], { id: SAM, name }],
+        names: { ...TRIP.names, [SAM]: name },
+        expenses: [
+          {
+            ...expense('e1', '2026-09-18', 'Island guesthouse', 10266700),
+            paidBy: [
+              { userId: ALEX, amountMinor: 5133350 },
+              { userId: SAM, amountMinor: 5133350 },
+            ],
+          },
+        ],
+      },
+      { timeZone: 'Asia/Kolkata' },
+    ),
+  );
+  expect(text(html)).toContain(
+    `Alex Rivera ₹51,333.50 ${name} ₹51,333.50 ₹102,667.00 Alex Rivera ₹51,333.50 ${name} ₹51,333.50`,
+  );
+  const lines = stylesOf(html, 'statement-line');
+  const names = stylesOf(html, 'statement-name');
+  // Paid by's two payers and Share's two people, in order: Alex, the long name, Alex, the long name.
+  expect(names.map((style) => style.value('white-space'))).toEqual([
+    'nowrap',
+    'normal',
+    'nowrap',
+    'normal',
+  ]);
+  expect(lines.map((style) => style.value('flex-wrap'))).toEqual([
+    undefined,
+    'wrap',
+    undefined,
+    'wrap',
+  ]);
+  // A wrapped amount keeps to the column's right edge.
+  for (const line of [lines[1], lines[3]]) {
+    const rules = line.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('');
+    expect(rules).toMatch(/>\.statement-amount\{[^}]*margin-left:auto/);
+  }
+  // A wrapped line is set apart from the person after it, as the preview's are (#928), so an
+  // amount on its own line never reads as the next name's.
+  for (const line of [lines[1], lines[3]]) {
+    const rules = line.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('');
+    expect(rules).toMatch(/\+\*\{[^}]*margin-top:4px/);
+  }
 });

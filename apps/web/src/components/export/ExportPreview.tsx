@@ -10,6 +10,7 @@ import LinearProgress from '@mui/material/LinearProgress';
 import MoneyText from '@/components/common/MoneyText';
 import { getCurrency } from '@splitbook/shared/currency';
 import { displayMajorAmount } from '@splitbook/shared/exact-money';
+import { formatCurrencyWithMinus } from '@splitbook/shared/money';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import ErrorState from '@/components/common/ErrorState';
 import Typography from '@mui/material/Typography';
@@ -24,6 +25,7 @@ import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import { categoryLabel } from '@splitbook/shared/categories';
 import { statementDay, zonedDateTime } from '@splitbook/shared/export-csv';
+import { lineMayWrap } from '@/components/statement/person-name';
 
 export type PreviewState =
   | { status: 'idle'; message: string }
@@ -44,6 +46,8 @@ export function previewPeriod(data: Pick<ExportPreview, 'from' | 'to'>) {
 const MONEY = 'export-statement-money';
 /** A statement preview cell under its first line: the Expense's "Category · Tag" (#918). */
 const CAPTION = 'export-statement-caption';
+/** A person's name in a statement preview's Paid by or Share, which wraps if long (#928). */
+const PERSON_NAME = 'statement-preview-name';
 
 /**
  * A statement preview's tables fit the Export card (#916), as the statement's compact tables fit
@@ -124,9 +128,21 @@ function PreviewTable({
  * the card has room, the amount under the name where it hasn't, never cut off (#916). A wrapped
  * amount keeps to the column's right edge with the other figures, and each person is set a
  * little apart, so an amount never reads as the next person's. A single payer has no amount: it
- * is the Expense's Amount, in the next column (#918), and their name keeps to the left.
+ * is the Expense's Amount, in the next column (#918), and their name keeps to the left. In a long
+ * line (lineMayWrap: the name with its written amount) the name wraps between its words and
+ * after a hyphen, never inside a word, so it can't push the columns after it out of the card; an
+ * everyday name stays whole, and an amount never wraps (#928).
  */
-function PersonAmount({ name, children }: { name: string; children?: ReactNode }) {
+function PersonAmount({
+  name,
+  amount,
+  children,
+}: {
+  name: string;
+  /** The amount as written beside the name, if any. */
+  amount?: string;
+  children?: ReactNode;
+}) {
   return (
     <Box
       className="statement-preview-person"
@@ -135,14 +151,20 @@ function PersonAmount({ name, children }: { name: string; children?: ReactNode }
         flexWrap: 'wrap',
         justifyContent: 'space-between',
         columnGap: 1.5,
-        '& > *': { whiteSpace: 'nowrap' },
+        [`& > :not(.${PERSON_NAME})`]: { whiteSpace: 'nowrap' },
         '& > *:last-child': { marginLeft: 'auto' },
         // A single payer's name stands alone (#918): it keeps to the left, as on the statement.
         '& > *:only-child': { marginLeft: 0 },
         '& + &': { marginTop: '4px' },
       }}
     >
-      <span>{name}</span>
+      <Box
+        component="span"
+        className={PERSON_NAME}
+        sx={{ whiteSpace: lineMayWrap(name, amount) ? 'normal' : 'nowrap' }}
+      >
+        {name}
+      </Box>
       {children}
     </Box>
   );
@@ -428,7 +450,18 @@ export default function ExportPreviewPanel({
                         const people = (allocations: typeof expense.paidBy, amounts = true) => (
                           <TableCell>
                             {allocations.map((person) => (
-                              <PersonAmount key={person.userId} name={name(person.userId)}>
+                              <PersonAmount
+                                key={person.userId}
+                                name={name(person.userId)}
+                                amount={
+                                  amounts
+                                    ? formatCurrencyWithMinus(
+                                        displayMajorAmount(person.amountMinor, bucket.currency),
+                                        bucket.currency,
+                                      )
+                                    : undefined
+                                }
+                              >
                                 {amounts ? (
                                   <MoneyText
                                     amount={displayMajorAmount(person.amountMinor, bucket.currency)}
@@ -453,11 +486,17 @@ export default function ExportPreviewPanel({
                               sx={{ minWidth: '6em', overflowWrap: 'anywhere' }}
                             >
                               {expense.description}
-                              <span className={CAPTION}>
+                              {/* A long Description may break anywhere; its caption breaks
+                                  between words, never inside one (#929). */}
+                              <Box
+                                component="span"
+                                className={CAPTION}
+                                sx={{ overflowWrap: 'normal' }}
+                              >
                                 {categoryLabel(expense.category)}
                                 {SEPARATOR}
                                 {expense.tag}
-                              </span>
+                              </Box>
                             </TableCell>
                             {/* One payer paid the Amount: their name alone (#918). */}
                             {people(expense.paidBy, expense.paidBy.length > 1)}
