@@ -449,14 +449,18 @@ describe('the Expense table beside the side panel (#942)', () => {
 
   // With a split "By percentage" too, the stacked columns still need 652 px of 624, so the table
   // scrolls; You then stays at the card's right edge, on the card's colour, the other columns
-  // passing under it. Wide, nothing changes.
-  it('keeps You at the card’s right edge in a narrow table that scrolls', () => {
+  // passing under it. At 1440 the same three need 802 px of a wide table's 784, and You was cut
+  // there, so the pin holds at every width. Sticky moves a cell only once it would pass the
+  // card's edge, so a table that fits lays out as before: the pin sets no size, no padding and
+  // no display of its own.
+  it('keeps You at the card’s right edge in a table of any width that scrolls', () => {
     const header = /<th\b[^>]*>(?=You<\/th>)/.exec(html)![0];
     for (const tag of [header, ...cells.map((row) => row[5].td)]) {
-      expect(narrow(tag)).toMatch(/position:sticky/);
-      expect(narrow(tag)).toContain('right:0');
-      expect(narrow(tag)).toContain('background-color:#ffffff');
-      expect(own(tag)).not.toContain('sticky');
+      expect(own(tag)).toMatch(/position:sticky/);
+      expect(own(tag)).toContain('right:0');
+      expect(own(tag)).toContain('background-color:#ffffff');
+      expect(narrow(tag)).not.toMatch(/position|right:|background-color/);
+      expect(own(tag)).not.toMatch(/(?:^|;)(?:min-|max-)?width:|(?:^|;)display:|margin/);
     }
     // An edge while there is more of the table to its right, where the browser can tell.
     const scrollBox = /<div\b[^>]*>(?=(?:<style[^>]*>[^<]*<\/style>)*<table)/.exec(html)![0];

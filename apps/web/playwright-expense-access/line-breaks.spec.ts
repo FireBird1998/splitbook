@@ -569,8 +569,9 @@ test('the Expenses table keeps You in its card with a long name, CHF 10,000,000.
 
 // #942: with the long name, a split "By percentage" and CHF 10,000,000.00 all at once, the
 // columns need more than the card beside the side panel at 1280 px even stacked (652 px of 624
-// in Chromium on macOS), so the table scrolls; You stays at the card's right edge, its figures
-// whole, while the other columns pass under it.
+// in Chromium on macOS), so the table scrolls; at 1440 px, in a wide table on one line, they
+// need 802 px of 784, and it scrolls too. At either width You stays at the card's right edge,
+// its figures whole, while the other columns pass under it.
 test('You stays in view with a long name, a split By percentage and CHF 10,000,000.00 at once (#942)', async ({
   page,
   ledger,
@@ -587,17 +588,20 @@ test('You stays in view with a long name, a split By percentage and CHF 10,000,0
   await expect(table.getByRole('cell', { name: /^By percentage/ })).toBeVisible();
 
   const cut: string[] = [];
-  for (const scrolled of [false, true]) {
-    if (scrolled)
-      await table.evaluate((element) => {
-        element.parentElement!.scrollLeft = element.parentElement!.scrollWidth;
-      });
-    for (const problem of [
-      ...(await pastTheCard(table, 'You')),
-      ...(await brokenAmounts(table.getByRole('cell', { name: /^you (owe|lent)/ }))),
-      ...(await brokenName(table)),
-    ])
-      cut.push(`${scrolled ? 'scrolled' : 'at rest'}: ${problem}`);
+  for (const width of [1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(table.getByRole('columnheader', { name: 'You' })).toBeVisible();
+    for (const scrolled of [false, true]) {
+      await table.evaluate((element, scrolled) => {
+        element.parentElement!.scrollLeft = scrolled ? element.parentElement!.scrollWidth : 0;
+      }, scrolled);
+      for (const problem of [
+        ...(await pastTheCard(table, 'You')),
+        ...(await brokenAmounts(table.getByRole('cell', { name: /^you (owe|lent)/ }))),
+        ...(await brokenName(table)),
+      ])
+        cut.push(`${width}px ${scrolled ? 'scrolled' : 'at rest'}: ${problem}`);
+    }
   }
   expect(cut).toEqual([]);
 });

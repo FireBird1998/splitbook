@@ -124,19 +124,19 @@ const stackedLine = { [STACKED]: { display: 'block' } } as const;
 const SCROLL_BOX = 'expense-table-scroll';
 
 /**
- * The You column in a narrow table: where even stacked the columns need more than the card,
- * as with a long name, a split "By percentage" and CHF 10,000,000.00 all at once beside the
- * side panel, the table scrolls, and You stays at the card's right edge with its figures whole
- * while the other columns pass under it (#942). An edge shows while one is under it, where the
- * browser can tell (scroll-state queries). With room, as almost always, nothing is under it.
+ * The You column: where the columns need more than the card, as with a long name, a split
+ * "By percentage" and CHF 10,000,000.00 all at once (652 px of 624 stacked beside the side
+ * panel at 1280, 802 px of 784 on one line at 1440), the table scrolls, and You stays at the
+ * card's right edge with its figures whole while the other columns pass under it (#942). An
+ * edge shows while one is under it, where the browser can tell (scroll-state queries). Sticky
+ * moves the cell only once it would pass the card's edge, so a table that fits, as almost
+ * always, lays out exactly as before: the card's colour under it is the card's own.
  */
 const pinnedYou = {
-  [STACKED]: {
-    position: 'sticky',
-    right: 0,
-    zIndex: 1,
-    bgcolor: 'background.paper',
-  },
+  position: 'sticky',
+  right: 0,
+  zIndex: 1,
+  bgcolor: 'background.paper',
   [`@container ${SCROLL_BOX} scroll-state(scrollable: right)`]: {
     boxShadow: (theme: Theme) => `inset 1px 0 0 ${theme.palette.divider}`,
   },

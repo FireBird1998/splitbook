@@ -397,9 +397,11 @@ link, `/groups/[id]?search=…`, fills the search.
   a symbol, as in "₹621.50", stays with its figure) (#942). A long name wraps
   between its words and after a hyphen, never inside a word, and a figure and a
   split stay whole; each cell still reads as one phrase. Narrower than its
-  columns need, it scrolls inside its card, and in a narrow table You stays at
-  the card's right edge while the other columns pass under it, with an edge
-  where the browser can tell (scroll-state queries). A figure is never broken.
+  columns need, it scrolls inside its card, and at any width You stays at the
+  card's right edge while the other columns pass under it, with an edge where
+  the browser can tell (scroll-state queries). A table that fits looks exactly
+  as before: the pin only moves You once it would pass the card's edge. A figure
+  is never broken.
 - Positions ("you lent ₹833.00", "you owe ₹953.33") come from the shared
   `expense-row` module over the stored minor units, in the status colours,
   which reach 4.5:1 on every surface a row has, light and dark.
