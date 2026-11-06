@@ -96,6 +96,12 @@ one, such as "Equally · 2", uses `NO_BREAK_SEPARATOR`, and a date-time such as 
 keeps its parts together with `NO_BREAK_SPACE`. Outfit draws U+00A0 but has no U+202F or
 U+2009. `packages/shared/src/separator.test.ts` fails on a plain " · " in UI text.
 
+A count and its noun stay on one line: write them with `counted(2, 'member')` ("2 members"),
+or join a fixed noun with `NO_BREAK_SPACE` (#898); the same test fails on a count joined to its
+noun by a plain space. A sign stays with its figure: signed money goes through `withSign` from
+`@splitbook/shared/money` (`formatSignedCurrency` does), which joins "−" or "+" to the figure
+with a word joiner (U+2060), so "−€20.00" never breaks after the sign (#899).
+
 ### Shape
 
 `RADIUS = { sm: 8, md: 12, lg: 16 }` — buttons and chips `sm`, cards `md`,
@@ -383,6 +389,10 @@ link, `/groups/[id]?search=…`, fills the search.
 - From MUI's `md` breakpoint the Expenses are a table; below it, cards. Either
   way each Expense has one button that opens its details below it (until the
   side panel, #311), and no control sits inside another.
+- Every column of the table shows whole (#900). Where the table is narrower
+  than 760 px, as beside the side panel on a 1280 px screen, the You column puts
+  "lent" or "owe" above its figure; narrower than its columns need, it scrolls
+  inside its card. A money column is never cut.
 - Positions ("you lent ₹833.00", "you owe ₹953.33") come from the shared
   `expense-row` module over the stored minor units, in the status colours,
   which reach 4.5:1 on every surface a row has, light and dark.

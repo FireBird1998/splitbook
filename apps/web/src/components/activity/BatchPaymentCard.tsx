@@ -1,6 +1,5 @@
 'use client';
 
-import { format } from 'date-fns';
 import type { Ref } from 'react';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
@@ -11,6 +10,7 @@ import { memberLabel } from '@splitbook/shared/activity-timeline';
 import { RADIUS } from '@/lib/theme/tokens';
 import type { SettlementBatchWords } from '@splitbook/shared/settlement-batch-words';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { recordedWhen } from './record-time';
 
 interface BatchPaymentCardProps {
   words: SettlementBatchWords;
@@ -37,7 +37,7 @@ export default function BatchPaymentCard({
   onClose,
 }: BatchPaymentCardProps) {
   const recorder = memberLabel(recordedBy?._id, recordedBy?.name, viewerId) ?? 'a former member';
-  const when = format(new Date(recordedAt), 'EEE d MMM, HH:mm');
+  const when = recordedWhen(recordedAt);
   // "₹3,322.00 to clear …", or only "to clear …" while part of it is in older Activity.
   const split = words.amounts.indexOf('to clear ');
   const paid = split > 0 ? words.amounts.slice(0, split).trim() : null;

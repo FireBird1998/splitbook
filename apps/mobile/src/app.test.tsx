@@ -549,7 +549,7 @@ describe('App refresh rendering', () => {
     await settle();
     const shown = app.text();
     expect(shown).toContain('August 2026');
-    expect(shown).toContain('1 expense in August');
+    expect(shown).toContain('1\u00a0expense in August');
     expect(shown).toContain('August rent');
     expect(shown).not.toContain('September');
   });
@@ -568,7 +568,7 @@ describe('App refresh rendering', () => {
     expect(app.text()).toContain(retained);
     expect(app.text()).toContain('September groceries');
     expect(app.text()).toContain('September 2026');
-    expect(app.text()).toContain('1 expense');
+    expect(app.text()).toContain('1\u00a0expense');
     await app.press('Balances');
     expect(app.text()).toContain(retained);
     expect(app.text()).toContain('You owe₹30.00');
@@ -1034,7 +1034,7 @@ describe('App Trip strip', () => {
     const [strip, ...others] = strips();
     expect(others).toHaveLength(0);
     expect(strip.props.accessibilityLabel).toBe(
-      'Trip from GOA to TRI, 17 to 20 September, 1 member',
+      'Trip from GOA to TRI, 17 to 20 September, 1\u00a0member',
     );
     // Part of the scrolling content, so it scrolls away, and above the Expenses summary.
     const content = screen!.root.findAll((node) => (node.type as unknown) === 'ScrollView')[0];
@@ -2280,7 +2280,7 @@ describe('App invitation', () => {
     post.release(json({ data: { groupId: joinedId }, status: 201 }, 201));
     await settle();
     expect(app.text()).not.toContain('You’re invited');
-    expect(app.text()).toContain('Cedar FlatHousehold\u00a0· 1 member\u00a0· INR');
+    expect(app.text()).toContain('Cedar FlatHousehold\u00a0· 1\u00a0member\u00a0· INR');
   });
 });
 
@@ -2308,7 +2308,7 @@ describe('App Home', () => {
     );
     expect(await app.androidBack()).toBe(true);
     expect(app.pressable('Open Maple House').props.accessibilityLabel).toBe(
-      'Open Maple House, Household\u00a0· 1 member, You owe ₹30.00',
+      'Open Maple House, Household\u00a0· 1\u00a0member, You owe ₹30.00',
     );
     expect(app.text()).toContain('Continue where you left off');
 
@@ -3160,7 +3160,7 @@ describe('Account → Connected assistants (#622)', () => {
     const shown = app.text();
     expect(shown).toContain('Account\u00a0· Sam Chen');
     expect(shown).toContain('Fictional Helper');
-    expect(shown).toContain('Read only\u00a0· 1 of 1 Group');
+    expect(shown).toContain('Read only\u00a0· 1 of 1\u00a0Group');
     expect(app.pressable('Back to Settings')).toBeTruthy();
   });
 

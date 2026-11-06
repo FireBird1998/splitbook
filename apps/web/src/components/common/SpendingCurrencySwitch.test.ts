@@ -42,9 +42,9 @@ describe('the Spending in switch (#729)', () => {
     expect(html).toMatch(/<div\b(?=[^>]*role="tablist")(?=[^>]*aria-label="Spending in")/);
     expect(text(html)).toContain('INR · main ₹48,600.00 EUR €1,240.00 JPY ¥186,000');
     expect(tabsOf(html)).toEqual([
-      { name: 'INR, main currency, ₹48,600.00 spent in 3 Expenses', selected: false },
-      { name: 'EUR, €1,240.00 spent in 11 Expenses', selected: false },
-      { name: 'JPY, ¥186,000 spent in 24 Expenses', selected: true },
+      { name: 'INR, main currency, ₹48,600.00 spent in 3\u00a0Expenses', selected: false },
+      { name: 'EUR, €1,240.00 spent in 11\u00a0Expenses', selected: false },
+      { name: 'JPY, ¥186,000 spent in 24\u00a0Expenses', selected: true },
     ]);
   });
 
@@ -65,8 +65,8 @@ describe('the Spending in switch (#729)', () => {
         }),
       ),
     );
-    expect(tabsOf(html)[1].name).toBe('JPY, ¥2,500 spent in 1 Expense');
-    expect(tabsOf(html)[0].name).toBe('INR, main currency, ₹0.00 spent in 0 Expenses');
+    expect(tabsOf(html)[1].name).toBe('JPY, ¥2,500 spent in 1\u00a0Expense');
+    expect(tabsOf(html)[0].name).toBe('INR, main currency, ₹0.00 spent in 0\u00a0Expenses');
     expect(text(html)).toContain('Opened on JPY, the currency with the most Expenses (1).');
   });
 });

@@ -357,7 +357,7 @@ describe('Who paid sheet', () => {
 
     await ui.done();
     expect(ui.hasSheet()).toBe(false);
-    expect(ui.tile().props.accessibilityLabel).toBe('Paid by: 3 people');
+    expect(ui.tile().props.accessibilityLabel).toBe('Paid by: 3\u00a0people');
     expect(ui.writes).toEqual([]);
   });
 
@@ -381,7 +381,7 @@ describe('Who paid sheet', () => {
     await ui.type('What Sam Chen paid', '30');
     await ui.done();
     expect(ui.tile().props.accessibilityLabel).toBe(
-      'Paid by: 2 people. Payer amounts must add up to the expense amount',
+      'Paid by: 2\u00a0people. Payer amounts must add up to the expense amount',
     );
     expect(ui.stored()?.payers).toEqual([
       { user: alexId, amount: '80' },
@@ -470,7 +470,7 @@ describe('Who paid sheet', () => {
       { user: alexId, amount: '6' },
       { user: samId, amount: '4' },
     ]);
-    expect(ui.tile().props.accessibilityLabel).toBe('Paid by: 2 people');
+    expect(ui.tile().props.accessibilityLabel).toBe('Paid by: 2\u00a0people');
 
     // Clearing an entry means that person paid nothing.
     await ui.open();

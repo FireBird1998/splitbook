@@ -305,9 +305,9 @@ describe('Who paid this month', () => {
     expect(tableRows(markup)).toEqual([
       ['Member', '', 'Paid', 'Share', 'Month net'],
       // Each name follows its avatar's initials, which assistive technology doesn't hear.
-      ['PS Priya Shah', '', '₹6,677.00', '₹6,140.00', '+₹537.00 paid more than their share'],
-      ['SC Sam Chen', '', '₹6,533.00', '₹6,140.00', '+₹393.00 paid more than their share'],
-      ['AR You', '', '₹5,210.00', '₹6,140.00', '−₹930.00 paid less than your share'],
+      ['PS Priya Shah', '', '₹6,677.00', '₹6,140.00', '+\u2060₹537.00 paid more than their share'],
+      ['SC Sam Chen', '', '₹6,533.00', '₹6,140.00', '+\u2060₹393.00 paid more than their share'],
+      ['AR You', '', '₹5,210.00', '₹6,140.00', '−\u2060₹930.00 paid less than your share'],
     ]);
     expect(markup.match(/<div[^>]*aria-hidden="true"[^>]*>PS<\/div>/g)).toHaveLength(1);
     expect(text(markup)).toContain('September 2026 · each share is ₹6,140.00');
@@ -427,7 +427,7 @@ describe('Recurring Expenses', () => {
       userId: alex,
       currentMonth: '2026-10',
     });
-    expect(model.subtitle).toBe('₹4,849.00\u00a0· 3 of 14 Expenses in September');
+    expect(model.subtitle).toBe('₹4,849.00\u00a0· 3 of 14\u00a0Expenses in September');
     expect(
       model.rows.map((row) => [row.description, row.amountText, row.schedule, row.added, row.next]),
     ).toEqual([

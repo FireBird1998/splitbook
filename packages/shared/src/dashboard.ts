@@ -12,6 +12,7 @@ import {
   sumMinorAmounts,
   toMajorAmount,
 } from './exact-money';
+import { counted } from './separator';
 
 /** A suggested payment in one Group and currency, as `simplifyDebtsMinor` returns it. */
 export interface MinorTransaction {
@@ -189,7 +190,7 @@ export function selectNextAction(
     return {
       kind: 'review-invitations',
       title: 'Review your group invitation',
-      description: `${pendingInvitationCount} invitation${pendingInvitationCount === 1 ? '' : 's'} waiting for you.`,
+      description: `${counted(pendingInvitationCount, 'invitation')} waiting for you.`,
       href: '#pending-actions',
     };
   }

@@ -439,7 +439,7 @@ describe('Home’s paths the suite missed (#471)', () => {
       ),
     ).toMatchObject({
       kind: 'review-invitations',
-      description: '2 invitations waiting for you.',
+      description: '2\u00a0invitations waiting for you.',
     });
   });
 });

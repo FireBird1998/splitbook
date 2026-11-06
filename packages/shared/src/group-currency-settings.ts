@@ -6,7 +6,7 @@
 import { format } from 'date-fns';
 import { z } from 'zod';
 import { CURRENCIES, CURRENCY_CODES, wholeUnit } from './currency';
-import { SEPARATOR } from './separator';
+import { SEPARATOR, counted } from './separator';
 
 const identity = z.string().regex(/^[a-f\d]{24}$/i);
 const code = z.string().refine((value) => CURRENCY_CODES.includes(value));
@@ -38,9 +38,6 @@ export const groupCurrencySettingsSchema = z.object({
 export type ExtraCurrencyUse = z.infer<typeof extraCurrencyUseSchema>;
 export type ExtraCurrencySetting = z.infer<typeof extraCurrencySettingSchema>;
 export type GroupCurrencySettings = z.infer<typeof groupCurrencySettingsSchema>;
-
-const counted = (count: number, one: string, many = `${one}s`) =>
-  `${count} ${count === 1 ? one : many}`;
 
 /** "A, B and C", the way the settings say a short list. */
 function spokenList(items: readonly string[]): string {

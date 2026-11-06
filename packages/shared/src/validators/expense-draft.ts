@@ -2,11 +2,12 @@ import { z } from 'zod/v4';
 import { CATEGORY_IDS, EXPENSE_CATEGORIES } from '../categories';
 import { draftAttributionSchema } from '../draft-attribution';
 import { createExpenseSchema, expenseFields } from './expense';
+import { NO_BREAK_SPACE } from '../separator';
 
 export const DRAFTS_PER_REQUEST = 10;
 /** Active Drafts for one member in one Group. */
 export const ACTIVE_DRAFTS_PER_MEMBER = 100;
-export const DRAFT_GROUP_LIMIT_MESSAGE = `You have ${ACTIVE_DRAFTS_PER_MEMBER} items waiting in this Group. Save or delete some before keeping more.`;
+export const DRAFT_GROUP_LIMIT_MESSAGE = `You have ${ACTIVE_DRAFTS_PER_MEMBER}${NO_BREAK_SPACE}items waiting in this Group. Save or delete some before keeping more.`;
 
 export const draftObjectId = z.string().regex(/^[a-fA-F0-9]{24}$/, 'Invalid identity');
 export const draftRequestKey = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/);

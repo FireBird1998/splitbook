@@ -315,7 +315,7 @@ describe('Split sheet', () => {
       { label: 'Priya Shah, ₹416.50', checked: true },
     ]);
     expect(text(ui.sheet()!)).toContain('Adds up');
-    expect(text(ui.sheet()!)).toContain('3 people\u00a0· ₹1,249.50 allocated');
+    expect(text(ui.sheet()!)).toContain('3\u00a0people\u00a0· ₹1,249.50 allocated');
     expect(text(ui.sheet()!)).not.toContain('leftover');
 
     await ui.toggle('Priya Shah');
@@ -351,19 +351,19 @@ describe('Split sheet', () => {
       { label: 'Sam Chen, ₹312.38', checked: true },
       { label: 'Priya Shah, ₹312.37', checked: true },
     ]);
-    expect(text(ui.sheet()!)).toContain('4 shares\u00a0· ₹1,249.50 allocated');
+    expect(text(ui.sheet()!)).toContain('4\u00a0shares\u00a0· ₹1,249.50 allocated');
     expect(text(ui.sheet()!)).toContain(
       'The leftover ₹0.01 goes to Sam Chen so the total is exact.',
     );
     expect(moneyRuns(ui.sheet()!)).toEqual([
       { run: '₹1,249.50', line: 'Total ₹1,249.50\u00a0· INR' },
-      { run: '₹1,249.50', line: '4 shares\u00a0· ₹1,249.50 allocated' },
+      { run: '₹1,249.50', line: '4\u00a0shares\u00a0· ₹1,249.50 allocated' },
       { run: '₹0.01', line: 'The leftover ₹0.01 goes to Sam Chen so the total is exact.' },
     ]);
     expect(
       spoken(
         ui.sheet()!,
-        'Adds up. 4 shares\u00a0· ₹1,249.50 allocated. The leftover ₹0.01 goes to Sam Chen so the total is exact.',
+        'Adds up. 4\u00a0shares\u00a0· ₹1,249.50 allocated. The leftover ₹0.01 goes to Sam Chen so the total is exact.',
       ),
     ).toHaveLength(1);
     expect(ui.pressable('Decrease shares for Sam Chen').props.disabled).toBe(true);

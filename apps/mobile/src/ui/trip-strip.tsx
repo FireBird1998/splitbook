@@ -8,7 +8,7 @@ import type { MobileGroup } from '../data/types';
 import { CompactText, isLargeText, scaledSp, space, textVariants } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 // Trip dates are calendar days stored at midnight UTC.
 const day = (date: Date, month: 'short' | 'long') =>
@@ -131,7 +131,7 @@ export function TripStrip({ group }: { group: MobileGroup }) {
   const { from, to } = deriveTripCodes(group.name);
   const dates = tripDates(group);
   const count = group.members.length;
-  const members = `${count} ${count === 1 ? 'member' : 'members'}`;
+  const members = counted(count, 'member');
   const currencies = groupCurrencies(group);
   const several = currencies.length > 1;
   const list = currencies.join(SEPARATOR);

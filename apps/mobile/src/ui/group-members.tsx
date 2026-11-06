@@ -19,7 +19,7 @@ import {
 } from './compact';
 import { Icon, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 const themeIcons: Record<GroupCategory, IconName> = {
   trip: 'airplane-outline',
@@ -198,8 +198,8 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
       </CompactText>
       {!!leave.toReviewCount && (
         <CompactText>
-          You have {leave.toReviewCount} {leave.toReviewCount === 1 ? 'item' : 'items'} in To review
-          for {group.name}. They’re kept but hidden while you’re not a member.
+          You have {counted(leave.toReviewCount, 'item')} in To review for {group.name}. They’re
+          kept but hidden while you’re not a member.
         </CompactText>
       )}
       {state.draft && state.status !== 'blocked' ? (

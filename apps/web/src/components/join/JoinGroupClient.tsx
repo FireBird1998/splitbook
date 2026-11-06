@@ -19,6 +19,7 @@ import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory } from '@splitbook/shared/types';
 import { apiFetch } from '@/lib/utils/api-fetch';
+import { counted } from '@splitbook/shared/separator';
 
 interface JoinGroupClientProps {
   code: string;
@@ -145,8 +146,7 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
               </Typography>
             </Stack>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {group?.memberCount as number} member
-              {(group?.memberCount as number) !== 1 ? 's' : ''}
+              {counted(group?.memberCount as number, 'member')}
             </Typography>
           </Box>
 

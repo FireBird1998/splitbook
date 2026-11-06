@@ -144,9 +144,9 @@ describe('the Month navigation and range', () => {
   it('offers 1, 6 and 12 months, with the address’s pressed', () => {
     const html = render({ address: { month: '2026-09', compare: 12 }, read: undefined });
     expect(html).toContain('aria-label="Compare with the months before"');
-    expect(html).toMatch(/aria-pressed="false"[^>]*>1 month</);
-    expect(html).toMatch(/aria-pressed="false"[^>]*>6 months</);
-    expect(html).toMatch(/aria-pressed="true"[^>]*>12 months</);
+    expect(html).toMatch(/aria-pressed="false"[^>]*>1\u00a0month</);
+    expect(html).toMatch(/aria-pressed="false"[^>]*>6\u00a0months</);
+    expect(html).toMatch(/aria-pressed="true"[^>]*>12\u00a0months</);
   });
 });
 
@@ -337,7 +337,7 @@ describe('the currency switch (#729)', () => {
   it('opens on the currency the read chose, says why, and replaces the left-out note', () => {
     const html = render({ read: travelling });
     expect(html).toMatch(/<div\b(?=[^>]*role="tablist")(?=[^>]*aria-label="Spending in")/);
-    expect(selectedTab(html)).toBe('EUR, €640.00 spent in 16 Expenses');
+    expect(selectedTab(html)).toBe('EUR, €640.00 spent in 16\u00a0Expenses');
     expect(text(html)).toContain(
       'Opened on EUR, the currency with the most Expenses (16). Each currency is shown on its own; nothing is converted.',
     );
@@ -349,7 +349,7 @@ describe('the currency switch (#729)', () => {
       read: { ...travelling, currency: 'USD' },
       address: { month: '2026-09', compare: 6, currency: 'USD' },
     });
-    expect(selectedTab(html)).toBe('USD, $100.00 spent in 2 Expenses');
+    expect(selectedTab(html)).toBe('USD, $100.00 spent in 2\u00a0Expenses');
     expect(text(html)).toContain('Each currency is shown on its own; nothing is converted.');
     expect(text(html)).not.toContain('Opened on');
   });
@@ -372,8 +372,8 @@ describe('the currency switch (#729)', () => {
       },
       address: { month: '2026-09', compare: 6, currency: 'USD' },
     });
-    expect(selectedTab(html)).toBe('USD, $0.00 spent in 0 Expenses');
-    expect(html).toContain('aria-label="INR, main currency, ₹18,420.00 spent in 14 Expenses"');
+    expect(selectedTab(html)).toBe('USD, $0.00 spent in 0\u00a0Expenses');
+    expect(html).toContain('aria-label="INR, main currency, ₹18,420.00 spent in 14\u00a0Expenses"');
   });
 
   it('shows no switch while one currency is spent in', () => {

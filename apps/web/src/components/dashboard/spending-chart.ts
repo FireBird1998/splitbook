@@ -7,6 +7,7 @@ import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { spendingTrend, type SpendingTrend } from '@splitbook/shared/insights';
 import type { UserSpendingRead } from '@splitbook/shared/user-spending-read';
+import { NO_BREAK_SPACE } from '@splitbook/shared/separator';
 
 export interface SpendingPart {
   groupId: string;
@@ -113,7 +114,7 @@ export function explainTrend(
   if (trend.kind === 'up')
     return `${month} is up because of ${groupName(trend.groupId)}: ${money(trend.groupShareMinor, currency).text} of your ${total}.`;
   const average = money(trend.averageMinor, currency).text;
-  const before = `the ${earlierMonths === 1 ? 'month' : `${earlierMonths} months`} before`;
+  const before = `the ${earlierMonths === 1 ? 'month' : `${earlierMonths}${NO_BREAK_SPACE}months`} before`;
   return trend.kind === 'level'
     ? `${month} matches your average of ${average} for ${before}.`
     : `So far, ${month} is below your average of ${average} for ${before}.`;

@@ -1770,7 +1770,7 @@ export function connectionTests(mongo = false) {
           const over = await create(6, 'quota-over-batch');
           expect(over.isError).toBe(true);
           expect((over.content as Array<{ text: string }>)[0].text).toBe(
-            'You have 100 items waiting in this Group. Save or delete some before keeping more.',
+            'You have 100\u00a0items waiting in this Group. Save or delete some before keeping more.',
           );
           expect(await list()).toHaveLength(95);
           const raced = await Promise.all([

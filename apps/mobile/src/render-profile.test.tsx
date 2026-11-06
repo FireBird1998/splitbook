@@ -746,7 +746,7 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       () => app.press('Balances'),
       () => {
         expect(app.shows('All-time balance'), 'Balances on screen').toBe(true);
-        expect(app.shows('−₹30.00'), "Sam's balance").toBe(true);
+        expect(app.shows('−\u2060₹30.00'), "Sam's balance").toBe(true);
       },
     );
     await journey(

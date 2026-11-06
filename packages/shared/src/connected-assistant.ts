@@ -1,5 +1,6 @@
 import { assistantReachesGroup } from './assistant-reach';
 import type { AssistantRule } from './assistant-rule';
+import { counted } from './separator';
 
 /**
  * A Connected assistant as Settings reads it from `GET /api/auth/mcp/connections`, on the web
@@ -63,5 +64,5 @@ export function assistantGroupCount(
 
 /** "1 of 3 Groups": how many of the member's Groups an assistant reaches, as both clients say it. */
 export function assistantGroupCountLabel({ reached, of }: { reached: number; of: number }): string {
-  return `${reached} of ${of} ${of === 1 ? 'Group' : 'Groups'}`;
+  return `${reached} of ${counted(of, 'Group')}`;
 }

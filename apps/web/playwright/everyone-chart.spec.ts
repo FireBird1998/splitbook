@@ -32,7 +32,9 @@ const { alex } = DEMO_PERSONA_IDS;
 /** "₹1,060.00" for an amount in rupees, as the card writes it. */
 const rupees = (amount: number) =>
   `₹${Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const signed = (amount: number) => (amount > 0 ? `+${rupees(amount)}` : `−${rupees(amount)}`);
+/** "+₹1,060.00" or "−₹1,480.00", the sign joined to its figure (#899). */
+const signed = (amount: number) =>
+  amount > 0 ? `+\u2060${rupees(amount)}` : `−\u2060${rupees(amount)}`;
 const firstName = (person: Person) => (person._id === alex ? 'you' : person.name.split(' ')[0]);
 const shownName = (person: Person) => (person._id === alex ? 'You' : person.name);
 

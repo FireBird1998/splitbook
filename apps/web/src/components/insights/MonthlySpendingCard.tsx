@@ -18,7 +18,7 @@ import {
 import { compactMoney, valueAxis } from '@/components/dashboard/spending-chart';
 import { visuallyHidden } from './a11y';
 import type { MonthlySpending, MonthlyRow } from './group-insights';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 /*
  * "Monthly spending" on a Group's Insights tab (#314, design canvas "Web portal", Group
@@ -137,7 +137,7 @@ function MonthTooltip() {
           </Box>
           <span>{row.long}</span>
           <span>
-            {row.expenseCount} {row.expenseCount === 1 ? 'Expense' : 'Expenses'}
+            {counted(row.expenseCount, 'Expense')}
             {SEPARATOR}your share{' '}
             <Box component="span" sx={(theme) => ({ ...theme.typography.money })}>
               {row.shareText}

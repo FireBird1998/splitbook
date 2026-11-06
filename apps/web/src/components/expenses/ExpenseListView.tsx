@@ -72,6 +72,7 @@ import {
 } from '@splitbook/shared/group-currencies';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { visuallyHidden } from '@/components/common/visually-hidden';
+import { counted } from '@splitbook/shared/separator';
 
 /** Expenses on one page of the list, on a computer or a phone. */
 export const EXPENSE_LIST_PAGE_SIZE = 50;
@@ -628,7 +629,7 @@ export default function ExpenseListView({
 
       {filters > 0 && pagination && (
         <Typography role="status" variant="body2" color="text.secondary">
-          {pagination.total === 1 ? '1 Expense matches' : `${pagination.total} Expenses match`}
+          {`${counted(pagination.total, 'Expense')} ${pagination.total === 1 ? 'matches' : 'match'}`}
         </Typography>
       )}
 

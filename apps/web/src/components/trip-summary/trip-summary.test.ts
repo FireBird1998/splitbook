@@ -120,7 +120,7 @@ describe('the whole trip', () => {
   it('says what was spent, the member’s share, what they paid, and per person per day', () => {
     expect(tripFigures(read())).toEqual({
       heading: 'Whole trip\u00a0· INR',
-      spent: { text: '₹6,220.00', line: '4 Expenses over 4 days' },
+      spent: { text: '₹6,220.00', line: '4\u00a0Expenses over 4\u00a0days' },
       share: { text: '₹2,073.33', line: 'In all 4 of its Expenses' },
       paid: {
         text: '₹2,400.00',
@@ -128,7 +128,7 @@ describe('the whole trip', () => {
         tone: 'positive',
       },
       // ₹6,220.00 ÷ (3 people × 4 days), rounded half up.
-      perPersonPerDay: { text: '₹518.33', line: '3 people\u00a0· 4 days' },
+      perPersonPerDay: { text: '₹518.33', line: '3\u00a0people\u00a0· 4\u00a0days' },
     });
     expect(tripFigures(read({ memberId: PRIYA.id })).paid).toEqual({
       text: '₹380.00',
@@ -141,7 +141,7 @@ describe('the whole trip', () => {
           expenses: [...EXPENSES, expense('2026-09-19', 'Tip', SAM, [0, 500])],
         }),
       ).share.line,
-    ).toBe('In 4 of its 5 Expenses');
+    ).toBe('In 4 of its 5\u00a0Expenses');
     expect(tripFigures(read({ expenses: [EXPENSES[0]] })).share.line).toBe('In its one Expense');
     expect(
       tripFigures(read({ expenses: [expense('2026-09-19', 'Tip', SAM, [0, 500])] })).share.line,
@@ -212,7 +212,7 @@ describe('day by day', () => {
       },
     ]);
     expect(chart.outsideNote).toBe(
-      'Expenses dated outside the trip’s days count in the whole trip, but aren’t drawn here: ₹600.00 before it (1 Expense) and ₹30.00 after it (1 Expense).',
+      'Expenses dated outside the trip’s days count in the whole trip, but aren’t drawn here: ₹600.00 before it (1\u00a0Expense) and ₹30.00 after it (1\u00a0Expense).',
     );
   });
 
@@ -227,7 +227,7 @@ describe('day by day', () => {
     expect(long.rows).toEqual([]);
     expect(long.average).toBeNull();
     expect(long.explanation).toBe(
-      'This trip runs over 166 days, too many to draw one by one. It spent ₹37.47 a day on average.',
+      'This trip runs over 166\u00a0days, too many to draw one by one. It spent ₹37.47 a day on average.',
     );
   });
 
@@ -248,15 +248,15 @@ describe('By Tag', () => {
       name: 'Transport',
       spentText: '₹3,040.00',
       percentText: '49%',
-      countText: '2 Expenses',
+      countText: '2\u00a0Expenses',
       width: 100,
       href: `/groups/${GROUP}/expenses?tag=${TRANSPORT.id}`,
-      label: 'Transport: ₹3,040.00, 49% of INR spend, 2 Expenses. Show these Expenses',
+      label: 'Transport: ₹3,040.00, 49% of INR spend, 2\u00a0Expenses. Show these Expenses',
     });
     expect(rows[1]).toMatchObject({
       name: 'Stay',
       percentText: '45%',
-      countText: '1 Expense',
+      countText: '1\u00a0Expense',
       width: 92.1,
       href: `/groups/${GROUP}/expenses?tag=${STAY.id}`,
     });
@@ -267,7 +267,7 @@ describe('By Tag', () => {
       percentText: '6%',
       width: 12.5,
     });
-    expect(rows[2].label).toBe('Café: ₹380.00, 6% of INR spend, 1 Expense');
+    expect(rows[2].label).toBe('Café: ₹380.00, 6% of INR spend, 1\u00a0Expense');
   });
 
   it('uses the Expenses tab’s own Tag filter in the address', () => {

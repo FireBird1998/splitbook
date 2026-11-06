@@ -568,7 +568,7 @@ describe('rendered Expense corrections', () => {
       'Tag, required: Choose a Tag. Choose a Tag for this Expense.',
     );
     expect(corrections(ui.root())).toContain('Choose a Tag for this Expense.');
-    expect(text(ui.root())).toContain('4 things to fix before saving');
+    expect(text(ui.root())).toContain('4\u00a0things to fix before saving');
     for (const field of ['Amount', 'Description', 'Date', 'Tag'])
       expect(ui.pressable(`Go to ${field}`)).toBeTruthy();
     expect(ui.focusCount('Amount, Indian Rupee, required')).toBe(1);
@@ -1287,12 +1287,12 @@ describe('rendered edit history', () => {
       );
     });
     const shown = text(screen!.root);
-    /** A moment on this device, day first: "28 Sep 2026, 10:00 AM" in UTC. */
+    /** A moment on this device, day first: "28\u00a0Sep 2026, 10:00 AM" in UTC. */
     const moment = (value: string) => {
       const date = new Date(value);
       const month = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[date.getMonth()];
       const clock = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-      return `${date.getDate()} ${month} ${date.getFullYear()}, ${clock}`;
+      return `${date.getDate()}\u00a0${month} ${date.getFullYear()}, ${clock}`;
     };
     // The Expense's own date is a calendar day (#437); the rest are moments on this device.
     expect(shown).toContain('Mon 28 Sep 2026\u00a0· food');
@@ -1962,7 +1962,7 @@ describe('the currency beside the amount (#720)', () => {
     await ui.type('Amount, Japanese Yen, required', '2500');
     await ui.press('Currency, JPY, Japanese Yen. Change currency');
     const sheet = visibleSheet(ui.root(), 'Currency')!;
-    expect(text(sheet)).toContain('Lisbon and Tokyo\u00a0· 3 currencies');
+    expect(text(sheet)).toContain('Lisbon and Tokyo\u00a0· 3\u00a0currencies');
     expect(radios(sheet)).toEqual([
       {
         label: 'JPY, Japanese Yen, your latest Expense here, whole amounts only',

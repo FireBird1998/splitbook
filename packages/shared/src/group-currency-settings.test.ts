@@ -55,12 +55,15 @@ describe('an extra currency as its settings row shows it (#721)', () => {
         { expenses: expenses(11), settlements: 1 },
         addedBy(SAM, 'Sam', localNoon('2026-10-01')),
       ),
-    ).toEqual({ inUse: true, line: '11 Expenses\u00a0· 1 Settlement\u00a0· added by Sam, 1 Oct' });
+    ).toEqual({
+      inUse: true,
+      line: '11\u00a0Expenses\u00a0· 1\u00a0Settlement\u00a0· added by Sam, 1 Oct',
+    });
     expect(
       row('JPY', { expenses: expenses(24) }, addedBy(SAM, 'Sam', localNoon('2026-10-05'))),
     ).toEqual({
       inUse: true,
-      line: '24 Expenses\u00a0· whole amounts only\u00a0· added by Sam, 5 Oct',
+      line: '24\u00a0Expenses\u00a0· whole amounts only\u00a0· added by Sam, 5 Oct',
     });
     expect(row('GBP', {}, addedBy(PRIYA, 'Priya', localNoon('2026-10-02')))).toEqual({
       inUse: false,
@@ -71,10 +74,13 @@ describe('an extra currency as its settings row shows it (#721)', () => {
   it('says one in the singular, and counts every To review item, yours or not', () => {
     expect(
       row('EUR', { expenses: expenses(1), settlements: 2, toReview: { yours: 1, others: 2 } }),
-    ).toEqual({ inUse: true, line: '1 Expense\u00a0· 2 Settlements\u00a0· 3 items in To review' });
+    ).toEqual({
+      inUse: true,
+      line: '1\u00a0Expense\u00a0· 2\u00a0Settlements\u00a0· 3\u00a0items in To review',
+    });
     expect(row('EUR', { toReview: { yours: 0, others: 1 } })).toEqual({
       inUse: true,
-      line: '1 item in To review',
+      line: '1\u00a0item in To review',
     });
     expect(row('KRW', {})).toEqual({
       inUse: false,
@@ -105,12 +111,12 @@ describe('what still uses a currency, as the refused removal lists it (#721)', (
     ).toEqual([
       {
         kind: 'expenses',
-        title: '24 Expenses',
+        title: '24\u00a0Expenses',
         detail: 'Ramen at Ichiran, Taxi to Haneda and 22 more',
       },
       {
         kind: 'others',
-        title: '2 items in members’ To review',
+        title: '2\u00a0items in members’ To review',
         detail: 'Only their owners can see them. They need to save, change or delete them.',
       },
     ]);
@@ -127,20 +133,20 @@ describe('what still uses a currency, as the refused removal lists it (#721)', (
         }),
       ),
     ).toEqual([
-      { kind: 'expenses', title: '1 Expense', detail: 'Pastéis de nata' },
+      { kind: 'expenses', title: '1\u00a0Expense', detail: 'Pastéis de nata' },
       {
         kind: 'settlements',
-        title: '1 Settlement',
+        title: '1\u00a0Settlement',
         detail: 'A recorded payment can’t be changed or deleted, so EUR stays on the list.',
       },
       {
         kind: 'yours',
-        title: '1 item in your To review',
+        title: '1\u00a0item in your To review',
         detail: 'Save it, change its currency or delete it in To review.',
       },
       {
         kind: 'others',
-        title: '1 item in members’ To review',
+        title: '1\u00a0item in members’ To review',
         detail: 'Only their owners can see them. They need to save, change or delete them.',
       },
     ]);
@@ -153,17 +159,17 @@ describe('what still uses a currency, as the refused removal lists it (#721)', (
         }),
       ),
     ).toEqual([
-      { kind: 'expenses', title: '2 Expenses', detail: 'Tram 28 and Fado night' },
+      { kind: 'expenses', title: '2\u00a0Expenses', detail: 'Tram 28 and Fado night' },
       {
         kind: 'yours',
-        title: '2 items in your To review',
+        title: '2\u00a0items in your To review',
         detail: 'Save them, change their currency or delete them in To review.',
       },
     ]);
     expect(currencyUseRows('EUR', use({ settlements: 3 }))).toEqual([
       {
         kind: 'settlements',
-        title: '3 Settlements',
+        title: '3\u00a0Settlements',
         detail: 'A recorded payment can’t be changed or deleted, so EUR stays on the list.',
       },
     ]);

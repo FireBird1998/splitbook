@@ -20,7 +20,7 @@ import { getCategory } from '@splitbook/shared/categories';
 import { moneyParticipantId } from '@splitbook/shared/exact-money';
 import { expenseEdits, FORMER_MEMBER } from '@splitbook/shared/expense-detail';
 import ExpenseEditLines from './ExpenseEditLines';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 interface Person {
   _id: string;
@@ -174,7 +174,7 @@ export default function ExpenseDetails({
                 row.percentage !== undefined
                   ? `${row.percentage}%`
                   : row.shares !== undefined
-                    ? `${row.shares} shares`
+                    ? counted(row.shares, 'share')
                     : undefined
               }
             />
@@ -239,8 +239,7 @@ export default function ExpenseDetails({
                 endIcon={showHistory ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                 sx={{ px: 0 }}
               >
-                {showHistory ? 'Hide' : 'Show'} edit history ({edits.length} edit
-                {edits.length !== 1 ? 's' : ''})
+                {showHistory ? 'Hide' : 'Show'} edit history ({counted(edits.length, 'edit')})
               </Button>
               <Collapse in={showHistory}>
                 <Stack spacing={1.5} sx={{ mt: 1, borderLeft: 2, borderColor: 'divider', pl: 2 }}>

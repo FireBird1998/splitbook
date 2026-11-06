@@ -8,6 +8,7 @@
  */
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { ExpenseFilters } from '@splitbook/shared/types';
+import { NO_BREAK_SPACE } from '@splitbook/shared/separator';
 
 export type ExpenseSort = 'newest' | 'oldest' | 'largest' | 'smallest';
 
@@ -252,7 +253,7 @@ export function customRangeError(query: Pick<ExpenseListQuery, 'when' | 'from' |
   const to = Date.parse(`${query.to}T00:00:00Z`);
   if (from > to) return 'The first day must be on or before the last day.';
   if ((to - from) / 86_400_000 + 1 > MAX_CUSTOM_RANGE_DAYS)
-    return `Choose ${MAX_CUSTOM_RANGE_DAYS} days or fewer.`;
+    return `Choose ${MAX_CUSTOM_RANGE_DAYS}${NO_BREAK_SPACE}days or fewer.`;
   return null;
 }
 

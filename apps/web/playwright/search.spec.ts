@@ -204,7 +204,7 @@ test('people by name only, and only in the member’s own Groups', async ({ page
   expect(body).not.toMatch(/email/i);
 
   const sam = section(page, 'People').getByRole('option');
-  await expect(sam).toHaveAccessibleName(/^Sam Chen, In .+ and 2 other Groups$/);
+  await expect(sam).toHaveAccessibleName(/^Sam Chen, In .+ and 2\sother Groups$/);
   await expect(dialog(page)).not.toContainText('@');
   const href = await sam.getAttribute('href');
   const { data } = JSON.parse(body);

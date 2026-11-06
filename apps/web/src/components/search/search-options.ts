@@ -16,7 +16,7 @@ import type { GroupCategory } from '@splitbook/shared/types';
 import { openExpenseQuery } from '@/components/expenses/expense-list-query';
 import { groupTabHref } from '@/components/groups/group-tabs';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 export type SearchSectionKey = 'groups' | 'people' | 'expenses';
 
@@ -64,8 +64,6 @@ export function initialsOf(name: string): string {
   return letters.map((word) => Array.from(word)[0]?.toUpperCase() ?? '').join('') || '?';
 }
 
-const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
-
 function groupOption(group: SearchGroupResult): SearchOption {
   const category = group.category as GroupCategory;
   return {
@@ -73,7 +71,7 @@ function groupOption(group: SearchGroupResult): SearchOption {
     key: `group:${group.id}`,
     href: groupHref(group.id),
     title: group.name,
-    detail: `${getGroupTheme(category).label}${SEPARATOR}${plural(group.memberCount, 'member', 'members')}`,
+    detail: `${getGroupTheme(category).label}${SEPARATOR}${counted(group.memberCount, 'member', 'members')}`,
     category,
   };
 }
@@ -88,7 +86,7 @@ function personOption(person: SearchPersonResult): SearchOption {
     title: person.name,
     detail:
       others > 0
-        ? `In ${person.groupName} and ${plural(others, 'other Group', 'other Groups')}`
+        ? `In ${person.groupName} and ${counted(others, 'other Group', 'other Groups')}`
         : `In ${person.groupName}`,
     initials: initialsOf(person.name),
   };
@@ -144,10 +142,10 @@ export function searchSections(read: SearchRead): SearchSection[] {
 export function resultsSummary(sections: readonly SearchSection[]): string {
   const counts = sections.map(({ key, options: { length } }) =>
     key === 'groups'
-      ? plural(length, 'Group', 'Groups')
+      ? counted(length, 'Group', 'Groups')
       : key === 'people'
-        ? plural(length, 'person', 'people')
-        : plural(length, 'Expense', 'Expenses'),
+        ? counted(length, 'person', 'people')
+        : counted(length, 'Expense', 'Expenses'),
   );
   if (counts.length === 0) return 'No results';
   return counts.length === 1

@@ -41,7 +41,7 @@ import type { IconName } from './primitives';
 import { useTheme } from './theme';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import { nearDay, spellDay } from './day-format';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 
 const categoryIcons: Record<string, IconName> = {
   food: 'restaurant-outline',
@@ -93,7 +93,7 @@ export function expenseDays(expenses: MobileExpense[], now: number) {
 
 /** "You paid", "Sam Chen paid", or "2 people paid". */
 function payers(expense: MobileExpense, currentUserId: string) {
-  if (expense.paidBy.length !== 1) return `${expense.paidBy.length} people paid`;
+  if (expense.paidBy.length !== 1) return `${expense.paidBy.length}${NO_BREAK_SPACE}people paid`;
   const [{ user }] = expense.paidBy;
   return user.id === currentUserId ? 'You paid' : `${user.name} paid`;
 }
@@ -277,7 +277,7 @@ function tripSpending(trip: TripSummaryState | undefined, main: string) {
       name: [
         row.currency,
         ...(row.currency === main ? ['main currency'] : []),
-        `${spent} spent in ${row.expenseCount} ${row.expenseCount === 1 ? 'Expense' : 'Expenses'}`,
+        `${spent} spent in ${counted(row.expenseCount, 'Expense')}`,
       ].join(', '),
     };
   });
@@ -355,7 +355,7 @@ const ExpenseSummary = memo(function ExpenseSummary({
   ) : (
     <ReadTime refreshedAt={refreshedAt} restored={restored} updating={updating} offline={offline} />
   );
-  const count = summary ? `${summary.count} ${summary.count === 1 ? 'expense' : 'expenses'}` : '';
+  const count = summary ? counted(summary.count, 'expense') : '';
   const within = !month
     ? ''
     : month === current

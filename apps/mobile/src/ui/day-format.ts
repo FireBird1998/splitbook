@@ -1,4 +1,5 @@
 import { gregorianLocale, toDateParam } from '@splitbook/shared/date';
+import { NO_BREAK_SPACE } from '@splitbook/shared/separator';
 
 /** The phone's locale, e.g. "en-IN" or "fa-IR", and its time zone. */
 export interface PhoneCalendar {
@@ -60,6 +61,8 @@ export interface DaySpelling {
   year?: boolean;
   /** The zone to read the day in, such as UTC for a Group's dates stored at UTC midnight. */
   timeZone?: string;
+  /** Join the day and its month with a no-break space, where they are rebuilt: "6 Nov". */
+  together?: boolean;
 }
 
 const english = (locale: string) => /^en(?:[-_]|$)/i.test(locale);
@@ -78,7 +81,7 @@ const english = (locale: string) => /^en(?:[-_]|$)/i.test(locale);
  */
 export function spellDay(
   date: Date,
-  { weekday, month = 'short', year, timeZone }: DaySpelling = {},
+  { weekday, month = 'short', year, timeZone, together }: DaySpelling = {},
 ) {
   const format = gregorianDateFormat({
     ...(weekday ? { weekday } : {}),
@@ -95,7 +98,11 @@ export function spellDay(
     const named = part('month');
     const monthFirst = at('month') < at('day');
     if (named && !/\p{Nd}/u.test(named) && (monthFirst || english(readPhoneCalendar().locale)))
-      return [weekday && part('weekday'), part('day'), named, year && part('year')]
+      return [
+        weekday && part('weekday'),
+        together ? `${part('day')}${NO_BREAK_SPACE}${named}` : [part('day'), named].join(' '),
+        year && part('year'),
+      ]
         .filter(Boolean)
         .join(' ');
   } catch {
@@ -114,9 +121,13 @@ export const spellTime = (date: Date) =>
     .format(date)
     .replace(/\u202f/g, '\u00a0');
 
-/** A moment, its day first: "19 Oct, 1:44 PM", or as `spelling` spells the day. */
+/**
+ * A moment, its day first: "19 Oct, 1:44 PM", or as `spelling` spells the day. Its day and
+ * month are joined by a no-break space, so a record's "Fri 6 Nov 2026" never breaks between
+ * them (the Designer's review of #899).
+ */
 export const spellMoment = (date: Date, spelling: DaySpelling = {}) =>
-  `${spellDay(date, spelling)}, ${spellTime(date)}`;
+  `${spellDay(date, { ...spelling, together: true })}, ${spellTime(date)}`;
 
 /** "Today" or "Yesterday" when the day is one of them on this device, otherwise null. */
 export function nearDay(date: Date, now: number) {

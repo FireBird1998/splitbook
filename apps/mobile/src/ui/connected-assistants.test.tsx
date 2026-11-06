@@ -101,9 +101,9 @@ describe('Connected assistants (#622)', () => {
       'Assistants act as you, only with the access you give them.',
       'Assistants\u00a0· 2',
       'Fictional Helper',
-      'Read only + To review\u00a0· 1 of 2 Groups',
+      'Read only + To review\u00a0· 1 of 2\u00a0Groups',
       'Fictional Reader',
-      'Read only\u00a0· 2 of 2 Groups',
+      'Read only\u00a0· 2 of 2\u00a0Groups',
       'Not used yet',
     ])
       expect(shown).toContain(line);

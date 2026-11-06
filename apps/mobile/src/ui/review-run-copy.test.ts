@@ -3,9 +3,11 @@ import { joinGroupNames, reviewedItemsLine } from './review-run-copy';
 
 describe('the end-of-run line', () => {
   it('says item for one and items for more', () => {
-    expect(reviewedItemsLine(1, ['Maple House'])).toBe('You went through 1 item in Maple House');
+    expect(reviewedItemsLine(1, ['Maple House'])).toBe(
+      'You went through 1\u00a0item in Maple House',
+    );
     expect(reviewedItemsLine(5, ['Maple House', 'Goa Friends Trip'])).toBe(
-      'You went through 5 items in Maple House and Goa Friends Trip',
+      'You went through 5\u00a0items in Maple House and Goa Friends Trip',
     );
   });
   it('lists three or more Groups with commas and a final and', () => {

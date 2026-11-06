@@ -29,6 +29,7 @@ import { expenseMonth } from './expense-day';
 import { MoneyValidationError } from './exact-money';
 import { nextOccurrenceDay } from './recurring-due-periods';
 import { findReferencedTag, type IdentityTag } from './tag-identity';
+import { NO_BREAK_SPACE } from './separator';
 
 /** How many Months a spending read covers: six on Home, at most a year. */
 export const SPENDING_MONTHS = { default: 6, min: 1, max: 12 } as const;
@@ -56,7 +57,7 @@ export function readSpendingMonths(value: unknown): number {
   return readMonthCount(
     value,
     SPENDING_MONTHS,
-    `Ask for ${SPENDING_MONTHS.min} to ${SPENDING_MONTHS.max} months of spending.`,
+    `Ask for ${SPENDING_MONTHS.min} to ${SPENDING_MONTHS.max}${NO_BREAK_SPACE}months of spending.`,
   );
 }
 

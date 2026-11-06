@@ -21,7 +21,7 @@ import {
   type OutsideTrip,
   type Statement,
 } from '@splitbook/shared/statement';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 const light = getSemanticTokens('light');
 /** A whole trip's Expenses and Payments outside the Trip's dates. */
@@ -29,7 +29,7 @@ const OUTSIDE_TRIP: Record<OutsideTrip, string> = {
   before: 'Before the trip',
   after: 'After the trip',
 };
-const expenses = (count: number) => `${count} ${count === 1 ? 'Expense' : 'Expenses'}`;
+const expenses = (count: number) => counted(count, 'Expense');
 function StatementTable({
   title,
   headers,

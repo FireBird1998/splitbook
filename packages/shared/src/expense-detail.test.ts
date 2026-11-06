@@ -442,7 +442,7 @@ describe('an Expense’s history', () => {
         },
       }),
     ).toEqual([
-      'Split Equally → By shares',
+      'Split Equally → By\u00a0shares',
       'Your share ₹6.00 → ₹4.00',
       'Sam Chen’s share ₹6.00 → ₹8.00',
     ]);
@@ -458,7 +458,7 @@ describe('an Expense’s history', () => {
         splitMethod: { old: 'equal', new: 'shares' },
         splitBetween: { old: equal(45000), new: byShares(60000) },
       }),
-    ).toEqual(['Amount ₹900.00 → ₹1,200.00', 'Split Equally → By shares']);
+    ).toEqual(['Amount ₹900.00 → ₹1,200.00', 'Split Equally → By\u00a0shares']);
   });
 
   it('says the split changed when its shares changed but nobody’s amount did', () => {

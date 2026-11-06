@@ -73,7 +73,7 @@ import { useStartWhileUnfocused } from './start-while-unfocused';
 import { fonts, useTheme } from './theme';
 import { reviewedItemsLine } from './review-run-copy';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
 
 /**
  * An amount as its field shows it, with its currency's places, as Add expense does: 18.4 in euros
@@ -399,7 +399,7 @@ function ReviewRunContent({
     : state.pending
       ? 'We didn’t hear back, so it may already be saved'
       : model.needs.length
-        ? `${missing.length === 1 ? 'One thing' : `${missing.length} things`} left before you can save: ${missing.join(', ')}`
+        ? `${missing.length === 1 ? 'One thing' : `${missing.length}${NO_BREAK_SPACE}things`} left before you can save: ${missing.join(', ')}`
         : item.duplicates.some(
               (d) => d.kind === 'expense' && !state.matches.some((expense) => expense._id === d.id),
             )
@@ -457,7 +457,7 @@ function ReviewRunContent({
     <>
       <RunScreen
         title={groupName}
-        subtitle={`Review${SEPARATOR}${state.index + 1} of ${state.items.length}${groups > 1 ? `${SEPARATOR}across ${groups} Groups` : ''}`}
+        subtitle={`Review${SEPARATOR}${state.index + 1} of ${state.items.length}${groups > 1 ? `${SEPARATOR}across ${groups}${NO_BREAK_SPACE}Groups` : ''}`}
         close={close}
         refresh={
           offline

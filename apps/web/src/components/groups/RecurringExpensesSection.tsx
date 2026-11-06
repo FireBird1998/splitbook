@@ -59,7 +59,7 @@ import { apiFetch } from '@/lib/utils/api-fetch';
 import { recurringRefusal } from '@/components/groups/recurring-refusal';
 import { RECURRING_SECTION_ID } from '@/components/groups/group-tabs';
 import { memberLabel } from '@splitbook/shared/activity-timeline';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 interface RecurringExpensesSectionProps {
   groupId: string;
@@ -460,7 +460,7 @@ export default function RecurringExpensesSection({
     const count = template.splitBetween.length;
     switch (template.splitMethod) {
       case 'equal':
-        return `split equally ${count} way${count === 1 ? '' : 's'}`;
+        return `split equally ${counted(count, 'way')}`;
       case 'percentage':
         return `split by percentage across ${count}`;
       case 'shares':

@@ -92,7 +92,7 @@ import { savingNeedsConnection } from './offline-notice';
 import { spellMoment } from './day-format';
 import { useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
 
 /**
  * × on the form: where it goes, keeping the draft. An edit begun on the Expense's record returns
@@ -882,7 +882,7 @@ function ExpenseTask({
           {summary ? (
             <Banner
               tone="error"
-              title={`${invalid.length === 1 ? 'One thing' : `${invalid.length} things`} to fix before saving`}
+              title={`${invalid.length === 1 ? 'One thing' : `${invalid.length}${NO_BREAK_SPACE}things`} to fix before saving`}
               message={expenseRecoveryWords('Your draft is kept. Go to each one:')}
             >
               {invalid.map((field) => (

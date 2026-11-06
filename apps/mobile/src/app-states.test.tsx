@@ -853,14 +853,14 @@ describe('cold start', () => {
     expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
     expect(app.text()).toContain('Maple House');
     expect(app.text()).not.toContain('Checking your session');
-    expect(app.button('Open Maple House, Household\u00a0· 2 members')).toBeNull();
+    expect(app.button('Open Maple House, Household\u00a0· 2\u00a0members')).toBeNull();
     expect(app.disabled('Refresh Home')).toBe(true);
     expect(app.disabled('Account and settings')).toBe(true);
 
     check.release();
     await settle();
     expect(app.text()).not.toContain('Checking…');
-    expect(app.button('Open Maple House, Household\u00a0· 2 members')).not.toBeNull();
+    expect(app.button('Open Maple House, Household\u00a0· 2\u00a0members')).not.toBeNull();
   });
 
   it('replaces the saved Home with sign-in when the session has ended', async () => {
@@ -1172,12 +1172,12 @@ describe('first load and refresh', () => {
     const app = await start(phone);
     await settle();
     const read = phone.hold(`/api/groups/${lisbon}`);
-    app.tap('Open Lisbon Offsite, Work\u00a0· 2 members');
+    app.tap('Open Lisbon Offsite, Work\u00a0· 2\u00a0members');
     await read.reached;
     await settle();
 
     expect(app.headers()[0]).toBe('Lisbon Offsite');
-    expect(app.text()).toContain('Work\u00a0· 2 members\u00a0· INR');
+    expect(app.text()).toContain('Work\u00a0· 2\u00a0members\u00a0· INR');
     expect(app.disabled('Invite people')).toBe(false);
     expect(app.button('Group options')).not.toBeNull();
     expect(app.button('Add expense')).not.toBeNull();
@@ -1198,7 +1198,7 @@ describe('first load and refresh', () => {
     await usedBefore(phone);
     const app = await start(phone);
     await settle();
-    await app.press('Open Maple House, Household\u00a0· 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2\u00a0members');
     await app.press('Balances');
     const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
     app.pull().onRefresh();
@@ -1225,7 +1225,7 @@ describe('first load and refresh', () => {
     await usedBefore(phone);
     const app = await start(phone);
     await settle();
-    await app.press('Open Maple House, Household\u00a0· 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2\u00a0members');
     // Expenses and Balances keep when they were read; the progress bar says they're read (#219).
     const refresh = async (path: string, destination: string, cue = /Updated \d/) => {
       if (destination !== 'Expenses') await app.press(destination);
@@ -1281,7 +1281,7 @@ describe('first load and refresh', () => {
     await usedBefore(phone);
     const app = await start(phone);
     await settle();
-    await app.press('Open Maple House, Household\u00a0· 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2\u00a0members');
     await app.press('Activity');
     expect(app.text()).toContain('No changes yet');
 
@@ -1303,7 +1303,7 @@ describe('first load and refresh', () => {
     await usedBefore(phone);
     const app = await start(phone);
     await settle();
-    await app.press('Open Maple House, Household\u00a0· 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2\u00a0members');
     const read = phone.hold(`/api/groups/${maple}`);
     await app.press('Group options');
     app.tap('Refresh, Check for the latest changes');
@@ -1365,7 +1365,7 @@ describe('offline', () => {
     );
     expect(app.text()).toContain(saved);
 
-    await app.press('Open Maple House, Household\u00a0· 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2\u00a0members');
     expect(app.text().match(/You’re offline/g)).toHaveLength(1);
     expect(app.text()).toContain(saved);
     expect(app.disabled('Invite people. Inviting needs a connection')).toBe(true);
@@ -1501,7 +1501,7 @@ describe('offline', () => {
     phone.network.online = false;
     const app = await start(phone);
     await settle();
-    await app.press('Open Lisbon Offsite, Work\u00a0· 2 members');
+    await app.press('Open Lisbon Offsite, Work\u00a0· 2\u00a0members');
 
     expect(app.headers()).toEqual(
       expect.arrayContaining(['Lisbon Offsite', 'Not available offline']),
@@ -1524,7 +1524,7 @@ describe('offline', () => {
     phone.network.online = false;
     const app = await start(phone);
     await settle();
-    await app.press('Open Maple House, Household\u00a0· 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2\u00a0members');
     await app.press('Previous month');
     expect(app.text()).toContain(
       'Expenses in August 2026 aren’t saved on this phone. Connect to load them.',
@@ -1551,7 +1551,7 @@ describe('offline', () => {
     phone.network.online = false;
     const app = await start(phone);
     await settle();
-    await app.press('Open Lisbon Offsite, Work\u00a0· 2 members');
+    await app.press('Open Lisbon Offsite, Work\u00a0· 2\u00a0members');
     expect(app.text()).toContain('No expenses yet');
     await app.press('Activity');
     // True whether it was never saved here, removed or withheld (#280 item 2, #222).
@@ -1847,7 +1847,7 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.content().inside).toContain(saved);
     // Alex opens a Group, reconnects, pulls and saves an Expense, which removes that copy; the
     // connection drops before Home's figures are read again, and Alex goes back to Home.
-    await app.press('Open Maple House, Household\u00a0· 2 members');
+    await app.press('Open Maple House, Household\u00a0· 2\u00a0members');
     phone.network.online = true;
     await settle(controller().refresh('pull'));
     await settle(controller().openExpense(maple));
@@ -1883,7 +1883,7 @@ describe('Home says what is true, without jumps (#332)', () => {
       phone.storage.failRemoval = copy === 'withheld';
       phone.network.online = true;
       phone.network.refused.push(lisbon);
-      await app.press('Open Lisbon Offsite, Work\u00a0· 2 members');
+      await app.press('Open Lisbon Offsite, Work\u00a0· 2\u00a0members');
       // The connection drops before Home is read again.
       phone.network.online = false;
       await settle(Promise.resolve(controller().back()));
@@ -2008,8 +2008,8 @@ describe('Home says what is true, without jumps (#332)', () => {
 describe('A Group says what is true, without jumps (#219)', () => {
   const controller = () => runtime.controller as MobileController;
   const open = {
-    [maple]: 'Open Maple House, Household\u00a0· 2 members',
-    [lisbon]: 'Open Lisbon Offsite, Work\u00a0· 2 members',
+    [maple]: 'Open Maple House, Household\u00a0· 2\u00a0members',
+    [lisbon]: 'Open Lisbon Offsite, Work\u00a0· 2\u00a0members',
   };
   /** Signed in once, with Home read: no Group's view has been opened on this phone. */
   async function signedIn(phone: ReturnType<typeof device>) {
@@ -2664,7 +2664,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await signedIn(phone);
     const app = await start(phone);
     await settle();
-    await app.press('Open Lisbon Offsite, Trip\u00a0· 2 members');
+    await app.press('Open Lisbon Offsite, Trip\u00a0· 2\u00a0members');
     const tabs = () =>
       app
         .hosts((p) => p.accessibilityRole === 'tablist' && p.accessibilityLabel === 'Spending in')
@@ -2675,9 +2675,9 @@ describe('A Group says what is true, without jumps (#219)', () => {
         )
         .map((tab) => [tab.props.accessibilityLabel, tab.props.accessibilityState?.selected]);
     expect(tabs()).toEqual([
-      ['INR, main currency, ₹48,600.00 spent in 3 Expenses', false],
-      ['EUR, €1,240.00 spent in 11 Expenses', false],
-      ['JPY, ¥186,000 spent in 24 Expenses', true],
+      ['INR, main currency, ₹48,600.00 spent in 3\u00a0Expenses', false],
+      ['EUR, €1,240.00 spent in 11\u00a0Expenses', false],
+      ['JPY, ¥186,000 spent in 24\u00a0Expenses', true],
     ]);
     expect(app.hosts((p) => p.accessibilityLabel === 'Spent: ¥186,000')).toHaveLength(1);
     expect(seen()).toContain(
@@ -2686,7 +2686,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     // Its strip lists the Trip's currencies too.
     expect(seen()).toContain('INR\u00a0· EUR\u00a0· JPY');
 
-    await app.press('EUR, €1,240.00 spent in 11 Expenses');
+    await app.press('EUR, €1,240.00 spent in 11\u00a0Expenses');
     expect(phone.sent).toContain(
       `GET /api/groups/${lisbon}/trip-summary?tz=${PHONE_ZONE}&currency=EUR`,
     );
@@ -2704,13 +2704,13 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await settle();
     await app.press(open[maple]);
     expect(controller().getSnapshot().financial.month).toBe('2026-09');
-    expect(seen()).toContain('0 expenses this monthUpdated');
+    expect(seen()).toContain('0\u00a0expenses this monthUpdated');
     // The selected September list stays in place; only the relative label changes.
     phone.clock.now = new Date(2026, 9, 1, 0, 0, 1).getTime();
     await settle(controller().refresh('foreground'));
     expect(controller().getSnapshot().financial.month).toBe('2026-09');
-    expect(seen()).toContain('0 expenses in SeptemberUpdated');
-    expect(seen()).not.toContain('0 expenses this month');
+    expect(seen()).toContain('0\u00a0expenses in SeptemberUpdated');
+    expect(seen()).not.toContain('0\u00a0expenses this month');
   });
 
   // N2 (MB): once the Expenses are read after a change, they're current, whatever Balances wait on.
@@ -2729,13 +2729,13 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await settle();
     // The Expenses were read after the save; Balances, read after them, are still on their way.
     const listedAt = refreshedLabel(phone.clock.now);
-    expect(seen()).toContain(`0 expenses this monthUpdated ${listedAt}`);
+    expect(seen()).toContain(`0\u00a0expenses this monthUpdated ${listedAt}`);
     phone.clock.now += 60_000;
     const pulled = phone.hold(`/api/groups/${maple}/expenses?`);
     void controller().refresh('pull');
     await pulled.reached;
     await settle();
-    expect(seen()).toContain(`0 expenses this monthUpdated ${listedAt}`);
+    expect(seen()).toContain(`0\u00a0expenses this monthUpdated ${listedAt}`);
     expect(seen()).not.toContain('Updating');
     pulled.release();
     balances.release();
@@ -2779,7 +2779,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await app.press(open[maple]);
     const readAt = refreshedLabel(phone.clock.now);
     const height = contentHeight();
-    expect(seen()).toContain(`0 expenses this monthUpdated ${readAt}`);
+    expect(seen()).toContain(`0\u00a0expenses this monthUpdated ${readAt}`);
     phone.clock.now += 2 * 60_000;
     await settle(controller().openExpense(maple));
     await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
@@ -2788,12 +2788,14 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await expenses.reached;
     await settle();
     expect(app.text()).toContain('Expense saved');
-    expect(seen()).toContain('0 expenses this monthUpdating…');
+    expect(seen()).toContain('0\u00a0expenses this monthUpdating…');
     expect(seen()).not.toContain(`Updated ${readAt}`);
     expect(contentHeight()).toBe(height);
     expenses.release();
     await settle(saving);
-    expect(seen()).toContain(`0 expenses this monthUpdated ${refreshedLabel(phone.clock.now)}`);
+    expect(seen()).toContain(
+      `0\u00a0expenses this monthUpdated ${refreshedLabel(phone.clock.now)}`,
+    );
     expect(seen()).not.toContain('Updating');
   });
 
@@ -2841,7 +2843,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
 
 describe('The Expense form and Record payment say what they are doing (#334)', () => {
   const controller = () => runtime.controller as MobileController;
-  const openMaple = 'Open Maple House, Household\u00a0· 2 members';
+  const openMaple = 'Open Maple House, Household\u00a0· 2\u00a0members';
   const unreachable = 'Could not reach Splitbook. Check your connection and try again.';
   const footnote = 'Records a payment made outside Splitbook. No money moves.';
   /** Maple House on Balances, where Alex owes Sam ₹30.00. */
@@ -3344,7 +3346,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     first.dispose();
     const app = await start(phone);
     await settle();
-    await app.press('Open Lisbon Offsite, Work\u00a0· 2 members');
+    await app.press('Open Lisbon Offsite, Work\u00a0· 2\u00a0members');
     await app.press('Balances');
     await app.press('EUR, you owe €20.00');
     await app.press('Record your payment to Sam Chen');
@@ -3416,9 +3418,9 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     first.dispose();
     const app = await start(phone);
     await settle();
-    await app.press('Open Lisbon Offsite, Work\u00a0· 2 members');
+    await app.press('Open Lisbon Offsite, Work\u00a0· 2\u00a0members');
     await app.press('Balances');
-    expect(app.text()).toContain('You owe Sam Chen in 2 currencies');
+    expect(app.text()).toContain('You owe Sam Chen in 2\u00a0currencies');
     expect(app.hosts((p) => p.accessibilityLabel === '₹30.00 and €20.00')).toHaveLength(1);
     await app.press('Settle both with Sam Chen');
     const settling = () =>
@@ -3431,7 +3433,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(settling()).not.toBeNull();
     expect(phone.sent).toContain(`GET /api/groups/${lisbon}/rates?from=EUR&to=INR`);
     const sheetText = words(settling());
-    expect(sheetText).toContain('You owe Sam Chen in 2 currencies.');
+    expect(sheetText).toContain('You owe Sam Chen in 2\u00a0currencies.');
     expect(sheetText).toContain('Suggested\u00a0· Frankfurter, 20 Oct');
     expect(sheetText).toContain('₹1,872.00');
     expect(
@@ -3489,7 +3491,7 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
 // Group's other destinations do since #219.
 describe('Activity says what is true (#222)', () => {
   const controller = () => runtime.controller as MobileController;
-  const openMaple = 'Open Maple House, Household\u00a0· 2 members';
+  const openMaple = 'Open Maple House, Household\u00a0· 2\u00a0members';
   const activityPage = `/api/groups/${maple}/activity?page=1&limit=20`;
 
   // #280 item 1: older events stayed on screen, labelled "Saved", after this device's own change.

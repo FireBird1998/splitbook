@@ -20,6 +20,7 @@ import {
   type SettlementBatchAmounts,
   type SettlementBatchRate,
 } from './settlement-batch';
+import { NO_BREAK_SPACE } from './separator';
 
 /** What a client knows of a Debt's suggested rate: still reading, none, or the suggestion. */
 export type SettleAllRateState =
@@ -152,8 +153,8 @@ const andList = (words: string[]) =>
 export function settleAllWords(offer: SettleAllOffer) {
   const count = offer.debts.length;
   const lead = offer.youPay
-    ? `You owe ${offer.other} in ${count} currencies`
-    : `${offer.other} owes you in ${count} currencies`;
+    ? `You owe ${offer.other} in ${count}${NO_BREAK_SPACE}currencies`
+    : `${offer.other} owes you in ${count}${NO_BREAK_SPACE}currencies`;
   const clears = count === 2 ? 'clear both' : 'clear them all';
   return {
     lead,
@@ -165,7 +166,7 @@ export function settleAllWords(offer: SettleAllOffer) {
     title: `Settle up with ${offer.other}`,
     intro: `${lead}. One payment can ${clears}; each Debt keeps its own rate.`,
     payColumn: offer.youPay ? 'You pay' : `${offer.other} pays`,
-    note: `Records ${count} Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.`,
+    note: `Records ${count}${NO_BREAK_SPACE}Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.`,
   };
 }
 

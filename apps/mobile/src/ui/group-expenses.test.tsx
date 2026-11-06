@@ -30,6 +30,7 @@ import {
   tailCutOverrun,
   unreadText,
   wordsOf,
+  countApart,
 } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { ThemeContext } from './theme';
@@ -248,7 +249,7 @@ describe('Expenses summary', () => {
     for (const stat of ['Spent: ₹18,420.00', 'Your share: ₹6,140.00', 'You paid: ₹5,210.00'])
       expect(labelled(root, stat)).toHaveLength(1);
     const shown = text(root);
-    expect(shown).toContain('14 expenses this month');
+    expect(shown).toContain('14\u00a0expenses this month');
     expect(shown).toContain(`Updated ${refreshedLabel(at)}`);
     expect(shown).not.toMatch(/owe|balance/i);
     press(root, 'Previous month');
@@ -258,13 +259,13 @@ describe('Expenses summary', () => {
 
   it('an earlier Month moves forward, and All time offers This month', () => {
     const august = view({ state: financial({}, '2026-08') });
-    expect(text(august.root)).toContain('14 expenses in August');
+    expect(text(august.root)).toContain('14\u00a0expenses in August');
     press(august.root, 'Next month');
     expect(august.onSelectMonth).toHaveBeenCalledWith('2026-09');
     remount();
     const all = view({ state: financial({}, null) });
     expect(headings(all.root)).toContain('All time');
-    expect(text(all.root)).toContain('14 expenses');
+    expect(text(all.root)).toContain('14\u00a0expenses');
     expect(labelled(all.root, 'Next month')[0].props.accessibilityState).toEqual({
       disabled: true,
     });
@@ -279,7 +280,7 @@ describe('Expenses summary', () => {
     expect(headings(root)).toContain('All time');
     expect(labelled(root, 'Your share: ₹6,140.00')).toHaveLength(1);
     const shown = text(root);
-    expect(shown).toContain('14 expenses');
+    expect(shown).toContain('14\u00a0expenses');
     expect(shown).not.toContain('this month');
     expect(shown).toContain(`Updated ${refreshedLabel(at)}`);
   });
@@ -410,9 +411,9 @@ describe('A Trip’s spending, one currency at a time (#730)', () => {
   it('opens on the currency with the most Expenses, with what was spent in each, and says why', () => {
     const { root } = view({ group: lisbon(), state: shown(), onChooseTripCurrency: vi.fn() });
     expect(tabs(root)).toEqual([
-      ['INR, main currency, ₹48,600.00 spent in 3 Expenses', false],
-      ['EUR, €1,240.00 spent in 11 Expenses', false],
-      ['JPY, ¥186,000 spent in 24 Expenses', true],
+      ['INR, main currency, ₹48,600.00 spent in 3\u00a0Expenses', false],
+      ['EUR, €1,240.00 spent in 11\u00a0Expenses', false],
+      ['JPY, ¥186,000 spent in 24\u00a0Expenses', true],
     ]);
     for (const stat of ['Spent: ¥186,000', 'Your share: ¥62,000', 'You paid: ¥70,400'])
       expect(labelled(root, stat)).toHaveLength(1);
@@ -421,7 +422,7 @@ describe('A Trip’s spending, one currency at a time (#730)', () => {
     expect(words).toContain(
       'Opened on JPY, the currency with the most Expenses (24). Each currency is shown on its own.',
     );
-    expect(words).toContain('38 expenses');
+    expect(words).toContain('38\u00a0expenses');
     expect(words).toContain(`Updated ${refreshedLabel(at)}`);
     // The switch takes the place of the note on other currencies.
     expect(words).not.toContain('in other currencies');
@@ -430,7 +431,7 @@ describe('A Trip’s spending, one currency at a time (#730)', () => {
   it('asks for the currency chosen, and shows its figures only once they are read in it', () => {
     const onChooseTripCurrency = vi.fn();
     const { root } = view({ group: lisbon(), state: shown(), onChooseTripCurrency });
-    press(root, 'EUR, €1,240.00 spent in 11 Expenses');
+    press(root, 'EUR, €1,240.00 spent in 11\u00a0Expenses');
     expect(onChooseTripCurrency).toHaveBeenCalledWith('EUR');
     act(() =>
       screen!.update(
@@ -453,7 +454,7 @@ describe('A Trip’s spending, one currency at a time (#730)', () => {
       ),
     );
     expect(tabs(root).find(([, selected]) => selected)?.[0]).toBe(
-      'EUR, €1,240.00 spent in 11 Expenses',
+      'EUR, €1,240.00 spent in 11\u00a0Expenses',
     );
     // The yen figures never show under euros, in yen or formatted as euros ("Spent: €1,860.00",
     // mutant T3): no figure shows at all until the euro read lands.
@@ -519,8 +520,8 @@ describe('A Trip’s spending, one currency at a time (#730)', () => {
       onChooseTripCurrency: vi.fn(),
     });
     expect(tabs(root)).toEqual([
-      ['EUR, main currency, €1,240.00 spent in 11 Expenses', false],
-      ['JPY, ¥186,000 spent in 24 Expenses', true],
+      ['EUR, main currency, €1,240.00 spent in 11\u00a0Expenses', false],
+      ['JPY, ¥186,000 spent in 24\u00a0Expenses', true],
     ]);
   });
 
@@ -576,6 +577,16 @@ it.each([1.5, 2])('never starts a line with a dot at %s× text (#895)', (fontSca
   for (const words of lines) expect(words, words).not.toMatch(/(^|[ \n])·/);
 });
 
+// #898: a count and its noun, as the summary's "3 expenses" and a row's "2 people paid", are
+// joined by a no-break space, so a line never breaks between them at 150% or 200%.
+it.each([1.5, 2])('keeps each count with its noun at %s× text (#898)', (fontScale) => {
+  setWindow({ width: 360, height: 640, fontScale });
+  view();
+  const lines = outerTexts(screen!.toJSON() as ReactTestRendererJSON).map(wordsOf);
+  expect(lines).toContainEqual(expect.stringMatching(/\d\u00a0expenses?/));
+  for (const words of lines) expect(words, words).not.toMatch(countApart);
+});
+
 describe('Expense rows', () => {
   it('sit under day headings and say what the member lent or owes', () => {
     // A US phone too: day first, and Yesterday named like Today (#640).
@@ -594,7 +605,7 @@ describe('Expense rows', () => {
         'Electricity bill, ₹2,860.00, Sam Chen paid, Utilities, you owe ₹953.33',
         // Not involved: nothing either way.
         'Beach shack lunch, ₹1,860.00, Priya Shah paid, Dining',
-        'Villa stay, ₹3,000.00, 2 people paid, Stay, you lent ₹1,000.00',
+        'Villa stay, ₹3,000.00, 2\u00a0people paid, Stay, you lent ₹1,000.00',
       ]),
     );
     const shown = text(root);

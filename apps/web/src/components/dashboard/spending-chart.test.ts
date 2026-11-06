@@ -148,7 +148,7 @@ describe('the explanation', () => {
         { kind: 'down', month: '2026-09', totalMinor: 210000, averageMinor: 638083 },
         options,
       ),
-    ).toBe('So far, September is below your average of ₹6,380.83 for the 5 months before.');
+    ).toBe('So far, September is below your average of ₹6,380.83 for the 5\u00a0months before.');
     expect(
       explainTrend(
         { kind: 'level', month: '2026-09', totalMinor: 500, averageMinor: 500 },

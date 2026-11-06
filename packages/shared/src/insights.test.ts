@@ -272,7 +272,7 @@ describe('the Month count', () => {
   it.each(['0', '13', '6.5', '-1', 'six', ' 6', 0, 13, 2.5, Number.NaN, {}])(
     'refuses %j',
     (value) => {
-      expect(() => readSpendingMonths(value)).toThrow('Ask for 1 to 12 months of spending.');
+      expect(() => readSpendingMonths(value)).toThrow('Ask for 1 to 12\u00a0months of spending.');
     },
   );
 });

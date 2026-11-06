@@ -28,13 +28,14 @@ import {
 import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
+import { NO_BREAK_SPACE } from '@splitbook/shared/separator';
 
 /** The Paid by tile's value: who paid, or how many people did. */
 export function paidBySummary(draft: ExpenseDraft, person: (id: string) => string) {
   if (!draft.multiPayer) return person(draft.payerId);
   const payers = enteredPayers(draft.payers);
   if (payers.length === 1) return person(payers[0].user);
-  return payers.length ? `${payers.length} people` : 'Choose who paid';
+  return payers.length ? `${payers.length}${NO_BREAK_SPACE}people` : 'Choose who paid';
 }
 
 /**

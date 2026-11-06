@@ -192,7 +192,7 @@ describe('the Group chooser', () => {
       'Goa Friends Trip',
       'Lisbon Offsite',
     ]);
-    expect(groupChoiceDetail(GROUPS[0])).toBe('Household\u00a0· 3 members\u00a0· INR');
+    expect(groupChoiceDetail(GROUPS[0])).toBe('Household\u00a0· 3\u00a0members\u00a0· INR');
   });
 
   it('tells a member with no Groups to create one first, with a link to do so', () => {

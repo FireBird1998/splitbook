@@ -6,7 +6,7 @@ import Typography from '@mui/material/Typography';
 import SegmentedControl from '@/components/charts/SegmentedControl';
 import MoneyText from '@/components/common/MoneyText';
 import { TabCard } from './TabCard';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 export interface Debt {
   from: { _id: string; name: string };
@@ -92,9 +92,8 @@ export default function SettleUpViews({
       )}
       {fewer && (
         <Typography sx={{ m: 0, px: 2.5, pb: 2.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-          {suggestedCount} {suggestedCount === 1 ? 'payment settles' : 'payments settle'} the same{' '}
-          {debts?.length} {debts?.length === 1 ? 'debt' : 'debts'}. Everyone ends settled up either
-          way.
+          {counted(suggestedCount, 'payment')} {suggestedCount === 1 ? 'settles' : 'settle'} the
+          same {counted(debts?.length ?? 0, 'debt')}. Everyone ends settled up either way.
         </Typography>
       )}
     </TabCard>

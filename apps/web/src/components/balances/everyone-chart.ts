@@ -14,6 +14,7 @@ import {
 } from '@splitbook/shared/member-positions';
 import type { SettlementLedger } from '@splitbook/shared/settlement-preview';
 import { compactMoney } from '@/components/dashboard/spending-chart';
+import { withSign } from '@splitbook/shared/money';
 
 /** Someone who may appear in the chart: a member, or a former member the ledger still names. */
 export interface EveryonePerson {
@@ -165,8 +166,8 @@ export function everyoneModel(
     currency,
     settled: everyoneSettled(positions),
     scale: {
-      negative: `−${compactMoney(end, currency)}`,
-      positive: `+${compactMoney(end, currency)}`,
+      negative: withSign('−', compactMoney(end, currency)),
+      positive: withSign('+', compactMoney(end, currency)),
     },
     rows: positions.map((position) => {
       const major = toMajorAmount(Math.abs(position.netMinor), currency);
@@ -179,9 +180,9 @@ export function everyoneModel(
         standing: position.standing,
         amount:
           position.standing === 'owed'
-            ? `+${money(position.netMinor)}`
+            ? withSign('+', money(position.netMinor))
             : position.standing === 'owes'
-              ? `−${money(position.netMinor)}`
+              ? withSign('−', money(position.netMinor))
               : money(0),
         position: POSITION_WORDS[position.standing],
         settledBy: settledBy(position.standing, position.settledBy),

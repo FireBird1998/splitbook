@@ -40,7 +40,7 @@ import {
   retryWaitsForCheck,
 } from './payment-words';
 import { fonts, useTheme } from './theme';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
 
 /** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#868). */
 const symbol = currencyPrefix;
@@ -414,7 +414,7 @@ export function SettleAllSheet({
       ) : (
         <>
           <CompactText tone="secondary">
-            {`${youPay ? `You owe ${other}` : `${other} owes you`} in ${count} currencies. One payment can clear ${count === 2 ? 'both' : 'them all'}; each Debt keeps its own rate.`}
+            {`${youPay ? `You owe ${other}` : `${other} owes you`} in ${count}${NO_BREAK_SPACE}currencies. One payment can clear ${count === 2 ? 'both' : 'them all'}; each Debt keeps its own rate.`}
           </CompactText>
           {editable && payCurrencies.length > 1 ? (
             <View style={{ gap: 6 }}>
@@ -476,7 +476,7 @@ export function SettleAllSheet({
             </View>
           </Card>
           <CompactText variant="caption" tone="secondary">
-            {`Records ${count} Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.`}
+            {`Records ${count}${NO_BREAK_SPACE}Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.`}
           </CompactText>
         </>
       )}

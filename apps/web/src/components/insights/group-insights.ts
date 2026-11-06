@@ -14,7 +14,8 @@ import { COMPARE_MONTHS, type ChangeDirection } from '@splitbook/shared/insights
 import { addMonths, isMonthKey } from '@splitbook/shared/zoned-calendar';
 import { monthLabel } from '@/components/dashboard/spending-chart';
 import { groupTabHref } from '@/components/groups/group-tabs';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
+import { withSign } from '@splitbook/shared/money';
 
 export type CompareChoice = (typeof COMPARE_MONTHS.choices)[number];
 export const COMPARE_CHOICES: readonly CompareChoice[] = COMPARE_MONTHS.choices;
@@ -70,7 +71,7 @@ export function insightsHref(
 }
 
 /** "1 month", "6 months": the range switch's options. */
-export const compareLabel = (count: number) => `${count} ${count === 1 ? 'month' : 'months'}`;
+export const compareLabel = (count: number) => counted(count, 'month');
 
 /** Where the Month navigation can go, and why it can't. */
 export interface MonthSteps {
@@ -109,7 +110,7 @@ export function monthSteps(
 const money = (minor: number, currency: string) =>
   formatCurrency(toMajorAmount(minor, currency), currency);
 const signedMoney = (minor: number, currency: string) =>
-  `${minor > 0 ? '+' : minor < 0 ? '−' : ''}${money(Math.abs(minor), currency)}`;
+  withSign(minor > 0 ? '+' : minor < 0 ? '−' : '', money(Math.abs(minor), currency));
 
 const percentFormat = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 1,
@@ -364,5 +365,5 @@ export function otherCurrenciesNote(read: GroupInsightsRead): string | null {
     (entry) =>
       `${entry.expenseCount} in ${entry.currency} (${money(entry.spentMinor, entry.currency)})`,
   );
-  return `Only ${read.currency} Expenses are counted here. ${count === 1 ? 'One Expense' : `${count} Expenses`} in these months ${count === 1 ? 'is' : 'are'} in another currency and left out, never converted: ${parts.join(', ')}.`;
+  return `Only ${read.currency} Expenses are counted here. ${count === 1 ? 'One Expense' : `${count}${NO_BREAK_SPACE}Expenses`} in these months ${count === 1 ? 'is' : 'are'} in another currency and left out, never converted: ${parts.join(', ')}.`;
 }

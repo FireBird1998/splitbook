@@ -290,7 +290,7 @@ describe('By Tag', () => {
       `/groups/${GROUP}/expenses?tag=${STAY.id}`,
     ]);
     expect(html).toContain(
-      'aria-label="Transport: ₹3,040.00, 49% of INR spend, 2 Expenses. Show these Expenses"',
+      'aria-label="Transport: ₹3,040.00, 49% of INR spend, 2\u00a0Expenses. Show these Expenses"',
     );
     expect(text(html)).toContain('Café ₹380.00 6% of spend · 1 Expense');
   });
@@ -359,7 +359,7 @@ describe('the currency switch (#729)', () => {
   it('opens on the currency the read chose, says why, and replaces the left-out note', () => {
     const html = render({ read: travelling });
     expect(html).toMatch(/<div\b(?=[^>]*role="tablist")(?=[^>]*aria-label="Spending in")/);
-    expect(selectedTab(html)).toBe('EUR, €640.00 spent in 4 Expenses');
+    expect(selectedTab(html)).toBe('EUR, €640.00 spent in 4\u00a0Expenses');
     expect(text(html)).toContain(
       'Opened on EUR, the currency with the most Expenses (4). Switch to see INR and USD on their own.',
     );
@@ -368,7 +368,7 @@ describe('the currency switch (#729)', () => {
 
   it('says only that each currency is shown on its own once one is chosen', () => {
     const html = render({ read: { ...travelling, currency: 'USD' }, currency: 'USD' });
-    expect(selectedTab(html)).toBe('USD, $50.00 spent in 1 Expense');
+    expect(selectedTab(html)).toBe('USD, $50.00 spent in 1\u00a0Expense');
     expect(text(html)).toContain('Each currency is shown on its own; nothing is converted.');
   });
 

@@ -120,9 +120,9 @@ describe('the table', () => {
     const rows = tableRows(render(ready(maple), { view: 'table' }));
     expect(rows).toEqual([
       ['Member', 'All-time net', 'Position', 'Settled by'],
-      ['SC Sam Chen', '+₹1,060.00', 'Gets back', 'Gets ₹1,060.00 from you'],
-      ['PS Priya Shah', '+₹420.00', 'Gets back', 'Gets ₹420.00 from you'],
-      ['AR You', '−₹1,480.00', 'Owes', 'Pays Sam ₹1,060.00 and Priya ₹420.00'],
+      ['SC Sam Chen', '+\u2060₹1,060.00', 'Gets back', 'Gets ₹1,060.00 from you'],
+      ['PS Priya Shah', '+\u2060₹420.00', 'Gets back', 'Gets ₹420.00 from you'],
+      ['AR You', '−\u2060₹1,480.00', 'Owes', 'Pays Sam ₹1,060.00 and Priya ₹420.00'],
     ]);
   });
 
@@ -152,8 +152,12 @@ describe('the table', () => {
 
   it('colours each net with its status colour, beside its sign and its word', () => {
     const html = render(ready(maple), { view: 'table' });
-    expect(stylesOf(html, /<td[^>]*>\+₹1,060\.00<\/td>/)).toContain(lightTokens.status.positive);
-    expect(stylesOf(html, /<td[^>]*>−₹1,480\.00<\/td>/)).toContain(lightTokens.status.negative);
+    expect(stylesOf(html, /<td[^>]*>\+\u2060₹1,060\.00<\/td>/)).toContain(
+      lightTokens.status.positive,
+    );
+    expect(stylesOf(html, /<td[^>]*>−\u2060₹1,480\.00<\/td>/)).toContain(
+      lightTokens.status.negative,
+    );
   });
 
   it('marks the chosen view as pressed', () => {
@@ -167,9 +171,9 @@ describe('the chart view', () => {
     const html = render(ready(maple));
     expect(html).toMatch(/<div[^>]*aria-hidden="true" data-testid="everyone-chart"/);
     expect(tableRows(html).slice(1)).toEqual([
-      ['SC Sam Chen', '+₹1,060.00', 'Gets back', 'Gets ₹1,060.00 from you'],
-      ['PS Priya Shah', '+₹420.00', 'Gets back', 'Gets ₹420.00 from you'],
-      ['AR You', '−₹1,480.00', 'Owes', 'Pays Sam ₹1,060.00 and Priya ₹420.00'],
+      ['SC Sam Chen', '+\u2060₹1,060.00', 'Gets back', 'Gets ₹1,060.00 from you'],
+      ['PS Priya Shah', '+\u2060₹420.00', 'Gets back', 'Gets ₹420.00 from you'],
+      ['AR You', '−\u2060₹1,480.00', 'Owes', 'Pays Sam ₹1,060.00 and Priya ₹420.00'],
     ]);
     expect(html).not.toContain('aria-label="Everyone table"');
   });
@@ -195,12 +199,16 @@ describe('the chart view', () => {
     const labels = [...html.matchAll(/data-testid="everyone-amount"[^>]*>([\s\S]*?)<\/div>/g)].map(
       ([, label]) => text(label),
     );
-    expect(labels).toEqual(['+₹1,060.00 gets back', '+₹420.00 gets back', '−₹1,480.00 owes']);
+    expect(labels).toEqual([
+      '+\u2060₹1,060.00 gets back',
+      '+\u2060₹420.00 gets back',
+      '−\u2060₹1,480.00 owes',
+    ]);
     // A legend names the two colours, and the axis has its scale.
     const chart = /data-testid="everyone-chart">([\s\S]*)$/.exec(html)![1];
     expect(text(chart)).toMatch(/^Owes Gets back /);
     expect(text(/data-testid="everyone-scale"[^>]*>[\s\S]*?<\/div>/.exec(html)![0])).toContain(
-      '−₹1.5K 0 +₹1.5K',
+      '−\u2060₹1.5K 0 +\u2060₹1.5K',
     );
   });
 

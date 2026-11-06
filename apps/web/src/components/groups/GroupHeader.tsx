@@ -10,7 +10,7 @@ import AvatarGroup from '@mui/material/AvatarGroup';
 import MoneyText from '@/components/common/MoneyText';
 import { getMoneyTone } from '@splitbook/shared/money';
 import { formatCurrency } from '@splitbook/shared/currency';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 export interface GroupHeaderAmount {
   amount: number;
@@ -127,7 +127,7 @@ export default function GroupHeader({
   const memberNames = members.map((member) =>
     member._id === userId ? 'You' : member.name.split(' ')[0],
   );
-  const peopleLabel = `${members.length} ${members.length === 1 ? 'person' : 'people'}`;
+  const peopleLabel = counted(members.length, 'person', 'people');
 
   const ariaLabel = [`${name}, ${themeLabel}`, dateLabel, peopleLabel, `${balanceDescription}.`]
     .filter(Boolean)

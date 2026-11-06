@@ -121,7 +121,7 @@ describe('a Debt paid in another currency on the Activity tab (#727)', () => {
 
     expect(cardShown()).toBe(true);
     expect(paymentRow()!.props['aria-expanded']).toBe(true);
-    expect(textOf(renderer.root)).toContain('You and Sam in EUR: −€20.00 → €0.00');
+    expect(textOf(renderer.root)).toContain('You and Sam in EUR: −\u2060€20.00 → €0.00');
 
     await act(async () =>
       hosts('button')

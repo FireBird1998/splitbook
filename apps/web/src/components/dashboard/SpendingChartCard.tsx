@@ -20,7 +20,7 @@ import {
   type SpendingChartModel,
   type SpendingMonthRow,
 } from './spending-chart';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
 
 /*
  * Home's "Your share of spending" (#307, design canvas "Web portal"): six Months of the member's
@@ -85,7 +85,7 @@ export function SpendingChartView({
     <HomeCard
       id={CARD_ID}
       title="Your share of spending"
-      subtitle={`${model ? `${model.currency}${SEPARATOR}` : ''}last ${SPENDING_MONTHS.default} months${SEPARATOR}every Group`}
+      subtitle={`${model ? `${model.currency}${SEPARATOR}` : ''}last ${SPENDING_MONTHS.default}${NO_BREAK_SPACE}months${SEPARATOR}every Group`}
       aside={
         model ? (
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">

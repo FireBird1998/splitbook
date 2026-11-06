@@ -6,7 +6,7 @@ import { addableCurrencies, alreadyListedNote } from '@splitbook/shared/group-cu
 import { Banner, BottomSheet, CompactButton, CompactText, radius, touch, useTap } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
 
 /**
  * Adding a currency to a Group (#722, board "Add a currency"), as any member may on the web: a
@@ -86,7 +86,7 @@ export function AddCurrencySheet({
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
-          placeholder={`Search ${CURRENCY_CODES.length - listed.length} currencies`}
+          placeholder={`Search ${CURRENCY_CODES.length - listed.length}${NO_BREAK_SPACE}currencies`}
           placeholderTextColor={theme.textMuted}
           selectionColor={theme.brand.main}
           accessibilityLabel="Search currencies"

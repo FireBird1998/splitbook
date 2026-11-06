@@ -193,7 +193,7 @@ describe('a custom date window', () => {
     expect(custom('2026-09-03', '2026-09-02')).toBe(
       'The first day must be on or before the last day.',
     );
-    expect(custom('2026-09-01', '2026-10-02')).toBe('Choose 31 days or fewer.');
+    expect(custom('2026-09-01', '2026-10-02')).toBe('Choose 31\u00a0days or fewer.');
     expect(custom('2026-09-01', '2026-10-01')).toBeNull();
     expect(custom('2026-09-02', '2026-09-02')).toBeNull();
     expect(customRangeError({ when: 'thisWeek', from: null, to: null })).toBeNull();

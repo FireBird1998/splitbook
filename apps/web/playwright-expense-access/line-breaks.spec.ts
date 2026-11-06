@@ -1,16 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
+import { buildDemoSeedPlan, daysAgoDate } from '../src/lib/demo/seed-plan';
 import { test, expect, dataOf, joinGroup, type Ledger } from './fixtures';
 
 /*
  * #895: a line never starts with "·". Each " · " between a line's parts has a no-break space
  * before the dot, so a line that wraps there ends with the dot. The Expenses table's split,
  * "Equally · 2", never splits at all, and a payment's rate keeps "fetched 5 Nov 17:44" whole.
- * Checked as drawn: where each character lands, at every width and text size below.
+ * #899: a signed amount, "−€20.00", never leaves its sign at a line's end, and a payment's
+ * record keeps every word inside its card. #900: the Trip's Expenses table shows every column
+ * whole beside the side panel. Checked as drawn: where each character lands, at every width
+ * and text size below.
  */
 
-const { alex, sam } = DEMO_PERSONA_IDS;
+const { alex, sam, priya } = DEMO_PERSONA_IDS;
 
 /** Widths from a small laptop to a wide screen, in 32 px steps. */
 const WIDTHS = Array.from({ length: 21 }, (_, step) => 960 + step * 32);
@@ -56,6 +60,23 @@ function drawnLines(root: Locator) {
       }
     }
     return lines.map((line) => line.trim());
+  });
+}
+
+/** The text nodes under `card` that draw any character past its left or right edge. */
+function outsideCard(card: Locator) {
+  return card.evaluate((element) => {
+    const edge = element.getBoundingClientRect();
+    const range = document.createRange();
+    const past: string[] = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      range.selectNodeContents(node);
+      const boxes = [...range.getClientRects()].filter((box) => box.width > 0);
+      if (boxes.some((box) => box.left < edge.left - 0.5 || box.right > edge.right + 0.5))
+        past.push((node as Text).data);
+    }
+    return past;
   });
 }
 
@@ -125,7 +146,7 @@ test('the Expenses table never starts a line with "·" and keeps "Equally · 2" 
   expect(broken).toEqual([]);
 });
 
-test('a payment’s record keeps its rate’s fetched time on one line (#895)', async ({
+test('a payment’s record keeps its rates, their fetched time and its date whole, a sign with its figure, and stays inside its card (#895, #899)', async ({
   page,
   ledger,
 }) => {
@@ -193,14 +214,135 @@ test('a payment’s record keeps its rate’s fetched time on one line (#895)', 
   const when = `${fetchedAt.getDate()} ${month} 17:44`;
   await expect(fetched).toContainText(`fetched ${when}`);
 
+  // #899: the Debt before the payment, "−€20.00", keeps its sign: no line ends with it.
+  const pair = card.getByText(/^You and Sam in EUR:/);
+  await expect(pair).toBeVisible();
+  const recorded = card.getByText(/^Recorded by you/);
+  await expect(card.getByText(/^₹92\.10\sper\s€$/)).toHaveCount(2);
+
   const broken: string[] = [];
   for (const width of [960, 1280, 1600])
     for (const percent of TEXT_SIZES) {
       await page.setViewportSize({ width, height: 900 });
       await textSize(page, percent);
       const lines = await drawnLines(fetched);
-      if (!lines.some((line) => line.endsWith(when)) || lines.some((line) => line.startsWith('·')))
+      if (
+        !lines.some((line) => line.endsWith(`fetched ${when}`)) ||
+        lines.some((line) => line.startsWith('·'))
+      )
         broken.push(`${width}px ${percent}%: ${JSON.stringify(lines)}`);
+      const pairLines = (await drawnLines(pair)).map((line) => line.replace(/\u2060/g, ''));
+      if (pairLines.some((line) => /[−+]$/.test(line)))
+        broken.push(`${width}px ${percent}%: ${JSON.stringify(pairLines)}`);
+      // The rate used and the suggested rate, each "₹92.10 per €" on one line.
+      for (const rate of await card.getByText(/^₹92\.10\sper\s€$/).all()) {
+        const rateLines = await drawnLines(rate);
+        if (rateLines.length > 1)
+          broken.push(`${width}px ${percent}%: ${JSON.stringify(rateLines)}`);
+      }
+      // The header's "Fri 6 Nov, 03:21" keeps its day and month together.
+      const headerLines = await drawnLines(recorded);
+      if (/\d\n\p{L}/u.test(headerLines.join('\n')))
+        broken.push(`${width}px ${percent}%: ${JSON.stringify(headerLines)}`);
+      for (const text of await outsideCard(card))
+        broken.push(`${width}px ${percent}%: past the card: ${JSON.stringify(text)}`);
     }
   expect(broken).toEqual([]);
+});
+
+/** The demo's Goa Friends Trip, as `pnpm web demo:seed` writes it: three members, seven Expenses. */
+async function demoTrip(ledger: Ledger) {
+  const plan = buildDemoSeedPlan();
+  const day = (daysAgo: number) => daysAgoDate(daysAgo).toISOString().slice(0, 10);
+  const group = (
+    await dataOf(
+      await ledger.alex.post('/api/groups', {
+        data: {
+          name: `Goa words ${randomUUID().slice(0, 6)}`,
+          category: 'trip',
+          defaultCurrency: plan.currency,
+          alternateCurrencies: [],
+          startDate: day(10),
+          endDate: day(7),
+        },
+      }),
+      201,
+    )
+  )._id as string;
+  await joinGroup(ledger.alex, ledger.sam, group);
+  await joinGroup(ledger.alex, ledger.priya, group);
+  const actors: Record<string, Ledger['alex']> = {
+    [alex]: ledger.alex,
+    [sam]: ledger.sam,
+    [priya]: ledger.priya,
+  };
+  for (const expense of plan.expenses) {
+    const { description, amount, currency, category, tag, paidBy, splitMethod } = expense;
+    await dataOf(
+      await actors[paidBy[0]!.user]!.post(`/api/groups/${group}/expenses`, {
+        data: {
+          ...{ description, amount, currency, category, tag, paidBy, splitMethod },
+          splitBetween: expense.splitBetween,
+          date: daysAgoDate(expense.daysAgo).toISOString(),
+        },
+      }),
+      201,
+    );
+  }
+  return group;
+}
+
+test('the Trip’s Expenses table shows every column whole beside the side panel (#900)', async ({
+  page,
+  ledger,
+}) => {
+  const group = await demoTrip(ledger);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, ledger, `/groups/${group}`);
+  const table = page.getByRole('main').getByRole('table');
+  await expect(table.getByRole('row', { name: /Beachside villa/ })).toBeVisible();
+
+  const cut: string[] = [];
+  for (const width of [1280, 1366, 1440, 1600]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(table.getByRole('columnheader', { name: 'You' })).toBeVisible();
+    // Each header cell, and each cell whose words are money, inside the card's edges.
+    const outside = await table.evaluate((element) => {
+      const card = element.closest('section')!.getBoundingClientRect();
+      const scroller = element.parentElement!;
+      const cells = [...element.querySelectorAll('th[scope="col"], td')].filter(
+        (cell) => cell.matches('th') || /₹/.test(cell.textContent ?? ''),
+      );
+      return [
+        ...(scroller.scrollWidth > scroller.clientWidth
+          ? [`scrolls ${scroller.scrollWidth - scroller.clientWidth}px`]
+          : []),
+        ...cells
+          .filter((cell) => {
+            const box = cell.getBoundingClientRect();
+            return box.left < card.left - 0.5 || box.right > card.right + 0.5;
+          })
+          .map((cell) => JSON.stringify(cell.textContent)),
+      ];
+    });
+    for (const where of outside) cut.push(`${width}px: ${where}`);
+    // With room to spare: the columns at their narrowest leave at least 16 px, as fonts draw a
+    // little wider on Linux than on macOS (#901's CI run).
+    const slack = await table.evaluate((element) => {
+      const room = element.parentElement!.clientWidth;
+      element.style.width = 'min-content';
+      element.style.minWidth = '0';
+      const narrowest = element.getBoundingClientRect().width;
+      element.style.width = '';
+      element.style.minWidth = '';
+      return Math.floor(room - narrowest);
+    });
+    if (slack < 16) cut.push(`${width}px: only ${slack}px to spare`);
+    // Each split, such as "By percentage · 3", on one line.
+    for (const cell of await table.getByRole('cell', { name: /^(Equally|By\s)/ }).all()) {
+      const lines = await drawnLines(cell);
+      if (lines.length > 1) cut.push(`${width}px: ${JSON.stringify(lines)}`);
+    }
+  }
+  expect(cut).toEqual([]);
 });

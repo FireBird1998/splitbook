@@ -164,7 +164,7 @@ describe('Settle up with Sam (#734)', () => {
         .map((node) => node.children.join('')),
     ).toContain('Settle up with Sam Chen');
     expect(shown).toContain(
-      'You owe Sam Chen in 2 currencies. One payment can clear both; each Debt keeps its own rate.',
+      'You owe Sam Chen in 2\u00a0currencies. One payment can clear both; each Debt keeps its own rate.',
     );
     const radios = one(root, 'Pay in')
       .findAll((node) => typeof node.type === 'string' && node.props.accessibilityRole === 'radio')
@@ -183,7 +183,7 @@ describe('Settle up with Sam (#734)', () => {
     expect(shown).toContain('You pay Sam Chen');
     expect(shown).toContain('₹3,322.00');
     expect(shown).toContain(
-      'Records 2 Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.',
+      'Records 2\u00a0Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.',
     );
     expect(shown).toContain(recordPaymentFootnote);
     expect(record(root).props.accessibilityLabel).toBe('Record ₹3,322.00');

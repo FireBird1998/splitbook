@@ -12,13 +12,14 @@ import { formatSignedCurrency } from '@splitbook/shared/money';
 import { RADIUS } from '@/lib/theme/tokens';
 import { HomeCard, HomeCardBody, HomeCardEmpty, HomeCardError, HomeCardLoading } from './HomeCard';
 import { useHomeBalances, type CardRead, type HomeBalances } from './home-reads';
+import { counted } from '@splitbook/shared/separator';
 
 /** IBM Plex Mono with tabular figures, the theme's money type. */
 const money = (theme: Theme): CSSProperties => theme.typography.money;
 
 /** "3 Groups": the Groups where the member's balance in the currency isn't zero. */
 export function groupCountLabel(count: number): string {
-  return `${count} ${count === 1 ? 'Group' : 'Groups'}`;
+  return counted(count, 'Group');
 }
 
 function toneColor(minor: number, tone: 'negative' | 'positive') {

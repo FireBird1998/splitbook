@@ -229,7 +229,7 @@ for (const scheme of ['light', 'dark'] as const) {
     const card = page.getByRole('region', { name: 'Payment', exact: true });
     await expect(card).toContainText(/Paid\s*₹1,850\.00\s*to clear €20\.00, a Debt in EUR/);
     await expect(card).toContainText(/Rate used\s*₹92\.50 per\s€\s*Your rate/);
-    await expect(card).toContainText('You and Sam in EUR: −€20.00 → €0.00');
+    await expect(card).toContainText('You and Sam in EUR: −\u2060€20.00 → €0.00');
     await expect(card).toContainText(
       'INR balances didn’t change. Only the Debt’s own currency moves.',
     );
