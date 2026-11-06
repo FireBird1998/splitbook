@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { test, expect, type Page } from '@playwright/test';
 import { backupSchema } from '@splitbook/shared/export-backup';
+import { statementDay } from '@splitbook/shared/export-csv';
 import { statementPath } from '@splitbook/shared/statement-request';
 import { DEMO_WEEK_TRIP_ID, DEMO_WORK_GROUP_ID } from '../src/lib/demo-personas';
 import {
@@ -122,7 +123,7 @@ test('a Trip’s Share wrap-up opens its whole-trip statement, with every sectio
   const statement = page.locator('.statement-paper');
   // The Trip's own dates, as stored calendar days, and what the whole trip covers.
   await expect(statement).toContainText(
-    `${startDate.slice(0, 10)} – ${endDate.slice(0, 10)} · INR · ${timeZone}`,
+    `${statementDay(startDate.slice(0, 10))} – ${statementDay(endDate.slice(0, 10))} · INR · ${timeZone}`,
   );
   await expect(statement).toContainText(
     'Whole trip, including Expenses before and after the Trip’s dates.',

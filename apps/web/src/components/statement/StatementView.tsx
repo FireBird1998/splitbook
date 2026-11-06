@@ -13,7 +13,7 @@ import MoneyText from '@/components/common/MoneyText';
 import { getCurrency } from '@splitbook/shared/currency';
 import { displayMajorAmount } from '@splitbook/shared/exact-money';
 import { getSemanticTokens } from '@/lib/theme/tokens';
-import { zonedDateTime } from '@splitbook/shared/export-csv';
+import { statementDay, zonedDateTime } from '@splitbook/shared/export-csv';
 import { categoryLabel } from '@splitbook/shared/categories';
 import ExportPaymentDescription from '@/components/export/ExportPaymentDescription';
 import BrandLogo from '@/components/layout/BrandLogo';
@@ -35,7 +35,7 @@ const expenses = (count: number) => counted(count, 'Expense');
 
 /**
  * What a column holds, and so how its cells lay out (#646). Figures and dates never wrap, so
- * "₹54,000.00" and "2026-06-05" never break across lines; figures are right-aligned. Only free
+ * "₹54,000.00" and "5 Jun 2026" never break across lines; figures are right-aligned. Only free
  * text (an Expense's description, a payment's note or its cross-currency sentence) wraps; names
  * wrap only between words. A table wider than the sheet scrolls on screen, never in print.
  */
@@ -53,6 +53,15 @@ interface Column {
   kind: ColumnKind;
 }
 const column = (label: string, kind: ColumnKind): Column => ({ label, kind });
+
+/** A day of the statement's period, "14 Sep 2026", on one line (#907). */
+function PeriodDay({ day }: { day: string }) {
+  return (
+    <Box component="span" className="statement-period-day" sx={{ whiteSpace: 'nowrap' }}>
+      {statementDay(day)}
+    </Box>
+  );
+}
 
 function Cell({
   kind,
@@ -180,7 +189,13 @@ export default function StatementView({ statement }: { statement: Statement }) {
         {SEPARATOR}Statement
       </Typography>
       <Typography color="text.secondary">
-        {statement.from && statement.to ? `${statement.from} – ${statement.to}` : 'All time'}
+        {statement.from && statement.to ? (
+          <>
+            <PeriodDay day={statement.from} /> – <PeriodDay day={statement.to} />
+          </>
+        ) : (
+          'All time'
+        )}
         {SEPARATOR}
         {statement.currencies.map((row) => row.currency).join(', ')}
         {SEPARATOR}
@@ -412,7 +427,8 @@ function CurrencySection({
             {bucket.expenses.map((row) => (
               <TableRow key={row.id}>
                 <Cell kind="date">
-                  <span className="statement-when">{row.date}</span>
+                  {/* A calendar day (#437), as the web writes a date (#907). */}
+                  <span className="statement-when">{statementDay(row.date)}</span>
                   {row.outsideTrip ? (
                     <Typography variant="caption" component="div">
                       {OUTSIDE_TRIP[row.outsideTrip]}

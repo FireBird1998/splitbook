@@ -592,3 +592,52 @@ it('writes a statement preview’s negative Net and balance with the app’s “
   expect(page).toMatch(/Bob Tester −⁠₹35\.03/);
   expect(page).not.toMatch(/-₹/);
 });
+
+it('writes a statement preview’s period and Expense dates as the statement does, “14 Sep 2026” (#907)', () => {
+  const statement = buildStatement(
+    {
+      id: 'maple',
+      name: 'Maple House',
+      theme: 'home',
+      currency: 'INR',
+      members: [{ id: 'alice', name: 'Alice Tester' }],
+      names: { alice: 'Alice Tester' },
+      tags: [],
+      expenses: [
+        {
+          id: 'expense',
+          date: '2026-09-14T00:00:00.000Z',
+          description: 'Groceries',
+          category: 'food',
+          tag: 'Food',
+          currency: 'INR',
+          amountMinor: 7006,
+          splitMethod: 'equal',
+          paidBy: [{ userId: 'alice', amountMinor: 7006 }],
+          splitBetween: [{ userId: 'alice', amountMinor: 7006 }],
+        },
+      ],
+      settlements: [],
+    },
+    { timeZone: 'UTC' },
+  );
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      from: '2026-09-01',
+      to: '2026-09-20',
+      format: 'statement',
+      timeZone: 'UTC',
+      statement: buildStatementPreview(statement),
+    },
+  });
+  const page = text(html);
+  expect(page).toContain('Maple House · Statement · 1 Sep 2026 – 20 Sep 2026');
+  expect(page).toContain('Maple House · 1 Sep 2026 – 20 Sep 2026 · Statement');
+  expect(page).toContain('14 Sep 2026 Groceries');
+  expect(page).not.toMatch(/2026-09-/);
+  // Day and month joined by a no-break space, as on the printed statement (text() folds it).
+  expect(html).toContain('1\u00A0Sep 2026 – 20\u00A0Sep 2026');
+  expect(html).toContain('>14\u00A0Sep 2026<');
+});

@@ -22,6 +22,7 @@ import type { ExportPreview } from '@splitbook/shared/export-preview';
 import { exportWindowSlug } from '@splitbook/shared/export-request';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { statementDay } from '@splitbook/shared/export-csv';
 
 export type PreviewState =
   | { status: 'idle'; message: string }
@@ -36,7 +37,7 @@ export function previewPeriod(data: Pick<ExportPreview, 'from' | 'to'>) {
     ? new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
         new Date(`${slug}-15T12:00:00Z`),
       )
-    : `${data.from} – ${data.to}`;
+    : `${statementDay(data.from)} – ${statementDay(data.to)}`;
 }
 function PreviewTable({
   label,
@@ -368,7 +369,9 @@ export default function ExportPreviewPanel({
                     >
                       {bucket.expenses.map((expense) => (
                         <TableRow key={expense.id}>
-                          <TableCell sx={{ whiteSpace: 'nowrap' }}>{expense.date}</TableCell>
+                          <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                            {statementDay(expense.date)}
+                          </TableCell>
                           <TableCell>{expense.description}</TableCell>
                           <TableCell>{expense.tag}</TableCell>
                           <TableCell>

@@ -88,11 +88,26 @@
   .statement-paper table * {
     font-size: inherit !important;
   }
+  /* The Category · Tag caption: 11 px on screen, the app's smallest type but one (#907). */
   .statement-paper table .MuiTypography-caption {
-    font-size: 7.5pt !important;
+    font-size: 8.25pt !important;
   }
   .statement-paper th,
   .statement-paper td {
     padding: 3pt 4pt !important;
+  }
+  /* A right-aligned Amount and the left-aligned column after it read as one ("Amount Share"):
+     that column has more room on its left, under its heading and in every row (#907). */
+  .statement-paper th.statement-money + :not(.statement-money),
+  .statement-paper td.statement-money + :not(.statement-money),
+  .statement-paper td.statement-sentence + td {
+    padding-left: 10pt !important;
+  }
+}
+
+/* On paper the caption keeps 7.5 pt, after the shared block so print takes it. */
+@media print {
+  .statement-paper table .MuiTypography-caption {
+    font-size: 7.5pt !important;
   }
 }

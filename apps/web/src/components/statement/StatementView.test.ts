@@ -100,20 +100,20 @@ describe('a whole-trip statement', () => {
   it('counts Expenses outside the Trip’s dates in Spent, named as the Trip summary names them', () => {
     const page = render(true);
     expect(page).toContain('Ferry to the islands · Statement');
-    expect(page).toContain('2026-09-17 – 2026-09-20 · INR · Asia/Kolkata');
+    expect(page).toContain('17 Sep 2026 – 20 Sep 2026 · INR · Asia/Kolkata');
     expect(page).toContain('Whole trip, including Expenses before and after the Trip’s dates.');
     expect(page).toContain('Spent ₹1,840.00 Expenses 3 Payments ₹400.00 1 payment');
     expect(page).toContain('Before the trip: ₹600.00 · 1 Expense, counted in Spent');
     expect(page).toContain('After the trip: ₹40.00 · 1 Expense, counted in Spent');
-    expect(page).toContain('2026-08-30 Before the trip Ferry tickets, booked early');
-    expect(page).toContain('2026-09-18 Island guesthouse');
-    expect(page).toContain('2026-09-22 After the trip Late taxi refund share');
+    expect(page).toContain('30 Aug 2026 Before the trip Ferry tickets, booked early');
+    expect(page).toContain('18 Sep 2026 Island guesthouse');
+    expect(page).toContain('22 Sep 2026 After the trip Late taxi refund share');
     expect(page).not.toMatch(/\bYou\b/);
   });
 
   it('names each Expense’s Category as the Expense panel and CSV do, beside its Tag (#509)', () => {
     const page = render(true);
-    expect(page).toContain('2026-09-18 Island guesthouse Food & Drink · Food');
+    expect(page).toContain('18 Sep 2026 Island guesthouse Food & Drink · Food');
     expect(page).toContain('Ferry tickets, booked early Transport · Transport');
   });
 
@@ -317,6 +317,35 @@ describe('the statement’s table cells', () => {
     expect(html).not.toContain('2026-09-22T17:30:00+05:30');
   });
 
+  // #907: the Expenses' dates read as the web writes a date, as the payments' times beside them
+  // do, never ISO. An Expense's date is a calendar day (#437): no zone moves it.
+  it('writes each Expense’s date as the web does, day and month kept together (#907)', () => {
+    const html = tripHtml();
+    const expenses = html.slice(
+      html.indexOf('aria-label="Expense details"'),
+      html.indexOf('aria-label="Dated payments"'),
+    );
+    const days = [...expenses.matchAll(/class="statement-when">([^<]*)</g)].map(([, day]) => day);
+    expect(days).toEqual(['30 Aug 2026', '18 Sep 2026', '22 Sep 2026']);
+    expect(expenses).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  // #907: the period in the header, in the same words, each day on one line.
+  it('writes the period’s days as the web does, each kept on one line (#907)', () => {
+    const html = tripHtml(
+      buildStatement(TRIP, { timeZone: 'Asia/Kolkata', from: '2026-09-14', to: '2026-09-20' }),
+    );
+    const days = stylesOf(html, 'statement-period-day');
+    expect(days).toHaveLength(2);
+    for (const day of days) expect(day.value('white-space')).toBe('nowrap');
+    const head = html.slice(html.indexOf('</h1>'), html.indexOf('statement-controls'));
+    expect(head).toMatch(
+      /class="statement-period-day[^"]*">14 Sep 2026<\/span> – <span class="statement-period-day[^"]*">20 Sep 2026</,
+    );
+    expect(text(head)).toContain('14 Sep 2026 – 20 Sep 2026 · INR · Asia/Kolkata');
+    expect(head).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
   it('keeps each currency’s balances and Suggested payments together in print (#646)', () => {
     const html = tripHtml();
     const blocks = [...html.matchAll(/class="statement-keep-together[^"]*"[^>]*>/g)];
@@ -421,6 +450,52 @@ describe('the statement’s table cells', () => {
     // Print keeps no copy of its own that could drift from the screen's.
     const print = css.slice(css.indexOf('@media print {'), css.indexOf(query));
     expect(print).not.toMatch(/font-size:\s*9pt/);
+  });
+
+  // #907 (#910's polish): 7.5 pt is about 10 px, below the app's smallest type on screen. The
+  // Category · Tag caption is 11 px (8.25 pt) on screen and keeps 7.5 pt in print.
+  it('sets the caption at 8.25 pt on screen and 7.5 pt in print (#907)', () => {
+    const css = readFileSync(STATEMENT_CSS, 'utf8');
+    const caption = /\.statement-paper table \.MuiTypography-caption\s*\{([^}]*)\}/g;
+    const query = '@media print, screen and (min-width: 900px)';
+    const shared = css.slice(css.indexOf(query));
+    expect(caption.exec(shared)?.[1]).toMatch(/font-size:\s*8\.25pt\s*!important/);
+    // Print's own size comes after the shared block, so print takes it.
+    const printOnly = shared.slice(shared.indexOf('@media print {'));
+    expect(shared.indexOf('@media print {')).toBeGreaterThan(0);
+    caption.lastIndex = 0;
+    expect(caption.exec(printOnly)?.[1]).toMatch(/font-size:\s*7\.5pt\s*!important/);
+  });
+
+  // #907 (#910's polish): the right-aligned Amount heading ran into the left-aligned one after
+  // it ("Amount Share", "Amount Note"). The column after an amount has more room on its left.
+  it('gives the column after Amount more room on its left (#907)', () => {
+    const html = tripHtml();
+    for (const [table, next] of [
+      ['Expense details', 'Share'],
+      ['Dated payments', 'Note'],
+    ]) {
+      const region = html.slice(html.indexOf(`aria-label="${table}"`));
+      const labels = [...region.matchAll(/<th class="([^"]*)"[^>]*scope="col"[^>]*>([^<]*)</g)];
+      const amount = labels.findIndex(([, , label]) => label === 'Amount');
+      expect(labels[amount][1]).toContain('statement-money');
+      expect(labels[amount + 1][2]).toBe(next);
+      expect(labels[amount + 1][1]).not.toContain('statement-money');
+    }
+    const css = readFileSync(STATEMENT_CSS, 'utf8');
+    const block = css
+      .slice(css.indexOf('@media print, screen and (min-width: 900px)'))
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const [, selectors = '', body = ''] =
+      /\}\s*((?:[^{}]*?\.statement-money \+[^{}]*))\{([^}]*)\}/.exec(block) ?? [];
+    // Under the heading, and in each row, whether its Amount is a figure or a cross-currency
+    // payment's sentence, so the Note column's left edge stays one line.
+    expect(selectors.split(',').map((selector) => selector.trim())).toEqual([
+      '.statement-paper th.statement-money + :not(.statement-money)',
+      '.statement-paper td.statement-money + :not(.statement-money)',
+      '.statement-paper td.statement-sentence + td',
+    ]);
+    expect(body).toMatch(/padding-left:\s*10pt\s*!important/);
   });
 });
 
