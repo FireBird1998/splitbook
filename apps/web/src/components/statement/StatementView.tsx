@@ -270,17 +270,22 @@ function SummaryRow({ bucket }: { bucket: Statement['currencies'][number] }) {
       // One ruled strip, a rule above and below and a divider between figures, as the board's
       // summary strip; stacked on a phone, the dividers run across. A tile is never narrower than
       // its figure, kept whole (#943): where three don't fit side by side, the strip wraps between
-      // tiles. Each tile rules its left and top; the strip's own top rule covers the first row's,
-      // and the clip hides the left rule of whichever tile starts a row, never a figure.
+      // tiles. Each tile rules its left and top 1 px outside its own box: between tiles the rule
+      // lands on its neighbour's last pixel, while at a row's start (and above the first row) it
+      // falls outside the strip, whose clip hides it at any subpixel offset, DPR or zoom. The
+      // strip has no padding, so its clip edge is where a row starts; it is never narrower than
+      // its widest tile, so the clip never reaches a figure. `clip`, not `hidden`: no scroll
+      // container, so nothing can scroll it and print fragments it as before.
       sx={{
         display: 'flex',
         flexWrap: 'wrap',
         m: 0,
         mb: 1.5,
+        minWidth: 'min-content',
+        overflow: 'clip',
         borderTop: 1,
         borderBottom: 1,
         borderColor: 'divider',
-        clipPath: 'inset(0 -100vw 0 1px)',
       }}
     >
       {statementSummary(bucket).map((figure) => (
@@ -292,6 +297,7 @@ function SummaryRow({ bucket }: { bucket: Statement['currencies'][number] }) {
             px: 2,
             py: 1.25,
             mt: '-1px',
+            ml: '-1px',
             borderStyle: 'solid',
             borderColor: 'divider',
             borderWidth: '1px 0 0 1px',

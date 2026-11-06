@@ -530,15 +530,38 @@ describe('the summary strip', () => {
     expect(strip.value('border-top')).toBe('1px solid');
     expect(strip.value('border-bottom')).toBe('1px solid');
     expect(strip.value('border-radius')).toBeUndefined();
-    // Each tile rules its left and top (#943, so a wrapped row is ruled too); the strip's top
-    // rule covers the first row's, and its clip hides the rule left of a row's first tile.
-    expect(strip.value('clip-path')).toBe('inset(0 -100vw 0 1px)');
     const items = stylesOf(html, 'statement-summary-item');
     expect(items).toHaveLength(3);
     for (const item of items) {
       expect(item.value('border-radius')).toBeUndefined();
       expect(item.value('border')).toBeUndefined();
+    }
+  });
+
+  // #943 QA: a 1 px clip-path inset left a rule at the strip's left edge where the strip sat at a
+  // fractional x (424.84 px at 1280). Each tile now rules its left and top 1 px outside its own
+  // box (negative margins), and the strip clips everything outside its padding box. A row's first
+  // tile then puts its left rule, and the first row its top rule, wholly outside the strip, where
+  // the clip hides them whatever the subpixel offset, DPR or zoom: the rule and the clip edge move
+  // together, as they are snapped from the same box. jsdom lays nothing out, so this pins that
+  // structure: the clip, the strip's lack of padding (its clip edge is where a row starts), the
+  // negative margins equal to the rule's width, and no pixel inset left to drift.
+  it('hides the rule left of a row’s first tile, and above the first row, outside its clip (#943)', () => {
+    const html = tripHtml();
+    const [strip] = stylesOf(html, 'statement-summary');
+    expect(strip.value('overflow')).toBe('clip');
+    expect(strip.value('clip-path')).toBeUndefined();
+    expect(strip.value('padding')).toBeUndefined();
+    expect(strip.value('padding-left')).toBeUndefined();
+    expect(strip.value('padding-top')).toBeUndefined();
+    // Never narrower than its widest tile, so the clip never reaches a figure.
+    expect(strip.value('min-width')).toBe('min-content');
+    const items = stylesOf(html, 'statement-summary-item');
+    expect(items).toHaveLength(3);
+    for (const item of items) {
+      expect(item.value('border-style')).toBe('solid');
       expect(item.value('border-width')).toBe('1px 0 0 1px');
+      expect(item.value('margin-left')).toBe('-1px');
       expect(item.value('margin-top')).toBe('-1px');
     }
   });
