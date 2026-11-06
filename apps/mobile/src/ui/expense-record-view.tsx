@@ -74,7 +74,7 @@ import {
   allocationStacked,
   amountPair,
   sharesDifferNote,
-  stackedFigure,
+  stackedPairStyles,
 } from './expense-form';
 import { RefreshStatus } from './financial-views';
 import type { MobileExpense } from '../data/types';
@@ -791,19 +791,13 @@ export function ExpenseRecordSkeleton({
   );
   // As Who owes what shows them: three, then Show all, past four people.
   const shown = record.people.length > 4 ? record.people.slice(0, 3) : record.people;
-  // Stacked, each kind of figure as wide as the widest of everyone's, as the record draws it (#932).
-  const figures = {
-    Paid: stackedFigure(
-      record.people.map(({ paid }) => paid ?? '–'),
-      width,
-      fontScale,
-    ),
-    Share: stackedFigure(
-      record.people.map(({ share }) => share),
-      width,
-      fontScale,
-    ),
-  };
+  // Stacked, the pairs laid out from everyone's figures, as the record lays them out (#932).
+  const pairs = stackedPairStyles(
+    record.people.map(({ paid }) => paid ?? '–'),
+    record.people.map(({ share }) => share),
+    width,
+    fontScale,
+  );
   const history = record.changed ? 2 : 1;
   return (
     <View
@@ -915,9 +909,11 @@ export function ExpenseRecordSkeleton({
                 ).map(([label, amount]) => (
                   <SkeletonOf key={label} bar>
                     <View style={amountPair}>
-                      <CompactText variant="caption">{label}</CompactText>
+                      <CompactText variant="caption" style={pairs[label].label}>
+                        {label}
+                      </CompactText>
                       {/* Nothing is a dash in the amount's face, as on the record (#932). */}
-                      <Money size="table" numberOfLines={0} style={figures[label]}>
+                      <Money size="table" numberOfLines={0} style={pairs[label].figure}>
                         {amount ?? '–'}
                       </Money>
                     </View>

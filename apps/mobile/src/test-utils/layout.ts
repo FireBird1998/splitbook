@@ -346,6 +346,40 @@ export function layoutTops(
 }
 
 /**
+ * Each label and its figure in a stacked Who owes what ("Paid –", "Share CHF …"), as
+ * `layoutHeight` lays the tree out `width` wide at this text size: its words; how many lines it
+ * takes; where the figure's box starts, beside the label or under it (0); and where the figure's
+ * characters start and end, a right-aligned figure's at its box's end. In dp from the pair's own
+ * left edge, which is its label's (#932). The widths are estimates (see `layoutWidth`).
+ */
+export function stackedPairs(node: Node | null, fontScale: number, width: number) {
+  const widths = new Map<Node, number>();
+  layoutHeight(node, fontScale, width, { node: (each, room) => widths.set(each, room) });
+  return findHosts(node, (props) => {
+    const style = flatten(props.style);
+    return style.flexWrap === 'wrap' && style.columnGap === 6;
+  })
+    .filter((pair) => widths.has(pair))
+    .map((pair) => {
+      const [, figure] = inFlow(pair);
+      const [[, start]] = rowStarts(pair, fontScale, widths.get(pair)!, (row) => row === pair) as [
+        number[],
+      ];
+      const own = textWidth(figure!, fontScale, true);
+      const right = flatten(figure!.props.style).textAlign === 'right';
+      const drawnStart = start! + (right ? widths.get(figure!)! - own : 0);
+      const line = Math.max(...inFlow(pair).map((child) => layoutHeight(child, fontScale)));
+      return {
+        words: wordsOf(pair),
+        lines: Math.round(layoutHeight(pair, fontScale, widths.get(pair)) / line),
+        start: start!,
+        drawnStart,
+        drawnEnd: drawnStart + own,
+      };
+    });
+}
+
+/**
  * The phone's own font's "…", in em: Roboto's (0.669), read from the emulator's
  * /system/fonts/Roboto-Regular.ttf. React Native's text view cuts a line with its own paint,
  * which has the phone's font and the text's size in dp, not scaled with the phone's text size,

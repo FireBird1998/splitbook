@@ -29,6 +29,7 @@ import {
   layoutHeight,
   layoutTops,
   rowStarts,
+  stackedPairs,
   unreadText,
   wordsOf,
 } from '../test-utils/layout';
@@ -1193,6 +1194,44 @@ describe('compact Expense record, opening', () => {
       expect(unreadText(owes!, 2, room)).toEqual([]);
     },
   );
+
+  // #932, the Designer's review at 200% on a 360 dp phone: CHF 10,000,000.00 gave every row's Paid
+  // its width, wider than "Paid" leaves beside it, so "Paid" sat alone and the dash of each member
+  // who paid nothing dropped to a line of its own, at the card's right edge. Too wide to line up,
+  // the figures keep their own widths, in the record and in its skeleton: the dash stays beside
+  // "Paid", and a figure under its label starts where the label does.
+  it('keeps "Paid –" on one line beside CHF 10,000,000.00, in the record and its skeleton (#932)', async () => {
+    setWindow({ width: 360, fontScale: 2 });
+    const check = (card: ReactTestRendererJSON) => {
+      const shown = stackedPairs(card, 2, 360 - 32);
+      expect(shown.map(({ words }) => words)).toEqual([
+        'Paid–',
+        'ShareCHF\u00a05,000,000.00',
+        'PaidCHF\u00a010,000,000.00',
+        'ShareCHF\u00a05,000,000.00',
+      ]);
+      for (const pair of shown)
+        if (pair.words.endsWith('–')) {
+          expect(pair.lines).toBe(1);
+          expect(pair.start).toBeGreaterThan(0);
+        } else {
+          expect(pair.start).toBe(0);
+          expect(pair.drawnStart).toBeCloseTo(0, 0);
+        }
+    };
+    await act(async () => {
+      screen = create(
+        editor(
+          { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.office },
+          recordOutline(listRow(ids.office), alex.id),
+        ),
+      );
+    });
+    check(cards()[1]!);
+    act(() => screen?.unmount());
+    await render(open(ids.office));
+    check(cards()[1]!);
+  });
 
   // QA on the device (#925): opened cold at 200% on a 360 dp phone, the skeleton's headline read
   // "CHF 2,345,6\u2026" over the record that then showed it whole: the record's amount shrinks to fit,

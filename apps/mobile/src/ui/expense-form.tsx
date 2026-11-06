@@ -394,6 +394,56 @@ export function stackedFigure(figures: readonly string[], width: number, fontSca
   return { minWidth: Math.min(room, widest), textAlign: 'right' as const };
 }
 
+/** A stacked pair's label and figure styles: their widths, and how the figure sits in its own. */
+type PairStyles = { label?: TextStyle; figure?: TextStyle };
+
+/**
+ * How each stacked pair, "Paid ₹…" and "Share ₹…", is laid out under a name, from everyone's Paid
+ * figures and everyone's Share figures ("–" for nothing), so every row lays its pairs out alike:
+ * - Side by side where both fit, each figure as wide as the widest of its kind (`stackedFigure`):
+ *   "Share" starts at one x in every row (#932).
+ * - Share under Paid otherwise, the labels as wide as each other and the figures too, so the
+ *   figures end at one x, a column of them, dashes and all.
+ * - Where a label and the widest figure can't share a line, as for CHF 10,000,000.00 at 200% on a
+ *   360 dp phone, each figure is as wide as itself: a dash stays beside "Paid" rather than drop to
+ *   a line of its own at the card's edge, and a figure that goes under its label starts where the
+ *   label does (#932). Share is under Paid in every row there already.
+ * The labels' widths are Outfit's, never less than Android draws them, so a pair is never
+ * narrower than this takes it to be, and Share is under Paid wherever this says it is.
+ */
+export function stackedPairStyles(
+  paid: readonly string[],
+  share: readonly string[],
+  width: number,
+  fontScale: number,
+): Record<'Paid' | 'Share', PairStyles> {
+  const room = width - 2 * 16 - 2 - 2 * 14 - 36;
+  const gap = amountPair.columnGap;
+  const caption = scaledSp(Number(textVariants.caption.fontSize), fontScale);
+  const label = (word: string) => Math.ceil((outfitWidth(word) ?? 0) * caption);
+  const figures = {
+    Paid: stackedFigure(paid, width, fontScale),
+    Share: stackedFigure(share, width, fontScale),
+  };
+  const beside =
+    label('Paid') +
+    gap +
+    figures.Paid.minWidth +
+    16 +
+    label('Share') +
+    gap +
+    figures.Share.minWidth;
+  if (beside <= room) return { Paid: { figure: figures.Paid }, Share: { figure: figures.Share } };
+  const labelWidth = Math.max(label('Paid'), label('Share'));
+  const figureWidth = Math.max(figures.Paid.minWidth, figures.Share.minWidth);
+  if (labelWidth + gap + figureWidth > room) return { Paid: {}, Share: {} };
+  const under = {
+    label: { minWidth: labelWidth },
+    figure: { minWidth: figureWidth, textAlign: 'right' as const },
+  };
+  return { Paid: under, Share: under };
+}
+
 /**
  * Whether Who owes what waits for the amount, keeping its rows with a dash for each figure: there
  * is no amount it can use yet, whether none, one typed in part (a sub-unit amount passes through
@@ -491,23 +541,17 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
       {figure(minor)}
     </Money>
   );
-  // Stacked, each kind of figure is as wide as the widest in the table, everyone's, so "Share"
-  // starts at one x in every row (#932). Never narrower than the currency's zero, the shortest an
-  // amount is written: Share then sits beside or under the dashes before the amount as it will
-  // beside or under the shortest amount, and typing one doesn't move Notes (#911).
-  const figures = stacked
-    ? {
-        Paid: stackedFigure(
-          [money(0), ...people.map((id) => figure(paid.get(id)))],
-          width,
-          fontScale,
-        ),
-        Share: stackedFigure(
-          [money(0), ...people.map((id) => figure(shares.has(id) ? shares.get(id)! : 0))],
-          width,
-          fontScale,
-        ),
-      }
+  // Stacked, every row lays its pairs out alike, from everyone's figures, so "Share" starts at one
+  // x in every row (#932). Never narrower than the currency's zero, the shortest an amount is
+  // written: Share then sits beside or under the dashes before the amount as it will beside or
+  // under the shortest amount, and typing one doesn't move Notes (#911).
+  const pairs = stacked
+    ? stackedPairStyles(
+        [money(0), ...people.map((id) => figure(paid.get(id)))],
+        [money(0), ...people.map((id) => figure(shares.has(id) ? shares.get(id)! : 0))],
+        width,
+        fontScale,
+      )
     : null;
   const spoken = (minor: number | null | undefined) =>
     minor === undefined ? 'nothing' : money(minor as number);
@@ -577,10 +621,10 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
                   // label: at 200% on a 360 dp phone, the pair ran past the card and its edge cut
                   // "Paid CHF 10,000,000.(" (#925).
                   <View key={label} style={amountPair}>
-                    <CompactText variant="caption" tone="secondary">
+                    <CompactText variant="caption" tone="secondary" style={pairs![label].label}>
                       {label}
                     </CompactText>
-                    {amount(minor, figures![label])}
+                    {amount(minor, pairs![label].figure)}
                   </View>
                 ))}
               </View>
