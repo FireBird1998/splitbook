@@ -882,3 +882,61 @@ it('names the Category with the Tag, and a single payer without the Amount, as t
     '15 Sep 2026 Sofa Housing · Furniture Alice Tester ₹20,000.00 Bob Tester ₹10,000.00 ₹30,000.00',
   );
 });
+
+// #918: a single payer's name stands alone in Paid by, so the rule that pushes a wrapped amount
+// to the right (#916) must not push the name there too: it keeps to the left, as on the
+// statement and as several payers' names do.
+it('keeps a single payer’s name on the left of Paid by (#918)', () => {
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(
+        buildStatement(
+          {
+            id: 'maple',
+            name: 'Maple House',
+            theme: 'home',
+            currency: 'INR',
+            members: [
+              { id: 'alice', name: 'Alice Tester' },
+              { id: 'bob', name: 'Bob Tester' },
+            ],
+            names: { alice: 'Alice Tester', bob: 'Bob Tester' },
+            tags: [],
+            expenses: [
+              {
+                id: 'expense',
+                date: '2026-09-14T00:00:00.000Z',
+                description: 'Groceries',
+                category: 'food',
+                tag: 'Food',
+                currency: 'INR',
+                amountMinor: 7006,
+                splitMethod: 'equal',
+                paidBy: [{ userId: 'alice', amountMinor: 7006 }],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 3503 },
+                  { userId: 'bob', amountMinor: 3503 },
+                ],
+              },
+            ],
+            settlements: [],
+          },
+          { timeZone: 'UTC' },
+        ),
+      ),
+    },
+  });
+  const [payer] = stylesOf(html, 'statement-preview-person');
+  // The name alone: no amount beside it.
+  const table = /<table\b[^>]*aria-label="INR first Expenses"[^>]*>([\s\S]*?)<\/table>/.exec(html);
+  expect(text(table![1])).toContain('Groceries Food & Drink · Food Alice Tester ₹70.06');
+  // A lone child of the row is not pushed right: its left margin is put back.
+  const rules = payer.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('');
+  expect(rules).toMatch(/>\*:only-child\{[^}]*margin-left:0/);
+  const pushes = rules.indexOf('>*:last-child{');
+  expect(pushes).toBeGreaterThanOrEqual(0);
+  expect(rules.indexOf('>*:only-child{')).toBeGreaterThan(pushes);
+});

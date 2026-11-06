@@ -124,7 +124,7 @@ function PreviewTable({
  * the card has room, the amount under the name where it hasn't, never cut off (#916). A wrapped
  * amount keeps to the column's right edge with the other figures, and each person is set a
  * little apart, so an amount never reads as the next person's. A single payer has no amount: it
- * is the Expense's Amount, in the next column (#918).
+ * is the Expense's Amount, in the next column (#918), and their name keeps to the left.
  */
 function PersonAmount({ name, children }: { name: string; children?: ReactNode }) {
   return (
@@ -137,6 +137,8 @@ function PersonAmount({ name, children }: { name: string; children?: ReactNode }
         columnGap: 1.5,
         '& > *': { whiteSpace: 'nowrap' },
         '& > *:last-child': { marginLeft: 'auto' },
+        // A single payer's name stands alone (#918): it keeps to the left, as on the statement.
+        '& > *:only-child': { marginLeft: 0 },
         '& + &': { marginTop: '4px' },
       }}
     >
