@@ -22,6 +22,7 @@ import type { ExportPreview } from '@splitbook/shared/export-preview';
 import { exportWindowSlug } from '@splitbook/shared/export-request';
 import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { categoryLabel } from '@splitbook/shared/categories';
 import { statementDay, zonedDateTime } from '@splitbook/shared/export-csv';
 
 export type PreviewState =
@@ -41,7 +42,7 @@ export function previewPeriod(data: Pick<ExportPreview, 'from' | 'to'>) {
 }
 /** A money column of a statement preview table: its figures right-aligned, on one line. */
 const MONEY = 'export-statement-money';
-/** A statement preview cell under its first line: the Expense's Tag. */
+/** A statement preview cell under its first line: the Expense's "Category · Tag" (#918). */
 const CAPTION = 'export-statement-caption';
 
 /**
@@ -122,9 +123,10 @@ function PreviewTable({
  * A name and its amount in Paid by or Share, as the statement writes them: on one line where
  * the card has room, the amount under the name where it hasn't, never cut off (#916). A wrapped
  * amount keeps to the column's right edge with the other figures, and each person is set a
- * little apart, so an amount never reads as the next person's.
+ * little apart, so an amount never reads as the next person's. A single payer has no amount: it
+ * is the Expense's Amount, in the next column (#918), and their name keeps to the left.
  */
-function PersonAmount({ name, children }: { name: string; children: ReactNode }) {
+function PersonAmount({ name, children }: { name: string; children?: ReactNode }) {
   return (
     <Box
       className="statement-preview-person"
@@ -135,6 +137,8 @@ function PersonAmount({ name, children }: { name: string; children: ReactNode })
         columnGap: 1.5,
         '& > *': { whiteSpace: 'nowrap' },
         '& > *:last-child': { marginLeft: 'auto' },
+        // A single payer's name stands alone (#918): it keeps to the left, as on the statement.
+        '& > *:only-child': { marginLeft: 0 },
         '& + &': { marginTop: '4px' },
       }}
     >
@@ -421,15 +425,17 @@ export default function ExportPreviewPanel({
                       money={['Amount']}
                     >
                       {bucket.expenses.map((expense) => {
-                        const people = (allocations: typeof expense.paidBy) => (
+                        const people = (allocations: typeof expense.paidBy, amounts = true) => (
                           <TableCell>
                             {allocations.map((person) => (
                               <PersonAmount key={person.userId} name={name(person.userId)}>
-                                <MoneyText
-                                  amount={displayMajorAmount(person.amountMinor, bucket.currency)}
-                                  currency={bucket.currency}
-                                  tone="neutral"
-                                />
+                                {amounts ? (
+                                  <MoneyText
+                                    amount={displayMajorAmount(person.amountMinor, bucket.currency)}
+                                    currency={bucket.currency}
+                                    tone="neutral"
+                                  />
+                                ) : null}
                               </PersonAmount>
                             ))}
                           </TableCell>
@@ -439,16 +445,22 @@ export default function ExportPreviewPanel({
                             <TableCell sx={{ whiteSpace: 'nowrap' }}>
                               {statementDay(expense.date)}
                             </TableCell>
-                            {/* As the statement heads a row with its Description, the Tag under it. */}
+                            {/* As the statement heads a row with its Description, and writes
+                                "Category · Tag" under it (#918). */}
                             <TableCell
                               component="th"
                               scope="row"
                               sx={{ minWidth: '6em', overflowWrap: 'anywhere' }}
                             >
                               {expense.description}
-                              <span className={CAPTION}>{expense.tag}</span>
+                              <span className={CAPTION}>
+                                {categoryLabel(expense.category)}
+                                {SEPARATOR}
+                                {expense.tag}
+                              </span>
                             </TableCell>
-                            {people(expense.paidBy)}
+                            {/* One payer paid the Amount: their name alone (#918). */}
+                            {people(expense.paidBy, expense.paidBy.length > 1)}
                             <TableCell className={MONEY}>
                               <MoneyText
                                 amount={displayMajorAmount(expense.amountMinor, bucket.currency)}

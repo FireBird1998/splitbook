@@ -126,6 +126,8 @@ export const statementPreviewSchema = z.object({
               id: z.string(),
               date: z.string(),
               description: z.string(),
+              /** The stored Category key, named as the statement names it (#918). */
+              category: z.string(),
               tag: z.string(),
               amountMinor: minor,
               paidBy: z.array(z.object({ userId: z.string(), amountMinor: minor })),

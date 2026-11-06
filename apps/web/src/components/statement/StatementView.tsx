@@ -84,8 +84,11 @@ function Cell({
   );
 }
 
-/** A name with its amount, on one line, in Paid by and Share. */
-function PersonAmount({ name, children }: { name: string; children: ReactNode }) {
+/**
+ * A name with its amount, on one line, in Paid by and Share. A single payer has no amount: it is
+ * the Expense's Amount, in the next column (#918).
+ */
+function PersonAmount({ name, children }: { name: string; children?: ReactNode }) {
   return (
     <Box
       className="statement-line"
@@ -446,7 +449,7 @@ function CurrencySection({
                 <Cell kind="people">
                   {row.paidBy.map((person) => (
                     <PersonAmount key={person.userId} name={name(person.userId)}>
-                      {amount(person.amountMinor)}
+                      {row.paidBy.length > 1 ? amount(person.amountMinor) : null}
                     </PersonAmount>
                   ))}
                 </Cell>

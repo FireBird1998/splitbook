@@ -1023,15 +1023,20 @@ describe('Export preview (#611)', () => {
     expect(bucket.expenses).toEqual(
       printed.currencies[0].expenses
         .slice(0, 5)
-        .map(({ id, date, description, tag, amountMinor, paidBy, splitBetween }) => ({
+        .map(({ id, date, description, category, tag, amountMinor, paidBy, splitBetween }) => ({
           id,
           date,
           description,
+          category,
           tag,
           amountMinor,
           paidBy,
           splitBetween,
         })),
+    );
+    // #918: the server fills each Expense's Category, so the preview names it as the statement does.
+    expect(bucket.expenses.map((expense: { category: string }) => expense.category)).toEqual(
+      Array(5).fill('food'),
     );
     expect(bucket.people.map((p: { name: string }) => p.name)).toEqual([
       'Alice Tester',

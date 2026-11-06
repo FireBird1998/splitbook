@@ -2176,8 +2176,8 @@ JSON with `Cache-Control: no-store` and no `Content-Disposition`. The shared
   `paymentTotalMinor`, `paymentCount`, named `people` (Paid, Share, Net in
   minor units for the period, plus current all-time `balanceMinor`),
   `suggestedPayments`, up to five first `payments` with stored cross-currency fields
-  and the shared payment `description`, and up to five first `expenses` including `paidBy` and
-  `splitBetween` allocations. Currency buckets remain separate; current all-time
+  and the shared payment `description`, and up to five first `expenses` including the stored
+  `category` key with the `tag` (#918), and `paidBy` and `splitBetween` allocations. Currency buckets remain separate; current all-time
   balances and Suggested payments are not period contributions.
   The existing printable page still supplies print/save as PDF.
 
