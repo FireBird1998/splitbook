@@ -14,6 +14,9 @@ import {
   findHosts,
   flatten,
   layoutHeight,
+  outerTexts,
+  rowStarts,
+  stackedPairs,
   unbroken,
   unreadText,
   wordsOf,
@@ -23,9 +26,9 @@ import { formatCurrency } from '@splitbook/shared/currency';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { AmountDescriptionCard, SaveBar, WhoOwesWhat, expenseDateLabel } =
+const { AmountDescriptionCard, SaveBar, WhoOwesWhat, expenseDateLabel, stackedFigure } =
   await import('./expense-form');
-const { CompactButton } = await import('./compact');
+const { CompactButton, moneySizes, scaledSp } = await import('./compact');
 
 const people = ['Alex Rao', 'Sam Chen', 'Priya Shah', 'Jo Park', 'Kim Lee'];
 const ids = people.map((_, index) => `a0000000000000000000000${index + 1}`);
@@ -227,6 +230,182 @@ describe('Who owes what', () => {
       expect(layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, 328)).toBe(
         before,
       );
+    },
+  );
+
+  // #932, QA on the emulator at 200% on a 360 dp phone: stacked, the dashes before the amount left
+  // Share beside "Paid –" in every row, and ₹9.00, as short as an INR amount is written, put Share
+  // under Paid in all three: typing it moved Notes 93 dp down (31 dp before #932). A figure still to
+  // come keeps the width of the currency's zero, so the shortest amount moves nothing.
+  it('is as tall before the amount as with the shortest one, stacked at 2x text on 360 dp (#932)', () => {
+    setWindow({ width: 360, height: 780, fontScale: 2 });
+    onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+    const members = ids.slice(0, 3);
+    const render = (value: ExpenseDraft, waiting: boolean) =>
+      act(() => {
+        renderer?.unmount();
+        renderer = create(
+          <WhoOwesWhat
+            draft={value}
+            allocation={waiting ? null : expenseMoney(value)}
+            problem="Enter a valid amount to see who owes what."
+            waiting={waiting}
+            name={(id) => people[ids.indexOf(id)]!}
+            currentUserId={ids[0]}
+            money={(minor) => `₹${(minor / 100).toFixed(2)}`}
+          />,
+        );
+      });
+    const height = () => layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, 2, 328);
+    render(draft('', members), true);
+    const before = height();
+    render(draft('9.00', members), false);
+    expect(height()).toBe(before);
+  });
+
+  // #932, the Designer's review of #926: stacked, "Share" started wherever each row's Paid ended,
+  // about 40 dp further right in the You row than under the others, and "Paid –" sat about 2 dp
+  // lower than "Share ₹…". At 200% on a 360 dp phone, Share went under the You row's Paid and
+  // stayed beside every "Paid –".
+  it.each([
+    [412, 1, 'Priyamvada Venkataraghavan-Subramaniam', '900.00'],
+    [360, 2, 'Sam Chen', '9.00'],
+  ] as const)(
+    'starts Share at one x in every stacked row, on Paid’s baseline, %sdp at %s× text (#932)',
+    (width, fontScale, second, amount) => {
+      setWindow({ width, fontScale });
+      onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+      const members = ids.slice(0, 3);
+      const value = draft(amount, members);
+      act(() => {
+        renderer = create(
+          <WhoOwesWhat
+            draft={value}
+            allocation={expenseMoney(value)}
+            problem=""
+            name={(id) => (id === ids[1] ? second : people[ids.indexOf(id)]!)}
+            currentUserId={ids[0]}
+            money={(minor) => `₹${(minor / 100).toFixed(2)}`}
+          />,
+        );
+      });
+      const card = width - 32;
+      const json = renderer!.toJSON() as ReactTestRendererJSON;
+      /** Each row's Paid and Share, under its name. */
+      const under = (row: ReactTestRendererJSON) => {
+        const style = flatten(row.props.style);
+        return style.flexWrap === 'wrap' && style.paddingLeft === 36;
+      };
+      const starts = rowStarts(json, fontScale, card, under);
+      expect(starts).toHaveLength(3);
+      const shares = starts.map(([, share]) => share!);
+      for (const share of shares) expect(Math.abs(share - shares[0]!)).toBeLessThanOrEqual(1);
+      // Each pair is a label and its figure, in the same faces as every other pair's, so the
+      // labels share a baseline: a dash for nothing is drawn in the amount's own face.
+      const faces = (pair: ReactTestRendererJSON) =>
+        outerTexts(pair).map((text) => {
+          const { fontFamily, fontSize, lineHeight } = flatten(text.props.style);
+          return { fontFamily, fontSize, lineHeight };
+        });
+      for (const row of findHosts(json, (props) => under({ props } as ReactTestRendererJSON))) {
+        const [paid, share] = row.children as ReactTestRendererJSON[];
+        expect(faces(paid!)).toEqual(faces(share!));
+      }
+      expect(unreadText(json, fontScale, card)).toEqual([]);
+    },
+  );
+
+  // #932, the Designer's review at 200% on a 360 dp phone: CHF 10,000,000.00 Priya paid gave every
+  // row's Paid its width, wider than "Paid" leaves beside it. "Paid" then sat alone and the dash
+  // of each member who paid nothing dropped to a line of its own at the card's right edge, and
+  // each figure under its label started about 5 dp right of it. Too wide to line up, the figures
+  // keep their own widths: a dash stays beside "Paid", and a figure under its label starts there.
+  it('keeps "Paid –" on one line beside a Paid too wide to line up, 360dp at 2× text (#932)', () => {
+    setWindow({ width: 360, height: 780, fontScale: 2 });
+    onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+    const value = { ...draft('10000000.00', ids.slice(0, 3)), currency: 'CHF', payerId: ids[2]! };
+    act(() => {
+      renderer = create(
+        <WhoOwesWhat
+          draft={value}
+          allocation={expenseMoney(value)}
+          problem=""
+          name={(id) => people[ids.indexOf(id)]!}
+          currentUserId={ids[0]}
+          money={(minor) => formatCurrency(minor / 100, 'CHF')}
+        />,
+      );
+    });
+    const shown = stackedPairs(renderer!.toJSON() as ReactTestRendererJSON, 2, 360 - 32);
+    expect(shown.map(({ words }) => words)).toEqual([
+      'Paid–',
+      'ShareCHF 3,333,333.34',
+      'Paid–',
+      'ShareCHF 3,333,333.33',
+      'PaidCHF 10,000,000.00',
+      'ShareCHF 3,333,333.33',
+    ]);
+    for (const pair of shown.filter(({ words }) => words.endsWith('–'))) {
+      expect(pair.lines).toBe(1);
+      expect(pair.start).toBeGreaterThan(0);
+    }
+    // Each CHF figure goes under its label, and starts where the label does.
+    for (const pair of shown.filter(({ words }) => !words.endsWith('–'))) {
+      expect(pair.start).toBe(0);
+      expect(pair.drawnStart).toBeCloseTo(0, 0);
+    }
+  });
+
+  // #932, the Designer's review: before the amount, at 200% on a 360 dp phone, Share sits under
+  // Paid, and each dash ended where its label left it, "Share –"'s further right than "Paid –"'s.
+  // Under each other, the labels and the figures are as wide as each other, so the dashes line up.
+  it('lines the dashes up under each other before the amount, 360dp at 2× text (#932)', () => {
+    setWindow({ width: 360, height: 780, fontScale: 2 });
+    onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+    const value = { ...draft('', ids.slice(0, 3)), currency: 'CHF' };
+    act(() => {
+      renderer = create(
+        <WhoOwesWhat
+          draft={value}
+          allocation={null}
+          problem="Enter a valid amount to see who owes what."
+          waiting
+          name={(id) => people[ids.indexOf(id)]!}
+          currentUserId={ids[0]}
+          money={(minor) => formatCurrency(minor / 100, 'CHF')}
+        />,
+      );
+    });
+    const shown = stackedPairs(renderer!.toJSON() as ReactTestRendererJSON, 2, 360 - 32);
+    expect(shown.map(({ words }) => words)).toEqual(Array(3).fill(['Paid–', 'Share–']).flat());
+    // Share under Paid in every row, so each pair starts at the same x.
+    const json = renderer!.toJSON() as ReactTestRendererJSON;
+    const rows = rowStarts(json, 2, 360 - 32, (row) => {
+      const style = flatten(row.props.style);
+      return style.flexWrap === 'wrap' && style.paddingLeft === 36;
+    });
+    expect(rows).toEqual(Array(3).fill([36, 36]));
+    for (const pair of shown) {
+      expect(pair.lines).toBe(1);
+      expect(pair.drawnEnd).toBeCloseTo(shown[0]!.drawnEnd, 0);
+    }
+  });
+
+  // #932, QA on the emulator: Android draws the table's money face 0.6 em a character, its letter
+  // spacing narrowing nothing ("₹1,250.00" took 185 px at 412 dp 100%, "CHF 10,000,000.00" 349 px,
+  // against 181 and 340 estimated). The widest figure outgrew the width every row was given, and
+  // the You row's Share started 5 px right of the others'. Each figure's width now holds it whole.
+  it.each([
+    [412, 1, ['₹1,250.00', '–', '–']],
+    [412, 1, ['CHF 10,000,000.00', '–', '–']],
+    [360, 2, ['₹9.00', '–', '–']],
+  ] as const)(
+    'gives every stacked figure the width Android draws the widest in, %sdp at %s× text (#932)',
+    (width, fontScale, figures) => {
+      const drawn = (figure: string) =>
+        [...figure].length * 0.6 * scaledSp(Number(moneySizes.table.fontSize), fontScale);
+      const { minWidth } = stackedFigure(figures, width, fontScale);
+      expect(minWidth).toBeGreaterThanOrEqual(Math.max(...figures.map(drawn)));
     },
   );
 });

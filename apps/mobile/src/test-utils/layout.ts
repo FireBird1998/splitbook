@@ -268,6 +268,118 @@ export function unreadText(
 }
 
 /**
+ * Where each child of a row starts across it, in dp from the row's own left edge, as `layoutHeight`
+ * lays the tree out `width` wide at this text size: one list for each row that `match` picks, in
+ * order. A row that wraps (`flexWrap: 'wrap'`) starts a line again at its left padding where a
+ * child no longer fits, as `layoutHeight` breaks it; so whether "Share" sits beside "Paid" or under
+ * it, and where (#932). The widths are estimates (see `layoutWidth`).
+ */
+export function rowStarts(
+  node: Node | null,
+  fontScale: number,
+  width: number,
+  match: (row: Node) => boolean,
+) {
+  const widths = new Map<Node, number>();
+  layoutHeight(node, fontScale, width, { node: (each, room) => widths.set(each, room) });
+  return findHosts(node, (_props, type) => type === 'View')
+    .filter((row) => match(row) && widths.has(row))
+    .map((row) => {
+      const style = flatten(row.props.style);
+      const left =
+        edge(style, 'Left', 'padding') + number(style.borderLeftWidth ?? style.borderWidth);
+      const inner = widths.get(row)! - horizontal(style);
+      const across = number(style.columnGap ?? style.gap);
+      let used = -1;
+      return inFlow(row).map((child) => {
+        const own = widths.get(child) ?? 0;
+        const wraps = style.flexWrap === 'wrap' && used >= 0 && used + across + own > inner;
+        const start = used < 0 || wraps ? 0 : used + across;
+        used = start + own;
+        return left + start;
+      });
+    });
+}
+
+/**
+ * How far down its tree each node that `match` picks starts, in dp from the top of `node`, as
+ * `layoutHeight` lays it out `width` wide at this text size: columns stacked with their padding,
+ * borders, margins and gaps, and a scroll view's content from its content container's padding.
+ * A row's children start at its top. Absolutely positioned children take no room, as there, and
+ * aren't measured. Enough to see that a notice arriving moves nothing else on a screen (#932).
+ */
+export function layoutTops(
+  node: Node | null,
+  fontScale: number,
+  width: number,
+  match: (node: Node) => boolean,
+) {
+  const found: { node: Node; top: number }[] = [];
+  const walk = (each: Node, top: number, room: number) => {
+    if (match(each)) found.push({ node: each, top });
+    if (each.type === 'Text' || each.type === 'AnimatedText') return;
+    const style = flatten(each.props.style);
+    if (style.display === 'none') return;
+    const content = flatten(each.props.contentContainerStyle);
+    const inner = room - horizontal(style) - horizontal(content);
+    const row = style.flexDirection === 'row';
+    const gap = number(style.rowGap ?? style.gap) + number(content.rowGap ?? content.gap);
+    let y =
+      top +
+      edge(style, 'Top', 'padding') +
+      number(style.borderTopWidth ?? style.borderWidth) +
+      edge(content, 'Top', 'padding');
+    inFlow(each).forEach((child, index) => {
+      const own = flatten(child.props.style);
+      const childRoom = childWidth(child, row, inner, fontScale)!;
+      if (!row && index > 0) y += gap;
+      walk(child, y + edge(own, 'Top', 'margin'), childRoom);
+      if (!row)
+        y +=
+          layoutHeight(child, fontScale, childRoom) +
+          edge(own, 'Top', 'margin') +
+          edge(own, 'Bottom', 'margin');
+    });
+  };
+  if (node) walk(node, 0, width);
+  return found;
+}
+
+/**
+ * Each label and its figure in a stacked Who owes what ("Paid –", "Share CHF …"), as
+ * `layoutHeight` lays the tree out `width` wide at this text size: its words; how many lines it
+ * takes; where the figure's box starts, beside the label or under it (0); and where the figure's
+ * characters start and end, a right-aligned figure's at its box's end. In dp from the pair's own
+ * left edge, which is its label's (#932). The widths are estimates (see `layoutWidth`).
+ */
+export function stackedPairs(node: Node | null, fontScale: number, width: number) {
+  const widths = new Map<Node, number>();
+  layoutHeight(node, fontScale, width, { node: (each, room) => widths.set(each, room) });
+  return findHosts(node, (props) => {
+    const style = flatten(props.style);
+    return style.flexWrap === 'wrap' && style.columnGap === 6;
+  })
+    .filter((pair) => widths.has(pair))
+    .map((pair) => {
+      const [, figure] = inFlow(pair);
+      const [[, start]] = rowStarts(pair, fontScale, widths.get(pair)!, (row) => row === pair) as [
+        number[],
+      ];
+      const own = textWidth(figure!, fontScale, true);
+      const right = flatten(figure!.props.style).textAlign === 'right';
+      const drawnStart = start! + (right ? widths.get(figure!)! - own : 0);
+      const line = Math.max(...inFlow(pair).map((child) => layoutHeight(child, fontScale)));
+      return {
+        words: wordsOf(pair),
+        lines: Math.round(layoutHeight(pair, fontScale, widths.get(pair)) / line),
+        start: start!,
+        drawnStart,
+        drawnEnd: drawnStart + own,
+      };
+    });
+}
+
+/**
  * The phone's own font's "…", in em: Roboto's (0.669), read from the emulator's
  * /system/fonts/Roboto-Regular.ttf. React Native's text view cuts a line with its own paint,
  * which has the phone's font and the text's size in dp, not scaled with the phone's text size,

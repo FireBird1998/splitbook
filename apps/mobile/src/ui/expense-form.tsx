@@ -1,4 +1,4 @@
-import type { ViewInstance, TextInputInstance } from 'react-native';
+import type { ViewInstance, TextInputInstance, TextStyle } from 'react-native';
 import {
   createContext,
   memo,
@@ -49,6 +49,8 @@ import {
   headingBeside,
   headingLine,
   isLargeText,
+  moneySizes,
+  moneyWidth,
   scaledSp,
   textVariants,
   useLargeText,
@@ -59,7 +61,7 @@ import {
 } from './compact';
 import { outfitWidth } from './compact/outfit-metrics';
 import { useTheme } from './theme';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, WORD_JOINER } from '@splitbook/shared/separator';
 import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import { amountError } from '../data/field-feedback';
 
@@ -374,6 +376,75 @@ export const amountPair = {
 } as const;
 
 /**
+ * How wide each of one kind of figure in the stacked Who owes what is drawn: as wide as the widest
+ * of them in the table (`figures`, everyone's Paid or everyone's Share, "–" for nothing), up to
+ * the room under a name. Every row's pairs are then as wide as each other, so "Share" starts at
+ * one x in every row, beside Paid or under it, and the figures end together (#932). Before, it
+ * started wherever that row's Paid ended. The record's skeleton keeps it.
+ */
+export function stackedFigure(figures: readonly string[], width: number, fontScale: number) {
+  const room = width - 2 * 16 - 2 - 2 * 14 - 36;
+  // As Android draws it: 0.6 em a character, the face's letter spacing narrowing nothing on the
+  // device. Measured with it, a wide figure outgrew its width and moved that row's Share (#932).
+  const { letterSpacing } = moneySizes.table;
+  const drawn = (figure: string) =>
+    moneyWidth(figure, 'table', fontScale) -
+    [...figure.replaceAll(WORD_JOINER, '')].length * Number(letterSpacing ?? 0);
+  const widest = Math.max(0, ...figures.map(drawn));
+  return { minWidth: Math.min(room, widest), textAlign: 'right' as const };
+}
+
+/** A stacked pair's label and figure styles: their widths, and how the figure sits in its own. */
+type PairStyles = { label?: TextStyle; figure?: TextStyle };
+
+/**
+ * How each stacked pair, "Paid ₹…" and "Share ₹…", is laid out under a name, from everyone's Paid
+ * figures and everyone's Share figures ("–" for nothing), so every row lays its pairs out alike:
+ * - Side by side where both fit, each figure as wide as the widest of its kind (`stackedFigure`):
+ *   "Share" starts at one x in every row (#932).
+ * - Share under Paid otherwise, the labels as wide as each other and the figures too, so the
+ *   figures end at one x, a column of them, dashes and all.
+ * - Where a label and the widest figure can't share a line, as for CHF 10,000,000.00 at 200% on a
+ *   360 dp phone, each figure is as wide as itself: a dash stays beside "Paid" rather than drop to
+ *   a line of its own at the card's edge, and a figure that goes under its label starts where the
+ *   label does (#932). Share is under Paid in every row there already.
+ * The labels' widths are Outfit's, never less than Android draws them, so a pair is never
+ * narrower than this takes it to be, and Share is under Paid wherever this says it is.
+ */
+export function stackedPairStyles(
+  paid: readonly string[],
+  share: readonly string[],
+  width: number,
+  fontScale: number,
+): Record<'Paid' | 'Share', PairStyles> {
+  const room = width - 2 * 16 - 2 - 2 * 14 - 36;
+  const gap = amountPair.columnGap;
+  const caption = scaledSp(Number(textVariants.caption.fontSize), fontScale);
+  const label = (word: string) => Math.ceil((outfitWidth(word) ?? 0) * caption);
+  const figures = {
+    Paid: stackedFigure(paid, width, fontScale),
+    Share: stackedFigure(share, width, fontScale),
+  };
+  const beside =
+    label('Paid') +
+    gap +
+    figures.Paid.minWidth +
+    16 +
+    label('Share') +
+    gap +
+    figures.Share.minWidth;
+  if (beside <= room) return { Paid: { figure: figures.Paid }, Share: { figure: figures.Share } };
+  const labelWidth = Math.max(label('Paid'), label('Share'));
+  const figureWidth = Math.max(figures.Paid.minWidth, figures.Share.minWidth);
+  if (labelWidth + gap + figureWidth > room) return { Paid: {}, Share: {} };
+  const under = {
+    label: { minWidth: labelWidth },
+    figure: { minWidth: figureWidth, textAlign: 'right' as const },
+  };
+  return { Paid: under, Share: under };
+}
+
+/**
  * Whether Who owes what waits for the amount, keeping its rows with a dash for each figure: there
  * is no amount it can use yet, whether none, one typed in part (a sub-unit amount passes through
  * "0" and "0.") or one corrected beside the field. Folding the table there would move Notes
@@ -456,14 +527,32 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
   // Wide enough for "₹1,24,999.50" in the table face. Money is never cut short: a longer
   // amount widens its column, and names wrap instead.
   const column = { minWidth: amountColumn, alignItems: 'flex-end' as const };
-  const amount = (minor: number | null | undefined) =>
-    minor === undefined ? (
-      <CompactText tone="muted">–</CompactText>
-    ) : (
-      <Money size="table" numberOfLines={0} tone={minor === null ? 'muted' : undefined}>
-        {minor === null ? '–' : money(minor)}
-      </Money>
-    );
+  // Nothing, or a figure still to come, is a dash in the amount's own face: stacked, "Paid –"
+  // then sits on the same baseline as "Share ₹…" (#932).
+  const figure = (minor: number | null | undefined) =>
+    minor === undefined || minor === null ? '–' : money(minor);
+  const amount = (minor: number | null | undefined, style?: TextStyle) => (
+    <Money
+      size="table"
+      numberOfLines={0}
+      tone={minor === undefined || minor === null ? 'muted' : undefined}
+      style={style}
+    >
+      {figure(minor)}
+    </Money>
+  );
+  // Stacked, every row lays its pairs out alike, from everyone's figures, so "Share" starts at one
+  // x in every row (#932). Never narrower than the currency's zero, the shortest an amount is
+  // written: Share then sits beside or under the dashes before the amount as it will beside or
+  // under the shortest amount, and typing one doesn't move Notes (#911).
+  const pairs = stacked
+    ? stackedPairStyles(
+        [money(0), ...people.map((id) => figure(paid.get(id)))],
+        [money(0), ...people.map((id) => figure(shares.has(id) ? shares.get(id)! : 0))],
+        width,
+        fontScale,
+      )
+    : null;
   const spoken = (minor: number | null | undefined) =>
     minor === undefined ? 'nothing' : money(minor as number);
   // A figure that waits for the amount says so; "paid and share" when both do (#911).
@@ -532,10 +621,10 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
                   // label: at 200% on a 360 dp phone, the pair ran past the card and its edge cut
                   // "Paid CHF 10,000,000.(" (#925).
                   <View key={label} style={amountPair}>
-                    <CompactText variant="caption" tone="secondary">
+                    <CompactText variant="caption" tone="secondary" style={pairs![label].label}>
                       {label}
                     </CompactText>
-                    {amount(minor)}
+                    {amount(minor, pairs![label].figure)}
                   </View>
                 ))}
               </View>

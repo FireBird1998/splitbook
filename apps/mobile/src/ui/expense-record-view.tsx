@@ -68,7 +68,14 @@ import {
   type BadgeTone,
   type Reveal,
 } from './compact';
-import { WhoOwesWhat, allocationStacked, amountPair, sharesDifferNote } from './expense-form';
+import {
+  ActionBar,
+  WhoOwesWhat,
+  allocationStacked,
+  amountPair,
+  sharesDifferNote,
+  stackedPairStyles,
+} from './expense-form';
 import { RefreshStatus } from './financial-views';
 import type { MobileExpense } from '../data/types';
 import { savingNeedsConnection } from './offline-notice';
@@ -341,8 +348,8 @@ export function ExpenseRecordScreen({
   const held = state.groupDraft
     ? expenseRecoveryWords('Finish or discard the draft in this Group first.')
     : undefined;
-  // What is said above the record: the Group's draft, a message, and when the record shown was
-  // read, if it wasn't in this open.
+  // What is said above the record: a message, and when the record shown was read, if it wasn't in
+  // this open.
   // Said whenever the record shown wasn't read in this open: a copy kept here can be hours old.
   const readTime =
     state.known && !offline ? (
@@ -350,31 +357,34 @@ export function ExpenseRecordScreen({
     ) : null;
   // The top bar says the record is read again; History then doesn't say it twice.
   const cued = !offline && !!(state.known?.refreshing || state.refreshing);
+  // The Group's draft, or this Expense's own edit that × kept here, offered at the screen's foot:
+  // it can arrive after the record shows, as over the record's skeleton, and above the record it
+  // pushed everything down under a finger about to tap (#932). Kept out of the scrolling record,
+  // it moves nothing, and a record without one keeps no room for it.
+  const draftNotice = recordKeepsEdit(state) ? (
+    <UnfinishedDraft onResume={onResume} onDiscard={onDiscard} />
+  ) : state.groupDraft ? (
+    <Banner
+      tone="info"
+      message={expenseRecoveryWords(
+        'This Group has an unfinished draft. Finish or discard it to edit or delete this Expense.',
+      )}
+    >
+      <CompactButton
+        label={
+          process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
+            ? 'View On this phone item'
+            : expenseRecoveryWords('Resume draft')
+        }
+        variant="text"
+        dense
+        onPress={onResume}
+      />
+    </Banner>
+  ) : null;
   const lead =
-    state.groupDraft || (state.message && state.status !== 'delete-review') || readTime ? (
+    (state.message && state.status !== 'delete-review') || readTime ? (
       <>
-        {/* This Expense's own edit, which × kept here: offered as a kept edit is on its form. */}
-        {recordKeepsEdit(state) ? (
-          <UnfinishedDraft onResume={onResume} onDiscard={onDiscard} />
-        ) : state.groupDraft ? (
-          <Banner
-            tone="info"
-            message={expenseRecoveryWords(
-              'This Group has an unfinished draft. Finish or discard it to edit or delete this Expense.',
-            )}
-          >
-            <CompactButton
-              label={
-                process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
-                  ? 'View On this phone item'
-                  : expenseRecoveryWords('Resume draft')
-              }
-              variant="text"
-              dense
-              onPress={onResume}
-            />
-          </Banner>
-        ) : null}
         {state.message && state.status !== 'delete-review' ? (
           state.viewMonth && onViewMonth ? (
             // An edit saved here: the Month it now belongs to, as the Expenses tab spells it.
@@ -547,6 +557,11 @@ export function ExpenseRecordScreen({
           />
         </FadeIn>
       </ScrollView>
+      {draftNotice ? (
+        <FadeIn reveal={reveal}>
+          <ActionBar>{draftNotice}</ActionBar>
+        </FadeIn>
+      ) : null}
       {options ? (
         <BottomSheet
           visible={options}
@@ -776,6 +791,13 @@ export function ExpenseRecordSkeleton({
   );
   // As Who owes what shows them: three, then Show all, past four people.
   const shown = record.people.length > 4 ? record.people.slice(0, 3) : record.people;
+  // Stacked, the pairs laid out from everyone's figures, as the record lays them out (#932).
+  const pairs = stackedPairStyles(
+    record.people.map(({ paid }) => paid ?? '–'),
+    record.people.map(({ share }) => share),
+    width,
+    fontScale,
+  );
   const history = record.changed ? 2 : 1;
   return (
     <View
@@ -887,14 +909,13 @@ export function ExpenseRecordSkeleton({
                 ).map(([label, amount]) => (
                   <SkeletonOf key={label} bar>
                     <View style={amountPair}>
-                      <CompactText variant="caption">{label}</CompactText>
-                      {amount === null ? (
-                        <CompactText>–</CompactText>
-                      ) : (
-                        <Money size="table" numberOfLines={0}>
-                          {amount}
-                        </Money>
-                      )}
+                      <CompactText variant="caption" style={pairs[label].label}>
+                        {label}
+                      </CompactText>
+                      {/* Nothing is a dash in the amount's face, as on the record (#932). */}
+                      <Money size="table" numberOfLines={0} style={pairs[label].figure}>
+                        {amount ?? '–'}
+                      </Money>
                     </View>
                   </SkeletonOf>
                 ))}
