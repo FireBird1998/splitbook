@@ -7111,11 +7111,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const owner = generation,
         view = route;
       const owns = queryOwner(queryClient, groupKey(account(), groupId));
+      const failed = snapshot.expense.contextCheck.status === 'failed';
       publish({
         ...snapshot,
         expense: {
           ...snapshot.expense,
           contextCheck: { ...snapshot.expense.contextCheck, status: 'checking' },
+          // The failed check's words go as it is checked again, as when a reconnect reads it
+          // (#694): its outcome says anything new.
+          message: failed ? null : snapshot.expense.message,
         },
       });
       try {
