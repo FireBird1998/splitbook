@@ -43,12 +43,14 @@ type Registration = {
   keyHash: string;
   accountId: string;
   sessionId: string;
+  binding: string;
   expiresAt: Date;
   enabled: boolean;
   expenseUpdates: boolean;
   payments: boolean;
   revision: number;
   activation: string | null;
+  expenseActivation?: string | null;
   expenseCutoff: Date | null;
   paymentCutoff: Date | null;
   token?: string;
@@ -71,6 +73,8 @@ const publicState = (r: Registration) => ({
   payments: r.payments,
   revision: r.revision,
   activation: r.activation,
+  binding: r.binding,
+  expenseActivation: r.expenseActivation ?? r.activation,
   expenseCutoff: r.expenseCutoff?.toISOString() ?? null,
   paymentCutoff: r.paymentCutoff?.toISOString() ?? null,
 });
@@ -178,11 +182,16 @@ export async function POST(req: Request) {
           keyHash: hash(body.installationKey),
           accountId: member.user.id,
           sessionId: member.session.id,
+          binding: prior?.binding ?? randomUUID(),
           expiresAt: new Date(member.session.expiresAt),
           enabled: body.enabled,
           expenseUpdates,
           payments,
           revision: (previous?.revision ?? 0) + 1,
+          expenseActivation:
+            expenseUpdates && (enabling || !prior?.expenseUpdates)
+              ? randomUUID()
+              : (prior?.expenseActivation ?? prior?.activation ?? null),
           activation: activate ? randomUUID() : (prior?.activation ?? null),
           expenseCutoff:
             expenseUpdates && (enabling || !prior?.expenseUpdates)

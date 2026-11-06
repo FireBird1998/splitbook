@@ -1,3 +1,4 @@
+import { publicActivityProjection } from '@/lib/activity-boundary';
 import { settlementBatchActivityShape } from '@splitbook/shared/settlement-batch-activity';
 import { crossCurrencySettlementReadShape } from '@splitbook/shared/validators/settlement';
 import { assistantAttributionSchema } from '@splitbook/shared/draft-attribution';
@@ -138,6 +139,7 @@ export class UserActivityService {
 
     // The { group, createdAt, _id } index serves each Group's newest events in order.
     const events = await Activity.find({ group: { $in: groupIds } })
+      .select(publicActivityProjection)
       .sort({ createdAt: -1, _id: -1 })
       .limit(size)
       .populate<{ actor: { _id: Types.ObjectId; name?: string } | null }>('actor', 'name')

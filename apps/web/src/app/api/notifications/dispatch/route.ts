@@ -1,0 +1,27 @@
+import { timingSafeEqual } from 'node:crypto';
+import { NextResponse } from 'next/server';
+import { dispatchExpenseAlerts } from '@/lib/notifications/dispatch';
+export async function POST(request: Request) {
+  const configured = process.env.NOTIFICATION_DISPATCH_SECRET;
+  const provided = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
+  if (
+    !configured ||
+    configured.length < 32 ||
+    Buffer.byteLength(provided) !== Buffer.byteLength(configured) ||
+    !timingSafeEqual(Buffer.from(provided), Buffer.from(configured))
+  )
+    return NextResponse.json({ error: 'Unauthorized', status: 401 }, { status: 401 });
+  if (new URL(request.url).search || (await request.text()).length)
+    return NextResponse.json({ error: 'Invalid request', status: 400 }, { status: 400 });
+  try {
+    return NextResponse.json(
+      { data: await dispatchExpenseAlerts(), status: 200 },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
+  } catch {
+    return NextResponse.json(
+      { error: 'Notification dispatch unavailable', status: 503 },
+      { status: 503 },
+    );
+  }
+}

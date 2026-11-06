@@ -275,6 +275,26 @@ Run `pnpm mobile verify:notifications` against the isolated `MOBILE_VERIFY_URL` 
 two-phone Settings/controller/authenticated-HTTP journey. It substitutes only the native
 permission/token boundary and writes no financial records. Controller, rendered Settings
 and Expo boundary tests cover denial, OS blocking, offline/backend failures, confirmation,
-late results and cleanup. This slice has no financial event producer or delivery transport.
+late results and cleanup. The device-controls verifier does not exercise financial event delivery.
 Real Android permission/dialog and FCM configuration checks remain platform acceptance;
 Node tests and browser checks cannot establish those native behaviors.
+
+## Expense-added alerts (#840)
+
+The native direct-FCM boundary sends a generic FCM notification alongside Expo SDK 58's data
+envelope; SDK 58 skips the foreground handler for data-only messages. Existing public Firebase
+client configuration can be supplied to prebuild with `ANDROID_GOOGLE_SERVICES_FILE`; the file
+stays outside Git. Server credentials never belong in the app. Permission requests remain
+limited to the explicit Settings enable action.
+
+The controller validates the version-2 environment/account/binding/activation/expiry envelope
+before processing a receipt or tap. Occurrence timestamps allow at most 30 seconds of device
+clock skew; expiry stays strict and the envelope lifetime must remain exactly 24 hours. Reading the affected Group refreshes quietly; other allowed
+receipts show only Splitbook and the fixed generic Expense text. Receipts retire affected
+financial saved copies through the existing controller ownership and never modify money.
+
+Warm and cold taps wait for restoration and read current authorized Group Activity. They do
+not look up a missing Expense for editing or record a payment. Forms and unresolved writes keep
+their contents; a valid tap is held for explicit later opening. Read failures retain an explicit
+retry. Access denial uses the existing unavailable state and removes inaccessible reads.
+Signing out clears the held destination and native alerts.

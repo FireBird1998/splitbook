@@ -15,6 +15,8 @@ const preferences = z.object({
   payments: z.boolean(),
   revision: z.number().int().nonnegative(),
   activation: z.string().nullable(),
+  binding: z.string().nullable().optional(),
+  expenseActivation: z.string().nullable().optional(),
   expenseCutoff: z.string().nullable(),
   paymentCutoff: z.string().nullable(),
 });

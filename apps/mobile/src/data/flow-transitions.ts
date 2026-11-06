@@ -90,3 +90,10 @@ export const notificationTransitions = {
   blocked: ['loading', 'pending', 'off'],
   error: ['loading', 'pending', 'off'],
 } as const satisfies Transitions<import('./notification-controls').NotificationControls['status']>;
+
+export const notificationOpeningTransitions = {
+  idle: ['held'],
+  held: ['opening', 'idle'],
+  opening: ['held', 'error', 'idle'],
+  error: ['opening', 'held', 'idle'],
+} as const satisfies Transitions<import('./notification-alerts').NotificationOpening['status']>;

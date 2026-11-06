@@ -23,6 +23,9 @@ export default {
   ios: { bundleIdentifier: appIdentifier },
   android: {
     package: appIdentifier,
+    ...(process.env.ANDROID_GOOGLE_SERVICES_FILE
+      ? { googleServicesFile: process.env.ANDROID_GOOGLE_SERVICES_FILE }
+      : {}),
     // Off until facebook/react-native#58407 is resolved in the React Native version in use.
     // Opted in, React Native does not forward Back to the app on Android 13–15, so Back leaves
     // the app from every screen, even mid-save.

@@ -1,0 +1,67 @@
+import type { MobileSnapshot } from './types';
+import { z } from 'zod';
+const id = z.string().regex(/^[a-f0-9]{24}$/i);
+export const notificationEnvelope = z
+  .object({
+    version: z.literal(2),
+    kind: z.literal('expense_added'),
+    eventId: id,
+    groupId: id,
+    recordId: id,
+    accountId: id,
+    environment: z.enum(['development', 'staging', 'production']),
+    binding: z.string().uuid(),
+    activation: z.string().uuid(),
+    occurredAt: z.string().datetime(),
+    expiresAt: z.string().datetime(),
+  })
+  .strict();
+export type NotificationEnvelope = z.infer<typeof notificationEnvelope>;
+export interface NotificationOpening {
+  status: 'idle' | 'held' | 'opening' | 'error';
+  message: string;
+}
+export const emptyNotificationOpening = (): NotificationOpening => ({
+  status: 'idle',
+  message: '',
+});
+export function parseNotificationEnvelope(value: unknown, time: number) {
+  // Expo direct FCM data presentation places the JSON envelope in body.
+  let raw = value;
+  try {
+    if (raw && typeof raw === 'object' && 'body' in raw && typeof raw.body === 'string')
+      raw = JSON.parse(raw.body);
+  } catch {
+    return null;
+  }
+  const parsed = notificationEnvelope.safeParse(raw);
+  if (!parsed.success) return null;
+  const event = parsed.data;
+  const occurred = Date.parse(event.occurredAt),
+    expires = Date.parse(event.expiresAt);
+  // A freshly delivered server event can precede a device clock by a few seconds.
+  // This tolerance never changes the server's expiry or the exact 24-hour lifetime.
+  return occurred <= time + 30_000 && expires > time && expires - occurred === 86_400_000
+    ? event
+    : null;
+}
+
+/** Read-only routes may contain protected sheets; both commands and the action banner use this guard. */
+export function notificationTaskProtected(snapshot: MobileSnapshot): boolean {
+  return (
+    !['group', 'groups', 'members', 'settings'].includes(snapshot.screen) ||
+    ['uncertain', 'saving'].includes(snapshot.expense.status) ||
+    ['uncertain', 'saving'].includes(snapshot.settlement.status) ||
+    ['uncertain', 'saving'].includes(snapshot.creation.status) ||
+    snapshot.toReview.groupId !== null ||
+    snapshot.toReview.run !== null ||
+    snapshot.sharedDraftCollection.groupId !== null ||
+    snapshot.sharedDraftCollection.busy ||
+    snapshot.tagsOpenFor !== null ||
+    snapshot.currenciesOpenFor !== null ||
+    snapshot.tagManager.edit !== null ||
+    snapshot.tagManager.recovery !== null ||
+    snapshot.tagManager.busy ||
+    snapshot.leave.status !== 'closed'
+  );
+}

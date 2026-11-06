@@ -40,6 +40,7 @@ export function resolveProxyResponse({
   // 1. These routes verify their own credentials. The cron exception is one exact GET.
   if (
     isApiAuth ||
+    (pathname === '/api/notifications/dispatch' && method === 'POST') ||
     pathname === '/api/mcp' ||
     (pathname === '/api/cron/exchange-rates' && method === 'GET') ||
     pathname.startsWith('/.well-known/') ||

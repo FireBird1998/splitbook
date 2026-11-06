@@ -2349,7 +2349,7 @@ New installations and new account/session bindings start off. Explicit opt-in de
 categories on. Each enabling or category off-to-on transition confirms a new activation
 generation and server cutoff; preferences are independent per installation across Groups.
 Responses contain `available`, `enabled`, `expenseUpdates`, `payments`, `revision`,
-`activation`, `expenseCutoff` and `paymentCutoff`. They never contain tokens or ownership
+`binding`, `activation`, `expenseActivation`, `expenseCutoff` and `paymentCutoff`. They never contain tokens or ownership
 proofs. A previous account's binding is returned as off to another account on the same
 installation. Installation ownership proof is still required; revisions remain monotonic
 across binding changes so older updates cannot overwrite newer bindings.
@@ -2372,4 +2372,45 @@ generation, not an instruction to replay another category. Later delivery slices
 `expenseCutoff` for Expense events and `paymentCutoff` for Payments; the unchanged category
 keeps its existing cutoff. Rechecking or replacing older-generation work must retain accepted
 event/installation history so a new preference generation cannot resend an accepted event.
-No event projection or delivery is introduced by these device controls.
+The Expense delivery generation `expenseActivation` changes only when Expense alerts are enabled
+or re-enabled. An unrelated Payments transition cannot resend an accepted Expense alert.
+
+## First Expense-added Android alert
+
+Manual Expense creation and saving a reviewed Draft capture the validated involved members,
+excluding the actor, in the financial commit's private recoverable Activity intent. Activity
+publication copies that immutable context and acknowledges the intent independently of FCM.
+Preparing or reviewing Drafts sends nothing. Legacy Activity without captured context is
+ineligible; public Activity, financial reads and exports omit the private context.
+
+Both `ANDROID_NOTIFICATIONS_ENABLED=true` and
+`ANDROID_NOTIFICATION_SENDS_ENABLED=true` are required to send. Both remain off until owner
+acceptance. The direct FCM adapter uses Google Application Default Credentials through the
+supported Google authentication library and an explicitly configured `FCM_PROJECT_ID`.
+Credential provisioning, scheduler setup and rollout require the separate owner setup.
+
+Newly published events schedule bounded post-response dispatch. An explicit
+`POST /api/notifications/dispatch` also runs one bounded pass; it requires
+`Authorization: Bearer <NOTIFICATION_DISPATCH_SECRET>` with a dedicated secret of at least
+32 bytes. No request body or query parameters are accepted. Responses contain only
+`considered`, `accepted`, `skipped` and `failed` counts. It creates no financial writes.
+The pass considers at most 100 events and 100 deliveries, sends sequentially within 20 seconds,
+and starts no FCM request with fewer than ten seconds of invocation budget remaining.
+Provider work, including credential lookup, is capped at 15 seconds and the remaining budget.
+An environment cursor prevents already considered older pages from starving newer work.
+An indexed identity lookup excludes terminal and in-flight device deliveries before the device
+limit, so an accepted prefix cannot starve a later installation. Pending work and expired claims
+remain eligible.
+Budget exhaustion before provider I/O preserves pending work. Autonomous retries and recovery
+are deferred to the recovery ticket; accepted and uncertain outcomes are never resent here.
+
+Immediately before FCM, the server rechecks current membership, persisted session, binding,
+Expense preferences, activation cutoff, kill switches and event expiry. Eligible delivery
+identity includes event, environment, installation, binding and Expense activation. FCM data
+contains generic `title` and `message`, `channelId`, and a JSON version-2 envelope in `body`.
+The envelope carries event, recipient, Group and record identities, environment, binding,
+activation, occurrence and expiry. It contains no names, amounts, descriptions or credentials.
+A fixed generic FCM `notification` title/body and Android channel accompany the data so Expo
+SDK 58 invokes its foreground handler. Android allows at most 30 seconds of occurrence clock
+skew, while checking the exact 24-hour envelope lifetime and strict expiry.
+The remaining FCM TTL never extends the event's 24-hour lifetime.

@@ -447,6 +447,7 @@ export interface GroupCurrenciesState {
 
 export interface MobileSnapshot {
   notifications: import('./notification-controls').NotificationControls;
+  notificationOpening: import('./notification-alerts').NotificationOpening;
   /** Account → Connected assistants (#622): its list, Saved copy and Disconnect. */
   assistants: AssistantsState;
   tagManager: TagManagerState;

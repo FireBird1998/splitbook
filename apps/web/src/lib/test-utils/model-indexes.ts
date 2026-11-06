@@ -13,6 +13,11 @@ export const MODEL_INDEXES = {
   activities: [
     id,
     { name: 'group_1_createdAt_-1__id_-1', key: { group: 1, createdAt: -1, _id: -1 } },
+    {
+      name: 'notificationContext.version_1__id_1_createdAt_1',
+      key: { 'notificationContext.version': 1, _id: 1, createdAt: 1 },
+      partialFilterExpression: { 'notificationContext.version': 2 },
+    },
   ],
   expenses: [
     id,

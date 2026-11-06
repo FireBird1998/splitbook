@@ -1,3 +1,5 @@
+import { notificationTaskProtected } from './src/data/notification-alerts';
+import { attachNotificationCallbacks } from './src/notification-callbacks';
 import type { ScrollViewInstance, ViewInstance } from 'react-native';
 import { TagManager } from './src/ui/tag-manager';
 import { GroupCurrencies } from './src/ui/group-currencies';
@@ -150,6 +152,7 @@ export default function App() {
       <ThemeContext.Provider value={getSemanticTokens(mode)}>
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
         <SplitBook />
+        <NotificationOpening />
       </ThemeContext.Provider>
     </SafeAreaProvider>
   );
@@ -173,6 +176,14 @@ function SplitBook() {
       if (url.includes('://expo-development-client/') || url.startsWith('exp+splitbook:')) return;
       void start.restored.then(() => controller.openInvitation(url));
     };
+    let stopNotifications: (() => void) | undefined;
+    let disposed = false;
+    void attachNotificationCallbacks(controller, start.restored)
+      .then((stop) => {
+        if (disposed) stop();
+        else stopNotifications = stop;
+      })
+      .catch(() => undefined);
     const links = Linking.addEventListener('url', ({ url }) => openLink(url));
     void Linking.getInitialURL().then((url) => {
       if (url && url !== start.lastLink) openLink(url);
@@ -191,6 +202,8 @@ function SplitBook() {
       return false;
     });
     return () => {
+      disposed = true;
+      stopNotifications?.();
       appState.remove();
       links.remove();
       back.remove();
@@ -1654,3 +1667,24 @@ const ExpenseScreen = memo(function ExpenseScreen() {
     </>
   );
 });
+
+function NotificationOpening() {
+  const state = useMobileSnapshot(
+    controller,
+    (snapshot) => ({
+      opening: snapshot.notificationOpening,
+      protected: notificationTaskProtected(snapshot),
+    }),
+    sameSelection,
+  );
+  if (!['held', 'error'].includes(state.opening.status) || state.protected) return null;
+  return (
+    <View style={{ padding: 12 }}>
+      <Copy>{state.opening.message}</Copy>
+      <Button
+        label={state.opening.status === 'error' ? 'Retry opening update' : 'Open update'}
+        onPress={() => void controller.openPendingNotification()}
+      />
+    </View>
+  );
+}
