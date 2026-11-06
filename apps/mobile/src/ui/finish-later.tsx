@@ -19,7 +19,10 @@ export function FinishLater({ controller }: { controller: MobileController }) {
     controller,
     (snapshot) => ({
       editor: snapshot.expense,
-      offline: snapshot.offline.active || snapshot.toReview.offline,
+      // Offline as Finish later decides it (`keepExpenseAsSharedDraft`): the app's offline state
+      // and the connection, not To review's read, which isn't read again while the form is open
+      // and still said offline after Try again verified the Group online (#927).
+      offline: snapshot.offline.active,
       count:
         snapshot.toReview.read.groups.find((group) => group.groupId === snapshot.expense.groupId)
           ?.count ?? 0,

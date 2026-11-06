@@ -68,7 +68,7 @@ import {
   type BadgeTone,
   type Reveal,
 } from './compact';
-import { WhoOwesWhat, amountPair, sharesDifferNote } from './expense-form';
+import { WhoOwesWhat, allocationStacked, amountPair, sharesDifferNote } from './expense-form';
 import { RefreshStatus } from './financial-views';
 import type { MobileExpense } from '../data/types';
 import { savingNeedsConnection } from './offline-notice';
@@ -644,9 +644,10 @@ export interface RecordOutline {
   badge: { label: string; tone: BadgeTone } | null;
   /**
    * The people in Who owes what, the member first, with what each paid (null for nothing, shown
-   * as "–") and their share, as the record writes them.
+   * as "–") and their share, as the record writes them, each named as it names them ("You" for
+   * the member): a long name's word puts the amounts under every name (#926).
    */
-  people: { paid: string | null; share: string }[];
+  people: { name: string; paid: string | null; share: string }[];
   /** An equal split whose shares differ by the smallest unit: its note follows the people. */
   sharesDiffer: boolean;
   /** A Category row follows Who owes what. */
@@ -665,8 +666,8 @@ const typicalRecord: RecordOutline = {
   amount: '₹2,400.00',
   badge: { label: 'You lent Sam ₹1,200.00', tone: 'positive' },
   people: [
-    { paid: '₹2,400.00', share: '₹1,200.00' },
-    { paid: null, share: '₹1,200.00' },
+    { name: 'You', paid: '₹2,400.00', share: '₹1,200.00' },
+    { name: 'Sam', paid: null, share: '₹1,200.00' },
   ],
   sharesDiffer: false,
   category: false,
@@ -722,6 +723,10 @@ export function recordOutline(expense: MobileExpense, currentUserId?: string): R
             tone: positionTone(position),
           },
     people: people.map((id) => ({
+      name:
+        id === currentUserId
+          ? 'You'
+          : (everyone.find((user) => user.id === id)?.name ?? 'Historical member'),
       paid: paid.has(id) ? money(paid.get(id)!) : null,
       share: money(share.get(id) ?? 0),
     })),
@@ -761,10 +766,14 @@ export function ExpenseRecordSkeleton({
       </SkeletonOf>
     );
   const theme = useTheme();
-  const large = useLargeText();
-  const { width } = useWindowDimensions();
-  // As Who owes what decides: amounts sit under each name at large text or on a narrow screen.
-  const stacked = large || width < 360;
+  const { width, fontScale } = useWindowDimensions();
+  // As Who owes what decides: amounts sit under each name at large text, on a narrow screen, or
+  // beside a word of a name too wide for the room they leave (#926).
+  const stacked = allocationStacked(
+    record.people.map(({ name }) => name),
+    width,
+    fontScale,
+  );
   // As Who owes what shows them: three, then Show all, past four people.
   const shown = record.people.length > 4 ? record.people.slice(0, 3) : record.people;
   const history = record.changed ? 2 : 1;

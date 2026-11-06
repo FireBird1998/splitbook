@@ -112,9 +112,9 @@ export const breakAfterHyphens = (text: string) =>
  */
 export function widestSemiboldWord(text: string): number | null {
   let widest = 0;
-  for (const word of breakAfterHyphens(text).split(/[\s\u200b]+|(?<=\/)(?=\p{L})/u)) {
+  for (const word of lineWords(text)) {
     let width = 0;
-    for (const character of word.normalize('NFD').replace(/\p{M}/gu, '')) {
+    for (const character of word) {
       const advance = outfitSemiboldAdvance(character);
       if (advance === undefined) return null;
       width += advance;
@@ -123,6 +123,27 @@ export function widestSemiboldWord(text: string): number | null {
   }
   return widest;
 }
+
+/**
+ * The widest word of `text` in Outfit Regular, the face of body text, in ems, broken as
+ * `widestSemiboldWord` breaks it, with the kerning that widens it (`outfitWidth`). Null when a
+ * character's width isn't known here (#926).
+ */
+export function widestRegularWord(text: string): number | null {
+  let widest = 0;
+  for (const word of lineWords(text)) {
+    const width = outfitWidth(word);
+    if (width === null) return null;
+    widest = Math.max(widest, width);
+  }
+  return widest;
+}
+
+/** `text`'s words as its lines break them, each accented letter as its letter (#921). */
+const lineWords = (text: string) =>
+  breakAfterHyphens(text)
+    .split(/[\s\u200b]+|(?<=\/)(?=\p{L})/u)
+    .map((word) => word.normalize('NFD').replace(/\p{M}/gu, ''));
 
 /**
  * A text's strings with their breaks after hyphens (`breakAfterHyphens`), those of the texts and

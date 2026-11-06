@@ -10,7 +10,14 @@ import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { expenseMoney, type ExpenseDraft } from '../data/expense-draft';
 import { ThemeContext } from './theme';
 import { setWindow } from '../test-utils/native';
-import { findHosts, flatten, layoutHeight, unreadText, wordsOf } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  layoutHeight,
+  unbroken,
+  unreadText,
+  wordsOf,
+} from '../test-utils/layout';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { formatCurrency } from '@splitbook/shared/currency';
 
@@ -133,6 +140,56 @@ describe('Who owes what', () => {
     expect(text(root).match(/Paid/g)).toHaveLength(3);
     for (const amount of amounts(root)) expect(amount.lines || 0).toBe(0);
   });
+
+  // #926: at 100% on a 412 dp phone, a name beside Paid and Share has 126 dp, and
+  // "Venkataraghavan-" needs 129 dp in Outfit: Android broke it inside the word, "Priyamvada Venk /
+  // ataraghavan-S…". A name with a word wider than that room puts the amounts under every name, as
+  // at large text, so it breaks only at a space or after its hyphen. Before the amount too: the
+  // table keeps its height when the amount comes (#911).
+  it.each([412, 360])(
+    'puts Paid and Share under each name when a word of a name doesn’t fit beside them, %sdp at 1× text (#926)',
+    (width) => {
+      setWindow({ width, fontScale: 1 });
+      const long = 'Priyamvada Venkataraghavan-Subramaniam';
+      const members = ids.slice(0, 3);
+      const named = (id: string) => (id === ids[1] ? long : people[ids.indexOf(id)]!);
+      const render = (value: ExpenseDraft, waiting: boolean) => {
+        act(() => {
+          renderer?.unmount();
+          renderer = create(
+            <WhoOwesWhat
+              draft={value}
+              allocation={waiting ? null : expenseMoney(value)}
+              problem="Enter a valid amount to see who owes what."
+              waiting={waiting}
+              name={named}
+              currentUserId={ids[0]}
+              money={(minor) => `₹${(minor / 100).toFixed(2)}`}
+            />,
+          );
+        });
+        return renderer!.root;
+      };
+      const card = width - 32;
+      for (const waiting of [true, false]) {
+        const root = render(draft(waiting ? '' : '90.00', members), waiting);
+        // No column headings: each row labels its own amounts.
+        expect(text(root).match(/Paid/g)).toHaveLength(3);
+        const name = root.find(
+          (node) => isHost(node, 'Text') && unbroken(wordsOf(node as never)) === long,
+        );
+        // The name may wrap: no line limit cuts it.
+        expect(name.props.numberOfLines).toBeUndefined();
+        expect(unreadText(renderer!.toJSON() as ReactTestRendererJSON, 1, card)).toEqual([]);
+      }
+      const filled = layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, 1, card);
+      render(draft('', members), true);
+      expect(layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, 1, card)).toBe(filled);
+      // Everyday names keep their columns.
+      table(draft('90.00', members));
+      expect(text(renderer!.root).match(/Paid/g)).toHaveLength(1);
+    },
+  );
 
   // #911: the table sits above Category and notes, so typing the amount mustn't move Notes. At
   // 200% a longer figure can wrap its own line, as any amount's length can; that is QA's to shoot.
