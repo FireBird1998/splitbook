@@ -2335,3 +2335,41 @@ Documented in earlier drafts but absent from the codebase:
   either Zod schema, so no request can populate it. See
   [`features/receipts.md`](features/receipts.md).
 - **`GET /api/groups/[id]/balances/simplified`** — folded into `/balances`.
+
+## Android notification device controls
+
+`GET /api/notifications/device?installationId=<uuid>` reads this phone's confirmed controls.
+It requires `X-Installation-Key`, the private installation ownership proof.
+`POST /api/notifications/device` accepts `installationId`, `installationKey`, the last
+confirmed integer `revision`, `enabled`, optional `expenseUpdates` and `payments`,
+and a direct Android `token` when enabling. Account, session and environment are derived
+on the server; caller-selected identity fields are refused.
+
+New installations and new account/session bindings start off. Explicit opt-in defaults both
+categories on. Each enabling or category off-to-on transition confirms a new activation
+generation and server cutoff; preferences are independent per installation across Groups.
+Responses contain `available`, `enabled`, `expenseUpdates`, `payments`, `revision`,
+`activation`, `expenseCutoff` and `paymentCutoff`. They never contain tokens or ownership
+proofs. A previous account's binding is returned as off to another account on the same
+installation. Installation ownership proof is still required; revisions remain monotonic
+across binding changes so older updates cannot overwrite newer bindings.
+
+Every response is `Cache-Control: private, no-store`. Authentication bypasses the signed
+cookie cache and writes fence against live persisted session revocation. An invalid session
+gets 401, a mismatched installation proof gets 403, a stale revision gets 409, and invalid
+schema input gets the standard 422 validation envelope. Opt-in requires the off-by-default
+`ANDROID_NOTIFICATIONS_ENABLED=true` server switch; turning off remains permitted.
+Registrations expire with their session, independently of asynchronous TTL deletion.
+These endpoints write only notification/session control state, never financial records.
+
+The availability switch is separate from confirmed consent: a previously enabled binding
+still returns its persisted preferences with `available: false` while the feature is paused.
+Clients must not interpret `enabled` alone as effective delivery permission. Disabling remains
+permitted while paused; Settings shows the feature as unavailable and retains Android settings.
+
+The shared `activation` changes on any category off-to-on transition. It is an authorization
+generation, not an instruction to replay another category. Later delivery slices must use
+`expenseCutoff` for Expense events and `paymentCutoff` for Payments; the unchanged category
+keeps its existing cutoff. Rechecking or replacing older-generation work must retain accepted
+event/installation history so a new preference generation cannot resend an accepted event.
+No event projection or delivery is introduced by these device controls.

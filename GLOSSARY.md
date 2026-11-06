@@ -99,3 +99,7 @@ _Avoid_: live rate, guaranteed rate
 **Custom rate**:
 The rate the member chooses in place of a Suggested rate. The Settlement retains both. When no suggestion was available, the rate is entered instead; the record says that no rate was suggested.
 _Avoid_: corrected rate, official rate
+
+**Notification**:
+An optional alert on one Android phone about a recorded Expense or Settlement change. It is separate from Activity and never records a financial change. Consent and preferences belong to that phone and account.
+_Avoid_: payment confirmation, financial action, notification inbox

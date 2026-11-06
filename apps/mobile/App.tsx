@@ -463,6 +463,7 @@ function TaskScreen() {
       groups: snapshot.groups,
       offline: snapshot.offline,
       assistants: snapshot.assistants,
+      notifications: snapshot.notifications,
       feedback: refreshFeedback(snapshot),
     }),
     (a, b) =>
@@ -598,6 +599,19 @@ function TaskScreen() {
           )}
           {state.screen === 'settings' ? (
             <SettingsScreen
+              notifications={
+                process.env.EXPO_PUBLIC_ANDROID_NOTIFICATIONS_ENABLED === 'true'
+                  ? {
+                      state: state.notifications,
+                      onEnable: () => void controller.enableNotifications(),
+                      onDisable: () => void controller.disableNotifications(),
+                      onCategory: (category, value) =>
+                        void controller.setNotificationCategory(category, value),
+                      onRetry: () => void controller.retryNotifications(),
+                      onAndroidSettings: () => void controller.openNotificationSettings(),
+                    }
+                  : undefined
+              }
               user={state.auth.user!}
               appearance={preference.mode}
               onAppearanceChange={(mode) => void appearance.select(mode)}

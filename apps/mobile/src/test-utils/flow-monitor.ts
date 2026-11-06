@@ -5,6 +5,7 @@ import {
   settlementTransitions,
   creationTransitions,
   leaveTransitions,
+  notificationTransitions,
 } from '../data/flow-transitions';
 
 const tables = {
@@ -12,6 +13,7 @@ const tables = {
   settlement: settlementTransitions,
   creation: creationTransitions,
   leave: leaveTransitions,
+  notifications: notificationTransitions,
 };
 const monitored = new Set<ReturnType<typeof monitorFlows>>();
 
@@ -44,7 +46,7 @@ export function monitorFlows(controller: MobileController) {
   }
   const stop = controller.subscribe(() => {
     const next = controller.getSnapshot();
-    for (const flow of ['expense', 'settlement', 'creation', 'leave'] as const) {
+    for (const flow of ['expense', 'settlement', 'creation', 'leave', 'notifications'] as const) {
       const from = previous[flow].status,
         to = next[flow].status;
       if (from === to) continue;

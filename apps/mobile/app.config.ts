@@ -43,6 +43,7 @@ export default {
   // The Google Expo plugin configures Firebase/iOS, neither needed for this Android beta.
   plugins: [
     'expo-secure-store',
+    'expo-notifications',
     'expo-font',
     'expo-sqlite',
     'expo-status-bar',

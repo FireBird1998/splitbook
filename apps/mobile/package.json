@@ -16,6 +16,7 @@
     "expo-dev-client": "~58.0.14",
     "expo-font": "~58.0.9",
     "expo-linear-gradient": "~58.0.3",
+    "expo-notifications": "~58.1.8",
     "expo-secure-store": "~58.0.2",
     "expo-splash-screen": "~58.0.11",
     "expo-sqlite": "~58.0.13",
@@ -66,7 +67,8 @@
     "verify:tags": "node --import tsx scripts/verify-tag-management.ts",
     "verify:all": "node scripts/verify-all.mjs",
     "build:staging": "node scripts/build-staging-apk.mjs",
-    "build:production": "node scripts/build-staging-apk.mjs --production"
+    "build:production": "node scripts/build-staging-apk.mjs --production",
+    "verify:notifications": "node --import tsx scripts/verify-notifications.ts"
   },
   "private": true
 }

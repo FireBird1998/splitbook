@@ -135,6 +135,8 @@ const unreachable = (kind: 'network' | 'timeout') =>
 const gatewayStatuses = [502, 503, 504];
 
 export interface RequestOptions {
+  /** Private installation ownership proof, never part of a URL or saved copy. */
+  installationKey?: string;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** Sent as `X-Splitbook-Revision`: the revision an edit or delete was made against. */
   revision?: number;
@@ -357,6 +359,7 @@ export function createTransport({
         method: options.method ?? 'GET',
         headers: {
           Accept: 'application/json',
+          ...(options.installationKey ? { 'X-Installation-Key': options.installationKey } : {}),
           Origin: authOrigin,
           ...(options.body === undefined && options.serializedBody === undefined
             ? {}

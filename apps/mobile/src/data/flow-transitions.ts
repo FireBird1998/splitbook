@@ -78,3 +78,15 @@ export const leaveTransitions = {
   refused: ['closed', 'checking', 'leaving'],
   error: ['closed', 'checking', 'leaving'],
 } as const satisfies Transitions<LeaveGroupState['status']>;
+
+/** Notification preferences are confirmed only by authenticated backend replies. */
+export const notificationTransitions = {
+  off: ['loading', 'pending', 'offline'],
+  loading: ['ready', 'blocked', 'offline', 'error', 'off'],
+  pending: ['ready', 'denied', 'blocked', 'offline', 'error', 'off'],
+  ready: ['loading', 'pending', 'offline', 'off'],
+  offline: ['loading', 'pending', 'off'],
+  denied: ['loading', 'pending', 'off'],
+  blocked: ['loading', 'pending', 'off'],
+  error: ['loading', 'pending', 'off'],
+} as const satisfies Transitions<import('./notification-controls').NotificationControls['status']>;

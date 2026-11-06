@@ -1,3 +1,4 @@
+import { emptyNotifications, notificationControls } from './notification-controls';
 import {
   groupCurrenciesPath,
   groupRatesPath,
@@ -376,6 +377,7 @@ const keptWorkUnreadable =
 function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
   return {
     auth,
+    notifications: emptyNotifications(),
     sharedDraftCollection: emptySharedDraftCollection(),
     assistants: emptyAssistants(),
     tagManager: emptyTagManager(),
@@ -757,6 +759,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const invalidate = () => {
     generation += 1;
+    notifications.reset();
     offlineSession = false;
     savedCopies.retire();
     untrusted.clear();
@@ -1155,6 +1158,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     },
   });
   const { request, verifyGoogleBackend, revokeDetached } = transport;
+  const notifications = notificationControls({
+    native: dependencies.notifications,
+    owner: () => generation,
+    current,
+    authenticated: () => snapshot.auth.status === 'authenticated',
+    online: () => !offlineSession && !snapshot.offline.active && onlineManager.isOnline(),
+    state: () => snapshot.notifications,
+    publish: (notifications) => publish({ ...snapshot, notifications }),
+    request,
+  });
 
   /**
    * A read answered: from the server (`saved` undefined), or from this device's copy saved at
@@ -5747,6 +5760,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openSettings = () => {
     if (snapshot.auth.status !== 'authenticated' || expenseNavigationBlocked()) return;
     navigate({ screen: 'settings' });
+    void notifications.read();
     // Whether the server has assistants switched on decides Account's Connected assistants.
     void assistantsData.read();
   };
@@ -8026,6 +8040,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     signInWithGoogle,
     startCreate,
     openSettings,
+    refreshNotifications: notifications.read,
+    enableNotifications: notifications.enable,
+    disableNotifications: notifications.disable,
+    setNotificationCategory: notifications.category,
+    retryNotifications: notifications.retry,
+    openNotificationSettings: notifications.openSettings,
     openAssistants,
     askDisconnectAssistant: (id: string) => assistantsData.ask(id),
     cancelDisconnectAssistant: () => assistantsData.cancel(),

@@ -98,6 +98,8 @@ export function isolatedEnv() {
     AUTH_SECRET: 'native-ticket-50-isolated-fictional-test-secret-not-a-real-account-secret',
     AUTH_RATE_LIMIT_ENABLED: 'false',
     PERSISTENT_DRAFTS_ENABLED: 'true',
+    ANDROID_NOTIFICATIONS_ENABLED: 'true',
+    MOBILE_APP_ENV: 'development',
     NEXT_PUBLIC_APP_URL: origin,
     MONGODB_URI: mongoUri,
     ...targetVariables(target),

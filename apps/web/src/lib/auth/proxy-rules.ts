@@ -57,7 +57,12 @@ export function resolveProxyResponse({
   // 4. Anonymous API calls get the same 401 JSON shape the route helpers use
   //    (see api-response.ts); API clients cannot follow a redirect.
   if (isApi && !hasSessionCookie) {
-    return NextResponse.json(UNAUTHORIZED_BODY, { status: 401 });
+    return NextResponse.json(UNAUTHORIZED_BODY, {
+      status: 401,
+      ...(pathname === '/api/notifications/device'
+        ? { headers: { 'Cache-Control': 'private, no-store' } }
+        : {}),
+    });
   }
 
   // 5. Every other anonymous page visit goes to sign-in, remembering where it was headed.

@@ -1,3 +1,4 @@
+import { createNotificationNative } from './notifications-native';
 import { createSettlementAttemptStore } from './data/settlement-storage';
 import { randomUUID, getRandomBytes } from 'expo-crypto';
 import { createExpenseDraftStore } from './data/expense-storage';
@@ -84,6 +85,10 @@ const offlineIdentity = {
   clear: () => SecureStore.deleteItemAsync(offlineIdentityKey),
 };
 export const controller = createMobileController(controllerConfig, {
+  notifications:
+    process.env.EXPO_PUBLIC_ANDROID_NOTIFICATIONS_ENABLED === 'true'
+      ? createNotificationNative(controllerConfig.apiBaseUrl)
+      : undefined,
   googleSignIn: config?.googleWebClientId
     ? createGoogleIdentityProvider(
         config.googleWebClientId,

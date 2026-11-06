@@ -277,6 +277,7 @@ export const reactNative = {
   // Android 15: text scales by Android 14's non-linear curves.
   Platform: { OS: 'android', Version: 35 },
   Pressable: 'Pressable',
+  Switch: 'Switch',
   RefreshControl: 'RefreshControl',
   ScrollView: 'ScrollView',
   Share: { share: spies.share },

@@ -1,0 +1,297 @@
+import { describe, expect, it, vi } from 'vitest';
+import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import type { MobileDependencies } from './types';
+const user = {
+  id: 'a00000000000000000000001',
+  name: 'Alex',
+  email: 'alex@example.test',
+  image: null,
+};
+const off = {
+  available: true,
+  enabled: false,
+  expenseUpdates: false,
+  payments: false,
+  revision: 0,
+  activation: null,
+  expenseCutoff: null,
+  paymentCutoff: null,
+};
+const response = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Set-Cookie': 'better-auth.session_token=fictional.signature; Path=/; HttpOnly',
+    },
+  });
+function device() {
+  let confirmed = { ...off };
+  let fail = false;
+  let unreachable = false;
+  let hold: Promise<void> | null = null;
+  let heldRead: Promise<void> | null = null;
+  const requestPermission = vi.fn(async () => 'granted' as const);
+  const clear = vi.fn(async () => {});
+  const writes: unknown[] = [];
+  const notifications = {
+    installation: async () => ({
+      id: '00000000-0000-4000-8000-000000000001',
+      key: 'private-installation-proof-000000000001',
+    }),
+    permission: async () => 'granted' as const,
+    requestPermission,
+    token: async () => 'private-native-token',
+    clear,
+    openSettings: vi.fn(async () => {}),
+  };
+  const fetch: MobileDependencies['fetch'] = async (url, init) => {
+    if (url.includes('demo-persona/sign-in')) return response({ user, token: 'session' }, 200);
+    if (url.includes('get-session'))
+      return response({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
+    if (url.includes('sign-out')) return response({ success: true });
+    if (url.includes('/api/notifications/device')) {
+      if (unreachable) throw new TypeError('Fictional offline boundary');
+      if (init.method !== 'POST' && heldRead) await heldRead;
+      if (init.method === 'POST') {
+        writes.push(JSON.parse(String(init.body)));
+        if (hold) await hold;
+        if (fail) return response({ error: 'Failed' }, 500);
+        const sent = JSON.parse(String(init.body));
+        confirmed = {
+          ...confirmed,
+          ...sent,
+          available: true,
+          expenseUpdates: sent.enabled ? (sent.expenseUpdates ?? true) : false,
+          payments: sent.enabled ? (sent.payments ?? true) : false,
+          revision: confirmed.revision + 1,
+        };
+      }
+      // The real server never returns the native token/proof.
+      const {
+        available,
+        enabled,
+        expenseUpdates,
+        payments,
+        revision,
+        activation,
+        expenseCutoff,
+        paymentCutoff,
+      } = confirmed;
+      return response({
+        data: {
+          available,
+          enabled,
+          expenseUpdates,
+          payments,
+          revision,
+          activation,
+          expenseCutoff,
+          paymentCutoff,
+        },
+      });
+    }
+    if (url.includes('/api/groups')) return response({ data: [] });
+    return response({ data: {} });
+  };
+  const controller = createMobileController(
+    {
+      apiBaseUrl: 'http://localhost:3000',
+      authOrigin: 'http://localhost:3000',
+      developmentPersonaEnabled: true,
+    },
+    {
+      fetch,
+      notifications,
+      credentials: { load: async () => null, save: async () => {}, clear: async () => {} },
+    },
+  );
+  return {
+    controller,
+    notifications,
+    writes,
+    setOffline: (value: boolean) => {
+      unreachable = value;
+    },
+    setFailure: (value: boolean) => {
+      fail = value;
+    },
+    holdRead: (value: Promise<void>) => {
+      heldRead = value;
+    },
+    hold: (value: Promise<void>) => {
+      hold = value;
+    },
+  };
+}
+describe('Settings notification controls at the controller/native seam', () => {
+  it('starts off and never asks permission on launch or Settings read', async () => {
+    const { controller, notifications } = device();
+    await controller.signIn('alex');
+    controller.openSettings();
+    await controller.refreshNotifications();
+    expect(notifications.requestPermission).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(false);
+  });
+  it('explicit enable waits for backend confirmation, keeps tokens private and switches categories independently', async () => {
+    const { controller, notifications, writes, hold } = device();
+    await controller.signIn('alex');
+    let release!: () => void;
+    hold(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const enabling = controller.enableNotifications();
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    expect(controller.getSnapshot().notifications.status).toBe('pending');
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(false);
+    release();
+    await enabling;
+    expect(notifications.requestPermission).toHaveBeenCalledOnce();
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(true);
+    expect(JSON.stringify(controller.getSnapshot())).not.toContain('private-native-token');
+    await controller.setNotificationCategory('expenseUpdates', false);
+    expect(controller.getSnapshot().notifications.confirmed).toMatchObject({
+      expenseUpdates: false,
+      payments: true,
+    });
+    expect(writes).toHaveLength(2);
+  });
+  it('denial never registers a token and offers Android settings', async () => {
+    const { controller, notifications, writes } = device();
+    notifications.requestPermission.mockResolvedValueOnce('denied' as never);
+    await controller.signIn('alex');
+    await controller.enableNotifications();
+    expect(controller.getSnapshot().notifications.status).toBe('denied');
+    expect(writes).toHaveLength(0);
+    await controller.openNotificationSettings();
+    expect(notifications.openSettings).toHaveBeenCalledOnce();
+  });
+  it('backend refusal is distinguishable and Retry confirms the intended preference only after acknowledgement', async () => {
+    const { controller, setFailure } = device();
+    await controller.signIn('alex');
+    setFailure(true);
+    await controller.enableNotifications();
+    expect(controller.getSnapshot().notifications.status).toBe('error');
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(false);
+    setFailure(false);
+    await controller.retryNotifications();
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(true);
+  });
+  it('sign-out clears native state and a late token or reply cannot restore previous account settings', async () => {
+    const { controller, notifications, writes, hold } = device();
+    await controller.signIn('alex');
+    let release!: () => void;
+    hold(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const enabling = controller.enableNotifications();
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    await controller.signOut();
+    release();
+    await enabling;
+    expect(notifications.clear).toHaveBeenCalled();
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(false);
+    expect(controller.getSnapshot().auth.user).toBeNull();
+  });
+
+  it('distinguishes an offline update from a backend refusal without displaying unconfirmed preferences', async () => {
+    const { controller, setOffline } = device();
+    await controller.signIn('alex');
+    setOffline(true);
+    await controller.enableNotifications();
+    expect(controller.getSnapshot().notifications.status).toBe('offline');
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(false);
+    await controller.retryNotifications();
+    expect(controller.getSnapshot().notifications.status).toBe('offline');
+    setOffline(false);
+    await controller.retryNotifications();
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(true);
+  });
+  it('shows current Android OS blocking without another permission request', async () => {
+    const { controller, notifications } = device();
+    await controller.signIn('alex');
+    await controller.enableNotifications();
+    vi.spyOn(notifications, 'permission').mockResolvedValueOnce('blocked' as never);
+    await controller.refreshNotifications();
+    expect(controller.getSnapshot().notifications.status).toBe('blocked');
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(true);
+    expect(notifications.requestPermission).toHaveBeenCalledOnce();
+  });
+  it('drops a native token that arrives after account invalidation without uploading it', async () => {
+    const { controller, notifications, writes } = device();
+    await controller.signIn('alex');
+    let release!: (value: string) => void;
+    vi.spyOn(notifications, 'token').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const enabling = controller.enableNotifications();
+    await vi.waitFor(() => expect(notifications.token).toHaveBeenCalled());
+    await controller.signOut();
+    release('private-late-native-token');
+    await enabling;
+    expect(writes).toHaveLength(0);
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(false);
+  });
+
+  it('confirms category preferences while Android blocks display without registering another token', async () => {
+    const { controller, notifications, writes } = device();
+    await controller.signIn('alex');
+    await controller.enableNotifications();
+    vi.spyOn(notifications, 'permission').mockResolvedValueOnce('blocked' as never);
+    await controller.setNotificationCategory('payments', false);
+    expect(controller.getSnapshot().notifications.confirmed.payments).toBe(false);
+    expect(controller.getSnapshot().notifications.status).toBe('blocked');
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).not.toHaveProperty('token');
+  });
+
+  it('never carries an in-flight Retry intent into a replacement account session', async () => {
+    const { controller, setFailure, writes, holdRead } = device();
+    await controller.signIn('alex');
+    setFailure(true);
+    await controller.enableNotifications();
+    setFailure(false);
+    let release!: () => void;
+    holdRead(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const retry = controller.retryNotifications();
+    await vi.waitFor(() => expect(controller.getSnapshot().notifications.status).toBe('loading'));
+    await controller.signOut();
+    await controller.signIn('alex');
+    release();
+    await retry;
+    expect(writes).toHaveLength(1);
+    expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(false);
+  });
+
+  it('waits for previous native alert cleanup before registering a replacement session', async () => {
+    const { controller, notifications, writes } = device();
+    await controller.signIn('alex');
+    await controller.enableNotifications();
+    let release!: () => void;
+    notifications.clear.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    await controller.signIn('alex');
+    const enabling = controller.enableNotifications();
+    await vi.waitFor(() => expect(controller.getSnapshot().notifications.status).toBe('pending'));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(writes).toHaveLength(1);
+    release();
+    await enabling;
+    expect(writes).toHaveLength(2);
+  });
+});

@@ -247,3 +247,34 @@ Use Android SDK `apksigner verify --print-certs` on the APK. Register its packag
 Android recovery: if this phone cannot store the latest Expense entries, an incoming invitation waits on the form. After the entries are stored, Back opens the invitation; confirmed Save or Discard also opens it. A malformed link waits in the same way. Stored drafts and unconfirmed saves still allow opening invitations, and joining always requires an explicit tap.
 
 A Group’s own 403/404, or a response without the signed-in member, removes its saved views. A draft or unconfirmed Expense/payment stays blocked while its form is open. Leaving removes its device records in order after pending draft writes; Discard warns first for a save or payment that may already be recorded. Cleanup intent is recorded separately on refusal; a failed device removal keeps the record and shows an error without signing out. Startup retries deletion before restoring records, and a still-pending cleanup keeps them hidden and locked. A verified Groups list that omits a stored financial record’s Group checks that Group once: an archived Group counts as lost, as its own refusal would (#578), and offline/server/session-check failures delete nothing. A save to an archived Group, refused with 409 `GROUP_ARCHIVED`, says the Group was archived and blocks the form the same way. If access returns after cleanup, check the Group’s Expenses and payments before saving again.
+
+## Per-phone notification controls (#839)
+
+Notifications default off. The Settings controls are included only when
+`EXPO_PUBLIC_ANDROID_NOTIFICATIONS_ENABLED=true`; the backend separately requires
+`ANDROID_NOTIFICATIONS_ENABLED=true` for opt-in. Both stay unset in production until
+owner acceptance. The isolated fictional verification backend enables the server controls.
+
+Only **Enable notifications** requests Android permission. After Android allows it, the
+controller obtains a direct FCM token and waits for the authenticated backend to confirm
+opt-in. Expense updates and Payments initially start on and can then change independently
+on this phone across its Groups. The snapshot keeps the last confirmed values during a
+pending or failed update. Retry first reconciles the current backend revision; it never
+prompts for permission. Android settings remain available when permission is blocked or
+the backend cannot be reached.
+
+An installation identifier and private ownership proof persist in SecureStore per backend.
+They are device identity, not consent. Tokens are obtained for a live operation and never
+enter snapshots, saved copies or device storage. A new account/session starts off; native
+displayed and scheduled alerts are cleared when an account is invalidated. The registration
+API bypasses Better Auth's cookie cache and fences updates against persisted session
+revocation. Activation generations and per-category server cutoffs prevent later slices
+from sending historical changes when alerts are enabled again.
+
+Run `pnpm mobile verify:notifications` against the isolated `MOBILE_VERIFY_URL` for the
+two-phone Settings/controller/authenticated-HTTP journey. It substitutes only the native
+permission/token boundary and writes no financial records. Controller, rendered Settings
+and Expo boundary tests cover denial, OS blocking, offline/backend failures, confirmation,
+late results and cleanup. This slice has no financial event producer or delivery transport.
+Real Android permission/dialog and FCM configuration checks remain platform acceptance;
+Node tests and browser checks cannot establish those native behaviors.
