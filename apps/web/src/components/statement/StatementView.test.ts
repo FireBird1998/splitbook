@@ -629,3 +629,53 @@ it('breaks the Category · Tag caption only between words, never inside one (#92
     expect(caption.value('word-break')).toBeUndefined();
   }
 });
+
+// #928: below 21 characters a name stayed on one line beside its amount, so "Venkataraghavans"
+// beside "₹51,333.50" in each payer's line pushed the Expenses table past the A4 page. A line of
+// 25 characters or more, a name with its written amount, may wrap: the name between its words,
+// and the amount under it, at the column's right edge. An everyday line stays whole (#646).
+it('lets a long name-and-amount line wrap, and keeps an everyday one whole (#928)', () => {
+  const name = 'Venkataraghavans';
+  const html = tripHtml(
+    buildStatement(
+      {
+        ...TRIP,
+        members: [TRIP.members[0], { id: SAM, name }],
+        names: { ...TRIP.names, [SAM]: name },
+        expenses: [
+          {
+            ...expense('e1', '2026-09-18', 'Island guesthouse', 10266700),
+            paidBy: [
+              { userId: ALEX, amountMinor: 5133350 },
+              { userId: SAM, amountMinor: 5133350 },
+            ],
+          },
+        ],
+      },
+      { timeZone: 'Asia/Kolkata' },
+    ),
+  );
+  expect(text(html)).toContain(
+    `Alex Rivera ₹51,333.50 ${name} ₹51,333.50 ₹102,667.00 Alex Rivera ₹51,333.50 ${name} ₹51,333.50`,
+  );
+  const lines = stylesOf(html, 'statement-line');
+  const names = stylesOf(html, 'statement-name');
+  // Paid by's two payers and Share's two people, in order: Alex, the long name, Alex, the long name.
+  expect(names.map((style) => style.value('white-space'))).toEqual([
+    'nowrap',
+    'normal',
+    'nowrap',
+    'normal',
+  ]);
+  expect(lines.map((style) => style.value('flex-wrap'))).toEqual([
+    undefined,
+    'wrap',
+    undefined,
+    'wrap',
+  ]);
+  // A wrapped amount keeps to the column's right edge.
+  for (const line of [lines[1], lines[3]]) {
+    const rules = line.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('');
+    expect(rules).toMatch(/>\.statement-amount\{[^}]*margin-left:auto/);
+  }
+});

@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type TestInfo } from '@playwright/test';
-import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
+import { DEMO_PERSONAS, DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { enterAsPersona, isPhone, type PersonaKey } from '../playwright/fixtures';
 
 test('statement print uses clean A4 light colours in every theme', async ({ page }) => {
@@ -262,5 +262,102 @@ test('on screen the statement’s tables fit the A4 sheet at 1280 and at md', as
       tables.filter((table) => table.scrolls || table.cut),
       `${width}px`,
     ).toEqual([]);
+  }
+});
+
+// #928: a name beside its amount stayed on one line until the name reached 21 characters, so a
+// shorter long name, "Venkataraghavans", beside "₹51,333.50" in each of three payers' lines
+// pushed the Expenses table past the A4 page, where print cuts Share off. A line that long may
+// wrap: the name between its words and after a hyphen, never inside a word, and its amount under
+// it. Priya renames herself for the test, and her name is put back after it.
+test('a long name beside its amount keeps the Expenses table on the A4 page', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.skip(isPhone(testInfo), 'Print is checked once, at A4 width.');
+  await enterAsPersona(page, 'alex');
+  const response = await page.request.post('/api/groups', {
+    data: { name: 'Long names statement', category: 'trip', defaultCurrency: 'INR' },
+  });
+  expect(response.status()).toBe(201);
+  const id = (await response.json()).data._id;
+  const invite = await page.request.post(`/api/groups/${id}/invite-link`, { data: {} });
+  expect(invite.status(), await invite.text()).toBe(201);
+  const code = (await invite.json()).data.inviteCode;
+  const sam = await personaPage(browser, testInfo, 'sam');
+  const priya = await personaPage(browser, testInfo, 'priya');
+  for (const member of [sam, priya]) {
+    const joined = await member.request.post(`/api/join/${code}`);
+    expect(joined.status(), await joined.text()).toBe(201);
+  }
+  await sam.context().close();
+  // Each pays their own equal share, so the test leaves everyone settled.
+  const everyone = [DEMO_PERSONA_IDS.alex, DEMO_PERSONA_IDS.sam, DEMO_PERSONA_IDS.priya];
+  const expense = await page.request.post(`/api/groups/${id}/expenses`, {
+    data: {
+      description: 'Houseboat for the whole group, all meals and two nights on the backwaters',
+      date: '2026-09-15',
+      amount: 154000.5,
+      currency: 'INR',
+      category: 'accommodation',
+      tag: 'General',
+      paidBy: everyone.map((user) => ({ user, amount: 51333.5 })),
+      splitMethod: 'equal',
+      splitBetween: everyone.map((user) => ({ user })),
+    },
+  });
+  expect(expense.status(), await expense.text()).toBe(201);
+
+  const rename = async (name: string) => {
+    const renamed = await priya.request.patch('/api/user/profile', { data: { name } });
+    expect(renamed.status(), await renamed.text()).toBe(200);
+  };
+  await page.setViewportSize({ width: A4_CONTENT_WIDTH, height: 1123 });
+  await page.emulateMedia({ media: 'print' });
+  try {
+    for (const name of ['Venkataraghavans', 'Priyamvada Venkataraghavan-Subramaniam']) {
+      await rename(name);
+      await page.goto(`/groups/${id}/statement?tz=Asia%2FKolkata`);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+        'Long names statement · Statement',
+      );
+      const paper = page.locator('.statement-paper');
+      await expect(paper.getByRole('region', { name: 'Expense details' })).toContainText(name);
+      await page.evaluate(() => document.fonts.ready);
+      const misfits = await paper.evaluate((paper, name) => {
+        const found: string[] = [];
+        const right = paper.getBoundingClientRect().right;
+        for (const region of paper.querySelectorAll('.statement-table-region')) {
+          const label = region.getAttribute('aria-label');
+          const table = region.querySelector('table')!;
+          if (region.scrollWidth > region.clientWidth + 1 || table.clientWidth > paper.clientWidth)
+            found.push(`${label} is ${table.clientWidth} px on a ${paper.clientWidth} px page`);
+          for (const amount of region.querySelectorAll('.statement-amount'))
+            if (amount.getBoundingClientRect().right > right + 0.5)
+              found.push(`${label}: “${amount.textContent}” past the page`);
+        }
+        // Where the name breaks onto a new line, the line before ends at a space or a hyphen.
+        const walker = document.createTreeWalker(paper, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (node.textContent !== name) continue;
+          const range = document.createRange();
+          let top: number | undefined;
+          for (let i = 0; i < name.length; i += 1) {
+            range.setStart(node, i);
+            range.setEnd(node, i + 1);
+            const rect = range.getClientRects()[0];
+            if (!rect) continue;
+            if (top !== undefined && rect.top > top + 1 && !/[ -]/.test(name[i - 1]))
+              found.push(`“${name}” breaks inside a word, before “${name.slice(i)}”`);
+            top = rect.top;
+          }
+        }
+        return found;
+      }, name);
+      expect(misfits, name).toEqual([]);
+    }
+  } finally {
+    await rename(DEMO_PERSONAS.find((persona) => persona.key === 'priya')!.name);
+    await priya.context().close();
   }
 });

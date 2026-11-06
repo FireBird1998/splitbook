@@ -10,6 +10,7 @@ import LinearProgress from '@mui/material/LinearProgress';
 import MoneyText from '@/components/common/MoneyText';
 import { getCurrency } from '@splitbook/shared/currency';
 import { displayMajorAmount } from '@splitbook/shared/exact-money';
+import { formatCurrencyWithMinus } from '@splitbook/shared/money';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import ErrorState from '@/components/common/ErrorState';
 import Typography from '@mui/material/Typography';
@@ -24,7 +25,7 @@ import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import { categoryLabel } from '@splitbook/shared/categories';
 import { statementDay, zonedDateTime } from '@splitbook/shared/export-csv';
-import { nameMayWrap } from '@/components/statement/person-name';
+import { lineMayWrap } from '@/components/statement/person-name';
 
 export type PreviewState =
   | { status: 'idle'; message: string }
@@ -127,11 +128,21 @@ function PreviewTable({
  * the card has room, the amount under the name where it hasn't, never cut off (#916). A wrapped
  * amount keeps to the column's right edge with the other figures, and each person is set a
  * little apart, so an amount never reads as the next person's. A single payer has no amount: it
- * is the Expense's Amount, in the next column (#918), and their name keeps to the left. A long
- * name wraps between its words and after a hyphen, never inside a word, so it can't push the
- * columns after it out of the card; an everyday one stays whole, and an amount never wraps (#928).
+ * is the Expense's Amount, in the next column (#918), and their name keeps to the left. In a long
+ * line (lineMayWrap: the name with its written amount) the name wraps between its words and
+ * after a hyphen, never inside a word, so it can't push the columns after it out of the card; an
+ * everyday name stays whole, and an amount never wraps (#928).
  */
-function PersonAmount({ name, children }: { name: string; children?: ReactNode }) {
+function PersonAmount({
+  name,
+  amount,
+  children,
+}: {
+  name: string;
+  /** The amount as written beside the name, if any. */
+  amount?: string;
+  children?: ReactNode;
+}) {
   return (
     <Box
       className="statement-preview-person"
@@ -150,7 +161,7 @@ function PersonAmount({ name, children }: { name: string; children?: ReactNode }
       <Box
         component="span"
         className={PERSON_NAME}
-        sx={{ whiteSpace: nameMayWrap(name) ? 'normal' : 'nowrap' }}
+        sx={{ whiteSpace: lineMayWrap(name, amount) ? 'normal' : 'nowrap' }}
       >
         {name}
       </Box>
@@ -439,7 +450,18 @@ export default function ExportPreviewPanel({
                         const people = (allocations: typeof expense.paidBy, amounts = true) => (
                           <TableCell>
                             {allocations.map((person) => (
-                              <PersonAmount key={person.userId} name={name(person.userId)}>
+                              <PersonAmount
+                                key={person.userId}
+                                name={name(person.userId)}
+                                amount={
+                                  amounts
+                                    ? formatCurrencyWithMinus(
+                                        displayMajorAmount(person.amountMinor, bucket.currency),
+                                        bucket.currency,
+                                      )
+                                    : undefined
+                                }
+                              >
                                 {amounts ? (
                                   <MoneyText
                                     amount={displayMajorAmount(person.amountMinor, bucket.currency)}

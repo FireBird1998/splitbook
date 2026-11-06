@@ -1069,3 +1069,62 @@ it('breaks the Category · Tag caption only between words, never inside one (#92
   expect(caption.value('overflow-wrap')).toBe('normal');
   expect(caption.value('word-break')).toBeUndefined();
 });
+
+// #928: below 21 characters a name stayed on one line beside its amount. A line of 25
+// characters or more, a name with its written amount, lets the name wrap between its words, as
+// the statement does; an everyday line stays whole.
+it('lets the name in a long name-and-amount line wrap, and keeps an everyday one whole (#928)', () => {
+  const name = 'Venkataraghavans';
+  const html = render({
+    status: 'ready',
+    data: {
+      ...csv,
+      format: 'statement',
+      statement: buildStatementPreview(
+        buildStatement(
+          {
+            id: 'maple',
+            name: 'Maple House',
+            theme: 'home',
+            currency: 'INR',
+            members: [
+              { id: 'alice', name: 'Alice Tester' },
+              { id: 'venkat', name },
+            ],
+            names: { alice: 'Alice Tester', venkat: name },
+            tags: [],
+            expenses: [
+              {
+                id: 'stay',
+                date: '2026-09-15',
+                description: 'Houseboat',
+                category: 'accommodation',
+                tag: 'General',
+                currency: 'INR',
+                amountMinor: 10266700,
+                splitMethod: 'equal',
+                paidBy: [
+                  { userId: 'alice', amountMinor: 5133350 },
+                  { userId: 'venkat', amountMinor: 5133350 },
+                ],
+                splitBetween: [
+                  { userId: 'alice', amountMinor: 5133350 },
+                  { userId: 'venkat', amountMinor: 5133350 },
+                ],
+              },
+            ],
+            settlements: [],
+          },
+          { timeZone: 'UTC' },
+        ),
+      ),
+    },
+  });
+  const table = /<table\b[^>]*aria-label="INR first Expenses"[^>]*>([\s\S]*?)<\/table>/.exec(html);
+  expect(text(table![1])).toContain(
+    `Alice Tester ₹51,333.50 ${name} ₹51,333.50 ₹102,667.00 Alice Tester ₹51,333.50 ${name} ₹51,333.50`,
+  );
+  expect(
+    stylesOf(html, 'statement-preview-name').map((style) => style.value('white-space')),
+  ).toEqual(['nowrap', 'normal', 'nowrap', 'normal']);
+});

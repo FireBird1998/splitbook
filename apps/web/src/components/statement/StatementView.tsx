@@ -12,6 +12,7 @@ import TableCell from '@mui/material/TableCell';
 import MoneyText from '@/components/common/MoneyText';
 import { getCurrency } from '@splitbook/shared/currency';
 import { displayMajorAmount } from '@splitbook/shared/exact-money';
+import { formatCurrencyWithMinus } from '@splitbook/shared/money';
 import { getSemanticTokens } from '@/lib/theme/tokens';
 import { statementDay, zonedDateTime } from '@splitbook/shared/export-csv';
 import { categoryLabel } from '@splitbook/shared/categories';
@@ -23,7 +24,7 @@ import {
   type Statement,
 } from '@splitbook/shared/statement';
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
-import { nameMayWrap } from './person-name';
+import { lineMayWrap } from './person-name';
 import { statementSummary } from './statement-summary';
 
 const light = getSemanticTokens('light');
@@ -87,21 +88,40 @@ function Cell({
 }
 
 /**
- * A name beside its amount in Paid by and Share. A long name wraps between its words and after a
- * hyphen, never inside a word, so it can't push Share past the sheet or the page; an everyday
- * one stays on one line, and the amount never wraps (#928). A single
- * payer has no amount: it is the Expense's Amount, in the next column (#918).
+ * A name beside its amount in Paid by and Share. An everyday line stays whole, and the amount
+ * never wraps. A long line (lineMayWrap: the name with its written amount) may wrap, so it can't
+ * push Share past the sheet or the page: the name between its words and after a hyphen, never
+ * inside a word, and the amount under it at the column's right edge (#928). A single payer has
+ * no amount: it is the Expense's Amount, in the next column (#918).
  */
-function PersonAmount({ name, children }: { name: string; children?: ReactNode }) {
+function PersonAmount({
+  name,
+  amount,
+  children,
+}: {
+  name: string;
+  /** The amount as written beside the name, if any. */
+  amount?: string;
+  children?: ReactNode;
+}) {
+  const mayWrap = lineMayWrap(name, amount);
   return (
     <Box
       className="statement-line"
-      sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5, whiteSpace: 'nowrap' }}
+      sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 1.5,
+        whiteSpace: 'nowrap',
+        ...(mayWrap
+          ? { flexWrap: 'wrap', rowGap: 0, '& > .statement-amount': { marginLeft: 'auto' } }
+          : {}),
+      }}
     >
       <Box
         component="span"
         className="statement-name"
-        sx={{ whiteSpace: nameMayWrap(name) ? 'normal' : 'nowrap' }}
+        sx={{ whiteSpace: mayWrap ? 'normal' : 'nowrap' }}
       >
         {name}
       </Box>
@@ -326,6 +346,9 @@ function CurrencySection({
   const name = (id: string) => statement.names[id] ?? 'Former member';
   // A currency Splitbook no longer supports has no position, so no one's figures here (#820).
   const inBalances = !!getCurrency(currency);
+  /** An amount as MoneyText writes it, "₹51,333.50". */
+  const written = (minor: number) =>
+    formatCurrencyWithMinus(displayMajorAmount(minor, currency), currency);
   const amount = (minor: number) => (
     <MoneyText
       className="statement-amount"
@@ -465,7 +488,11 @@ function CurrencySection({
                 </Cell>
                 <Cell kind="people">
                   {row.paidBy.map((person) => (
-                    <PersonAmount key={person.userId} name={name(person.userId)}>
+                    <PersonAmount
+                      key={person.userId}
+                      name={name(person.userId)}
+                      amount={row.paidBy.length > 1 ? written(person.amountMinor) : undefined}
+                    >
                       {row.paidBy.length > 1 ? amount(person.amountMinor) : null}
                     </PersonAmount>
                   ))}
@@ -473,7 +500,11 @@ function CurrencySection({
                 <Cell kind="money">{amount(row.amountMinor)}</Cell>
                 <Cell kind="people">
                   {row.splitBetween.map((person) => (
-                    <PersonAmount key={person.userId} name={name(person.userId)}>
+                    <PersonAmount
+                      key={person.userId}
+                      name={name(person.userId)}
+                      amount={written(person.amountMinor)}
+                    >
                       {amount(person.amountMinor)}
                     </PersonAmount>
                   ))}
