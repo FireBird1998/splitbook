@@ -97,11 +97,37 @@ const checkboxCell = { ...cell, width: 16 + 28, pr: 0, '&:first-of-type': { pl: 
 const checkboxSx = { p: '4px' } as const;
 
 /**
- * Where the table is narrower than this, as beside the side panel on a 1280 px screen, the You
- * column puts "lent" or "owe" above its figure, so every column fits and no figure is cut
- * (#900). Wider, they share a line. Each row of a table reads the same way.
+ * Where the table is narrower than this, as beside the side panel on a 1280 px screen, three
+ * cells put their parts one above the other, so every column fits and no figure is cut: the You
+ * column puts "lent" or "owe" above its figure (#900), the Date its weekday above the day, and
+ * Paid by the payer's initials above their name (#942). Wider, each shares a line. Each row of
+ * a table reads the same way.
+ *
+ * The Date and the initials gave way because nothing else can: a split ("By percentage · 2"),
+ * an amount ("CHF 10,000,000.00") and each word of a name stay whole, and a long name already
+ * wraps between its words and after a hyphen, as on the statement (#928). Beside its initials,
+ * "Priyamvada Venkataraghavan-Subramaniam" still made Paid by 161 px, and the table 665 px in
+ * a 626 px card; two Expenses of CHF 10,000,000.00 made it 673 px (#942).
  */
-const STACKED_POSITIONS = '@container expense-table (max-width: 759.98px)';
+const STACKED = '@container expense-table (max-width: 759.98px)';
+
+/** One part of a stacked cell: on its own line in a narrow table, in line in a wide one. */
+const stackedLine = { [STACKED]: { display: 'block' } } as const;
+
+/** "Wed 30 Sep": in a narrow table "Wed" above "30 Sep", still read as one date (#942). */
+function DayLabel({ label }: { label: string }) {
+  const [weekday, ...day] = label.split(' ');
+  return (
+    <>
+      <Box component="span" sx={stackedLine}>
+        {weekday}
+      </Box>{' '}
+      <Box component="span" sx={stackedLine}>
+        {day.join(' ')}
+      </Box>
+    </>
+  );
+}
 
 /**
  * A Group's Expenses on a computer (#310, design canvas "GroupExpenses"): the date, the
@@ -145,15 +171,17 @@ export default function ExpenseTable({
         container: 'expense-table / inline-size',
       }}
     >
-      <Box sx={{ overflowX: 'auto' }}>
+      {/* Positioned, so the cells' visually hidden "you" is clipped here with its cell and
+          never widens the page (#944). */}
+      <Box sx={{ position: 'relative', overflowX: 'auto' }}>
         <Box
           component="table"
           onKeyDown={onKeyDown}
           sx={{
             width: '100%',
             // Beside the side panel (#311) a 1280 px screen leaves the table about 630 px, so
-            // who paid and the split may wrap there, and the You column stacks (#900); the
-            // dates and money never wrap. Narrower still, the table scrolls inside its card.
+            // who paid may wrap there, and the Date, Paid by and You columns stack (#900, #942);
+            // money and splits never wrap. Narrower still, the table scrolls inside its card.
             minWidth: 600,
             borderCollapse: 'collapse',
             fontSize: '0.875rem',
@@ -255,7 +283,7 @@ export default function ExpenseTable({
                         color: 'text.secondary',
                       }}
                     >
-                      {expenseDayLabel(expense.date, now)}
+                      <DayLabel label={expenseDayLabel(expense.date, now)} />
                     </Box>
                     <Box component="td" sx={cell}>
                       {/* The row's click opens it; the button is how a keyboard does. */}
@@ -299,7 +327,16 @@ export default function ExpenseTable({
                       </Box>
                     </Box>
                     <Box component="td" sx={cell}>
-                      <PayerLabel payer={expensePayerSummary(expense, userId)} />
+                      <PayerLabel
+                        payer={expensePayerSummary(expense, userId)}
+                        sx={{
+                          [STACKED]: {
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            gap: '2px',
+                          },
+                        }}
+                      />
                       <PreparedBy value={expense.preparedBy} inline />
                     </Box>
                     <Box
@@ -321,7 +358,7 @@ export default function ExpenseTable({
                         position={listedExpensePosition(expense, userId)}
                         currency={expense.currency}
                         sx={{
-                          [STACKED_POSITIONS]: {
+                          [STACKED]: {
                             flexDirection: 'column',
                             alignItems: 'flex-end',
                             gap: 0,

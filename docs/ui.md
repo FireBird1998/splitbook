@@ -391,8 +391,11 @@ link, `/groups/[id]?search=…`, fills the search.
   side panel, #311), and no control sits inside another.
 - Every column of the table shows whole (#900). Where the table is narrower
   than 760 px, as beside the side panel on a 1280 px screen, the You column puts
-  "lent" or "owe" above its figure; narrower than its columns need, it scrolls
-  inside its card. A money column is never cut.
+  "lent" or "owe" above its figure, the Date its weekday above the day, and Paid
+  by the payer's initials above their name (#942); a long name wraps between
+  its words and after a hyphen, never inside a word, and an amount and a split
+  stay whole. Narrower than its columns need, it scrolls inside its card. A
+  money column is never cut.
 - Positions ("you lent ₹833.00", "you owe ₹953.33") come from the shared
   `expense-row` module over the stored minor units, in the status colours,
   which reach 4.5:1 on every surface a row has, light and dark.
@@ -525,6 +528,9 @@ in a `HomeSlot` of its width.
   focus back on the row, as Activity's payment rows do (#852)
 - A currency tab is never wider than its row; at large text its amount wraps under the words,
   whole (#854)
+- A table that scrolls sideways does so in a box with `position: relative`, so the visually
+  hidden text in its cells (`position: absolute`) stays in that box. Unpositioned, a hidden
+  "No note" in the Payments table widened the whole Balances page at 390 px (#944)
 - Screen reader labels on icon-only buttons
 
 Enforced by `playwright/theme-a11y.spec.ts`, which runs **axe-core** across four

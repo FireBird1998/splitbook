@@ -308,6 +308,109 @@ describe('the Expense table', () => {
   });
 });
 
+// #942: beside the side panel at 1280 px, the table needed 665 px in a 626 px card with Priya
+// renamed "Priyamvada Venkataraghavan-Subramaniam", and 673 px with two Expenses of
+// CHF 10,000,000.00, so the You column went behind a scroller and every figure in it was cut. A
+// name already wraps between its words and after a hyphen, and an amount and a split stay whole;
+// so in a narrow table the Date puts its weekday above the day and Paid by the initials above the
+// name, as You puts "lent" or "owe" above its figure (#900). Wide, each keeps one line.
+describe('the Expense table beside the side panel (#942)', () => {
+  const LONG = { ...PRIYA, name: 'Priyamvada Venkataraghavan-Subramaniam' };
+  const wide = [
+    expense(1, 'Monthly staples — rice, dal, oil', 'Groceries', LONG, [
+      [ALEX, 62150],
+      [SAM, 62150],
+      [LONG, 62150],
+    ]),
+    expense(
+      2,
+      'Security deposit',
+      'Housing',
+      SAM,
+      [
+        [ALEX, 500000000],
+        [SAM, 500000000],
+      ],
+      { currency: 'CHF' },
+    ),
+  ];
+  const html = render(
+    createElement(ExpenseTable, {
+      expenses: wide,
+      userId: ALEX._id,
+      recurringExpensesEnabled: false,
+      label: 'Expenses, September 2026',
+      caption: 'Expenses in September 2026, newest first.',
+      openId: null,
+      onToggle: vi.fn(),
+      panelId: 'expense-panel',
+    }),
+  );
+  const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)]
+    .map(([, rules]) => rules)
+    .join('');
+  const hashOf = (tag: string) => /\bclass="[^"]*\b(css-[\w-]+)/.exec(tag)?.[1] ?? 'none';
+  /** An element's own declarations, wherever the table is. */
+  const own = (tag: string) =>
+    new RegExp(`(?:^|\\})\\.${hashOf(tag)}\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+  /** An element's declarations in a table narrower than 760 px, as beside the side panel. */
+  const narrow = (tag: string) =>
+    new RegExp(
+      `@container expense-table \\(max-width: ?759\\.98px\\)\\{\\.${hashOf(tag)}\\{([^}]*)\\}\\}`,
+    ).exec(css)?.[1] ?? '';
+  const cells = [...html.matchAll(/<tr\b[^>]*data-expense-id[^>]*>([\s\S]*?)<\/tr>/g)].map(
+    ([, row]) =>
+      [...row.matchAll(/(<td\b[^>]*>)([\s\S]*?)<\/td>/g)].map(([, td, inner]) => ({ td, inner })),
+  );
+
+  it('reads every row as before: the whole date, the whole name, each amount whole', () => {
+    expect(rows(html)).toEqual([
+      [
+        expenseDayLabel(wide[0].date),
+        'Monthly staples — rice, dal, oil Groceries',
+        'PV Priyamvada Venkataraghavan-Subramaniam',
+        'Equally · 3',
+        '₹1,864.50',
+        'you owe ₹621.50',
+      ],
+      [
+        expenseDayLabel(wide[1].date),
+        'Security deposit Housing',
+        'SC Sam Chen',
+        'Equally · 2',
+        'CHF 10,000,000.00',
+        'you owe CHF 5,000,000.00',
+      ],
+    ]);
+    for (const row of cells) expect(own(row[4].td)).toContain('white-space:nowrap');
+  });
+
+  it('puts the weekday above the day in a narrow table, and keeps them on one line in a wide one', () => {
+    for (const [date] of cells) {
+      const parts = [...date.inner.matchAll(/<span\b[^>]*>/g)].map(([tag]) => tag);
+      expect(parts).toHaveLength(2);
+      for (const part of parts) {
+        expect(narrow(part)).toContain('display:block');
+        expect(own(part)).not.toContain('display:block');
+      }
+      expect(own(date.td)).toContain('white-space:nowrap');
+    }
+  });
+
+  it('puts the payer’s initials above their name in a narrow table, the name wrapping only between words', () => {
+    for (const row of cells) {
+      const label = /<span\b[^>]*>/.exec(row[2].inner)![0];
+      expect(own(label)).toContain('display:inline-flex');
+      expect(narrow(label)).toContain('flex-direction:column');
+      expect(narrow(label)).toContain('align-items:flex-start');
+      // Never inside a word, and free to wrap between words and after a hyphen.
+      for (const rules of [own(label), narrow(label), own(row[2].td)]) {
+        expect(rules).not.toMatch(/white-space:nowrap|overflow-wrap:anywhere|word-break/);
+      }
+    }
+  });
+});
+
 // #810: an Expense in a currency Splitbook no longer supports, as an old database holds it,
 // shows its stored amount with its code, as Activity does (#779), and no position.
 describe('an Expense in a currency Splitbook no longer supports (#810)', () => {

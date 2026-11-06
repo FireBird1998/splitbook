@@ -102,11 +102,25 @@ export function PositionText({
 
 /**
  * Who paid, with their initials (design canvas `.gx-payer`): "You", a name or "2 people". A
- * long name may wrap beside the initials when the table sits beside the side panel (#311).
+ * long name may wrap beside the initials, between its words and after a hyphen (#311); the
+ * Expenses table may put the initials above the name instead (#942).
  */
-export function PayerLabel({ payer }: { payer: ExpensePayerSummary }) {
+export function PayerLabel({
+  payer,
+  sx,
+}: {
+  payer: ExpensePayerSummary;
+  /** Styles for the initials and name together, such as the Expenses table's stacking (#942). */
+  sx?: SxProps<Theme>;
+}) {
   return (
-    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+    <Box
+      component="span"
+      sx={[
+        { display: 'inline-flex', alignItems: 'center', gap: 1 },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
+    >
       <Avatar
         aria-hidden
         sx={{
