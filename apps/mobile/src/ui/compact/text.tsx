@@ -466,14 +466,15 @@ function FadingOut({
 
 /**
  * How wide `amount` draws in the money face at `size` and this text size, in dp: IBM Plex Mono's
- * advance is 0.6 of its size, less the size's letter spacing, and a word joiner draws nothing. The
- * face is monospaced, so this holds for any amount; Android scales the letter spacing with the
- * text, so at large text the amount draws a little narrower than this, never wider (#925).
+ * advance is 0.6 of its size, and a word joiner draws nothing. The face's letter spacing narrows
+ * nothing on the device: at 420 dpi and 100%, "₹1,250.00" in the table's size drew 185 px and
+ * "CHF 10,000,000.00" 349 px, where taking it off gave 181 and 340 (#932). Measured with it, a
+ * Suggested payment kept ₹1,234,567.89 beside its avatars at 393 dp and 130% and cut it by 2 dp
+ * (#945). The face is monospaced, so this holds for any amount.
  */
 export function moneyWidth(amount: string, size: MoneySize, fontScale: number) {
-  const { fontSize, letterSpacing } = moneySizes[size];
   const characters = [...amount.replaceAll(WORD_JOINER, '')].length;
-  return characters * (0.6 * scaledSp(Number(fontSize), fontScale) + Number(letterSpacing ?? 0));
+  return characters * 0.6 * scaledSp(Number(moneySizes[size].fontSize), fontScale);
 }
 
 /** A formatted amount (the caller formats it) in IBM Plex Mono with tabular figures. */

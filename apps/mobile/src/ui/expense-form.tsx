@@ -49,7 +49,6 @@ import {
   headingBeside,
   headingLine,
   isLargeText,
-  moneySizes,
   moneyWidth,
   scaledSp,
   textVariants,
@@ -61,7 +60,7 @@ import {
 } from './compact';
 import { outfitWidth } from './compact/outfit-metrics';
 import { useTheme } from './theme';
-import { SEPARATOR, WORD_JOINER } from '@splitbook/shared/separator';
+import { SEPARATOR } from '@splitbook/shared/separator';
 import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import { amountError } from '../data/field-feedback';
 
@@ -384,13 +383,9 @@ export const amountPair = {
  */
 export function stackedFigure(figures: readonly string[], width: number, fontScale: number) {
   const room = width - 2 * 16 - 2 - 2 * 14 - 36;
-  // As Android draws it: 0.6 em a character, the face's letter spacing narrowing nothing on the
-  // device. Measured with it, a wide figure outgrew its width and moved that row's Share (#932).
-  const { letterSpacing } = moneySizes.table;
-  const drawn = (figure: string) =>
-    moneyWidth(figure, 'table', fontScale) -
-    [...figure.replaceAll(WORD_JOINER, '')].length * Number(letterSpacing ?? 0);
-  const widest = Math.max(0, ...figures.map(drawn));
+  // As Android draws it (`moneyWidth`): measured narrower, a wide figure outgrew its width and
+  // moved that row's Share (#932).
+  const widest = Math.max(0, ...figures.map((figure) => moneyWidth(figure, 'table', fontScale)));
   return { minWidth: Math.min(room, widest), textAlign: 'right' as const };
 }
 
@@ -1026,8 +1021,8 @@ export function saveBeside({
   // The bar's padding, the row's gap, the button beside Save and Save's own padding.
   const room = width - 2 * 16 - 8 - (other * SEMIBOLD * size + 2 * 18) - 2 * 18;
   const wordsWidth = words * SEMIBOLD * size;
-  // IBM Plex Mono's advance is 0.6 of its size, less the money face's letter spacing.
-  const money = amount ? [...amount].length * (0.6 * size - 0.3) : 0;
+  // The amount in the money face, as Android draws it (`moneyWidth`, #945).
+  const money = amount ? moneyWidth(amount, 'list', fontScale) : 0;
   if (wordsWidth + (amount ? 8 + money : 0) <= room) return 'inline';
   if (amount && Math.max(wordsWidth, money) <= room) return 'below';
   return 'stacked';

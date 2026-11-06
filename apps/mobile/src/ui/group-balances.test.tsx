@@ -28,7 +28,7 @@ import {
   wordsOf,
 } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
-import { hairSpace } from './compact';
+import { hairSpace, scaledSp } from './compact';
 import { refreshedLabel } from './refresh-feedback';
 import { ThemeContext, fonts } from './theme';
 import {
@@ -787,6 +787,64 @@ describe.each(['light', 'dark'] as const)('Balances with large amounts in %s (#9
     const tree = screen!.toJSON() as ReactTestRendererJSON;
     expect(layoutHeight(tree, size.fontScale, size.width - 32)).toBeCloseTo(size.height, 6);
   });
+});
+
+// #945, the pre-release review of main 79efd1af: at 393 dp and 130% the room beside the avatars
+// and Record is 150 dp, and `moneyWidth` took ₹1,234,567.89 to be 150 dp too, its letter spacing
+// narrowing it, though Android draws it 152 dp wide (0.6 em a character, #932). It stayed beside
+// the avatars and was cut by 2 dp, where it should have gone under them, whole.
+describe('a Suggested payment as wide as the room beside its avatars (#945)', () => {
+  it.each([
+    { currency: 'INR', amount: 1_234_567.89, width: 393, fontScale: 1.3 },
+    { currency: 'CHF', amount: 1_234_567.89, width: 369, fontScale: 1 },
+    { currency: 'CHF', amount: 1_234_567.89, width: 428, fontScale: 1.3 },
+    { currency: 'CHF', amount: 12_345.67, width: 394, fontScale: 1.3 },
+  ])(
+    'puts $currency $amount under the avatars, whole, $width dp at $fontScale× text',
+    ({ currency, amount, width, fontScale }) => {
+      setWindow({ width, height: 640, fontScale });
+      render(
+        <ThemeContext.Provider value={getSemanticTokens('light')}>
+          <GroupBalancesView
+            group={{ ...group(), defaultCurrency: currency }}
+            currentUserId={you}
+            state={financial({
+              data: [
+                {
+                  currency,
+                  balances: [
+                    { user: person(priya, 'Priya Shah'), balance: amount },
+                    { user: person(you, 'Alex Rivera'), balance: -amount },
+                  ],
+                  debts: [
+                    { from: person(you, 'Alex Rivera'), to: person(priya, 'Priya Shah'), amount },
+                  ],
+                },
+              ],
+            })}
+            pending={null}
+            offline={false}
+            onRecord={vi.fn()}
+            onCheckPayment={vi.fn()}
+            onRefreshBalances={() => undefined}
+          />
+        </ThemeContext.Provider>,
+      );
+      const tree = screen!.toJSON() as ReactTestRendererJSON;
+      const said = formatCurrency(amount, currency);
+      const [payment] = findHosts(
+        tree,
+        (props, type) =>
+          type === 'View' && props.accessibilityLabel === `You pay Priya Shah, ${said}`,
+      );
+      // Android draws the money face 0.6 em a character (#932): the words keep at least that.
+      const drawn = [...said].length * 0.6 * scaledSp(15, fontScale);
+      expect(flatten(payment!.props.style).minWidth).toBeGreaterThanOrEqual(drawn);
+      const [figure] = outerTexts(payment!).filter((text) => wordsOf(text) === said);
+      expect(figure!.props.adjustsFontSizeToFit).toBeUndefined();
+      expect(unreadText(tree, fontScale, width - 32)).toEqual([]);
+    },
+  );
 });
 
 // #639 review: the room the balance card's title and the payments' caption keep beside what

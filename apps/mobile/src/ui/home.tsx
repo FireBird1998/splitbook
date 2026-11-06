@@ -30,8 +30,7 @@ import {
   SectionHeader,
   Skeleton,
   SkeletonText,
-  moneySizes,
-  scaledSp,
+  moneyWidth,
   useLargeText,
   useLineBox,
 } from './compact';
@@ -433,8 +432,7 @@ function groupPosition(balances: HomeGroupBalance[]) {
  * amount widens its own row, and is never cut.
  */
 export function balanceWidth(fontScale: number) {
-  const { fontSize, letterSpacing } = moneySizes.list;
-  return 9 * (0.6 * scaledSp(fontSize as number, fontScale) + (letterSpacing as number));
+  return moneyWidth('₹1,480.00', 'list', fontScale);
 }
 
 const GroupRow = memo(function GroupRow({

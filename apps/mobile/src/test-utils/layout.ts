@@ -628,8 +628,10 @@ function runWidth(characters: string, style: Style, fontScale: number) {
       zeroWidth.has(character)
         ? sum
         : sum +
-          size * (mono ? 0.6 : outfitAdvance(character) * weight) +
-          number(style.letterSpacing),
+          // The money face's letter spacing narrows nothing on the device (#932, #945).
+          (mono
+            ? size * 0.6
+            : size * outfitAdvance(character) * weight + number(style.letterSpacing)),
     0,
   );
 }
