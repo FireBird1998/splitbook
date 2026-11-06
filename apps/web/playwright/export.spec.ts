@@ -235,3 +235,55 @@ test('preview follows Groups, period, include and format choices with recovery',
     ),
   ).toBe(true);
 });
+
+/**
+ * #916: the printable statement's preview fits its card at 1280 and at the `md` breakpoint (900):
+ * no statement preview table scrolls, and every figure in them, a date or an amount, sits inside
+ * its table and the card. A phone width may still scroll, so the desktop projects check this.
+ */
+test('the statement preview’s tables fit the card at 1280 and 900, every figure in view', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name.startsWith('mobile'), 'A phone-width preview may scroll.');
+  await enterAsPersona(page, 'alex');
+  for (const width of [1280, 900]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/export?group=${DEMO_GROUP_ID}`);
+    await page.getByLabel('Period', { exact: true }).selectOption('all');
+    await page.getByRole('radio', { name: 'Printable statement', exact: true }).check();
+    const preview = page.getByRole('region', { name: 'Preview', exact: true });
+    await expect(
+      preview.getByRole('table', { name: 'INR first Expenses', exact: true }),
+    ).toBeVisible();
+    // The statement's time, "Fri 6 Nov 2026, 12:40 PM" (zonedDateTime).
+    await expect(preview).toContainText(
+      /Generated (Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}\s[A-Z][a-z]{2} \d{4}, \d{1,2}:\d{2}\s[AP]M/,
+    );
+    const misfits = await preview.evaluate((card) => {
+      const found: string[] = [];
+      const inside = (outer: DOMRect, inner: DOMRect) =>
+        inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5;
+      const cardBox = card.getBoundingClientRect();
+      const regions = [...card.querySelectorAll('article [role="region"]')];
+      if (!regions.length) found.push('no statement preview tables');
+      for (const region of regions) {
+        const name = region.getAttribute('aria-label');
+        if (region.scrollWidth > region.clientWidth)
+          found.push(`${name} scrolls: ${region.scrollWidth} > ${region.clientWidth}`);
+        const box = region.getBoundingClientRect();
+        const walker = document.createTreeWalker(region, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!/\d/.test(node.textContent ?? '')) continue;
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          for (const rect of range.getClientRects()) {
+            if (!inside(box, rect) || !inside(cardBox, rect))
+              found.push(`${name}: “${node.textContent}” at ${rect.left}–${rect.right}`);
+          }
+        }
+      }
+      return found;
+    });
+    expect(misfits, `at ${width} px`).toEqual([]);
+  }
+});
