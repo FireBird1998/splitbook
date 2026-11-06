@@ -11,7 +11,11 @@ import {
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { EXPENSE_CATEGORIES, getCategory } from '@splitbook/shared/categories';
 import { formatCurrency, wholeUnit } from '@splitbook/shared/currency';
-import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import {
+  maxExpenseAmountMinor,
+  parseAmountMinor,
+  toMajorAmount,
+} from '@splitbook/shared/exact-money';
 import {
   isMoneyField,
   type ExpenseMoneyField,
@@ -465,6 +469,33 @@ export const waitsForAmount = (
   allocation: Allocation | null,
   amountCorrection: string | undefined,
 ) => !allocation && (!!amountCorrection || !!amountError(draft.amount, draft.currency));
+
+/**
+ * The room Who owes what's totals keep, unseen and unread: the sum line at the widest amount the
+ * currency allows (`widest`, its digits all "0", Outfit's widest), and, for an equal split, the
+ * note, which an amount may bring: with one member too, so a member the Group check adds moves
+ * Notes by their row alone. Android lays it out as it would the totals, so no amount takes more
+ * lines than it keeps: before, at 200% on a 360 dp phone, "Enter an amount first." took one line,
+ * "₹900.00 paid = ₹900.00 shared." two, and the note more, so typing the amount moved Category and
+ * notes (#941). The totals are drawn over it (`totalsOver`).
+ */
+const TotalsRoom = memo(function TotalsRoom({ widest, note }: { widest: string; note: boolean }) {
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={{ gap: 4, opacity: 0 }}
+    >
+      <CompactText variant="small">
+        {widest} paid = {widest} shared.
+      </CompactText>
+      {note ? <CompactText variant="caption">{sharesDifferNote}</CompactText> : null}
+    </View>
+  );
+});
+/** The totals, over the room `TotalsRoom` keeps for them inside the footer's padding. */
+const totalsOver = { position: 'absolute', top: 14, left: 14, right: 14, gap: 4 } as const;
+
 export const WhoOwesWhat = memo(function WhoOwesWhat({
   draft,
   allocation,
@@ -653,24 +684,37 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
             borderTopWidth: 1,
             borderTopColor: theme.border,
             padding: 14,
-            gap: 4,
           }}
         >
-          {saved ? null : allocation ? (
-            <CompactText variant="small">
-              {money(allocation.amountMinor)} paid = {money(allocation.amountMinor)} shared.
-            </CompactText>
-          ) : (
-            // One short line, as the totals will be.
-            <CompactText variant="small" tone="secondary">
-              {corrected ? 'Correct the amount first.' : 'Enter an amount first.'}
-            </CompactText>
-          )}
-          {rounded ? (
+          {saved ? (
             <CompactText variant="caption" tone="secondary">
               {sharesDifferNote}
             </CompactText>
-          ) : null}
+          ) : (
+            <>
+              {/* The room the widest amount and the note would take (#941). */}
+              <TotalsRoom
+                widest={money(maxExpenseAmountMinor(draft.currency)).replace(/\d/g, '0')}
+                note={draft.splitMethod === 'equal'}
+              />
+              <View style={totalsOver}>
+                {allocation ? (
+                  <CompactText variant="small">
+                    {money(allocation.amountMinor)} paid = {money(allocation.amountMinor)} shared.
+                  </CompactText>
+                ) : (
+                  <CompactText variant="small" tone="secondary">
+                    {corrected ? 'Correct the amount first.' : 'Enter an amount first.'}
+                  </CompactText>
+                )}
+                {rounded ? (
+                  <CompactText variant="caption" tone="secondary">
+                    {sharesDifferNote}
+                  </CompactText>
+                ) : null}
+              </View>
+            </>
+          )}
         </View>
       )}
     </Card>
