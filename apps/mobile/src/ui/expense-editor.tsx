@@ -726,10 +726,15 @@ function ExpenseTask({
         : [draft.payerId]),
       ...draft.participantIds,
     ].some((id) => !members.some((member) => member.id === id));
+  // Who owes what sits above Category and notes, so it takes its final height while the Group
+  // is checked (#911): it draws the draft's split with the members of the Group this phone
+  // already holds (the saved copy, read and never written here), and the check updates it in
+  // place. Paid by and Split stay locked meanwhile. Without such a copy it waits, as before.
+  const showsAllocation = !pendingContext || !!context;
   let allocation: ReturnType<typeof expenseMoney> | null = null;
   let allocationError = '';
   try {
-    if (!pendingContext) allocation = expenseMoney(draft);
+    if (showsAllocation) allocation = expenseMoney(draft);
   } catch (error) {
     allocationError = error instanceof Error ? error.message : 'Review the allocation.';
   }
@@ -949,6 +954,31 @@ function ExpenseTask({
               onOpen={openTile}
             />
           )}
+          {/* Before Category and notes, as boards 06, 08 and 23 draw it (#911). */}
+          {showsAllocation &&
+            (controller ? (
+              <SelectedWhoOwesWhat
+                controller={controller}
+                name={name}
+                currentUserId={currentUserId}
+              />
+            ) : (
+              <WhoOwesWhat
+                draft={draft}
+                allocation={allocation}
+                problem={
+                  errors.amount
+                    ? 'Correct the amount to see who owes what.'
+                    : draft.amount
+                      ? allocationError
+                      : 'Enter a valid amount to see who owes what.'
+                }
+                waiting={!errors.amount && !draft.amount}
+                name={name}
+                currentUserId={currentUserId}
+                money={money}
+              />
+            ))}
           {controller ? (
             <SelectedOptionalDetails
               controller={controller}
@@ -1053,29 +1083,6 @@ function ExpenseTask({
                 remove unavailable members.
               </CompactText>
             )}
-            {!pendingContext &&
-              (controller ? (
-                <SelectedWhoOwesWhat
-                  controller={controller}
-                  name={name}
-                  currentUserId={currentUserId}
-                />
-              ) : (
-                <WhoOwesWhat
-                  draft={draft}
-                  allocation={allocation}
-                  problem={
-                    errors.amount
-                      ? 'Correct the amount to see who owes what.'
-                      : draft.amount
-                        ? allocationError
-                        : 'Enter a valid amount to see who owes what.'
-                  }
-                  name={name}
-                  currentUserId={currentUserId}
-                  money={money}
-                />
-              ))}
             {/* The banners above already say why a save is unconfirmed or in conflict. */}
             {state.message &&
               !summary &&
@@ -1135,7 +1142,9 @@ function ExpenseTask({
             label={draft.original ? 'Save changes' : 'Save expense'}
             busy={state.status === 'saving' ? 'Saving expense…' : undefined}
             amount={
-              allocation && state.status !== 'saving' ? money(allocation.amountMinor) : undefined
+              allocation && !pendingContext && state.status !== 'saving'
+                ? money(allocation.amountMinor)
+                : undefined
             }
             blocked={saveBlocked}
             onSave={onSave}

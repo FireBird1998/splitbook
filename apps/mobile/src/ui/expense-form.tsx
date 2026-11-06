@@ -48,6 +48,7 @@ import {
 import { outfitWidth } from './compact/outfit-metrics';
 import { useTheme } from './theme';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { enteredPayers } from '@splitbook/shared/payer-remainder';
 
 type Allocation = ReturnType<typeof expenseMoney>;
 type SectionRef = (field: ExpenseField) => (node: ViewInstance | null) => void;
@@ -250,10 +251,13 @@ export const sharesDifferNote = 'Shares differ by the smallest unit so the whole
 const AllocationHeading = memo(function AllocationHeading({
   savedLabel,
   currency,
+  waiting = false,
 }: {
   savedLabel?: string;
   /** The form's Expense currency, beside the heading (#720): every share is in it. */
   currency?: string;
+  /** No amount yet: nothing adds up, so the badge says so in the same place (#911). */
+  waiting?: boolean;
 }) {
   return (
     // At large text the badge goes under the heading, at the row's end, where they can't share a
@@ -269,6 +273,8 @@ const AllocationHeading = memo(function AllocationHeading({
         <CompactText variant="caption" tone="secondary">
           {savedLabel}
         </CompactText>
+      ) : waiting ? (
+        <Badge label="No amount" icon="ellipsis-horizontal" />
       ) : (
         <Badge label="Adds up" tone="positive" icon="checkmark" />
       )}
@@ -326,11 +332,18 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
   currentUserId,
   money,
   saved = false,
+  waiting = false,
 }: {
   draft: ExpenseDraft;
   allocation: Allocation | null;
   /** Why there is no allocation to show yet. */
   problem: string;
+  /**
+   * There is no amount yet, and nothing to correct: the table shows the draft's members with a
+   * dash for each figure, at the height the amount will give it, so typing the amount (while the
+   * Group is checked too) moves nothing below it (#911).
+   */
+  waiting?: boolean;
   name: (id: string) => string;
   currentUserId?: string;
   money: (minor: number) => string;
@@ -344,7 +357,7 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
   const { width } = useWindowDimensions();
   const stacked = large || width < 360;
   const person = (id: string) => (id === currentUserId ? 'You' : name(id));
-  if (!allocation)
+  if (!allocation && !waiting)
     return (
       <Card padded>
         <CompactText variant="overline">Who owes what</CompactText>
@@ -353,14 +366,26 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
         </CompactText>
       </Card>
     );
-  const paid = new Map(allocation.paidBy.map((row) => [String(row.user), row.amountMinor]));
-  const shares = new Map(allocation.splitBetween.map((row) => [String(row.user), row.amountMinor]));
+  // Waiting, each payer's and member's figure is still to come (null): a dash in the amount's
+  // own face, so each row is as tall as it will be.
+  const paid = new Map<string, number | null>(
+    allocation
+      ? allocation.paidBy.map((row) => [String(row.user), row.amountMinor])
+      : (draft.multiPayer ? enteredPayers(draft.payers).map(({ user }) => user) : [draft.payerId])
+          .filter(Boolean)
+          .map((user) => [user, null]),
+  );
+  const shares = new Map<string, number | null>(
+    allocation
+      ? allocation.splitBetween.map((row) => [String(row.user), row.amountMinor])
+      : draft.participantIds.map((user) => [user, null]),
+  );
   // The signed-in member first, then everyone else in the Group's order.
   const people = [...new Set([...shares.keys(), ...paid.keys()])].sort(
     (a, b) => Number(b === currentUserId) - Number(a === currentUserId),
   );
   const shown = people.length > 4 && !all ? people.slice(0, 3) : people;
-  const shareValues = [...shares.values()];
+  const shareValues = allocation ? allocation.splitBetween.map((row) => row.amountMinor) : [];
   const rounded =
     draft.splitMethod === 'equal' &&
     shareValues.length > 1 &&
@@ -368,29 +393,32 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
   // Wide enough for "₹1,24,999.50" in the table face. Money is never cut short: a longer
   // amount widens its column, and names wrap instead.
   const column = { minWidth: 84, alignItems: 'flex-end' as const };
-  const amount = (minor: number | undefined) =>
+  const amount = (minor: number | null | undefined) =>
     minor === undefined ? (
       <CompactText tone="muted">–</CompactText>
     ) : (
-      <Money size="table" numberOfLines={0}>
-        {money(minor)}
+      <Money size="table" numberOfLines={0} tone={minor === null ? 'muted' : undefined}>
+        {minor === null ? '–' : money(minor)}
       </Money>
     );
+  const spoken = (minor: number | null | undefined) =>
+    minor === undefined ? 'nothing' : minor === null ? 'to come' : money(minor);
   return (
     <Card>
       <AllocationHeading
         savedLabel={saved ? splitSummary(draft) : undefined}
         currency={draft.currency}
+        waiting={!allocation}
       />
       {stacked ? <View style={{ height: 6 }} /> : <AllocationColumns />}
       {shown.map((id) => {
         const paidMinor = paid.get(id);
-        const shareMinor = shares.get(id) ?? 0;
+        const shareMinor = shares.has(id) ? shares.get(id)! : 0;
         return (
           <View
             key={id}
             accessible
-            accessibilityLabel={`${person(id)}: paid ${paidMinor === undefined ? 'nothing' : money(paidMinor)}, share ${money(shareMinor)}`}
+            accessibilityLabel={`${person(id)}: paid ${spoken(paidMinor)}, share ${spoken(shareMinor)}`}
             style={{
               minHeight: 48,
               justifyContent: 'center',
@@ -461,9 +489,14 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
             gap: 4,
           }}
         >
-          {saved ? null : (
+          {saved ? null : allocation ? (
             <CompactText variant="small">
               {money(allocation.amountMinor)} paid = {money(allocation.amountMinor)} shared.
+            </CompactText>
+          ) : (
+            // One short line, as the totals will be.
+            <CompactText variant="small" tone="secondary">
+              Enter an amount first.
             </CompactText>
           )}
           {rounded ? (

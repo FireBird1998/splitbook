@@ -132,6 +132,45 @@ describe('Who owes what', () => {
     expect(text(root).match(/Paid/g)).toHaveLength(3);
     for (const amount of amounts(root)) expect(amount.lines || 0).toBe(0);
   });
+
+  // #911: the table sits above Category and notes, so typing the amount mustn't move Notes. At
+  // 200% a longer figure can wrap its own line, as any amount's length can; that is QA's to shoot.
+  it.each([1, 1.3])(
+    'is as tall before the amount as with it, with a dash for each figure, at %sx text',
+    (fontScale) => {
+      setWindow({ width: 360, height: 640, fontScale });
+      onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+      const members = ids.slice(0, 3);
+      act(() => {
+        renderer = create(
+          <WhoOwesWhat
+            draft={draft('', members)}
+            allocation={null}
+            problem="Enter a valid amount to see who owes what."
+            waiting
+            name={(id) => people[ids.indexOf(id)]}
+            currentUserId={ids[0]}
+            money={(minor) => `₹${(minor / 100).toFixed(2)}`}
+          />,
+        );
+      });
+      const waiting = renderer!.root;
+      expect(rows(waiting)).toEqual([
+        'You: paid to come, share to come',
+        'Sam Chen: paid nothing, share to come',
+        'Priya Shah: paid nothing, share to come',
+      ]);
+      expect(text(waiting)).toContain('No amount');
+      expect(text(waiting)).toContain('Enter an amount first.');
+      expect(text(waiting)).not.toContain('Adds up');
+      const before = layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, 328);
+      act(() => renderer!.unmount());
+      table(draft('90.00', members));
+      expect(layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, 328)).toBe(
+        before,
+      );
+    },
+  );
 });
 
 describe('Expense date label', () => {

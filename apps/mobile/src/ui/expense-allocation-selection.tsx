@@ -25,7 +25,7 @@ export const SelectedWhoOwesWhat = memo(function SelectedWhoOwesWhat({
 }: Pick<Parameters<typeof WhoOwesWhat>[0], 'name' | 'currentUserId'> & {
   controller: MobileController;
 }) {
-  const { draft, allocation, problem } = useMobileSnapshot(
+  const { draft, allocation, problem, waiting } = useMobileSnapshot(
     controller,
     ({ expense }) => {
       const draft = expense.draft!;
@@ -39,6 +39,8 @@ export const SelectedWhoOwesWhat = memo(function SelectedWhoOwesWhat({
       return {
         draft,
         allocation,
+        // No amount yet, and nothing to correct: the table keeps its shape (#911).
+        waiting: !expense.validation.errors.amount && !draft.amount,
         problem: expense.validation.errors.amount
           ? 'Correct the amount to see who owes what.'
           : draft.amount
@@ -48,6 +50,13 @@ export const SelectedWhoOwesWhat = memo(function SelectedWhoOwesWhat({
     },
     (a, b) =>
       a.problem === b.problem &&
+      a.waiting === b.waiting &&
+      // Waiting, the rows are the draft's payers and members.
+      (!a.waiting ||
+        (a.draft.payerId === b.draft.payerId &&
+          a.draft.multiPayer === b.draft.multiPayer &&
+          a.draft.payers === b.draft.payers &&
+          a.draft.participantIds === b.draft.participantIds)) &&
       a.draft.currency === b.draft.currency &&
       a.draft.splitMethod === b.draft.splitMethod &&
       sameAllocation(a.allocation, b.allocation),
@@ -59,6 +68,7 @@ export const SelectedWhoOwesWhat = memo(function SelectedWhoOwesWhat({
       allocation={allocation}
       money={(minor) => formatCurrency(toMajorAmount(minor, draft.currency), draft.currency)}
       problem={problem}
+      waiting={waiting}
     />
   );
 });
