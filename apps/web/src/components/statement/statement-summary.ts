@@ -1,4 +1,5 @@
 import type { Statement } from '@splitbook/shared/statement';
+import { counted } from '@splitbook/shared/separator';
 
 /** One figure in a currency's summary row: an amount in exact minor units, or a count. */
 export type SummaryFigure =
@@ -19,8 +20,7 @@ export function statementSummary(bucket: Statement['currencies'][number]): Summa
     {
       label: 'Payments',
       amountMinor: bucket.paymentTotalMinor,
-      note:
-        payments === 0 ? 'No payments' : `${payments} ${payments === 1 ? 'payment' : 'payments'}`,
+      note: payments === 0 ? 'No payments' : counted(payments, 'payment'),
     },
   ];
 }

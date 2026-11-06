@@ -181,7 +181,7 @@ describe('the statement summary’s figures (#646, W2)', () => {
     expect(statementSummary(bucket)).toEqual([
       { label: 'Spent', amountMinor: 184000 },
       { label: 'Expenses', count: 3 },
-      { label: 'Payments', amountMinor: 40000, note: '1 payment' },
+      { label: 'Payments', amountMinor: 40000, note: '1\u00a0payment' },
     ]);
   });
 
@@ -196,7 +196,7 @@ describe('the statement summary’s figures (#646, W2)', () => {
     expect(statementSummary(bucket)[2]).toEqual({
       label: 'Payments',
       amountMinor: 40005,
-      note: '2 payments',
+      note: '2\u00a0payments',
     });
     const [none] = buildStatement({ ...TRIP, settlements: [] }).currencies;
     expect(statementSummary(none)[2]).toEqual({

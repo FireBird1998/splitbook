@@ -293,7 +293,8 @@ test('the Table view shows each month, the average row, and passes axe', async (
     ...read.months.map((entry) => {
       const difference = entry.spentMinor - read.average!.spentMinor;
       const sign = difference > 0 ? '+' : difference < 0 ? '−' : '';
-      return `${sign}${money(Math.abs(difference), read.currency)}`;
+      // withSign joins the sign to its figure with a word joiner (#899).
+      return `${sign}${sign ? '\u2060' : ''}${money(Math.abs(difference), read.currency)}`;
     }),
     '–',
   ]);

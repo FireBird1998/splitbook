@@ -356,12 +356,12 @@ describe('the table’s “vs average” column (#646, W4a)', () => {
     ]);
     const model = monthlySpending(READ, { currentMonth: '2026-10' });
     expect(model.rows.map((row) => row.vsAverageText)).toEqual([
-      '−₹873.00',
-      '−₹213.00',
-      '+₹1,357.00',
-      '+₹197.00',
-      '−₹468.00',
-      '+₹567.00',
+      '−\u2060₹873.00',
+      '−\u2060₹213.00',
+      '+\u2060₹1,357.00',
+      '+\u2060₹197.00',
+      '−\u2060₹468.00',
+      '+\u2060₹567.00',
     ]);
     expect(model.average?.vsLabel).toBe('vs 5-month average');
   });
