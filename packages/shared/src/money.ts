@@ -32,3 +32,15 @@ export function formatSignedCurrency(amount: number, currency: string): string {
   if (tone === 'neutral') return formatCurrency(0, currency);
   return withSign(tone === 'positive' ? '+' : '−', formatCurrency(Math.abs(amount), currency));
 }
+
+/**
+ * Format an amount without a "+", but with the app's "−" when it is negative (#906):
+ * ₹620.00 · −₹12,759.14 · $0.00. Intl writes a negative with a hyphen-minus ("-₹12,759.14")
+ * that a line may break after; this joins the "−" to its figure as `withSign` does (#899). A
+ * negative that rounds to nothing in its currency's places is written as zero, with no sign.
+ * For display only: CSV and export files keep their exact machine values.
+ */
+export function formatCurrencyWithMinus(amount: number, currency: string): string {
+  const figure = formatCurrency(Math.abs(amount), currency);
+  return amount < 0 && figure !== formatCurrency(0, currency) ? withSign('−', figure) : figure;
+}

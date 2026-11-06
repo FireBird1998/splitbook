@@ -451,3 +451,14 @@ describe('the summary strip', () => {
     }
   });
 });
+
+// #906: a negative figure carries the app's "−", joined to it with a word joiner as the rest of
+// the app writes a sign (#899), never Intl's hyphen-minus. Positive figures stay unsigned.
+it('writes a negative figure with the app’s “−” kept to its figure, and a positive one unsigned (#906)', () => {
+  const page = render(false);
+  // Sam paid nothing and shares half of ₹1,840.00: Net −₹920.00.
+  expect(page).toContain('Sam Chen ₹0.00 ₹920.00 −⁠₹920.00');
+  expect(page).toContain('Alex Rivera ₹1,840.00 ₹920.00 ₹920.00');
+  expect(page).toContain('Member Balance Alex Rivera ₹1,320.00 Sam Chen −\u2060₹1,320.00');
+  expect(page).not.toMatch(/-₹/);
+});

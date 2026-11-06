@@ -539,3 +539,56 @@ it.each([0, 1, 2])(
     );
   },
 );
+
+// #906: a member who owes reads "−₹35.03" in the statement preview's Net and Current balances,
+// the app's "−" kept to its figure (#899), never Intl's hyphen-minus "-₹35.03".
+it('writes a statement preview’s negative Net and balance with the app’s “−” (#906)', () => {
+  const statement = buildStatement(
+    {
+      id: 'maple',
+      name: 'Maple House',
+      theme: 'home',
+      currency: 'INR',
+      members: [
+        { id: 'alice', name: 'Alice Tester' },
+        { id: 'bob', name: 'Bob Tester' },
+      ],
+      names: { alice: 'Alice Tester', bob: 'Bob Tester' },
+      tags: [],
+      expenses: [
+        {
+          id: 'expense',
+          date: '2026-09-01T00:00:00.000Z',
+          description: 'Groceries',
+          category: 'food',
+          tag: 'Food',
+          currency: 'INR',
+          amountMinor: 7006,
+          splitMethod: 'equal',
+          paidBy: [{ userId: 'alice', amountMinor: 7006 }],
+          splitBetween: [
+            { userId: 'alice', amountMinor: 3503 },
+            { userId: 'bob', amountMinor: 3503 },
+          ],
+        },
+      ],
+      settlements: [],
+    },
+    { timeZone: 'UTC' },
+  );
+  const page = text(
+    render({
+      status: 'ready',
+      data: {
+        ...csv,
+        format: 'statement',
+        timeZone: 'UTC',
+        statement: buildStatementPreview(statement),
+      },
+    }),
+  );
+  expect(page).toContain('Bob Tester ₹0.00 ₹35.03 −⁠₹35.03');
+  expect(page).toContain('Alice Tester ₹70.06 ₹35.03 ₹35.03');
+  expect(page).toMatch(/Bob Tester −⁠₹35\.03/);
+  expect(page).not.toMatch(/-₹/);
+});
