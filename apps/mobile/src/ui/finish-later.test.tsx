@@ -682,6 +682,33 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     expect(text(editor)).not.toContain('Finish this expense later?');
     expect(f.calls.some((call) => call === `POST /api/groups/${groupId}/drafts`)).toBe(false);
   });
+  // #927: To review's read said "offline" while the Group was open offline, and kept saying it on
+  // the form, where it isn't read again. Once the Group was checked again online (Try again), Save
+  // worked and Finish later uploaded, but its note still said "You’re offline…".
+  it('says what Finish later does online once the form is back online, after a Group opened offline (#927)', async () => {
+    const f = fixture({ empty: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.openGroup(groupId);
+      onlineManager.setOnline(false);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(f.controller.getSnapshot().toReview.offline).toBe(true);
+    await act(async () => {
+      await f.controller.openExpense(groupId);
+      onlineManager.setOnline(true);
+      await f.controller.refresh();
+      await f.controller.updateExpenseDraft({ description: 'Phone groceries', amount: '9', tagId });
+    });
+    expect(f.controller.getSnapshot().offline.active).toBe(false);
+    const editor = await form(f, mode);
+    expect(text(editor)).toContain('Keeps it in To review. Only you can see it.');
+    expect(text(editor)).not.toContain('You’re offline');
+    // As it says, Finish later keeps it in To review, not on this phone.
+    await tap(editor, 'Finish later');
+    expect(f.drafts.values.size).toBe(0);
+    expect(f.controller.getSnapshot().snackbar?.message).toBe('Kept in To review');
+  });
   it('keeps offline entries on this phone and reconnects without uploading', async () => {
     const f = fixture({ empty: true });
     await signIn(f);
