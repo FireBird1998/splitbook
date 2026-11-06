@@ -383,24 +383,133 @@ async function groupWith(
   return group;
 }
 
+const LONG_NAME = 'Priyamvada Venkataraghavan-Subramaniam';
+
+/** Shows Priya as LONG_NAME in this Group's Expenses read only, so no other test meets it. */
+async function withLongName(page: Page, group: string) {
+  await page.route(`**/api/groups/${group}/expenses**`, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replaceAll('"Priya Shah"', JSON.stringify(LONG_NAME));
+    await route.fulfill({ response, body });
+  });
+}
+
+/** CHF 10,000,000.00 paid by `payer`, split equally between `between` or 60/40 by percentage. */
+function tenMillion(description: string, payer: string, between: string[], byPercentage = false) {
+  return {
+    description,
+    amount: 10_000_000,
+    currency: 'CHF',
+    paidBy: [{ user: payer, amount: 10_000_000 }],
+    splitMethod: byPercentage ? 'percentage' : 'equal',
+    splitBetween: between.map((user, index) =>
+      byPercentage ? { user, percentage: index ? 40 : 60 } : { user },
+    ),
+  };
+}
+
+/** Where the table scrolls, and each header or cell (or only You's) past its card's edges. */
+function pastTheCard(table: Locator, only: 'all' | 'You' = 'all') {
+  return table.evaluate((element, only) => {
+    const card = element.closest('section')!.getBoundingClientRect();
+    const scroller = element.parentElement!;
+    const cells = [...element.querySelectorAll('tr')].flatMap((row) =>
+      only === 'You' ? [row.lastElementChild!] : [...row.querySelectorAll('th[scope="col"], td')],
+    );
+    return [
+      ...(only === 'all' && scroller.scrollWidth > scroller.clientWidth
+        ? [`scrolls ${scroller.scrollWidth - scroller.clientWidth}px`]
+        : []),
+      ...cells
+        .filter((cell) => {
+          const box = cell.getBoundingClientRect();
+          return box.left < card.left - 0.5 || box.right > card.right + 0.5;
+        })
+        .map((cell) => JSON.stringify(cell.textContent)),
+    ];
+  }, only);
+}
+
+/**
+ * Each amount, in Amount and You, whose figure isn't whole on one line. A currency code may sit
+ * on the line above its figure, as "CHF" over "10,000,000.00" in a narrow table (#942).
+ */
+async function brokenAmounts(table: Locator) {
+  const broken: string[] = [];
+  for (const amount of await table.getByText(/^−?(CHF\s|₹)[\d,]+\.\d\d$/).all()) {
+    const lines = await drawnLines(amount);
+    const whole =
+      /^−?(CHF\s|₹)[\d,]+\.\d\d$/.test(lines.join(' ')) &&
+      (lines.length === 1 || (lines.length === 2 && lines[0] === 'CHF'));
+    if (!whole) broken.push(JSON.stringify(lines));
+  }
+  return broken;
+}
+
+/** How the long name is drawn: each line whole words of it, broken after a space or hyphen. */
+async function brokenName(table: Locator) {
+  const words = new Set(LONG_NAME.split(/\s+|(?<=-)/));
+  const drawn = await table.evaluate((element, name) => {
+    const range = document.createRange();
+    const shown: string[][] = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if ((node as Text).data !== name) continue;
+      const lines: string[] = [];
+      let top: number | null = null;
+      for (let at = 0; at < name.length; at++) {
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        const box = range.getClientRects()[0];
+        if (!box || (!box.width && !box.height)) continue;
+        if (top === null || box.top > top + box.height / 2) lines.push('');
+        top = box.top;
+        lines[lines.length - 1] += name[at];
+      }
+      shown.push(lines.map((line) => line.trim()));
+    }
+    return shown;
+  }, LONG_NAME);
+  return [
+    ...(drawn.length === 1 ? [] : [`the name is shown ${drawn.length} times`]),
+    ...drawn
+      .flat()
+      .filter((line) => !line.split(/\s+|(?<=-)/).every((word) => words.has(word)))
+      .map((line) => `"${line}"`),
+  ];
+}
+
 // #942: beside the side panel at 1280 px, Priya renamed "Priyamvada Venkataraghavan-Subramaniam"
-// made the table 665 px in a 626 px card, and two Expenses of CHF 10,000,000.00 made it 673 px,
-// so the You column went behind a scroller and each figure in it was cut. The name wraps only
-// between its words and after its hyphen, every amount stays whole, and nothing scrolls. Priya's
-// name is made long in the Expenses read only, so no other test meets it.
-test('the Expenses table keeps You in its card with a long name or CHF 10,000,000.00 (#942)', async ({
+// made the table 665 px in a 626 px card, two Expenses of CHF 10,000,000.00 made it 673 px, and
+// both together 713 px, so the You column went behind a scroller and each figure in it was cut.
+// The name wraps only between its words and after its hyphen; each figure is whole on its own
+// line, a code such as "CHF" above it; and nothing scrolls. The long-name Group has the
+// Household's widest rows (a ₹54,000.00 rent, "By shares", "By percentage"): without the
+// narrow table's stacking it needs about 660 px.
+test('the Expenses table keeps You in its card with a long name, CHF 10,000,000.00 or both (#942)', async ({
   page,
   ledger,
 }) => {
-  const longName = 'Priyamvada Venkataraghavan-Subramaniam';
   const named = await groupWith(ledger, 'Long name', [
     {
-      description: 'Monthly staples — rice, dal, oil',
-      amount: 1864.5,
+      description: 'Flat rent',
+      amount: 54_000,
       currency: 'INR',
-      paidBy: [{ user: priya, amount: 1864.5 }],
+      paidBy: [{ user: alex, amount: 54_000 }],
       splitMethod: 'equal',
       splitBetween: [{ user: alex }, { user: sam }, { user: priya }],
+    },
+    {
+      description: 'House-warming party snacks',
+      amount: 3240,
+      currency: 'INR',
+      paidBy: [{ user: sam, amount: 3240 }],
+      splitMethod: 'shares',
+      splitBetween: [
+        { user: alex, shares: 1 },
+        { user: sam, shares: 2 },
+        { user: priya, shares: 1 },
+      ],
     },
     {
       description: 'AC servicing — two rooms',
@@ -413,30 +522,31 @@ test('the Expenses table keeps You in its card with a long name or CHF 10,000,00
         { user: sam, percentage: 40 },
       ],
     },
-  ]);
-  const large = await groupWith(
-    ledger,
-    'Large amounts',
-    [sam, alex].map((payer, index) => ({
-      description: index ? 'Renovation fund' : 'Security deposit',
-      amount: 10_000_000,
-      currency: 'CHF',
-      paidBy: [{ user: payer, amount: 10_000_000 }],
+    {
+      description: 'Monthly staples — rice, dal, oil',
+      amount: 1864.5,
+      currency: 'INR',
+      paidBy: [{ user: priya, amount: 1864.5 }],
       splitMethod: 'equal',
-      splitBetween: [{ user: alex }, { user: sam }],
-    })),
-  );
-  await page.route(`**/api/groups/${named}/expenses**`, async (route) => {
-    const response = await route.fetch();
-    const body = (await response.text()).replaceAll('"Priya Shah"', JSON.stringify(longName));
-    await route.fulfill({ response, body });
-  });
+      splitBetween: [{ user: alex }, { user: sam }, { user: priya }],
+    },
+  ]);
+  const large = await groupWith(ledger, 'Large amounts', [
+    tenMillion('Security deposit', sam, [alex, sam]),
+    tenMillion('Renovation fund', alex, [alex, sam]),
+  ]);
+  const both = await groupWith(ledger, 'Large amounts, long name', [
+    tenMillion('Security deposit', priya, [alex, priya]),
+    tenMillion('Renovation fund', alex, [alex, sam]),
+  ]);
+  await withLongName(page, named);
+  await withLongName(page, both);
 
-  const words = new Set(longName.split(/\s+|(?<=-)/));
   const cut: string[] = [];
   for (const [group, shown] of [
-    [named, longName],
+    [named, LONG_NAME],
     [large, /CHF\s10,000,000\.00/],
+    [both, LONG_NAME],
   ] as const) {
     await page.setViewportSize({ width: 1280, height: 900 });
     await open(page, ledger, `/groups/${group}`);
@@ -445,58 +555,49 @@ test('the Expenses table keeps You in its card with a long name or CHF 10,000,00
     for (const width of [1280, 1366, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await expect(table.getByRole('columnheader', { name: 'You' })).toBeVisible();
-      // Nothing scrolls, and every cell is inside the card's edges.
-      const outside = await table.evaluate((element) => {
-        const card = element.closest('section')!.getBoundingClientRect();
-        const scroller = element.parentElement!;
-        return [
-          ...(scroller.scrollWidth > scroller.clientWidth
-            ? [`scrolls ${scroller.scrollWidth - scroller.clientWidth}px`]
-            : []),
-          ...[...element.querySelectorAll('th[scope="col"], td')]
-            .filter((cell) => {
-              const box = cell.getBoundingClientRect();
-              return box.left < card.left - 0.5 || box.right > card.right + 0.5;
-            })
-            .map((cell) => JSON.stringify(cell.textContent)),
-        ];
-      });
-      for (const where of outside) cut.push(`${width}px: ${where}`);
-      // Each amount on one line.
-      for (const amount of await table.getByText(/^−?(CHF\s|₹)[\d,]+\.\d\d$/).all()) {
-        const lines = await drawnLines(amount);
-        if (lines.length > 1) cut.push(`${width}px: ${JSON.stringify(lines)}`);
-      }
-      if (group !== named) continue;
-      // The long name breaks only after a space or its hyphen: each line it draws is whole words
-      // of it. (Its initials share its label, so its own text is read, not the label's.)
-      const nameLines = await table.evaluate((element, name) => {
-        const range = document.createRange();
-        const drawn: string[][] = [];
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-          if ((node as Text).data !== name) continue;
-          const lines: string[] = [];
-          let top: number | null = null;
-          for (let at = 0; at < name.length; at++) {
-            range.setStart(node, at);
-            range.setEnd(node, at + 1);
-            const box = range.getClientRects()[0];
-            if (!box || (!box.width && !box.height)) continue;
-            if (top === null || box.top > top + box.height / 2) lines.push('');
-            top = box.top;
-            lines[lines.length - 1] += name[at];
-          }
-          drawn.push(lines.map((line) => line.trim()));
-        }
-        return drawn;
-      }, longName);
-      if (nameLines.length !== 1)
-        cut.push(`${width}px: the name is shown ${nameLines.length} times`);
-      for (const line of nameLines.flat())
-        if (!line.split(/\s+|(?<=-)/).every((word) => words.has(word)))
-          cut.push(`${width}px: "${line}"`);
+      const where = group === named ? 'long name' : group === large ? 'CHF' : 'both';
+      for (const problem of [
+        ...(await pastTheCard(table)),
+        ...(await brokenAmounts(table)),
+        ...(group === large ? [] : await brokenName(table)),
+      ])
+        cut.push(`${where} ${width}px: ${problem}`);
     }
+  }
+  expect(cut).toEqual([]);
+});
+
+// #942: with the long name, a split "By percentage" and CHF 10,000,000.00 all at once, the
+// columns need more than the card beside the side panel at 1280 px even stacked (652 px of 624
+// in Chromium on macOS), so the table scrolls; You stays at the card's right edge, its figures
+// whole, while the other columns pass under it.
+test('You stays in view with a long name, a split By percentage and CHF 10,000,000.00 at once (#942)', async ({
+  page,
+  ledger,
+}) => {
+  const group = await groupWith(ledger, 'Everything at once', [
+    tenMillion('Security deposit', priya, [alex, priya]),
+    tenMillion('Renovation fund', alex, [alex, sam], true),
+  ]);
+  await withLongName(page, group);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await open(page, ledger, `/groups/${group}`);
+  const table = page.getByRole('main').getByRole('table');
+  await expect(table.getByText(LONG_NAME)).toBeVisible();
+  await expect(table.getByRole('cell', { name: /^By percentage/ })).toBeVisible();
+
+  const cut: string[] = [];
+  for (const scrolled of [false, true]) {
+    if (scrolled)
+      await table.evaluate((element) => {
+        element.parentElement!.scrollLeft = element.parentElement!.scrollWidth;
+      });
+    for (const problem of [
+      ...(await pastTheCard(table, 'You')),
+      ...(await brokenAmounts(table.getByRole('cell', { name: /^you (owe|lent)/ }))),
+      ...(await brokenName(table)),
+    ])
+      cut.push(`${scrolled ? 'scrolled' : 'at rest'}: ${problem}`);
   }
   expect(cut).toEqual([]);
 });

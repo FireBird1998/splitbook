@@ -4,6 +4,7 @@ import PreparedBy from './PreparedBy';
 import { Fragment } from 'react';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
+import type { Theme } from '@mui/material/styles';
 import { format } from 'date-fns';
 import MoneyText from '@/components/common/MoneyText';
 import { visuallyHidden } from '@/components/common/visually-hidden';
@@ -97,22 +98,49 @@ const checkboxCell = { ...cell, width: 16 + 28, pr: 0, '&:first-of-type': { pl: 
 const checkboxSx = { p: '4px' } as const;
 
 /**
- * Where the table is narrower than this, as beside the side panel on a 1280 px screen, three
+ * Where the table is narrower than this, as beside the side panel on a 1280 px screen, four
  * cells put their parts one above the other, so every column fits and no figure is cut: the You
- * column puts "lent" or "owe" above its figure (#900), the Date its weekday above the day, and
- * Paid by the payer's initials above their name (#942). Wider, each shares a line. Each row of
- * a table reads the same way.
+ * column puts "lent" or "owe" above its figure (#900), the Date its weekday above the day, Paid
+ * by the payer's initials above their name, and Amount and You a currency code above its figure,
+ * "CHF" over "10,000,000.00" and "owe CHF" over "5,000,000.00" (#942). A symbol stays with its
+ * figure ("₹621.50"). Wider, each shares a line. Each row of a table reads the same way, and
+ * each cell reads as before: "Wed 30 Sep", "CHF 10,000,000.00".
  *
- * The Date and the initials gave way because nothing else can: a split ("By percentage · 2"),
- * an amount ("CHF 10,000,000.00") and each word of a name stay whole, and a long name already
- * wraps between its words and after a hyphen, as on the statement (#928). Beside its initials,
- * "Priyamvada Venkataraghavan-Subramaniam" still made Paid by 161 px, and the table 665 px in
- * a 626 px card; two Expenses of CHF 10,000,000.00 made it 673 px (#942).
+ * These gave way because nothing else can: a split ("By percentage · 2"), a figure and each word
+ * of a name stay whole, and a long name already wraps between its words and after a hyphen, as
+ * on the statement (#928). Beside its initials, "Priyamvada Venkataraghavan-Subramaniam" made
+ * Paid by 161 px and the table 665 px in a 626 px card; two Expenses of CHF 10,000,000.00 made
+ * it 673 px, as Amount and You were each as wide as "CHF 10,000,000.00"; both together, 713 px.
  */
 const STACKED = '@container expense-table (max-width: 759.98px)';
 
 /** One part of a stacked cell: on its own line in a narrow table, in line in a wide one. */
 const stackedLine = { [STACKED]: { display: 'block' } } as const;
+
+/**
+ * The table's scroll box, named so a cell can ask whether there is more of the table to its
+ * right (#942).
+ */
+const SCROLL_BOX = 'expense-table-scroll';
+
+/**
+ * The You column in a narrow table: where even stacked the columns need more than the card,
+ * as with a long name, a split "By percentage" and CHF 10,000,000.00 all at once beside the
+ * side panel, the table scrolls, and You stays at the card's right edge with its figures whole
+ * while the other columns pass under it (#942). An edge shows while one is under it, where the
+ * browser can tell (scroll-state queries). With room, as almost always, nothing is under it.
+ */
+const pinnedYou = {
+  [STACKED]: {
+    position: 'sticky',
+    right: 0,
+    zIndex: 1,
+    bgcolor: 'background.paper',
+  },
+  [`@container ${SCROLL_BOX} scroll-state(scrollable: right)`]: {
+    boxShadow: (theme: Theme) => `inset 1px 0 0 ${theme.palette.divider}`,
+  },
+} as const;
 
 /** "Wed 30 Sep": in a narrow table "Wed" above "30 Sep", still read as one date (#942). */
 function DayLabel({ label }: { label: string }) {
@@ -173,7 +201,14 @@ export default function ExpenseTable({
     >
       {/* Positioned, so the cells' visually hidden "you" is clipped here with its cell and
           never widens the page (#944). */}
-      <Box sx={{ position: 'relative', overflowX: 'auto' }}>
+      <Box
+        sx={{
+          position: 'relative',
+          overflowX: 'auto',
+          containerName: SCROLL_BOX,
+          containerType: 'scroll-state',
+        }}
+      >
         <Box
           component="table"
           onKeyDown={onKeyDown}
@@ -226,6 +261,7 @@ export default function ExpenseTable({
                     fontWeight: 600,
                     color: 'text.secondary',
                     whiteSpace: 'nowrap',
+                    ...(column === 'You' ? pinnedYou : {}),
                   }}
                 >
                   {column}
@@ -351,19 +387,15 @@ export default function ExpenseTable({
                         currency={expense.currency}
                         tone="neutral"
                         variant="body2"
+                        figureSx={stackedLine}
                       />
                     </Box>
-                    <Box component="td" sx={{ ...cell, textAlign: 'right' }}>
+                    <Box component="td" sx={{ ...cell, textAlign: 'right', ...pinnedYou }}>
                       <PositionText
                         position={listedExpensePosition(expense, userId)}
                         currency={expense.currency}
-                        sx={{
-                          [STACKED]: {
-                            flexDirection: 'column',
-                            alignItems: 'flex-end',
-                            gap: 0,
-                          },
-                        }}
+                        sx={stackedLine}
+                        figureSx={stackedLine}
                       />
                     </Box>
                   </Box>

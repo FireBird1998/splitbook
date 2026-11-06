@@ -409,6 +409,64 @@ describe('the Expense table beside the side panel (#942)', () => {
       }
     }
   });
+
+  // With that name and CHF 10,000,000.00 together, the table still needed 676 px of 624: Amount
+  // and You were 150 and 157 px wide, each the width of "CHF 10,000,000.00" or
+  // "CHF 5,000,000.00" on one line. In a narrow table the code goes above its figure in Amount,
+  // and beside "owe" or "lent" in You, so each figure starts a line of its own, whole.
+  it('puts a currency code above its figure in a narrow table, the figure whole on its own line', () => {
+    /** The figure's own element in a cell, and what the cell reads before it. */
+    const figureIn = (inner: string, figure: string) => {
+      const match = new RegExp(`(<span\\b[^>]*>)${figure.replace(/[.$]/g, '\\$&')}</span>`).exec(
+        inner,
+      );
+      expect(match, `${figure} in its own span`).not.toBeNull();
+      return { tag: match![1], before: text(inner.slice(0, match!.index)) };
+    };
+    const [rupees, francs] = cells;
+    for (const [row, amount, position, word] of [
+      [rupees, '₹1,864.50', '₹621.50', 'you owe'],
+      [francs, '10,000,000.00', '5,000,000.00', 'you owe CHF'],
+    ] as const) {
+      const shown = figureIn(row[4].inner, amount);
+      const owed = figureIn(row[5].inner, position);
+      // The code (where the currency has no symbol) is on the line above; a symbol stays.
+      expect(shown.before).toBe(amount.startsWith('₹') ? '' : 'CHF');
+      expect(owed.before).toBe(word);
+      for (const { tag } of [shown, owed]) {
+        expect(narrow(tag)).toContain('display:block');
+        expect(own(tag)).not.toContain('display:block');
+      }
+      // You's word, code and figure share no flex column any more: its figure is the block.
+      const label = /<span\b[^>]*>/.exec(row[5].inner)![0];
+      expect(narrow(label)).toContain('display:block');
+      expect(narrow(label)).not.toContain('flex-direction:column');
+      // Never broken inside: each figure's cell keeps its lines whole.
+      expect(own(row[4].td)).toContain('white-space:nowrap');
+      expect(own(label)).toContain('white-space:nowrap');
+    }
+  });
+
+  // With a split "By percentage" too, the stacked columns still need 652 px of 624, so the table
+  // scrolls; You then stays at the card's right edge, on the card's colour, the other columns
+  // passing under it. Wide, nothing changes.
+  it('keeps You at the card’s right edge in a narrow table that scrolls', () => {
+    const header = /<th\b[^>]*>(?=You<\/th>)/.exec(html)![0];
+    for (const tag of [header, ...cells.map((row) => row[5].td)]) {
+      expect(narrow(tag)).toMatch(/position:sticky/);
+      expect(narrow(tag)).toContain('right:0');
+      expect(narrow(tag)).toContain('background-color:#ffffff');
+      expect(own(tag)).not.toContain('sticky');
+    }
+    // An edge while there is more of the table to its right, where the browser can tell.
+    const scrollBox = /<div\b[^>]*>(?=(?:<style[^>]*>[^<]*<\/style>)*<table)/.exec(html)![0];
+    expect(own(scrollBox)).toContain('container-type:scroll-state');
+    expect(css).toMatch(
+      new RegExp(
+        `@container expense-table-scroll scroll-state\\(scrollable: ?right\\)\\{\\.${hashOf(header)}\\{box-shadow:inset 1px 0 0 `,
+      ),
+    );
+  });
 });
 
 // #810: an Expense in a currency Splitbook no longer supports, as an old database holds it,

@@ -59,11 +59,14 @@ export function PositionText({
   position,
   currency,
   sx,
+  figureSx,
 }: {
   position: ExpensePosition | null;
   currency: string;
   /** Styles for the word and figure together, such as the Expenses table's stacking (#900). */
   sx?: SxProps<Theme>;
+  /** Styles for the figure apart from the word and any currency code (#942); see MoneyText. */
+  figureSx?: SxProps<Theme>;
 }) {
   if (!position)
     return (
@@ -95,7 +98,15 @@ export function PositionText({
         </Box>
         {position.kind}
       </Box>
-      <MoneyText amount={position.amount} currency={currency} color="inherit" variant="body2" />
+      {/* In a row, the gap parts them; as lines (with figureSx), this space does (#942). */}
+      {figureSx !== undefined && ' '}
+      <MoneyText
+        amount={position.amount}
+        currency={currency}
+        color="inherit"
+        variant="body2"
+        figureSx={figureSx}
+      />
     </Box>
   );
 }
