@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatSignedCurrency, getMoneyTone, withSign } from './money';
+import { formatCurrencyWithMinus, formatSignedCurrency, getMoneyTone, withSign } from './money';
 
 describe('getMoneyTone', () => {
   it('classifies positive, negative, and near-zero amounts', () => {
@@ -43,5 +43,26 @@ describe('withSign', () => {
   it('is how every signed amount is written', () => {
     expect(formatSignedCurrency(-20, 'EUR')).toBe(withSign('−', '€20.00'));
     expect(formatSignedCurrency(620, 'INR')).toBe(withSign('+', '₹620.00'));
+  });
+});
+
+// #906: an unsigned figure that can be negative, such as a statement's Net, writes the app's "−"
+// kept to its figure (#899), never Intl's hyphen-minus; any other figure as formatCurrency does.
+describe('formatCurrencyWithMinus', () => {
+  it('writes a negative figure with "−" and a word joiner', () => {
+    expect(formatCurrencyWithMinus(-12759.14, 'INR')).toBe('−⁠₹12,759.14');
+    expect(formatCurrencyWithMinus(-20, 'EUR')).toBe(withSign('−', '€20.00'));
+    expect(formatCurrencyWithMinus(-5, 'NOPE')).toBe('−⁠NOPE 5.00');
+  });
+
+  it('leaves a positive figure, and zero, unsigned', () => {
+    expect(formatCurrencyWithMinus(620, 'INR')).toBe('₹620.00');
+    expect(formatCurrencyWithMinus(0, 'USD')).toBe('$0.00');
+  });
+
+  it('writes a negative that rounds to nothing as zero, not "−$0.00"', () => {
+    expect(formatCurrencyWithMinus(-0.001, 'USD')).toBe('$0.00');
+    expect(formatCurrencyWithMinus(-0.4, 'JPY')).toBe('¥0');
+    expect(formatCurrencyWithMinus(-0, 'USD')).toBe('$0.00');
   });
 });
