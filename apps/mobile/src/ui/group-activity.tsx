@@ -32,8 +32,6 @@ import {
   Divider,
   LinearProgress,
   SectionHeader,
-  hairSpace,
-  textVariants,
   useLargeText,
   useLargestText,
   useTap,
@@ -135,47 +133,20 @@ function Details({
   line,
   time,
   whole = false,
-  keepTime = false,
 }: {
   line: ActivityLine;
   time: string;
   /**
-   * All the lines it needs: in an event's detail, where it is read in full (#783), and in the
-   * list from 150% text (#871).
+   * All the lines it needs: in an event's detail, where it is read in full (#783), in the list
+   * from 150% text (#871), and a settle-all batch's, whose rates are figures a row never cuts
+   * (#925).
    */
   whole?: boolean;
-  /**
-   * Cut at two lines, the time stays: a settle-all batch's Debts, one after another, ran past two
-   * lines and took its time with them (#871).
-   */
-  keepTime?: boolean;
 }) {
-  const theme = useTheme();
-  if (whole || !keepTime || line.details.length === 0)
-    return (
-      <CompactText variant="caption" tone="secondary" numberOfLines={whole ? 0 : 2}>
-        <Parts parts={[...line.details, { text: time }]} />
-      </CompactText>
-    );
-  // The details take two lines at most, cut at their tail, and the time follows their last
-  // line, never cut with them. The time is a plain text in the caption's look, so a row draws no
-  // more components than it did.
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-      <CompactText
-        variant="caption"
-        tone="secondary"
-        numberOfLines={2}
-        spare
-        style={{ flexShrink: 1 }}
-      >
-        <Parts parts={line.details} />
-      </CompactText>
-      <Text style={[textVariants.caption, { color: theme.textSecondary }]}>
-        {`${SEPARATOR}${time}`}
-        {hairSpace}
-      </Text>
-    </View>
+    <CompactText variant="caption" tone="secondary" numberOfLines={whole ? 0 : 2}>
+      <Parts parts={[...line.details, { text: time }]} />
+    </CompactText>
   );
 }
 
@@ -197,7 +168,11 @@ const EventContent = memo(function EventContent({
   line: ActivityLine;
   name: string;
   time: string;
-  /** A settle-all batch's row: below 150% its time keeps its place beside the cut details. */
+  /**
+   * A settle-all batch's row: its details take the lines they need at any text size. With three
+   * or more Debts they sum up the rates, with no figures; with one or two they keep each rate, and
+   * wrap rather than cut one (#925).
+   */
   batch?: boolean;
 }) {
   // From 150% text the headline and the details take the lines they need, as other rows' titles
@@ -220,7 +195,7 @@ const EventContent = memo(function EventContent({
             {line.credit}
           </CompactText>
         ) : null}
-        <Details line={line} time={time} whole={whole} keepTime={batch} />
+        <Details line={line} time={time} whole={whole || batch} />
       </View>
     </>
   );
@@ -255,7 +230,11 @@ const ActivityRow = memo(
     const line = useMemo(
       () =>
         batch
-          ? describeSettlementBatch(batch.events, batch.batchSize, { currentUserId, currency })
+          ? describeSettlementBatch(batch.events, batch.batchSize, {
+              currentUserId,
+              currency,
+              summary: true,
+            })
           : describeActivity(event, { currentUserId, currency, members }),
       // The members by what they say, not by the list that holds them.
       [event, batch, currentUserId, currency, named],

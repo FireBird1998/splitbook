@@ -413,22 +413,34 @@ export function describeActivity(
 }
 
 /**
+ * What an Activity row says of a payment's rates when it settled three or more Debts (#925): its
+ * headline lists every amount, and its details page each rate.
+ */
+export const eachDebtAtItsOwnRate = 'Each Debt at its own rate';
+
+/**
  * A payment that settled several Debts at once (#734), as one row: "You paid Sam Chen ₹3,322.00 to
  * clear ₹1,480.00 and €20.00", then each Debt and its rate, in the shared words the web says.
- * `events` are the batch's events loaded so far; `batchSize`, how many it has in all.
+ * `events` are the batch's events loaded so far; `batchSize`, how many it has in all. A row
+ * (`summary`) sums up three or more Debts' rates, `eachDebtAtItsOwnRate`, with no figures: a row
+ * may sum up but never cut a figure, and a third Debt's rate ran past the row's two lines (#925).
  */
 export function describeSettlementBatch(
   events: ActivityEvent[],
   batchSize: number,
-  { currentUserId }: { currentUserId: string; currency: string },
+  {
+    currentUserId,
+    summary = false,
+  }: { currentUserId: string; currency: string; summary?: boolean },
 ): ActivityLine {
   const words = settlementBatchWords(events, batchSize, currentUserId);
+  const debts = summary && batchSize >= 3 ? [eachDebtAtItsOwnRate] : words.debts;
   return {
     actor: words.payer,
     verb: 'paid',
     subject: words.payee,
     complement: words.amounts,
-    details: [...words.debts, ...(words.rest ? [words.rest] : [])].map((text) => ({ text })),
+    details: [...debts, ...(words.rest ? [words.rest] : [])].map((text) => ({ text })),
     changes: [],
   };
 }

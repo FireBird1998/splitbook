@@ -7,6 +7,7 @@ import {
 } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { formatCurrency } from '@splitbook/shared/currency';
 import { emptySettlement, type SettlementState } from '../data/settlement';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
 import {
@@ -20,6 +21,7 @@ import {
   findHosts,
   flatten,
   largeTextWindows,
+  layoutHeight,
   outerTexts,
   unbroken,
   unreadText,
@@ -675,6 +677,116 @@ describe.each(['light', 'dark'] as const)('Balances at large text in %s (#639)',
       expect(unreadText(footer!, size.fontScale, size.width)).toEqual([]);
     },
   );
+});
+
+// #925, the Designer's release check: at 200% on a 360 dp phone, a CHF 12,345,678.90 Debt read
+// "CHF 12,345,…" as the all-time balance, under "You owe", and "CHF 12,345,6…" as the Suggested
+// payment, beside its avatars with Record under it. The balance shrinks to fit, as Home's Your
+// balances do; the payment gets the card's full width under its title, with Record below it.
+describe.each(['light', 'dark'] as const)('Balances with large amounts in %s (#925)', (mode) => {
+  const francs = (amount: number): GroupCurrencyBalance => ({
+    currency: 'CHF',
+    balances: [
+      { user: person(priya, 'Priya Shah'), balance: amount },
+      { user: person(sam, 'Sam Chen'), balance: 0 },
+      { user: person(you, 'Alex Rivera'), balance: -amount },
+    ],
+    debts: [{ from: person(you, 'Alex Rivera'), to: person(priya, 'Priya Shah'), amount }],
+  });
+  const balances = (amount: number, size: { width: number; fontScale: number }) => {
+    setWindow({ ...size, height: 640 });
+    render(
+      <ThemeContext.Provider value={getSemanticTokens(mode)}>
+        <GroupBalancesView
+          group={{ ...group(), defaultCurrency: 'CHF' }}
+          currentUserId={you}
+          state={financial({ data: [francs(amount)] })}
+          pending={null}
+          offline={false}
+          onRecord={vi.fn()}
+          onCheckPayment={vi.fn()}
+          onRefreshBalances={() => undefined}
+        />
+      </ThemeContext.Provider>,
+    );
+    return screen!.toJSON() as ReactTestRendererJSON;
+  };
+  /** The texts that say `words`, each a line of its own. */
+  const saying = (tree: ReactTestRendererJSON, words: string) =>
+    outerTexts(tree).filter((text) => wordsOf(text) === words);
+
+  it.each(
+    [12_345_678.9, 10_000_000].flatMap((amount) =>
+      [
+        { width: 360, fontScale: 1 },
+        { width: 360, fontScale: 1.3 },
+        { width: 360, fontScale: 2 },
+        { width: 412, fontScale: 2 },
+      ].map((size) => ({ amount, ...size })),
+    ),
+  )('shows every digit of $amount francs, $width dp at $fontScale× text', (size) => {
+    const tree = balances(size.amount, size);
+    const digits = formatCurrency(size.amount, 'CHF').replace('CHF\u00a0', '');
+    // The all-time balance, the Suggested payment and Priya's and the member's positions.
+    expect(outerTexts(tree).filter((text) => wordsOf(text).includes(digits))).toHaveLength(4);
+    // The screen's content is inset 16dp on each side.
+    expect(unreadText(tree, size.fontScale, size.width - 32)).toEqual([]);
+  });
+
+  it('shrinks the all-time balance to fit, as Home’s Your balances do', () => {
+    const tree = balances(12_345_678.9, { width: 360, fontScale: 2 });
+    const [balance] = findHosts(
+      tree,
+      (props, type) =>
+        type === 'View' && props.accessibilityLabel === 'You owe CHF\u00a012,345,678.90',
+    );
+    const [amount] = saying(balance!, 'CHF\u00a012,345,678.90');
+    expect(amount!.props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true });
+  });
+
+  it('gives the Suggested payment the card’s full width, its digits at their size, Record below', () => {
+    const tree = balances(12_345_678.9, { width: 360, fontScale: 2 });
+    const [payment] = findHosts(
+      tree,
+      (props, type) =>
+        type === 'View' &&
+        props.accessibilityLabel === 'You pay Priya Shah, CHF\u00a012,345,678.90',
+    );
+    // Wider than the room beside the avatars (two of 26 dp and a 14 dp arrow, 2 dp apart, then
+    // a 10 dp gap), so the words and their amount take the row's full width under them.
+    const row = 360 - 32 - 2 - 28;
+    expect(flatten(payment!.props.style)).toMatchObject({ flex: 1 });
+    expect(flatten(payment!.props.style).minWidth).toBeGreaterThan(row - 70 - 10);
+    expect(flatten(payment!.props.style).minWidth).toBeLessThanOrEqual(row);
+    const [amount] = saying(payment!, 'CHF\u00a012,345,678.90');
+    expect(amount!.props.adjustsFontSizeToFit).toBeUndefined();
+  });
+
+  // As main 61f18493 laid them out: an ordinary amount's Balances keep their shape.
+  it.each([
+    { width: 360, fontScale: 1, height: 584 },
+    { width: 412, fontScale: 1, height: 536 },
+    { width: 360, fontScale: 1.3, height: 681.7 },
+    { width: 412, fontScale: 1.3, height: 624.2 },
+  ])('keeps ordinary amounts where they were, $width dp at $fontScale× text', (size) => {
+    setWindow({ ...size, height: 640 });
+    render(
+      <ThemeContext.Provider value={getSemanticTokens(mode)}>
+        <GroupBalancesView
+          group={group()}
+          currentUserId={you}
+          state={financial()}
+          pending={null}
+          offline={false}
+          onRecord={vi.fn()}
+          onCheckPayment={vi.fn()}
+          onRefreshBalances={() => undefined}
+        />
+      </ThemeContext.Provider>,
+    );
+    const tree = screen!.toJSON() as ReactTestRendererJSON;
+    expect(layoutHeight(tree, size.fontScale, size.width - 32)).toBeCloseTo(size.height, 6);
+  });
 });
 
 // #639 review: the room the balance card's title and the payments' caption keep beside what

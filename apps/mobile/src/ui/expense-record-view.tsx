@@ -68,7 +68,7 @@ import {
   type BadgeTone,
   type Reveal,
 } from './compact';
-import { WhoOwesWhat, sharesDifferNote } from './expense-form';
+import { WhoOwesWhat, amountPair, sharesDifferNote } from './expense-form';
 import { RefreshStatus } from './financial-views';
 import type { MobileExpense } from '../data/types';
 import { savingNeedsConnection } from './offline-notice';
@@ -798,7 +798,13 @@ export function ExpenseRecordSkeleton({
             marginTop: 12,
           }}
         >
-          {known(<Money size="form">{record.amount}</Money>, 'center')}
+          {/* Shrinks to fit, as the record's amount does, rather than cut it (#925). */}
+          {known(
+            <Money size="form" adjustsFontSizeToFit>
+              {record.amount}
+            </Money>,
+            'center',
+          )}
           {record.badge ? (
             outline ? (
               <Badge label={record.badge.label} tone={record.badge.tone} />
@@ -871,7 +877,7 @@ export function ExpenseRecordSkeleton({
                   ] as const
                 ).map(([label, amount]) => (
                   <SkeletonOf key={label} bar>
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                    <View style={amountPair}>
                       <CompactText variant="caption">{label}</CompactText>
                       {amount === null ? (
                         <CompactText>–</CompactText>

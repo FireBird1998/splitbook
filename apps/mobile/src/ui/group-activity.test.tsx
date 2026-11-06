@@ -16,7 +16,6 @@ import {
 import {
   findHosts,
   flatten,
-  hairSpace,
   largeTextWindows,
   layoutHeight,
   layoutWidth,
@@ -1108,6 +1107,36 @@ describe('a payment that settled several Debts at once (#734)', () => {
     },
   );
 
+  // #925: with one or two Debts the row keeps each rate, and its details take the lines they need
+  // rather than cut a figure at two.
+  it.each([
+    { width: 412, fontScale: 1 },
+    { width: 360, fontScale: 1.3 },
+    { width: 360, fontScale: 2 },
+    { width: 412, fontScale: 2 },
+  ])('keeps two Debts’ rates whole, $width dp at $fontScale× text (#925)', (size) => {
+    setWindow({ ...size, height: 640 });
+    render({
+      state: activity({
+        events: [euros, rupees],
+        pagination: { page: 1, limit: 20, total: 2, totalPages: 1 },
+      }),
+    });
+    const [row] = findHosts(
+      screen!.toJSON() as ReactTestRendererJSON,
+      (props, type) =>
+        type === 'Pressable' &&
+        props.accessibilityRole === 'button' &&
+        String(props.accessibilityLabel).includes('Sam Chen'),
+    );
+    const details = outerTexts(row!).find((text) => wordsOf(text).includes('at the suggested'))!;
+    expect(wordsOf(details)).toContain('€20.00 at the suggested ₹92.10 per\u00a0€ (20\u00a0Oct)');
+    expect(wordsOf(details)).toContain('11:30 AM');
+    expect(Number(details.props.numberOfLines) || 0).toBe(0);
+    // The list lies in a Card 16 dp in, inside its 1 dp border.
+    expect(unreadText(row!, size.fontScale, size.width - 34, { cutOnce: true })).toEqual([]);
+  });
+
   // #792: a batch's row has details, so from 130% its avatar keeps beside the headline.
   it('keeps its avatar beside its headline at 130% text (#792)', () => {
     setWindow({ width: 360, height: 640, fontScale: 1.3 });
@@ -1342,10 +1371,10 @@ describe.each(['light', 'dark'] as const)('Activity rows at large text in %s (#8
       expect(unreadText(shown, fontScale, 360 - 34)).toEqual([]);
       expect(wordsOf(shown)).toContain('3:18 PM');
     }
-    // The batch's headline names every Debt it cleared, and its details each Debt's rate.
+    // The batch's headline names every Debt it cleared; its details sum up their rates (#925).
     expect(wordsOf(row(rows.batch))).toContain('₹1,480.00, €15.00, ¥2,500 and £10.00');
-    expect(wordsOf(row(rows.batch))).toContain(
-      '£10.00 at the suggested ₹110.25 per\u00a0£ (20\u00a0Oct)',
+    expect(lines(rows.batch).map(({ words }) => words)).toContain(
+      'Each Debt at its own rate\u00a0· 3:18 PM',
     );
   });
 
@@ -1357,9 +1386,10 @@ describe.each(['light', 'dark'] as const)('Activity rows at large text in %s (#8
       for (const said of Object.values(rows)) {
         const texts = lines(said);
         // The headline and the details each take two lines at most, cut at their tail with the
-        // paint sized for the "…" and the words nested inside (#785).
+        // paint sized for the "…" and the words nested inside (#785). A batch's details are never
+        // cut (#925).
         const cut = texts.filter(({ text }) => Number(text.props.numberOfLines) === 2);
-        expect(cut, said).toHaveLength(2);
+        expect(cut, said).toHaveLength(said === rows.batch ? 1 : 2);
         for (const { text } of cut) {
           const [words] = (text.children ?? []).filter(
             (child): child is ReactTestRendererJSON => typeof child !== 'string',
@@ -1371,18 +1401,12 @@ describe.each(['light', 'dark'] as const)('Activity rows at large text in %s (#8
         // Nothing runs past the row, and no word breaks in two.
         expect(unreadText(row(said), fontScale, 360 - 34, { cutOnce: true })).toEqual([]);
       }
-      // A batch's time is a text of its own after its Debts, never cut with them: its Debts run
-      // past two lines here, so the cut takes them, not the time.
+      // A batch of four Debts sums up their rates, with its time, in a line never cut (#925): its
+      // Debts ran past two lines and cut a rate, at 100% on a 412 dp phone too.
       const time = lines(rows.batch).find(({ words }) => words.includes('3:18 PM'));
       expect(Number(time!.text.props.numberOfLines) || 0).toBe(0);
-      expect(time!.words.replaceAll(hairSpace, '')).toBe('\u00a0· 3:18 PM');
-      const debts = lines(rows.batch).find(
-        ({ text, words }) => Number(text.props.numberOfLines) === 2 && words.includes('at the'),
-      )!;
-      expect(debts.words).not.toContain('3:18 PM');
-      expect(unreadText(debts.text, fontScale, column).some((said) => said.includes('needs'))).toBe(
-        true,
-      );
+      expect(time!.words).toBe('Each Debt at its own rate\u00a0· 3:18 PM');
+      expect(unreadText(time!.text, fontScale, column)).toEqual([]);
       // Other rows keep their time at the end of their details, as before.
       for (const said of [rows.cross, rows.currencies]) {
         const details = lines(said).find(({ words }) => words.includes('3:18 PM'))!;
@@ -1390,6 +1414,37 @@ describe.each(['light', 'dark'] as const)('Activity rows at large text in %s (#8
       }
     },
   );
+
+  // #925, the Designer's release check: after Settle all, the row's details held each Debt's rate
+  // to two lines and cut the third with "…" ("EUR18.90 a…"), at 360 dp and 200% inside a figure.
+  // A row may sum up, but never cut a figure: with three or more Debts it says "Each Debt at its
+  // own rate", with no figures; the headline lists every amount, and the details page each rate.
+  it.each([
+    { width: 412, fontScale: 1 },
+    { width: 360, fontScale: 1 },
+    { width: 360, fontScale: 1.3 },
+    { width: 360, fontScale: 2 },
+  ])('sums up four Debts’ rates without a figure, $width dp at $fontScale× text', (size) => {
+    setWindow({ ...size, height: 640 });
+    render({ state: activity({ events: page.events, pagination: page.pagination }) }, mode);
+    const details = lines(rows.batch).find(({ words }) => words.includes('3:18 PM'))!;
+    expect(details.words).toBe('Each Debt at its own rate\u00a0· 3:18 PM');
+    expect(Number(details.text.props.numberOfLines) || 0).toBe(0);
+    expect(wordsOf(row(rows.batch))).not.toContain('at the suggested');
+    // The headline still names every Debt it cleared.
+    expect(wordsOf(row(rows.batch))).toContain('₹1,480.00, €15.00, ¥2,500 and £10.00');
+    expect(row(rows.batch).props.accessibilityLabel).toContain('Each Debt at its own rate');
+    expect(unreadText(details.text, size.fontScale, size.width - 34 - 28 - 44)).toEqual([]);
+  });
+
+  it('keeps every Debt’s rate on the payment’s details page (#925)', () => {
+    setWindow({ width: 360, height: 640, fontScale: 2 });
+    const selected = page.events.find((event) => event._id === hex('e', 914))!;
+    render({ state: activity({ selected, events: page.events }) }, mode);
+    const shown = wordsOf(screen!.toJSON() as ReactTestRendererJSON);
+    expect(shown).toContain('£10.00 at the suggested ₹110.25 per\u00a0£ (20\u00a0Oct)');
+    expect(shown).not.toContain('Each Debt at its own rate');
+  });
 });
 
 // An actor's long hyphenated name, set in its own run in the headline, breaks after its hyphen at

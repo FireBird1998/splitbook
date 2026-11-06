@@ -35,6 +35,8 @@ import {
   useLineBox,
   useTap,
   useTextColumn,
+  moneyWidth,
+  widestSemiboldWord,
 } from './compact';
 import { inPlace, ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -424,7 +426,15 @@ function MemberBalanceCard({
             }}
           >
             <CompactText tone="secondary">{label}</CompactText>
-            <Money size="form" tone={tone === 'negative' ? 'negative' : 'positive'}>
+            {/* A figure wider than the card on a line of its own shrinks to fit, as Home's Your
+                balances do: at 200% on a 360 dp phone, CHF 12,345,678.90 read "CHF 12,345,…"
+                under "You owe" (#925). */}
+            <Money
+              size="form"
+              tone={tone === 'negative' ? 'negative' : 'positive'}
+              adjustsFontSizeToFit
+              style={{ flexShrink: 1 }}
+            >
               {formatCurrency(Math.abs(own), bucket.currency)}
             </Money>
           </View>
@@ -597,7 +607,7 @@ function SettleUp({
                   amount={formatCurrency(payment.amount, payment.currency)}
                 >
                   <CompactButton
-                    label="Record"
+                    label={recordLabel}
                     variant="tonal"
                     dense
                     disabled={offline || locked || unavailable !== null}
@@ -637,6 +647,12 @@ function SettleUp({
 
 /** A Suggested payment's or a Debt's padding at its sides, inside its Card. */
 const paymentRowPadding = 14;
+/** Who pays whom, before a payment's words: two small avatars and the arrow between them. */
+const paymentAvatarsWidth = 2 * avatarSize.small + 14 + 2 * 2;
+/** Record's words, and how wide the dense tonal button that says them is, at this text size. */
+const recordLabel = 'Record';
+const recordWidth = (fontScale: number) =>
+  Math.ceil(2 * 14 + (widestSemiboldWord(recordLabel) ?? 4) * scaledSp(14, fontScale)) + 1;
 
 /**
  * A Suggested payment or a Debt: who pays whom, read as one with its amount in the text colour,
@@ -657,13 +673,25 @@ function PaymentRow({
 }) {
   const theme = useTheme();
   const whole = useLargestText();
+  const { width, fontScale } = useWindowDimensions();
+  // The room inside the row: the screen's gutter, its Card's border and the row's own padding on
+  // each side.
+  const inset = 2 * (space.gutter + 1 + paymentRowPadding);
   // From 150% the title wraps, keeping room for its widest word (#921), and no more than the row
-  // has: the screen's gutter, its Card's border and the row's own padding on each side.
-  const column = useTextColumn(
-    whole ? title : undefined,
-    'body',
-    2 * (space.gutter + 1 + paymentRowPadding),
-  );
+  // has.
+  const textColumn = useTextColumn(whole ? title : undefined, 'body', inset);
+  // The words keep room for their amount, whole: where it doesn't fit beside the avatars (and
+  // Record), the words and the amount take the row's full width under the avatars, and Record
+  // goes below them. At 200% on a 360 dp phone, CHF 12,345,678.90 read "CHF 12,345,6…" in the
+  // column beside the avatars (#925). Wider than the row still, it shrinks to fit.
+  const row = width - inset;
+  const amountWidth = Math.ceil(moneyWidth(amount, 'list', fontScale)) + 1;
+  const beside = row - paymentAvatarsWidth - 10 - (children ? 10 + recordWidth(fontScale) : 0);
+  const wide = textColumn === undefined && amountWidth > beside;
+  const column =
+    textColumn === undefined && !wide
+      ? undefined
+      : Math.max(textColumn ?? 0, Math.min(amountWidth, row));
   // From 130% text the row runs several lines: its avatars keep beside the first, at the top,
   // as an Activity row's does (#792), centred on that line.
   const top = useLargeText();
@@ -705,7 +733,7 @@ function PaymentRow({
         <CompactText weight="semibold" numberOfLines={whole ? 0 : 2}>
           {title}
         </CompactText>
-        <Money>{amount}</Money>
+        <Money adjustsFontSizeToFit={amountWidth > row || undefined}>{amount}</Money>
       </View>
       {children ? (
         column ? (

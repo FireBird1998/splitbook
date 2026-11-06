@@ -1,5 +1,13 @@
 import type { ViewInstance, TextInputInstance } from 'react-native';
-import { createContext, memo, useState, type ReactNode, type Ref } from 'react';
+import {
+  createContext,
+  memo,
+  useContext,
+  useLayoutEffect,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { EXPENSE_CATEGORIES, getCategory } from '@splitbook/shared/categories';
 import { formatCurrency, wholeUnit } from '@splitbook/shared/currency';
@@ -326,6 +334,18 @@ const AllocationPersonLabel = memo(function AllocationPersonLabel({
   );
 });
 /**
+ * A label and its amount in the stacked Who owes what, "Paid CHF 10,000,000.00": on one line where
+ * they fit, the amount under the label where they don't (#925). The record's skeleton keeps it.
+ */
+export const amountPair = {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  alignItems: 'baseline',
+  columnGap: 6,
+  rowGap: 2,
+} as const;
+
+/**
  * Whether Who owes what waits for the amount, keeping its rows with a dash for each figure: there
  * is no amount it can use yet, whether none, one typed in part (a sub-unit amount passes through
  * "0" and "0.") or one corrected beside the field. Folding the table there would move Notes
@@ -480,10 +500,10 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
                     ['Share', shareMinor],
                   ] as const
                 ).map(([label, minor]) => (
-                  <View
-                    key={label}
-                    style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}
-                  >
+                  // Where a label and its amount don't fit on one line, the amount goes under the
+                  // label: at 200% on a 360 dp phone, the pair ran past the card and its edge cut
+                  // "Paid CHF 10,000,000.(" (#925).
+                  <View key={label} style={amountPair}>
                     <CompactText variant="caption" tone="secondary">
                       {label}
                     </CompactText>
@@ -842,6 +862,15 @@ export function ActionBar({ children }: { children: ReactNode }) {
 export const SaveBarRow = createContext(false);
 
 /**
+ * What the box that keeps Add expense's footer at its tallest (#376) is told by Save: `release`
+ * while the amount typed can't be saved, so Save names no amount and the line it took under
+ * Save's words goes. The box then fits the bar rather than keep that line as an empty band above
+ * it, as at 200% on a 360 dp phone over an amount past the maximum (#925). Written as Save lays
+ * out, never read while rendering, so it draws nothing again.
+ */
+export const RetainedFooter = createContext<{ release: boolean } | null>(null);
+
+/**
  * Outfit SemiBold's widths, taken as Regular's (`outfitWidth`) times this: Finish later measured
  * 115 dp wide on an emulator at 100%, 18 dp of padding each side.
  */
@@ -896,6 +925,7 @@ export function SaveBar({
   onSave,
   secondary,
   beside = 'Finish later',
+  amountWrong = false,
   children,
 }: {
   label: string;
@@ -911,7 +941,13 @@ export function SaveBar({
   children?: ReactNode;
   /** The words of what goes beside Save on a short window, to know whether both fit. */
   beside?: string;
+  /** The amount typed can't be saved, so Save names none (`RetainedFooter`). */
+  amountWrong?: boolean;
 }) {
+  const retained = useContext(RetainedFooter);
+  useLayoutEffect(() => {
+    if (retained) retained.release = amountWrong;
+  });
   // From 150% the amount goes under the words: beside "CHF 2,500.50" at 200% on a 360 dp phone,
   // Save read "Save ex / pense" (#867), as Record payment's did (#639).
   const largest = useLargestText();

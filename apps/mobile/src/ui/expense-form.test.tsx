@@ -12,6 +12,7 @@ import { ThemeContext } from './theme';
 import { setWindow } from '../test-utils/native';
 import { findHosts, flatten, layoutHeight, unreadText, wordsOf } from '../test-utils/layout';
 import { mockDeviceLocale } from '../test-utils/device-locale';
+import { formatCurrency } from '@splitbook/shared/currency';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -349,6 +350,81 @@ describe.each(['light', 'dark'] as const)('the Who owes what heading in %s (#876
     expect(layoutHeight(row, 1, card)).toBe(one + 12);
   });
 });
+
+// #925, the Designer's release check: at 200% on a 360 dp phone, the stacked Who owes what clipped
+// "Paid CHF 10,000,000.(" at the card's edge: each label and its amount were a row that couldn't
+// shrink. Where the pair doesn't fit, the amount goes under its label.
+describe.each(['light', 'dark'] as const)(
+  'Who owes what with large amounts in %s (#925)',
+  (mode) => {
+    const francs = (amount: string) => ({ ...draft(amount, ids.slice(0, 2)), currency: 'CHF' });
+    function render(amount: string, size: { width: number; fontScale: number }) {
+      setWindow({ ...size, height: 640 });
+      const value = francs(amount);
+      act(() => {
+        renderer = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <WhoOwesWhat
+              draft={value}
+              allocation={expenseMoney(value)}
+              problem=""
+              name={(id) => people[ids.indexOf(id)]}
+              currentUserId={ids[0]}
+              money={(minor) => formatCurrency(minor / 100, 'CHF')}
+            />
+          </ThemeContext.Provider>,
+        );
+      });
+      return renderer!.toJSON() as ReactTestRendererJSON;
+    }
+    /** A label and its amount: "Paid" and "CHF 10,000,000.00". */
+    const pairs = (tree: ReactTestRendererJSON) =>
+      findHosts(
+        tree,
+        (props, type) => type === 'View' && flatten(props.style).alignItems === 'baseline',
+      ).filter((pair) => ['Paid', 'Share'].includes(wordsOf((pair.children ?? [])[0] ?? '')));
+
+    it.each([
+      { width: 360, fontScale: 2 },
+      { width: 412, fontScale: 2 },
+    ])('shows every digit of CHF 10,000,000.00, $width dp at $fontScale× text', (size) => {
+      const tree = render('10000000.00', size);
+      expect(wordsOf(tree)).toContain('PaidCHF\u00a010,000,000.00');
+      // The Card sits 16 dp in from the screen's edges, inside its 1 dp border.
+      expect(unreadText(tree, size.fontScale, size.width - 32 - 2)).toEqual([]);
+    });
+
+    it('puts the amount under its label where the two don’t fit on one line, at 200% on 360 dp', () => {
+      const tree = render('10000000.00', { width: 360, fontScale: 2 });
+      const [paid] = pairs(tree);
+      expect(flatten(paid!.props.style)).toMatchObject({ flexWrap: 'wrap' });
+      // The label's line, then the amount's: two lines, not one cut short.
+      const [label, amount] = (paid!.children ?? []) as ReactTestRendererJSON[];
+      const room = 360 - 32 - 2 - 28 - 36;
+      expect(layoutHeight(paid!, 2, room)).toBe(
+        layoutHeight(label!, 2, room) + 2 + layoutHeight(amount!, 2, room),
+      );
+    });
+
+    // Stacked below 130% on a phone narrower than 360 dp.
+    it.each([
+      { width: 340, fontScale: 1 },
+      { width: 360, fontScale: 1.3 },
+      { width: 412, fontScale: 1.3 },
+    ])('keeps an ordinary amount beside its label, $width dp at $fontScale× text', (size) => {
+      const tree = render('120.00', size);
+      const card = size.width - 32 - 2;
+      expect(unreadText(tree, size.fontScale, card)).toEqual([]);
+      expect(pairs(tree)).toHaveLength(4);
+      for (const pair of pairs(tree)) {
+        const [label, amount] = (pair.children ?? []) as ReactTestRendererJSON[];
+        expect(layoutHeight(pair, size.fontScale, card - 28 - 36)).toBe(
+          Math.max(layoutHeight(label!, size.fontScale), layoutHeight(amount!, size.fontScale)),
+        );
+      }
+    });
+  },
+);
 
 // #867, from the Tester's #710 device pass: at 200% on a 360 dp phone, 2500.50 in Swiss francs
 // showed only "CHF 00.50": the chip and the "CHF" before the amount left the field too little
