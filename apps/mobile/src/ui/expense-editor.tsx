@@ -764,6 +764,8 @@ function ExpenseTask({
     !draft.original ? (
       <FinishLater controller={controller} />
     ) : null;
+  // What Finish later says, to know whether Save fits beside it on a short window (#646).
+  const besideLater = state.finishLaterPending ? 'Check again' : 'Finish later';
   const tagName = (id: string) =>
     !id
       ? 'No Tag'
@@ -1112,6 +1114,7 @@ function ExpenseTask({
             blocked={checking ? checkingMessage : offline ? 'Checking needs a connection.' : null}
             onSave={state.attempt ? onSave : onReconcile}
             secondary={onClose && { label: 'Keep for later', onPress: onClose }}
+            beside={besideLater}
           >
             {later}
           </SaveBar>
@@ -1140,6 +1143,7 @@ function ExpenseTask({
             secondary={
               reviewing ? { label: 'Go to What’s different', onPress: showReview } : undefined
             }
+            beside={besideLater}
           >
             {later}
           </SaveAction>

@@ -17,6 +17,7 @@ import { mockDeviceLocale } from '../test-utils/device-locale';
 
 const { AmountDescriptionCard, SaveBar, WhoOwesWhat, expenseDateLabel } =
   await import('./expense-form');
+const { CompactButton } = await import('./compact');
 
 const people = ['Alex Rao', 'Sam Chen', 'Priya Shah', 'Jo Park', 'Kim Lee'];
 const ids = people.map((_, index) => `a0000000000000000000000${index + 1}`);
@@ -392,3 +393,76 @@ describe.each(['light', 'dark'] as const)('the Save bar at large text in %s (#86
     expect(unreadText(bar(size.fontScale, size.amount), size.fontScale, 360)).toEqual([]);
   });
 });
+
+// #646 (Designer): at 360×640 and 100%, Save beside Finish later has about 169 dp inside its
+// padding. "Save expense ₹99.00" fits on its line, but beside ₹1,249.50 it read "Save / expense",
+// and beside ₹1,234,567.89 "Save / expen / se". Where the amount doesn't fit beside the words it
+// goes under them, still in one row; where the words alone don't fit, the row stacks.
+describe.each(['light', 'dark'] as const)(
+  'Save beside Finish later at 360×640 in %s (#646)',
+  (mode) => {
+    function bar(label: string, amount?: string, fontScale = 1) {
+      setWindow({ width: 360, height: 640, fontScale });
+      onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+      act(() => {
+        renderer = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <SaveBar label={label} amount={amount} blocked={null} onSave={() => undefined}>
+              <CompactButton label="Finish later" variant="tonal" onPress={() => undefined} />
+            </SaveBar>
+          </ThemeContext.Provider>,
+        );
+      });
+      return renderer!.root;
+    }
+    const save = (root: ReactTestInstance) =>
+      root.find(
+        (node) =>
+          isHost(node, 'Pressable') &&
+          !!node.props.accessibilityLabel &&
+          node.props.accessibilityLabel !== 'Finish later',
+      );
+    /** Whether Save and Finish later share a row. */
+    const shareRow = (root: ReactTestInstance) => {
+      let node = save(root).parent;
+      while (node && !(isHost(node, 'View') && flatten(node.props.style).flexDirection === 'row'))
+        node = node.parent;
+      return (
+        !!node &&
+        node.findAll((child) => child.props.accessibilityLabel === 'Finish later').length > 0
+      );
+    };
+    /** Whether Save's amount sits under its words: both in a column of their own. */
+    const amountUnder = (root: ReactTestInstance) => {
+      const money = save(root).find(
+        (node) => isHost(node, 'Text') && /\d/.test(node.children.join('')),
+      );
+      // The money face is a text within a text; what holds them both is the first view up.
+      let holder = money.parent;
+      while (holder && !isHost(holder, 'View') && !isHost(holder, 'Pressable'))
+        holder = holder.parent;
+      return isHost(holder!, 'View') && flatten(holder!.props.style).alignItems === 'center';
+    };
+
+    it('keeps ₹99.00 beside the words, in one row', () => {
+      const root = bar('Save expense', '₹99.00');
+      expect(shareRow(root)).toBe(true);
+      expect(amountUnder(root)).toBe(false);
+    });
+
+    it.each(['₹1,249.50', '₹1,234,567.89', '₹12,34,567.89'])(
+      'puts %s under the words, still in one row',
+      (amount) => {
+        const root = bar('Save expense', amount);
+        expect(shareRow(root)).toBe(true);
+        expect(amountUnder(root)).toBe(true);
+        expect(unreadText(renderer!.toJSON() as ReactTestRendererJSON, 1, 360)).toEqual([]);
+      },
+    );
+
+    it('stacks the row when the words alone don’t fit beside Finish later', () => {
+      const root = bar('Check the saved Expense');
+      expect(shareRow(root)).toBe(false);
+    });
+  },
+);
