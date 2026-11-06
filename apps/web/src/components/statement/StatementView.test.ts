@@ -634,6 +634,18 @@ describe('the summary strip', () => {
     expect(print).toMatch(/\.statement-summary[^{]*\{[^}]*print-color-adjust:\s*exact/);
   });
 
+  // #954: the theme script sets the dark scheme inline on <html>, and Chromium paints the A4
+  // margins in that scheme's page colour (18,18,18) when background graphics are on. Printing the
+  // statement takes the light scheme, over the inline style, so the margins print white too. Only
+  // where a statement is on the page: no other page's print changes.
+  it('prints the A4 margins in the light colour scheme in every theme (#954)', () => {
+    const css = readFileSync(STATEMENT_CSS, 'utf8');
+    const print = css.slice(css.indexOf('@media print {'));
+    expect(print).toMatch(
+      /:root:has\(\.statement-paper\)\s*\{[^}]*color-scheme:\s*light\s*!important/,
+    );
+  });
+
   it('labels each figure in small uppercase', () => {
     const labels = stylesOf(tripHtml(), 'statement-summary-label');
     expect(labels).toHaveLength(3);
