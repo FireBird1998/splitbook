@@ -1300,6 +1300,13 @@ describe.each(['light', 'dark'] as const)('a large Expense in the list in %s (#9
     expect(wordsOf(line)).toContain('CHF\u00a010,000,000.00');
   });
 
+  // QA on the device: wrapped, the caption took the row's width and its lines started at the
+  // row's left, so "you owe" and "CHF 10,000,000.00" sat apart from the amount above them.
+  it('ends each line of a wrapped caption at the row\u2019s end, under its amount', () => {
+    const [row] = list({ width: 360, fontScale: 2 });
+    expect(flatten(caption(row!).props.style).textAlign).toBe('right');
+  });
+
   it.each([
     { width: 360, fontScale: 1 },
     { width: 412, fontScale: 1 },

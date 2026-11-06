@@ -505,6 +505,9 @@ export const ListRow = memo(function ListRow({
   );
 });
 
+/** A wrapped caption's lines end at the row's end, under its amount, as one line does. */
+const captionEnd = { textAlign: 'right' } as const;
+
 /**
  * A trailing amount with a caption beneath, for list rows. The caption wraps where it is wider than
  * its row, so an amount in it goes onto a line of its own, never cut: at 200% on a 360 dp phone,
@@ -526,7 +529,7 @@ export function RowAmount({
     <>
       {amount ? <Money tone={tone}>{amount}</Money> : null}
       {caption ? (
-        <CompactText variant="caption" tone={captionTone} spare>
+        <CompactText variant="caption" tone={captionTone} spare style={captionEnd}>
           {caption}
         </CompactText>
       ) : null}
