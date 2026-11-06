@@ -68,7 +68,7 @@ import {
   type BadgeTone,
   type Reveal,
 } from './compact';
-import { WhoOwesWhat, sharesDifferNote } from './expense-form';
+import { WhoOwesWhat, amountPair, sharesDifferNote } from './expense-form';
 import { RefreshStatus } from './financial-views';
 import type { MobileExpense } from '../data/types';
 import { savingNeedsConnection } from './offline-notice';
@@ -871,7 +871,7 @@ export function ExpenseRecordSkeleton({
                   ] as const
                 ).map(([label, amount]) => (
                   <SkeletonOf key={label} bar>
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                    <View style={amountPair}>
                       <CompactText variant="caption">{label}</CompactText>
                       {amount === null ? (
                         <CompactText>–</CompactText>

@@ -17,7 +17,7 @@ import {
   type RecordedEdit,
 } from '@splitbook/shared/expense-detail';
 import { motion } from './compact';
-import { findHosts, flatten, layoutHeight } from '../test-utils/layout';
+import { findHosts, flatten, layoutHeight, unreadText, wordsOf } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, timing, touchAlong } from '../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -39,6 +39,7 @@ const ids = {
   rerun: 'b00000000000000000000008',
   groceries: 'b00000000000000000000009',
   marks: 'b00000000000000000000010',
+  office: 'b00000000000000000000011',
 };
 const iso = '2026-09-29T14:32:00.000Z';
 const group = {
@@ -174,6 +175,16 @@ const records: Record<string, Record<string, unknown>> = {
     paidBy: [row(alex, 4000)],
     splitBetween: [row(alex, 2000), row(sam, 2000)],
     createdBy: alex.id,
+  }),
+  // The Designer's release check (#925): CHF 10,000,000.00 Priya paid, shared by Alex and Priya.
+  [ids.office]: expense(ids.office, {
+    description: 'Office fit-out',
+    currency: 'CHF',
+    amount: 10_000_000,
+    amountMinor: 1_000_000_000,
+    paidBy: [row(priya, 1_000_000_000)],
+    splitBetween: [row(alex, 500_000_000), row(priya, 500_000_000)],
+    createdBy: person(priya),
   }),
   [ids.weekly]: expense(ids.weekly, {
     description: 'Weekly groceries',
@@ -1037,6 +1048,33 @@ describe('compact Expense record, opening', () => {
       act(() => screen?.unmount());
       await render(open(id));
       expect(shape(room, fontScale)).toEqual(skeleton);
+    },
+  );
+
+  // #925, the Designer's release check: at 200% on a 360 dp phone, Who owes what clipped "Paid
+  // CHF 10,000,000.(" at the card's edge. The amount goes under its label, in the record and in
+  // the skeleton it opens over, whose pairs are the record's texts.
+  it.each([360, 412])(
+    'shows every digit of CHF 10,000,000.00 in Who owes what and its skeleton, %sdp at 2× text',
+    async (width) => {
+      setWindow({ width, fontScale: 2 });
+      const room = width - 32;
+      await act(async () => {
+        screen = create(
+          editor(
+            { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.office },
+            recordOutline(listRow(ids.office), alex.id),
+          ),
+        );
+      });
+      const [, skeleton] = cards();
+      expect(wordsOf(skeleton!)).toContain('PaidCHF\u00a010,000,000.00');
+      expect(unreadText(skeleton!, 2, room)).toEqual([]);
+      act(() => screen?.unmount());
+      await render(open(ids.office));
+      const [, owes] = cards();
+      expect(wordsOf(owes!)).toContain('PaidCHF\u00a010,000,000.00');
+      expect(unreadText(owes!, 2, room)).toEqual([]);
     },
   );
 

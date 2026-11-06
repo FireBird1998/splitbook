@@ -326,6 +326,18 @@ const AllocationPersonLabel = memo(function AllocationPersonLabel({
   );
 });
 /**
+ * A label and its amount in the stacked Who owes what, "Paid CHF 10,000,000.00": on one line where
+ * they fit, the amount under the label where they don't (#925). The record's skeleton keeps it.
+ */
+export const amountPair = {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  alignItems: 'baseline',
+  columnGap: 6,
+  rowGap: 2,
+} as const;
+
+/**
  * Whether Who owes what waits for the amount, keeping its rows with a dash for each figure: there
  * is no amount it can use yet, whether none, one typed in part (a sub-unit amount passes through
  * "0" and "0.") or one corrected beside the field. Folding the table there would move Notes
@@ -480,10 +492,10 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
                     ['Share', shareMinor],
                   ] as const
                 ).map(([label, minor]) => (
-                  <View
-                    key={label}
-                    style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}
-                  >
+                  // Where a label and its amount don't fit on one line, the amount goes under the
+                  // label: at 200% on a 360 dp phone, the pair ran past the card and its edge cut
+                  // "Paid CHF 10,000,000.(" (#925).
+                  <View key={label} style={amountPair}>
                     <CompactText variant="caption" tone="secondary">
                       {label}
                     </CompactText>
