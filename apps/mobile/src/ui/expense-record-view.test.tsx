@@ -1,5 +1,11 @@
 import { useSyncExternalStore } from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
 import { mockDeviceLocale } from '../test-utils/device-locale';
@@ -21,6 +27,7 @@ import {
   findHosts,
   flatten,
   layoutHeight,
+  layoutTops,
   rowStarts,
   unreadText,
   wordsOf,
@@ -1124,6 +1131,39 @@ describe('compact Expense record, opening', () => {
       const shares = starts.map(([, share]) => share!);
       for (const share of shares) expect(Math.abs(share - shares[0]!)).toBeLessThanOrEqual(1);
       expect(unreadText(owes!, fontScale, width - 32)).toEqual([]);
+    },
+  );
+
+  // #932, the Designer's review of #926: a draft's notice came in above the record, so the record
+  // moved down under a finger about to tap it. However it arrives, nothing of the record moves:
+  // every line of it starts where it did, above and below the notice.
+  it.each([
+    ['the Group’s draft', 412, 1, false],
+    ['this Expense’s kept edit', 412, 1, true],
+    ['the Group’s draft', 360, 2, false],
+  ] as const)(
+    'moves nothing of the record when it offers %s, %sdp at %s× text (#932)',
+    async (_case, width, fontScale, own) => {
+      setWindow({ width, fontScale });
+      const ui = await render(open(ids.bill));
+      const shown = ui.controller.getSnapshot().expense;
+      const kept = { ...shown.draft!, description: 'Electricity and water' };
+      const groupDraft = own ? kept : { ...kept, original: undefined };
+      /** Each line on the screen, and how far down it starts. */
+      const lines = () =>
+        layoutTops(screen!.toJSON() as ReactTestRendererJSON, fontScale, width, (node) =>
+          ['Text', 'AnimatedText'].includes(node.type),
+        ).map(({ node, top }) => [wordsOf(node), top] as const);
+      act(() => screen?.unmount());
+      await act(async () => {
+        screen = create(editor(shown));
+      });
+      const before = lines();
+      await act(async () => screen!.update(editor({ ...shown, groupDraft })));
+      const words = text(screen!.root);
+      expect(words).toMatch(own ? /Unfinished draft/ : /This Group has an unfinished draft/);
+      const said = new Set(before.map(([line]) => line));
+      expect(lines().filter(([line]) => said.has(line))).toEqual(before);
     },
   );
 

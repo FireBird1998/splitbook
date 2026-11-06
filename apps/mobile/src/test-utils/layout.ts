@@ -302,6 +302,50 @@ export function rowStarts(
 }
 
 /**
+ * How far down its tree each node that `match` picks starts, in dp from the top of `node`, as
+ * `layoutHeight` lays it out `width` wide at this text size: columns stacked with their padding,
+ * borders, margins and gaps, and a scroll view's content from its content container's padding.
+ * A row's children start at its top. Absolutely positioned children take no room, as there, and
+ * aren't measured. Enough to see that a notice arriving moves nothing else on a screen (#932).
+ */
+export function layoutTops(
+  node: Node | null,
+  fontScale: number,
+  width: number,
+  match: (node: Node) => boolean,
+) {
+  const found: { node: Node; top: number }[] = [];
+  const walk = (each: Node, top: number, room: number) => {
+    if (match(each)) found.push({ node: each, top });
+    if (each.type === 'Text' || each.type === 'AnimatedText') return;
+    const style = flatten(each.props.style);
+    if (style.display === 'none') return;
+    const content = flatten(each.props.contentContainerStyle);
+    const inner = room - horizontal(style) - horizontal(content);
+    const row = style.flexDirection === 'row';
+    const gap = number(style.rowGap ?? style.gap) + number(content.rowGap ?? content.gap);
+    let y =
+      top +
+      edge(style, 'Top', 'padding') +
+      number(style.borderTopWidth ?? style.borderWidth) +
+      edge(content, 'Top', 'padding');
+    inFlow(each).forEach((child, index) => {
+      const own = flatten(child.props.style);
+      const childRoom = childWidth(child, row, inner, fontScale)!;
+      if (!row && index > 0) y += gap;
+      walk(child, y + edge(own, 'Top', 'margin'), childRoom);
+      if (!row)
+        y +=
+          layoutHeight(child, fontScale, childRoom) +
+          edge(own, 'Top', 'margin') +
+          edge(own, 'Bottom', 'margin');
+    });
+  };
+  if (node) walk(node, 0, width);
+  return found;
+}
+
+/**
  * The phone's own font's "…", in em: Roboto's (0.669), read from the emulator's
  * /system/fonts/Roboto-Regular.ttf. React Native's text view cuts a line with its own paint,
  * which has the phone's font and the text's size in dp, not scaled with the phone's text size,
