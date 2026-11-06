@@ -969,6 +969,14 @@ describe('a long hyphenated name breaks after its hyphen, never inside a word (#
     errors.mockRestore();
   });
 
+  it('but not in text the reader can select, which must copy as it reads', () => {
+    // A copied email or origin would paste with an invisible U+200B in it (QA).
+    render(<CompactText selectable>{'priya.v-s@split-book.test'}</CompactText>);
+    expect((renderer!.toJSON() as ReactTestRendererJSON).children).toEqual([
+      'priya.v-s@split-book.test',
+    ]);
+  });
+
   it('measures a title’s widest word as its lines break it, in Outfit SemiBold', () => {
     const width = (word: string) =>
       [...word].reduce((sum, character) => sum + outfitSemiboldAdvance(character)!, 0);

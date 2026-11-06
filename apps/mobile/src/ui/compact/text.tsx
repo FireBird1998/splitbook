@@ -301,8 +301,10 @@ export function CompactText({
   const cutInMiddle = props.numberOfLines === 1 && props.ellipsizeMode === 'middle';
   if (cutInMiddle && !spare && typeof words === 'string')
     return <MiddleCutLine {...props} look={look} text={words} />;
-  // A line that may wrap breaks after a hyphen, not inside a word (#921).
-  const children = withHyphenBreaks(words);
+  // A line that may wrap breaks after a hyphen, not inside a word (#921). Text the reader can
+  // select keeps its words as given: a copied email or origin would paste with a zero-width
+  // space in it.
+  const children = props.selectable ? words : withHyphenBreaks(words);
   const cutAtTail = (props.numberOfLines ?? 0) > 0 && (props.ellipsizeMode ?? 'tail') === 'tail';
   if (cutAtTail)
     return (
