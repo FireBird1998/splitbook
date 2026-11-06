@@ -466,3 +466,26 @@ describe.each(['light', 'dark'] as const)(
     });
   },
 );
+
+// #646 (Designer): offline, "Saving needs a connection." sat at the bar's start while the note
+// under it, "You're offline, so it stays on this phone…", was centred. Both are centred.
+describe('Save’s reason it is unavailable (#646)', () => {
+  it.each([
+    { width: 360, height: 640 },
+    { width: 412, height: 915 },
+  ])('is centred, as the notes in the bar are, at $width×$height', (size) => {
+    setWindow({ ...size, fontScale: 1 });
+    onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+    act(() => {
+      renderer = create(
+        <SaveBar label="Save expense" blocked="Saving needs a connection." onSave={() => undefined}>
+          <CompactButton label="Finish later" variant="tonal" onPress={() => undefined} />
+        </SaveBar>,
+      );
+    });
+    const reason = renderer!.root.find(
+      (node) => isHost(node, 'Text') && node.children.join('') === 'Saving needs a connection.',
+    );
+    expect(flatten(reason.props.style).textAlign).toBe('center');
+  });
+});

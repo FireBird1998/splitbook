@@ -878,8 +878,9 @@ export function SaveBar({
   return (
     <ActionBar>
       {/* Above Save: the bar grows upward from the bottom of the screen, so Save stays put. */}
+      {/* Centred, as the notes under it are, such as what Finish later does offline (#646). */}
       {blocked ? (
-        <CompactText variant="small" tone="secondary">
+        <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
           {blocked}
         </CompactText>
       ) : null}
