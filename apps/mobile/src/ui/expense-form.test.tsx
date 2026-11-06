@@ -25,9 +25,9 @@ import { formatCurrency } from '@splitbook/shared/currency';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { AmountDescriptionCard, SaveBar, WhoOwesWhat, expenseDateLabel } =
+const { AmountDescriptionCard, SaveBar, WhoOwesWhat, expenseDateLabel, stackedFigure } =
   await import('./expense-form');
-const { CompactButton } = await import('./compact');
+const { CompactButton, moneySizes, scaledSp } = await import('./compact');
 
 const people = ['Alex Rao', 'Sam Chen', 'Priya Shah', 'Jo Park', 'Kim Lee'];
 const ids = people.map((_, index) => `a0000000000000000000000${index + 1}`);
@@ -281,6 +281,24 @@ describe('Who owes what', () => {
         expect(faces(paid!)).toEqual(faces(share!));
       }
       expect(unreadText(json, fontScale, card)).toEqual([]);
+    },
+  );
+
+  // #932, QA on the emulator: Android draws the table's money face 0.6 em a character, its letter
+  // spacing narrowing nothing ("₹1,250.00" took 185 px at 412 dp 100%, "CHF 10,000,000.00" 349 px,
+  // against 181 and 340 estimated). The widest figure outgrew the width every row was given, and
+  // the You row's Share started 5 px right of the others'. Each figure's width now holds it whole.
+  it.each([
+    [412, 1, ['₹1,250.00', '–', '–']],
+    [412, 1, ['CHF 10,000,000.00', '–', '–']],
+    [360, 2, ['₹9.00', '–', '–']],
+  ] as const)(
+    'gives every stacked figure the width Android draws the widest in, %sdp at %s× text (#932)',
+    (width, fontScale, figures) => {
+      const drawn = (figure: string) =>
+        [...figure].length * 0.6 * scaledSp(Number(moneySizes.table.fontSize), fontScale);
+      const { minWidth } = stackedFigure(figures, width, fontScale);
+      expect(minWidth).toBeGreaterThanOrEqual(Math.max(...figures.map(drawn)));
     },
   );
 });

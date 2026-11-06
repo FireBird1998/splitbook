@@ -49,6 +49,7 @@ import {
   headingBeside,
   headingLine,
   isLargeText,
+  moneySizes,
   moneyWidth,
   scaledSp,
   textVariants,
@@ -60,7 +61,7 @@ import {
 } from './compact';
 import { outfitWidth } from './compact/outfit-metrics';
 import { useTheme } from './theme';
-import { SEPARATOR } from '@splitbook/shared/separator';
+import { SEPARATOR, WORD_JOINER } from '@splitbook/shared/separator';
 import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import { amountError } from '../data/field-feedback';
 
@@ -383,7 +384,13 @@ export const amountPair = {
  */
 export function stackedFigure(figures: readonly string[], width: number, fontScale: number) {
   const room = width - 2 * 16 - 2 - 2 * 14 - 36;
-  const widest = Math.max(0, ...figures.map((figure) => moneyWidth(figure, 'table', fontScale)));
+  // As Android draws it: 0.6 em a character, the face's letter spacing narrowing nothing on the
+  // device. Measured with it, a wide figure outgrew its width and moved that row's Share (#932).
+  const { letterSpacing } = moneySizes.table;
+  const drawn = (figure: string) =>
+    moneyWidth(figure, 'table', fontScale) -
+    [...figure.replaceAll(WORD_JOINER, '')].length * Number(letterSpacing ?? 0);
+  const widest = Math.max(0, ...figures.map(drawn));
   return { minWidth: Math.min(room, widest), textAlign: 'right' as const };
 }
 
