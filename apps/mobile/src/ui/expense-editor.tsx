@@ -10,6 +10,7 @@ import { SelectedSaveBar } from './expense-save-selection';
 import { SelectedSplitSheet, SelectedPayerSheet } from './expense-sheet-selection';
 import { SelectedOptionalDetails } from './expense-optional-details';
 import { canEditExpense } from '../data/expense-record';
+import { amountError } from '../data/field-feedback';
 import {
   ExpenseRecordScreen,
   ExpenseRecordSkeleton,
@@ -80,6 +81,7 @@ import {
   AmountDescriptionCard,
   ExpenseTiles,
   OptionalDetails,
+  RetainedFooter,
   SaveBar,
   WhatsDifferent,
   WhoOwesWhat,
@@ -154,9 +156,12 @@ function RetainHeight({
   footer?: boolean;
 }) {
   const [height, setHeight] = useState(0);
+  // A footer's Save says when the amount typed can't be saved: the footer then fits the bar,
+  // giving back the line Save's amount took (#925).
+  const [retained] = useState(() => ({ release: false }));
   const theme = useTheme();
   if (!enabled) return <>{children}</>;
-  return (
+  const box = (
     <View
       style={{
         minHeight: height,
@@ -168,13 +173,14 @@ function RetainHeight({
         style={footer ? undefined : { gap: 12 }}
         onLayout={(event) => {
           const natural = event.nativeEvent.layout.height;
-          setHeight((before) => Math.max(before, natural));
+          setHeight((before) => (footer && retained.release ? natural : Math.max(before, natural)));
         }}
       >
         {children}
       </View>
     </View>
   );
+  return footer ? <RetainedFooter.Provider value={retained}>{box}</RetainedFooter.Provider> : box;
 }
 
 /**
@@ -1149,6 +1155,7 @@ function ExpenseTask({
                 : undefined
             }
             blocked={saveBlocked}
+            amountWrong={!!amountError(draft.amount, draft.currency)}
             onSave={onSave}
             // Save's reason leads back to the choices it waits for, wherever the form is scrolled.
             secondary={

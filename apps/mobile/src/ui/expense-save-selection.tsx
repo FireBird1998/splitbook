@@ -5,6 +5,7 @@ import { expenseContextPending, expenseMoney } from '../data/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
 import { SaveBar } from './expense-form';
 import { useMobileSnapshot } from './use-mobile-snapshot';
+import { amountError } from '../data/field-feedback';
 
 /** The Save amount follows current entries, independently of the task frame. */
 export const SelectedSaveBar = memo(function SelectedSaveBar({
@@ -28,5 +29,10 @@ export const SelectedSaveBar = memo(function SelectedSaveBar({
       return undefined;
     }
   });
-  return <SaveBar {...props} amount={amount} />;
+  // The amount typed can't be saved: the footer gives back the line Save's amount took (#925).
+  const amountWrong = useMobileSnapshot(
+    controller,
+    ({ expense }) => !!expense.draft && !!amountError(expense.draft.amount, expense.draft.currency),
+  );
+  return <SaveBar {...props} amount={amount} amountWrong={amountWrong} />;
 });

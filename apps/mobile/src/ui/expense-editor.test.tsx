@@ -2221,6 +2221,46 @@ describe('the Add expense header at large text (#639)', () => {
   );
 });
 
+// #925, the Designer's polish: at 360 dp and 200%, an empty band sat above Save once the amount
+// went past the maximum. The bar kept the height Save had with its amount under its words, which
+// it no longer had. The bar keeps its height while notices and Save's reason come and go (#376),
+// but gives back the amount's line when the amount typed can't be saved.
+describe('the Save bar when the amount can’t be saved (#925)', () => {
+  /** The footer's retained box, and the bar inside it. */
+  const footer = (scale: number) => {
+    const tree = screen!.toJSON();
+    const frame = Array.isArray(tree) ? tree[0]! : tree!;
+    const outer = frame.children!.at(-1) as ReactTestRendererJSON;
+    const [inner] = outer.children as ReactTestRendererJSON[];
+    return { shown: layoutHeight(outer, scale, 360), natural: layoutHeight(inner!, scale, 360) };
+  };
+
+  it.each([1, 2])(
+    'closes the amount’s line over an amount past the maximum, at %s× text',
+    async (scale) => {
+      setWindow({ width: 360, height: 640, fontScale: scale });
+      const form = await render((controller) => controller.openExpense(groupId));
+      await form.type('Description, required', 'Office fit-out');
+      await form.type('Amount, Indian Rupee, required', '1234567.89');
+      await measureForm(scale);
+      const saving = footer(scale);
+      expect(text(form.root())).toContain('₹1,234,567.89');
+      await form.type('Amount, Indian Rupee, required', '12345678.90');
+      await measureForm(scale);
+      const over = footer(scale);
+      expect(text(form.root())).not.toContain('₹12,345,678.90');
+      // No band: the bar is as tall as what it holds.
+      expect(over.shown).toBe(over.natural);
+      if (scale === 2) expect(over.shown).toBeLessThan(saving.shown);
+      else expect(over.shown).toBe(saving.shown);
+      // A valid amount again gets its line back.
+      await form.type('Amount, Indian Rupee, required', '1234567.89');
+      await measureForm(scale);
+      expect(footer(scale)).toEqual(saving);
+    },
+  );
+});
+
 // #639 device check: at 200% and density 420, Add expense's Description placeholder, "What was it
 // for? e.g. Groceries", wrapped in its one-line box and its second line was cut in half. At large
 // text it says only "What was it for?", which fits the box's line; at 100% it keeps its example.
