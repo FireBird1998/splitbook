@@ -275,7 +275,7 @@ const AllocationHeading = memo(function AllocationHeading({
           {savedLabel}
         </CompactText>
       ) : waiting ? (
-        <Badge label="No amount" icon="ellipsis-horizontal" />
+        <Badge label="No amount" />
       ) : (
         <Badge label="Adds up" tone="positive" icon="checkmark" />
       )}
@@ -345,6 +345,7 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
   money,
   saved = false,
   waiting = false,
+  corrected = false,
 }: {
   draft: ExpenseDraft;
   allocation: Allocation | null;
@@ -356,6 +357,8 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
    * Group is checked too) moves nothing below it (#911).
    */
   waiting?: boolean;
+  /** The amount has a correction beside it: the table asks for that, not for an amount. */
+  corrected?: boolean;
   name: (id: string) => string;
   currentUserId?: string;
   money: (minor: number) => string;
@@ -414,7 +417,20 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
       </Money>
     );
   const spoken = (minor: number | null | undefined) =>
-    minor === undefined ? 'nothing' : minor === null ? 'to come' : money(minor);
+    minor === undefined ? 'nothing' : money(minor as number);
+  // A figure that waits for the amount says so; "paid and share" when both do (#911).
+  const rowLabel = (
+    id: string,
+    paidMinor: number | null | undefined,
+    shareMinor: number | null | undefined,
+  ) => {
+    const waits = (minor: number | null | undefined) => minor === null;
+    if (waits(paidMinor) && waits(shareMinor))
+      return `${person(id)}: paid and share wait for the amount`;
+    const paid = waits(paidMinor) ? 'paid waits for the amount' : `paid ${spoken(paidMinor)}`;
+    const share = waits(shareMinor) ? 'share waits for the amount' : `share ${spoken(shareMinor)}`;
+    return `${person(id)}: ${paid}, ${share}`;
+  };
   return (
     <Card>
       <AllocationHeading
@@ -430,7 +446,7 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
           <View
             key={id}
             accessible
-            accessibilityLabel={`${person(id)}: paid ${spoken(paidMinor)}, share ${spoken(shareMinor)}`}
+            accessibilityLabel={rowLabel(id, paidMinor, shareMinor)}
             style={{
               minHeight: 48,
               justifyContent: 'center',
@@ -508,7 +524,7 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
           ) : (
             // One short line, as the totals will be.
             <CompactText variant="small" tone="secondary">
-              Enter an amount first.
+              {corrected ? 'Correct the amount first.' : 'Enter an amount first.'}
             </CompactText>
           )}
           {rounded ? (

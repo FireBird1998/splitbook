@@ -1960,7 +1960,7 @@ describe('compact Expense form', () => {
         .findAll(
           (node) =>
             isHost(node, 'View') &&
-            node.props.accessibilityLabel === 'You: paid to come, share to come',
+            node.props.accessibilityLabel === 'You: paid and share wait for the amount',
         ),
     ).toHaveLength(1);
     expect(ui.pressable('Save expense').props.accessibilityLabel).toBe('Save expense');

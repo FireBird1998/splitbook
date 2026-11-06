@@ -975,6 +975,7 @@ function ExpenseTask({
                       : 'Enter a valid amount to see who owes what.'
                 }
                 waiting={waitsForAmount(draft, allocation, errors.amount)}
+                corrected={!!errors.amount}
                 name={name}
                 currentUserId={currentUserId}
                 money={money}
