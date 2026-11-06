@@ -540,7 +540,10 @@ in a `HomeSlot` of its width.
   whole (#854)
 - A table that scrolls sideways does so in a box with `position: relative`, so the visually
   hidden text in its cells (`position: absolute`) stays in that box. Unpositioned, a hidden
-  "No note" in the Payments table widened the whole Balances page at 390 px (#944)
+  "No note" in the Payments table widened the whole Balances page at 390 px (#944). Every box
+  that scrolls sideways spreads `scrollBox` (`components/common/scroll-box.ts`), which sets
+  both, rather than writing its own `overflowX`; `scroll-box.test.ts` fails on any that does
+  (#946)
 - Screen reader labels on icon-only buttons
 
 Enforced by `playwright/theme-a11y.spec.ts`, which runs **axe-core** across four

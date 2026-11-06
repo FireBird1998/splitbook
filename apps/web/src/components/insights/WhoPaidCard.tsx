@@ -19,6 +19,7 @@ import {
 import { groupTabHref } from '@/components/groups/group-tabs';
 import { visuallyHidden } from './a11y';
 import { whoPaidModel, type InsightsCardState, type WhoPaidModel } from './insights-cards';
+import { scrollBox } from '@/components/common/scroll-box';
 
 /*
  * "Who paid this month" on a Group's Insights tab (#315, design canvas "Web portal", Group
@@ -153,7 +154,7 @@ function PaidTable({ model }: { model: WhoPaidModel }) {
       aria-label="Who paid this month table"
       tabIndex={0}
       sx={{
-        overflowX: 'auto',
+        ...scrollBox,
         pb: 0.5,
         '&:focus-visible': { outline: 2, outlineColor: 'focus.main', outlineOffset: -2 },
       }}

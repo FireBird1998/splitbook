@@ -8,7 +8,7 @@ import type {
 } from '@splitbook/shared/group-insights-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { DETAIL_IDS, SEPTEMBER_DETAIL } from '@/lib/test-utils/insights-month-detail';
-import { anchors, text } from '@/lib/test-utils/markup';
+import { anchors, scrollBoxes, text } from '@/lib/test-utils/markup';
 import ByTagCard, { type ByTagCardProps } from './ByTagCard';
 import GroupInsightsView, { type GroupInsightsViewProps } from './GroupInsightsView';
 import RecurringExpensesCard, { type RecurringExpensesCardProps } from './RecurringExpensesCard';
@@ -606,5 +606,42 @@ describe('the recurring gate on the tab', () => {
     expect(text(markup)).toContain('Spending by Tag could not be loaded.');
     expect(text(markup)).toContain('₹6,677.00');
     expect(text(markup)).toContain('Wi-Fi');
+  });
+});
+
+// #946: each table's caption is visually hidden (position: absolute). In a scroll box with no
+// position it kept its place past the box's right edge and could widen the page on a phone, as
+// the Payments table's "No note" did (#944). Each scroll box is positioned, so it stays in it.
+describe('each table that scrolls sideways keeps its hidden text in its box (#946)', () => {
+  it.each([
+    [
+      'Who paid this month table',
+      () =>
+        html(
+          createElement(WhoPaidCard, {
+            groupId: GROUP,
+            userId: alex,
+            read: READ,
+            state: 'ready',
+            onRetry: noop,
+          }),
+        ),
+    ],
+    [
+      'Spending by Tag table',
+      () =>
+        html(
+          createElement(ByTagCard, {
+            read: READ,
+            state: 'ready',
+            onRetry: noop,
+            initialView: 'table',
+          }),
+        ),
+    ],
+  ])('%s', (label, markup) => {
+    const boxes = scrollBoxes(markup());
+    expect(boxes).toContainEqual({ label, positioned: true, holdsHiddenText: true });
+    expect(boxes.filter((box) => !box.positioned)).toEqual([]);
   });
 });

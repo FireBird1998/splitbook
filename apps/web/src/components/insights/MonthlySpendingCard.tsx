@@ -19,6 +19,7 @@ import { compactMoney, valueAxis } from '@/components/dashboard/spending-chart';
 import { visuallyHidden } from './a11y';
 import type { MonthlySpending, MonthlyRow } from './group-insights';
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
+import { scrollBox } from '@/components/common/scroll-box';
 
 /*
  * "Monthly spending" on a Group's Insights tab (#314, design canvas "Web portal", Group
@@ -381,7 +382,7 @@ function MonthlyTable({ model, hidden = false }: { model: MonthlySpending; hidde
   const frame = hidden
     ? { sx: visuallyHidden }
     : {
-        sx: { position: 'relative', overflowX: 'auto', borderRadius: 1 },
+        sx: { ...scrollBox, borderRadius: 1 },
         tabIndex: 0,
         role: 'group',
         'aria-labelledby': captionId,

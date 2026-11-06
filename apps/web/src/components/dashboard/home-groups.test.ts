@@ -8,7 +8,7 @@ import type {
   SpendingThisMonthRead,
 } from '@splitbook/shared/user-spending-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
-import { anchors, text } from '@/lib/test-utils/markup';
+import { anchors, scrollBoxes, text } from '@/lib/test-utils/markup';
 import type { CardRead, GroupBalanceAmounts } from './home-reads';
 import { WhereItWentView, type WhereItWentViewAs } from './WhereItWentCard';
 import { whereItWentModel } from './where-it-went';
@@ -455,5 +455,30 @@ describe('the Groups table’s wording', () => {
     expect(lastChangeLabel(new Date(2026, 9, 6, 23, 59), NOW)).toBe('Yesterday, 11:59\u00a0PM');
     expect(lastChangeLabel(new Date(2026, 9, 5, 23, 59), NOW)).toBe('5 Oct');
     expect(lastChangeLabel(new Date(2025, 11, 31, 10, 0), NOW)).toBe('31 Dec 2025');
+  });
+});
+
+// #946: a table's visually hidden text (a caption, a balance's or a dash's spoken words) is
+// position: absolute. In a scroll box with no position it kept its place past the box's right
+// edge and could widen the page on a phone, as the Payments table's "No note" did (#944). Each
+// scroll box is positioned, so the text stays in it.
+describe('each table that scrolls sideways keeps its hidden text in its box (#946)', () => {
+  it.each([
+    [
+      'Your share by Category table',
+      () =>
+        render(
+          createElement(WhereItWentView, {
+            thisMonth: ready(THIS_MONTH),
+            onRetry: noop,
+            initialView: 'table',
+          }),
+        ),
+    ],
+    ['Groups table', () => table({ layout: 'table' })],
+  ])('%s', (label, markup) => {
+    const boxes = scrollBoxes(markup());
+    expect(boxes).toContainEqual({ label, positioned: true, holdsHiddenText: true });
+    expect(boxes.filter((box) => !box.positioned)).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Box from '@mui/material/Box';
 import { GROUP_TABS, groupTabFromPath, groupTabHref } from './group-tabs';
+import { scrollBox } from '@/components/common/scroll-box';
 
 interface GroupTabsProps {
   groupId: string;
@@ -29,7 +30,7 @@ export default function GroupTabs({ groupId, label }: GroupTabsProps) {
         // The rule under the tabs is drawn inside the bar, so the open tab's 2 px line can
         // cover it: a scrolling box clips anything its children draw over its own border.
         boxShadow: (theme) => `inset 0 -1px 0 ${(theme.vars ?? theme).palette.divider}`,
-        overflowX: 'auto',
+        ...scrollBox,
       }}
     >
       {GROUP_TABS.filter(

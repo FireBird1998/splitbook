@@ -19,6 +19,7 @@ import {
 import { monthLabel } from '@/components/dashboard/spending-chart';
 import { visuallyHidden } from './a11y';
 import { byTagModel, type ByTagModel, type InsightsCardState } from './insights-cards';
+import { scrollBox } from '@/components/common/scroll-box';
 
 /*
  * "By Tag" on a Group's Insights tab (#315, design canvas "Web portal", Group insights): the
@@ -269,7 +270,7 @@ function TagTable({ model, hidden = false }: { model: ByTagModel; hidden?: boole
         'aria-label': 'Spending by Tag table',
         tabIndex: 0,
         sx: {
-          overflowX: 'auto',
+          ...scrollBox,
           borderRadius: 1,
           '&:focus-visible': { outline: 2, outlineColor: 'focus.main', outlineOffset: 2 },
         },

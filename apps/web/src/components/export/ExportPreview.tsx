@@ -26,6 +26,7 @@ import { SEPARATOR } from '@splitbook/shared/separator';
 import { categoryLabel } from '@splitbook/shared/categories';
 import { statementDay, zonedDateTime } from '@splitbook/shared/export-csv';
 import { lineMayWrap } from '@/components/statement/person-name';
+import { scrollBox } from '@/components/common/scroll-box';
 
 export type PreviewState =
   | { status: 'idle'; message: string }
@@ -90,7 +91,7 @@ function PreviewTable({
       aria-label={label}
       tabIndex={0}
       sx={{
-        overflowX: 'auto',
+        ...scrollBox,
         maxWidth: '100%',
         '&:focus-visible': { outline: '2px solid', outlineColor: 'focus.main', outlineOffset: 2 },
       }}
@@ -644,7 +645,8 @@ export default function ExportPreviewPanel({
                 tabIndex={0}
                 sx={{
                   m: 0,
-                  overflow: 'auto',
+                  ...scrollBox,
+                  overflowY: 'auto',
                   maxHeight: 384,
                   fontFamily: FONT_MONO,
                   '&:focus-visible': {

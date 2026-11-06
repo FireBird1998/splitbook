@@ -38,6 +38,7 @@ import {
   type GroupsTableRow,
   type SpentLine,
 } from './groups-table';
+import { scrollBox } from '@/components/common/scroll-box';
 
 /*
  * Home's Groups table (#308, design canvas "Web portal"; web.css .tbl): every Group of the
@@ -235,7 +236,7 @@ function GroupsTable({ rows, spentHeading }: { rows: GroupsTableRow[]; spentHead
       aria-label="Groups table"
       tabIndex={0}
       sx={{
-        overflowX: 'auto',
+        ...scrollBox,
         '&:focus-visible': { outline: 2, outlineColor: 'focus.main', outlineOffset: -2 },
       }}
     >

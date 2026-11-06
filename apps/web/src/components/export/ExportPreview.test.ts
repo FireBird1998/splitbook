@@ -4,7 +4,7 @@ import { act, create, type ReactTestInstance } from 'react-test-renderer';
 import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
-import { stylesOf, text } from '@/lib/test-utils/markup';
+import { scrollBoxes, stylesOf, text } from '@/lib/test-utils/markup';
 import { exportPreviewSchema, type ExportPreview } from '@splitbook/shared/export-preview';
 import { buildStatement } from '@splitbook/shared/statement';
 import { buildStatementPreview } from '@splitbook/shared/export-preview';
@@ -1197,4 +1197,13 @@ it('lets the name in a long name-and-amount line wrap, and keeps an everyday one
   expect(
     stylesOf(html, 'statement-preview-name').map((style) => style.value('white-space')),
   ).toEqual(['nowrap', 'normal', 'nowrap', 'normal']);
+});
+
+// #946: the preview's tables scroll sideways on a phone. Each scroll box is positioned, as the
+// shared scroll box is, so any visually hidden text (position: absolute) a cell holds stays in
+// it and never widens the page, as the Payments table's "No note" did (#944).
+it('puts each preview table that scrolls sideways in a positioned box (#946)', () => {
+  const boxes = scrollBoxes(render({ status: 'ready', data: csv }));
+  expect(boxes.length).toBeGreaterThan(0);
+  expect(boxes.filter((box) => !box.positioned)).toEqual([]);
 });
