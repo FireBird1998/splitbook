@@ -351,6 +351,8 @@ export function TagManager({
         }}
         leading={<IconTile icon="pricetag-outline" tone={tag.isArchived ? 'neutral' : 'brand'} />}
         title={tag.name}
+        // Greyed as no longer offered; the row isn't dimmed, so its ⋮ keeps full contrast.
+        titleTone={tag.isArchived ? 'secondary' : 'primary'}
         titleLines={3}
         meta={tag.isArchived ? 'Not offered on new Expenses' : undefined}
         highlighted={done?.receipt.tagId === tag.id}

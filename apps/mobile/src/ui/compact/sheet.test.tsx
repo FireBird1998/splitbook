@@ -169,6 +169,55 @@ describe('Bottom sheet structure', () => {
   });
 });
 
+// #646: a sheet whose close discards its entries, as Record payment's does, closes with ×.
+describe('Bottom sheet with a close icon (#646)', () => {
+  const closing = (onDone = vi.fn(), dismissible = true) => {
+    act(() => {
+      renderer = create(
+        <BottomSheet
+          visible
+          title="Record payment"
+          doneIcon="close"
+          doneLabel="Close"
+          dismissLabel="Close without recording"
+          dismissible={dismissible}
+          onDone={onDone}
+        >
+          <CompactText>Body</CompactText>
+        </BottomSheet>,
+      );
+    });
+    return { root: renderer!.root, onDone };
+  };
+  const closeButton = (root: ReactTestInstance) =>
+    host(root, (p) => p.accessibilityRole === 'button' && p.accessibilityLabel === 'Close');
+
+  it('draws a 48 dp ×, named Close, in place of the word, and closes the sheet', () => {
+    const { root, onDone } = closing();
+    const close = closeButton(root);
+    expect(
+      close.findAll((node) => isHost(node, 'Ionicons')).map((icon) => icon.props.name),
+    ).toEqual(['close']);
+    expect(close.props.style({ pressed: false })).toMatchObject({ width: 48, height: 48 });
+    const header = dragArea(root);
+    const words = header
+      .findAll((node) => isHost(node, 'Text'))
+      .flatMap((node) => node.children.filter((child) => typeof child === 'string'));
+    expect(words).toEqual(['Record payment']);
+    act(() => close.props.onPress());
+    expect(onDone).toHaveBeenCalledOnce();
+    // The scrim still says what closing does.
+    host(root, (p) => p.accessibilityLabel === 'Close without recording');
+  });
+
+  it('can’t be pressed while the sheet can’t close', () => {
+    const { root } = closing(vi.fn(), false);
+    const close = closeButton(root);
+    expect(close.props.disabled).toBe(true);
+    expect(close.props.accessibilityState).toEqual({ disabled: true });
+  });
+});
+
 // #639: sheet and dialog titles were cut to one line, "Finish this expense late…" at 100% on a
 // 360dp phone, "Delete this Expe…" and "Save ready expe…" at 200%. A title takes as many lines as
 // it needs, beside Done, and a subtitle such as Rename Tag's "Currently …" too.

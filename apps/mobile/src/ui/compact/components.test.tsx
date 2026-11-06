@@ -185,6 +185,21 @@ describe('Selector tile', () => {
     expect(tile.props.disabled).toBe(true);
   });
 
+  it('marks an optional value with the Optional marker, not in its label (#646)', () => {
+    const root = render(
+      <SelectorTile
+        icon="document-text-outline"
+        label="Note"
+        value="Add a note"
+        optional
+        onPress={vi.fn()}
+      />,
+    );
+    const tile = one(byRole(root, 'button', 'Note, optional: Add a note'));
+    // The label keeps a hair space to spare (#639), and the marker its own.
+    expect(text(tile)).toBe('Note \u200a Optional \u200a Add a note');
+  });
+
   it('shows a shortened value but speaks it in full', () => {
     const root = render(
       <SelectorTile

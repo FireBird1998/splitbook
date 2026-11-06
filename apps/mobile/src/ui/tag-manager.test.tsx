@@ -1041,3 +1041,35 @@ describe.each(['light', 'dark'] as const)(
     });
   },
 );
+
+describe.each(['light', 'dark'] as const)('an archived Tag in %s (#646)', (mode) => {
+  it('greys its name only: the ⋮ beside it keeps its full contrast', async () => {
+    await openManageTags();
+    await showTagsIn(mode);
+    const tokens = getSemanticTokens(mode);
+    const json = renderer!.toJSON() as ReactTestRendererJSON;
+    const read = (node: ReactTestRendererJSON | string): string =>
+      typeof node === 'string' ? node : (node.children ?? []).map(read).join('');
+    // The outer text of the name: a title cut at its tail nests its words in a second text.
+    const nameColor = (name: string) =>
+      flatten(
+        findHosts(json, (_props, type) => type === 'Text').find((node) => read(node) === name)!
+          .props.style,
+      ).color;
+    expect(nameColor('Old rent')).toBe(tokens.textSecondary);
+    expect(nameColor(longName)).toBe(tokens.text);
+    // The row itself isn't dimmed, and its ⋮ is drawn as an active Tag's is.
+    const row = (label: string) =>
+      findHosts(json, (props) => props.accessibilityLabel === label)[0]!;
+    const archived = row('Old rent, archived. Opens Restore');
+    const active = row(`${longName}, active. Opens Rename`);
+    expect(flatten(archived.props.style).opacity).toBeUndefined();
+    const menu = (node: ReactTestRendererJSON) =>
+      findHosts(
+        node,
+        (props, type) => type === 'Ionicons' && props.name === 'ellipsis-vertical',
+      ).map((icon) => icon.props.color);
+    expect(menu(archived)).toEqual([tokens.textMuted]);
+    expect(menu(archived)).toEqual(menu(active));
+  });
+});

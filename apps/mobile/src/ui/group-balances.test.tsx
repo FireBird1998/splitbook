@@ -357,6 +357,19 @@ describe('Record payment sheet states', () => {
     expect(text(root)).not.toContain('more than suggested');
   });
 
+  it('closes with ×, and marks the Note tile Optional (#646)', () => {
+    const { root } = sheet(base({}));
+    const [close] = labelled(root, 'Close');
+    expect(close!.props.accessibilityRole).toBe('button');
+    expect(
+      close!.findAll((node) => isHost(node, 'Ionicons')).map((icon) => icon.props.name),
+    ).toEqual(['close']);
+    expect(text(close!)).toBe('');
+    const [note] = labelled(root, 'Note, optional: Add a note');
+    expect(text(note!)).toContain('Optional');
+    expect(text(root)).not.toContain('Note, optional');
+  });
+
   it('names the recipient as “you” when someone else pays the member', () => {
     const { root } = sheet(
       base({ draft: { paidBy: sam, paidTo: you, currency: 'INR', amount: '1060', note: '' } }),
@@ -424,7 +437,6 @@ describe('Record payment sheet states', () => {
     const saving = sheet(base({ status: 'saving' }));
     expect(labelled(saving.root, 'Close')[0].props.accessibilityState).toEqual({
       disabled: true,
-      busy: false,
     });
     act(() => labelled(saving.root, 'Close without recording')[0].props.onPress());
     expect(saving.calls.close).not.toHaveBeenCalled();

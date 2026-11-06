@@ -887,6 +887,56 @@ it('shows Sign in branding once without the old tile or typed wordmark', async (
   expect(app.hosts(() => true).filter((node) => node.children.includes('s'))).toEqual([]);
 });
 
+describe('the launch, error and sign-out header shows the logo once (#646)', () => {
+  /** The header's logo, its badge, and nothing of the old tile or typed wordmark. */
+  const branded = (app: Awaited<ReturnType<typeof start>>) => {
+    const logos = app.hosts(
+      (props) => props.accessibilityLabel === 'Splitbook' && props.accessibilityRole === 'image',
+    );
+    expect(logos).toHaveLength(1);
+    expect(flatten(logos[0]!.props.style)).toMatchObject({ ...brandLogoSize });
+    expect(app.text()).not.toContain('splitbook');
+    expect(app.hosts(() => true).filter((node) => node.children.includes('s'))).toEqual([]);
+    // The environment badge keeps its place at the header's end.
+    expect(app.text()).toContain('DEV');
+  };
+
+  it('while the session is checked', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    phone.unverifySession();
+    const check = phone.hold('/api/auth/get-session');
+    const app = await start(phone);
+    await check.reached;
+    await settle();
+    expect(app.text()).toContain('Checking your session…');
+    branded(app);
+    check.release();
+    await settle();
+  });
+
+  it('when the session couldn’t be checked', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    phone.network.session = 500;
+    const app = await start(phone);
+    await settle();
+    expect(app.text()).toContain('Couldn’t check your session');
+    branded(app);
+  });
+
+  it('when the server didn’t confirm a sign-out', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    phone.network.online = false;
+    await settle((runtime.controller as MobileController).signOut());
+    expect(app.text()).toContain('Couldn’t sign out of the server');
+    branded(app);
+  });
+});
+
 it.each(['STAGING', 'LIVE'] as const)(
   'keeps the %s environment badge on Sign in',
   async (badge) => {

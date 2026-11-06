@@ -6,7 +6,7 @@ import { useReducedMotion } from './motion';
 import { denseHitSlop, radius, touch } from './scale';
 import { useTap, type Tap } from './tap';
 import { BannerActionColor } from './feedback';
-import { CompactText, FieldMarker, Money } from './text';
+import { CompactText, FieldMarker, Money, fieldMarker } from './text';
 
 /** Spinning while busy; with reduce motion on, a still hourglass instead. */
 export function BusyMark({ color }: { color: string }) {
@@ -215,7 +215,8 @@ export function IconButton({
 
 /**
  * A tile showing one Expense value (Date, Paid by, Split, Tag) that opens its sheet.
- * `error` describes what needs fixing; `locked` tiles can't be changed.
+ * `error` describes what needs fixing; `locked` tiles can't be changed. `required` and
+ * `optional` put their marker beside the label, as a form's fields do.
  */
 export function SelectorTile({
   icon,
@@ -224,6 +225,7 @@ export function SelectorTile({
   spokenValue,
   onPress,
   required = false,
+  optional = false,
   error,
   locked = false,
 }: {
@@ -234,6 +236,7 @@ export function SelectorTile({
   spokenValue?: string;
   onPress?: () => void;
   required?: boolean;
+  optional?: boolean;
   error?: string;
   locked?: boolean;
 }) {
@@ -241,7 +244,7 @@ export function SelectorTile({
   // A drag that starts on a tile never opens its editor (#693).
   const tap = useTap();
   const spoken = [
-    `${label}${required ? ', required' : ''}: ${spokenValue ?? value}`,
+    `${label}${required ? ', required' : optional ? ', optional' : ''}: ${spokenValue ?? value}`,
     error,
     locked ? 'locked' : undefined,
   ]
@@ -274,7 +277,12 @@ export function SelectorTile({
           <CompactText variant="caption" tone={error ? 'negative' : 'secondary'} spare>
             {label}
           </CompactText>
-          {required ? <FieldMarker kind="required" /> : null}
+          {required ? (
+            <FieldMarker kind="required" />
+          ) : optional ? (
+            // Drawn by a plain call, not a component: no extra render for the sheet (#646).
+            fieldMarker(theme, 'optional')
+          ) : null}
         </View>
         <CompactText weight="semibold" numberOfLines={1}>
           {value}
