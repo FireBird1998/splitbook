@@ -1534,7 +1534,7 @@ function MembersScreen() {
 const ExpenseScreen = memo(function ExpenseScreen() {
   const state = useMobileSnapshot(
     controller,
-    ({ expense, financial, keptDraft, auth, offline }) => ({
+    ({ expense, financial, keptDraft, auth, offline, detail, groups }) => ({
       expense: {
         requestedExpenseId: expense.requestedExpenseId,
         groupId: expense.groupId,
@@ -1545,6 +1545,13 @@ const ExpenseScreen = memo(function ExpenseScreen() {
         expense.requestedExpenseId && financial.groupId === expense.groupId
           ? financial.expenses.data.find((row) => row.id === expense.requestedExpenseId)
           : undefined,
+      // The Group it opens in, as this phone knows it, so the record's skeleton names it (#935).
+      groupName: expense.groupId
+        ? (detail.data?.id === expense.groupId
+            ? detail.data
+            : groups.data.find((group) => group.id === expense.groupId)
+          )?.name
+        : undefined,
       keptDraft,
       auth,
       offline,
@@ -1552,6 +1559,7 @@ const ExpenseScreen = memo(function ExpenseScreen() {
     (a, b) =>
       sameSelection(a.expense, b.expense) &&
       a.row === b.row &&
+      a.groupName === b.groupName &&
       a.keptDraft === b.keptDraft &&
       a.auth === b.auth &&
       a.offline === b.offline,
@@ -1570,6 +1578,7 @@ const ExpenseScreen = memo(function ExpenseScreen() {
         kept={!!groupId && state.keptDraft?.groupId === groupId}
         currentUserId={state.auth.user?.id}
         outline={outline}
+        groupName={state.groupName}
         notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
         emptyNotice={
           state.offline.active || state.offline.message ? (

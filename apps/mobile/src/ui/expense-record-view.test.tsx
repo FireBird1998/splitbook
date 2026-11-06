@@ -1168,6 +1168,63 @@ describe('compact Expense record, opening', () => {
     },
   );
 
+  // #935, the #932 device pass: at 200% on a 360 dp phone the skeleton's top bar had no Group
+  // under "Expense", and the record's added it, a line for Maple House and two for Goa Friends
+  // Trip, so the record moved down 8 to 36 dp after its first frame. The skeleton's bar names the
+  // Group the record opens in, beside the record's Edit and ⋮, so the name takes the lines it will
+  // in the record's bar, and nothing below it moves.
+  it.each([
+    [360, 2, 'Maple House'],
+    [360, 2, 'Goa Friends Trip'],
+    [412, 1, 'Maple House'],
+    [412, 1, 'Goa Friends Trip'],
+  ] as const)(
+    'keeps the record’s title and amount where its skeleton put them, %sdp at %s× text in %s (#935)',
+    async (width, fontScale, groupName) => {
+      setWindow({ width, fontScale });
+      const amount = '₹2,860.00';
+      /** How far down the screen the record's title and its amount (the summary's) start. */
+      const tops = () => {
+        const shown = layoutTops(
+          screen!.toJSON() as ReactTestRendererJSON,
+          fontScale,
+          width,
+          (node) => ['Text', 'AnimatedText'].includes(node.type),
+        );
+        return ['Electricity bill', amount].map(
+          (words) => [words, shown.find(({ node }) => wordsOf(node) === words)?.top] as const,
+        );
+      };
+      await act(async () => {
+        screen = create(
+          <ExpenseEditor
+            {...editor(
+              { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.bill },
+              recordOutline(listRow(ids.bill), alex.id),
+            ).props}
+            groupName={groupName}
+            onClose={() => undefined}
+          />,
+        );
+      });
+      const skeleton = tops();
+      for (const [, top] of skeleton) expect(top).toBeGreaterThan(0);
+      act(() => screen?.unmount());
+      const ui = await render(open(ids.bill));
+      const shown = ui.controller.getSnapshot().expense;
+      const named = {
+        ...shown,
+        context: { ...shown.context!, group: { ...shown.context!.group, name: groupName } },
+      };
+      act(() => screen?.unmount());
+      await act(async () => {
+        screen = create(<ExpenseEditor {...editor(named).props} onClose={() => undefined} />);
+      });
+      expect(text(screen!.root)).toContain(groupName);
+      expect(tops()).toEqual(skeleton);
+    },
+  );
+
   // #925, the Designer's release check: at 200% on a 360 dp phone, Who owes what clipped "Paid
   // CHF 10,000,000.(" at the card's edge. The amount goes under its label, in the record and in
   // the skeleton it opens over, whose pairs are the record's texts.

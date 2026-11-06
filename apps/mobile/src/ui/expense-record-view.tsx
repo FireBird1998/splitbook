@@ -209,6 +209,79 @@ export function UnfinishedDraft({
 }
 
 /**
+ * The record's top bar: "Expense" over its Group, Back, and Edit and ⋮ at its end. The skeleton
+ * the record opens over shows the same bar, with Edit and ⋮ unavailable until the record is read
+ * (no `onEdit` or `onOptions`), so the Group's name has the same room in both and takes the same
+ * lines: at 200% on a 360 dp phone, a skeleton's bar without the Group, or without Edit and ⋮,
+ * moved the record down as it landed (#935). Drawn again only when what it shows changes, not
+ * each time History reads.
+ */
+export const RecordTopBar = memo(function RecordTopBar({
+  groupName,
+  backLabel,
+  onBack,
+  refreshing = false,
+  deleted = false,
+  editReason,
+  onEdit,
+  onOptions,
+}: {
+  groupName?: string;
+  backLabel: string;
+  onBack?: () => void;
+  /** Says only that the record is being read again, on one line that shrinks. */
+  refreshing?: boolean;
+  deleted?: boolean;
+  /** Why Edit is unavailable, said as its hint. */
+  editReason?: string;
+  onEdit?: () => void;
+  onOptions?: () => void;
+}) {
+  const large = useLargeText();
+  const { width } = useWindowDimensions();
+  return (
+    <TopBar
+      title="Expense"
+      subtitle={groupName}
+      leading={onBack ? { kind: 'back', label: backLabel, onPress: onBack } : undefined}
+      // Only that it is being read again, on one line that shrinks: when it was read is in the
+      // body, so the title and Group keep their room (#332, #220).
+      status={
+        refreshing ? width < narrowBar ? <RefreshMark /> : <RefreshStatus visible /> : undefined
+      }
+      actions={
+        <>
+          {!deleted ? (
+            <CompactButton
+              label="Edit"
+              accessibilityLabel="Edit expense"
+              // At large text its word says it alone, so the title and Group keep their room.
+              icon={large ? undefined : 'pencil-outline'}
+              variant="text"
+              disabled={!onEdit || !!editReason}
+              hint={editReason}
+              onPress={onEdit ?? noop}
+            />
+          ) : null}
+          <IconButton
+            icon="ellipsis-vertical-outline"
+            label="Expense options"
+            disabled={!onOptions}
+            onPress={onOptions ?? noop}
+          />
+        </>
+      }
+    />
+  );
+});
+
+/** Back's words: to the Group destination the record opened from. */
+export const recordBackLabel = (state: Pick<Editor, 'returnTo'>) =>
+  state.returnTo?.destination === 'activity' ? 'Back to Activity' : 'Back to Group';
+
+const noop = () => undefined;
+
+/**
  * A saved Expense, read-only: what it was for, the member's position, who owes what, its
  * details and its history. Edit is in the top bar and Delete in ⋮, behind the existing
  * confirmation. While the Group holds another draft, or an edit of this Expense that × kept
@@ -269,9 +342,9 @@ export function ExpenseRecordScreen({
   outlined?: boolean;
 }) {
   const theme = useTheme();
-  const large = useLargeText();
-  const { width } = useWindowDimensions();
   const [options, setOptions] = useState(false);
+  // The same function each render, so the top bar isn't drawn again while History reads.
+  const openOptions = useCallback(() => setOptions(true), []);
   // A drag that starts on an option never presses it (#684).
   const optionTap = useTap();
   const scroll = useRef<ScrollViewInstance>(null);
@@ -462,43 +535,15 @@ export function ExpenseRecordScreen({
       : 'This Expense includes a member whose account is no longer available, so it can’t be edited.');
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <TopBar
-        title="Expense"
-        subtitle={context?.group.name}
-        leading={
-          onClose
-            ? {
-                kind: 'back',
-                label:
-                  state.returnTo?.destination === 'activity' ? 'Back to Activity' : 'Back to Group',
-                onPress: onClose,
-              }
-            : undefined
-        }
-        // Only that it is being read again, on one line that shrinks: when it was read is in the
-        // body, so the title and Group keep their room (#332, #220).
-        status={cued ? width < narrowBar ? <RefreshMark /> : <RefreshStatus visible /> : undefined}
-        actions={
-          <>
-            {!record.isDeleted ? (
-              <CompactButton
-                label="Edit"
-                accessibilityLabel="Edit expense"
-                // At large text its word says it alone, so the title and Group keep their room.
-                icon={large ? undefined : 'pencil-outline'}
-                variant="text"
-                disabled={!!editReason}
-                hint={editReason}
-                onPress={onEdit}
-              />
-            ) : null}
-            <IconButton
-              icon="ellipsis-vertical-outline"
-              label="Expense options"
-              onPress={() => setOptions(true)}
-            />
-          </>
-        }
+      <RecordTopBar
+        groupName={context?.group.name}
+        backLabel={recordBackLabel(state)}
+        onBack={onClose}
+        refreshing={cued}
+        deleted={record.isDeleted}
+        editReason={editReason}
+        onEdit={onEdit}
+        onOptions={openOptions}
       />
       <ScrollView
         ref={scroll}

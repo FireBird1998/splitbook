@@ -15,6 +15,8 @@ import {
   ExpenseRecordScreen,
   ExpenseRecordSkeleton,
   ExpenseRecordView,
+  RecordTopBar,
+  recordBackLabel,
   UnfinishedDraft,
   type RecordOutline,
 } from './expense-record-view';
@@ -358,6 +360,7 @@ function ExpenseTask({
   onRetryHistory,
   onViewMonth,
   outline,
+  groupName,
 }: {
   controller?: MobileController;
   state: Editor;
@@ -414,6 +417,11 @@ function ExpenseTask({
   onViewMonth?: () => void;
   /** What the list row an Expense opens from already says, so its skeleton takes its shape. */
   outline?: RecordOutline | null;
+  /**
+   * The Group's name, as this phone already knows it, so the record's skeleton names it under
+   * "Expense" where the record will (#935).
+   */
+  groupName?: string | null;
 }) {
   const theme = useTheme();
   const [editor, setEditor] = useState<'payers' | null>(null);
@@ -542,55 +550,65 @@ function ExpenseTask({
   const newTask = !state.requestedExpenseId && !draft?.original;
   const frame = (body: ReactNode, footer?: ReactNode) => (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <TopBar
-        title={
-          newTask
-            ? 'Add expense'
-            : !draft || state.status === 'loading' || record
-              ? 'Expense'
-              : draft.original
-                ? 'Edit expense'
-                : 'Add expense'
-        }
-        subtitle={
-          context
-            ? `${context.group.name}${SEPARATOR}${draft?.currency ?? context.group.defaultCurrency}`
-            : undefined
-        }
-        prominent={!form && !newTask}
-        leading={
-          onClose
-            ? form
-              ? { kind: 'close', label: closeLabel(state), onPress: onClose }
-              : { kind: 'back', label: 'Back to Group', onPress: onClose }
-            : undefined
-        }
-        status={
-          badge ? (
-            <Badge label={badge} tone="warning" />
-          ) : form ? (
-            controller ? (
-              <SelectedDraftStatus controller={controller} />
-            ) : (
-              <DraftStatus
-                persistence={state.persistence}
-                kept={
-                  !!(state.attempt || state.mutation) || expenseDraftChanged(draft!, state.blank)
-                }
+      {opening ? (
+        // The record's own bar over its skeleton, naming its Group on the lines the record's will
+        // take, so the record doesn't move when it lands (#935).
+        <RecordTopBar
+          groupName={context?.group.name ?? groupName ?? undefined}
+          backLabel={recordBackLabel(state)}
+          onBack={onClose}
+        />
+      ) : (
+        <TopBar
+          title={
+            newTask
+              ? 'Add expense'
+              : !draft || state.status === 'loading' || record
+                ? 'Expense'
+                : draft.original
+                  ? 'Edit expense'
+                  : 'Add expense'
+          }
+          subtitle={
+            context
+              ? `${context.group.name}${SEPARATOR}${draft?.currency ?? context.group.defaultCurrency}`
+              : undefined
+          }
+          prominent={!form && !newTask}
+          leading={
+            onClose
+              ? form
+                ? { kind: 'close', label: closeLabel(state), onPress: onClose }
+                : { kind: 'back', label: 'Back to Group', onPress: onClose }
+              : undefined
+          }
+          status={
+            badge ? (
+              <Badge label={badge} tone="warning" />
+            ) : form ? (
+              controller ? (
+                <SelectedDraftStatus controller={controller} />
+              ) : (
+                <DraftStatus
+                  persistence={state.persistence}
+                  kept={
+                    !!(state.attempt || state.mutation) || expenseDraftChanged(draft!, state.blank)
+                  }
+                />
+              )
+            ) : null
+          }
+          actions={
+            form && state.status === 'editing' ? (
+              <IconButton
+                icon="ellipsis-vertical-outline"
+                label="Expense options"
+                onPress={() => setSheet('options')}
               />
-            )
-          ) : null
-        }
-        actions={
-          form && state.status === 'editing' ? (
-            <IconButton
-              icon="ellipsis-vertical-outline"
-              label="Expense options"
-              onPress={() => setSheet('options')}
-            />
-          ) : null
-        }
-      />
+            ) : null
+          }
+        />
+      )}
       <ScrollView
         ref={scroll}
         innerViewRef={content as RefObject<ViewInstance>}
