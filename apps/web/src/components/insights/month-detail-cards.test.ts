@@ -8,7 +8,7 @@ import type {
 } from '@splitbook/shared/group-insights-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { DETAIL_IDS, SEPTEMBER_DETAIL } from '@/lib/test-utils/insights-month-detail';
-import { anchors, scrollBoxes, text } from '@/lib/test-utils/markup';
+import { anchors, scrollBoxes, stylesOf, text } from '@/lib/test-utils/markup';
 import ByTagCard, { type ByTagCardProps } from './ByTagCard';
 import GroupInsightsView, { type GroupInsightsViewProps } from './GroupInsightsView';
 import RecurringExpensesCard, { type RecurringExpensesCardProps } from './RecurringExpensesCard';
@@ -254,6 +254,22 @@ describe('By Tag', () => {
     expect(region).toContain('tabindex="0"');
     expect(markup).toMatch(/aria-pressed="true"[^>]*>Table</);
     expect(tableRows(markup)).toHaveLength(5);
+  });
+
+  it('wraps a Tag name only between words or after a hyphen, and keeps amounts whole (#951)', () => {
+    const markup = render({ initialView: 'table' });
+    const names = stylesOf(markup, 'by-tag-name');
+    // Household, Utilities, Groceries and Untagged.
+    expect(names).toHaveLength(4);
+    names.forEach((name) => {
+      // Never inside a word: a word wider than the column stays whole and the table scrolls.
+      expect(name.value('overflow-wrap')).toBeUndefined();
+      expect(name.value('word-break')).toBeUndefined();
+      expect(name.value('white-space')).toBeUndefined();
+    });
+    const amounts = stylesOf(markup, 'by-tag-amount');
+    expect(amounts).toHaveLength(12);
+    amounts.forEach((amount) => expect(amount.value('white-space')).toBe('nowrap'));
   });
 
   it('has no average columns or ticks in the Group’s first Month', () => {

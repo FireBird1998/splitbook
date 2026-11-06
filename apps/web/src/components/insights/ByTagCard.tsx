@@ -321,25 +321,39 @@ function TagTable({ model, hidden = false }: { model: ByTagModel; hidden?: boole
               <Box
                 component="th"
                 scope="row"
+                className="by-tag-name"
                 sx={{
                   ...cell,
                   fontWeight: 400,
                   color: row.untagged ? 'text.secondary' : 'text.primary',
                   fontStyle: row.untagged ? 'italic' : 'normal',
-                  overflowWrap: 'anywhere',
+                  // Wraps between words or after a hyphen, never inside a word (#951): a word
+                  // wider than the column stays whole and the table scrolls in its box.
                 }}
               >
                 {row.name}
               </Box>
-              <Box component="td" sx={[number, money, { color: 'text.primary' }]}>
+              <Box
+                component="td"
+                className="by-tag-amount"
+                sx={[number, money, { color: 'text.primary' }]}
+              >
                 {row.spentText}
               </Box>
               {withAverage ? (
                 <>
-                  <Box component="td" sx={[number, money, { color: 'text.secondary' }]}>
+                  <Box
+                    component="td"
+                    className="by-tag-amount"
+                    sx={[number, money, { color: 'text.secondary' }]}
+                  >
                     {row.averageText ?? '–'}
                   </Box>
-                  <Box component="td" sx={[number, money, { color: 'text.secondary' }]}>
+                  <Box
+                    component="td"
+                    className="by-tag-amount"
+                    sx={[number, money, { color: 'text.secondary' }]}
+                  >
                     {row.changeText}
                   </Box>
                 </>
