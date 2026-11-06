@@ -124,6 +124,22 @@ function PreviewTable({
 }
 
 /**
+ * A statement preview's amount, as the statement writes it: whole, never "CHF 20,000,000.0 / 0"
+ * (#943). MoneyText may break anywhere elsewhere; a figure too wide for its place moves whole.
+ */
+function PreviewAmount({ minor, currency }: { minor: number; currency: string }) {
+  return (
+    <MoneyText
+      className="export-statement-amount"
+      amount={displayMajorAmount(minor, currency)}
+      currency={currency}
+      tone="neutral"
+      sx={{ whiteSpace: 'nowrap', overflowWrap: 'normal' }}
+    />
+  );
+}
+
+/**
  * A name and its amount in Paid by or Share, as the statement writes them: on one line where
  * the card has room, the amount under the name where it hasn't, never cut off (#916). A wrapped
  * amount keeps to the column's right edge with the other figures, and each person is set a
@@ -278,11 +294,7 @@ export default function ExportPreviewPanel({
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 2 }}>
                   <Box>
                     <Typography variant="body2">Spent</Typography>
-                    <MoneyText
-                      amount={displayMajorAmount(bucket.spentMinor, bucket.currency)}
-                      currency={bucket.currency}
-                      tone="neutral"
-                    />
+                    <PreviewAmount minor={bucket.spentMinor} currency={bucket.currency} />
                   </Box>
                   <Box>
                     <Typography variant="body2">Expenses</Typography>
@@ -294,11 +306,7 @@ export default function ExportPreviewPanel({
                       {bucket.paymentCount}
                       {SEPARATOR}
                     </Typography>
-                    <MoneyText
-                      amount={displayMajorAmount(bucket.paymentTotalMinor, bucket.currency)}
-                      currency={bucket.currency}
-                      tone="neutral"
-                    />
+                    <PreviewAmount minor={bucket.paymentTotalMinor} currency={bucket.currency} />
                   </Box>
                 </Box>
                 {inBalances ? null : (
@@ -322,11 +330,7 @@ export default function ExportPreviewPanel({
                           {[person.paidMinor, person.shareMinor, person.netMinor].map(
                             (minor, i) => (
                               <TableCell key={i} className={MONEY}>
-                                <MoneyText
-                                  amount={displayMajorAmount(minor, bucket.currency)}
-                                  currency={bucket.currency}
-                                  tone="neutral"
-                                />
+                                <PreviewAmount minor={minor} currency={bucket.currency} />
                               </TableCell>
                             ),
                           )}
@@ -352,10 +356,9 @@ export default function ExportPreviewPanel({
                               {person.name}
                             </TableCell>
                             <TableCell className={MONEY}>
-                              <MoneyText
-                                amount={displayMajorAmount(person.balanceMinor, bucket.currency)}
+                              <PreviewAmount
+                                minor={person.balanceMinor}
                                 currency={bucket.currency}
-                                tone="neutral"
                               />
                             </TableCell>
                           </TableRow>
@@ -369,10 +372,9 @@ export default function ExportPreviewPanel({
                           {bucket.suggestedPayments.map((payment) => (
                             <li key={`${payment.from}-${payment.to}`}>
                               {name(payment.from)} pays {name(payment.to)}{' '}
-                              <MoneyText
-                                amount={displayMajorAmount(payment.amountMinor, bucket.currency)}
+                              <PreviewAmount
+                                minor={payment.amountMinor}
                                 currency={bucket.currency}
-                                tone="neutral"
                               />
                             </li>
                           ))}
@@ -417,10 +419,9 @@ export default function ExportPreviewPanel({
                             ) : (
                               <>
                                 {name(payment.fromId)} paid {name(payment.toId)}{' '}
-                                <MoneyText
-                                  amount={displayMajorAmount(payment.amountMinor, bucket.currency)}
+                                <PreviewAmount
+                                  minor={payment.amountMinor}
                                   currency={bucket.currency}
-                                  tone="neutral"
                                 />
                               </>
                             )}
@@ -463,10 +464,9 @@ export default function ExportPreviewPanel({
                                 }
                               >
                                 {amounts ? (
-                                  <MoneyText
-                                    amount={displayMajorAmount(person.amountMinor, bucket.currency)}
+                                  <PreviewAmount
+                                    minor={person.amountMinor}
                                     currency={bucket.currency}
-                                    tone="neutral"
                                   />
                                 ) : null}
                               </PersonAmount>
@@ -501,10 +501,9 @@ export default function ExportPreviewPanel({
                             {/* One payer paid the Amount: their name alone (#918). */}
                             {people(expense.paidBy, expense.paidBy.length > 1)}
                             <TableCell className={MONEY}>
-                              <MoneyText
-                                amount={displayMajorAmount(expense.amountMinor, bucket.currency)}
+                              <PreviewAmount
+                                minor={expense.amountMinor}
                                 currency={bucket.currency}
-                                tone="neutral"
                               />
                             </TableCell>
                             {people(expense.splitBetween)}

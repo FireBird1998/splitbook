@@ -391,6 +391,27 @@ describe('the statement’s table cells', () => {
     }
   });
 
+  // #943: at 1280 the Summary's "CHF 20,000,000.00" Spent broke as "CHF 20,000,000.0 / 0": its
+  // figures kept MoneyText's break-anywhere. A Summary figure stays whole; a tile is never
+  // narrower than its figure, and the strip wraps between tiles instead.
+  it('never breaks inside a Summary figure; the strip wraps between its tiles (#943)', () => {
+    const html = tripHtml();
+    const figures = stylesOf(html, 'statement-summary-figure');
+    // Spent and the payments' total.
+    expect(figures).toHaveLength(2);
+    for (const figure of figures) {
+      expect(figure.value('white-space')).toBe('nowrap');
+      expect(figure.value('overflow-wrap')).toBe('normal');
+    }
+    const [strip] = stylesOf(html, 'statement-summary');
+    expect(strip.value('display')).toBe('flex');
+    expect(strip.value('flex-wrap')).toBe('wrap');
+    const tiles = stylesOf(html, 'statement-summary-item');
+    expect(tiles).toHaveLength(3);
+    // A tile's least width is its content's: its figure, whole.
+    for (const tile of tiles) expect(tile.value('min-width')).toBeUndefined();
+  });
+
   it('keeps each date and date-time on one line', () => {
     const dates = stylesOf(tripHtml(), 'statement-date');
     // The Expenses' and Payments' headers, 3 Expense dates and 1 Payment's.
@@ -509,13 +530,78 @@ describe('the summary strip', () => {
     expect(strip.value('border-top')).toBe('1px solid');
     expect(strip.value('border-bottom')).toBe('1px solid');
     expect(strip.value('border-radius')).toBeUndefined();
-    expect(strip.nested.some((rule) => /^>\*\+\*/.test(rule.selector))).toBe(true);
     const items = stylesOf(html, 'statement-summary-item');
     expect(items).toHaveLength(3);
     for (const item of items) {
       expect(item.value('border-radius')).toBeUndefined();
       expect(item.value('border')).toBeUndefined();
     }
+  });
+
+  // #943 QA rounds 2 and 3: a rule hidden by clipping (a 1 px clip-path inset, then a border
+  // outside an overflow clip) still showed at the strip's left edge at fractional scales (browser
+  // zoom 90/110/125 %, CSS zoom 0.9), anti-aliased through the clip. Now no rule exists at a
+  // row's start at all: the strip's background is the rule colour and its 1 px gaps, row and
+  // column, are the dividers; each tile covers it with the sheet's surface colour and has no
+  // border or offset of its own. jsdom lays nothing out, so this pins that structure.
+  it('draws its dividers as the gaps between tiles, so no rule exists at a row’s start (#943)', () => {
+    const theme = createAppTheme('light');
+    const html = tripHtml();
+    const [strip] = stylesOf(html, 'statement-summary');
+    expect(strip.value('gap')).toBe('1px');
+    expect(strip.value('background-color')).toBe(theme.palette.divider);
+    // Its own top and bottom rules over its padding box only, never doubled on the background.
+    expect(strip.value('background-clip')).toBe('padding-box');
+    expect(strip.value('border-left')).toBeUndefined();
+    expect(strip.value('padding')).toBeUndefined();
+    expect(strip.value('padding-left')).toBeUndefined();
+    // Nothing is hidden by clipping any more.
+    expect(strip.value('overflow')).toBeUndefined();
+    expect(strip.value('clip-path')).toBeUndefined();
+    // Never narrower than its widest tile, so its background never shows beside a tile.
+    expect(strip.value('min-width')).toBe('min-content');
+    const items = stylesOf(html, 'statement-summary-item');
+    expect(items).toHaveLength(3);
+    for (const item of items) {
+      expect(item.value('background-color')).toBe(theme.palette.background.paper);
+      for (const property of ['border', 'border-width', 'border-left', 'border-style']) {
+        expect(item.value(property)).toBeUndefined();
+      }
+      expect(item.value('margin-left')).toBeUndefined();
+      expect(item.value('margin-top')).toBeUndefined();
+      expect(item.value('print-color-adjust')).toBe('exact');
+    }
+    expect(strip.value('print-color-adjust')).toBe('exact');
+  });
+
+  // The base's grid put each divider on a tile's first pixel (x = W/3 and 2W/3). With two 1 px
+  // gaps, equal growth from a first tile 1 px wider in its basis gives the same x for both.
+  it('puts the dividers where three equal grid columns had them (#943)', () => {
+    const html = tripHtml();
+    const hashes = [...html.matchAll(/class="([^"]*\bstatement-summary-item\b[^"]*)"/g)].map(
+      ([, classes]) => classes.split(' ').find((name) => name.startsWith('css-')),
+    );
+    expect(hashes).toHaveLength(3);
+    const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('');
+    const sm = createAppTheme('light').breakpoints.values.sm;
+    const smFlex = (hash: string | undefined) =>
+      new RegExp(`@media \\(min-width:${sm}px\\)\\{\\.${hash}\\{[^}]*;flex:([^;}]+)`).exec(
+        css,
+      )?.[1];
+    expect(smFlex(hashes[0])).toBe('1 1 1px');
+    expect(smFlex(hashes[1])).toBe('1 1 0');
+    expect(smFlex(hashes[2])).toBe('1 1 0');
+  });
+
+  // Print turns backgrounds off, and the sheet's print rules paint every box the paper's colour:
+  // the strip keeps the rule colour behind its gaps, so print still shows the dividers.
+  it('keeps the dividers in print (#943)', () => {
+    const css = readFileSync(STATEMENT_CSS, 'utf8');
+    const print = css.slice(css.indexOf('@media print'));
+    expect(print).toMatch(
+      /\.statement-paper \.statement-summary\s*\{[^}]*background-color:\s*var\(--statement-print-border\)\s*!important/,
+    );
+    expect(print).toMatch(/\.statement-summary[^{]*\{[^}]*print-color-adjust:\s*exact/);
   });
 
   it('labels each figure in small uppercase', () => {
