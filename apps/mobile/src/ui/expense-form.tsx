@@ -1,4 +1,4 @@
-import type { ViewInstance, TextInputInstance } from 'react-native';
+import type { ViewInstance, TextInputInstance, TextStyle } from 'react-native';
 import {
   createContext,
   memo,
@@ -49,6 +49,7 @@ import {
   headingBeside,
   headingLine,
   isLargeText,
+  moneyWidth,
   scaledSp,
   textVariants,
   useLargeText,
@@ -374,6 +375,19 @@ export const amountPair = {
 } as const;
 
 /**
+ * How wide each of one kind of figure in the stacked Who owes what is drawn: as wide as the widest
+ * of them in the table (`figures`, everyone's Paid or everyone's Share, "–" for nothing), up to
+ * the room under a name. Every row's pairs are then as wide as each other, so "Share" starts at
+ * one x in every row, beside Paid or under it, and the figures end together (#932). Before, it
+ * started wherever that row's Paid ended. The record's skeleton keeps it.
+ */
+export function stackedFigure(figures: readonly string[], width: number, fontScale: number) {
+  const room = width - 2 * 16 - 2 - 2 * 14 - 36;
+  const widest = Math.max(0, ...figures.map((figure) => moneyWidth(figure, 'table', fontScale)));
+  return { minWidth: Math.min(room, widest), textAlign: 'right' as const };
+}
+
+/**
  * Whether Who owes what waits for the amount, keeping its rows with a dash for each figure: there
  * is no amount it can use yet, whether none, one typed in part (a sub-unit amount passes through
  * "0" and "0.") or one corrected beside the field. Folding the table there would move Notes
@@ -456,14 +470,36 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
   // Wide enough for "₹1,24,999.50" in the table face. Money is never cut short: a longer
   // amount widens its column, and names wrap instead.
   const column = { minWidth: amountColumn, alignItems: 'flex-end' as const };
-  const amount = (minor: number | null | undefined) =>
-    minor === undefined ? (
-      <CompactText tone="muted">–</CompactText>
-    ) : (
-      <Money size="table" numberOfLines={0} tone={minor === null ? 'muted' : undefined}>
-        {minor === null ? '–' : money(minor)}
-      </Money>
-    );
+  // Nothing, or a figure still to come, is a dash in the amount's own face: stacked, "Paid –"
+  // then sits on the same baseline as "Share ₹…" (#932).
+  const figure = (minor: number | null | undefined) =>
+    minor === undefined || minor === null ? '–' : money(minor);
+  const amount = (minor: number | null | undefined, style?: TextStyle) => (
+    <Money
+      size="table"
+      numberOfLines={0}
+      tone={minor === undefined || minor === null ? 'muted' : undefined}
+      style={style}
+    >
+      {figure(minor)}
+    </Money>
+  );
+  // Stacked, each kind of figure is as wide as the widest in the table, everyone's, so "Share"
+  // starts at one x in every row (#932).
+  const figures = stacked
+    ? {
+        Paid: stackedFigure(
+          people.map((id) => figure(paid.get(id))),
+          width,
+          fontScale,
+        ),
+        Share: stackedFigure(
+          people.map((id) => figure(shares.has(id) ? shares.get(id)! : 0)),
+          width,
+          fontScale,
+        ),
+      }
+    : null;
   const spoken = (minor: number | null | undefined) =>
     minor === undefined ? 'nothing' : money(minor as number);
   // A figure that waits for the amount says so; "paid and share" when both do (#911).
@@ -535,7 +571,7 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
                     <CompactText variant="caption" tone="secondary">
                       {label}
                     </CompactText>
-                    {amount(minor)}
+                    {amount(minor, figures![label])}
                   </View>
                 ))}
               </View>

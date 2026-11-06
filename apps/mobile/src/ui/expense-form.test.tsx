@@ -14,6 +14,8 @@ import {
   findHosts,
   flatten,
   layoutHeight,
+  outerTexts,
+  rowStarts,
   unbroken,
   unreadText,
   wordsOf,
@@ -227,6 +229,58 @@ describe('Who owes what', () => {
       expect(layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, 328)).toBe(
         before,
       );
+    },
+  );
+
+  // #932, the Designer's review of #926: stacked, "Share" started wherever each row's Paid ended,
+  // about 40 dp further right in the You row than under the others, and "Paid –" sat about 2 dp
+  // lower than "Share ₹…". At 200% on a 360 dp phone, Share went under the You row's Paid and
+  // stayed beside every "Paid –".
+  it.each([
+    [412, 1, 'Priyamvada Venkataraghavan-Subramaniam', '900.00'],
+    [360, 2, 'Sam Chen', '9.00'],
+  ] as const)(
+    'starts Share at one x in every stacked row, on Paid’s baseline, %sdp at %s× text (#932)',
+    (width, fontScale, second, amount) => {
+      setWindow({ width, fontScale });
+      onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+      const members = ids.slice(0, 3);
+      const value = draft(amount, members);
+      act(() => {
+        renderer = create(
+          <WhoOwesWhat
+            draft={value}
+            allocation={expenseMoney(value)}
+            problem=""
+            name={(id) => (id === ids[1] ? second : people[ids.indexOf(id)]!)}
+            currentUserId={ids[0]}
+            money={(minor) => `₹${(minor / 100).toFixed(2)}`}
+          />,
+        );
+      });
+      const card = width - 32;
+      const json = renderer!.toJSON() as ReactTestRendererJSON;
+      /** Each row's Paid and Share, under its name. */
+      const under = (row: ReactTestRendererJSON) => {
+        const style = flatten(row.props.style);
+        return style.flexWrap === 'wrap' && style.paddingLeft === 36;
+      };
+      const starts = rowStarts(json, fontScale, card, under);
+      expect(starts).toHaveLength(3);
+      const shares = starts.map(([, share]) => share!);
+      for (const share of shares) expect(Math.abs(share - shares[0]!)).toBeLessThanOrEqual(1);
+      // Each pair is a label and its figure, in the same faces as every other pair's, so the
+      // labels share a baseline: a dash for nothing is drawn in the amount's own face.
+      const faces = (pair: ReactTestRendererJSON) =>
+        outerTexts(pair).map((text) => {
+          const { fontFamily, fontSize, lineHeight } = flatten(text.props.style);
+          return { fontFamily, fontSize, lineHeight };
+        });
+      for (const row of findHosts(json, (props) => under({ props } as ReactTestRendererJSON))) {
+        const [paid, share] = row.children as ReactTestRendererJSON[];
+        expect(faces(paid!)).toEqual(faces(share!));
+      }
+      expect(unreadText(json, fontScale, card)).toEqual([]);
     },
   );
 });

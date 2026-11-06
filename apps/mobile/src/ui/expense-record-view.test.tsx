@@ -17,7 +17,14 @@ import {
   type RecordedEdit,
 } from '@splitbook/shared/expense-detail';
 import { motion } from './compact';
-import { findHosts, flatten, layoutHeight, unreadText, wordsOf } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  layoutHeight,
+  rowStarts,
+  unreadText,
+  wordsOf,
+} from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, timing, touchAlong } from '../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -1080,6 +1087,45 @@ describe('compact Expense record, opening', () => {
     // Everyday names keep the columns, whose headings the skeleton draws as one bar.
     expect(await skeleton(recordOutline(row, alex.id))).toBe(0);
   });
+
+  // #932: the skeleton's stacked pairs are the record's texts, so they line up as the record's do:
+  // "Share" starts at one x in every row, whether it sits beside "Paid" or under it.
+  it.each([
+    [412, 1, 'Priyamvada Venkataraghavan-Subramaniam'],
+    [360, 2, 'Priya Shah'],
+  ] as const)(
+    'starts Share at one x in every row of its stacked skeleton, %sdp at %s× text (#932)',
+    async (width, fontScale, long) => {
+      setWindow({ width, fontScale });
+      const row = listRow(ids.bill);
+      const rename = (list: typeof row.paidBy) =>
+        list.map((entry) =>
+          entry.user.id === priya.id ? { ...entry, user: { ...entry.user, name: long } } : entry,
+        );
+      const renamed = {
+        ...row,
+        paidBy: rename(row.paidBy),
+        splitBetween: rename(row.splitBetween),
+      };
+      await act(async () => {
+        screen = create(
+          editor(
+            { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.bill },
+            recordOutline(renamed, alex.id),
+          ),
+        );
+      });
+      const [, owes] = cards();
+      const starts = rowStarts(owes!, fontScale, width - 32, (pairs) => {
+        const style = flatten(pairs.props.style);
+        return style.flexWrap === 'wrap' && style.paddingLeft === 36;
+      });
+      expect(starts).toHaveLength(3);
+      const shares = starts.map(([, share]) => share!);
+      for (const share of shares) expect(Math.abs(share - shares[0]!)).toBeLessThanOrEqual(1);
+      expect(unreadText(owes!, fontScale, width - 32)).toEqual([]);
+    },
+  );
 
   // #925, the Designer's release check: at 200% on a 360 dp phone, Who owes what clipped "Paid
   // CHF 10,000,000.(" at the card's edge. The amount goes under its label, in the record and in

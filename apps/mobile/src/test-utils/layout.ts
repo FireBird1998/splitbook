@@ -268,6 +268,40 @@ export function unreadText(
 }
 
 /**
+ * Where each child of a row starts across it, in dp from the row's own left edge, as `layoutHeight`
+ * lays the tree out `width` wide at this text size: one list for each row that `match` picks, in
+ * order. A row that wraps (`flexWrap: 'wrap'`) starts a line again at its left padding where a
+ * child no longer fits, as `layoutHeight` breaks it; so whether "Share" sits beside "Paid" or under
+ * it, and where (#932). The widths are estimates (see `layoutWidth`).
+ */
+export function rowStarts(
+  node: Node | null,
+  fontScale: number,
+  width: number,
+  match: (row: Node) => boolean,
+) {
+  const widths = new Map<Node, number>();
+  layoutHeight(node, fontScale, width, { node: (each, room) => widths.set(each, room) });
+  return findHosts(node, (_props, type) => type === 'View')
+    .filter((row) => match(row) && widths.has(row))
+    .map((row) => {
+      const style = flatten(row.props.style);
+      const left =
+        edge(style, 'Left', 'padding') + number(style.borderLeftWidth ?? style.borderWidth);
+      const inner = widths.get(row)! - horizontal(style);
+      const across = number(style.columnGap ?? style.gap);
+      let used = -1;
+      return inFlow(row).map((child) => {
+        const own = widths.get(child) ?? 0;
+        const wraps = style.flexWrap === 'wrap' && used >= 0 && used + across + own > inner;
+        const start = used < 0 || wraps ? 0 : used + across;
+        used = start + own;
+        return left + start;
+      });
+    });
+}
+
+/**
  * The phone's own font's "…", in em: Roboto's (0.669), read from the emulator's
  * /system/fonts/Roboto-Regular.ttf. React Native's text view cuts a line with its own paint,
  * which has the phone's font and the text's size in dp, not scaled with the phone's text size,
