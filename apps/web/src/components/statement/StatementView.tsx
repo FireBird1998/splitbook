@@ -281,21 +281,27 @@ function SummaryRow({ bucket }: { bucket: Statement['currencies'][number] }) {
       // shows only in the gaps. Its top and bottom rules stay borders, with the background
       // clipped inside them. From sm the first tile's basis is 1 px more than the others', so the
       // two dividers fall at W/3 and 2W/3, where the old three-column grid drew them. Print keeps
-      // the background (print-color-adjust here; statement.css repaints it for paper).
-      sx={{
+      // the background (print-color-adjust here; statement.css repaints it for paper). The rule
+      // colour stops 1 px short of each side (#949): at fractional zoom, and in the PDF, a tile's
+      // outer edge blends with what lies behind it, which is then the sheet's paper and not the
+      // rule colour. Every gap lies inside that inset.
+      sx={(theme) => ({
         display: 'flex',
         flexWrap: 'wrap',
         gap: '1px',
         m: 0,
         mb: 1.5,
         minWidth: 'min-content',
-        bgcolor: 'divider',
+        backgroundImage: `linear-gradient(${theme.palette.divider}, ${theme.palette.divider})`,
+        backgroundSize: 'calc(100% - 2px) 100%',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
         backgroundClip: 'padding-box',
         borderTop: 1,
         borderBottom: 1,
         borderColor: 'divider',
         ...KEEP_BACKGROUND,
-      }}
+      })}
     >
       {statementSummary(bucket).map((figure, index) => (
         <Box

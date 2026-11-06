@@ -549,7 +549,8 @@ describe('the summary strip', () => {
     const html = tripHtml();
     const [strip] = stylesOf(html, 'statement-summary');
     expect(strip.value('gap')).toBe('1px');
-    expect(strip.value('background-color')).toBe(theme.palette.divider);
+    // The rule colour behind the gaps (inset 1 px from each side since #949, below).
+    expect(strip.value('background-image')).toContain(theme.palette.divider);
     // Its own top and bottom rules over its padding box only, never doubled on the background.
     expect(strip.value('background-clip')).toBe('padding-box');
     expect(strip.value('border-left')).toBeUndefined();
@@ -572,6 +573,35 @@ describe('the summary strip', () => {
       expect(item.value('print-color-adjust')).toBe('exact');
     }
     expect(strip.value('print-color-adjust')).toBe('exact');
+  });
+
+  // #949: a tile's outer edge sits at a fractional x at browser zoom 90/110/125 % (and in the
+  // PDF), so its leftmost device pixel blends the tile with what lies behind it. With the rule
+  // colour under the whole strip, that column read 247–249 against the paper's 255. The rule
+  // colour is now a background inset 1 px from each side, so a tile's outer edge blends with the
+  // sheet's own paper; every gap lies inside the inset, so the dividers stay.
+  it('keeps the rule colour 1 px inside its left and right edges (#949)', () => {
+    const theme = createAppTheme('light');
+    const [strip] = stylesOf(tripHtml(), 'statement-summary');
+    // Nothing of the rule colour reaches the strip's outer columns.
+    expect(strip.value('background-color')).toBeUndefined();
+    expect(strip.value('background-image')).toBe(
+      `linear-gradient(${theme.palette.divider}, ${theme.palette.divider})`,
+    );
+    expect(strip.value('background-size')).toBe('calc(100% - 2px) 100%');
+    expect(strip.value('background-position')).toBe('center');
+    expect(strip.value('background-repeat')).toBe('no-repeat');
+    expect(strip.value('background-clip')).toBe('padding-box');
+  });
+
+  it('keeps the rule colour 1 px inside the strip’s edges in print, too (#949)', () => {
+    const css = readFileSync(STATEMENT_CSS, 'utf8');
+    const print = css.slice(css.indexOf('@media print'));
+    const rule = /\.statement-paper \.statement-summary\s*\{([^}]*)\}/.exec(print)?.[1] ?? '';
+    expect(rule).toMatch(
+      /background:\s*linear-gradient\(\s*var\(--statement-print-border\),\s*var\(--statement-print-border\)\s*\)\s*center\s*\/\s*calc\(100% - 2px\) 100%\s*no-repeat\s*padding-box\s*var\(--statement-print-paper\)\s*!important/,
+    );
+    expect(rule).not.toMatch(/background-color/);
   });
 
   // The base's grid put each divider on a tile's first pixel (x = W/3 and 2W/3). With two 1 px
@@ -599,7 +629,7 @@ describe('the summary strip', () => {
     const css = readFileSync(STATEMENT_CSS, 'utf8');
     const print = css.slice(css.indexOf('@media print'));
     expect(print).toMatch(
-      /\.statement-paper \.statement-summary\s*\{[^}]*background-color:\s*var\(--statement-print-border\)\s*!important/,
+      /\.statement-paper \.statement-summary\s*\{[^}]*background:[^;}]*var\(--statement-print-border\)[^;}]*!important/,
     );
     expect(print).toMatch(/\.statement-summary[^{]*\{[^}]*print-color-adjust:\s*exact/);
   });
