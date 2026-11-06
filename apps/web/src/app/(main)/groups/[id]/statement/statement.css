@@ -51,10 +51,11 @@
   }
   /* The Summary strip's dividers are its background showing through the 1 px gaps between its
      tiles (#943): the rule colour, not the paper's every other box takes above. Its tiles keep
-     the paper's colour. Printed even with background graphics off. */
+     the paper's colour. Printed even with background graphics off. The rule colour stops 1 px
+     short of each side, as on screen (#949), so the tiles' outer edges meet the paper. */
   .statement-paper .statement-summary {
-    background-color: var(--statement-print-border) !important;
-    background-clip: padding-box !important;
+    background: linear-gradient(var(--statement-print-border), var(--statement-print-border))
+      center / calc(100% - 2px) 100% no-repeat padding-box var(--statement-print-paper) !important;
   }
   .statement-summary,
   .statement-summary > div {
