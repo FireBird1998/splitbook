@@ -29,7 +29,9 @@ test('Join keeps one h1 through loading, invite, persona entry and error states'
     route.fulfill({ status: 404, json: {} }),
   );
   await page.goto('/join/bad-heading-invite');
-  await expect(page.getByRole('heading', { level: 1, name: 'Oops!' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Can’t open this invite' }),
+  ).toBeVisible();
   await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.locator('body')).not.toContainText('...');
 });

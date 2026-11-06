@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { createElement, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -10,16 +10,20 @@ import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import GoogleIcon from '@mui/icons-material/Google';
+import LinkOffOutlinedIcon from '@mui/icons-material/LinkOffOutlined';
 import { visuallyHidden } from '@/components/common/visually-hidden';
 import BrandLogo from '@/components/layout/BrandLogo';
+import BrandMark from '@/components/layout/BrandMark';
+import { groupThemeIcon } from '@/components/layout/group-theme-icons';
 import { PRODUCT_NAME } from '@/lib/product';
 import type { AuthMode } from '@/lib/auth-mode';
 import { authClient, signInWithGoogle } from '@/lib/auth-client';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
-import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory } from '@splitbook/shared/types';
 import { apiFetch } from '@/lib/utils/api-fetch';
-import { counted } from '@splitbook/shared/separator';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
+import { RADIUS } from '@/lib/theme/tokens';
 
 interface JoinGroupClientProps {
   code: string;
@@ -45,7 +49,9 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
           const data = await res.json();
           setGroup(data.data);
         } else {
-          setError('This invite link is invalid or has expired.');
+          setError(
+            'This invite link has expired or isn’t valid. Ask whoever sent it for a new one.',
+          );
         }
       } catch {
         setError('Failed to load group information.');
@@ -93,12 +99,19 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
   }
 
   if (loading) {
+    // The mark and "Loading…", as Sign in loads (#646).
     return (
       <JoinPage>
         <Typography component="h1" sx={visuallyHidden}>
           Join Group
         </Typography>
-        <CircularProgress />
+        <Box
+          role="status"
+          sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}
+        >
+          <BrandMark size={48} decorative={false} />
+          <Typography color="text.secondary">Loading…</Typography>
+        </Box>
       </JoinPage>
     );
   }
@@ -106,21 +119,23 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
   if (error && !group) {
     return (
       <JoinPage>
-        <Stack spacing={2} alignItems="center">
-          <Typography component="span" sx={{ fontSize: '3rem' }}>
-            😕
-          </Typography>
-          <Typography component="h1" variant="h6" fontWeight={700} color="text.primary">
-            Oops!
+        <Stack spacing={2} alignItems="center" sx={{ textAlign: 'center', maxWidth: 384 }}>
+          <JoinTile kind="error">
+            <LinkOffOutlinedIcon sx={{ fontSize: 28 }} />
+          </JoinTile>
+          <Typography component="h1" sx={titleSx}>
+            Can’t open this invite
           </Typography>
           <Typography color="text.secondary">{error}</Typography>
           <Button variant="outlined" onClick={() => router.push('/')}>
-            Go Home
+            Go to Home
           </Button>
         </Stack>
       </JoinPage>
     );
   }
+
+  const category = ((group?.category as string) || 'other') as GroupCategory;
 
   return (
     <JoinPage>
@@ -135,20 +150,20 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
         }}
       >
         <Stack spacing={3} alignItems="center">
-          <Box>
-            <Typography color="text.secondary" sx={{ mb: 1 }}>
-              You’ve been invited to join:
+          <Stack alignItems="center">
+            <JoinTile kind={category}>
+              {createElement(groupThemeIcon(category), { sx: { fontSize: 28 } })}
+            </JoinTile>
+            <Typography color="text.secondary" sx={{ mt: 2, mb: 1 }}>
+              You’ve been invited to join
             </Typography>
-            <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
-              <Typography component="h1" variant="h6" fontWeight={700} color="text.primary">
-                {getGroupTheme(((group?.category as string) || 'other') as GroupCategory).icon}{' '}
-                {group?.name as string}
-              </Typography>
-            </Stack>
+            <Typography component="h1" sx={titleSx}>
+              {group?.name as string}
+            </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {counted(group?.memberCount as number, 'member')}
+              {inviteSummary(category, group?.memberCount as number)}
             </Typography>
-          </Box>
+          </Stack>
 
           {error && (
             <Typography color="error.main" variant="body2">
@@ -187,6 +202,48 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
         </Stack>
       </Paper>
     </JoinPage>
+  );
+}
+
+/** "Household · 3 members": the Theme, then the count kept whole with its noun (#646). */
+function inviteSummary(category: GroupCategory, memberCount: number): string {
+  return `${getGroupTheme(category).label}${SEPARATOR}${counted(memberCount, 'member')}`;
+}
+
+/** The page's title style: the Group page header's h1 (board WebJoin, #646). */
+const titleSx = {
+  m: 0,
+  fontSize: '1.75rem',
+  lineHeight: 1.15,
+  fontWeight: 600,
+  letterSpacing: '-0.02em',
+  color: 'text.primary',
+  overflowWrap: 'anywhere',
+} as const;
+
+/**
+ * The 56 px tile above the title: the Group's Theme icon on the brand tint, or a broken link on
+ * the negative tint when the invite can't be opened. Decorative: the title says it all.
+ */
+function JoinTile({ kind, children }: { kind: GroupCategory | 'error'; children: ReactNode }) {
+  return (
+    <Box
+      aria-hidden
+      data-join-tile={kind}
+      sx={{
+        width: 56,
+        height: 56,
+        flex: 'none',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: `${RADIUS.lg}px`,
+        bgcolor: kind === 'error' ? 'tint.negative' : 'tint.brand',
+        color: kind === 'error' ? 'status.negative' : 'primary.main',
+      }}
+    >
+      {children}
+    </Box>
   );
 }
 

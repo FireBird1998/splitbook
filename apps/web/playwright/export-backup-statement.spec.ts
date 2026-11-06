@@ -33,7 +33,7 @@ test('JSON backup downloads all time, round-trips and has no emails', async ({
   await enterAsPersona(page, 'alex');
   await page.goto(`/export?group=${DEMO_GROUP_ID}`);
   await page.getByRole('checkbox', { name: 'Shares' }).uncheck();
-  await page.getByLabel('Format', { exact: true }).selectOption('json');
+  await page.getByRole('radio', { name: 'Full backup', exact: true }).check();
   await expect(page.getByRole('checkbox', { name: 'Shares' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'Shares' })).toBeDisabled();
   await expect(page.getByLabel('Period', { exact: true })).toHaveValue('all');
@@ -58,7 +58,7 @@ test('Export opens one Group’s printable statement with named sections in both
 }, testInfo) => {
   await enterAsPersona(page, 'alex');
   await page.goto(`/export?group=${DEMO_GROUP_ID}`);
-  await page.getByLabel('Format', { exact: true }).selectOption('statement');
+  await page.getByRole('radio', { name: 'Printable statement', exact: true }).check();
   await page.getByLabel('Period', { exact: true }).selectOption('all');
   await page.getByRole('link', { name: 'Open statement' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(`${DEMO_TRIP_NAME} · Statement`);

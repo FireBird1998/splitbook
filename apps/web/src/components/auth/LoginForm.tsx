@@ -1,6 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -47,21 +48,8 @@ export default function LoginForm() {
         </Box>
 
         {error && (
-          <Box
-            role="alert"
-            sx={{
-              bgcolor: (theme) =>
-                theme.vars
-                  ? `rgba(${theme.vars.palette.error.mainChannel} / ${18 / 255})`
-                  : `${theme.palette.error.main}12`,
-              color: 'status.negative',
-              px: 2,
-              py: 1.5,
-              borderRadius: 2,
-              fontSize: '0.875rem',
-              mb: 4,
-            }}
-          >
+          // The app's error banner: its status icon and tint, primary text (#646, #772).
+          <Alert severity="error" sx={{ mb: 4, textAlign: 'left', maxWidth: 360, mx: 'auto' }}>
             {isAccessDenied ? (
               <Stack spacing={0.5}>
                 <Typography component="span" fontWeight={600}>
@@ -76,7 +64,7 @@ export default function LoginForm() {
             ) : (
               'Something went wrong. Please try again.'
             )}
-          </Box>
+          </Alert>
         )}
 
         <Button

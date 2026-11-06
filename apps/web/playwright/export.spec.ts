@@ -178,7 +178,7 @@ test('preview follows Groups, period, include and format choices with recovery',
   await expect(
     preview.getByRole('columnheader', { name: 'Alex Rivera share', exact: true }),
   ).toHaveCount(0);
-  await page.getByLabel('Format', { exact: true }).selectOption('statement');
+  await page.getByRole('radio', { name: 'Printable statement', exact: true }).check();
   await expect(preview).toContainText('Member');
   await expect(preview).toContainText('Amounts in INR, never converted');
   await expect(
@@ -206,7 +206,7 @@ test('preview follows Groups, period, include and format choices with recovery',
   await page.getByLabel('From', { exact: true }).fill('2000-01-01');
   await page.getByLabel('To', { exact: true }).fill('2000-01-31');
   await expect(preview).toContainText('Nothing to export for this period.');
-  await page.getByLabel('Format', { exact: true }).selectOption('json');
+  await page.getByRole('radio', { name: 'Full backup', exact: true }).check();
   await expect(preview).toContainText('Approximately');
   await expect(preview).toContainText(
     'Not included: recurring Expense templates and Activity history.',
@@ -223,7 +223,7 @@ test('preview follows Groups, period, include and format choices with recovery',
   await expect(preview.getByRole('alert')).toContainText('The export couldn’t be prepared.');
   await page.unroute('**/api/export?**', failPreview);
   await preview.getByRole('button', { name: 'Retry', exact: true }).click();
-  await expect(preview).toContainText('each with its edit history');
+  await expect(preview).toContainText(/each with its edit history/i);
   await page
     .getByRole('group', { name: 'Groups', exact: true })
     .getByRole('checkbox', { name: new RegExp(DEMO_TRIP_NAME) })

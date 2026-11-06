@@ -34,8 +34,9 @@ const MONTHS = [
 ];
 
 function TripExtras() {
+  // It grows to fill the card, so its closing line sits at the foot of the 2 by 2 block (#646).
   return (
-    <Stack spacing={2}>
+    <Stack spacing={2} useFlexGap sx={{ flex: '1 1 auto' }}>
       <TripStrip
         name="Goa Weekend"
         currency="INR"
@@ -71,7 +72,7 @@ function TripExtras() {
           </Box>
         ))}
       </Box>
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 'auto' }}>
         A boarding-pass header, a setup checklist and a date range, with Expenses grouped by Trip
         day.
       </Typography>
@@ -89,7 +90,9 @@ function HouseholdExtras() {
         component="dl"
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
+          // Tiles side by side from 600 px; rows again from 1200 px, where the card is a quarter
+          // of the 4-column grid and a tile is too narrow for its amount (#646).
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))', lg: '1fr' },
           gap: 1,
           m: 0,
         }}
@@ -102,11 +105,12 @@ function HouseholdExtras() {
               borderRadius: 1,
               p: 1.25,
               minWidth: 0,
-              // A row on a phone, so no amount wraps; a tile from 600 px up.
+              // A row on a phone and in the 4-column grid, so no amount wraps or spills; a tile
+              // between 600 and 1200 px.
               display: 'flex',
-              flexDirection: { xs: 'row', sm: 'column' },
+              flexDirection: { xs: 'row', sm: 'column', lg: 'row' },
               justifyContent: 'space-between',
-              alignItems: { xs: 'baseline', sm: 'flex-start' },
+              alignItems: { xs: 'baseline', sm: 'flex-start', lg: 'baseline' },
               gap: 0.5,
             }}
           >
@@ -143,7 +147,13 @@ export default function LandingGroups() {
         sx={{
           display: 'grid',
           gap: 2,
-          gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+          // 4 columns on a computer (#646): the Trip card, with its strip, takes a 2 by 2 block
+          // and the other four Themes fill the two columns beside it.
+          gridTemplateColumns: {
+            xs: '1fr',
+            md: 'repeat(2, minmax(0, 1fr))',
+            lg: 'repeat(4, minmax(0, 1fr))',
+          },
         }}
       >
         {GROUP_THEME_LIST.map((theme) => {
@@ -152,9 +162,19 @@ export default function LandingGroups() {
             <Box
               key={theme.id}
               data-group-theme={theme.id}
-              sx={{ ...landingCard, gridRow: theme.id === 'trip' ? { md: 'span 2' } : undefined }}
+              sx={{
+                ...landingCard,
+                ...(theme.id === 'trip' && {
+                  gridRow: { md: 'span 2' },
+                  gridColumn: { lg: 'span 2' },
+                }),
+              }}
             >
-              <Stack spacing={1.5}>
+              <Stack
+                spacing={1.5}
+                useFlexGap
+                sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+              >
                 <Stack direction="row" spacing={1.25} alignItems="center">
                   <Icon fontSize="small" color="primary" aria-hidden />
                   <Typography variant="h6" component="h3" sx={{ m: 0 }}>

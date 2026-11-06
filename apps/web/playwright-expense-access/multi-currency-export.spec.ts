@@ -78,7 +78,7 @@ for (const size of ['desktop', 'phone'] as const) {
         path: testInfo.outputPath(`${size}-${mode}-csv-preview.png`),
         fullPage: true,
       });
-      await page.getByLabel('Format', { exact: true }).selectOption('statement');
+      await page.getByRole('radio', { name: 'Printable statement', exact: true }).check();
       for (const currency of ['EUR', 'INR', 'JPY'])
         await expect(
           preview.getByRole('region', { name: `${currency} statement preview`, exact: true }),
@@ -100,13 +100,19 @@ for (const size of ['desktop', 'phone'] as const) {
       await expect(page.locator('.statement-paper')).toContainText('₹1,850.00 to clear €20.00');
       await page.emulateMedia({ media: 'screen' });
       await page.goto(`${baseURL}/export?group=${group._id}`);
-      await page.getByLabel('Format', { exact: true }).selectOption('json');
+      await page.getByRole('radio', { name: 'Full backup', exact: true }).check();
       await expect(preview).toContainText('Fictional Europe trip: INR, EUR, JPY');
-      await expect(preview).toContainText(
-        '1 Payment, including both amounts, currencies and stored rates',
-      );
-      await expect(preview).toContainText('1 Expense');
-      await expect(preview).not.toContainText('1 Expenses');
+      // The count tiles (#646): each number, its label, then its line.
+      const tiles = preview
+        .getByRole('list', { name: 'What the backup holds', exact: true })
+        .getByRole('listitem');
+      await expect(tiles.nth(1).locator('p').nth(0)).toHaveText('1');
+      await expect(tiles.nth(1).locator('p').nth(1)).toHaveText('Expense');
+      await expect(tiles.nth(2).locator('p')).toHaveText([
+        '1',
+        'Payment',
+        'Both amounts, currencies and stored rates',
+      ]);
       await page.screenshot({
         path: testInfo.outputPath(`${size}-${mode}-backup-preview.png`),
         fullPage: true,

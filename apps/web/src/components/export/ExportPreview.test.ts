@@ -104,7 +104,7 @@ it('shows only backup contents and states the accepted backup omission', () => {
   expect(text(html)).toContain('splitbook-1-groups-backup.json');
   expect(text(html)).toContain('Approximately 1.2 KB');
   expect(text(html)).toContain('3 Members');
-  expect(text(html)).toContain('86 Expenses since April 2026, each with its edit history');
+  expect(text(html)).toContain('86 Expenses Since April 2026, each with its edit history');
   expect(text(html)).toContain('3 Payments');
   expect(text(html)).toContain('1 Deleted Expense');
   expect(text(html)).toContain('Not included: recurring Expense templates and Activity history.');
@@ -197,6 +197,39 @@ it('says nothing to export yet for an empty All time export', () => {
     ),
   ).toContain('Nothing to export yet.');
 });
+it('shows the backup’s counts as tiles, each number above its label (#646)', () => {
+  const html = render({
+    status: 'ready',
+    data: {
+      format: 'json',
+      groupNames: ['Maple House'],
+      generatedAt: '2026-10-19T06:00:00.000Z',
+      from: null,
+      to: null,
+      timeZone: 'UTC',
+      empty: false,
+      fileName: 'splitbook-1-groups-backup.json',
+      sizeBytes: 1200,
+      earliestMonth: '2026-04',
+      historyIncluded: true,
+      paymentsIncluded: true,
+      deletedExpensesIncluded: true,
+      counts: { members: 3, expenses: 86, payments: 1, deletedExpenses: 2, editHistoryEntries: 4 },
+    },
+  });
+  const tiles = /<ul\b[^>]*aria-label="What the backup holds"[^>]*>([\s\S]*?)<\/ul>/.exec(html);
+  expect(tiles).not.toBeNull();
+  const items = [...tiles![1].matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map(([, inner]) =>
+    [...inner.matchAll(/<(?:p|span)\b[^>]*>([^<]*)<\/(?:p|span)>/g)].map(([, part]) => part),
+  );
+  expect(items).toEqual([
+    ['3', 'Members'],
+    ['86', 'Expenses', 'Since April 2026, each with its edit history'],
+    ['1', 'Payment', 'Both amounts, currencies and stored rates'],
+    ['2', 'Deleted Expenses'],
+  ]);
+});
+
 it('hides Payments and Deleted Expenses when excluded from the backup', () => {
   const html = render({
     status: 'ready',
@@ -499,10 +532,10 @@ it.each([0, 1, 2])(
       },
     });
     expect(text(html)).toContain(
-      `${count} ${count === 1 ? 'Expense' : 'Expenses'}, each with its edit history`,
+      `${count} ${count === 1 ? 'Expense' : 'Expenses'} Each with its edit history`,
     );
     expect(text(html)).toContain(
-      `${count} ${count === 1 ? 'Payment' : 'Payments'}, including both amounts, currencies and stored rates`,
+      `${count} ${count === 1 ? 'Payment' : 'Payments'} Both amounts, currencies and stored rates`,
     );
   },
 );

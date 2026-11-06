@@ -472,6 +472,10 @@ function ExportForm(props: ExportPageViewProps) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      {/* What to export comes first, as the board has it (#646). */}
+      {props.onFormat ? (
+        <ExportFormatOptions value={props.format ?? 'csv'} onChange={props.onFormat} />
+      ) : null}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
         <Box
           sx={{
@@ -506,9 +510,6 @@ function ExportForm(props: ExportPageViewProps) {
         </Box>
       </Box>
 
-      {props.onFormat ? (
-        <ExportFormatOptions value={props.format ?? 'csv'} onChange={props.onFormat} />
-      ) : null}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
         <TextField
           disabled={props.format === 'json'}

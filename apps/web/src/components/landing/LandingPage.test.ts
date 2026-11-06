@@ -69,6 +69,20 @@ function moneyText(html: string, from?: string): string[] {
     .map(([, , inner]) => inner.trim());
 }
 
+/** The style rules for a class attribute's emotion classes, in the order they were emitted. */
+function classRules(html: string, classAttribute: string): string {
+  const classes = classAttribute.split(' ');
+  return [...html.matchAll(/\.(css-[\w-]+)\{([^}]*)\}/g)]
+    .filter(([, name]) => classes.includes(name))
+    .map(([, , rule]) => rule)
+    .join(';');
+}
+
+/** The last value a run of declarations gives a property: the one that applies. */
+function lastValue(rules: string, property: string): string | undefined {
+  return [...rules.matchAll(new RegExp(`(?:^|;)${property}:([^;]+)`, 'g'))].at(-1)?.[1];
+}
+
 /** The style rules of the element with this id, or of the first element with this tag. */
 function rulesOf(html: string, element: RegExp): string {
   const classes = element.exec(html)?.[1]?.split(' ') ?? [];
@@ -645,6 +659,105 @@ describe('the content sections (#446)', () => {
       // The total, and what the shares add up to.
       expect(moneyStyled(split, '₹1,000.00')).toEqual([true, true]);
     }
+  });
+
+  it('size each section heading 28 to 40 px, leaving the closing call to action as it is (#646)', () => {
+    const html = render('light', OFF);
+    const h2 = /<h2\b[^>]*class="([^"]*)"/;
+    for (const id of ['groups', 'how'])
+      expect(rulesOf(section(html, id), h2)).toContain('font-size:clamp(1.75rem, 3vw, 2.5rem)');
+    const styles = [...html.matchAll(/<style[^>]*>[\s\S]*?<\/style>/g)].map((m) => m[0]).join('');
+    const closing = styles + html.slice(html.lastIndexOf('<section'));
+    expect(rulesOf(closing, h2)).toContain('font-size:clamp(2rem, 4vw, 3.25rem)');
+  });
+
+  it('lay the Themes out in 4 columns on a computer, 2 on a tablet and 1 on a phone (#646)', () => {
+    const groups = section(render('light', OFF), 'groups');
+    // The grid is the element whose first card is the Trip's.
+    const grid =
+      /<div\b[^>]*class="([^"]*)"[^>]*>(?:<style\b[^>]*>[^<]*<\/style>)*<div\b[^>]*data-group-theme="trip"/;
+    const classes = grid
+      .exec(groups)![1]
+      .split(' ')
+      .filter((name) => name.startsWith('css-'));
+    /** The grid's columns from a breakpoint up, as its media rule sets them. */
+    const columns = (width: number) =>
+      new RegExp(
+        `@media \\(min-width:${width}px\\)\\{\\.(?:${classes.join('|')})\\{[^}]*grid-template-columns:([^;}]+)`,
+      ).exec(groups)?.[1];
+    expect(rulesOf(groups, grid)).toContain('grid-template-columns:1fr');
+    expect(columns(900)).toBe('repeat(2, minmax(0, 1fr))');
+    expect(columns(1200)).toBe('repeat(4, minmax(0, 1fr))');
+  });
+
+  it('stack the Household month totals as rows in the 4-column grid, so no amount spills out of its tile (#646)', () => {
+    const groups = section(render('light', OFF), 'groups');
+    const months = /<dl\b[^>]*class="([^"]*)"/;
+    const tile = /<dl\b[^>]*>(?:<style\b[^>]*>[^<]*<\/style>)*<div\b[^>]*class="([^"]*)"/;
+    /** An element's rules from a breakpoint up, as its media rule sets them. */
+    const from = (element: RegExp, width: number) => {
+      const classes = element
+        .exec(groups)![1]
+        .split(' ')
+        .filter((name) => name.startsWith('css-'));
+      return new RegExp(
+        `@media \\(min-width:${width}px\\)\\{\\.(?:${classes.join('|')})\\{([^}]*)`,
+      ).exec(groups)?.[1];
+    };
+    // Tiles side by side from 600 px, where the card is a column of 2 or 1.
+    expect(from(months, 600)).toContain('grid-template-columns:repeat(3, minmax(0, 1fr))');
+    expect(from(tile, 600)).toContain('flex-direction:column');
+    // From 1200 px the card is a quarter of the grid: one row per month.
+    expect(from(months, 1200)).toContain('grid-template-columns:1fr');
+    expect(from(tile, 1200)).toContain('flex-direction:row');
+  });
+
+  it('show the split methods as chips on the Groceries card, Shares picked, never as controls (#646)', () => {
+    for (const mode of MODES) {
+      const { palette } = createAppTheme(mode);
+      const split = section(render(mode, OFF), 'how');
+      const at = split.indexOf('data-split-methods');
+      expect(at).toBeGreaterThan(-1);
+      const container = split.slice(split.lastIndexOf('<div', at), split.indexOf('>', at) + 1);
+      expect(container).toContain('aria-hidden="true"');
+      const chips = [
+        ...split.matchAll(/<div\b[^>]*class="([^"]*MuiChip-root[^"]*)"[^>]*>([\s\S]*?)<\/div>/g),
+      ];
+      expect(chips.map(([, , inner]) => text(inner))).toEqual([
+        'Equally',
+        'Amounts',
+        'Percentage',
+        'Shares',
+      ]);
+      for (const [chip, classes, inner] of chips) {
+        expect(chip).not.toMatch(/<button\b|role="button"|tabindex=/);
+        expect(classes).toContain('MuiChip-outlined');
+        const rules = classRules(split, classes);
+        // The last declaration of each property is the one that wins.
+        expect(lastValue(rules, 'border-radius')).toBe('8px');
+        const picked = text(inner) === 'Shares';
+        expect(lastValue(rules, 'background-color') === palette.tint.brand).toBe(picked);
+        expect(lastValue(rules, 'color') === palette.primary.main).toBe(picked);
+        if (picked) expect(lastValue(rules, 'border-color')).toBe(palette.primary.main);
+      }
+    }
+  });
+
+  it('end the Trip card’s closing line level with the bottom of the cards beside it at lg (#646)', () => {
+    const groups = section(render('light', OFF), 'groups');
+    const card = groups.slice(groups.indexOf('data-group-theme="trip"'));
+    const stack = /^[^>]*>(?:<style\b[^>]*>[^<]*<\/style>)*<div\b[^>]*class="([^"]*)"/.exec(
+      card,
+    )![1];
+    const stackRules = classRules(groups, stack);
+    expect(stackRules).toContain('display:flex');
+    expect(stackRules).toContain('flex-direction:column');
+    expect(stackRules).toContain('height:100%');
+    const closing =
+      /<p\b[^>]*class="([^"]*)"[^>]*>A boarding-pass header, a setup checklist and a date range, with Expenses grouped by Trip day\.<\/p>/.exec(
+        card,
+      )![1];
+    expect(lastValue(classRules(groups, closing), 'margin-top')).toBe('auto');
   });
 
   it('show the web card everywhere, and the Android card only with a Play listing', () => {

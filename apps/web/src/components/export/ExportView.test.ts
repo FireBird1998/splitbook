@@ -142,6 +142,80 @@ describe('the Export page', () => {
     expect(text(html)).toContain('1–30 Sep 2026');
   });
 
+  it('asks for the format first, as three labelled radio cards with one line each (#646)', () => {
+    const html = view({ format: 'statement', onFormat: vi.fn() });
+    const format = /<fieldset\b[^>]*>[\s\S]*?<\/fieldset>/.exec(html)?.[0] ?? '';
+    expect(text(/<legend\b[^>]*>([\s\S]*?)<\/legend>/.exec(format)?.[1] ?? '')).toBe('Format');
+    const radios = [...format.matchAll(/<input\b([^>]*)>/g)].map(([, attributes]) => {
+      const labelledBy = /aria-labelledby="([^"]+)"/.exec(attributes)?.[1];
+      const describedBy = /aria-describedby="([^"]+)"/.exec(attributes)?.[1];
+      const byId = (id?: string) =>
+        id ? text(new RegExp(`id="${id}"[^>]*>([\\s\\S]*?)</`).exec(html)?.[1] ?? '') : '';
+      return {
+        type: /type="([^"]+)"/.exec(attributes)?.[1],
+        name: /name="([^"]+)"/.exec(attributes)?.[1],
+        value: /value="([^"]+)"/.exec(attributes)?.[1],
+        checked: /\bchecked=""/.test(attributes),
+        label: byId(labelledBy),
+        description: byId(describedBy),
+      };
+    });
+    expect(radios).toEqual([
+      {
+        type: 'radio',
+        name: 'export-format',
+        value: 'csv',
+        checked: false,
+        label: 'CSV files',
+        description: 'Plain rows for any spreadsheet or tool.',
+      },
+      {
+        type: 'radio',
+        name: 'export-format',
+        value: 'statement',
+        checked: true,
+        label: 'Printable statement',
+        description: 'A readable summary of one Group, to print or save as PDF.',
+      },
+      {
+        type: 'radio',
+        name: 'export-format',
+        value: 'json',
+        checked: false,
+        label: 'Full backup',
+        description: 'Everything in the chosen Groups, all time, in one JSON file.',
+      },
+    ]);
+    // Each title is followed by its file type, in the money font, outside the radio's name.
+    const badges = [
+      ...format.matchAll(/<span\b[^>]*class="([^"]*)"[^>]*data-format-badge=""[^>]*>([^<]*)</g),
+    ];
+    expect(badges.map(([, , badge]) => badge)).toEqual(['.csv', 'PDF', '.json']);
+    const mono = String(createAppTheme('light').typography.money.fontFamily)
+      .split(',')[0]
+      .replace(/[()]/g, '\\$&');
+    for (const [, classes] of badges)
+      expect(
+        classes
+          .split(' ')
+          .some((name) => new RegExp(`\\.${name}\\{[^}]*font-family:${mono}`).test(html)),
+      ).toBe(true);
+    for (const [label, badge] of [
+      ['CSV files', '.csv'],
+      ['Printable statement', 'PDF'],
+      ['Full backup', '.json'],
+    ])
+      expect(html).toMatch(
+        new RegExp(
+          `>${label}</span>(?:<style\\b[^>]*>[^<]*</style>)*<span\\b[^>]*data-format-badge=""[^>]*>${badge.replace('.', '\\.')}<`,
+        ),
+      );
+    // No dropdown for the format, and the format comes before the Groups and the period.
+    expect(html).not.toMatch(/<option value="json"/);
+    expect(html.indexOf('<fieldset')).toBeLessThan(html.indexOf('id="export-groups-heading"'));
+    expect(html.indexOf('<fieldset')).toBeLessThan(html.indexOf('id="export-period"'));
+  });
+
   it('offers this month, last month, a custom range and all time', () => {
     const options = [...view().matchAll(/<option value="([^"]+)"[^>]*>([^<]*)<\/option>/g)].map(
       ([, value, label]) => [value, label],
