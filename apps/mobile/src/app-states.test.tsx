@@ -3486,13 +3486,13 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(phone.sent).toContain(`GET /api/groups/${lisbon}/rates?from=EUR&to=INR`);
     const sheetText = words(settling());
     expect(sheetText).toContain('You owe Sam Chen in 2\u00a0currencies.');
-    expect(sheetText).toContain('Suggested\u00a0· Frankfurter, 20 Oct');
+    expect(sheetText).toContain('Suggested\u00a0· Frankfurter, 20\u00a0Oct');
     expect(sheetText).toContain('₹1,872.00');
     expect(
       app.hosts(
         (p) =>
           p.accessibilityLabel ===
-          'EUR Debt €20.00 at ₹92.10 per €, suggested, Frankfurter, 20 Oct. Pays ₹1,842.00',
+          'EUR Debt €20.00 at ₹92.10 per €, suggested, Frankfurter, 20\u00a0Oct. Pays ₹1,842.00',
       ),
     ).toHaveLength(1);
     // At 130% on this 360dp phone, every word reads in full.

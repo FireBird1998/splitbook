@@ -45,10 +45,14 @@ import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
 /** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#868). */
 const symbol = currencyPrefix;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-/** "20 Oct", from a provider's calendar date, whatever the phone's time zone. */
+/**
+ * "20 Oct", from a provider's calendar date, whatever the phone's time zone: the day and month
+ * joined with a no-break space, so a line never breaks between them ("Frankfurter, 6 / Nov" at
+ * 200%, #925).
+ */
 const rateDay = (asOf: string) => {
   const [, month, day] = asOf.split('-').map(Number);
-  return `${day} ${MONTHS[(month ?? 1) - 1]}`;
+  return `${day}${NO_BREAK_SPACE}${MONTHS[(month ?? 1) - 1]}`;
 };
 /** "Frankfurter, 20 Oct", or "rates of 21 Oct" for a second source, which its link names. */
 const sourceWords = (suggestion: RateSuggestion) =>
@@ -101,7 +105,8 @@ function legWords(leg: Leg, paidCurrency: string) {
         ? `${leg.currency} Debt ${debt} at ${rate} per ${symbol(leg.currency)}, ${kindWords}. Pays ${paid}`
         : `${leg.currency} Debt ${debt}, ${caption}`;
   return {
-    title: rate ? `${debt} Debt × ${rate}` : `${debt} Debt`,
+    // "×" keeps with its rate: at 200% the line broke "$43.25 Debt × / ₹82.89" (#925).
+    title: rate ? `${debt} Debt ×${NO_BREAK_SPACE}${rate}` : `${debt} Debt`,
     caption,
     paid,
     spoken,

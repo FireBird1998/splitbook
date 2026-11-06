@@ -16,7 +16,14 @@ import {
   type SettlementState,
 } from '../data/settlement';
 import type { GroupCurrencyBalance, MobileGroup } from '../data/types';
-import { findHosts, flatten, largeTextWindows, unreadText, wordsOf } from '../test-utils/layout';
+import {
+  findHosts,
+  flatten,
+  largeTextWindows,
+  outerTexts,
+  unreadText,
+  wordsOf,
+} from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
@@ -176,10 +183,13 @@ describe('Settle up with Sam (#734)', () => {
     // Each Debt on its own line: what it clears, at what rate, and what it pays.
     expect(one(root, 'INR Debt ₹1,480.00, same currency, no rate. Pays ₹1,480.00')).toBeDefined();
     expect(
-      one(root, 'EUR Debt €20.00 at ₹92.10 per €, suggested, Frankfurter, 20 Oct. Pays ₹1,842.00'),
+      one(
+        root,
+        'EUR Debt €20.00 at ₹92.10 per €, suggested, Frankfurter, 20\u00a0Oct. Pays ₹1,842.00',
+      ),
     ).toBeDefined();
     expect(shown).toContain('Same currency, no rate');
-    expect(shown).toContain('Suggested\u00a0· Frankfurter, 20 Oct');
+    expect(shown).toContain('Suggested\u00a0· Frankfurter, 20\u00a0Oct');
     expect(shown).toContain('You pay Sam Chen');
     expect(shown).toContain('₹3,322.00');
     expect(shown).toContain(
@@ -231,10 +241,16 @@ describe('Settle up with Sam (#734)', () => {
       ['JPY', false],
     ]);
     expect(
-      one(root, 'EUR Debt €20.00 at ₹92.10 per €, suggested, Frankfurter, 20 Oct. Pays ₹1,842.00'),
+      one(
+        root,
+        'EUR Debt €20.00 at ₹92.10 per €, suggested, Frankfurter, 20\u00a0Oct. Pays ₹1,842.00',
+      ),
     ).toBeDefined();
     expect(
-      one(root, 'JPY Debt ¥2,500 at ₹0.56 per ¥, suggested, Frankfurter, 20 Oct. Pays ₹1,400.00'),
+      one(
+        root,
+        'JPY Debt ¥2,500 at ₹0.56 per ¥, suggested, Frankfurter, 20\u00a0Oct. Pays ₹1,400.00',
+      ),
     ).toBeDefined();
     expect(record(root).props.accessibilityLabel).toBe('Record ₹3,242.00');
   });
@@ -255,7 +271,7 @@ describe('Settle up with Sam (#734)', () => {
       ),
     );
     const shown = text(custom.root);
-    expect(shown).toContain('Your rate\u00a0· suggested ₹92.10, Frankfurter, 20 Oct');
+    expect(shown).toContain('Your rate\u00a0· suggested ₹92.10, Frankfurter, 20\u00a0Oct');
     expect(shown).toContain('₹1,850.00');
     expect(shown).toContain('₹3,330.00');
     act(() => one(custom.root, 'Use ₹92.10 for the EUR Debt').props.onPress());
@@ -294,7 +310,7 @@ describe('Settle up with Sam (#734)', () => {
         paying({ rates: { EUR: { rate: { status: 'ready', suggestion: mixed }, custom: null } } }),
       ),
     );
-    expect(text(root)).toContain('Suggested\u00a0· rates of 21 Oct');
+    expect(text(root)).toContain('Suggested\u00a0· rates of 21\u00a0Oct');
     const link = one(root, 'Rates By Exchange Rate API');
     expect(link.props.accessibilityRole).toBe('link');
     act(() => link.props.onPress());
@@ -371,6 +387,23 @@ describe.each(['light', 'dark'] as const)('Settle up at large text in %s (#734)'
     expect(unreadText(body!, size.fontScale, size.width)).toEqual([]);
     expect(unreadText(footer!, size.fontScale, size.width)).toEqual([]);
   });
+});
+
+// #925, the Designer's polish: at 200% the sheet's lines broke mid-phrase, "Frankfurter, 6 / Nov"
+// and "$43.25 Debt × / ₹82.89". A no-break space joins the day and its month, and "×" and its
+// rate, as the shared separator's does elsewhere.
+describe('Settle up keeps a rate’s words together (#925)', () => {
+  it.each(largeTextWindows)(
+    'never breaks a day from its month, or × from its rate, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      render(state(paying()));
+      const lines = outerTexts(screen!.toJSON() as ReactTestRendererJSON).map(wordsOf);
+      expect(lines).toContain('€20.00 Debt ×\u00a0₹92.10');
+      expect(lines.join('\n')).toContain('Suggested\u00a0· Frankfurter, 20\u00a0Oct');
+      for (const words of lines) expect(words, words).not.toMatch(/\d [A-Z][a-z]{2}\b|× /);
+    },
+  );
 });
 
 // A long hyphenated name breaks after its hyphen at 200%, never inside a word: Android drew the
