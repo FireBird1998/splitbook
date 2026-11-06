@@ -22,6 +22,7 @@ import {
   type TextStyle,
 } from 'react-native';
 import type { SemanticTokens } from '@splitbook/shared/design-tokens';
+import { WORD_JOINER } from '@splitbook/shared/separator';
 import { fonts, useTheme } from '../theme';
 import { useStatusFade } from './motion';
 import { outfitSemiboldAdvance, outfitSteps, outfitWidth } from './outfit-metrics';
@@ -440,6 +441,18 @@ function FadingOut({
       </Animated.Text>
     </View>
   );
+}
+
+/**
+ * How wide `amount` draws in the money face at `size` and this text size, in dp: IBM Plex Mono's
+ * advance is 0.6 of its size, less the size's letter spacing, and a word joiner draws nothing. The
+ * face is monospaced, so this holds for any amount; Android scales the letter spacing with the
+ * text, so at large text the amount draws a little narrower than this, never wider (#925).
+ */
+export function moneyWidth(amount: string, size: MoneySize, fontScale: number) {
+  const { fontSize, letterSpacing } = moneySizes[size];
+  const characters = [...amount.replaceAll(WORD_JOINER, '')].length;
+  return characters * (0.6 * scaledSp(Number(fontSize), fontScale) + Number(letterSpacing ?? 0));
 }
 
 /** A formatted amount (the caller formats it) in IBM Plex Mono with tabular figures. */

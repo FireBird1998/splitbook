@@ -213,7 +213,8 @@ interface LayoutWatch {
  * cut; one with a word wider than its line, which Android breaks in two ("ALL-T / IME"); and
  * each text in a row whose children run past its edge; and a one-line field whose text is wider
  * than the field, which scrolls the rest out of sight ("CHF 00.50", #867). Each says why. Empty
- * when every text reads in full. With `cutOnce`, a text may end at its line limit, as a long name
+ * when every text reads in full. A text that shrinks to fit (`adjustsFontSizeToFit`) reads in
+ * full wherever it is, unless its row runs past its edge. With `cutOnce`, a text may end at its line limit, as a long name
  * does below 150% text (#332): only broken words and rows run past count. The widths are
  * estimates (see `layoutWidth`), so check close calls on a device.
  */
@@ -231,6 +232,9 @@ export function unreadText(
   layoutHeight(node, fontScale, width, {
     text: (text, room) => {
       const said = words(text).replaceAll(hairSpace, '');
+      // A text that shrinks its words to fit its lines (`adjustsFontSizeToFit`), as Home's
+      // balances do, reads in full in any room: Android makes it smaller until it fits (#925).
+      if (text.props.adjustsFontSizeToFit === true) return;
       // A text that stops growing (`maxFontSizeMultiplier`), as an avatar's initials do (#589).
       const scale = Math.min(fontScale, Number(text.props.maxFontSizeMultiplier) || Infinity);
       const lines = Math.max(1, Math.ceil(textWidth(text, scale, true) / room - 1e-6));
@@ -415,6 +419,9 @@ export const hairSpace = String.fromCodePoint(0x200a);
 /** A zero-width space: where `CompactText` lets a line break after a hyphen (#921). */
 export const breakHere = String.fromCodePoint(0x200b);
 
+/** Characters that take no room: a zero-width space and a word joiner, as in "−⁠€20.00" (#899). */
+const zeroWidth = new Set([breakHere, String.fromCodePoint(0x2060)]);
+
 /** `text` without its zero-width spaces (`breakHere`): the words a reader sees. */
 export const unbroken = (text: string) => text.replaceAll(breakHere, '');
 
@@ -503,7 +510,12 @@ function runWidth(characters: string, style: Style, fontScale: number) {
   const weight = String(style.fontFamily ?? '').includes('Bold') ? 1.09 : 1;
   return [...characters].reduce(
     (sum, character) =>
-      sum + size * (mono ? 0.6 : outfitAdvance(character) * weight) + number(style.letterSpacing),
+      // Nothing draws a word joiner or a zero-width space, in either face (#899, #921, #925).
+      zeroWidth.has(character)
+        ? sum
+        : sum +
+          size * (mono ? 0.6 : outfitAdvance(character) * weight) +
+          number(style.letterSpacing),
     0,
   );
 }
