@@ -304,8 +304,10 @@ loads the bundle and runs it without UI. No native service of our own is needed.
   (`src/notification-callbacks.ts`). The controller checks the envelope with a fresh controls
   read. On screen on the affected Group, it refreshes quietly and shows no alert. Elsewhere, or
   in the background, the alert shows.
-- With no app running (the app was swiped away, or Android stopped it), the task checks
-  without the controller (`src/data/notification-receipt.ts`). It needs a saved session
+- With no app running (the app was swiped away, or Android stopped it), or a mounted app not
+  signed in yet (still restoring in the background, for example), the task checks without the
+  controller (`src/data/notification-receipt.ts`). Each message takes exactly one of the two
+  paths. It needs a saved session
   confirmed for the envelope's account and no unconfirmed sign-out. It then reads
   `GET /api/notifications/device` once with that session and the installation proof, and the
   answer must be on, with Expense alerts on and the envelope's binding and activation. It

@@ -3,13 +3,14 @@ import { attachLiveReceiver, expenseAlertPrefix, notificationTaskName } from './
 /**
  * Receipt/tap callbacks are the only native navigation seam; no permissions are requested here.
  * Expense-added messages are data-only and reach the notification task, not this handler
- * (#968): with this app mounted, the task checks with its controller. The handler presents
+ * (#968): with this app mounted and signed in, the task checks with its controller. The handler presents
  * only the generic alert the task posted, quietly while the app is in use.
  */
 export async function attachNotificationCallbacks(
   controller: {
     receiveNotification(value: unknown, options?: { visible?: boolean }): Promise<boolean>;
     tapNotification(value: unknown): Promise<void>;
+    getSnapshot(): { auth: { status: string } };
   },
   restored: Promise<void>,
 ) {
@@ -29,9 +30,10 @@ export async function attachNotificationCallbacks(
       };
     },
   });
-  const detach = attachLiveReceiver((data, visible) =>
-    controller.receiveNotification(data, { visible }),
-  );
+  const detach = attachLiveReceiver({
+    signedIn: () => controller.getSnapshot().auth.status === 'authenticated',
+    receive: (data, visible) => controller.receiveNotification(data, { visible }),
+  });
   // Defined at startup (`index.ts`); registering again is harmless and survives restarts.
   void n.registerTaskAsync(notificationTaskName).catch(() => undefined);
   const respond = async (response: import('expo-notifications').NotificationResponse | null) => {

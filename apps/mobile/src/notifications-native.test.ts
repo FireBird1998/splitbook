@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNotificationNative } from './notifications-native';
 import { attachNotificationCallbacks } from './notification-callbacks';
 import { notificationTaskName, receiveNotificationTask } from './notification-task';
+import { checkNotificationWithoutApp, type NotificationAccess } from './data/notification-receipt';
+import type { StoredSession } from './data/cookies';
+import type { MobileSnapshot } from './data/types';
 const native = vi.hoisted(() => ({
   getPermissionsAsync: vi.fn(async () => ({ granted: false, canAskAgain: true })),
   requestPermissionsAsync: vi.fn(async () => ({ granted: true, canAskAgain: true })),
@@ -78,6 +81,7 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
     const controller = {
       receiveNotification: vi.fn(async () => true),
       tapNotification: vi.fn(async () => {}),
+      getSnapshot: () => ({ auth: { status: 'authenticated' } }),
     };
     const stop = await attachNotificationCallbacks(controller, Promise.resolve());
     const handler = native.setNotificationHandler.mock.calls[0][0];
@@ -119,6 +123,7 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
     const controller = {
       receiveNotification: vi.fn(async () => false),
       tapNotification: vi.fn(async () => {}),
+      getSnapshot: () => ({ auth: { status: 'authenticated' } }),
     };
     const stop = await attachNotificationCallbacks(controller, Promise.resolve());
     expect(native.registerTaskAsync).toHaveBeenCalledWith(notificationTaskName);
@@ -151,6 +156,96 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
     expect(controller.receiveNotification).toHaveBeenCalledOnce();
     expect(d.withoutApp).toHaveBeenCalledOnce();
   });
+  describe('a mounted app that is not signed in yet (#968)', () => {
+    const occurred = Date.now() - 1_000;
+    const alex = 'a00000000000000000000001';
+    const binding = '00000000-0000-4000-8000-000000000001';
+    const activation = '00000000-0000-4000-8000-000000000002';
+    const payload = {
+      data: {
+        body: JSON.stringify({
+          version: 2,
+          kind: 'expense_added',
+          eventId: 'd00000000000000000000001',
+          groupId: 'b00000000000000000000001',
+          recordId: 'c00000000000000000000001',
+          accountId: alex,
+          environment: 'development',
+          binding,
+          activation,
+          occurredAt: new Date(occurred).toISOString(),
+          expiresAt: new Date(occurred + 86_400_000).toISOString(),
+        }),
+      },
+      notification: null,
+    };
+    // This phone's saved records, as the no-app check reads them.
+    const access = (session: StoredSession | null): NotificationAccess => ({
+      environment: 'development',
+      leaving: async () => false,
+      session: async () => session,
+      installation: async () => ({
+        id: '00000000-0000-4000-8000-000000000968',
+        key: 'private-installation-proof-968968968',
+      }),
+      controls: async () => ({
+        data: {
+          available: true,
+          enabled: true,
+          expenseUpdates: true,
+          payments: true,
+          revision: 1,
+          activation,
+          binding,
+          expenseCutoff: new Date(0).toISOString(),
+          paymentCutoff: new Date(0).toISOString(),
+        },
+      }),
+    });
+    const receive = async (
+      status: MobileSnapshot['auth']['status'],
+      session: StoredSession | null,
+    ) => {
+      // As the controller answers before its sign-in is confirmed: never show.
+      const controller = {
+        receiveNotification: vi.fn(async () => false),
+        tapNotification: vi.fn(async () => {}),
+        getSnapshot: () => ({ auth: { status } }),
+      };
+      const stop = await attachNotificationCallbacks(controller, Promise.resolve());
+      const d = {
+        now: Date.now,
+        visible: () => false,
+        withoutApp: vi.fn((value: unknown) =>
+          checkNotificationWithoutApp(value, access(session), Date.now),
+        ),
+        present: vi.fn(async () => {}),
+      };
+      const shown = await receiveNotificationTask(payload, d);
+      stop();
+      return { shown, controller, d };
+    };
+
+    it('restoring in the background with a valid saved session: the no-app check shows one alert', async () => {
+      const { shown, controller, d } = await receive('restoring', {
+        cookie: 'better-auth.session_token=alex.signature',
+        accountId: alex,
+      });
+      expect(shown).toBe(true);
+      expect(d.withoutApp).toHaveBeenCalledOnce();
+      expect(controller.receiveNotification).not.toHaveBeenCalled();
+      expect(d.present).toHaveBeenCalledOnce();
+    });
+
+    it('signed out: the no-app check finds no saved session and nothing shows', async () => {
+      const { shown, controller, d } = await receive('signed-out', null);
+      expect(shown).toBe(false);
+      expect(d.withoutApp).toHaveBeenCalledOnce();
+      expect(controller.receiveNotification).not.toHaveBeenCalled();
+      expect(d.present).not.toHaveBeenCalled();
+    });
+  });
+
   it('cold response waits for restoration, forwards only data and clears the consumed native response', async () => {
     let restore!: () => void;
     const restored = new Promise<void>((resolve) => {
@@ -163,6 +258,7 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
     const controller = {
       receiveNotification: vi.fn(async () => false),
       tapNotification: vi.fn(async () => {}),
+      getSnapshot: () => ({ auth: { status: 'authenticated' } }),
     };
     const stop = await attachNotificationCallbacks(controller, restored);
     await Promise.resolve();
@@ -178,6 +274,7 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
     const controller = {
       receiveNotification: vi.fn(async () => false),
       tapNotification: vi.fn(async () => {}),
+      getSnapshot: () => ({ auth: { status: 'authenticated' } }),
     };
     const stop = await attachNotificationCallbacks(controller, Promise.resolve());
     const listener = native.addNotificationResponseReceivedListener.mock.calls[0][0];
@@ -196,6 +293,7 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
     const controller = {
       receiveNotification: vi.fn(async () => false),
       tapNotification: vi.fn(async () => {}),
+      getSnapshot: () => ({ auth: { status: 'authenticated' } }),
     };
     const stop = await attachNotificationCallbacks(controller, restored);
     const listener = native.addNotificationResponseReceivedListener.mock.calls[0][0];
@@ -210,6 +308,7 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
     const controller = {
       receiveNotification: vi.fn(async () => false),
       tapNotification: vi.fn(async () => {}),
+      getSnapshot: () => ({ auth: { status: 'authenticated' } }),
     };
     const stop = await attachNotificationCallbacks(controller, Promise.resolve());
     const listener = native.addNotificationResponseReceivedListener.mock.calls[0][0];

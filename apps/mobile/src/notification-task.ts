@@ -14,9 +14,16 @@ export const expenseAlertChannel = 'ledger-updates';
 export const receiptBudget = 10_000;
 
 /** The running app's checks: whether to show the alert, and a quiet refresh when it doesn't. */
-type LiveReceiver = (data: unknown, visible: boolean) => Promise<boolean>;
+export interface LiveReceiver {
+  /** Whether the app's sign-in is confirmed (`authenticated`); only then does it check. */
+  signedIn(): boolean;
+  receive(data: unknown, visible: boolean): Promise<boolean>;
+}
 let live: LiveReceiver | null = null;
-/** The mounted app attaches its controller; until then, and after, the task checks alone. */
+/**
+ * The mounted app attaches its controller; until then, and after, the task checks alone. So does
+ * an attached app that isn't signed in yet, such as one still restoring in the background.
+ */
 export function attachLiveReceiver(receiver: LiveReceiver) {
   live = receiver;
   return () => {
@@ -68,9 +75,12 @@ export async function receiveNotificationTask(
   if (!event) return false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const receiver = live;
+    // One path per message: the signed-in app's checks, or else the checks without the app.
+    const receiver = live?.signedIn() ? live : null;
     const show = await Promise.race([
-      receiver ? receiver(data, d.visible()) : d.withoutApp(data).then((found) => found !== null),
+      receiver
+        ? receiver.receive(data, d.visible())
+        : d.withoutApp(data).then((found) => found !== null),
       new Promise<boolean>((resolve) => {
         timer = setTimeout(() => resolve(false), receiptBudget);
       }),

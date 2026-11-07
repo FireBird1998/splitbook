@@ -4,6 +4,7 @@ import {
   expenseAlertChannel,
   receiptBudget,
   receiveNotificationTask,
+  type LiveReceiver,
   type NotificationTaskDependencies,
 } from './notification-task';
 
@@ -40,6 +41,11 @@ function task(overrides: Partial<NotificationTaskDependencies> = {}) {
     present: ReturnType<typeof vi.fn>;
   };
 }
+// A mounted app whose sign-in is confirmed.
+const signedIn = (receive: LiveReceiver['receive']): LiveReceiver => ({
+  signedIn: () => true,
+  receive,
+});
 let detach: (() => void) | undefined;
 afterEach(() => {
   detach?.();
@@ -50,7 +56,7 @@ afterEach(() => {
 describe('the notification task for data-only Expense alerts (#968)', () => {
   it('foreground on the affected Group: the app refreshes it quietly and shows no alert', async () => {
     const live = vi.fn(async () => false);
-    detach = attachLiveReceiver(live);
+    detach = attachLiveReceiver(signedIn(live));
     const d = task();
     expect(await receiveNotificationTask(payload, d)).toBe(false);
     expect(live).toHaveBeenCalledWith(payload.data, true);
@@ -59,7 +65,7 @@ describe('the notification task for data-only Expense alerts (#968)', () => {
   });
 
   it('foreground elsewhere: the app passes its checks and the generic alert shows', async () => {
-    detach = attachLiveReceiver(async () => true);
+    detach = attachLiveReceiver(signedIn(async () => true));
     const d = task();
     expect(await receiveNotificationTask(payload, d)).toBe(true);
     expect(d.present).toHaveBeenCalledWith({
@@ -79,7 +85,7 @@ describe('the notification task for data-only Expense alerts (#968)', () => {
 
   it('background with the app still running: its checks run as not visible, so the alert shows', async () => {
     const live = vi.fn(async (_data: unknown, visible: boolean) => !visible);
-    detach = attachLiveReceiver(live);
+    detach = attachLiveReceiver(signedIn(live));
     const d = task({ visible: vi.fn(() => false) });
     expect(await receiveNotificationTask(payload, d)).toBe(true);
     expect(live).toHaveBeenCalledWith(payload.data, false);
@@ -101,16 +107,30 @@ describe('the notification task for data-only Expense alerts (#968)', () => {
 
   it('after the app detaches, the task checks without it', async () => {
     const live = vi.fn(async () => true);
-    attachLiveReceiver(live)();
+    attachLiveReceiver(signedIn(live))();
     const d = task();
     await receiveNotificationTask(payload, d);
     expect(live).not.toHaveBeenCalled();
     expect(d.withoutApp).toHaveBeenCalledOnce();
   });
 
+  it('a mounted app not signed in yet: the checks without it decide, and only they run', async () => {
+    const live = vi.fn(async () => true);
+    detach = attachLiveReceiver({ signedIn: () => false, receive: live });
+    const d = task({ withoutApp: vi.fn(async () => envelope) });
+    expect(await receiveNotificationTask(payload, d)).toBe(true);
+    expect(live).not.toHaveBeenCalled();
+    expect(d.withoutApp).toHaveBeenCalledOnce();
+    expect(d.present).toHaveBeenCalledOnce();
+    const dropped = task();
+    expect(await receiveNotificationTask(payload, dropped)).toBe(false);
+    expect(live).not.toHaveBeenCalled();
+    expect(dropped.present).not.toHaveBeenCalled();
+  });
+
   it('a check that never answers shows nothing once its budget passes', async () => {
     vi.useFakeTimers();
-    detach = attachLiveReceiver(() => new Promise<boolean>(() => {}));
+    detach = attachLiveReceiver(signedIn(() => new Promise<boolean>(() => {})));
     const d = task();
     const shown = receiveNotificationTask(payload, d);
     await vi.advanceTimersByTimeAsync(receiptBudget);
@@ -119,9 +139,11 @@ describe('the notification task for data-only Expense alerts (#968)', () => {
   });
 
   it('a failing check or presentation resolves false and never rejects', async () => {
-    detach = attachLiveReceiver(async () => {
-      throw new Error('Fictional failure');
-    });
+    detach = attachLiveReceiver(
+      signedIn(async () => {
+        throw new Error('Fictional failure');
+      }),
+    );
     expect(await receiveNotificationTask(payload, task())).toBe(false);
     detach();
     const d = task({
@@ -135,7 +157,7 @@ describe('the notification task for data-only Expense alerts (#968)', () => {
 
   it('ignores action responses, malformed payloads and expired envelopes without checking', async () => {
     const live = vi.fn(async () => true);
-    detach = attachLiveReceiver(live);
+    detach = attachLiveReceiver(signedIn(live));
     const d = task();
     const expired = {
       data: {
