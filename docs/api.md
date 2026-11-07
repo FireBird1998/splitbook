@@ -2393,9 +2393,28 @@ ineligible; public Activity, financial reads and exports omit the private contex
 
 Both `ANDROID_NOTIFICATIONS_ENABLED=true` and
 `ANDROID_NOTIFICATION_SENDS_ENABLED=true` are required to send. Both remain off until owner
-acceptance. The direct FCM adapter uses Google Application Default Credentials through the
-supported Google authentication library and an explicitly configured `FCM_PROJECT_ID`.
-Credential provisioning, scheduler setup and rollout require the separate owner setup.
+acceptance. The direct FCM adapter sends through an explicitly configured `FCM_PROJECT_ID`
+and gets its Google credentials from `src/lib/notifications/google-credentials.ts`. No
+service-account key is stored anywhere (owner decision, 2026-11-07):
+
+- **On Vercel:** the function's Vercel OIDC token is exchanged through Google Workload Identity
+  Federation for a short-lived token of the sender service account, scoped to
+  `https://www.googleapis.com/auth/firebase.messaging`. This mode is on when all four of these
+  are set:
+  - `GCP_PROJECT_NUMBER`: the Google Cloud project number that holds the pool;
+  - `GCP_WORKLOAD_IDENTITY_POOL_ID`: the Workload Identity pool;
+  - `GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID`: the pool's OIDC provider for Vercel;
+  - `GCP_SERVICE_ACCOUNT_EMAIL`: the sender service account it impersonates.
+- **Locally and in dev:** with none of the four set, it uses Google Application Default
+  Credentials, as before.
+- **With only some set, or one malformed:** nothing is sent and there is no fallback to Application
+  Default Credentials. Each send logs one configuration error that names the missing or
+  malformed settings, never their values, and the delivery is `operational`.
+
+The credential lookup (the Vercel token and both Google exchanges) ends with the invocation's
+deadline, like the send. No token is logged. The setup is in
+[`docs/runbooks/android-notifications.md`](runbooks/android-notifications.md); scheduler setup and
+rollout remain the owner's.
 
 Pausing sending (either switch off) delays alerts rather than dropping them (owner decision,
 2026-11-07: deliver late). While paused, a dispatch writes no delivery and keeps its cursor.

@@ -171,6 +171,9 @@ importers:
       '@vercel/functions':
         specifier: 3.9.11
         version: 3.9.11(ws@8.22.0)
+      '@vercel/oidc':
+        specifier: 4.0.0
+        version: 4.0.0
       better-auth:
         specifier: 1.7.7
         version: 1.7.7(mongodb@7.7.0)(next@16.3.8(@babel/core@7.29.0)(@playwright/test@1.62.1)(@types/node@22.20.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(vitest@4.1.10)
