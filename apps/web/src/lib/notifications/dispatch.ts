@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import { ObjectId } from 'mongodb';
 import connectDB from '@/lib/db';
 import { connectMongo, getAuthDb } from '@/lib/mongodb-client';
-import type { ExpenseNotificationContext } from '@/lib/financial-write';
+import { expenseChangeAlertsEnabled, type ExpenseNotificationContext } from '@/lib/financial-write';
 import { sendFcm } from './provider';
 
 interface Registration {
@@ -49,6 +49,27 @@ interface Delivery {
 export const notificationEnvironment = () =>
   process.env.MOBILE_APP_ENV ||
   (process.env.NODE_ENV === 'production' ? 'production' : 'development');
+
+/**
+ * Which captured Expense events may send. Manual and reviewed-Draft Expense-added alerts (#840)
+ * always may. Edits, deletion, restoration and recurring generation (#841) send only while
+ * `ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED=true`, so turning it off also stops any it
+ * captured while it was on.
+ */
+const changeAlertScope = () =>
+  expenseChangeAlertsEnabled()
+    ? {
+        'notificationContext.kind': {
+          $in: ['expense_added', 'expense_updated', 'expense_deleted'],
+        },
+      }
+    : { 'notificationContext.kind': 'expense_added', 'metadata.recurring': { $ne: true } };
+const changeAlertAllowed = (event: {
+  notificationContext: ExpenseNotificationContext;
+  metadata?: { recurring?: unknown };
+}) =>
+  expenseChangeAlertsEnabled() ||
+  (event.notificationContext.kind === 'expense_added' && event.metadata?.recurring !== true);
 
 type DispatchCounts = { considered: number; accepted: number; skipped: number; failed: number };
 
@@ -115,10 +136,11 @@ async function runDispatch(
   const eventCollection = db.collection<{
     _id: ObjectId;
     notificationContext: ExpenseNotificationContext;
+    metadata?: { recurring?: unknown };
   }>('activities');
   const eligibility = {
     'notificationContext.version': 2,
-    'notificationContext.kind': 'expense_added',
+    ...changeAlertScope(),
     createdAt: { $gt: new Date(now.getTime() - 86_400_000), $lte: now },
   };
   const page = (after?: ObjectId) =>
@@ -357,7 +379,8 @@ async function runDispatch(
           if (
             Date.now() >= expiresAt.getTime() ||
             process.env.ANDROID_NOTIFICATIONS_ENABLED !== 'true' ||
-            process.env.ANDROID_NOTIFICATION_SENDS_ENABLED !== 'true'
+            process.env.ANDROID_NOTIFICATION_SENDS_ENABLED !== 'true' ||
+            !changeAlertAllowed(event)
           )
             return false;
           const binding = await authDb

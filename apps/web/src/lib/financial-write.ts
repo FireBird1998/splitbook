@@ -13,10 +13,18 @@ export interface ICreationRequest {
   legacyTagAlias?: string;
 }
 
+/** The Expense events an Android alert can be about (#840, #841). */
+export const EXPENSE_NOTIFICATION_KINDS = [
+  'expense_added',
+  'expense_updated',
+  'expense_deleted',
+] as const;
+export type ExpenseNotificationKind = (typeof EXPENSE_NOTIFICATION_KINDS)[number];
+
 export interface ExpenseNotificationContext {
   version: 2;
   eventId: string;
-  kind: 'expense_added';
+  kind: ExpenseNotificationKind;
   groupId: string;
   recordId: string;
   occurredAt: Date;
@@ -26,7 +34,7 @@ export const NotificationContextSchema = new Schema<ExpenseNotificationContext>(
   {
     version: { type: Number, enum: [2], required: true },
     eventId: { type: String, required: true },
-    kind: { type: String, enum: ['expense_added'], required: true },
+    kind: { type: String, enum: EXPENSE_NOTIFICATION_KINDS, required: true },
     groupId: { type: String, required: true },
     recordId: { type: String, required: true },
     occurredAt: { type: Date, required: true },
@@ -187,6 +195,54 @@ export function makePendingActivity(
     // Snapshot now: callers may subsequently mutate an expense or a changes object.
     metadata: JSON.parse(JSON.stringify(metadata)) as Record<string, unknown>,
   };
+}
+
+/**
+ * Whether edits, deletion, restoration and recurring generation capture an alert audience
+ * (#841). Off unless `ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED=true`: while it is off those
+ * events record no notification context, exactly as before #841, so turning it on later sends
+ * no backlog, and the dispatcher sends none it captured earlier. Manual and reviewed-Draft
+ * Expense-added alerts (#840) never depend on it.
+ */
+export function expenseChangeAlertsEnabled(): boolean {
+  return process.env.ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED === 'true';
+}
+
+/**
+ * The private immutable alert context for one Expense event, captured inside the financial
+ * commit: its involved members (payers and split participants, before and after for an edit)
+ * who are Group members at that commit, without the event's actor.
+ */
+export function expenseNotificationContext(
+  event: Pick<IPendingActivity, '_id' | 'actor' | 'occurredAt'>,
+  kind: ExpenseNotificationKind,
+  record: { groupId: string; recordId: string },
+  involved: Iterable<unknown>,
+  membersAtCommit: ReadonlySet<string>,
+): ExpenseNotificationContext {
+  const actor = String(event.actor);
+  return {
+    version: 2,
+    eventId: String(event._id),
+    kind,
+    groupId: record.groupId,
+    recordId: record.recordId,
+    occurredAt: event.occurredAt,
+    recipientIds: [...new Set(Array.from(involved, String))]
+      .filter((candidate) => candidate !== actor && membersAtCommit.has(candidate))
+      .sort(),
+  };
+}
+
+/** The payer and split-participant ids an Expense (or its template) records. */
+export function involvedMembers(record: {
+  paidBy?: ReadonlyArray<{ user: unknown }>;
+  splitBetween?: ReadonlyArray<{ user: unknown }>;
+}): string[] {
+  return [...(record.paidBy ?? []), ...(record.splitBetween ?? [])].map((row) => {
+    const user = row.user as { _id?: unknown } | null;
+    return String(user && typeof user === 'object' && '_id' in user ? user._id : user);
+  });
 }
 
 /** Refuse another mutation before committing if a sustained outage has filled this outbox. */

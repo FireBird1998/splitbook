@@ -40,8 +40,12 @@ import {
   assertCreateReplay,
   assertPendingActivityCapacity,
   createRequestMetadata,
+  expenseChangeAlertsEnabled,
+  expenseNotificationContext,
+  involvedMembers,
   makePendingActivity,
   requestTagForReplay,
+  type ExpenseNotificationKind,
 } from '@/lib/financial-write';
 import { lockLedgerCurrency, lockRestoredCurrency } from '@/lib/ledger-currency';
 import { assertExpectedRevision } from '@/lib/ledger-revision';
@@ -111,6 +115,37 @@ export class ExpenseService {
     // An archived Group can still be read, but takes no more changes (#578).
     if (writing && group.isArchived) throw new Error('GROUP_ARCHIVED');
     return group;
+  }
+
+  /**
+   * Inside a financial commit: give its new Activity intent the private alert audience (#841),
+   * from the Group's members at this commit. The assignment is idempotent, so a retried
+   * transaction captures again from its own read. While the rollout switch is off nothing is
+   * captured, as before. Never refuses: an alert can't change what the save does.
+   */
+  private async captureAlertAudience(
+    expense: { _id: unknown; pendingActivity: Array<{ notificationContext?: unknown }> },
+    event: Parameters<typeof expenseNotificationContext>[0] | undefined,
+    kind: ExpenseNotificationKind,
+    groupId: string,
+    involved: Iterable<string>,
+  ) {
+    if (!event || !expenseChangeAlertsEnabled()) return;
+    const committedGroup = await Group.findById(groupId).select('members').lean();
+    const membersAtCommit = new Set(
+      (committedGroup?.members ?? []).map((member) => String(member.user)),
+    );
+    const intent = expense.pendingActivity.find(
+      (pending) => String((pending as { _id?: unknown })._id) === String(event._id),
+    );
+    if (!intent) return;
+    intent.notificationContext = expenseNotificationContext(
+      event,
+      kind,
+      { groupId, recordId: String(expense._id) },
+      involved,
+      membersAtCommit,
+    );
   }
 
   /**
@@ -539,6 +574,8 @@ export class ExpenseService {
         'UNSUPPORTED_CURRENCY',
         unsupportedCurrencyEditRefusal(original.currency),
       );
+    // Before the edit loses them: who paid and shared it until now (#841).
+    const involvedBefore = involvedMembers(original);
     const { financialEdit, money } = decideExpenseMoneyEdit(original, data);
     if (financialEdit)
       assertExpenseParticipants(
@@ -574,16 +611,18 @@ export class ExpenseService {
         editedAt: new Date(),
         changes,
       });
+    let updated: ReturnType<typeof makePendingActivity> | undefined;
     if (restoring || Object.keys(changes).length) {
       assertPendingActivityCapacity(expense.pendingActivity);
-      expense.pendingActivity.push(
-        makePendingActivity(access.groupId, 'expense_updated', access.actorId, {
-          expenseId: access.expenseId,
-          description: expense.description,
-          ...(restoring ? { action: 'restored' } : { changes }),
-        }),
-      );
+      updated = makePendingActivity(access.groupId, 'expense_updated', access.actorId, {
+        expenseId: access.expenseId,
+        description: expense.description,
+        ...(restoring ? { action: 'restored' } : { changes }),
+      });
+      expense.pendingActivity.push(updated);
     }
+    // An edit alerts everyone it involved before or after; a restoration is this same event.
+    const involved = [...involvedBefore, ...involvedMembers(expense)];
     // An edit that keeps an older Expense's currency stays allowed, as the check above says.
     const currencyMoved = data.currency !== undefined && data.currency !== original.currency;
     await withGroupMutation(
@@ -594,6 +633,13 @@ export class ExpenseService {
         if (restoring)
           await lockRestoredCurrency(access.groupId, expense.currency, access.expenseId);
         else if (currencyMoved) await lockLedgerCurrency(access.groupId, expense.currency);
+        await this.captureAlertAudience(
+          expense,
+          updated,
+          'expense_updated',
+          access.groupId,
+          involved,
+        );
         return expense.save();
       },
       { ledger: true },
@@ -693,13 +739,25 @@ export class ExpenseService {
     expense.isDeleted = true;
     expense.deletedAt = new Date();
     expense.deletedBy = new mongoose.Types.ObjectId(access.actorId);
-    expense.pendingActivity.push(
-      makePendingActivity(access.groupId, 'expense_deleted', access.actorId, {
-        expenseId: access.expenseId,
-        description: expense.description,
-      }),
+    const deleted = makePendingActivity(access.groupId, 'expense_deleted', access.actorId, {
+      expenseId: access.expenseId,
+      description: expense.description,
+    });
+    expense.pendingActivity.push(deleted);
+    await withGroupMutation(
+      access.groupId,
+      async () => {
+        await this.captureAlertAudience(
+          expense,
+          deleted,
+          'expense_deleted',
+          access.groupId,
+          involvedMembers(expense),
+        );
+        return expense.save();
+      },
+      { ledger: true },
     );
-    await withGroupMutation(access.groupId, async () => expense.save(), { ledger: true });
     await activityService.publishPending('expenses', expense._id, expense.pendingActivity);
     return expense;
   }
