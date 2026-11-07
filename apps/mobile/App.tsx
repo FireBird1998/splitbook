@@ -1,5 +1,6 @@
 import { notificationTaskProtected } from './src/data/notification-alerts';
 import { attachNotificationCallbacks } from './src/notification-callbacks';
+import { androidNotificationsEnabled } from './src/notifications-flag';
 import type { ScrollViewInstance, ViewInstance } from 'react-native';
 import { TagManager } from './src/ui/tag-manager';
 import { GroupCurrencies } from './src/ui/group-currencies';
@@ -178,12 +179,14 @@ function SplitBook() {
     };
     let stopNotifications: (() => void) | undefined;
     let disposed = false;
-    void attachNotificationCallbacks(controller, start.restored)
-      .then((stop) => {
-        if (disposed) stop();
-        else stopNotifications = stop;
-      })
-      .catch(() => undefined);
+    // With Android notifications off, no native notification handler or response is touched.
+    if (androidNotificationsEnabled())
+      void attachNotificationCallbacks(controller, start.restored)
+        .then((stop) => {
+          if (disposed) stop();
+          else stopNotifications = stop;
+        })
+        .catch(() => undefined);
     const links = Linking.addEventListener('url', ({ url }) => openLink(url));
     void Linking.getInitialURL().then((url) => {
       if (url && url !== start.lastLink) openLink(url);
@@ -613,7 +616,7 @@ function TaskScreen() {
           {state.screen === 'settings' ? (
             <SettingsScreen
               notifications={
-                process.env.EXPO_PUBLIC_ANDROID_NOTIFICATIONS_ENABLED === 'true'
+                androidNotificationsEnabled()
                   ? {
                       state: state.notifications,
                       onEnable: () => void controller.enableNotifications(),
