@@ -26,8 +26,15 @@ import { formatCurrency } from '@splitbook/shared/currency';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { AmountDescriptionCard, SaveBar, WhoOwesWhat, expenseDateLabel, stackedFigure } =
-  await import('./expense-form');
+const {
+  AmountDescriptionCard,
+  SaveBar,
+  WhoOwesWhat,
+  expenseDateLabel,
+  sharesDifferNote,
+  sharesMayDifferNote,
+  stackedFigure,
+} = await import('./expense-form');
 const { CompactButton, moneySizes, scaledSp } = await import('./compact');
 
 const people = ['Alex Rao', 'Sam Chen', 'Priya Shah', 'Jo Park', 'Kim Lee'];
@@ -65,6 +72,20 @@ const text = (root: ReactTestInstance) =>
     .findAll((node) => isHost(node, 'Text'))
     .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
     .join('');
+/** The text drawn, leaving out the room the totals keep unseen (#941). */
+const drawn = (root: ReactTestInstance) =>
+  root
+    .findAll((node) => isHost(node, 'Text') && !unseen(node))
+    .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+    .join('');
+const unseen = (node: ReactTestInstance | null): boolean =>
+  !!node && (flatten(node.props.style).opacity === 0 || unseen(node.parent));
+/** Hidden from screen readers, by its own or an ancestor's props. */
+const hidden = (node: ReactTestInstance | null): boolean =>
+  !!node &&
+  (node.props.importantForAccessibility === 'no-hide-descendants' ||
+    node.props.accessibilityElementsHidden === true ||
+    hidden(node.parent));
 
 function table(value: ExpenseDraft) {
   act(() => {
@@ -97,11 +118,13 @@ describe('Who owes what', () => {
       showAll.props.onPress();
     });
     expect(rows(root)).toHaveLength(5);
-    expect(text(root)).toContain('₹500.00 paid = ₹500.00 shared.');
-    expect(text(root)).not.toContain('smallest unit');
+    expect(drawn(root)).toContain('₹500.00 paid = ₹500.00 shared.');
+    // An equal split says its shares may differ, as true of ₹500 ÷ 5 as of ₹100 ÷ 3 (#941).
+    expect(drawn(root)).toContain(sharesMayDifferNote);
+    expect(drawn(root)).not.toContain(sharesDifferNote);
   });
 
-  it('lists everyone when four or fewer share, and notes rounding only when it happened', () => {
+  it('lists everyone when four or fewer share, and notes that equal shares may differ', () => {
     const root = table(draft('100.00', ids.slice(0, 3)));
     expect(rows(root)).toEqual([
       'You: paid ₹100.00, share ₹33.34',
@@ -109,9 +132,12 @@ describe('Who owes what', () => {
       'Priya Shah: paid nothing, share ₹33.33',
     ]);
     expect(root.findAll((node) => node.props.accessibilityLabel === 'Show all 3')).toHaveLength(0);
-    expect(text(root)).toContain(
-      'Shares differ by the smallest unit so the whole amount is shared.',
+    // The form's note is the same whether or not the shares rounded; the record's past wording
+    // is only for a saved Expense that rounded (#941).
+    expect(drawn(root)).toContain(
+      'If it doesn’t divide evenly, shares differ by the smallest\u00a0unit.',
     );
+    expect(drawn(root)).not.toContain(sharesDifferNote);
   });
 
   /** Every amount in the table, with the line limit Android would apply to it. */
@@ -262,6 +288,165 @@ describe('Who owes what', () => {
     render(draft('9.00', members), false);
     expect(height()).toBe(before);
   });
+
+  // #941, the release re-check at 200% on a 360 dp phone: "Enter an amount first." is one line,
+  // "₹900.00 paid = ₹900.00 shared." two, so typing ₹900 moved Category and notes down 30 dp; ₹1,001
+  // ÷ 3 added "Shares differ by the smallest unit…" under it too. The totals keep the room the
+  // currency's widest sum line and the note take, so no amount moves what comes after the table.
+  it.each([
+    [360, 2],
+    [412, 1],
+  ] as const)(
+    'is as tall before the amount as with any amount, its totals and note too, %sdp at %s× text (#941)',
+    (width, fontScale) => {
+      setWindow({ width, height: 780, fontScale });
+      onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+      const members = ids.slice(0, 3);
+      const render = (value: ExpenseDraft, waiting: boolean) =>
+        act(() => {
+          renderer?.unmount();
+          renderer = create(
+            <WhoOwesWhat
+              draft={value}
+              allocation={waiting ? null : expenseMoney(value)}
+              problem="Enter a valid amount to see who owes what."
+              waiting={waiting}
+              name={(id) => people[ids.indexOf(id)]!}
+              currentUserId={ids[0]}
+              money={(minor) => formatCurrency(minor / 100, 'INR')}
+            />,
+          );
+        });
+      const card = width - 32;
+      const height = () =>
+        layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, card);
+      // The totals under the table, by their top border: the room they keep, and what is drawn
+      // over it, which must fit in it.
+      const totals = () => {
+        const [footer] = findHosts(
+          renderer!.toJSON() as ReactTestRendererJSON,
+          (props) => flatten(props.style).borderTopWidth === 1,
+        );
+        const [over] = findHosts(footer!, (props) => flatten(props.style).position === 'absolute');
+        return {
+          room: layoutHeight(footer!, fontScale, card - 2),
+          drawn: layoutHeight(over!, fontScale, card - 2 - 28) + 28,
+        };
+      };
+      render(draft('', members), true);
+      const before = { table: height(), room: totals().room };
+      for (const amount of ['9.00', '900.00', '1001.00']) {
+        render(draft(amount, members), false);
+        expect([amount, height()]).toEqual([amount, before.table]);
+      }
+      // Up to the largest amount, the totals keep their room and fit in it. (A figure that wide
+      // may stack its own row's Paid and Share, #937: that is the table's, and says so.)
+      for (const amount of ['', '9.00', '1001.00', '999999.99', '9999999.99', '10000000.00']) {
+        render(draft(amount, members), !amount);
+        const { room, drawn } = totals();
+        expect([amount, room]).toEqual([amount, before.room]);
+        expect(drawn).toBeLessThanOrEqual(room);
+      }
+      // ₹1,001 ÷ 3 is uneven, ₹900 ÷ 3 even: the equal split's note is there for both.
+      render(draft('1001.00', members), false);
+      expect(drawn(renderer!.root)).toContain(sharesMayDifferNote);
+      render(draft('900.00', members), false);
+      expect(drawn(renderer!.root)).toContain(sharesMayDifferNote);
+      // Screen readers hear the totals once: the room is hidden from them.
+      const [room] = renderer!.root.findAll(
+        (node) => isHost(node, 'View') && flatten(node.props.style).opacity === 0,
+      );
+      expect(room!.props.importantForAccessibility).toBe('no-hide-descendants');
+      expect(room!.props.accessibilityElementsHidden).toBe(true);
+    },
+  );
+
+  // #941, QA and the Designer at 200% on a 360 dp phone: the room kept for the shares-differ note
+  // left about 118 dp blank under "Enter an amount first." and 88 dp under ₹900.00's sum line. An
+  // equal split always says its shares may differ, so the note fills that room, true before any
+  // rounding, and ₹1,001 ÷ 3 rounding brings nothing new. Other split methods never round.
+  it.each([
+    [360, 2],
+    [412, 1],
+  ] as const)(
+    'says an equal split’s shares may differ, before the amount and at any amount, %sdp at %s× text (#941)',
+    (width, fontScale) => {
+      setWindow({ width, height: 780, fontScale });
+      onTestFinished(() => setWindow({ width: 360, height: 780, fontScale: 1 }));
+      const members = ids.slice(0, 3);
+      const note = 'If it doesn’t divide evenly, shares differ by the smallest unit.';
+      const render = (value: ExpenseDraft, waiting: boolean) =>
+        act(() => {
+          renderer?.unmount();
+          renderer = create(
+            <WhoOwesWhat
+              draft={value}
+              allocation={waiting ? null : expenseMoney(value)}
+              problem="Enter a valid amount to see who owes what."
+              waiting={waiting}
+              name={(id) => people[ids.indexOf(id)]!}
+              currentUserId={ids[0]}
+              money={(minor) => formatCurrency(minor / 100, 'INR')}
+            />,
+          );
+        });
+      const card = width - 32;
+      // The blank the totals leave: the room the widest sum line keeps, less the line drawn.
+      const blank = () => {
+        const json = renderer!.toJSON() as ReactTestRendererJSON;
+        const [room] = findHosts(json, (props) => flatten(props.style).opacity === 0);
+        const [over] = findHosts(json, (props) => flatten(props.style).position === 'absolute');
+        return (
+          layoutHeight(room!, fontScale, card - 30) - layoutHeight(over!, fontScale, card - 30)
+        );
+      };
+      // One line of the sum line's face, at this text size.
+      render(draft('9.00', members), false);
+      const line = layoutHeight(
+        findHosts(
+          renderer!.toJSON() as ReactTestRendererJSON,
+          (props) => flatten(props.style).position === 'absolute',
+        )[0]!,
+        fontScale,
+        card - 30,
+      );
+      for (const amount of ['', '9.00', '900.00', '1001.00', '10000000.00']) {
+        render(draft(amount, members), !amount);
+        const shown = drawn(renderer!.root);
+        expect([amount, shown.split(note).length - 1]).toEqual([amount, 1]);
+        // The record's past wording is the saved Expense's, not the form's.
+        expect(shown).not.toContain(sharesDifferNote);
+        // The sum line fits in its room, and leaves at most one line of it blank.
+        expect(blank()).toBeGreaterThanOrEqual(0);
+        expect(blank()).toBeLessThanOrEqual(line);
+      }
+      // Screen readers hear the note once, and none of the room.
+      const read = renderer!.root
+        .findAll((node) => isHost(node, 'Text') && !hidden(node))
+        .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+        .join('');
+      expect(read.split(note).length - 1).toBe(1);
+      expect(read).not.toMatch(/0,00,00,000\.00/);
+      // Other split methods share the amount as entered: no note.
+      for (const [splitMethod, values] of [
+        ['exact', ['300.00', '300.00', '300.00']],
+        ['percentage', ['40', '30', '30']],
+        ['shares', ['1', '1', '1']],
+      ] as const) {
+        const value: ExpenseDraft = {
+          ...draft('900.00', members),
+          splitMethod,
+          splitValues: Object.fromEntries(members.map((id, index) => [id, values[index]!])),
+        };
+        render(value, false);
+        expect(expenseMoney(value)).not.toBeNull();
+        expect([splitMethod, drawn(renderer!.root).includes('smallest')]).toEqual([
+          splitMethod,
+          false,
+        ]);
+      }
+    },
+  );
 
   // #932, the Designer's review of #926: stacked, "Share" started wherever each row's Paid ended,
   // about 40 dp further right in the You row than under the others, and "Paid –" sat about 2 dp
