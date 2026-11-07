@@ -111,6 +111,60 @@ const run = () =>
     cookie: '',
     headers: { authorization: 'Bearer ' + secret },
   });
+/** Prepares and reviews one Draft for Sam; answers the save command for its reviewed revision. */
+async function reviewedDraft() {
+  vi.stubEnv('PERSISTENT_DRAFTS_ENABLED', 'true');
+  const drafts = await import('@/app/api/groups/[id]/drafts/route');
+  const review = await import('@/app/api/groups/[id]/drafts/review/route');
+  const storedGroup = await mongoose.connection
+    .db!.collection('groups')
+    .findOne({ _id: new mongoose.Types.ObjectId(group) });
+  const tagId = String(storedGroup!.tags.find((tag: { name: string }) => tag.name === 'Food')._id);
+  const prepared = await callRoute(drafts.POST, {
+    method: 'POST',
+    path: '/api/groups/' + group + '/drafts',
+    params: { id: group },
+    cookie: alex,
+    headers: { 'Idempotency-Key': randomUUID() },
+    body: {
+      drafts: [
+        {
+          description: 'Private reviewed meal',
+          amount: 100,
+          currency: 'INR',
+          category: 'food',
+          date: '2026-11-06',
+          tagId,
+          paidBy: [{ user: users.alex, amount: 100 }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: users.sam }],
+        },
+      ],
+    },
+  });
+  expect(prepared.status).toBe(201);
+  const id = prepared.body.data[0].id;
+  const reviewed = await callRoute(review.POST, {
+    method: 'POST',
+    path: '/api/groups/' + group + '/drafts/review',
+    params: { id: group },
+    cookie: alex,
+    body: { ids: [id] },
+  });
+  expect(reviewed.status).toBe(200);
+  const row = reviewed.body.data[0];
+  return { drafts: [{ id, revision: row.draft.revision, review: row.review }] };
+}
+async function saveDraft(command: Awaited<ReturnType<typeof reviewedDraft>>) {
+  const save = await import('@/app/api/groups/[id]/drafts/save/route');
+  return callRoute(save.POST, {
+    method: 'POST',
+    path: '/api/groups/' + group + '/drafts/save',
+    params: { id: group },
+    cookie: alex,
+    body: command,
+  });
+}
 describe('Expense-added alerts through authenticated HTTP and real MongoDB', () => {
   it('commits one Expense and immutable private involved recipients; repeated request and dispatch send once', async () => {
     const key = randomUUID();
@@ -188,66 +242,11 @@ describe('Expense-added alerts through authenticated HTTP and real MongoDB', () 
     },
   );
   it('preparing and reviewing a Draft sends nothing; saving its reviewed revision alerts once', async () => {
-    vi.stubEnv('PERSISTENT_DRAFTS_ENABLED', 'true');
-    const drafts = await import('@/app/api/groups/[id]/drafts/route');
-    const review = await import('@/app/api/groups/[id]/drafts/review/route');
-    const save = await import('@/app/api/groups/[id]/drafts/save/route');
-    const storedGroup = await mongoose.connection
-      .db!.collection('groups')
-      .findOne({ _id: new mongoose.Types.ObjectId(group) });
-    const tagId = String(
-      storedGroup!.tags.find((tag: { name: string }) => tag.name === 'Food')._id,
-    );
-    const prepared = await callRoute(drafts.POST, {
-      method: 'POST',
-      path: '/api/groups/' + group + '/drafts',
-      params: { id: group },
-      cookie: alex,
-      headers: { 'Idempotency-Key': randomUUID() },
-      body: {
-        drafts: [
-          {
-            description: 'Private reviewed meal',
-            amount: 100,
-            currency: 'INR',
-            category: 'food',
-            date: '2026-11-06',
-            tagId,
-            paidBy: [{ user: users.alex, amount: 100 }],
-            splitMethod: 'equal',
-            splitBetween: [{ user: users.sam }],
-          },
-        ],
-      },
-    });
-    expect(prepared.status).toBe(201);
-    const id = prepared.body.data[0].id;
-    const reviewed = await callRoute(review.POST, {
-      method: 'POST',
-      path: '/api/groups/' + group + '/drafts/review',
-      params: { id: group },
-      cookie: alex,
-      body: { ids: [id] },
-    });
-    expect(reviewed.status).toBe(200);
+    const command = await reviewedDraft();
     expect(provider.send).not.toHaveBeenCalled();
-    const row = reviewed.body.data[0];
-    const command = { drafts: [{ id, revision: row.draft.revision, review: row.review }] };
-    const saved = await callRoute(save.POST, {
-      method: 'POST',
-      path: '/api/groups/' + group + '/drafts/save',
-      params: { id: group },
-      cookie: alex,
-      body: command,
-    });
+    const saved = await saveDraft(command);
     expect(saved.body.data[0].status).toBe('saved');
-    await callRoute(save.POST, {
-      method: 'POST',
-      path: '/api/groups/' + group + '/drafts/save',
-      params: { id: group },
-      cookie: alex,
-      body: command,
-    });
+    await saveDraft(command);
     expect(provider.send).toHaveBeenCalledTimes(1);
     expect(
       (await mongoose.connection.db!.collection('expenses').findOne({}))!.pendingActivity,
@@ -543,5 +542,37 @@ describe('a registration follows its live session (#840)', () => {
     await run();
     expect(provider.send).not.toHaveBeenCalled();
     expect((await readControls()).status).toBe(401);
+  });
+});
+describe('with both notification switches unset (#840)', () => {
+  const notificationDocuments = async () => {
+    const counts = await Promise.all(
+      ['notificationDeliveries', 'notificationDispatchCursors'].map((name) =>
+        getAuthDb().collection(name).countDocuments(),
+      ),
+    );
+    return counts.reduce((total, count) => total + count, 0);
+  };
+  beforeEach(() => {
+    // The opted-in phone from the outer beforeEach stays registered; only the switches go.
+    vi.stubEnv('ANDROID_NOTIFICATIONS_ENABLED', undefined);
+    vi.stubEnv('ANDROID_NOTIFICATION_SENDS_ENABLED', undefined);
+  });
+  it('a manual Expense save succeeds, writes no delivery or cursor, and calls no sender', async () => {
+    expect(process.env.ANDROID_NOTIFICATIONS_ENABLED).toBeUndefined();
+    expect(process.env.ANDROID_NOTIFICATION_SENDS_ENABLED).toBeUndefined();
+    expect((await create()).status).toBe(201);
+    expect((await run()).body.data).toMatchObject({ considered: 0, accepted: 0 });
+    expect(await mongoose.connection.db!.collection('expenses').countDocuments()).toBe(1);
+    expect(await notificationDocuments()).toBe(0);
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+  it('saving a reviewed Draft succeeds, writes no delivery or cursor, and calls no sender', async () => {
+    const saved = await saveDraft(await reviewedDraft());
+    expect(saved.body.data[0].status).toBe('saved');
+    await run();
+    expect(await mongoose.connection.db!.collection('expenses').countDocuments()).toBe(1);
+    expect(await notificationDocuments()).toBe(0);
+    expect(provider.send).not.toHaveBeenCalled();
   });
 });
