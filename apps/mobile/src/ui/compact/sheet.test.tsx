@@ -5,7 +5,14 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { findHosts, flatten, largeTextWindows, unreadText } from '../../test-utils/layout';
+import {
+  barCentres,
+  findHosts,
+  flatten,
+  largeTextWindows,
+  rowStarts,
+  unreadText,
+} from '../../test-utils/layout';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setWindow, spring } from '../../test-utils/native';
 
@@ -270,7 +277,9 @@ describe('Bottom sheet header action keeps to the title’s first line (#646)', 
       .children![1] as ReactTestRendererJSON;
   const top = (style: unknown) => {
     const flat = flatten(style);
-    return Number(flat.marginTop ?? 0);
+    // Room inside each box, which Yoga keeps in the header that wraps (#962).
+    expect(flat.marginTop).toBeUndefined();
+    return Number(flat.paddingTop ?? 0);
   };
   function open(title: string, subtitle?: string) {
     act(() => {
@@ -316,6 +325,114 @@ describe('Bottom sheet header action keeps to the title’s first line (#646)', 
     expect(rowStyle.minHeight).toBe(56);
     expect(actionTop + actionHeight + Number(rowStyle.paddingBottom ?? 0)).toBe(56);
   });
+});
+
+// #962, the Tester's release re-check: at large text the header wraps, and Yoga places a child
+// that keeps to its line's top by its position, not its top margin, so the title's margin moved
+// it nowhere. Done centred on the title and its subtitle, 8.6 dp below the title's first line on
+// Currency at 130% on a 412 dp phone (22.5 px), and 4 dp on Group options at 200%. Done, or ×,
+// centres on the title's first line at every size, and at 100% nothing moves: both on 28 dp,
+// down the 56 dp header.
+describe('Bottom sheet header action centres on the title’s first line at large text (#962)', () => {
+  /** Each sheet's title, its action, and any subtitle or marker, as the app shows them. */
+  const sheets: {
+    name: string;
+    title: string;
+    action?: string;
+    icon?: 'close';
+    subtitle?: string;
+    required?: boolean;
+  }[] = [
+    { name: 'Currency', title: 'Currency', subtitle: 'Lisbon and Tokyo · 2 currencies' },
+    { name: 'Tag', title: 'Tag', required: true },
+    { name: 'Who paid?', title: 'Who paid?' },
+    { name: 'Split', title: 'Split', subtitle: 'Equally among 4 people' },
+    { name: 'Date', title: 'Date' },
+    { name: 'Group options', title: 'Goa Friends Trip', subtitle: '4 members · INR' },
+    { name: 'Expense options', title: 'Expense options' },
+    { name: 'Record payment', title: 'Record payment', action: 'Close', icon: 'close' },
+    {
+      name: 'Settle up',
+      title: 'Settle up with Sam Chen',
+      action: 'Close',
+      icon: 'close',
+    },
+    { name: 'Finish later', title: 'Finish this expense later?', action: 'Keep editing' },
+    { name: 'Delete this Expense', title: 'Delete this Expense?', action: 'Cancel' },
+    {
+      name: 'Rename Tag',
+      title: 'Rename Tag',
+      action: 'Cancel',
+      subtitle: 'Currently Groceries',
+    },
+    {
+      name: 'Add a currency',
+      title: 'Add a currency',
+      action: 'Cancel',
+      subtitle: 'Goa Friends Trip · 1 of 3 extra currencies',
+    },
+  ];
+  const headerRow = () =>
+    findHosts(renderer!.toJSON(), (props) => props.testID === 'sheet-drag-area')[0]!
+      .children![1] as ReactTestRendererJSON;
+  function open({ title, action = 'Done', icon, subtitle, required }: (typeof sheets)[number]) {
+    act(() => {
+      renderer = create(
+        <BottomSheet
+          visible
+          title={title}
+          subtitle={subtitle}
+          titleAccessory={required ? <FieldMarker kind="required" /> : undefined}
+          doneLabel={action}
+          doneIcon={icon}
+          onDone={vi.fn()}
+        >
+          <CompactText>Body</CompactText>
+        </BottomSheet>,
+      );
+    });
+    return action;
+  }
+  const centres = (action: string, width: number, fontScale: number) =>
+    barCentres(headerRow(), fontScale, width, {
+      action: (node) => node.props.accessibilityLabel === action,
+    });
+
+  it.each(
+    sheets.flatMap((each) =>
+      largeTextWindows.map(({ width, fontScale }) => [each.name, width, fontScale, each] as const),
+    ),
+  )('%s, %s dp at %s× text', (_name, width, fontScale, each) => {
+    setWindow({ width, height: 800, fontScale });
+    const action = open(each);
+    const found = centres(action, width, fontScale);
+    expect(Object.keys(found).sort()).toEqual(['action', 'title']);
+    // Where the title needs the header's width, the action goes on a line of its own under it
+    // (#639), as "Keep editing" does under "Finish this expense later?" at 200% on 360 dp.
+    const header = headerRow();
+    const [[, actionStart]] = rowStarts(header, fontScale, width, (row) => row === header) as [
+      number[],
+    ];
+    if (actionStart === 20) expect(found.action! - found.title!).toBeGreaterThan(20);
+    else expect(Math.abs(found.action! - found.title!)).toBeLessThanOrEqual(0.5);
+  });
+
+  it('puts Keep editing under “Finish this expense later?” at 200% on a 360 dp phone', () => {
+    setWindow({ width: 360, height: 640, fontScale: 2 });
+    open(sheets.find(({ name }) => name === 'Finish later')!);
+    const header = headerRow();
+    const [starts] = rowStarts(header, 2, 360, (row) => row === header);
+    expect(starts![1]).toBe(20);
+  });
+
+  it.each(sheets.map((each) => [each.name, each] as const))(
+    '%s, unchanged at 100% on a 412 dp phone',
+    (_name, each) => {
+      setWindow({ width: 412, height: 915, fontScale: 1 });
+      const action = open(each);
+      expect(centres(action, 412, 1)).toEqual({ title: 28, action: 28 });
+    },
+  );
 });
 
 const { ConfirmSheet, useConfirm } = await import('./index');
