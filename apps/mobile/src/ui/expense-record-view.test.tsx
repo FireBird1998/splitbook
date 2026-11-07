@@ -6,7 +6,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { emptyExpenseEditor } from '../data/expense-draft';
@@ -1299,6 +1299,96 @@ describe('compact Expense record, opening', () => {
     },
   );
 
+  // #958, the device check: at 130% on a 412 dp phone, a record shown from its saved copy while it
+  // was read again lost "Maple House" under "Expense", and its title and Back moved 10 px down,
+  // then back up once the read landed: the saved copy shows before the Group's context is read.
+  // The record names its Group as this phone knows it, as its skeleton does (#935), and while it
+  // refreshes, "Refreshing…" shares the title's first line with Back, Edit and ⋮, within 1 dp,
+  // with or without the Group under the title.
+  describe('while it is read again (#958)', () => {
+    const labels = ['Back to Group', 'Edit expense', 'Expense options'];
+    const refreshingWords = (node: ReactTestRendererJSON) =>
+      ['Text', 'AnimatedText'].includes(node.type) && wordsOf(node) === 'Refreshing…';
+    /** "Refreshing…", or on a narrow phone its mark alone. */
+    const refreshShown = () =>
+      text(screen!.root).includes('Refreshing…') ||
+      findHosts(screen!.toJSON(), (props) => props.accessibilityLabel === 'Refreshing').length > 0;
+    /** The record as its saved copy shows it, before the Group's context is read again. */
+    const refreshing = async () => {
+      const ui = await render(open(ids.bill));
+      const shown = ui.controller.getSnapshot().expense;
+      act(() => screen?.unmount());
+      return {
+        refreshed: shown,
+        saved: {
+          ...shown,
+          context: null,
+          known: { refreshedAt: Date.now(), refreshing: true, saved: true },
+        },
+      };
+    };
+    const show = async (
+      state: Parameters<typeof ExpenseEditor>[0]['state'],
+      groupName?: string,
+    ) => {
+      act(() => screen?.unmount());
+      await act(async () => {
+        screen = create(
+          <ExpenseEditor
+            {...editor(state).props}
+            groupName={groupName}
+            onClose={() => undefined}
+          />,
+        );
+      });
+    };
+    /** The bar's centres, in dp from the top of the screen. */
+    const centres = (width: number, fontScale: number) =>
+      barCentres(screen!.toJSON() as ReactTestRendererJSON, fontScale, width, {
+        back: (node) => node.props.accessibilityLabel === labels[0],
+        edit: (node) => node.props.accessibilityLabel === labels[1],
+        options: (node) => node.props.accessibilityLabel === labels[2],
+        status: refreshingWords,
+      });
+
+    it.each([
+      [412, 1.3],
+      [412, 1],
+      [360, 2],
+    ] as const)(
+      'keeps its Group under “Expense”, and its bar where it stays, %sdp at %s× text',
+      async (width, fontScale) => {
+        setWindow({ width, fontScale });
+        const { refreshed, saved } = await refreshing();
+        const name = refreshed.context!.group.name;
+        await show(saved, name);
+        expect(refreshShown()).toBe(true);
+        expect(text(screen!.root)).toContain(name);
+        const during = centres(width, fontScale);
+        await show({ ...refreshed, known: null }, name);
+        expect(refreshShown()).toBe(false);
+        delete during.status;
+        expect(centres(width, fontScale)).toEqual(during);
+      },
+    );
+
+    it.each([
+      ['with its Group', true],
+      ['without its Group', false],
+    ] as const)(
+      '“Refreshing…” shares the title’s first line with Back, Edit and ⋮, %s, 412 dp at 1.3× text',
+      async (_case, named) => {
+        setWindow({ width: 412, fontScale: 1.3 });
+        const { refreshed, saved } = await refreshing();
+        await show(saved, named ? refreshed.context!.group.name : undefined);
+        const { status, title, back, edit, options } = centres(412, 1.3);
+        expect(status, 'status').toBeDefined();
+        for (const [part, centre] of Object.entries({ title, back, edit, options }))
+          expect(Math.abs(status! - centre!), part).toBeLessThanOrEqual(1);
+      },
+    );
+  });
+
   // #925, the Designer's release check: at 200% on a 360 dp phone, Who owes what clipped "Paid
   // CHF 10,000,000.(" at the card's edge. The amount goes under its label, in the record and in
   // the skeleton it opens over, whose pairs are the record's texts.
@@ -1535,16 +1625,20 @@ describe('the Expense form’s bar, with its status (#939)', () => {
         findHosts(node, (props, type) => type === 'Ionicons' && props.name === 'close').length > 0,
       options: (node) =>
         node.type === 'Pressable' && node.props.accessibilityLabel === 'Expense options',
+      status: (node) =>
+        node.type === 'View' &&
+        ['Draft saved', 'Kept on this phone'].includes(node.props.accessibilityLabel as string),
     });
   /** The form, with a change kept, so its status shows beside the title. */
-  const shown = async (form: keyof typeof forms) => {
+  const shown = async (form: keyof typeof forms, status = 'Draft saved') => {
     const ui = await render(forms[form]);
     await act(async () => ui.controller.updateExpenseDraft({ description: 'Ferry tickets' }));
     await settle();
     expect(ui.headings()).toContain(form);
-    expect(ui.labels()).toContain('Draft saved');
+    expect(ui.labels()).toContain(status);
     return ui;
   };
+  afterEach(() => vi.unstubAllEnvs());
 
   it.each([
     ['Add expense', 412, 1.3],
@@ -1562,12 +1656,57 @@ describe('the Expense form’s bar, with its status (#939)', () => {
     },
   );
 
+  // #958, the Designer's check of #939: at 130% on a 412 dp phone "Kept on this phone" stayed
+  // centred on the title and its Group together, below × and ⋮, between the title's two lines.
+  // Beside the title, the status shares their line, the title's first, as it did before #939.
+  it.each([
+    ['Add expense', 'Draft saved'],
+    ['Add expense', 'Kept on this phone'],
+    ['Edit expense', 'Draft saved'],
+    ['Edit expense', 'Kept on this phone'],
+  ] as const)(
+    '%s: “%s” shares the title’s first line, 412 dp at 1.3× text (#958)',
+    async (form, label) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(label === 'Kept on this phone'));
+      setWindow({ width: 412, fontScale: 1.3 });
+      await shown(form, label);
+      const { close, title, status } = centres(412, 1.3);
+      expect(status, 'status').toBeDefined();
+      expect(Math.abs(status! - title!)).toBeLessThanOrEqual(1);
+      expect(Math.abs(status! - close!)).toBeLessThanOrEqual(1);
+    },
+  );
+
+  // At 200% on a 360 dp phone the status has no room beside the title (#639): it keeps a line of
+  // its own under the title and its Group, at the bar's end, where it was, not between them.
+  it.each(['Add expense', 'Edit expense'] as const)(
+    '%s: the status keeps its line under the title and its Group, 360 dp at 2× text (#958)',
+    async (form) => {
+      setWindow({ width: 360, fontScale: 2 });
+      await shown(form);
+      const laid = layoutTops(screen!.toJSON() as ReactTestRendererJSON, 2, 360, (node) =>
+        ['Draft saved', 'Back to Group'].includes(node.props.accessibilityLabel as string)
+          ? true
+          : node.type === 'View' &&
+            (node.children ?? []).some(
+              (child) => typeof child !== 'string' && child.props.accessibilityRole === 'header',
+            ),
+      );
+      const titles = laid.find(
+        ({ node }) => node.type === 'View' && !node.props.accessibilityLabel,
+      );
+      const status = laid.find(({ node }) => node.props.accessibilityLabel === 'Draft saved');
+      expect(status!.top).toBeGreaterThanOrEqual(titles!.top + titles!.height);
+      expect(status!.top + status!.height / 2).toBe(89.25);
+    },
+  );
+
   it.each(['Add expense', 'Edit expense'] as const)(
     '%s: unchanged at 100% on a 412 dp phone',
     async (form) => {
       setWindow({ width: 412, fontScale: 1 });
       await shown(form);
-      expect(centres(412, 1)).toEqual({ close: 32, title: 24, options: 32 });
+      expect(centres(412, 1)).toEqual({ close: 32, title: 24, options: 32, status: 32 });
     },
   );
 });

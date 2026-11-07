@@ -710,6 +710,7 @@ function ExpenseTask({
         onViewMonth={onViewMonth}
         reveal={recordReveal}
         outlined={outlined.current}
+        groupName={groupName ?? undefined}
       />
     );
   const locked = state.status !== 'editing';
