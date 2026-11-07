@@ -145,8 +145,10 @@ export function layoutHeight(
       }
     }
     const down = number(style.rowGap ?? style.gap);
+    const heights = lines.map(line);
+    watch?.wrapped?.(node, lines, heights);
     return box(
-      lines.reduce((sum, members) => sum + line(members), 0) + down * Math.max(0, lines.length - 1),
+      heights.reduce((sum, height) => sum + height, 0) + down * Math.max(0, lines.length - 1),
     );
   }
   const heights = children.map((child) => outer(child, childWidth(child, row, inner, fontScale)));
@@ -205,6 +207,8 @@ interface LayoutWatch {
   overflow?: (row: Node, by: number) => void;
   /** A text field, and the room inside its box its text lays out in. */
   input?: (node: Node, room: number) => void;
+  /** A row that wraps, the children on each of its lines, and each line's height. */
+  wrapped?: (row: Node, lines: Node[][], heights: number[]) => void;
 }
 
 /**
@@ -304,11 +308,19 @@ export function rowStarts(
 }
 
 /**
- * How far down its tree each node that `match` picks starts, in dp from the top of `node`, as
- * `layoutHeight` lays it out `width` wide at this text size: columns stacked with their padding,
- * borders, margins and gaps, and a scroll view's content from its content container's padding.
- * A row's children start at its top. Absolutely positioned children take no room, as there, and
- * aren't measured. Enough to see that a notice arriving moves nothing else on a screen (#932).
+ * How far down its tree each node that `match` picks starts, in dp from the top of `node`, and
+ * how tall it is, as `layoutHeight` lays it out `width` wide at this text size: columns stacked
+ * with their padding, borders, margins and gaps, from their top or, with `justifyContent:
+ * 'center'`, centred in their height; and a scroll view's content from its content container's
+ * padding. In a row that doesn't wrap, each child starts where its `alignSelf`, or the row's
+ * `alignItems`, puts it: at the row's top, its centre or its end. A row that wraps stacks its
+ * lines as `layoutHeight` breaks them, and places each child in its line as Yoga does there: a
+ * child centred in its line is centred by its own height, its margins left out, so a top margin
+ * moves it down by only half (#939: at 130% on a 412 dp phone, Add expense's title, given
+ * 11.85 dp above it to meet × and ⋮, sat 5.7 dp above them, 15 px on the emulator). Each child
+ * lays out as wide as `layoutHeight` gave it. Absolutely positioned children take no room, as
+ * there, and aren't measured. Enough to see that a notice arriving moves nothing else on a
+ * screen (#932), and that a top bar's actions share a line (#939).
  */
 export function layoutTops(
   node: Node | null,
@@ -316,9 +328,17 @@ export function layoutTops(
   width: number,
   match: (node: Node) => boolean,
 ) {
-  const found: { node: Node; top: number }[] = [];
+  const found: { node: Node; top: number; height: number }[] = [];
+  // The width each box lays out in, as `layoutHeight` shares a row out among its children, and
+  // the lines each wrapping row breaks into.
+  const widths = new Map<Node, number>();
+  const wrapped = new Map<Node, { lines: Node[][]; heights: number[] }>();
+  layoutHeight(node, fontScale, width, {
+    node: (each, room) => widths.set(each, room),
+    wrapped: (row, lines, heights) => wrapped.set(row, { lines, heights }),
+  });
   const walk = (each: Node, top: number, room: number) => {
-    if (match(each)) found.push({ node: each, top });
+    if (match(each)) found.push({ node: each, top, height: layoutHeight(each, fontScale, room) });
     if (each.type === 'Text' || each.type === 'AnimatedText') return;
     const style = flatten(each.props.style);
     if (style.display === 'none') return;
@@ -326,25 +346,104 @@ export function layoutTops(
     const inner = room - horizontal(style) - horizontal(content);
     const row = style.flexDirection === 'row';
     const gap = number(style.rowGap ?? style.gap) + number(content.rowGap ?? content.gap);
+    /** The height its children lay out in: its own, inside its padding and borders. */
+    const own = () =>
+      layoutHeight(each, fontScale, room) -
+      edge(style, 'Top', 'padding') -
+      edge(style, 'Bottom', 'padding') -
+      vertical(style);
     let y =
       top +
       edge(style, 'Top', 'padding') +
       number(style.borderTopWidth ?? style.borderWidth) +
       edge(content, 'Top', 'padding');
-    inFlow(each).forEach((child, index) => {
-      const own = flatten(child.props.style);
-      const childRoom = childWidth(child, row, inner, fontScale)!;
-      if (!row && index > 0) y += gap;
-      walk(child, y + edge(own, 'Top', 'margin'), childRoom);
-      if (!row)
-        y +=
-          layoutHeight(child, fontScale, childRoom) +
-          edge(own, 'Top', 'margin') +
-          edge(own, 'Bottom', 'margin');
+    const placed = inFlow(each).map((child) => {
+      const mine = flatten(child.props.style);
+      const childRoom = widths.get(child) ?? childWidth(child, row, inner, fontScale)!;
+      const height = layoutHeight(child, fontScale, childRoom);
+      const before = edge(mine, 'Top', 'margin');
+      const after = edge(mine, 'Bottom', 'margin');
+      const align =
+        mine.alignSelf === undefined || mine.alignSelf === 'auto'
+          ? style.alignItems
+          : mine.alignSelf;
+      return { child, childRoom, height, before, after, outer: height + before + after, align };
+    });
+    const lines = row && style.flexWrap === 'wrap' ? wrapped.get(each) : undefined;
+    if (lines) {
+      // Each line under the last, its children placed in it as Yoga places them (see above).
+      let lineTop = y;
+      lines.lines.forEach((members, index) => {
+        const tall = lines.heights[index]!;
+        for (const { child, childRoom, height, before, after, align } of placed) {
+          if (!members.includes(child)) continue;
+          const start =
+            align === 'center'
+              ? (tall - height) / 2
+              : align === 'flex-end'
+                ? tall - height - after
+                : before;
+          walk(child, lineTop + start, childRoom);
+        }
+        lineTop += tall + gap;
+      });
+      return;
+    }
+    if (row) {
+      const across = own();
+      for (const { child, childRoom, before, outer, align } of placed) {
+        const offset =
+          align === 'center' ? (across - outer) / 2 : align === 'flex-end' ? across - outer : 0;
+        walk(child, y + offset + before, childRoom);
+      }
+      return;
+    }
+    // A column centred in its height starts its children half what they leave below its top.
+    if (style.justifyContent === 'center') {
+      const stacked = placed.reduce((sum, { outer }) => sum + outer, 0);
+      y += Math.max(0, own() - stacked - gap * Math.max(0, placed.length - 1)) / 2;
+    }
+    placed.forEach(({ child, childRoom, before, outer }, index) => {
+      if (index > 0) y += gap;
+      walk(child, y + before, childRoom);
+      y += outer;
     });
   };
   if (node) walk(node, 0, width);
   return found;
+}
+
+/**
+ * Where a top bar's parts centre, in dp from the top of `node`, as `layoutTops` lays it out
+ * `width` wide at this text size: `title`, the first line of the first heading (a text with the
+ * `header` role), and each part `parts` picks by name, as Back, ⋮ or a badge. Back or close, the
+ * title's first line and every action share one centre from large text (#939).
+ */
+export function barCentres(
+  node: Node | null,
+  fontScale: number,
+  width: number,
+  parts: Record<string, (node: Node) => boolean>,
+) {
+  const heading = (each: Node) =>
+    (each.type === 'Text' || each.type === 'AnimatedText') &&
+    each.props.accessibilityRole === 'header';
+  const named = Object.entries(parts);
+  const laid = layoutTops(
+    node,
+    fontScale,
+    width,
+    (each) => heading(each) || named.some(([, pick]) => pick(each)),
+  );
+  const centres: Record<string, number> = {};
+  const title = laid.find(({ node: each }) => heading(each));
+  // One line of the title: its line height, as a text laid out without a width is.
+  if (title) centres.title = title.top + layoutHeight(title.node, fontScale) / 2;
+  for (const [name, pick] of named) {
+    const part = laid.find(({ node: each }) => pick(each));
+    if (part) centres[name] = part.top + part.height / 2;
+  }
+  return centres;
 }
 
 /**

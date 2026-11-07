@@ -24,6 +24,7 @@ import {
 } from '@splitbook/shared/expense-detail';
 import { motion } from './compact';
 import {
+  barCentres,
   findHosts,
   flatten,
   layoutHeight,
@@ -1236,6 +1237,68 @@ describe('compact Expense record, opening', () => {
     },
   );
 
+  // #939, the Designer's check of #935: at 200% on a 360 dp phone Edit sat on the "Expense" line
+  // and Back and ⋮ lower, centred on "Expense" and the Group's lines together. The bar's actions
+  // share one centre, in the skeleton the record opens over and in the record, at every size.
+  it.each([
+    [360, 2, 'Maple House'],
+    [360, 2, 'Goa Friends Trip'],
+    [412, 1, 'Maple House'],
+    [412, 1, 'Goa Friends Trip'],
+  ] as const)(
+    'puts Back, Edit and ⋮ on one line, %sdp at %s× text in %s (#939)',
+    async (width, fontScale, groupName) => {
+      setWindow({ width, fontScale });
+      const labels = ['Back to Group', 'Edit expense', 'Expense options'];
+      /** Each action's vertical centre, in dp from the top of the screen. */
+      const centres = () => {
+        const laid = layoutTops(
+          screen!.toJSON() as ReactTestRendererJSON,
+          fontScale,
+          width,
+          (node) => labels.includes(node.props.accessibilityLabel as string),
+        );
+        return labels.map((label) => {
+          const action = laid.find(({ node }) => node.props.accessibilityLabel === label);
+          expect(action, label).toBeDefined();
+          return action!.top + action!.height / 2;
+        });
+      };
+      const together = ([back, ...others]: number[]) => {
+        for (const centre of others) expect(Math.abs(centre - back!)).toBeLessThanOrEqual(1);
+      };
+      await act(async () => {
+        screen = create(
+          <ExpenseEditor
+            {...editor(
+              { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.bill },
+              recordOutline(listRow(ids.bill), alex.id),
+            ).props}
+            groupName={groupName}
+            onClose={() => undefined}
+          />,
+        );
+      });
+      const skeleton = centres();
+      together(skeleton);
+      act(() => screen?.unmount());
+      const ui = await render(open(ids.bill));
+      const shown = ui.controller.getSnapshot().expense;
+      const named = {
+        ...shown,
+        context: { ...shown.context!, group: { ...shown.context!.group, name: groupName } },
+      };
+      act(() => screen?.unmount());
+      await act(async () => {
+        screen = create(<ExpenseEditor {...editor(named).props} onClose={() => undefined} />);
+      });
+      expect(text(screen!.root)).toContain(groupName);
+      const record = centres();
+      together(record);
+      expect(record).toEqual(skeleton);
+    },
+  );
+
   // #925, the Designer's release check: at 200% on a 360 dp phone, Who owes what clipped "Paid
   // CHF 10,000,000.(" at the card's edge. The amount goes under its label, in the record and in
   // the skeleton it opens over, whose pairs are the record's texts.
@@ -1449,4 +1512,62 @@ describe('an Expense in a currency Splitbook no longer supports (#820)', () => {
     expect(shown).toContain('This Expense is in DEM, which Splitbook no longer supports');
     expect(shown).not.toContain('Try again');
   });
+});
+
+// #939, QA's device pass: on Add and Edit expense, whose bar has a status beside the title,
+// the title's first line sat above × and ⋮ from 130% text, 15 px on a 412 dp phone at 130% and
+// 10 px on a 360 dp phone at 200%. The room given above the title, as a margin in the row the
+// status wraps in, moved it down by only half. ×, the title's first line and ⋮ share one centre,
+// and below large text nothing moves.
+describe('the Expense form’s bar, with its status (#939)', () => {
+  const forms = {
+    'Add expense': (controller: MobileController) => controller.openExpense(groupId),
+    'Edit expense': async (controller: MobileController) => {
+      await controller.openExpense(groupId, ids.dinner);
+      await controller.editExpense();
+    },
+  };
+  /** Where ×, the title's first line and ⋮ centre, in dp from the top of the screen. */
+  const centres = (width: number, fontScale: number) =>
+    barCentres(screen!.toJSON() as ReactTestRendererJSON, fontScale, width, {
+      close: (node) =>
+        node.type === 'Pressable' &&
+        findHosts(node, (props, type) => type === 'Ionicons' && props.name === 'close').length > 0,
+      options: (node) =>
+        node.type === 'Pressable' && node.props.accessibilityLabel === 'Expense options',
+    });
+  /** The form, with a change kept, so its status shows beside the title. */
+  const shown = async (form: keyof typeof forms) => {
+    const ui = await render(forms[form]);
+    await act(async () => ui.controller.updateExpenseDraft({ description: 'Ferry tickets' }));
+    await settle();
+    expect(ui.headings()).toContain(form);
+    expect(ui.labels()).toContain('Draft saved');
+    return ui;
+  };
+
+  it.each([
+    ['Add expense', 412, 1.3],
+    ['Add expense', 360, 2],
+    ['Edit expense', 412, 1.3],
+    ['Edit expense', 360, 2],
+  ] as const)(
+    '%s: ×, the title and ⋮ share a line, %s dp at %s× text',
+    async (form, width, fontScale) => {
+      setWindow({ width, fontScale });
+      await shown(form);
+      const { close, title, options } = centres(width, fontScale);
+      expect(Math.abs(title! - close!)).toBeLessThanOrEqual(1);
+      expect(Math.abs(options! - close!)).toBeLessThanOrEqual(1);
+    },
+  );
+
+  it.each(['Add expense', 'Edit expense'] as const)(
+    '%s: unchanged at 100% on a 412 dp phone',
+    async (form) => {
+      setWindow({ width: 412, fontScale: 1 });
+      await shown(form);
+      expect(centres(412, 1)).toEqual({ close: 32, title: 24, options: 32 });
+    },
+  );
 });
