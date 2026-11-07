@@ -281,11 +281,41 @@ Node tests and browser checks cannot establish those native behaviors.
 
 ## Expense-added alerts (#840)
 
-The native direct-FCM boundary sends a generic FCM notification alongside Expo SDK 58's data
-envelope; SDK 58 skips the foreground handler for data-only messages. Existing public Firebase
-client configuration can be supplied to prebuild with `ANDROID_GOOGLE_SERVICES_FILE`; the file
-stays outside Git. Server credentials never belong in the app. Permission requests remain
-limited to the explicit Settings enable action.
+Messages are data-only (#968): the server sends the version-2 envelope with no FCM
+`notification` block, at high priority, so Android never shows an alert by itself. The app
+shows "Splitbook" / "An Expense was added." as a local notification on the `ledger-updates`
+channel, one per event, only after its checks pass. Existing public Firebase client
+configuration can be supplied to prebuild with `ANDROID_GOOGLE_SERVICES_FILE`; the file stays
+outside Git. Server credentials never belong in the app. Permission requests remain limited to
+the explicit Settings enable action.
+
+**Why a notification task.** Expo SDK 58 doesn't pass data-only messages to the foreground
+handler (`setNotificationHandler`), and in the background shows them only when their data has
+a `title` or `message`. Its supported route for them is a background notification task:
+`expo-task-manager` (`~58.0.13`, the SDK 58 version) with expo-notifications
+`registerTaskAsync`. On Android, its Firebase service hands every received message to that
+task, in the foreground, in the background, and with no app running, when a headless JS runtime
+loads the bundle and runs it without UI. No native service of our own is needed.
+
+- `index.ts` defines the task (`src/notification-task-native.ts`) at startup, only in a build
+  with `EXPO_PUBLIC_ANDROID_NOTIFICATIONS_ENABLED=true`. Other builds never load
+  expo-task-manager, and attach no handler, task or listener.
+- The mounted app registers the task and lends it the controller
+  (`src/notification-callbacks.ts`). The controller checks the envelope with a fresh controls
+  read. On screen on the affected Group, it refreshes quietly and shows no alert. Elsewhere, or
+  in the background, the alert shows.
+- With no app running (the app was swiped away, or Android stopped it), the task checks
+  without the controller (`src/data/notification-receipt.ts`). It needs a saved session
+  confirmed for the envelope's account and no unconfirmed sign-out. It then reads
+  `GET /api/notifications/device` once with that session and the installation proof, and the
+  answer must be on, with Expense alerts on and the envelope's binding and activation. It
+  restores no session, revokes, purges or reads a ledger: those wait for the app.
+- A check that hasn't answered within 10 seconds shows nothing. While the app is in use, the
+  foreground handler shows only the task's own alert, quietly. It never shows a pushed message.
+
+Data-only delivery depends on the device: Doze, the restricted App Standby bucket or a
+manufacturer's battery optimisation can delay or drop a message, and a force-stopped app
+receives nothing until it is opened again (`docs/api.md`).
 
 The controller validates the version-2 environment/account/binding/activation/expiry envelope
 before processing a receipt or tap. Occurrence timestamps allow at most 30 seconds of device
