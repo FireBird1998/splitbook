@@ -50,23 +50,38 @@ export const notificationEnvironment = () =>
   process.env.MOBILE_APP_ENV ||
   (process.env.NODE_ENV === 'production' ? 'production' : 'development');
 
+type DispatchCounts = { considered: number; accepted: number; skipped: number; failed: number };
+
 /** Explicit bounded first dispatch. Autonomous recovery and scheduling belong to T5. */
 export async function dispatchExpenseAlerts(eventIds?: readonly string[]) {
   const deadline = Date.now() + 20_000;
+  const counts: DispatchCounts = { considered: 0, accepted: 0, skipped: 0, failed: 0 };
+  // Uncertain provider outcomes, a part of `failed`: the log line reports them on their own.
+  const uncertain = { count: 0 };
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      runDispatch(deadline, eventIds),
+      runDispatch(deadline, counts, uncertain, eventIds),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error('Notification dispatch budget expired')), 20_000);
       }),
     ]);
   } finally {
     clearTimeout(timer);
+    // One line per run, counts only: production checks need no database read, and the line
+    // carries no ids, tokens or names.
+    console.info(
+      `Notification dispatch: considered=${counts.considered} accepted=${counts.accepted}` +
+        ` skipped=${counts.skipped} uncertain=${uncertain.count} failed=${counts.failed}`,
+    );
   }
 }
-async function runDispatch(deadline: number, eventIds?: readonly string[]) {
-  const counts = { considered: 0, accepted: 0, skipped: 0, failed: 0 };
+async function runDispatch(
+  deadline: number,
+  counts: DispatchCounts,
+  uncertain: { count: number },
+  eventIds?: readonly string[],
+) {
   if (
     process.env.ANDROID_NOTIFICATIONS_ENABLED !== 'true' ||
     process.env.ANDROID_NOTIFICATION_SENDS_ENABLED !== 'true'
@@ -436,6 +451,7 @@ async function runDispatch(deadline: number, eventIds?: readonly string[]) {
         );
       if (outcome === 'accepted') counts.accepted++;
       else counts.failed++;
+      if (outcome === 'uncertain') uncertain.count++;
     }
   }
   if (!eventIds && advanced)

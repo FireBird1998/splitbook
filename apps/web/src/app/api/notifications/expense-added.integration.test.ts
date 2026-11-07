@@ -576,3 +576,43 @@ describe('with both notification switches unset (#840)', () => {
     expect(provider.send).not.toHaveBeenCalled();
   });
 });
+describe('the dispatch log line (#840)', () => {
+  const dispatchLines = (log: { mock: { calls: unknown[][] } }) =>
+    log.mock.calls.map((call) => call.join(' ')).filter((line) => line.includes('dispatch'));
+  it('each run logs one line of counts, and no ids, tokens or names', async () => {
+    vi.stubEnv('ANDROID_NOTIFICATION_SENDS_ENABLED', 'false');
+    await create();
+    await create();
+    vi.stubEnv('ANDROID_NOTIFICATION_SENDS_ENABLED', 'true');
+    provider.send.mockImplementationOnce(async (_message, _signal, authorize) =>
+      (await authorize()) ? 'uncertain' : 'ineligible',
+    );
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      expect((await run()).status).toBe(200);
+      const lines = dispatchLines(log);
+      expect(lines).toEqual([
+        'Notification dispatch: considered=2 accepted=1 skipped=0 uncertain=1 failed=1',
+      ]);
+      expect(lines[0]).not.toMatch(
+        new RegExp(
+          [group, users.sam, phone, 'fictional-private-fcm-token', 'Sam', 'Fictional'].join('|'),
+        ),
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it('a run with the switches off logs its zero counts too', async () => {
+    vi.stubEnv('ANDROID_NOTIFICATION_SENDS_ENABLED', undefined);
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      await run();
+      expect(dispatchLines(log)).toEqual([
+        'Notification dispatch: considered=0 accepted=0 skipped=0 uncertain=0 failed=0',
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+});

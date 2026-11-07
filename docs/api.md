@@ -2408,6 +2408,10 @@ Newly published events schedule bounded post-response dispatch. An explicit
 `Authorization: Bearer <NOTIFICATION_DISPATCH_SECRET>` with a dedicated secret of at least
 32 bytes. No request body or query parameters are accepted. Responses contain only
 `considered`, `accepted`, `skipped` and `failed` counts. It creates no financial writes.
+Every dispatch run, explicit or after a new event, logs one counts-only line, such as
+`Notification dispatch: considered=2 accepted=1 skipped=0 uncertain=1 failed=1`, with no ids,
+tokens or names, so production checks need no database read. `failed` counts every provider
+outcome other than accepted, as in the response; `uncertain` is the part of it never resent.
 The pass considers at most 100 events and 100 deliveries, sends sequentially within 20 seconds,
 and starts no FCM request with fewer than ten seconds of invocation budget remaining.
 Provider work, including credential lookup, is capped at 15 seconds and the remaining budget.
