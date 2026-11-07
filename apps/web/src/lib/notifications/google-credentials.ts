@@ -9,8 +9,9 @@ import {
  * The FCM sender's Google credentials. Production holds no service-account key: a Vercel
  * Function's OIDC token is exchanged through Google Workload Identity Federation for a token of
  * the sender service account (docs/runbooks/android-notifications.md). With none of the four
- * settings present, local and dev keep Application Default Credentials. With only some present,
- * the sender fails closed and never falls back to Application Default Credentials.
+ * settings present, local and dev keep Application Default Credentials; on Vercel (`VERCEL` set)
+ * that is a configuration error instead. With only some present, the sender fails closed and
+ * never falls back to Application Default Credentials.
  */
 export const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 
@@ -51,7 +52,18 @@ export function googleCredentialConfig(): GoogleCredentialConfig {
     SETTINGS.map((name) => [name, process.env[name]?.trim() ?? '']),
   ) as Record<Setting, string>;
   const missing = SETTINGS.filter((name) => !values[name]);
-  if (missing.length === SETTINGS.length) return { kind: 'application-default' };
+  if (missing.length === SETTINGS.length) {
+    // A Vercel Function has no Application Default Credentials: on Vercel, unset is a mistake to
+    // log, not a reason to try ADC and end each send as an unexplained operational failure.
+    if (process.env.VERCEL?.trim()) {
+      throw new GoogleCredentialConfigError(
+        'Firebase sender Workload Identity settings are missing on Vercel: set ' +
+          SETTINGS.join(', ') +
+          '.',
+      );
+    }
+    return { kind: 'application-default' };
+  }
   if (missing.length > 0) {
     throw new GoogleCredentialConfigError(
       'Firebase sender Workload Identity settings are incomplete: set all of ' +

@@ -36,6 +36,8 @@ const network = vi.hoisted(() => ({
 const request = gaxios.Gaxios.prototype.request;
 beforeEach(() => {
   stubWif({});
+  // Off Vercel unless a test says otherwise; Vercel sets VERCEL=1 in its builds and functions.
+  vi.stubEnv('VERCEL', undefined);
   network.fetch.mockRejectedValue(new Error('No network in unit tests'));
   vi.spyOn(gaxios.Gaxios.prototype, 'request').mockImplementation(function (
     this: gaxios.Gaxios,
@@ -52,6 +54,39 @@ afterEach(() => {
 
 describe('Firebase sender credential selection', () => {
   it('uses Application Default Credentials when no Workload Identity setting is present', async () => {
+    const { googleCredentialConfig } = await load();
+    expect(googleCredentialConfig()).toEqual({ kind: 'application-default' });
+  });
+
+  it('fails loudly on Vercel when no Workload Identity setting is present, naming all four', async () => {
+    vi.stubEnv('VERCEL', '1');
+    const { googleCredentialConfig, GoogleCredentialConfigError } = await load();
+    expect(() => googleCredentialConfig()).toThrow(GoogleCredentialConfigError);
+    expect(() => googleCredentialConfig()).toThrow(
+      'Firebase sender Workload Identity settings are missing on Vercel: set ' +
+        'GCP_PROJECT_NUMBER, GCP_WORKLOAD_IDENTITY_POOL_ID, ' +
+        'GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID, GCP_SERVICE_ACCOUNT_EMAIL.',
+    );
+  });
+
+  it('on Vercel, blank settings count as missing too, and no ADC client is built', async () => {
+    vi.stubEnv('VERCEL', '1');
+    stubWif({ GCP_PROJECT_NUMBER: ' ', GCP_SERVICE_ACCOUNT_EMAIL: '' });
+    const fromJSON = vi.spyOn(ExternalAccountClient, 'fromJSON');
+    const { fcmCredentialClient, GoogleCredentialConfigError } = await load();
+    await expect(fcmCredentialClient()).rejects.toBeInstanceOf(GoogleCredentialConfigError);
+    expect(fromJSON).not.toHaveBeenCalled();
+  });
+
+  it('on Vercel, all four settings still select Workload Identity Federation', async () => {
+    vi.stubEnv('VERCEL', '1');
+    stubWif();
+    const { googleCredentialConfig } = await load();
+    expect(googleCredentialConfig()).toMatchObject({ kind: 'workload-identity' });
+  });
+
+  it('off Vercel, no setting still means Application Default Credentials', async () => {
+    vi.stubEnv('VERCEL', '');
     const { googleCredentialConfig } = await load();
     expect(googleCredentialConfig()).toEqual({ kind: 'application-default' });
   });

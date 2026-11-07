@@ -112,7 +112,7 @@ Replace each placeholder; none of these values are secrets, but keep them out of
      --member="principal://iam.googleapis.com/projects/<project-number>/locations/global/workloadIdentityPools/<pool-id>/subject/owner:<team-slug>:project:<project-name>:environment:production"
    ```
 
-7. **Set the Vercel environment variables** for Production (Settings → Environment Variables). Set all four, or none: with only some set, nothing is sent and nothing falls back to Application Default Credentials.
+7. **Set the Vercel environment variables** for Production (Settings → Environment Variables). Set all four: with only some set, or none on Vercel, nothing is sent, each send logs a configuration error naming the settings, and nothing falls back to Application Default Credentials.
 
    ```text
    GCP_PROJECT_NUMBER=<project-number>

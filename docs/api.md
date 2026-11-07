@@ -2406,10 +2406,11 @@ service-account key is stored anywhere (owner decision, 2026-11-07):
   - `GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID`: the pool's OIDC provider for Vercel;
   - `GCP_SERVICE_ACCOUNT_EMAIL`: the sender service account it impersonates.
 - **Locally and in dev:** with none of the four set, it uses Google Application Default
-  Credentials, as before.
-- **With only some set, or one malformed:** nothing is sent and there is no fallback to Application
-  Default Credentials. Each send logs one configuration error that names the missing or
-  malformed settings, never their values, and the delivery is `operational`.
+  Credentials, as before. On Vercel (`VERCEL` set), none set is a configuration error instead.
+- **With only some set, one malformed, or none on Vercel:** nothing is sent and there is no
+  fallback to Application Default Credentials. Each send logs one configuration error that
+  names the missing or malformed settings, never their values, and the delivery is
+  `operational`.
 
 The credential lookup (the Vercel token and both Google exchanges) ends with the invocation's
 deadline, like the send. No token is logged. The setup is in

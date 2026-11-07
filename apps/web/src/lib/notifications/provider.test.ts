@@ -32,6 +32,7 @@ const WIF_ENV = {
 };
 beforeEach(() => {
   for (const name of Object.keys(WIF_ENV)) vi.stubEnv(name, undefined);
+  vi.stubEnv('VERCEL', undefined);
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -161,5 +162,22 @@ describe('an incomplete Workload Identity configuration', () => {
     );
     expect(logged).not.toContain('123456789012');
     expect(logged).not.toContain('fcm-sender@');
+  });
+});
+
+describe('no Workload Identity settings on Vercel', () => {
+  it('sends nothing, uses no Application Default Credentials, and logs the missing settings', async () => {
+    vi.stubEnv('VERCEL', '1');
+    vi.stubEnv('FCM_PROJECT_ID', 'fictional-project');
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    expect(await sendFcm(message, AbortSignal.timeout(1_000))).toBe('operational');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(credentials.client).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(String(error.mock.calls[0][0])).toContain(
+      'Firebase sender Workload Identity settings are missing on Vercel',
+    );
   });
 });
