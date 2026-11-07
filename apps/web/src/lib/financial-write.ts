@@ -13,12 +13,35 @@ export interface ICreationRequest {
   legacyTagAlias?: string;
 }
 
+export interface ExpenseNotificationContext {
+  version: 2;
+  eventId: string;
+  kind: 'expense_added';
+  groupId: string;
+  recordId: string;
+  occurredAt: Date;
+  recipientIds: string[];
+}
+export const NotificationContextSchema = new Schema<ExpenseNotificationContext>(
+  {
+    version: { type: Number, enum: [2], required: true },
+    eventId: { type: String, required: true },
+    kind: { type: String, enum: ['expense_added'], required: true },
+    groupId: { type: String, required: true },
+    recordId: { type: String, required: true },
+    occurredAt: { type: Date, required: true },
+    recipientIds: { type: [String], required: true },
+  },
+  { _id: false },
+);
+
 export interface IPendingActivity {
   _id: Types.ObjectId;
   group: Types.ObjectId;
   type: ActivityType;
   actor: Types.ObjectId;
   occurredAt: Date;
+  notificationContext?: ExpenseNotificationContext;
   metadata: Record<string, unknown>;
 }
 
@@ -67,6 +90,7 @@ export const PendingActivitySchema = new Schema<IPendingActivity>({
   type: { type: String, required: true, enum: ACTIVITY_TYPES },
   actor: { type: Schema.Types.ObjectId, required: true },
   occurredAt: { type: Date, required: true },
+  notificationContext: { type: NotificationContextSchema, default: undefined },
   metadata: { type: Schema.Types.Mixed, default: {} },
 });
 

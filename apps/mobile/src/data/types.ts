@@ -446,6 +446,8 @@ export interface GroupCurrenciesState {
 }
 
 export interface MobileSnapshot {
+  notifications: import('./notification-controls').NotificationControls;
+  notificationOpening: import('./notification-alerts').NotificationOpening;
   /** Account → Connected assistants (#622): its list, Saved copy and Disconnect. */
   assistants: AssistantsState;
   tagManager: TagManagerState;
@@ -671,6 +673,7 @@ export interface NetworkState {
 }
 
 export interface MobileDependencies {
+  notifications?: import('./notification-controls').NotificationNative;
   /** Native identity acquisition only. The controller owns the app session. */
   googleSignIn?: () => Promise<GoogleIdentityResult>;
   /**

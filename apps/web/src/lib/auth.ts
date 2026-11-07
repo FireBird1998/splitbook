@@ -2,6 +2,7 @@ import 'server-only';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { connectedAuthAdapter, getAuthDb } from '@/lib/mongodb-client';
 import { createSplitbookAuth } from '@/lib/auth/create-auth';
+import { followSessionRenewal } from '@/lib/notifications/session-renewal';
 
 /**
  * The Better Auth instance (Node runtime only: route handler, server
@@ -12,10 +13,12 @@ import { createSplitbookAuth } from '@/lib/auth/create-auth';
  * user model; sessions, accounts, verifications and rate-limit counters get
  * their own collections. Ids stay ObjectIds through the adapter default.
  * `transaction: false` because local and CI run a standalone `mongod`. It runs
- * on the app's one client, connected before each of its calls (#826).
+ * on the app's one client, connected before each of its calls (#826). A
+ * session renewal moves its notification registrations to the new expiry.
  */
 export const auth = createSplitbookAuth({
   database: connectedAuthAdapter(
     mongodbAdapter(getAuthDb(), { usePlural: true, transaction: false }),
   ),
+  onSessionRenewed: followSessionRenewal,
 });

@@ -46,6 +46,8 @@ export interface AuthEnv extends AuthModeEnv {
 export interface CreateAuthInput {
   database: BetterAuthOptions['database'];
   env?: AuthEnv;
+  /** Runs after Better Auth renews a session; a failure never fails the request. */
+  onSessionRenewed?: (session: { id: string; expiresAt: Date }) => Promise<void>;
 }
 
 const endSessionBeforeSignOut = createAuthMiddleware(async (ctx) => {
@@ -58,7 +60,11 @@ function rateLimitEnabled(env: AuthEnv): boolean | undefined {
   return undefined;
 }
 
-export function buildAuthOptions({ database, env = process.env }: CreateAuthInput) {
+export function buildAuthOptions({
+  database,
+  env = process.env,
+  onSessionRenewed,
+}: CreateAuthInput) {
   const appUrl = env.NEXT_PUBLIC_APP_URL || undefined;
   const testIdTokenSecret = isTestIdTokenOverrideEnabled(env)
     ? env.AUTH_TEST_ID_TOKEN_SECRET
@@ -124,6 +130,16 @@ export function buildAuthOptions({ database, env = process.env }: CreateAuthInpu
           before: async (user) => {
             const { removeAccountDrafts } = await import('@/lib/services/draft-account-cleanup');
             await removeAccountDrafts(user.id);
+          },
+        },
+      },
+      session: {
+        update: {
+          after: async (session) => {
+            if (!session || !onSessionRenewed) return;
+            await onSessionRenewed(session).catch(() => {
+              console.error('A notification registration could not follow its session renewal.');
+            });
           },
         },
       },

@@ -1,3 +1,4 @@
+import { NotificationSettings, type NotificationSettingsProps } from './notification-settings';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import type { SessionUser } from '../data';
 import type { AppearanceMode } from '../data/appearance';
@@ -27,6 +28,7 @@ export const signOutInterruptedSave =
   'If a save was interrupted, check your saved history after signing in before creating it again.';
 
 export interface SettingsScreenProps {
+  notifications?: NotificationSettingsProps;
   user: SessionUser;
   appearance: SettingsAppearance;
   onAppearanceChange: (value: SettingsAppearance) => void;
@@ -73,6 +75,7 @@ const row = {
 
 /** Content only; the parent screen supplies the top bar, scrolling and Android Back behavior. */
 export function SettingsScreen({
+  notifications,
   user,
   appearance,
   onAppearanceChange,
@@ -107,6 +110,7 @@ export function SettingsScreen({
         Choose how {PRODUCT_NAME} looks and manage your session.
       </CompactText>
 
+      {notifications ? <NotificationSettings {...notifications} /> : null}
       <View style={{ gap: 6 }}>
         <SectionHeader title="Appearance" />
         <Card>

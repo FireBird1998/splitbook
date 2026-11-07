@@ -1,3 +1,5 @@
+import { after } from 'next/server';
+import { dispatchExpenseAlerts } from '@/lib/notifications/dispatch';
 import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import Activity from '@/lib/models/Activity';
@@ -5,6 +7,7 @@ import mongoose, { Types } from 'mongoose';
 import { fingerprintCreateCommand, type IPendingActivity } from '@/lib/financial-write';
 import type { ActivityType } from '@splitbook/shared/types';
 import { PERSON_FIELDS } from './person-fields';
+import { activityPayload, publicActivityProjection } from '@/lib/activity-boundary';
 
 export type ActivitySource = 'expenses' | 'settlements';
 
@@ -40,16 +43,6 @@ function recoveryBudget(budget: ActivityRecoveryBudget) {
   };
 }
 
-function activityPayload(event: IPendingActivity) {
-  return {
-    group: event.group,
-    type: event.type,
-    actor: event.actor,
-    metadata: event.metadata,
-    createdAt: event.occurredAt,
-  };
-}
-
 export class ActivityService {
   /**
    * Persist an immutable event once, then acknowledge its embedded intent. The two
@@ -70,6 +63,7 @@ export class ActivityService {
       String(event.group),
       async () => {
         const payload = activityPayload(event);
+        const expectedFingerprint = fingerprintCreateCommand(payload);
         try {
           await Activity.updateOne(
             { _id: event._id },
@@ -85,19 +79,25 @@ export class ActivityService {
           ) {
             throw err;
           }
-          const existing = await Activity.findById(event._id).maxTimeMS(maxTimeMS()).lean();
-          if (
-            !existing ||
-            fingerprintCreateCommand({
-              group: existing.group,
-              type: existing.type,
-              actor: existing.actor,
-              metadata: existing.metadata,
-              createdAt: existing.createdAt,
-            }) !== fingerprintCreateCommand(payload)
-          ) {
-            throw err;
-          }
+        }
+        const existing = await Activity.findById(event._id)
+          .select('+notificationContext')
+          .maxTimeMS(maxTimeMS())
+          .lean();
+        if (
+          !existing ||
+          fingerprintCreateCommand({
+            group: existing.group,
+            type: existing.type,
+            actor: existing.actor,
+            metadata: existing.metadata,
+            createdAt: existing.createdAt,
+            ...(existing.notificationContext
+              ? { notificationContext: existing.notificationContext }
+              : {}),
+          }) !== expectedFingerprint
+        ) {
+          throw new Error('Activity immutable event conflict');
         }
       },
       { deadline },
@@ -155,6 +155,22 @@ export class ActivityService {
     } catch (err) {
       result.failed += 1;
       console.error(`Activity publication could not connect for ${source}/${recordId}`, err);
+    }
+    if (result.published && events.some((event) => event.notificationContext)) {
+      // Next owns this bounded work after the response. Publication acknowledgement never waits for FCM.
+      try {
+        after(async () => {
+          try {
+            await dispatchExpenseAlerts(
+              events.filter((event) => event.notificationContext).map((event) => String(event._id)),
+            );
+          } catch {
+            /* independent delivery failure */
+          }
+        });
+      } catch {
+        /* Non-HTTP callers use the explicit dispatcher. */
+      }
     }
     return result;
   }
@@ -265,6 +281,7 @@ export class ActivityService {
 
     const [activities, total] = await Promise.all([
       Activity.find(filter)
+        .select(publicActivityProjection)
         .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(limit)

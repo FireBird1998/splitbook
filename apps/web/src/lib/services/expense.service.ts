@@ -180,6 +180,26 @@ export class ExpenseService {
         async () => {
           // In the insert's own mutation, so a removal of the currency can't come in between.
           await lockLedgerCurrency(groupId, data.currency);
+          // Read the current fenced Group inside the same commit; never reconstruct an audience later.
+          const committedGroup = await Group.findOne({ _id: groupId, 'members.user': userId });
+          if (!committedGroup) throw new Error('FORBIDDEN');
+          const membersAtCommit = new Set(
+            committedGroup.members.map((member) => String(member.user)),
+          );
+          assertExpenseParticipants(membersAtCommit, data.paidBy, data.splitBetween);
+          event.notificationContext = {
+            version: 2,
+            eventId: String(event._id),
+            kind: 'expense_added',
+            groupId,
+            recordId: String(id),
+            occurredAt: event.occurredAt,
+            recipientIds: [
+              ...new Set([...data.paidBy, ...data.splitBetween].map((row) => String(row.user))),
+            ]
+              .filter((candidate) => candidate !== userId && membersAtCommit.has(candidate))
+              .sort(),
+          };
           return Expense.create({
             ...command,
             preparedBy: options?.preparedBy,

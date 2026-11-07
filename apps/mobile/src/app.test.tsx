@@ -60,6 +60,14 @@ vi.mock('./runtime', () => ({
   googleSignInEnabled: false,
 }));
 
+// The native notification callbacks; App attaches them only with Android notifications on.
+const callbacks = vi.hoisted(() => ({
+  attach: vi.fn<(...args: unknown[]) => Promise<() => void>>(async () => () => undefined),
+}));
+vi.mock('./notification-callbacks', () => ({
+  attachNotificationCallbacks: callbacks.attach,
+}));
+
 const { default: App } = await import('../App');
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -763,6 +771,21 @@ describe('App refresh rendering', () => {
     pulled.release(json(page([september])));
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
+  });
+});
+
+describe('App notification callbacks (#839)', () => {
+  beforeEach(() => callbacks.attach.mockClear());
+  afterEach(() => vi.unstubAllEnvs());
+  it('attaches no native notification handler while Android notifications are off', async () => {
+    vi.stubEnv('EXPO_PUBLIC_ANDROID_NOTIFICATIONS_ENABLED', '');
+    await renderApp();
+    expect(callbacks.attach).not.toHaveBeenCalled();
+  });
+  it('attaches them once when Android notifications are on', async () => {
+    vi.stubEnv('EXPO_PUBLIC_ANDROID_NOTIFICATIONS_ENABLED', 'true');
+    await renderApp();
+    expect(callbacks.attach).toHaveBeenCalledTimes(1);
   });
 });
 

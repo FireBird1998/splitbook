@@ -2335,3 +2335,100 @@ Documented in earlier drafts but absent from the codebase:
   either Zod schema, so no request can populate it. See
   [`features/receipts.md`](features/receipts.md).
 - **`GET /api/groups/[id]/balances/simplified`** — folded into `/balances`.
+
+## Android notification device controls
+
+`GET /api/notifications/device?installationId=<uuid>` reads this phone's confirmed controls.
+It requires `X-Installation-Key`, the private installation ownership proof.
+`POST /api/notifications/device` accepts `installationId`, `installationKey`, the last
+confirmed integer `revision`, `enabled`, optional `expenseUpdates` and `payments`,
+and a direct Android `token` when enabling. Account, session and environment are derived
+on the server; caller-selected identity fields are refused.
+
+New installations and new account/session bindings start off. Explicit opt-in defaults both
+categories on. Each enabling or category off-to-on transition confirms a new activation
+generation and server cutoff; preferences are independent per installation across Groups.
+Responses contain `available`, `enabled`, `expenseUpdates`, `payments`, `revision`,
+`binding`, `activation`, `expenseActivation`, `expenseCutoff` and `paymentCutoff`. They never contain tokens or ownership
+proofs. A previous account's binding is returned as off to another account on the same
+installation. Installation ownership proof is still required; revisions remain monotonic
+across binding changes so older updates cannot overwrite newer bindings.
+
+Every response is `Cache-Control: private, no-store`. Authentication bypasses the signed
+cookie cache and writes fence against live persisted session revocation. An invalid session
+gets 401, a mismatched installation proof gets 403, a stale revision gets 409, and invalid
+schema input gets the standard 422 validation envelope. Opt-in requires the off-by-default
+`ANDROID_NOTIFICATIONS_ENABLED=true` server switch; turning off remains permitted.
+A registration lives exactly as long as its session. Better Auth sessions last 30 days and are
+renewed after a day of use; each renewal moves the session's registrations to the new expiry
+(a `session.update.after` hook, `src/lib/notifications/session-renewal.ts`), so a member who
+keeps using the app keeps getting alerts and keeps seeing their controls on. Reads, writes and
+dispatch refuse a registration whose stored expiry has passed, without waiting for the TTL index
+to delete it, and dispatch also rechecks the persisted session, so a revoked session sends nothing.
+These endpoints write only notification/session control state, never financial records.
+
+The availability switch is separate from confirmed consent: a previously enabled binding
+still returns its persisted preferences with `available: false` while the feature is paused.
+Clients must not interpret `enabled` alone as effective delivery permission. Disabling remains
+permitted while paused. Once its read answers `available: false`, Android Settings says
+"Notifications aren’t available yet." in place of Enable, the category switches and Turn off,
+for an opted-in phone as for any other (`notification-settings.tsx`); an opted-in phone keeps
+"Open Android notification settings". Its preferences stay stored and return when sending resumes.
+
+The shared `activation` changes on any category off-to-on transition. It is an authorization
+generation, not an instruction to replay another category. Later delivery slices must use
+`expenseCutoff` for Expense events and `paymentCutoff` for Payments; the unchanged category
+keeps its existing cutoff. Rechecking or replacing older-generation work must retain accepted
+event/installation history so a new preference generation cannot resend an accepted event.
+The Expense delivery generation `expenseActivation` changes only when Expense alerts are enabled
+or re-enabled. An unrelated Payments transition cannot resend an accepted Expense alert.
+
+## First Expense-added Android alert
+
+Manual Expense creation and saving a reviewed Draft capture the validated involved members,
+excluding the actor, in the financial commit's private recoverable Activity intent. Activity
+publication copies that immutable context and acknowledges the intent independently of FCM.
+Preparing or reviewing Drafts sends nothing. Legacy Activity without captured context is
+ineligible; public Activity, financial reads and exports omit the private context.
+
+Both `ANDROID_NOTIFICATIONS_ENABLED=true` and
+`ANDROID_NOTIFICATION_SENDS_ENABLED=true` are required to send. Both remain off until owner
+acceptance. The direct FCM adapter uses Google Application Default Credentials through the
+supported Google authentication library and an explicitly configured `FCM_PROJECT_ID`.
+Credential provisioning, scheduler setup and rollout require the separate owner setup.
+
+Pausing sending (either switch off) delays alerts rather than dropping them (owner decision,
+2026-11-07: deliver late). While paused, a dispatch writes no delivery and keeps its cursor.
+Once both switches are on again, the next explicit `POST /api/notifications/dispatch` sends the
+alerts for events from the last 24 hours, each with what remains of its 24-hour lifetime; the
+dispatch after a new event covers only that event. Older events have expired and are never sent.
+
+Newly published events schedule bounded post-response dispatch. An explicit
+`POST /api/notifications/dispatch` also runs one bounded pass; it requires
+`Authorization: Bearer <NOTIFICATION_DISPATCH_SECRET>` with a dedicated secret of at least
+32 bytes. No request body or query parameters are accepted. Responses contain only
+`considered`, `accepted`, `skipped` and `failed` counts. It creates no financial writes.
+Every dispatch run, explicit or after a new event, logs one counts-only line, such as
+`Notification dispatch: considered=2 accepted=1 skipped=0 uncertain=1 failed=1`, with no ids,
+tokens or names, so production checks need no database read. `failed` counts every provider
+outcome other than accepted, as in the response; `uncertain` is the part of it never resent.
+The pass considers at most 100 events and 100 deliveries, sends sequentially within 20 seconds,
+and starts no FCM request with fewer than ten seconds of invocation budget remaining.
+Provider work, including credential lookup, is capped at 15 seconds and the remaining budget.
+An environment cursor prevents already considered older pages from starving newer work.
+An indexed identity lookup excludes terminal and in-flight device deliveries before the device
+limit, so an accepted prefix cannot starve a later installation. Pending work and expired claims
+remain eligible.
+Budget exhaustion before provider I/O preserves pending work. Autonomous retries and recovery
+are deferred to the recovery ticket; accepted and uncertain outcomes are never resent here.
+
+Immediately before FCM, the server rechecks current membership, persisted session, binding,
+Expense preferences, activation cutoff, kill switches and event expiry. Eligible delivery
+identity includes event, environment, installation, binding and Expense activation. FCM data
+contains generic `title` and `message`, `channelId`, and a JSON version-2 envelope in `body`.
+The envelope carries event, recipient, Group and record identities, environment, binding,
+activation, occurrence and expiry. It contains no names, amounts, descriptions or credentials.
+A fixed generic FCM `notification` title/body and Android channel accompany the data so Expo
+SDK 58 invokes its foreground handler. Android allows at most 30 seconds of occurrence clock
+skew, while checking the exact 24-hour envelope lifetime and strict expiry.
+The remaining FCM TTL never extends the event's 24-hour lifetime.

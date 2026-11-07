@@ -247,3 +247,54 @@ Use Android SDK `apksigner verify --print-certs` on the APK. Register its packag
 Android recovery: if this phone cannot store the latest Expense entries, an incoming invitation waits on the form. After the entries are stored, Back opens the invitation; confirmed Save or Discard also opens it. A malformed link waits in the same way. Stored drafts and unconfirmed saves still allow opening invitations, and joining always requires an explicit tap.
 
 A Group’s own 403/404, or a response without the signed-in member, removes its saved views. A draft or unconfirmed Expense/payment stays blocked while its form is open. Leaving removes its device records in order after pending draft writes; Discard warns first for a save or payment that may already be recorded. Cleanup intent is recorded separately on refusal; a failed device removal keeps the record and shows an error without signing out. Startup retries deletion before restoring records, and a still-pending cleanup keeps them hidden and locked. A verified Groups list that omits a stored financial record’s Group checks that Group once: an archived Group counts as lost, as its own refusal would (#578), and offline/server/session-check failures delete nothing. A save to an archived Group, refused with 409 `GROUP_ARCHIVED`, says the Group was archived and blocks the form the same way. If access returns after cleanup, check the Group’s Expenses and payments before saving again.
+
+## Per-phone notification controls (#839)
+
+Notifications default off. The Settings controls are included only when
+`EXPO_PUBLIC_ANDROID_NOTIFICATIONS_ENABLED=true`; the backend separately requires
+`ANDROID_NOTIFICATIONS_ENABLED=true` for opt-in. Both stay unset in production until
+owner acceptance. The isolated fictional verification backend enables the server controls.
+
+Only **Enable notifications** requests Android permission. After Android allows it, the
+controller obtains a direct FCM token and waits for the authenticated backend to confirm
+opt-in. Expense updates and Payments initially start on and can then change independently
+on this phone across its Groups. The snapshot keeps the last confirmed values during a
+pending or failed update. Retry first reconciles the current backend revision; it never
+prompts for permission. Android settings remain available when permission is blocked or
+the backend cannot be reached.
+
+An installation identifier and private ownership proof persist in SecureStore per backend.
+They are device identity, not consent. Tokens are obtained for a live operation and never
+enter snapshots, saved copies or device storage. A new account/session starts off; native
+displayed and scheduled alerts are cleared when an account is invalidated. The registration
+API bypasses Better Auth's cookie cache and fences updates against persisted session
+revocation. Activation generations and per-category server cutoffs prevent later slices
+from sending historical changes when alerts are enabled again.
+
+Run `pnpm mobile verify:notifications` against the isolated `MOBILE_VERIFY_URL` for the
+two-phone Settings/controller/authenticated-HTTP journey. It substitutes only the native
+permission/token boundary and writes no financial records. Controller, rendered Settings
+and Expo boundary tests cover denial, OS blocking, offline/backend failures, confirmation,
+late results and cleanup. The device-controls verifier does not exercise financial event delivery.
+Real Android permission/dialog and FCM configuration checks remain platform acceptance;
+Node tests and browser checks cannot establish those native behaviors.
+
+## Expense-added alerts (#840)
+
+The native direct-FCM boundary sends a generic FCM notification alongside Expo SDK 58's data
+envelope; SDK 58 skips the foreground handler for data-only messages. Existing public Firebase
+client configuration can be supplied to prebuild with `ANDROID_GOOGLE_SERVICES_FILE`; the file
+stays outside Git. Server credentials never belong in the app. Permission requests remain
+limited to the explicit Settings enable action.
+
+The controller validates the version-2 environment/account/binding/activation/expiry envelope
+before processing a receipt or tap. Occurrence timestamps allow at most 30 seconds of device
+clock skew; expiry stays strict and the envelope lifetime must remain exactly 24 hours. Reading the affected Group refreshes quietly; other allowed
+receipts show only Splitbook and the fixed generic Expense text. Receipts retire affected
+financial saved copies through the existing controller ownership and never modify money.
+
+Warm and cold taps wait for restoration and read current authorized Group Activity. They do
+not look up a missing Expense for editing or record a payment. Forms and unresolved writes keep
+their contents; a valid tap is held for explicit later opening. Read failures retain an explicit
+retry. Access denial uses the existing unavailable state and removes inaccessible reads.
+Signing out clears the held destination and native alerts.

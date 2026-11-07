@@ -1,4 +1,11 @@
 import {
+  parseNotificationEnvelope,
+  notificationTaskProtected,
+  emptyNotificationOpening,
+  type NotificationEnvelope,
+} from './notification-alerts';
+import { emptyNotifications, notificationControls } from './notification-controls';
+import {
   groupCurrenciesPath,
   groupRatesPath,
   tagActionsPath,
@@ -376,6 +383,8 @@ const keptWorkUnreadable =
 function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
   return {
     auth,
+    notifications: emptyNotifications(),
+    notificationOpening: emptyNotificationOpening(),
     sharedDraftCollection: emptySharedDraftCollection(),
     assistants: emptyAssistants(),
     tagManager: emptyTagManager(),
@@ -757,6 +766,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const invalidate = () => {
     generation += 1;
+    notifications.reset();
+    pendingNotification = null;
+    notificationSeen.clear();
     offlineSession = false;
     savedCopies.retire();
     untrusted.clear();
@@ -1155,6 +1167,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     },
   });
   const { request, verifyGoogleBackend, revokeDetached } = transport;
+  const notifications = notificationControls({
+    native: dependencies.notifications,
+    owner: () => generation,
+    current,
+    authenticated: () => snapshot.auth.status === 'authenticated',
+    online: () => !offlineSession && !snapshot.offline.active && onlineManager.isOnline(),
+    state: () => snapshot.notifications,
+    publish: (notifications) => publish({ ...snapshot, notifications }),
+    request,
+  });
 
   /**
    * A read answered: from the server (`saved` undefined), or from this device's copy saved at
@@ -2517,6 +2539,133 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (rereadGroup && showingActivity() && snapshot.detail.id === groupId)
         await activityQueries.read(generation, { saved: true });
     }
+  };
+
+  let pendingNotification: NotificationEnvelope | null = null;
+  const notificationSeen = new Map<string, number>();
+  const notificationProtected = () => notificationTaskProtected(snapshot);
+  const matchingNotification = (event: NotificationEnvelope) => {
+    const confirmed = snapshot.notifications.confirmed;
+    return (
+      snapshot.auth.status === 'authenticated' &&
+      snapshot.auth.user?.id === event.accountId &&
+      event.environment === (config.googleEnvironment ?? 'development') &&
+      event.expiresAt > new Date(now()).toISOString() &&
+      confirmed.enabled &&
+      confirmed.expenseUpdates &&
+      confirmed.binding === event.binding &&
+      (confirmed.expenseActivation ?? confirmed.activation) === event.activation
+    );
+  };
+  const checkedNotification = async (value: unknown) => {
+    const event = parseNotificationEnvelope(value, now());
+    if (
+      !event ||
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.notifications.status === 'pending'
+    )
+      return null;
+    const owner = generation;
+    await notifications.read();
+    return current(owner) && matchingNotification(event) ? event : null;
+  };
+  /** Returns whether native may show the fixed generic preview. Never navigates or writes money. */
+  const receiveNotification = async (value: unknown) => {
+    const event = await checkedNotification(value);
+    if (!event) return false;
+    for (const [id, expiry] of notificationSeen) if (expiry <= now()) notificationSeen.delete(id);
+    if (notificationSeen.has(event.eventId)) return false;
+    notificationSeen.set(event.eventId, Date.parse(event.expiresAt));
+    while (notificationSeen.size > 1024)
+      notificationSeen.delete(notificationSeen.keys().next().value!);
+    const owner = generation;
+    const receiptRoute = route;
+    const quiet =
+      route.screen === 'group' && route.groupId === event.groupId && !notificationProtected();
+    ledgerChanged(event.groupId);
+    await removeLedgerCopies(event.groupId, owner);
+    if (!current(owner)) return false;
+    const stillQuiet = quiet && route === receiptRoute && !notificationProtected();
+    if (stillQuiet) await openGroup(event.groupId, false);
+    return current(owner) && !stillQuiet;
+  };
+  /** Explicit retry/open. A protected task keeps its contents and destination unchanged. */
+  const openPendingNotification = async () => {
+    const event = pendingNotification;
+    if (!event || notificationProtected()) return;
+    const owner = generation;
+    if (!matchingNotification(event)) {
+      pendingNotification = null;
+      publish({ ...snapshot, notificationOpening: emptyNotificationOpening() });
+      return;
+    }
+    publish({
+      ...snapshot,
+      notificationOpening: { status: 'opening', message: 'Checking Group access…' },
+    });
+    try {
+      // A hint cannot grant access. Read before changing the current destination.
+      await request('/api/groups/' + event.groupId, owner);
+      if (!current(owner) || pendingNotification !== event) return;
+      if (notificationProtected()) {
+        publish({
+          ...snapshot,
+          notificationOpening: {
+            status: 'held',
+            message: 'An update is ready. Open it when you’re finished.',
+          },
+        });
+        return;
+      }
+      if (!matchingNotification(event)) {
+        pendingNotification = null;
+        publish({ ...snapshot, notificationOpening: emptyNotificationOpening() });
+        return;
+      }
+      await openGroup(event.groupId, false, 'activity');
+      if (!current(owner) || pendingNotification !== event) return;
+      if (snapshot.activity.status === 'error' || snapshot.detail.status === 'error')
+        throw new Error('Notification read unavailable');
+      pendingNotification = null;
+      publish({ ...snapshot, notificationOpening: emptyNotificationOpening() });
+    } catch (error) {
+      if (!current(owner) || pendingNotification !== event) return;
+      if (notificationProtected()) {
+        publish({
+          ...snapshot,
+          notificationOpening: {
+            status: 'held',
+            message: 'An update is ready. Open it when you’re finished.',
+          },
+        });
+        return;
+      }
+      if (error instanceof RequestError && [403, 404].includes(error.status)) {
+        await openGroup(event.groupId, false, 'activity'); // existing denied-state and saved-copy cleanup
+        pendingNotification = null;
+        publish({ ...snapshot, notificationOpening: emptyNotificationOpening() });
+      } else
+        publish({
+          ...snapshot,
+          notificationOpening: {
+            status: 'error',
+            message: 'Couldn’t open the update. Retry when ready.',
+          },
+        });
+    }
+  };
+  const tapNotification = async (value: unknown) => {
+    const event = await checkedNotification(value);
+    if (!event) return;
+    pendingNotification = event;
+    publish({
+      ...snapshot,
+      notificationOpening: {
+        status: 'held',
+        message: 'An update is ready. Open it when you’re finished.',
+      },
+    });
+    if (!notificationProtected()) await openPendingNotification();
   };
 
   /** Open a Group on its Activity destination. */
@@ -5747,6 +5896,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openSettings = () => {
     if (snapshot.auth.status !== 'authenticated' || expenseNavigationBlocked()) return;
     navigate({ screen: 'settings' });
+    void notifications.read();
     // Whether the server has assistants switched on decides Account's Connected assistants.
     void assistantsData.read();
   };
@@ -8026,6 +8176,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     signInWithGoogle,
     startCreate,
     openSettings,
+    receiveNotification,
+    tapNotification,
+    openPendingNotification,
+    refreshNotifications: notifications.read,
+    enableNotifications: notifications.enable,
+    disableNotifications: notifications.disable,
+    setNotificationCategory: notifications.category,
+    retryNotifications: notifications.retry,
+    openNotificationSettings: notifications.openSettings,
     openAssistants,
     askDisconnectAssistant: (id: string) => assistantsData.ask(id),
     cancelDisconnectAssistant: () => assistantsData.cancel(),
