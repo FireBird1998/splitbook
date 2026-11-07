@@ -53,4 +53,36 @@ describe('per-phone Settings notification controls', () => {
     expect(onCategory).toHaveBeenCalledExactlyOnceWith('payments', true);
     act(() => screen.unmount());
   });
+  it('shows a paused feature as not available yet, for an opted-in phone too (#839)', () => {
+    const actions = {
+      onEnable: vi.fn(),
+      onCategory: vi.fn(),
+      onRetry: vi.fn(),
+      onAndroidSettings: vi.fn(),
+      onDisable: vi.fn(),
+    };
+    const paused = { ...emptyNotifications().confirmed, available: false };
+    for (const enabled of [false, true]) {
+      let screen!: ReturnType<typeof create>;
+      const confirmed = { ...paused, enabled, expenseUpdates: enabled, payments: enabled };
+      act(() => {
+        screen = create(
+          <NotificationSettings {...actions} state={{ status: 'ready', confirmed, message: '' }} />,
+        );
+      });
+      const texts = screen.root
+        .findAll((n) => (n.type as unknown) === 'Text')
+        .flatMap((n) => n.children.filter((child) => typeof child === 'string'))
+        .join(' ');
+      expect(texts).toContain('Notifications aren’t available yet.');
+      const labels = screen.root
+        .findAll((n) => (n.type as unknown) === 'Pressable' || (n.type as unknown) === 'Switch')
+        .map((n) => n.props.accessibilityLabel);
+      expect(labels).not.toContain('Enable notifications');
+      expect(labels).not.toContain('Turn off notifications');
+      expect(labels).not.toContain('Expense updates');
+      expect(labels.includes('Open Android notification settings')).toBe(enabled);
+      act(() => screen.unmount());
+    }
+  });
 });

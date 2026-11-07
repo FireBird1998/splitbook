@@ -2370,7 +2370,10 @@ These endpoints write only notification/session control state, never financial r
 The availability switch is separate from confirmed consent: a previously enabled binding
 still returns its persisted preferences with `available: false` while the feature is paused.
 Clients must not interpret `enabled` alone as effective delivery permission. Disabling remains
-permitted while paused; Settings shows the feature as unavailable and retains Android settings.
+permitted while paused. Once its read answers `available: false`, Android Settings says
+"Notifications aren’t available yet." in place of Enable, the category switches and Turn off,
+for an opted-in phone as for any other (`notification-settings.tsx`); an opted-in phone keeps
+"Open Android notification settings". Its preferences stay stored and return when sending resumes.
 
 The shared `activation` changes on any category off-to-on transition. It is an authorization
 generation, not an instruction to replay another category. Later delivery slices must use
@@ -2393,6 +2396,12 @@ Both `ANDROID_NOTIFICATIONS_ENABLED=true` and
 acceptance. The direct FCM adapter uses Google Application Default Credentials through the
 supported Google authentication library and an explicitly configured `FCM_PROJECT_ID`.
 Credential provisioning, scheduler setup and rollout require the separate owner setup.
+
+Pausing sending (either switch off) delays alerts rather than dropping them (owner decision,
+2026-11-07: deliver late). While paused, a dispatch writes no delivery and keeps its cursor.
+Once both switches are on again, the next explicit `POST /api/notifications/dispatch` sends the
+alerts for events from the last 24 hours, each with what remains of its 24-hour lifetime; the
+dispatch after a new event covers only that event. Older events have expired and are never sent.
 
 Newly published events schedule bounded post-response dispatch. An explicit
 `POST /api/notifications/dispatch` also runs one bounded pass; it requires
