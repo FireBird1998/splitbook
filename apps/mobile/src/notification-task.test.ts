@@ -1,0 +1,160 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  attachLiveReceiver,
+  expenseAlertChannel,
+  receiptBudget,
+  receiveNotificationTask,
+  type NotificationTaskDependencies,
+} from './notification-task';
+
+// Fictional identities only.
+const time = Date.now();
+const envelope = {
+  version: 2 as const,
+  kind: 'expense_added' as const,
+  eventId: 'd00000000000000000000001',
+  groupId: 'b00000000000000000000001',
+  recordId: 'c00000000000000000000001',
+  accountId: 'a00000000000000000000001',
+  environment: 'development' as const,
+  binding: '00000000-0000-4000-8000-000000000001',
+  activation: '00000000-0000-4000-8000-000000000002',
+  occurredAt: new Date(time - 1_000).toISOString(),
+  expiresAt: new Date(time - 1_000 + 86_400_000).toISOString(),
+};
+// What expo-notifications passes the task for a data-only FCM message on Android.
+const payload = {
+  data: { body: JSON.stringify(envelope), dataString: JSON.stringify(envelope) },
+  notification: null,
+};
+function task(overrides: Partial<NotificationTaskDependencies> = {}) {
+  return {
+    now: () => time,
+    visible: vi.fn(() => true),
+    withoutApp: vi.fn(async (): Promise<typeof envelope | null> => null),
+    present: vi.fn(async () => {}),
+    ...overrides,
+  } as NotificationTaskDependencies & {
+    visible: ReturnType<typeof vi.fn>;
+    withoutApp: ReturnType<typeof vi.fn>;
+    present: ReturnType<typeof vi.fn>;
+  };
+}
+let detach: (() => void) | undefined;
+afterEach(() => {
+  detach?.();
+  detach = undefined;
+  vi.useRealTimers();
+});
+
+describe('the notification task for data-only Expense alerts (#968)', () => {
+  it('foreground on the affected Group: the app refreshes it quietly and shows no alert', async () => {
+    const live = vi.fn(async () => false);
+    detach = attachLiveReceiver(live);
+    const d = task();
+    expect(await receiveNotificationTask(payload, d)).toBe(false);
+    expect(live).toHaveBeenCalledWith(payload.data, true);
+    expect(d.present).not.toHaveBeenCalled();
+    expect(d.withoutApp).not.toHaveBeenCalled();
+  });
+
+  it('foreground elsewhere: the app passes its checks and the generic alert shows', async () => {
+    detach = attachLiveReceiver(async () => true);
+    const d = task();
+    expect(await receiveNotificationTask(payload, d)).toBe(true);
+    expect(d.present).toHaveBeenCalledWith({
+      identifier: 'expense-added:' + envelope.eventId,
+      content: {
+        title: 'Splitbook',
+        body: 'An Expense was added.',
+        data: { body: JSON.stringify(envelope) },
+        sound: 'default',
+      },
+      trigger: { channelId: expenseAlertChannel },
+    });
+    // Generic: nothing of the Expense, its Group or its members.
+    const shown = d.present.mock.calls[0][0].content;
+    expect(shown.title + shown.body).not.toMatch(/[0-9a-f]{24}/);
+  });
+
+  it('background with the app still running: its checks run as not visible, so the alert shows', async () => {
+    const live = vi.fn(async (_data: unknown, visible: boolean) => !visible);
+    detach = attachLiveReceiver(live);
+    const d = task({ visible: vi.fn(() => false) });
+    expect(await receiveNotificationTask(payload, d)).toBe(true);
+    expect(live).toHaveBeenCalledWith(payload.data, false);
+    expect(d.present).toHaveBeenCalledOnce();
+  });
+
+  it('no app running: the checks without the app decide, and pass shows the alert', async () => {
+    const d = task({ withoutApp: vi.fn(async () => envelope) });
+    expect(await receiveNotificationTask(payload, d)).toBe(true);
+    expect(d.withoutApp).toHaveBeenCalledWith(payload.data);
+    expect(d.present).toHaveBeenCalledOnce();
+  });
+
+  it('no app running: a dropped envelope shows nothing', async () => {
+    const d = task();
+    expect(await receiveNotificationTask(payload, d)).toBe(false);
+    expect(d.present).not.toHaveBeenCalled();
+  });
+
+  it('after the app detaches, the task checks without it', async () => {
+    const live = vi.fn(async () => true);
+    attachLiveReceiver(live)();
+    const d = task();
+    await receiveNotificationTask(payload, d);
+    expect(live).not.toHaveBeenCalled();
+    expect(d.withoutApp).toHaveBeenCalledOnce();
+  });
+
+  it('a check that never answers shows nothing once its budget passes', async () => {
+    vi.useFakeTimers();
+    detach = attachLiveReceiver(() => new Promise<boolean>(() => {}));
+    const d = task();
+    const shown = receiveNotificationTask(payload, d);
+    await vi.advanceTimersByTimeAsync(receiptBudget);
+    expect(await shown).toBe(false);
+    expect(d.present).not.toHaveBeenCalled();
+  });
+
+  it('a failing check or presentation resolves false and never rejects', async () => {
+    detach = attachLiveReceiver(async () => {
+      throw new Error('Fictional failure');
+    });
+    expect(await receiveNotificationTask(payload, task())).toBe(false);
+    detach();
+    const d = task({
+      withoutApp: vi.fn(async () => envelope),
+      present: vi.fn(async () => {
+        throw new Error('Fictional presentation failure');
+      }),
+    });
+    expect(await receiveNotificationTask(payload, d)).toBe(false);
+  });
+
+  it('ignores action responses, malformed payloads and expired envelopes without checking', async () => {
+    const live = vi.fn(async () => true);
+    detach = attachLiveReceiver(live);
+    const d = task();
+    const expired = {
+      data: {
+        body: JSON.stringify({
+          ...envelope,
+          occurredAt: new Date(time - 86_400_001).toISOString(),
+          expiresAt: new Date(time - 1).toISOString(),
+        }),
+      },
+    };
+    for (const value of [
+      null,
+      { actionIdentifier: 'default', notification: {} },
+      { notification: null },
+      { data: { body: '{' } },
+      expired,
+    ])
+      expect(await receiveNotificationTask(value, d)).toBe(false);
+    expect(live).not.toHaveBeenCalled();
+    expect(d.present).not.toHaveBeenCalled();
+  });
+});

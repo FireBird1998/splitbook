@@ -217,6 +217,51 @@ describe('Expense notification receipt and tap at the Android controller seam', 
     });
     expect(requests.some((path) => path.includes('/expenses/' + expenseId))).toBe(false);
   });
+  it('in the background on the affected Group, the alert shows: a quiet refresh is for a visible app (#968)', async () => {
+    const controller = setup();
+    await controller.signIn('alex');
+    await controller.openActivity(groupId);
+    expect(await controller.receiveNotification(hint(), { visible: false })).toBe(true);
+    // Its route is untouched: nothing navigates while the member isn't looking.
+    expect(controller.getSnapshot()).toMatchObject({ screen: 'group', destination: 'activity' });
+  });
+  it("drops another account's envelope after a sign-out whose revoke failed and another sign-in (#968)", async () => {
+    const sam = {
+      id: 'a00000000000000000000002',
+      name: 'Sam',
+      email: 'sam@example.test',
+      image: null,
+    };
+    let account = user;
+    const controller = setup((url, init) => {
+      if (url.pathname.endsWith('/sign-out'))
+        return Promise.reject(new TypeError('Network request failed'));
+      if (url.pathname.endsWith('/sign-in')) {
+        account = String(init.body).includes('sam') ? sam : user;
+        return new Response(JSON.stringify({ user: account }), {
+          headers: {
+            'Set-Cookie': `better-auth.session_token=${account.name}.signature; Max-Age=2592000`,
+          },
+        });
+      }
+      if (url.pathname.endsWith('/get-session'))
+        return json({
+          user: account,
+          session: { userId: account.id, expiresAt: '2030-01-01T00:00:00Z' },
+        });
+    });
+    await controller.signIn('alex');
+    await controller.signOut();
+    expect(controller.getSnapshot().auth.status).toBe('sign-out-unconfirmed');
+    await controller.signIn('sam');
+    expect(controller.getSnapshot().auth).toMatchObject({ status: 'authenticated', user: sam });
+    const screen = controller.getSnapshot().screen;
+    // Alex's session outlived the failed revoke, so Alex's alerts still reach this phone.
+    expect(await controller.receiveNotification(hint())).toBe(false);
+    expect(await controller.receiveNotification(hint(), { visible: false })).toBe(false);
+    await controller.tapNotification(hint());
+    expect(controller.getSnapshot().screen).toBe(screen);
+  });
   it('bounds occurrence skew at 30 seconds and leaves expiry strict', () => {
     const time = Date.now();
     const at = (occurred: number, expires = occurred + 86_400_000) =>

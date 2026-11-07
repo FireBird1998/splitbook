@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNotificationNative } from './notifications-native';
 import { attachNotificationCallbacks } from './notification-callbacks';
+import { notificationTaskName, receiveNotificationTask } from './notification-task';
 const native = vi.hoisted(() => ({
   getPermissionsAsync: vi.fn(async () => ({ granted: false, canAskAgain: true })),
   requestPermissionsAsync: vi.fn(async () => ({ granted: true, canAskAgain: true })),
@@ -17,6 +18,7 @@ const native = vi.hoisted(() => ({
   }),
   getLastNotificationResponseAsync: vi.fn(async (): Promise<unknown> => null),
   clearLastNotificationResponseAsync: vi.fn(async () => {}),
+  registerTaskAsync: vi.fn(async () => null),
 }));
 const storage = vi.hoisted(() => new Map<string, string>());
 vi.mock('expo-notifications', () => native);
@@ -72,24 +74,82 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
       content: { data: { version: 2, eventId: 'fictional' } },
     },
   };
-  it('passes receipt decisions to native presentation without prompting', async () => {
+  it('presents only the generic alert the notification task posted, quietly, and never a push itself (#968)', async () => {
+    const controller = {
+      receiveNotification: vi.fn(async () => true),
+      tapNotification: vi.fn(async () => {}),
+    };
+    const stop = await attachNotificationCallbacks(controller, Promise.resolve());
+    const handler = native.setNotificationHandler.mock.calls[0][0];
+    const posted = {
+      request: {
+        identifier: 'expense-added:d00000000000000000000001',
+        content: notification.request.content,
+        trigger: { type: 'channel', channelId: 'ledger-updates' },
+      },
+    };
+    expect(await handler.handleNotification(posted)).toEqual({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    });
+    // A message with a notification block reaches this handler unchecked: it never shows.
+    const pushed = {
+      request: { ...notification.request, trigger: { type: 'push', remoteMessage: {} } },
+    };
+    expect(await handler.handleNotification(pushed)).toMatchObject({
+      shouldShowBanner: false,
+      shouldShowList: false,
+    });
+    expect(
+      await handler.handleNotification({
+        request: {
+          ...posted.request,
+          identifier: 'expense-added:x',
+          trigger: pushed.request.trigger,
+        },
+      }),
+    ).toMatchObject({ shouldShowBanner: false });
+    expect(controller.receiveNotification).not.toHaveBeenCalled();
+    expect(native.requestPermissionsAsync).not.toHaveBeenCalled();
+    stop();
+  });
+  it('registers the notification task and lends it the controller until teardown (#968)', async () => {
     const controller = {
       receiveNotification: vi.fn(async () => false),
       tapNotification: vi.fn(async () => {}),
     };
     const stop = await attachNotificationCallbacks(controller, Promise.resolve());
-    const handler = native.setNotificationHandler.mock.calls[0][0];
-    expect(await handler.handleNotification(notification)).toMatchObject({
-      shouldShowBanner: false,
-      shouldShowList: false,
-    });
-    controller.receiveNotification.mockResolvedValue(true);
-    expect(await handler.handleNotification(notification)).toMatchObject({
-      shouldShowBanner: true,
-      shouldShowList: true,
-    });
-    expect(native.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(native.registerTaskAsync).toHaveBeenCalledWith(notificationTaskName);
+    const occurred = Date.now() - 1_000;
+    const envelope = {
+      version: 2,
+      kind: 'expense_added',
+      eventId: 'd00000000000000000000001',
+      groupId: 'b00000000000000000000001',
+      recordId: 'c00000000000000000000001',
+      accountId: 'a00000000000000000000001',
+      environment: 'development',
+      binding: '00000000-0000-4000-8000-000000000001',
+      activation: '00000000-0000-4000-8000-000000000002',
+      occurredAt: new Date(occurred).toISOString(),
+      expiresAt: new Date(occurred + 86_400_000).toISOString(),
+    };
+    const payload = { data: { body: JSON.stringify(envelope) }, notification: null };
+    const d = {
+      now: Date.now,
+      visible: () => false,
+      withoutApp: vi.fn(async () => null),
+      present: vi.fn(async () => {}),
+    };
+    await receiveNotificationTask(payload, d);
+    expect(controller.receiveNotification).toHaveBeenCalledWith(payload.data, { visible: false });
+    expect(d.withoutApp).not.toHaveBeenCalled();
     stop();
+    await receiveNotificationTask(payload, d);
+    expect(controller.receiveNotification).toHaveBeenCalledOnce();
+    expect(d.withoutApp).toHaveBeenCalledOnce();
   });
   it('cold response waits for restoration, forwards only data and clears the consumed native response', async () => {
     let restore!: () => void;
