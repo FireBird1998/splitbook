@@ -1,4 +1,8 @@
-import { GoogleAuth } from 'google-auth-library';
+import {
+  fcmCredentialClient,
+  forgetFcmCredentialClients,
+  GoogleCredentialConfigError,
+} from './google-credentials';
 
 export interface FcmRequest {
   token: string;
@@ -12,8 +16,11 @@ export type SendOutcome =
   | 'operational'
   | 'uncertain'
   | 'ineligible';
-const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/firebase.messaging'] });
-/** Only external boundary replaced by HTTP acceptance tests. ADC belongs to the server owner. */
+/**
+ * Only external boundary replaced by HTTP acceptance tests. Credentials come from
+ * ./google-credentials: Vercel OIDC through Workload Identity Federation in production,
+ * Application Default Credentials locally.
+ */
 function withinSignal<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     const abort = () => reject(signal.reason ?? new Error('Notification deadline expired'));
@@ -35,11 +42,17 @@ export async function sendFcm(
   if (!project || !/^[a-z][a-z0-9-]{4,62}$/.test(project)) return 'operational';
   let authorization: string;
   try {
-    const client = await withinSignal(auth.getClient(), signal);
+    // The whole lookup, the Vercel token and both Google exchanges included, ends with the signal.
+    const client = await withinSignal(fcmCredentialClient(), signal);
     const token = await withinSignal(client.getAccessToken(), signal);
     if (!token.token) return 'operational';
     authorization = 'Bearer ' + token.token;
-  } catch {
+  } catch (error) {
+    // Only a configuration error is logged: it names settings, never values. Any other lookup
+    // error may carry Google's or Vercel's response, so it is dropped.
+    if (error instanceof GoogleCredentialConfigError) console.error(error.message);
+    // A lookup left pending at the deadline would otherwise be shared by every later send.
+    if (signal.aborted) forgetFcmCredentialClients();
     return 'operational';
   }
   if (signal.aborted) return 'operational';
