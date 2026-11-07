@@ -112,3 +112,20 @@ describe('refresh status', () => {
     expect(byRole(root, 'progressbar')).toHaveLength(0);
   });
 });
+
+// #966: offline over the saved Group, the one card names it, and when it was checked if known.
+describe('offline card over the saved Group (#966)', () => {
+  it('drops “checked” when no Group check time is known, rather than inventing one', async () => {
+    const { savedGroupOfflineMessage } = await import('./offline-notice');
+    const at = new Date(2026, 10, 7, 16, 24).getTime();
+    expect(savedGroupOfflineMessage({ refreshedAt: at, held: true })).toBe(
+      `Using the saved Group, checked ${refreshedLabel(at)}. Paid by and Split stay as they are until you’re back online.`,
+    );
+    expect(savedGroupOfflineMessage({ refreshedAt: null, held: true })).toBe(
+      'Using the saved Group. Paid by and Split stay as they are until you’re back online.',
+    );
+    expect(savedGroupOfflineMessage({ refreshedAt: null, held: false })).toBe(
+      'Using the saved Group.',
+    );
+  });
+});
