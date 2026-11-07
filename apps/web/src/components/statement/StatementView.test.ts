@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { buildStatement } from '@splitbook/shared/statement';
 import type { BackupExpenseInput, BackupGroupInput } from '@splitbook/shared/export-backup';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
-import { images, stylesOf, text } from '@/lib/test-utils/markup';
+import { images, scrollBoxes, stylesOf, text } from '@/lib/test-utils/markup';
 import StatementView from './StatementView';
 import { statementSummary } from './statement-summary';
 
@@ -800,4 +800,13 @@ it('lets a long name-and-amount line wrap, and keeps an everyday one whole (#928
     const rules = line.nested.map((rule) => `${rule.selector}{${rule.body}}`).join('');
     expect(rules).toMatch(/\+\*\{[^}]*margin-top:4px/);
   }
+});
+
+// #946: the statement's tables scroll sideways on a phone. Each scroll box is positioned, as the
+// shared scroll box is, so any visually hidden text (position: absolute) a cell holds stays in
+// it and never widens the page, as the Payments table's "No note" did (#944).
+it('puts each table that scrolls sideways in a positioned box (#946)', () => {
+  const boxes = scrollBoxes(tripHtml());
+  expect(boxes.length).toBeGreaterThan(0);
+  expect(boxes.filter((box) => !box.positioned)).toEqual([]);
 });

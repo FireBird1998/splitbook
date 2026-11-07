@@ -8,7 +8,7 @@ import type {
 } from '@splitbook/shared/group-insights-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { DETAIL_IDS, SEPTEMBER_DETAIL } from '@/lib/test-utils/insights-month-detail';
-import { anchors, text } from '@/lib/test-utils/markup';
+import { anchors, scrollBoxes, stylesOf, text } from '@/lib/test-utils/markup';
 import ByTagCard, { type ByTagCardProps } from './ByTagCard';
 import GroupInsightsView, { type GroupInsightsViewProps } from './GroupInsightsView';
 import RecurringExpensesCard, { type RecurringExpensesCardProps } from './RecurringExpensesCard';
@@ -254,6 +254,73 @@ describe('By Tag', () => {
     expect(region).toContain('tabindex="0"');
     expect(markup).toMatch(/aria-pressed="true"[^>]*>Table</);
     expect(tableRows(markup)).toHaveLength(5);
+  });
+
+  it('wraps a Tag name only between words or after a hyphen, and keeps amounts whole (#951)', () => {
+    const markup = render({ initialView: 'table' });
+    const names = stylesOf(markup, 'by-tag-name');
+    // Household, Utilities, Groceries and Untagged.
+    expect(names).toHaveLength(4);
+    names.forEach((name) => {
+      // Never inside a word: a word wider than the column stays whole and the table scrolls.
+      expect(name.value('overflow-wrap')).toBeUndefined();
+      expect(name.value('word-break')).toBeUndefined();
+      expect(name.value('white-space')).toBeUndefined();
+    });
+    const amounts = stylesOf(markup, 'by-tag-amount');
+    expect(amounts).toHaveLength(12);
+    amounts.forEach((amount) => expect(amount.value('white-space')).toBe('nowrap'));
+  });
+
+  it('keeps at least 12 px between a Tag name and its first amount, however long the name (#951)', () => {
+    const markup = render({ initialView: 'table' });
+    // A body row is one <th> (the Tag name, first child) and then three <td>s (the amounts),
+    // so `:first-of-type` and `:last-of-type` both match the name, and `:first-of-type` the
+    // first amount. Which of each cell's nested rules apply where it sits in the row:
+    type Place = Record<
+      ':first-child' | ':last-child' | ':first-of-type' | ':last-of-type',
+      boolean
+    >;
+    const NAME: Place = {
+      ':first-child': true,
+      ':last-child': false,
+      ':first-of-type': true,
+      ':last-of-type': true,
+    };
+    const FIRST_AMOUNT: Place = {
+      ':first-child': false,
+      ':last-child': false,
+      ':first-of-type': true,
+      ':last-of-type': false,
+    };
+    const applies = (selector: string, place: Place) => {
+      const pseudo = selector.trim();
+      if (!(pseudo in place)) throw new Error(`Unexpected rule on a By Tag cell: ${selector}`);
+      return place[pseudo as keyof Place];
+    };
+    const padding = (
+      cell: ReturnType<typeof stylesOf>[number],
+      side: 'left' | 'right',
+      place: Place,
+    ) => {
+      let value = cell.value(`padding-${side}`) ?? '0px';
+      for (const rule of cell.nested) {
+        if (!applies(rule.selector, place)) continue;
+        const set = new RegExp(`(?:^|;)padding-${side}:([^;]+)`).exec(rule.body)?.[1];
+        if (set) value = set;
+      }
+      return Number.parseFloat(value);
+    };
+    const names = stylesOf(markup, 'by-tag-name');
+    const amounts = stylesOf(markup, 'by-tag-amount');
+    expect(names).toHaveLength(4);
+    names.forEach((name, row) => {
+      const firstAmount = amounts[row * 3];
+      // The name may fill its column (one long word), and the amount is right-aligned in its
+      // own, so in the narrowest table only the two paddings keep the texts apart.
+      const between = padding(name, 'right', NAME) + padding(firstAmount, 'left', FIRST_AMOUNT);
+      expect(between).toBeGreaterThanOrEqual(12);
+    });
   });
 
   it('has no average columns or ticks in the Group’s first Month', () => {
@@ -606,5 +673,42 @@ describe('the recurring gate on the tab', () => {
     expect(text(markup)).toContain('Spending by Tag could not be loaded.');
     expect(text(markup)).toContain('₹6,677.00');
     expect(text(markup)).toContain('Wi-Fi');
+  });
+});
+
+// #946: each table's caption is visually hidden (position: absolute). In a scroll box with no
+// position it kept its place past the box's right edge and could widen the page on a phone, as
+// the Payments table's "No note" did (#944). Each scroll box is positioned, so it stays in it.
+describe('each table that scrolls sideways keeps its hidden text in its box (#946)', () => {
+  it.each([
+    [
+      'Who paid this month table',
+      () =>
+        html(
+          createElement(WhoPaidCard, {
+            groupId: GROUP,
+            userId: alex,
+            read: READ,
+            state: 'ready',
+            onRetry: noop,
+          }),
+        ),
+    ],
+    [
+      'Spending by Tag table',
+      () =>
+        html(
+          createElement(ByTagCard, {
+            read: READ,
+            state: 'ready',
+            onRetry: noop,
+            initialView: 'table',
+          }),
+        ),
+    ],
+  ])('%s', (label, markup) => {
+    const boxes = scrollBoxes(markup());
+    expect(boxes).toContainEqual({ label, positioned: true, holdsHiddenText: true });
+    expect(boxes.filter((box) => !box.positioned)).toEqual([]);
   });
 });

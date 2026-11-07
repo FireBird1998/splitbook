@@ -26,6 +26,7 @@ import {
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
 import { lineMayWrap } from './person-name';
 import { statementSummary } from './statement-summary';
+import { scrollBox } from '@/components/common/scroll-box';
 
 const light = getSemanticTokens('light');
 /** A whole trip's Expenses and Payments outside the Trip's dates. */
@@ -153,7 +154,7 @@ function StatementTable({
       aria-label={title}
       tabIndex={0}
       sx={{
-        overflowX: 'auto',
+        ...scrollBox,
         '&:focus-visible': { outline: '2px solid', outlineColor: 'focus.main', outlineOffset: 2 },
       }}
     >

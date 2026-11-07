@@ -50,6 +50,7 @@ import type { GroupTagOption } from './expense-form-helpers';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { memberLabel } from '@splitbook/shared/activity-timeline';
 import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
+import { scrollBox } from '@/components/common/scroll-box';
 
 export interface ExpenseFieldsProps {
   values: Omit<ExpenseDraftValues, 'splitMethod'> & {
@@ -310,7 +311,7 @@ export default function ExpenseFields({
           sx={{
             display: 'flex',
             gap: 1,
-            overflowX: 'auto',
+            ...scrollBox,
             // Room for a chip's focus ring, which the scroll row would clip (#830); the margins
             // keep the row where it was, its 4px below included. "&&" outranks the Stack's own
             // margin reset on its children.

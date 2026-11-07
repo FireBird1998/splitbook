@@ -18,6 +18,7 @@ import {
 import { compactMoney, valueAxis } from '@/components/dashboard/spending-chart';
 import { visuallyHidden } from '@/components/insights/a11y';
 import type { TripCardState, TripDayChart, TripDayRow } from './trip-summary';
+import { scrollBox } from '@/components/common/scroll-box';
 
 /*
  * "Day by day" on a Trip's Insights tab (#316, design canvas "Web portal", Trip Group): each of
@@ -387,8 +388,7 @@ function DayTable({ model, hidden = false }: { model: TripDayChart; hidden?: boo
         'aria-label': 'Day by day, as a table',
         tabIndex: 0,
         sx: {
-          position: 'relative',
-          overflowX: 'auto',
+          ...scrollBox,
           borderRadius: 1,
           '&:focus-visible': { outline: 2, outlineColor: 'focus.main', outlineOffset: -2 },
         },

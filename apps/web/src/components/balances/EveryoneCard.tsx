@@ -19,6 +19,7 @@ import {
   type PhrasePart,
 } from './everyone-chart';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { scrollBox } from '@/components/common/scroll-box';
 
 /*
  * Balances' "Everyone" (#313, design canvas "Web portal", GroupBalances): each person's
@@ -133,8 +134,7 @@ export default function EveryoneCard({
           sx={{
             // Positioned, so the cells' visually hidden text is clipped here when the columns
             // scroll out of view, and never widens the page.
-            position: 'relative',
-            overflowX: 'auto',
+            ...scrollBox,
             pb: 1,
             borderBottomLeftRadius: '16px',
             borderBottomRightRadius: '16px',

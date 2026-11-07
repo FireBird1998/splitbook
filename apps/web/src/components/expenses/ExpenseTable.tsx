@@ -23,6 +23,7 @@ import type { ExpenseSelection } from './expense-selection';
 import type { TripDayHeading } from './expense-trip-days';
 import { expenseLocalDate } from '@splitbook/shared/expense-day';
 import { counted } from '@splitbook/shared/separator';
+import { scrollBox } from '@/components/common/scroll-box';
 
 /** The table's columns, as the design canvas ("GroupExpenses") lays them out. */
 export const EXPENSE_TABLE_COLUMNS = [
@@ -224,9 +225,9 @@ export default function ExpenseTable({
   const selecting = ticked.length > 0;
   // A click on the checkbox ticks it, and never opens the row too.
   const keepToCheckbox = (event: { stopPropagation: () => void }) => event.stopPropagation();
-  const scrollBox = useRef<HTMLDivElement>(null);
+  const scrollArea = useRef<HTMLDivElement>(null);
   const table = useRef<HTMLTableElement>(null);
-  useExpenseTableLayout(scrollBox, table, expenses);
+  useExpenseTableLayout(scrollArea, table, expenses);
   const [scrolled, setScrolled] = useState(false);
   return (
     <Box
@@ -245,15 +246,10 @@ export default function ExpenseTable({
       {/* Positioned, so the cells' visually hidden "you" is clipped here with its cell and
           never widens the page (#944). */}
       <Box
-        ref={scrollBox}
+        ref={scrollArea}
         data-scrolled={scrolled || undefined}
         onScroll={(event) => setScrolled(event.currentTarget.scrollLeft > 0)}
-        sx={{
-          position: 'relative',
-          overflowX: 'auto',
-          containerName: SCROLL_BOX,
-          containerType: 'scroll-state',
-        }}
+        sx={{ ...scrollBox, containerName: SCROLL_BOX, containerType: 'scroll-state' }}
       >
         <Box
           component="table"

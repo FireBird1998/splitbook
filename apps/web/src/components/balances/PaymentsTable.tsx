@@ -16,6 +16,7 @@ import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import ErrorState from '@/components/common/ErrorState';
 import { TabCard, PaysArrow, PersonAvatar, visuallyHidden } from './TabCard';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { scrollBox } from '@/components/common/scroll-box';
 
 /** Someone named in a payment, as the settlements read populates them; null for an account gone. */
 type PaymentPerson = { _id: string; name?: string } | null | undefined;
@@ -139,8 +140,7 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
             // is clipped here with its cell. Unpositioned, an empty Note's "No note" kept its
             // place in a table wider than the screen and widened the whole page: at 390 px,
             // Maple House's Balances scrolled 478 px sideways (#944).
-            position: 'relative',
-            overflowX: 'auto',
+            ...scrollBox,
             pb: 1,
             borderBottomLeftRadius: '16px',
             borderBottomRightRadius: '16px',

@@ -21,6 +21,7 @@ import {
   type SpendingMonthRow,
 } from './spending-chart';
 import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
+import { scrollBox } from '@/components/common/scroll-box';
 
 /*
  * Home's "Your share of spending" (#307, design canvas "Web portal"): six Months of the member's
@@ -331,7 +332,7 @@ function SpendingTable({ model, hidden = false }: { model: SpendingChartModel; h
     : {
         // Positioned, so the cells' visually hidden text is clipped here with the columns
         // scrolled out of view, and never widens the page.
-        sx: { position: 'relative', overflowX: 'auto', borderRadius: 1 },
+        sx: { ...scrollBox, borderRadius: 1 },
         tabIndex: 0,
         role: 'group',
         'aria-labelledby': captionId,

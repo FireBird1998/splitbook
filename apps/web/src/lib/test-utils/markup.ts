@@ -135,3 +135,43 @@ export function stylesOf(html: string, marker: string) {
       };
     });
 }
+
+/** The element whose opening tag starts at `start`, through its matching closing tag. */
+function element(html: string, start: number): string {
+  const name = /^<([a-z]+)/.exec(html.slice(start))![1];
+  const tags = new RegExp(`<(/?)${name}\\b[^>]*>`, 'g');
+  tags.lastIndex = start;
+  let depth = 0;
+  for (let tag = tags.exec(html); tag; tag = tags.exec(html)) {
+    if (tag[0].endsWith('/>')) continue;
+    depth += tag[1] ? -1 : 1;
+    if (depth === 0) return html.slice(start, tags.lastIndex);
+  }
+  return html.slice(start);
+}
+
+/*
+ * Each box that scrolls sideways (its own rule sets `overflow-x` or `overflow` to auto or
+ * scroll), by its accessible name: whether it holds visually hidden text (an element inside it
+ * whose own rule is `position: absolute`) and whether it is positioned, so that text stays in
+ * it. Unpositioned, hidden text in a table wider than the screen widens the page (#944, #946).
+ */
+export function scrollBoxes(html: string) {
+  const css = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('');
+  const own = (tag: string) => {
+    const hash = /\bclass="[^"]*?\b(css-[\w-]+)/.exec(tag)?.[1];
+    return hash ? (new RegExp(`(?:^|\\})\\.${hash}\\{([^}]*)\\}`).exec(css)?.[1] ?? '') : '';
+  };
+  return [...html.matchAll(/<[a-z]+\b[^>]*\bclass="[^"]*"[^>]*>/g)]
+    .filter(([tag]) => /(?:^|;)overflow(?:-x)?:(?:auto|scroll)/.test(own(tag)))
+    .map((match) => {
+      const inside = element(html, match.index).slice(match[0].length);
+      return {
+        label: /\saria-label="([^"]*)"/.exec(match[0])?.[1] ?? null,
+        positioned: /(?:^|;)position:(?:relative|absolute|fixed|sticky)/.test(own(match[0])),
+        holdsHiddenText: [...inside.matchAll(/<[a-z]+\b[^>]*\bclass="[^"]*"[^>]*>/g)].some(
+          ([tag]) => /(?:^|;)position:absolute/.test(own(tag)),
+        ),
+      };
+    });
+}

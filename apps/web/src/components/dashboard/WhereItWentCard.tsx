@@ -15,6 +15,7 @@ import { HomeCard, HomeCardBody, HomeCardEmpty, HomeCardError, HomeCardLoading }
 import { spendingField, useHomeSpending, type CardRead } from './home-reads';
 import { thisMonthName, whereItWentModel, type WhereItWentModel } from './where-it-went';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { scrollBox } from '@/components/common/scroll-box';
 
 /*
  * Home's "Where it went" (#308, design canvas "Web portal"): the member's share of this Month
@@ -189,7 +190,7 @@ function CategoryTable({
             'aria-label': 'Your share by Category table',
             tabIndex: 0,
             sx: {
-              overflowX: 'auto',
+              ...scrollBox,
               '&:focus-visible': { outline: 2, outlineColor: 'focus.main', outlineOffset: -2 },
             },
           })}
