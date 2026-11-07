@@ -163,6 +163,67 @@ describe('a data-only Expense alert with no app running (#968)', () => {
     ).toBeNull();
   });
 
+  describe('the account checked again once the server answers', () => {
+    // The server read is the slow step: a sign-out can start, or the saved session can change,
+    // while it is pending. Nothing shows unless the phone is still signed in to the same account.
+    function pending(overrides: Partial<NotificationAccess> = {}) {
+      let answer!: (value: unknown) => void;
+      const access = phone({
+        controls: vi.fn(
+          () =>
+            new Promise<unknown>((resolve) => {
+              answer = resolve;
+            }),
+        ),
+        ...overrides,
+      });
+      const result = check(received(), access);
+      return {
+        access,
+        result,
+        answer: async () => {
+          await vi.waitFor(() => expect(access.controls).toHaveBeenCalledOnce());
+          answer(controls());
+          return result;
+        },
+      };
+    }
+
+    it('drops it when a sign-out starts while the server read is pending', async () => {
+      let leaving = false;
+      const read = pending({ leaving: async () => leaving });
+      await vi.waitFor(() => expect(read.access.controls).toHaveBeenCalledOnce());
+      leaving = true;
+      expect(await read.answer()).toBeNull();
+    });
+
+    it.each([
+      ['the saved session is gone', null],
+      [
+        'the saved session is now another account’s',
+        { cookie: 'better-auth.session_token=sam.signature', accountId: sam },
+      ],
+      [
+        'the saved session is now unverified',
+        { cookie: 'better-auth.session_token=alex.signature', accountId: null },
+      ],
+    ])('drops it when %s by the time the server answers', async (_case, later) => {
+      let session: { cookie: string; accountId: string | null } | null = {
+        cookie: 'better-auth.session_token=alex.signature',
+        accountId: alex,
+      };
+      const read = pending({ session: async () => session });
+      await vi.waitFor(() => expect(read.access.controls).toHaveBeenCalledOnce());
+      session = later;
+      expect(await read.answer()).toBeNull();
+    });
+
+    it('still passes when nothing changed while the server answered', async () => {
+      const read = pending();
+      expect(await read.answer()).toMatchObject({ accountId: alex });
+    });
+  });
+
   it('drops a malformed or unknown envelope without reading anything', async () => {
     const access = phone();
     for (const value of [null, {}, { body: '{' }, received({ version: 1 }), received({ x: 1 })])

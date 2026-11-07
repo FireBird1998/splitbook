@@ -40,14 +40,20 @@ export async function checkNotificationWithoutApp(
     const confirmed = parseNotificationPreferences(
       await access.controls(await access.installation(), session.cookie),
     );
-    return notificationAuthorized(event, {
-      accountId: session.accountId,
-      environment: access.environment,
-      confirmed,
-      now: now(),
-    })
-      ? event
-      : null;
+    if (
+      !notificationAuthorized(event, {
+        accountId: session.accountId,
+        environment: access.environment,
+        confirmed,
+        now: now(),
+      })
+    )
+      return null;
+    // A sign-out, or another account's sign-in, can land while the server answers: check the
+    // phone's account again just before the alert shows.
+    if (await access.leaving()) return null;
+    const still = await access.session();
+    return still?.accountId === session.accountId ? event : null;
   } catch {
     return null;
   }
