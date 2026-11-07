@@ -184,6 +184,38 @@ describe('buildAuthOptions', () => {
   });
 });
 
+describe('session renewal hook', () => {
+  const renewed = {
+    id: 'session-1',
+    token: 'token',
+    userId: 'user-1',
+    expiresAt: new Date('2026-12-07T00:00:00Z'),
+    createdAt: new Date('2026-11-07T00:00:00Z'),
+    updatedAt: new Date('2026-11-07T00:00:00Z'),
+  };
+  const afterUpdate = (
+    onSessionRenewed?: (session: { id: string; expiresAt: Date }) => Promise<void>,
+  ) =>
+    buildAuthOptions({ database: memoryAdapter(memoryDb()), env: baseEnv, onSessionRenewed })
+      .databaseHooks.session.update.after;
+
+  it('hands each renewed session to the notification registrations', async () => {
+    const follow = vi.fn(async () => {});
+    await afterUpdate(follow)(renewed);
+    expect(follow).toHaveBeenCalledWith(renewed);
+  });
+
+  it('never fails the auth request when the registrations cannot follow', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(
+      afterUpdate(() => Promise.reject(new Error('unreachable')))(renewed),
+    ).resolves.toBeUndefined();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(String(error.mock.calls[0])).not.toContain('session-1');
+    error.mockRestore();
+  });
+});
+
 describe('Google ID-token sign-in through the test verifier', () => {
   const withOverride = { AUTH_TEST_ID_TOKEN_SECRET: TEST_SECRET };
 

@@ -2359,7 +2359,12 @@ cookie cache and writes fence against live persisted session revocation. An inva
 gets 401, a mismatched installation proof gets 403, a stale revision gets 409, and invalid
 schema input gets the standard 422 validation envelope. Opt-in requires the off-by-default
 `ANDROID_NOTIFICATIONS_ENABLED=true` server switch; turning off remains permitted.
-Registrations expire with their session, independently of asynchronous TTL deletion.
+A registration lives exactly as long as its session. Better Auth sessions last 30 days and are
+renewed after a day of use; each renewal moves the session's registrations to the new expiry
+(a `session.update.after` hook, `src/lib/notifications/session-renewal.ts`), so a member who
+keeps using the app keeps getting alerts and keeps seeing their controls on. Reads, writes and
+dispatch refuse a registration whose stored expiry has passed, without waiting for the TTL index
+to delete it, and dispatch also rechecks the persisted session, so a revoked session sends nothing.
 These endpoints write only notification/session control state, never financial records.
 
 The availability switch is separate from confirmed consent: a previously enabled binding

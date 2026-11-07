@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, afterAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, afterAll, describe, expect, it, vi } from 'vitest';
 import mongoose from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
@@ -496,5 +496,52 @@ describe('Expense-added alerts through authenticated HTTP and real MongoDB', () 
         })
       ).status,
     ).toBe(400);
+  });
+});
+describe('a registration follows its live session (#840)', () => {
+  const day = 86_400_000;
+  const readControls = () =>
+    callRoute(device.GET, {
+      method: 'GET',
+      path: '/api/notifications/device?installationId=' + phone,
+      cookie: sam,
+      headers: { 'X-Installation-Key': installationKey },
+    });
+  const readFeed = (cookie: string) =>
+    callRoute(activity.GET, {
+      method: 'GET',
+      path: '/api/groups/' + group + '/activity',
+      params: { id: group },
+      cookie,
+    });
+  afterEach(() => vi.useRealTimers());
+  it('a session renewed past its first expiry still gets sends, and its controls still read as on', async () => {
+    const registeredAt = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+    // Day 29.5: both members use the app (not Settings), so Better Auth renews their sessions.
+    vi.setSystemTime(registeredAt + 29.5 * day);
+    expect((await readFeed(sam)).status).toBe(200);
+    expect((await readFeed(alex)).status).toBe(200);
+    // Day 31: past the session's first expiry.
+    vi.setSystemTime(registeredAt + 31 * day);
+    const registration = await getAuthDb().collection('notificationRegistrations').findOne({});
+    expect(registration!.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect((await create()).status).toBe(201);
+    await run();
+    expect(provider.send).toHaveBeenCalledTimes(1);
+    const controls = await readControls();
+    expect(controls.status).toBe(200);
+    expect(controls.body.data).toMatchObject({ enabled: true, expenseUpdates: true });
+  });
+  it('an expired session gets no sends and its controls do not read as on', async () => {
+    const registeredAt = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+    vi.setSystemTime(registeredAt + 29.5 * day);
+    expect((await readFeed(alex)).status).toBe(200);
+    vi.setSystemTime(registeredAt + 31 * day);
+    expect((await create()).status).toBe(201);
+    await run();
+    expect(provider.send).not.toHaveBeenCalled();
+    expect((await readControls()).status).toBe(401);
   });
 });
