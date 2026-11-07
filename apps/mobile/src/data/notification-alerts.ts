@@ -5,7 +5,8 @@ const id = z.string().regex(/^[a-f0-9]{24}$/i);
 export const notificationEnvelope = z
   .object({
     version: z.literal(2),
-    kind: z.literal('expense_added'),
+    // Expense-added (#840); updated, covering restoration, and deleted (#841).
+    kind: z.enum(['expense_added', 'expense_updated', 'expense_deleted']),
     eventId: id,
     groupId: id,
     recordId: id,

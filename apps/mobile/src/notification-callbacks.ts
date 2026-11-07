@@ -1,8 +1,8 @@
-import { attachLiveReceiver, expenseAlertPrefix, notificationTaskName } from './notification-task';
+import { attachLiveReceiver, isExpenseAlert, notificationTaskName } from './notification-task';
 
 /**
  * Receipt/tap callbacks are the only native navigation seam; no permissions are requested here.
- * Expense-added messages are data-only and reach the notification task, not this handler
+ * Expense messages are data-only and reach the notification task, not this handler
  * (#968): with this app mounted and signed in, the task checks with its controller. The handler presents
  * only the generic alert the task posted, quietly while the app is in use.
  */
@@ -21,7 +21,7 @@ export async function attachNotificationCallbacks(
     handleNotification: async (notification) => {
       const { trigger, identifier } = notification.request;
       const pushed = !!trigger && 'type' in trigger && trigger.type === 'push';
-      const show = active && !pushed && identifier.startsWith(expenseAlertPrefix);
+      const show = active && !pushed && isExpenseAlert(identifier);
       return {
         shouldShowBanner: show,
         shouldShowList: show,

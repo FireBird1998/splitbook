@@ -332,3 +332,18 @@ not look up a missing Expense for editing or record a payment. Forms and unresol
 their contents; a valid tap is held for explicit later opening. Read failures retain an explicit
 retry. Access denial uses the existing unavailable state and removes inaccessible reads.
 Signing out clears the held destination and native alerts.
+
+## Expense updated and deleted alerts (#841)
+
+The same data-only path carries `expense_updated` (edits and restoration) and `expense_deleted`
+envelopes, and recurring generation's `expense_added`. Every kind goes through the same checks
+(account, environment, binding, Expense activation, expiry), the same notification task and the
+same per-event deduplication; the Expense updates switch covers all three. The alert text is
+fixed per kind: "Splitbook" / "An Expense was added.", "An Expense was updated." or "An Expense
+was deleted.", each with its own identifier (`expense-added:`, `expense-updated:`,
+`expense-deleted:` and the event id). A visible app on the affected Group refreshes quietly
+instead. A tap, warm or cold, opens the current authorized Group Activity after a fresh Group
+read; a deleted Expense's alert never reads or opens the missing record, and no tap writes. Open
+forms and other protected tasks keep the tap held until the member opens it. The server sends
+these kinds only while `ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED=true` (docs/api.md), off by
+default; app builds from before #841 drop them unshown.
