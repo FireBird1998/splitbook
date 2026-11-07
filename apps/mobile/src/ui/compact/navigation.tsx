@@ -77,6 +77,8 @@ export function TopBar({
       ) : null}
     </View>
   );
+  /** The height the title's first line centres in at large text, from the title's top. */
+  const band = Math.max(touch.min, firstLine);
   /** Back or close, and the actions, beside the title's first line at large text. */
   const beside = { marginTop: Math.max(0, lift) };
   return (
@@ -118,7 +120,12 @@ export function TopBar({
             }}
           >
             {heading}
-            {status}
+            {/* Beside the title, centred on its first line: stretched to its line, as tall as
+                the title and its Group, and no taller than the band the title's first line
+                centres in. On a line of its own it keeps its height, so the bar does too (#958). */}
+            <View style={{ alignSelf: 'stretch', maxHeight: band, justifyContent: 'center' }}>
+              {status}
+            </View>
           </View>
         ) : (
           <>

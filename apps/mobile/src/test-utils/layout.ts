@@ -317,7 +317,10 @@ export function rowStarts(
  * lines as `layoutHeight` breaks them, and places each child in its line as Yoga does there: a
  * child centred in its line is centred by its own height, its margins left out, so a top margin
  * moves it down by only half (#939: at 130% on a 412 dp phone, Add expense's title, given
- * 11.85 dp above it to meet × and ⋮, sat 5.7 dp above them, 15 px on the emulator). Each child
+ * 11.85 dp above it to meet × and ⋮, sat 5.7 dp above them, 15 px on the emulator). A child
+ * given `alignSelf: 'stretch'` is as tall as its line or row, within its `minHeight` and
+ * `maxHeight`, and lays its own children out in that height (#958); Yoga's default, stretch
+ * without saying so, isn't modelled, as a row's children start at its top here. Each child
  * lays out as wide as `layoutHeight` gave it. Absolutely positioned children take no room, as
  * there, and aren't measured. Enough to see that a notice arriving moves nothing else on a
  * screen (#932), and that a top bar's actions share a line (#939).
@@ -337,8 +340,20 @@ export function layoutTops(
     node: (each, room) => widths.set(each, room),
     wrapped: (row, lines, heights) => wrapped.set(row, { lines, heights }),
   });
-  const walk = (each: Node, top: number, room: number) => {
-    if (match(each)) found.push({ node: each, top, height: layoutHeight(each, fontScale, room) });
+  /** A child stretched across its line, as tall as the line leaves it, within its limits. */
+  const stretched = (mine: Style, across: number, before: number, after: number) =>
+    mine.alignSelf === 'stretch' && typeof mine.height !== 'number'
+      ? Math.min(
+          typeof mine.maxHeight === 'number' ? mine.maxHeight : Infinity,
+          Math.max(
+            typeof mine.minHeight === 'number' ? mine.minHeight : 0,
+            across - before - after,
+          ),
+        )
+      : undefined;
+  const walk = (each: Node, top: number, room: number, tall?: number) => {
+    const natural = () => tall ?? layoutHeight(each, fontScale, room);
+    if (match(each)) found.push({ node: each, top, height: natural() });
     if (each.type === 'Text' || each.type === 'AnimatedText') return;
     const style = flatten(each.props.style);
     if (style.display === 'none') return;
@@ -348,7 +363,7 @@ export function layoutTops(
     const gap = number(style.rowGap ?? style.gap) + number(content.rowGap ?? content.gap);
     /** The height its children lay out in: its own, inside its padding and borders. */
     const own = () =>
-      layoutHeight(each, fontScale, room) -
+      natural() -
       edge(style, 'Top', 'padding') -
       edge(style, 'Bottom', 'padding') -
       vertical(style);
@@ -367,7 +382,16 @@ export function layoutTops(
         mine.alignSelf === undefined || mine.alignSelf === 'auto'
           ? style.alignItems
           : mine.alignSelf;
-      return { child, childRoom, height, before, after, outer: height + before + after, align };
+      return {
+        child,
+        mine,
+        childRoom,
+        height,
+        before,
+        after,
+        outer: height + before + after,
+        align,
+      };
     });
     const lines = row && style.flexWrap === 'wrap' ? wrapped.get(each) : undefined;
     if (lines) {
@@ -375,7 +399,7 @@ export function layoutTops(
       let lineTop = y;
       lines.lines.forEach((members, index) => {
         const tall = lines.heights[index]!;
-        for (const { child, childRoom, height, before, after, align } of placed) {
+        for (const { child, mine, childRoom, height, before, after, align } of placed) {
           if (!members.includes(child)) continue;
           const start =
             align === 'center'
@@ -383,7 +407,7 @@ export function layoutTops(
               : align === 'flex-end'
                 ? tall - height - after
                 : before;
-          walk(child, lineTop + start, childRoom);
+          walk(child, lineTop + start, childRoom, stretched(mine, tall, before, after));
         }
         lineTop += tall + gap;
       });
@@ -391,10 +415,10 @@ export function layoutTops(
     }
     if (row) {
       const across = own();
-      for (const { child, childRoom, before, outer, align } of placed) {
+      for (const { child, mine, childRoom, before, after, outer, align } of placed) {
         const offset =
           align === 'center' ? (across - outer) / 2 : align === 'flex-end' ? across - outer : 0;
-        walk(child, y + offset + before, childRoom);
+        walk(child, y + offset + before, childRoom, stretched(mine, across, before, after));
       }
       return;
     }

@@ -6,7 +6,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { emptyExpenseEditor } from '../data/expense-draft';
@@ -1535,16 +1535,20 @@ describe('the Expense form’s bar, with its status (#939)', () => {
         findHosts(node, (props, type) => type === 'Ionicons' && props.name === 'close').length > 0,
       options: (node) =>
         node.type === 'Pressable' && node.props.accessibilityLabel === 'Expense options',
+      status: (node) =>
+        node.type === 'View' &&
+        ['Draft saved', 'Kept on this phone'].includes(node.props.accessibilityLabel as string),
     });
   /** The form, with a change kept, so its status shows beside the title. */
-  const shown = async (form: keyof typeof forms) => {
+  const shown = async (form: keyof typeof forms, status = 'Draft saved') => {
     const ui = await render(forms[form]);
     await act(async () => ui.controller.updateExpenseDraft({ description: 'Ferry tickets' }));
     await settle();
     expect(ui.headings()).toContain(form);
-    expect(ui.labels()).toContain('Draft saved');
+    expect(ui.labels()).toContain(status);
     return ui;
   };
+  afterEach(() => vi.unstubAllEnvs());
 
   it.each([
     ['Add expense', 412, 1.3],
@@ -1562,12 +1566,57 @@ describe('the Expense form’s bar, with its status (#939)', () => {
     },
   );
 
+  // #958, the Designer's check of #939: at 130% on a 412 dp phone "Kept on this phone" stayed
+  // centred on the title and its Group together, below × and ⋮, between the title's two lines.
+  // Beside the title, the status shares their line, the title's first, as it did before #939.
+  it.each([
+    ['Add expense', 'Draft saved'],
+    ['Add expense', 'Kept on this phone'],
+    ['Edit expense', 'Draft saved'],
+    ['Edit expense', 'Kept on this phone'],
+  ] as const)(
+    '%s: “%s” shares the title’s first line, 412 dp at 1.3× text (#958)',
+    async (form, label) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(label === 'Kept on this phone'));
+      setWindow({ width: 412, fontScale: 1.3 });
+      await shown(form, label);
+      const { close, title, status } = centres(412, 1.3);
+      expect(status, 'status').toBeDefined();
+      expect(Math.abs(status! - title!)).toBeLessThanOrEqual(1);
+      expect(Math.abs(status! - close!)).toBeLessThanOrEqual(1);
+    },
+  );
+
+  // At 200% on a 360 dp phone the status has no room beside the title (#639): it keeps a line of
+  // its own under the title and its Group, at the bar's end, where it was, not between them.
+  it.each(['Add expense', 'Edit expense'] as const)(
+    '%s: the status keeps its line under the title and its Group, 360 dp at 2× text (#958)',
+    async (form) => {
+      setWindow({ width: 360, fontScale: 2 });
+      await shown(form);
+      const laid = layoutTops(screen!.toJSON() as ReactTestRendererJSON, 2, 360, (node) =>
+        ['Draft saved', 'Back to Group'].includes(node.props.accessibilityLabel as string)
+          ? true
+          : node.type === 'View' &&
+            (node.children ?? []).some(
+              (child) => typeof child !== 'string' && child.props.accessibilityRole === 'header',
+            ),
+      );
+      const titles = laid.find(
+        ({ node }) => node.type === 'View' && !node.props.accessibilityLabel,
+      );
+      const status = laid.find(({ node }) => node.props.accessibilityLabel === 'Draft saved');
+      expect(status!.top).toBeGreaterThanOrEqual(titles!.top + titles!.height);
+      expect(status!.top + status!.height / 2).toBe(89.25);
+    },
+  );
+
   it.each(['Add expense', 'Edit expense'] as const)(
     '%s: unchanged at 100% on a 412 dp phone',
     async (form) => {
       setWindow({ width: 412, fontScale: 1 });
       await shown(form);
-      expect(centres(412, 1)).toEqual({ close: 32, title: 24, options: 32 });
+      expect(centres(412, 1)).toEqual({ close: 32, title: 24, options: 32, status: 32 });
     },
   );
 });
