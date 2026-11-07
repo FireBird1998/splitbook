@@ -347,3 +347,29 @@ read; a deleted Expense's alert never reads or opens the missing record, and no 
 forms and other protected tasks keep the tap held until the member opens it. The server sends
 these kinds only while `ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED=true` (docs/api.md), off by
 default; app builds from before #841 drop them unshown.
+
+## Keeping an opted-in phone registered (#844)
+
+FCM can replace a phone's token at any time. The controller keeps the registration current
+under the consent the phone already has; it never enables notifications or asks for permission:
+
+- **A new token while the app runs.** The native boundary's `onToken`
+  (expo-notifications `addPushTokenListener`) hands it to the controller.
+- **The same session restored** (a cold start with the saved session). The controller sends the
+  phone's current token, which may have changed while the app wasn't running.
+
+Either way it first reads `GET /api/notifications/device`. Only when that answers on for this
+session and Android currently allows notifications does it send `POST /api/notifications/device`
+with `maintenance: true` and the token. The server keeps the binding, both activations and both
+cutoffs (`docs/api.md`), so nothing older is sent again; the same token again writes nothing.
+A phone that is off, blocked, offline, or signed in with a new session sends nothing: a new
+sign-in starts off and needs **Enable notifications**, as before.
+
+A network or server failure is tried again at most twice, after 2 and 8 seconds; a refusal
+(409) is not retried, and the controls are read again. Signing out, another account, disposal
+or a member's own change in Settings ends a maintenance run, and a token, reply or retry that
+arrives afterwards is dropped. A Settings change waits for a maintenance reply already in
+flight, so the two never send conflicting revisions; a category change interrupted this way
+runs maintenance again afterwards. Tokens stay in memory for the one request: never in a
+snapshot, a saved copy, device storage or a log. `pnpm mobile verify:notifications` covers
+rotation and same-session restoration against a real backend.

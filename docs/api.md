@@ -2367,6 +2367,20 @@ dispatch refuse a registration whose stored expiry has passed, without waiting f
 to delete it, and dispatch also rechecks the persisted session, so a revoked session sends nothing.
 These endpoints write only notification/session control state, never financial records.
 
+**Registration maintenance (#844).** A phone keeps its registration current with
+`POST /api/notifications/device` and the body `installationId`, `installationKey`, `revision`,
+`enabled: true`, the phone's current `token` and `maintenance: true`, and nothing else (a
+category field, or no token, is a 422). Android sends it after a native token change and after
+restoring the same session. It applies only to this account's live session on this installation
+while that binding is on; any other installation state (never opted in, turned off, another
+account, a new session of the same account) and a stale revision get 409, and nothing changes.
+It is allowed while `ANDROID_NOTIFICATIONS_ENABLED` is off, since it grants nothing. It keeps
+the binding, `activation`, `expenseActivation` and both cutoffs, so it never replays older
+events or moves a cutoff. A new token replaces the stored one and advances `revision`; the same
+token again writes nothing and returns the same revision. Accepted and uncertain deliveries
+keep their identities (event, installation, binding, Expense activation), so a new token gets no
+accepted or uncertain event again, and a pending one keeps its event's original 24-hour expiry.
+
 The availability switch is separate from confirmed consent: a previously enabled binding
 still returns its persisted preferences with `available: false` while the feature is paused.
 Clients must not interpret `enabled` alone as effective delivery permission. Disabling remains
@@ -2445,6 +2459,14 @@ are deferred to the recovery ticket; accepted and uncertain outcomes are never r
 Immediately before FCM, the server rechecks current membership, persisted session, binding,
 Expense preferences, activation cutoff, kill switches and event expiry. Eligible delivery
 identity includes event, environment, installation, binding and Expense activation.
+
+A permanent FCM `UNREGISTERED` answer disables that token, not the member's consent (#844): the
+registration keeps its controls, revision, binding and activations, and nothing more is sent to
+that token. The phone's next token, registered by maintenance, receives later alerts and any
+eligible event not yet delivered to it within its 24 hours; the event that failed is not sent
+again, and the same refused token presented again stays disabled. Dispatch sends to the
+installation's current token at the time of the send, so a token rotated during a pass still
+gets that pass's event.
 
 Messages are data-only (#968): there is no FCM `notification` block, and FCM data holds only
 `body`, a JSON version-2 envelope. The envelope carries event, recipient, Group and record
