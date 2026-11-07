@@ -93,7 +93,7 @@ import {
 } from './expense-form';
 import { SplitSheet } from './split-sheet';
 import { ErrorBoundary } from './error-boundary';
-import { savingNeedsConnection } from './offline-notice';
+import { OfflineSavedGroup, savingNeedsConnection } from './offline-notice';
 import { spellMoment } from './day-format';
 import { useTheme } from './theme';
 import { PRODUCT_NAME } from '../product';
@@ -546,7 +546,24 @@ function ExpenseTask({
   // The offline banner speaks of what's shown: while the Expense opens, or when nothing of it
   // could be, it only says the phone is offline, and the screen's own Try again stands alone
   // (the loading-state audit, #220).
-  const shownNotice = draft && state.status !== 'loading' ? notice : emptyNotice;
+  // Offline over the saved Group, the offline banner says it is in use, and when it was checked:
+  // one card and one Try again, which checks the Group again, in place of the Saved Group notice
+  // beside it (#966). A check that failed keeps its own words, and online it is as it was.
+  const check = state.contextCheck;
+  const savedGroupShown =
+    offline && !!check && check.saved && check.status !== 'failed' && showsForm(state);
+  const savedGroupHeld = savedGroupShown && expenseContextPending(state, offline);
+  const savedGroupAt = check?.refreshedAt ?? null;
+  const savedGroup = useMemo(
+    () => (savedGroupShown ? { refreshedAt: savedGroupAt, held: savedGroupHeld } : null),
+    [savedGroupShown, savedGroupAt, savedGroupHeld],
+  );
+  const shownNotice =
+    draft && state.status !== 'loading' ? (
+      <OfflineSavedGroup.Provider value={savedGroup}>{notice}</OfflineSavedGroup.Provider>
+    ) : (
+      emptyNotice
+    );
   const newTask = !state.requestedExpenseId && !draft?.original;
   const frame = (body: ReactNode, footer?: ReactNode) => (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -1024,7 +1041,7 @@ function ExpenseTask({
           <RetainHeight enabled={newTask}>
             {newTask ? shownNotice : null}
             {/* The Group's details are unknown: offline, refused, or not read. Each says which. */}
-            {checking && checkNotice ? (
+            {checking && checkNotice && !savedGroup ? (
               <Banner tone={checkNotice.tone} title={checkNotice.title} message={checkingMessage}>
                 {checking.saved && checking.refreshedAt && (
                   <CompactText variant="small" tone="secondary">

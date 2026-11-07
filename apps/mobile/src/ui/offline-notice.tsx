@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { createContext, useContext } from 'react';
 import { View } from 'react-native';
 import type { MobileSnapshot } from '../data/types';
 import { Banner, Card, CompactButton, CompactText } from './compact';
@@ -11,11 +11,34 @@ import { OfflineConnection } from './use-connected';
 export const savingNeedsConnection = 'Saving needs a connection.';
 
 /**
+ * The saved Group an Expense form uses while offline: when it was checked, if known, and whether
+ * Paid by and Split are held until the live check. The form provides it, so its offline banner
+ * says so and its own Saved Group notice steps aside: one card, one Try again, one time (#966).
+ */
+export const OfflineSavedGroup = createContext<{
+  refreshedAt: number | null;
+  held: boolean;
+} | null>(null);
+
+/** The offline banner's words over the saved Group, in the offline banner's time format (#966). */
+export function savedGroupOfflineMessage({
+  refreshedAt,
+  held,
+}: {
+  refreshedAt: number | null;
+  held: boolean;
+}) {
+  const checked = refreshedAt === null ? '' : `, checked ${refreshedLabel(refreshedAt)}`;
+  return `Using the saved Group${checked}.${held ? ' Paid by and Split stay as they are until you’re back online.' : ''}`;
+}
+
+/**
  * The screen's one offline banner: what's shown was saved on this device, and when. Each write
  * says why it's unavailable where it is. `onRetry` is for screens without pull-to-refresh.
  * Without `savedShown`, nothing on screen is this device's saved copy: it says only that the app
  * is offline (#332). Inside the Expense form, a lost connection says it is offline too, before
- * any request has failed (`OfflineConnection`, #963).
+ * any request has failed (`OfflineConnection`, #963), and the saved Group in use is named in it
+ * (`OfflineSavedGroup`, #966).
  */
 export function OfflineNotice({
   state,
@@ -27,6 +50,7 @@ export function OfflineNotice({
   savedShown?: boolean;
 }) {
   const connected = useContext(OfflineConnection);
+  const savedGroup = useContext(OfflineSavedGroup);
   const active = state.active || connected === false;
   if (!active && !state.message) return null;
   return (
@@ -36,9 +60,11 @@ export function OfflineNotice({
           tone="offline"
           title="You’re offline"
           message={
-            savedShown
-              ? `Some of what’s shown was saved on this device${state.refreshedAt === null ? '' : ` at ${refreshedLabel(state.refreshedAt)}`} and may have changed since.`
-              : 'Connect to load the latest.'
+            !savedShown
+              ? 'Connect to load the latest.'
+              : savedGroup
+                ? savedGroupOfflineMessage(savedGroup)
+                : `Some of what’s shown was saved on this device${state.refreshedAt === null ? '' : ` at ${refreshedLabel(state.refreshedAt)}`} and may have changed since.`
           }
         >
           {onRetry ? (

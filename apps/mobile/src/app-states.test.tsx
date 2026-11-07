@@ -12,6 +12,9 @@ import { createMobileController, type MobileController } from './data/mobile-con
 import type { FetchResponse } from './data/types';
 import { balanceWidth, HomeBalances } from './ui/home';
 import { refreshFeedback, refreshedLabel } from './ui/refresh-feedback';
+import { ExpenseEditor } from './ui/expense-editor';
+import { OfflineNotice } from './ui/offline-notice';
+import { spellMoment } from './ui/day-format';
 import {
   findHosts,
   flatten,
@@ -3021,10 +3024,8 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
       status: 'editing',
       contextCheck: { status: 'saved', saved: true },
     });
-    expect(app.text()).toContain('Saved Group');
-    expect(app.text()).toContain(
-      'Using the saved Group. Connect to verify current financial choices before saving.',
-    );
+    // Offline, the offline card says it (#966).
+    expect(app.text()).toContain('Using the saved Group, checked');
     expect(app.text()).not.toContain('Checking Group');
     await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12' }));
     expect(app.disabled('Save expense')).toBe(true);
@@ -3032,6 +3033,179 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(phone.sent.filter((request) => request.startsWith(`POST /api/groups/${maple}`))).toEqual(
       [],
     );
+  });
+
+  // #966: offline, Add expense stacked two cards, "You’re offline" with Try again and "Saved
+  // Group" with Retry Group check, giving one time in two formats ("at 10:42 AM" and
+  // "27 Sep 2026, 10:42 AM"). Offline, one card says the saved Group is in use.
+  describe('offline over the saved Group, one card (#966)', () => {
+    /** The cards that say the phone is offline or which Group is in use. */
+    const offlineCards = (app: Awaited<ReturnType<typeof start>>) =>
+      app
+        .hosts((p) => p.accessibilityRole === 'summary' || p.accessibilityRole === 'alert')
+        .filter((node) => /You’re offline|Saved Group|saved Group/.test(wordsOf(node)));
+    const openOffline = async () => {
+      const phone = device();
+      const savedAt = await usedBefore(phone);
+      phone.network.online = false;
+      const app = await start(phone);
+      await settle();
+      await app.press(openMaple);
+      await app.press('Add expense');
+      await settle();
+      expect(controller().getSnapshot().expense).toMatchObject({
+        status: 'editing',
+        contextCheck: { status: 'saved', saved: true, refreshedAt: savedAt },
+      });
+      return { phone, app, savedAt };
+    };
+
+    it.each([
+      [412, 1],
+      [360, 2],
+    ])('shows one card with one Try again and one time at %sdp, %s× text', async (width, scale) => {
+      setWindow({ width, fontScale: scale });
+      const { app, savedAt } = await openOffline();
+      const cards = offlineCards(app);
+      expect(cards).toHaveLength(1);
+      expect(wordsOf(cards[0]).trim()).toBe(
+        `You’re offlineUsing the saved Group, checked ${refreshedLabel(savedAt)}. Paid by and Split stay as they are until you’re back online.Try again`,
+      );
+      expect(app.text().match(/You’re offline/g)).toHaveLength(1);
+      expect(app.text()).not.toContain('Saved Group');
+      expect(app.button('Retry Group check')).toBeNull();
+      expect(app.button('Try again')).not.toBeNull();
+      // One format: the time as the offline card says it, never the Group check's dated one.
+      expect(app.text()).not.toContain('27 Sep 2026');
+      expect(unreadText(cards[0] as never, scale, width - 32)).toEqual([]);
+      // Paid by and Split stay as they are, as the card says.
+      for (const tile of ['Paid by', 'Split'])
+        expect(
+          app
+            .hosts((p) => String(p.accessibilityLabel).startsWith(`${tile}:`))
+            .every((node) => node.props.accessibilityState?.disabled === true),
+          tile,
+        ).toBe(true);
+    });
+
+    it('Try again checks the Group again, and back online the card goes', async () => {
+      const { phone, app } = await openOffline();
+      const groupReads = () =>
+        phone.sent.filter((request) => request === `GET /api/groups/${maple}`).length;
+      // Still offline: Try again checks the Group again. Offline, a read first asks for the
+      // session (ADR 0006), and the check answers from the saved Group: the card stays, one.
+      const checks: (string | undefined)[] = [];
+      const stop = controller().subscribe(() =>
+        checks.push(controller().getSnapshot().expense.contextCheck?.status),
+      );
+      const mark = phone.sent.length;
+      await app.press('Try again');
+      await settle();
+      stop();
+      expect(checks).toContain('checking');
+      expect(phone.sent.slice(mark)).toContain('GET /api/auth/get-session');
+      expect(controller().getSnapshot().expense.contextCheck).toMatchObject({ status: 'saved' });
+      expect(offlineCards(app)).toHaveLength(1);
+      expect(app.text()).toContain('Using the saved Group, checked');
+      // Back online: Try again checks the Group live, and the card goes with the offline state.
+      phone.network.online = true;
+      const before = groupReads();
+      await app.press('Try again');
+      await settle();
+      expect(groupReads()).toBeGreaterThan(before);
+      expect(controller().getSnapshot().offline.active).toBe(false);
+      expect(controller().getSnapshot().expense.contextCheck).toBeUndefined();
+      expect(offlineCards(app)).toHaveLength(0);
+      expect(app.text()).not.toContain('You’re offline');
+      expect(app.text()).not.toContain('saved Group');
+      // Save no longer waits for a connection or the Group.
+      expect(app.text()).not.toContain('Saving needs a connection.');
+      expect(app.disabled('Save expense')).toBe(false);
+    });
+
+    // A draft kept here keeps the editing rules it had offline (`expenseContextPending`): its
+    // Paid by and Split stay open, so the card doesn't say they are held.
+    it('a kept draft opened offline names the saved Group without holding Paid by and Split', async () => {
+      const phone = device();
+      const savedAt = await usedBefore(phone);
+      const app = await start(phone);
+      await settle();
+      await app.press(openMaple);
+      await app.press('Add expense');
+      await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12' }));
+      await app.press('Back to Group, keeping your draft');
+      expect(controller().getSnapshot().keptDraft).toMatchObject({ groupId: maple });
+      phone.network.online = false;
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
+      await settle(controller().openExpense(maple));
+      if (controller().getSnapshot().expense.status === 'resume')
+        await settle(Promise.resolve(controller().resumeExpenseDraft()));
+      expect(controller().getSnapshot().expense).toMatchObject({
+        status: 'editing',
+        draft: { description: 'Gas bill' },
+        contextCheck: { status: 'saved', saved: true, initialize: false },
+      });
+      const cards = offlineCards(app);
+      expect(cards).toHaveLength(1);
+      expect(wordsOf(cards[0]).trim()).toBe(
+        `You’re offlineUsing the saved Group, checked ${refreshedLabel(controller().getSnapshot().expense.contextCheck!.refreshedAt)}.Try again`,
+      );
+      expect(controller().getSnapshot().expense.contextCheck!.refreshedAt).toBeGreaterThanOrEqual(
+        savedAt,
+      );
+      for (const tile of ['Paid by', 'Split'])
+        expect(
+          app
+            .hosts((p) => String(p.accessibilityLabel).startsWith(`${tile}:`))
+            .some((node) => node.props.accessibilityState?.disabled !== true),
+          tile,
+        ).toBe(true);
+    });
+
+    it('online, a saved Group keeps its Saved Group notice as it was', async () => {
+      const { app } = await openOffline();
+      const editor = controller().getSnapshot().expense;
+      const retries: string[] = [];
+      const none = () => undefined;
+      // The same Expense, online: the app is no longer offline, but the Group isn't checked yet.
+      await act(async () =>
+        screen!.update(
+          <ExpenseEditor
+            controller={controller()}
+            state={editor}
+            currentUserId={alex.id}
+            offline={false}
+            notice={
+              <OfflineNotice
+                state={{ active: false, refreshedAt: null, message: null }}
+                onRetry={() => retries.push('Try again')}
+              />
+            }
+            onRetry={() => retries.push('Retry Group check')}
+            onChange={none}
+            onLeaveField={none}
+            onSave={none}
+            onResume={none}
+            onDiscard={none}
+            onEdit={none}
+            onReviewDelete={none}
+            onDelete={none}
+            onCancelDelete={none}
+            onReconcile={none}
+            onReviewLatest={none}
+            onAcceptCurrent={none}
+          />,
+        ),
+      );
+      const cards = offlineCards(app);
+      expect(cards).toHaveLength(1);
+      expect(wordsOf(cards[0]).trim()).toBe(
+        `Saved GroupUsing the saved Group. Connect to verify current financial choices before saving.Saved Group checked ${spellMoment(new Date(editor.contextCheck!.refreshedAt!), { year: true })}Retry Group check`,
+      );
+      expect(app.text()).not.toContain('You’re offline');
+      await app.press('Retry Group check');
+      expect(retries).toEqual(['Retry Group check']);
+    });
   });
 
   // Item 1: "Opening your draft…" showed for a brand-new Expense.
