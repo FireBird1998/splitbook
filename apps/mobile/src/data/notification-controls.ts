@@ -270,19 +270,35 @@ export function notificationControls(d: {
           maintenanceWanted = true;
           return;
         }
-        await read();
-        if (!live()) return;
-        const { status } = d.state();
-        if (status === 'offline' || status === 'error') continue;
-        // Off, Android blocking, or a member's change since: nothing to maintain.
-        if (status !== 'ready' || !d.state().confirmed.enabled) return;
         try {
+          // Its own read, so a Settings read at the same time can't cancel it (#844).
           const installation = await d.native.installation();
           if (!live()) return;
+          const confirmed = result(
+            await d.request('/api/notifications/device?installationId=' + installation.id, owner, {
+              installationKey: installation.key,
+            }),
+          );
+          if (!live()) return;
+          const permission = await d.native.permission();
+          if (!live()) return;
+          const allowed = permission === 'granted';
+          if (d.state().status !== 'pending') {
+            // As a Settings read: through loading, the one way the flow table leaves off.
+            if (d.state().status !== 'loading') set('loading');
+            d.publish({
+              confirmed,
+              status: confirmed.enabled && !allowed ? 'blocked' : 'ready',
+              message:
+                confirmed.enabled && !allowed
+                  ? 'Android blocks notifications. Open Android settings to allow them.'
+                  : '',
+            });
+          }
+          // Off, or Android blocking: nothing to maintain, and never a permission prompt.
+          if (!confirmed.enabled || !allowed) return;
           const token = given ?? (await d.native.token());
           if (!live()) return;
-          const { status: now, confirmed } = d.state();
-          if (now !== 'ready' || !confirmed.enabled) return;
           const flight = d.request('/api/notifications/device', owner, {
             method: 'POST',
             body: {
