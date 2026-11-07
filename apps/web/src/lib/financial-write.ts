@@ -20,21 +20,25 @@ export const EXPENSE_NOTIFICATION_KINDS = [
   'expense_deleted',
 ] as const;
 export type ExpenseNotificationKind = (typeof EXPENSE_NOTIFICATION_KINDS)[number];
+/** Every event an Android alert can be about: the Expense ones and a recorded Settlement (#842). */
+export const NOTIFICATION_KINDS = [...EXPENSE_NOTIFICATION_KINDS, 'settlement_recorded'] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
-export interface ExpenseNotificationContext {
+/** The private immutable alert context an Expense or Settlement event captures at its commit. */
+export interface NotificationContext {
   version: 2;
   eventId: string;
-  kind: ExpenseNotificationKind;
+  kind: NotificationKind;
   groupId: string;
   recordId: string;
   occurredAt: Date;
   recipientIds: string[];
 }
-export const NotificationContextSchema = new Schema<ExpenseNotificationContext>(
+export const NotificationContextSchema = new Schema<NotificationContext>(
   {
     version: { type: Number, enum: [2], required: true },
     eventId: { type: String, required: true },
-    kind: { type: String, enum: EXPENSE_NOTIFICATION_KINDS, required: true },
+    kind: { type: String, enum: NOTIFICATION_KINDS, required: true },
     groupId: { type: String, required: true },
     recordId: { type: String, required: true },
     occurredAt: { type: Date, required: true },
@@ -49,7 +53,7 @@ export interface IPendingActivity {
   type: ActivityType;
   actor: Types.ObjectId;
   occurredAt: Date;
-  notificationContext?: ExpenseNotificationContext;
+  notificationContext?: NotificationContext;
   metadata: Record<string, unknown>;
 }
 
@@ -209,17 +213,29 @@ export function expenseChangeAlertsEnabled(): boolean {
 }
 
 /**
- * The private immutable alert context for one Expense event, captured inside the financial
- * commit: its involved members (payers and split participants, before and after for an edit)
- * who are Group members at that commit, without the event's actor.
+ * Whether a recorded Settlement (single, batch or Cross-currency) captures a Payment alert
+ * audience (#842). Off unless `ANDROID_NOTIFICATION_PAYMENTS_ENABLED=true`, independently of
+ * `ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED`: while it is off a recording captures no
+ * notification context, exactly as before #842, so turning it on later sends no backlog, and the
+ * dispatcher sends none it captured earlier. Expense alerts never depend on it.
  */
-export function expenseNotificationContext(
+export function paymentAlertsEnabled(): boolean {
+  return process.env.ANDROID_NOTIFICATION_PAYMENTS_ENABLED === 'true';
+}
+
+/**
+ * The private immutable alert context for one Expense or Settlement event, captured inside the
+ * financial commit: its involved members (an Expense's payers and split participants, before and
+ * after for an edit; a Settlement's payer and recipient) who are Group members at that commit,
+ * without the event's actor.
+ */
+export function ledgerNotificationContext(
   event: Pick<IPendingActivity, '_id' | 'actor' | 'occurredAt'>,
-  kind: ExpenseNotificationKind,
+  kind: NotificationKind,
   record: { groupId: string; recordId: string },
   involved: Iterable<unknown>,
   membersAtCommit: ReadonlySet<string>,
-): ExpenseNotificationContext {
+): NotificationContext {
   const actor = String(event.actor);
   return {
     version: 2,
@@ -232,6 +248,36 @@ export function expenseNotificationContext(
       .filter((candidate) => candidate !== actor && membersAtCommit.has(candidate))
       .sort(),
   };
+}
+
+/**
+ * Inside a Settlement's financial commit: give its `settlement_recorded` intent the Payment alert
+ * audience (#842), the payer and recipient who are Group members at this commit, without the
+ * member who recorded it. Each Settlement of a batch gets its own, under its own event identity.
+ * While the rollout switch is off nothing is read or captured. Never refuses: an alert can't
+ * change what the save does.
+ */
+export async function paymentAlertAudience(
+  event: IPendingActivity,
+  settlement: {
+    groupId: string;
+    recordId: string;
+    paidBy: string;
+    paidTo: string;
+    members: () => Promise<ReadonlyArray<{ user: unknown }>>;
+  },
+): Promise<void> {
+  if (!paymentAlertsEnabled()) return;
+  const membersAtCommit = new Set(
+    (await settlement.members()).map((member) => String(member.user)),
+  );
+  event.notificationContext = ledgerNotificationContext(
+    event,
+    'settlement_recorded',
+    { groupId: settlement.groupId, recordId: settlement.recordId },
+    [settlement.paidBy, settlement.paidTo],
+    membersAtCommit,
+  );
 }
 
 /** The payer and split-participant ids an Expense (or its template) records. */

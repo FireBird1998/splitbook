@@ -28,7 +28,7 @@ import type { IGroupDocument } from '@/lib/models/Group';
 import { displayTagReference, resolveTagReference } from '@splitbook/shared/tag-identity';
 import {
   expenseChangeAlertsEnabled,
-  expenseNotificationContext,
+  ledgerNotificationContext,
   involvedMembers,
   makePendingActivity,
 } from '@/lib/financial-write';
@@ -509,7 +509,7 @@ export class RecurringExpenseService {
               // members it involves get "An Expense was added.", from this commit's members.
               if (expenseChangeAlertsEnabled()) {
                 const committedGroup = await Group.findById(groupId).select('members').lean();
-                event.notificationContext = expenseNotificationContext(
+                event.notificationContext = ledgerNotificationContext(
                   event,
                   'expense_added',
                   { groupId, recordId: expenseId.toString() },

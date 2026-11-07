@@ -4,7 +4,12 @@ import mongoose from 'mongoose';
 import { ObjectId } from 'mongodb';
 import connectDB from '@/lib/db';
 import { connectMongo, getAuthDb } from '@/lib/mongodb-client';
-import { expenseChangeAlertsEnabled, type ExpenseNotificationContext } from '@/lib/financial-write';
+import {
+  expenseChangeAlertsEnabled,
+  paymentAlertsEnabled,
+  type NotificationContext,
+  type NotificationKind,
+} from '@/lib/financial-write';
 import { sendFcm } from './provider';
 
 interface Registration {
@@ -19,6 +24,9 @@ interface Registration {
   enabled: boolean;
   expenseUpdates: boolean;
   expenseCutoff: Date;
+  payments?: boolean;
+  paymentCutoff?: Date | null;
+  paymentActivation?: string;
   token: string;
   tokenHash: string;
   /** FCM answered that the token is unregistered (#844): consent stays, sends wait for a new token. */
@@ -53,25 +61,39 @@ export const notificationEnvironment = () =>
   (process.env.NODE_ENV === 'production' ? 'production' : 'development');
 
 /**
- * Which captured Expense events may send. Manual and reviewed-Draft Expense-added alerts (#840)
- * always may. Edits, deletion, restoration and recurring generation (#841) send only while
- * `ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED=true`, so turning it off also stops any it
- * captured while it was on.
+ * Which captured events may send. Manual and reviewed-Draft Expense-added alerts (#840) always
+ * may. Edits, deletion, restoration and recurring generation (#841) send only while
+ * `ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED=true`, and recorded Settlements (#842) only while
+ * `ANDROID_NOTIFICATION_PAYMENTS_ENABLED=true`, so turning either off also stops any it captured
+ * while it was on.
  */
-const changeAlertScope = () =>
-  expenseChangeAlertsEnabled()
-    ? {
-        'notificationContext.kind': {
-          $in: ['expense_added', 'expense_updated', 'expense_deleted'],
-        },
-      }
-    : { 'notificationContext.kind': 'expense_added', 'metadata.recurring': { $ne: true } };
+const sendableKinds = (): NotificationKind[] => [
+  'expense_added',
+  ...(expenseChangeAlertsEnabled() ? (['expense_updated', 'expense_deleted'] as const) : []),
+  ...(paymentAlertsEnabled() ? (['settlement_recorded'] as const) : []),
+];
+const changeAlertScope = () => ({
+  'notificationContext.kind': { $in: sendableKinds() },
+  ...(expenseChangeAlertsEnabled() ? {} : { 'metadata.recurring': { $ne: true } }),
+});
 const changeAlertAllowed = (event: {
-  notificationContext: ExpenseNotificationContext;
+  notificationContext: NotificationContext;
   metadata?: { recurring?: unknown };
 }) =>
-  expenseChangeAlertsEnabled() ||
-  (event.notificationContext.kind === 'expense_added' && event.metadata?.recurring !== true);
+  sendableKinds().includes(event.notificationContext.kind) &&
+  (expenseChangeAlertsEnabled() || event.metadata?.recurring !== true);
+/**
+ * The device switch an event kind obeys (#839): Payments for a recorded Settlement, Expense
+ * updates for every Expense kind, each with its own cutoff and activation generation.
+ */
+const preferenceFor = (kind: NotificationKind) =>
+  kind === 'settlement_recorded'
+    ? ({ flag: 'payments', cutoff: 'paymentCutoff', activation: 'paymentActivation' } as const)
+    : ({
+        flag: 'expenseUpdates',
+        cutoff: 'expenseCutoff',
+        activation: 'expenseActivation',
+      } as const);
 
 type DispatchCounts = { considered: number; accepted: number; skipped: number; failed: number };
 
@@ -129,6 +151,12 @@ async function runDispatch(
     },
     { maxTimeMS: 500 },
   );
+  await authDb
+    .collection<Registration>('notificationRegistrations')
+    .createIndex(
+      { environment: 1, accountId: 1, enabled: 1, payments: 1, paymentCutoff: 1, expiresAt: 1 },
+      { maxTimeMS: 500 },
+    );
   const environment = notificationEnvironment();
   const now = new Date();
   const cursors = authDb.collection<{ _id: string; after: ObjectId }>(
@@ -137,7 +165,7 @@ async function runDispatch(
   const cursor = eventIds ? null : await cursors.findOne({ _id: environment }, { maxTimeMS: 500 });
   const eventCollection = db.collection<{
     _id: ObjectId;
-    notificationContext: ExpenseNotificationContext;
+    notificationContext: NotificationContext;
     metadata?: { recurring?: unknown };
   }>('activities');
   const eligibility = {
@@ -168,6 +196,7 @@ async function runDispatch(
     const previouslyAdvanced = advanced;
     advanced = event._id;
     const context = event.notificationContext;
+    const preference = preferenceFor(context.kind);
     if (context.eventId !== String(event._id) || !ObjectId.isValid(context.groupId)) continue;
     const occurredAt = new Date(context.occurredAt);
     const expiresAt = new Date(occurredAt.getTime() + 86_400_000);
@@ -182,10 +211,10 @@ async function runDispatch(
               environment,
               accountId: { $in: context.recipientIds },
               enabled: true,
-              expenseUpdates: true,
+              [preference.flag]: true,
               binding: { $type: 'string' },
               activation: { $type: 'string' },
-              expenseCutoff: { $lte: occurredAt },
+              [preference.cutoff]: { $lte: occurredAt },
               expiresAt: { $gt: new Date() },
               token: { $type: 'string' },
               tokenInvalid: { $ne: true },
@@ -200,7 +229,7 @@ async function runDispatch(
                   ':',
                   '$binding',
                   ':',
-                  { $ifNull: ['$expenseActivation', '$activation'] },
+                  { $ifNull: ['$' + preference.activation, '$activation'] },
                 ],
               },
             },
@@ -239,7 +268,11 @@ async function runDispatch(
     for (const registration of registrations) {
       if (deadline - Date.now() < 10_000 || counts.considered >= 100) break;
       counts.considered++;
-      const activation = registration.expenseActivation ?? registration.activation;
+      const generation = registration[preference.activation];
+      const activation = generation ?? registration.activation;
+      const sameGeneration = generation
+        ? { [preference.activation]: activation }
+        : { activation: activation };
       const identity = [
         context.eventId,
         environment,
@@ -290,14 +323,12 @@ async function runDispatch(
           environment,
           installationId: registration.installationId,
           binding: row.binding,
-          ...(registration.expenseActivation
-            ? { expenseActivation: row.activation }
-            : { activation: row.activation }),
+          ...sameGeneration,
           accountId: row.accountId,
           sessionId: registration.sessionId,
           enabled: true,
-          expenseUpdates: true,
-          expenseCutoff: { $lte: occurredAt },
+          [preference.flag]: true,
+          [preference.cutoff]: { $lte: occurredAt },
           expiresAt: { $gt: new Date() },
           // The installation's current token, which may have rotated since this pass listed it (#844).
           token: { $type: 'string' },
@@ -396,14 +427,12 @@ async function runDispatch(
                 environment,
                 installationId: live.installationId,
                 binding: row.binding,
-                ...(registration.expenseActivation
-                  ? { expenseActivation: row.activation }
-                  : { activation: row.activation }),
+                ...sameGeneration,
                 accountId: row.accountId,
                 sessionId: live.sessionId,
                 enabled: true,
-                expenseUpdates: true,
-                expenseCutoff: { $lte: occurredAt },
+                [preference.flag]: true,
+                [preference.cutoff]: { $lte: occurredAt },
                 expiresAt: { $gt: new Date() },
                 token: live.token,
                 tokenInvalid: { $ne: true },

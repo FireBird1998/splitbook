@@ -2,7 +2,7 @@ import mongoose, { Schema, Model } from 'mongoose';
 import type { ActivityType } from '@splitbook/shared/types';
 import {
   NotificationContextSchema,
-  type ExpenseNotificationContext,
+  type NotificationContext,
   ACTIVITY_TYPES,
 } from '@/lib/financial-write';
 // `populate()` finds the model a `ref` names in Mongoose's registry, not through an import, and a
@@ -17,7 +17,7 @@ export interface IActivityDocument {
   type: ActivityType;
   actor: mongoose.Types.ObjectId;
   metadata: Record<string, unknown>;
-  notificationContext?: ExpenseNotificationContext;
+  notificationContext?: NotificationContext;
   createdAt: Date;
 }
 

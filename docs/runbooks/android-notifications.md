@@ -127,6 +127,8 @@ Replace each placeholder; none of these values are secrets, but keep them out of
 
 Edits, deletion, restoration and recurring generation also need `ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED=true` (#841). It is off by default; leave it off in production until the owner accepts those alerts. Unsetting it is their rollback: it stops their sends without touching Expense-added alerts or any save.
 
+Payment alerts for recorded Settlements (single, batch and Cross-currency) need `ANDROID_NOTIFICATION_PAYMENTS_ENABLED=true` (#842), independently of the Expense switch above. It is off by default; leave it off in production until the owner accepts Payment alerts. Unsetting it is their rollback: it stops Payment sends without touching Expense alerts or any save.
+
 With both notification switches on, run one dispatch (`POST /api/notifications/dispatch`, docs/api.md) after an Expense is added. Its log line should count the alert as `accepted`.
 
 - **A log line starting `Firebase sender Workload Identity settings`:** a setting is missing or malformed; the line names which.
