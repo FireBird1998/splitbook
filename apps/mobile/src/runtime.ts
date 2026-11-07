@@ -1,4 +1,4 @@
-import { createNotificationNative } from './notifications-native';
+import { createNotificationNative, readNotificationInstallation } from './notifications-native';
 import { androidNotificationsEnabled } from './notifications-flag';
 import { createSettlementAttemptStore } from './data/settlement-storage';
 import { randomUUID, getRandomBytes } from 'expo-crypto';
@@ -159,8 +159,9 @@ export const controller = createMobileController(controllerConfig, {
 
 /**
  * The notification task's checks with no app running (#968): this phone's saved session,
- * sign-out marker and installation, and one controls read with them. It never restores a
- * session, purges, revokes or reads a ledger: those wait for the app.
+ * sign-out marker and installation, and one controls read with them. The installation is only
+ * read, never created. It never restores a session, purges, revokes or reads a ledger: those
+ * wait for the app.
  */
 export const notificationAccess: NotificationAccess | null =
   notificationNative && config
@@ -173,7 +174,7 @@ export const notificationAccess: NotificationAccess | null =
             ? decodeStoredSession(saved, controllerConfig.apiBaseUrl.startsWith('https:'))
             : null;
         },
-        installation: () => notificationNative.installation(),
+        installation: () => readNotificationInstallation(controllerConfig.apiBaseUrl),
         controls: async (installation, cookie) => {
           const response = await fetch(
             controllerConfig.apiBaseUrl +

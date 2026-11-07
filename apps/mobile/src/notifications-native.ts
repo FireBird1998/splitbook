@@ -3,11 +3,31 @@ import { randomUUID } from 'expo-crypto';
 import { Linking, Platform } from 'react-native';
 import type { NotificationNative } from './data/notification-controls';
 
+const installationKey = (environment: string) =>
+  'splitbook.notification-installation.' +
+  Array.from(environment, (c) => c.charCodeAt(0).toString(16)).join('');
+
+/** This phone's saved installation identity, or null when none is saved. Never writes. */
+export async function readNotificationInstallation(
+  environment: string,
+): Promise<{ id: string; key: string } | null> {
+  const saved = await SecureStore.getItemAsync(installationKey(environment));
+  if (!saved) return null;
+  const value: unknown = JSON.parse(saved);
+  if (
+    typeof value === 'object' &&
+    value &&
+    'id' in value &&
+    'key' in value &&
+    typeof value.id === 'string' &&
+    typeof value.key === 'string'
+  )
+    return { id: value.id, key: value.key };
+  throw new Error('Installation identity is unavailable');
+}
+
 /** The only boundary that obtains Android permissions and raw FCM tokens. */
 export function createNotificationNative(environment: string): NotificationNative {
-  const storageKey =
-    'splitbook.notification-installation.' +
-    Array.from(environment, (c) => c.charCodeAt(0).toString(16)).join('');
   let installation: Promise<{ id: string; key: string }> | null = null;
   const native = () => import('expo-notifications');
   const permission = (value: { granted: boolean; canAskAgain: boolean }) =>
@@ -19,22 +39,10 @@ export function createNotificationNative(environment: string): NotificationNativ
   return {
     installation: () => {
       installation ??= (async () => {
-        const saved = await SecureStore.getItemAsync(storageKey);
-        if (saved) {
-          const value: unknown = JSON.parse(saved);
-          if (
-            typeof value === 'object' &&
-            value &&
-            'id' in value &&
-            'key' in value &&
-            typeof value.id === 'string' &&
-            typeof value.key === 'string'
-          )
-            return { id: value.id, key: value.key };
-          throw new Error('Installation identity is unavailable');
-        }
+        const saved = await readNotificationInstallation(environment);
+        if (saved) return saved;
         const value = { id: randomUUID(), key: randomUUID() + randomUUID() };
-        await SecureStore.setItemAsync(storageKey, JSON.stringify(value));
+        await SecureStore.setItemAsync(installationKey(environment), JSON.stringify(value));
         return value;
       })().catch((error) => {
         installation = null;

@@ -147,6 +147,12 @@ describe('a data-only Expense alert with no app running (#968)', () => {
     expect(access.controls).not.toHaveBeenCalled();
   });
 
+  it('drops it with no installation saved, before any read', async () => {
+    const access = phone({ installation: async () => null });
+    expect(await check(received(), access)).toBeNull();
+    expect(access.controls).not.toHaveBeenCalled();
+  });
+
   it('drops it when the server refuses the session or cannot be reached', async () => {
     expect(
       await check(

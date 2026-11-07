@@ -14,7 +14,8 @@ export interface NotificationAccess {
   leaving(): Promise<boolean>;
   /** The saved session, or null. */
   session(): Promise<StoredSession | null>;
-  installation(): Promise<{ id: string; key: string }>;
+  /** This phone's saved installation, or null. Read only: the no-app check never creates one. */
+  installation(): Promise<{ id: string; key: string } | null>;
   /** `GET /api/notifications/device` with the saved cookie and the installation proof. */
   controls(installation: { id: string; key: string }, cookie: string): Promise<unknown>;
 }
@@ -37,8 +38,11 @@ export async function checkNotificationWithoutApp(
     const session = await access.session();
     // An unverified cookie has no confirmed account yet: nothing shows until the app checks it.
     if (!session?.accountId || session.accountId !== event.accountId) return null;
+    // With no installation saved this phone has never registered: nothing to check with.
+    const installation = await access.installation();
+    if (!installation) return null;
     const confirmed = parseNotificationPreferences(
-      await access.controls(await access.installation(), session.cookie),
+      await access.controls(installation, session.cookie),
     );
     if (
       !notificationAuthorized(event, {
