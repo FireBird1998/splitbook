@@ -1299,6 +1299,96 @@ describe('compact Expense record, opening', () => {
     },
   );
 
+  // #958, the device check: at 130% on a 412 dp phone, a record shown from its saved copy while it
+  // was read again lost "Maple House" under "Expense", and its title and Back moved 10 px down,
+  // then back up once the read landed: the saved copy shows before the Group's context is read.
+  // The record names its Group as this phone knows it, as its skeleton does (#935), and while it
+  // refreshes, "Refreshing…" shares the title's first line with Back, Edit and ⋮, within 1 dp,
+  // with or without the Group under the title.
+  describe('while it is read again (#958)', () => {
+    const labels = ['Back to Group', 'Edit expense', 'Expense options'];
+    const refreshingWords = (node: ReactTestRendererJSON) =>
+      ['Text', 'AnimatedText'].includes(node.type) && wordsOf(node) === 'Refreshing…';
+    /** "Refreshing…", or on a narrow phone its mark alone. */
+    const refreshShown = () =>
+      text(screen!.root).includes('Refreshing…') ||
+      findHosts(screen!.toJSON(), (props) => props.accessibilityLabel === 'Refreshing').length > 0;
+    /** The record as its saved copy shows it, before the Group's context is read again. */
+    const refreshing = async () => {
+      const ui = await render(open(ids.bill));
+      const shown = ui.controller.getSnapshot().expense;
+      act(() => screen?.unmount());
+      return {
+        refreshed: shown,
+        saved: {
+          ...shown,
+          context: null,
+          known: { refreshedAt: Date.now(), refreshing: true, saved: true },
+        },
+      };
+    };
+    const show = async (
+      state: Parameters<typeof ExpenseEditor>[0]['state'],
+      groupName?: string,
+    ) => {
+      act(() => screen?.unmount());
+      await act(async () => {
+        screen = create(
+          <ExpenseEditor
+            {...editor(state).props}
+            groupName={groupName}
+            onClose={() => undefined}
+          />,
+        );
+      });
+    };
+    /** The bar's centres, in dp from the top of the screen. */
+    const centres = (width: number, fontScale: number) =>
+      barCentres(screen!.toJSON() as ReactTestRendererJSON, fontScale, width, {
+        back: (node) => node.props.accessibilityLabel === labels[0],
+        edit: (node) => node.props.accessibilityLabel === labels[1],
+        options: (node) => node.props.accessibilityLabel === labels[2],
+        status: refreshingWords,
+      });
+
+    it.each([
+      [412, 1.3],
+      [412, 1],
+      [360, 2],
+    ] as const)(
+      'keeps its Group under “Expense”, and its bar where it stays, %sdp at %s× text',
+      async (width, fontScale) => {
+        setWindow({ width, fontScale });
+        const { refreshed, saved } = await refreshing();
+        const name = refreshed.context!.group.name;
+        await show(saved, name);
+        expect(refreshShown()).toBe(true);
+        expect(text(screen!.root)).toContain(name);
+        const during = centres(width, fontScale);
+        await show({ ...refreshed, known: null }, name);
+        expect(refreshShown()).toBe(false);
+        delete during.status;
+        expect(centres(width, fontScale)).toEqual(during);
+      },
+    );
+
+    it.each([
+      ['with its Group', true],
+      ['without its Group', false],
+    ] as const)(
+      '“Refreshing…” shares the title’s first line with Back, Edit and ⋮, %s, 412 dp at 1.3× text',
+      async (_case, named) => {
+        setWindow({ width: 412, fontScale: 1.3 });
+        const { refreshed, saved } = await refreshing();
+        await show(saved, named ? refreshed.context!.group.name : undefined);
+        const { status, title, back, edit, options } = centres(412, 1.3);
+        expect(status, 'status').toBeDefined();
+        for (const [part, centre] of Object.entries({ title, back, edit, options }))
+          expect(Math.abs(status! - centre!), part).toBeLessThanOrEqual(1);
+      },
+    );
+  });
+
   // #925, the Designer's release check: at 200% on a 360 dp phone, Who owes what clipped "Paid
   // CHF 10,000,000.(" at the card's edge. The amount goes under its label, in the record and in
   // the skeleton it opens over, whose pairs are the record's texts.

@@ -307,6 +307,7 @@ export function ExpenseRecordScreen({
   onViewMonth,
   reveal = null,
   outlined = false,
+  groupName,
 }: {
   state: Editor;
   currentUserId?: string;
@@ -341,6 +342,11 @@ export function ExpenseRecordScreen({
    * rest fades in (#220).
    */
   outlined?: boolean;
+  /**
+   * The Group's name, as this phone already knows it: a record shown from its saved copy while
+   * it is read again has no Group context yet, and keeps its Group under "Expense" (#935, #958).
+   */
+  groupName?: string;
 }) {
   const theme = useTheme();
   const [options, setOptions] = useState(false);
@@ -537,7 +543,7 @@ export function ExpenseRecordScreen({
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <RecordTopBar
-        groupName={context?.group.name}
+        groupName={context?.group.name ?? groupName}
         backLabel={recordBackLabel(state)}
         onBack={onClose}
         refreshing={cued}

@@ -54,11 +54,17 @@ export function TopBar({
   // half and the title sat above × and ⋮ (#939).
   const firstLine = useLineBox(prominent ? 'title' : 'heading').height;
   const lift = column ? (firstLine - touch.min) / 2 : 0;
+  /** The height the title's first line centres in at large text, from the title's top. */
+  const band = Math.max(touch.min, firstLine);
   const heading = (
     <View
       style={{
         flex: 1,
         minWidth: column && status ? column : 0,
+        // Beside a status, at least the band: a title without a subtitle is shorter, and the
+        // status stretched to its line centred above the first line, 5 dp above × and ⋮ at 130%
+        // on a 412 dp phone (#958).
+        minHeight: column && status ? band : undefined,
         paddingHorizontal: 4,
         paddingTop: Math.max(0, -lift),
       }}
@@ -77,8 +83,6 @@ export function TopBar({
       ) : null}
     </View>
   );
-  /** The height the title's first line centres in at large text, from the title's top. */
-  const band = Math.max(touch.min, firstLine);
   /** Back or close, and the actions, beside the title's first line at large text. */
   const beside = { marginTop: Math.max(0, lift) };
   return (
