@@ -194,7 +194,11 @@ export function BottomSheet({
                   ...(column ? { flexWrap: 'wrap', alignContent: 'flex-start', rowGap: 0 } : {}),
                 }}
               >
-                <View style={{ flex: 1, minWidth: column ?? 0, marginTop: Math.max(0, -lift) }}>
+                {/* Room inside the title's box, not a margin: in the header that wraps, Yoga
+                    places a box kept to its line's top by its position and leaves its margin
+                    out, so Done sat level with the title's top, 8.6 dp below its first line at
+                    130% on a 412 dp phone (#962), as × did in the top bar (#939). */}
+                <View style={{ flex: 1, minWidth: column ?? 0, paddingTop: Math.max(0, -lift) }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <CompactText
                       ref={titleRef}
@@ -216,7 +220,7 @@ export function BottomSheet({
                 {/* On a line of its own, Done keeps to the header's end. */}
                 <View
                   style={{
-                    marginTop: Math.max(0, lift),
+                    paddingTop: Math.max(0, lift),
                     ...(column ? { marginLeft: 'auto' } : {}),
                   }}
                 >
