@@ -3,6 +3,12 @@
     size: A4;
     margin: 15mm;
   }
+  /* The A4 margins take the root's colour scheme, not the body's background: the theme script
+     sets the dark scheme inline on <html>, and with background graphics on Chromium paints them
+     in its dark page colour (#954). A statement prints in the light scheme, margins included. */
+  :root:has(.statement-paper) {
+    color-scheme: light !important;
+  }
   body:has(.statement-paper),
   body:has(.statement-paper) main {
     background: var(--statement-print-paper) !important;
