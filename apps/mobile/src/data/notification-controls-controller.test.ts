@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { onlineManager } from '@tanstack/query-core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import type { MobileDependencies } from './types';
 const user = {
@@ -294,4 +295,23 @@ describe('Settings notification controls at the controller/native seam', () => {
     await enabling;
     expect(writes).toHaveLength(2);
   });
+});
+
+describe('notification controls flow table (#839)', () => {
+  afterEach(() => onlineManager.setOnline(true));
+  // The flow monitor fails the test after it on any transition the table doesn't declare.
+  it.each(['denied', 'blocked', 'error'] as const)(
+    'a change made offline from %s says it needs a connection',
+    async (from) => {
+      const { controller, notifications, setFailure } = device();
+      await controller.signIn('alex');
+      if (from === 'error') setFailure(true);
+      else notifications.requestPermission.mockResolvedValueOnce(from as never);
+      await controller.enableNotifications();
+      expect(controller.getSnapshot().notifications.status).toBe(from);
+      onlineManager.setOnline(false);
+      await controller.enableNotifications();
+      expect(controller.getSnapshot().notifications.status).toBe('offline');
+    },
+  );
 });

@@ -86,9 +86,9 @@ export const notificationTransitions = {
   pending: ['ready', 'denied', 'blocked', 'offline', 'error', 'off'],
   ready: ['loading', 'pending', 'offline', 'off'],
   offline: ['loading', 'pending', 'off'],
-  denied: ['loading', 'pending', 'off'],
-  blocked: ['loading', 'pending', 'off'],
-  error: ['loading', 'pending', 'off'],
+  denied: ['loading', 'pending', 'offline', 'off'],
+  blocked: ['loading', 'pending', 'offline', 'off'],
+  error: ['loading', 'pending', 'offline', 'off'],
 } as const satisfies Transitions<import('./notification-controls').NotificationControls['status']>;
 
 export const notificationOpeningTransitions = {
