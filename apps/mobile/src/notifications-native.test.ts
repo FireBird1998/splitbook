@@ -263,7 +263,9 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
               Date.now,
             ),
           ),
-          present: vi.fn(async (_alert: { identifier: string; content: { body: string } }) => {}),
+          present: vi.fn<
+            (alert: { identifier: string; content: { body: string } }) => Promise<void>
+          >(async () => {}),
         };
         expect(await receiveNotificationTask(changed, d)).toBe(true);
         const alert = d.present.mock.calls[0][0];
