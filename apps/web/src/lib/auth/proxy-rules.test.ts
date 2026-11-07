@@ -86,13 +86,24 @@ describe('proxy rules', () => {
     expect(passesThrough(decide('/api/groups', true))).toBe(true);
     expect(passesThrough(decide('/api/join/ABC123', true, 'POST'))).toBe(true);
   });
-});
 
-it('keeps anonymous notification registration refusals private and non-cacheable', async () => {
-  for (const method of ['GET', 'POST']) {
-    const response = decide('/api/notifications/device', false, method);
-    expect(response.status).toBe(401);
-    expect(response.headers.get('cache-control')).toBe('private, no-store');
-    expect(await response.json()).toEqual({ error: 'Unauthorized', status: 401 });
-  }
+  it('keeps anonymous notification registration refusals private and non-cacheable', async () => {
+    for (const method of ['GET', 'POST']) {
+      const response = decide('/api/notifications/device', false, method);
+      expect(response.status).toBe(401);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(await response.json()).toEqual({ error: 'Unauthorized', status: 401 });
+    }
+  });
+
+  it('lets only the exact dispatch POST reach its own Bearer check without a session', async () => {
+    expect(passesThrough(decide('/api/notifications/dispatch', false, 'POST'))).toBe(true);
+    for (const method of ['GET', 'PUT', 'PATCH', 'DELETE']) {
+      const response = decide('/api/notifications/dispatch', false, method);
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ error: 'Unauthorized', status: 401 });
+    }
+    expect(decide('/api/notifications/dispatch/other', false, 'POST').status).toBe(401);
+    expect(decide('/api/notifications', false, 'POST').status).toBe(401);
+  });
 });
