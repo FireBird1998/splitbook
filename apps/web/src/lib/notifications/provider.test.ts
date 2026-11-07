@@ -42,12 +42,7 @@ afterEach(() => {
 });
 const message: FcmRequest = {
   token: 'fictional-private-token',
-  data: {
-    title: 'Splitbook',
-    message: 'An Expense was added.',
-    body: '{}',
-    channelId: 'ledger-updates',
-  },
+  data: { body: '{}' },
   android: { ttl: '60s', priority: 'high', collapse_key: 'fictional-event' },
 };
 
@@ -116,9 +111,34 @@ describe.each(paths)('direct FCM credential and transport boundary ($name)', (pa
     expect(fetch.mock.calls[0][1].headers).toMatchObject({
       Authorization: 'Bearer fictional-auth-token',
     });
-    // SDK 58 skips the foreground handler for data-only FCM messages.
-    expect(sent.notification).toEqual({ title: 'Splitbook', body: 'An Expense was added.' });
-    expect(sent.android.notification).toEqual({ channel_id: 'ledger-updates' });
+  });
+});
+
+describe('the FCM message (#968)', () => {
+  it('sends a data-only, high-priority message: the app shows the alert only after its own checks (#968)', async () => {
+    vi.stubEnv('FCM_PROJECT_ID', 'fictional-project');
+    credentials.client.mockResolvedValue({
+      getAccessToken: async () => ({ token: 'fictional-auth-token' }),
+    });
+    const fetch = vi.fn(async (url: string, init: RequestInit) => {
+      void url;
+      void init;
+      return Response.json({ name: 'accepted' });
+    });
+    vi.stubGlobal('fetch', fetch);
+    const body = JSON.stringify({ expiresAt: new Date(Date.now() + 60_000).toISOString() });
+    const request = { ...message, data: { body } };
+    expect(await sendFcm(request, AbortSignal.timeout(1_000))).toBe('accepted');
+    const sent = JSON.parse(fetch.mock.calls[0][1].body as string).message;
+    // No notification block anywhere: with one, Android shows the alert without the app's checks.
+    expect(sent).not.toHaveProperty('notification');
+    expect(sent.android).not.toHaveProperty('notification');
+    expect(sent.android.priority).toBe('high');
+    expect(sent.android.collapse_key).toBe('fictional-event');
+    expect(sent.android.ttl).toMatch(/^(59|60)s$/);
+    // Only the envelope: a data `title` or `message` makes Expo show it in the background itself.
+    expect(sent.data).toEqual({ body });
+    expect(sent.token).toBe('fictional-private-token');
   });
 });
 

@@ -6,7 +6,8 @@ import {
 
 export interface FcmRequest {
   token: string;
-  data: { title: string; message: string; body: string; channelId: string };
+  /** The JSON envelope only. A data `title` or `message` would let Expo show it unchecked. */
+  data: { body: string };
   android: { ttl: string; priority: 'high'; collapse_key: string };
 }
 export type SendOutcome =
@@ -64,14 +65,16 @@ export async function sendFcm(
     if (!Number.isFinite(expiresAt)) return 'operational';
     const remaining = expiresAt - Date.now();
     if (remaining <= 0) return 'ineligible';
+    // Data-only (#968): no `notification` block, so Android never shows an alert by itself. The
+    // app's notification task checks account, environment, binding, activation and expiry, and
+    // only then shows the generic alert. High priority lets the message wake a stopped app.
     const currentMessage = {
-      ...message,
-      // Expo SDK 58 does not invoke its foreground handler for data-only messages.
-      notification: { title: 'Splitbook', body: 'An Expense was added.' },
+      token: message.token,
+      data: { body: message.data.body },
       android: {
-        ...message.android,
         ttl: Math.floor(remaining / 1000) + 's',
-        notification: { channel_id: 'ledger-updates' },
+        priority: 'high',
+        collapse_key: message.android.collapse_key,
       },
     };
     dispatched = true;
