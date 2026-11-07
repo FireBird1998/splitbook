@@ -307,11 +307,13 @@ loads the bundle and runs it without UI. No native service of our own is needed.
 - With no app running (the app was swiped away, or Android stopped it), or a mounted app not
   signed in yet (still restoring in the background, for example), the task checks without the
   controller (`src/data/notification-receipt.ts`). Each message takes exactly one of the two
-  paths. It needs a saved session
-  confirmed for the envelope's account and no unconfirmed sign-out. It then reads
-  `GET /api/notifications/device` once with that session and the installation proof, and the
-  answer must be on, with Expense alerts on and the envelope's binding and activation. It
-  restores no session, revokes, purges or reads a ledger: those wait for the app.
+  paths. It needs a saved session confirmed for the envelope's account, no unconfirmed sign-out
+  and a saved installation; it only reads the installation, and with none saved it drops the
+  message. It then reads `GET /api/notifications/device` once with that session and the
+  installation proof, and the answer must be on, with Expense alerts on and the envelope's
+  binding and activation. Once the server answers, it reads the sign-out marker and the saved
+  session again: a sign-out started meanwhile, or a session now gone or another account's, drops
+  the message. It restores no session, revokes, purges or reads a ledger: those wait for the app.
 - A check that hasn't answered within 10 seconds shows nothing. While the app is in use, the
   foreground handler shows only the task's own alert, quietly. It never shows a pushed message.
 
