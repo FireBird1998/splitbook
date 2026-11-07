@@ -1,9 +1,11 @@
+import { useContext } from 'react';
 import { View } from 'react-native';
 import type { MobileSnapshot } from '../data/types';
 import { Banner, Card, CompactButton, CompactText } from './compact';
 import { Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
+import { OfflineConnection } from './use-connected';
 
 /** Why saving, deleting an Expense or creating a Group waits while offline. */
 export const savingNeedsConnection = 'Saving needs a connection.';
@@ -12,7 +14,8 @@ export const savingNeedsConnection = 'Saving needs a connection.';
  * The screen's one offline banner: what's shown was saved on this device, and when. Each write
  * says why it's unavailable where it is. `onRetry` is for screens without pull-to-refresh.
  * Without `savedShown`, nothing on screen is this device's saved copy: it says only that the app
- * is offline (#332).
+ * is offline (#332). Inside the Expense form, a lost connection says it is offline too, before
+ * any request has failed (`OfflineConnection`, #963).
  */
 export function OfflineNotice({
   state,
@@ -23,10 +26,12 @@ export function OfflineNotice({
   onRetry?: () => void;
   savedShown?: boolean;
 }) {
-  if (!state.active && !state.message) return null;
+  const connected = useContext(OfflineConnection);
+  const active = state.active || connected === false;
+  if (!active && !state.message) return null;
   return (
     <>
-      {state.active ? (
+      {active ? (
         <Banner
           tone="offline"
           title="You’re offline"

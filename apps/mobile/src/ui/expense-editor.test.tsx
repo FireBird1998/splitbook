@@ -19,6 +19,7 @@ import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/n
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { onlineManager } from '@tanstack/query-core';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
 import { draftFromExpense, expenseDraftSchema } from '../data/expense-draft';
@@ -27,7 +28,7 @@ import { ExpenseEditor } from './expense-editor';
 import { ControllerExpenseEditor } from './controller-expense-editor';
 import { expenseDateLabel } from './expense-form';
 import { ExpenseRecordView } from './expense-record-view';
-import { OfflineNotice } from './offline-notice';
+import { OfflineNotice, savingNeedsConnection } from './offline-notice';
 import { expenseRecoveryWords } from './expense-recovery-copy';
 import { lineBox } from './compact/scale';
 
@@ -788,6 +789,45 @@ describe('rendered Expense corrections', () => {
     expect(corrections(ui.root())).not.toContain('Choose a Tag for this Expense.');
     // Saving still needs a connection.
     expect(ui.writes).toEqual([]);
+  });
+
+  // #963: the connection went before any request failed, so the app's offline state was still
+  // off. Finish later said "You’re offline…", but the form showed no banner and Save sent the save.
+  it('offline as Finish later says it once the connection is lost, before any request fails (#963)', async () => {
+    onTestFinished(() => onlineManager.setOnline(true));
+    const ui = await render(async (controller) => {
+      await controller.openGroup(groupId);
+      await controller.back();
+      await controller.openExpense(groupId);
+    });
+    await ui.type('Amount, Indian Rupee, required', '12.34');
+    await ui.type('Description, required', 'Saved dinner');
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
+    await ui.press('Tag: Groceries');
+    await act(async () => onlineManager.setOnline(false));
+    await settle();
+    // No request has failed: the app's own offline state hasn't changed, only the connection.
+    expect(ui.controller.getSnapshot().offline.active).toBe(false);
+    expect(text(ui.root())).toContain('You’re offline');
+    expect(text(ui.root())).toContain(savingNeedsConnection);
+    // Save answers why, as its hint too, and sends nothing.
+    const save = ui.pressable('Save expense');
+    expect(save.props.disabled).toBe(true);
+    expect(save.props.accessibilityHint).toBe(savingNeedsConnection);
+    expect(ui.submissions).toEqual([]);
+    expect(ui.writes).toEqual([]);
+    // Paid by and Split are held as they are once the app knows it is offline.
+    const held = ['Paid by', 'Split'].map((label) => ui.tile(label).props.disabled);
+    await act(async () => onlineManager.setOnline(true));
+    await act(async () => ui.controller.refresh());
+    await settle();
+    expect(ui.controller.getSnapshot().offline.active).toBe(false);
+    expect(text(ui.root())).not.toContain('You’re offline');
+    expect(text(ui.root())).not.toContain(savingNeedsConnection);
+    expect(ui.pressable('Save expense').props.disabled).toBe(false);
+    expect(['Paid by', 'Split'].map((label) => ui.tile(label).props.disabled)).toEqual(held);
+    await ui.press('Save expense');
+    expect(ui.submissions).toHaveLength(1);
   });
 
   it('moves screen-reader focus to a missing Tag instead of opening the keyboard', async () => {

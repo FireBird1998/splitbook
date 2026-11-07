@@ -1,5 +1,4 @@
-import { useContext, useSyncExternalStore } from 'react';
-import { onlineManager } from '@tanstack/query-core';
+import { useContext } from 'react';
 import type { MobileController } from '../data/mobile-controller';
 import { finishLaterOffline } from '../data/to-review';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
@@ -10,10 +9,9 @@ import {
 import { View } from 'react-native';
 import { BottomSheet, CompactButton, CompactText, useShortWindow } from './compact';
 import { SaveBarRow } from './expense-form';
+import { useConnected } from './use-connected';
 
 /** A small subscriber keeps status and account counts outside the form's render budget. */
-const subscribeOnline = (notify: () => void) => onlineManager.subscribe(notify);
-const isOnline = () => onlineManager.isOnline();
 export function FinishLater({ controller }: { controller: MobileController }) {
   const state = useMobileSnapshot(
     controller,
@@ -29,7 +27,7 @@ export function FinishLater({ controller }: { controller: MobileController }) {
     }),
     sameSelection,
   );
-  const connected = useSyncExternalStore(subscribeOnline, isOnline, isOnline);
+  const connected = useConnected();
   const short = useShortWindow();
   const row = useContext(SaveBarRow);
   const { editor, count } = state;

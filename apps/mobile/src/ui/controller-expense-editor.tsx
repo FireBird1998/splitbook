@@ -3,6 +3,7 @@ import type { MobileController } from '../data/mobile-controller';
 import type { ExpenseEditor as Editor } from '../data/expense-draft';
 import { ExpenseEditor } from './expense-editor';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
+import { OfflineConnection, useConnected } from './use-connected';
 
 /** Text and storage status belong to their field/status subscribers, outside the task frame. */
 function sameFrame(before: Editor, after: Editor) {
@@ -42,5 +43,18 @@ export const ControllerExpenseEditor = memo(function ControllerExpenseEditor({
   ...props
 }: Omit<Parameters<typeof ExpenseEditor>[0], 'state'> & { controller: MobileController }) {
   const state = useMobileSnapshot(controller, (snapshot) => snapshot.expense, sameFrame);
-  return <ExpenseEditor {...props} controller={controller} state={state} />;
+  // Offline as Finish later says it: the app's offline state or a lost connection, so the banner,
+  // Save, Paid by and Split follow it as soon as the connection goes, not once a request fails
+  // (#963).
+  const connected = useConnected();
+  return (
+    <OfflineConnection.Provider value={connected}>
+      <ExpenseEditor
+        {...props}
+        offline={!!props.offline || !connected}
+        controller={controller}
+        state={state}
+      />
+    </OfflineConnection.Provider>
+  );
 });
