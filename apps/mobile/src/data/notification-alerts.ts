@@ -1,4 +1,5 @@
 import type { MobileSnapshot } from './types';
+import type { NotificationPreferences } from './notification-controls';
 import { z } from 'zod';
 const id = z.string().regex(/^[a-f0-9]{24}$/i);
 export const notificationEnvelope = z
@@ -44,6 +45,33 @@ export function parseNotificationEnvelope(value: unknown, time: number) {
   return occurred <= time + 30_000 && expires > time && expires - occurred === 86_400_000
     ? event
     : null;
+}
+
+/**
+ * Whether an envelope is for this phone as it is now: the signed-in account, this build's
+ * environment, the confirmed binding and Expense activation, Expense alerts on, and not expired.
+ * The running app and the notification task with no app running (#968) both decide with this.
+ */
+export function notificationAuthorized(
+  event: NotificationEnvelope,
+  phone: {
+    accountId: string | null | undefined;
+    environment: string;
+    confirmed: NotificationPreferences;
+    now: number;
+  },
+): boolean {
+  const { confirmed } = phone;
+  return (
+    !!phone.accountId &&
+    phone.accountId === event.accountId &&
+    event.environment === phone.environment &&
+    Date.parse(event.expiresAt) > phone.now &&
+    confirmed.enabled &&
+    confirmed.expenseUpdates &&
+    confirmed.binding === event.binding &&
+    (confirmed.expenseActivation ?? confirmed.activation) === event.activation
+  );
 }
 
 /** Read-only routes may contain protected sheets; both commands and the action banner use this guard. */

@@ -1,8 +1,16 @@
-/** Receipt/tap callbacks are the only native navigation seam; no permissions are requested here. */
+import { attachLiveReceiver, expenseAlertPrefix, notificationTaskName } from './notification-task';
+
+/**
+ * Receipt/tap callbacks are the only native navigation seam; no permissions are requested here.
+ * Expense-added messages are data-only and reach the notification task, not this handler
+ * (#968): with this app mounted and signed in, the task checks with its controller. The handler presents
+ * only the generic alert the task posted, quietly while the app is in use.
+ */
 export async function attachNotificationCallbacks(
   controller: {
-    receiveNotification(value: unknown): Promise<boolean>;
+    receiveNotification(value: unknown, options?: { visible?: boolean }): Promise<boolean>;
     tapNotification(value: unknown): Promise<void>;
+    getSnapshot(): { auth: { status: string } };
   },
   restored: Promise<void>,
 ) {
@@ -11,28 +19,23 @@ export async function attachNotificationCallbacks(
   const responses = new Set<string>();
   n.setNotificationHandler({
     handleNotification: async (notification) => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      let show = false;
-      try {
-        show = await Promise.race([
-          controller.receiveNotification(notification.request.content.data),
-          new Promise<boolean>((resolve) => {
-            timer = setTimeout(() => resolve(false), 2_000);
-          }),
-        ]);
-      } catch {
-        /* Reject unknown payloads and unavailable authorization. */
-      } finally {
-        clearTimeout(timer);
-      }
+      const { trigger, identifier } = notification.request;
+      const pushed = !!trigger && 'type' in trigger && trigger.type === 'push';
+      const show = active && !pushed && identifier.startsWith(expenseAlertPrefix);
       return {
-        shouldShowBanner: active && show,
-        shouldShowList: active && show,
+        shouldShowBanner: show,
+        shouldShowList: show,
         shouldPlaySound: false,
         shouldSetBadge: false,
       };
     },
   });
+  const detach = attachLiveReceiver({
+    signedIn: () => controller.getSnapshot().auth.status === 'authenticated',
+    receive: (data, visible) => controller.receiveNotification(data, { visible }),
+  });
+  // Defined at startup (`index.ts`); registering again is harmless and survives restarts.
+  void n.registerTaskAsync(notificationTaskName).catch(() => undefined);
   const respond = async (response: import('expo-notifications').NotificationResponse | null) => {
     if (!response || !active || response.actionIdentifier !== n.DEFAULT_ACTION_IDENTIFIER) return;
     const identity = response.notification.request.identifier;
@@ -57,6 +60,7 @@ export async function attachNotificationCallbacks(
     .catch(() => undefined);
   return () => {
     active = false;
+    detach();
     subscription.remove();
     n.setNotificationHandler(null);
   };

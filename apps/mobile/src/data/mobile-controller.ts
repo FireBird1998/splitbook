@@ -1,5 +1,6 @@
 import {
   parseNotificationEnvelope,
+  notificationAuthorized,
   notificationTaskProtected,
   emptyNotificationOpening,
   type NotificationEnvelope,
@@ -2544,19 +2545,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let pendingNotification: NotificationEnvelope | null = null;
   const notificationSeen = new Map<string, number>();
   const notificationProtected = () => notificationTaskProtected(snapshot);
-  const matchingNotification = (event: NotificationEnvelope) => {
-    const confirmed = snapshot.notifications.confirmed;
-    return (
-      snapshot.auth.status === 'authenticated' &&
-      snapshot.auth.user?.id === event.accountId &&
-      event.environment === (config.googleEnvironment ?? 'development') &&
-      event.expiresAt > new Date(now()).toISOString() &&
-      confirmed.enabled &&
-      confirmed.expenseUpdates &&
-      confirmed.binding === event.binding &&
-      (confirmed.expenseActivation ?? confirmed.activation) === event.activation
-    );
-  };
+  const matchingNotification = (event: NotificationEnvelope) =>
+    snapshot.auth.status === 'authenticated' &&
+    notificationAuthorized(event, {
+      accountId: snapshot.auth.user?.id,
+      environment: config.googleEnvironment ?? 'development',
+      confirmed: snapshot.notifications.confirmed,
+      now: now(),
+    });
   const checkedNotification = async (value: unknown) => {
     const event = parseNotificationEnvelope(value, now());
     if (
@@ -2569,8 +2565,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await notifications.read();
     return current(owner) && matchingNotification(event) ? event : null;
   };
-  /** Returns whether native may show the fixed generic preview. Never navigates or writes money. */
-  const receiveNotification = async (value: unknown) => {
+  /**
+   * Returns whether the phone may show the fixed generic alert. Never navigates or writes money.
+   * Only a visible app (`visible`, the default) refreshes its open Group quietly in place of the
+   * alert; in the background the alert shows whatever the route is (#968).
+   */
+  const receiveNotification = async (
+    value: unknown,
+    { visible = true }: { visible?: boolean } = {},
+  ) => {
     const event = await checkedNotification(value);
     if (!event) return false;
     for (const [id, expiry] of notificationSeen) if (expiry <= now()) notificationSeen.delete(id);
@@ -2581,7 +2584,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = generation;
     const receiptRoute = route;
     const quiet =
-      route.screen === 'group' && route.groupId === event.groupId && !notificationProtected();
+      visible &&
+      route.screen === 'group' &&
+      route.groupId === event.groupId &&
+      !notificationProtected();
     ledgerChanged(event.groupId);
     await removeLedgerCopies(event.groupId, owner);
     if (!current(owner)) return false;

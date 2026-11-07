@@ -2444,11 +2444,27 @@ are deferred to the recovery ticket; accepted and uncertain outcomes are never r
 
 Immediately before FCM, the server rechecks current membership, persisted session, binding,
 Expense preferences, activation cutoff, kill switches and event expiry. Eligible delivery
-identity includes event, environment, installation, binding and Expense activation. FCM data
-contains generic `title` and `message`, `channelId`, and a JSON version-2 envelope in `body`.
-The envelope carries event, recipient, Group and record identities, environment, binding,
-activation, occurrence and expiry. It contains no names, amounts, descriptions or credentials.
-A fixed generic FCM `notification` title/body and Android channel accompany the data so Expo
-SDK 58 invokes its foreground handler. Android allows at most 30 seconds of occurrence clock
-skew, while checking the exact 24-hour envelope lifetime and strict expiry.
-The remaining FCM TTL never extends the event's 24-hour lifetime.
+identity includes event, environment, installation, binding and Expense activation.
+
+Messages are data-only (#968): there is no FCM `notification` block, and FCM data holds only
+`body`, a JSON version-2 envelope. The envelope carries event, recipient, Group and record
+identities, environment, binding, activation, occurrence and expiry. It contains no names,
+amounts, descriptions or credentials. With a `notification` block Android would show the alert
+itself, without the app's checks; a data `title` or `message` would make Expo SDK 58 show it in
+the background the same way, so neither is sent. `android.priority` is `high`, so a message can
+start a stopped app, and `collapse_key` is the event. The remaining FCM TTL never extends the
+event's 24-hour lifetime.
+
+The Android app shows the alert itself, only after its checks pass: the signed-in account,
+this build's environment, the confirmed binding and Expense activation, Expense alerts on, and
+not expired. Its text is fixed and generic, "Splitbook" / "An Expense was added.". Expo SDK 58
+gives data-only messages to no foreground handler, so the app receives them in an
+expo-task-manager notification task (expo-notifications `registerTaskAsync`), which runs in the
+foreground, in the background and with no app running (`apps/mobile/README.md`). Android allows
+at most 30 seconds of occurrence clock skew, while checking the exact 24-hour envelope lifetime
+and strict expiry.
+
+Delivery caveat: Android delivers a high-priority data message to a stopped app, but a device
+in Doze, an app in the restricted App Standby bucket, or a manufacturer's battery optimisation
+can delay or drop it, and Android may lower the priority of an app whose high-priority messages
+seldom show a notification. A force-stopped app receives nothing until it is opened again.

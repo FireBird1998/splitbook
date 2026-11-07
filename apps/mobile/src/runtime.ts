@@ -1,4 +1,4 @@
-import { createNotificationNative } from './notifications-native';
+import { createNotificationNative, readNotificationInstallation } from './notifications-native';
 import { androidNotificationsEnabled } from './notifications-flag';
 import { createSettlementAttemptStore } from './data/settlement-storage';
 import { randomUUID, getRandomBytes } from 'expo-crypto';
@@ -13,6 +13,8 @@ import { mobileConfig } from './config';
 import { createGoogleIdentityProvider } from './google-identity';
 import { createAppearanceController } from './data/appearance';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { decodeStoredSession } from './data/cookies';
+import type { NotificationAccess } from './data/notification-receipt';
 
 const config = mobileConfig(
   {
@@ -85,10 +87,11 @@ const offlineIdentity = {
   save: (value: unknown) => SecureStore.setItemAsync(offlineIdentityKey, JSON.stringify(value)),
   clear: () => SecureStore.deleteItemAsync(offlineIdentityKey),
 };
+const notificationNative = androidNotificationsEnabled()
+  ? createNotificationNative(controllerConfig.apiBaseUrl)
+  : undefined;
 export const controller = createMobileController(controllerConfig, {
-  notifications: androidNotificationsEnabled()
-    ? createNotificationNative(controllerConfig.apiBaseUrl)
-    : undefined,
+  notifications: notificationNative,
   googleSignIn: config?.googleWebClientId
     ? createGoogleIdentityProvider(
         config.googleWebClientId,
@@ -153,3 +156,44 @@ export const controller = createMobileController(controllerConfig, {
     ],
   },
 });
+
+/**
+ * The notification task's checks with no app running (#968): this phone's saved session,
+ * sign-out marker and installation, and one controls read with them. The installation is only
+ * read, never created. It never restores a session, purges, revokes or reads a ledger: those
+ * wait for the app.
+ */
+export const notificationAccess: NotificationAccess | null =
+  notificationNative && config
+    ? {
+        environment: controllerConfig.googleEnvironment ?? 'development',
+        leaving: async () => (await SecureStore.getItemAsync(cleanupKey)) !== null,
+        session: async () => {
+          const saved = await SecureStore.getItemAsync(storageKey);
+          return saved
+            ? decodeStoredSession(saved, controllerConfig.apiBaseUrl.startsWith('https:'))
+            : null;
+        },
+        installation: () => readNotificationInstallation(controllerConfig.apiBaseUrl),
+        controls: async (installation, cookie) => {
+          const response = await fetch(
+            controllerConfig.apiBaseUrl +
+              '/api/notifications/device?installationId=' +
+              encodeURIComponent(installation.id),
+            {
+              headers: {
+                Accept: 'application/json',
+                'X-Installation-Key': installation.key,
+                Origin: controllerConfig.authOrigin,
+                Cookie: cookie,
+              },
+              credentials: 'omit',
+              redirect: 'error',
+              signal: AbortSignal.timeout(8_000),
+            },
+          );
+          if (!response.ok) throw new Error('Notification controls unavailable');
+          return response.json();
+        },
+      }
+    : null;

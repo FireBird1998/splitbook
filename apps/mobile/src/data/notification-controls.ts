@@ -21,6 +21,9 @@ const preferences = z.object({
   paymentCutoff: z.string().nullable(),
 });
 export type NotificationPreferences = z.infer<typeof preferences>;
+/** A `GET /api/notifications/device` answer's confirmed controls; throws on anything else. */
+export const parseNotificationPreferences = (value: unknown): NotificationPreferences =>
+  preferences.parse(z.object({ data: preferences }).parse(value).data);
 export interface NotificationControls {
   status: 'off' | 'loading' | 'pending' | 'ready' | 'offline' | 'denied' | 'blocked' | 'error';
   confirmed: NotificationPreferences;
@@ -75,8 +78,7 @@ export function notificationControls(d: {
     d.current(owner) && operation === task && d.authenticated();
   const set = (status: NotificationControls['status'], message = '') =>
     d.publish({ ...d.state(), status, message });
-  const result = (value: unknown) =>
-    preferences.parse(z.object({ data: preferences }).parse(value).data);
+  const result = parseNotificationPreferences;
   const failed = (error: unknown) => {
     if (error instanceof Superseded) return;
     set(

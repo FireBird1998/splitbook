@@ -328,9 +328,6 @@ async function runDispatch(
         {
           token: live.token,
           data: {
-            title: 'Splitbook',
-            message: 'An Expense was added.',
-            channelId: 'ledger-updates',
             body: JSON.stringify({
               version: 2,
               eventId: context.eventId,

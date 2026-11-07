@@ -183,11 +183,12 @@ describe('Expense-added alerts through authenticated HTTP and real MongoDB', () 
       .findOne({ type: 'expense_added' });
     expect(event!.notificationContext.recipientIds).toEqual([users.sam]);
     const message = provider.send.mock.calls[0][0] as unknown as {
-      data: { title: string; message: string; body: string };
-      android: { ttl: string };
+      data: { body: string };
+      android: { ttl: string; priority: string };
     };
-    expect(message.data.title).toBe('Splitbook');
-    expect(message.data.message).toBe('An Expense was added.');
+    // Data-only (#968): the envelope alone, so only the app's checks can show an alert.
+    expect(Object.keys(message.data)).toEqual(['body']);
+    expect(message.android.priority).toBe('high');
     const envelope = JSON.parse(message.data.body);
     expect(envelope).toMatchObject({
       version: 2,
