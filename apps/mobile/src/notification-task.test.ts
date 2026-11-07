@@ -237,3 +237,37 @@ describe('Expense updated and deleted alerts (#841)', () => {
     expect(d.present).not.toHaveBeenCalled();
   });
 });
+
+describe('Payment alerts (#842)', () => {
+  const payment = { ...envelope, kind: 'settlement_recorded' as const };
+  const message = { data: { body: JSON.stringify(payment) }, notification: null };
+  it('foreground elsewhere and with no app running, the fixed generic Payment text shows, one per event', async () => {
+    detach = attachLiveReceiver(signedIn(async () => true));
+    const live = task();
+    expect(await receiveNotificationTask(message, live)).toBe(true);
+    detach();
+    detach = undefined;
+    const noApp = task({ withoutApp: vi.fn(async () => payment) });
+    expect(await receiveNotificationTask(message, noApp)).toBe(true);
+    for (const d of [live, noApp])
+      expect(d.present.mock.calls[0][0]).toEqual({
+        identifier: 'settlement-recorded:' + envelope.eventId,
+        content: {
+          title: 'Splitbook',
+          body: 'A payment was recorded.',
+          data: { body: JSON.stringify(payment) },
+          sound: 'default',
+        },
+        trigger: { channelId: expenseAlertChannel },
+      });
+  });
+
+  it('foreground on the affected Group: a payment refreshes quietly and shows no alert', async () => {
+    const live = vi.fn(async () => false);
+    detach = attachLiveReceiver(signedIn(live));
+    const d = task();
+    expect(await receiveNotificationTask(message, d)).toBe(false);
+    expect(live).toHaveBeenCalledWith(message.data, true);
+    expect(d.present).not.toHaveBeenCalled();
+  });
+});

@@ -5,8 +5,9 @@ const id = z.string().regex(/^[a-f0-9]{24}$/i);
 export const notificationEnvelope = z
   .object({
     version: z.literal(2),
-    // Expense-added (#840); updated, covering restoration, and deleted (#841).
-    kind: z.enum(['expense_added', 'expense_updated', 'expense_deleted']),
+    // Expense-added (#840); updated, covering restoration, and deleted (#841); a recorded
+    // Settlement, single, batch or Cross-currency (#842).
+    kind: z.enum(['expense_added', 'expense_updated', 'expense_deleted', 'settlement_recorded']),
     eventId: id,
     groupId: id,
     recordId: id,
@@ -50,7 +51,8 @@ export function parseNotificationEnvelope(value: unknown, time: number) {
 
 /**
  * Whether an envelope is for this phone as it is now: the signed-in account, this build's
- * environment, the confirmed binding and Expense activation, Expense alerts on, and not expired.
+ * environment, the confirmed binding, the category's own switch and activation (Payments for a
+ * recorded Settlement, #842; Expense updates for every Expense kind), and not expired.
  * The running app and the notification task with no app running (#968) both decide with this.
  */
 export function notificationAuthorized(
@@ -63,15 +65,17 @@ export function notificationAuthorized(
   },
 ): boolean {
   const { confirmed } = phone;
+  const payment = event.kind === 'settlement_recorded';
   return (
     !!phone.accountId &&
     phone.accountId === event.accountId &&
     event.environment === phone.environment &&
     Date.parse(event.expiresAt) > phone.now &&
     confirmed.enabled &&
-    confirmed.expenseUpdates &&
+    (payment ? confirmed.payments : confirmed.expenseUpdates) &&
     confirmed.binding === event.binding &&
-    (confirmed.expenseActivation ?? confirmed.activation) === event.activation
+    ((payment ? confirmed.paymentActivation : confirmed.expenseActivation) ??
+      confirmed.activation) === event.activation
   );
 }
 

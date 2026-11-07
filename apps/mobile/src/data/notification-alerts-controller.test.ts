@@ -606,3 +606,140 @@ describe('Expense updated and deleted alerts at the Android controller seam (#84
     },
   );
 });
+
+describe('Payment alerts at the Android controller seam (#842)', () => {
+  const settlementId = 'c00000000000000000000009';
+  const payment = (extra = {}) =>
+    hint({ kind: 'settlement_recorded', recordId: settlementId, ...extra });
+  /** This phone's confirmed controls with one category switched, as the device read answers. */
+  const controls = (switches: { expenseUpdates?: boolean; payments?: boolean }) => (url: URL) =>
+    url.pathname === '/api/notifications/device'
+      ? json({
+          data: {
+            available: true,
+            enabled: true,
+            expenseUpdates: true,
+            payments: true,
+            revision: 1,
+            activation,
+            binding,
+            expenseCutoff: new Date(0).toISOString(),
+            paymentCutoff: new Date(0).toISOString(),
+            ...switches,
+          },
+        })
+      : undefined;
+  it('quietly refreshes the open Group, suppresses a replay and never records a payment', async () => {
+    const writes: string[] = [];
+    const controller = setup((url, init) => {
+      if (init.method && init.method !== 'GET' && !url.pathname.includes('auth'))
+        writes.push(url.pathname);
+    });
+    await controller.signIn('alex');
+    await controller.openActivity(groupId);
+    const before = controller.getSnapshot().activity;
+    expect(await controller.receiveNotification(payment())).toBe(false);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'activity',
+      activity: { status: 'ready' },
+    });
+    expect(controller.getSnapshot().activity).not.toBe(before);
+    expect(await controller.receiveNotification(payment(), { visible: false })).toBe(false);
+    expect(writes).toEqual([]);
+  });
+  it('elsewhere or in the background the alert may show; a warm tap opens Group Activity with no Settlement read or write', async () => {
+    const requests: string[] = [];
+    const writes: string[] = [];
+    const controller = setup((url, init) => {
+      requests.push(url.pathname);
+      if (init.method && init.method !== 'GET' && !url.pathname.includes('auth'))
+        writes.push(url.pathname);
+    });
+    await controller.signIn('alex');
+    expect(await controller.receiveNotification(payment())).toBe(true);
+    await controller.tapNotification(payment());
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'activity',
+      activity: { status: 'ready' },
+      notificationOpening: { status: 'idle' },
+      settlement: { status: 'idle' },
+    });
+    expect(requests).toContain('/api/groups/' + groupId);
+    expect(requests.some((path) => path.includes(settlementId))).toBe(false);
+    expect(writes).toEqual([]);
+    await controller.openActivity(groupId);
+    expect(
+      await controller.receiveNotification(payment({ eventId: 'd00000000000000000000009' }), {
+        visible: false,
+      }),
+    ).toBe(true);
+  });
+  it('Payments off with Expense updates on: a Payment alert neither shows nor opens; an Expense alert still does', async () => {
+    const controller = setup(controls({ expenseUpdates: true, payments: false }));
+    await controller.signIn('alex');
+    expect(await controller.receiveNotification(payment())).toBe(false);
+    await controller.tapNotification(payment());
+    expect(controller.getSnapshot().screen).not.toBe('group');
+    expect(
+      await controller.receiveNotification(hint({ eventId: 'd00000000000000000000008' })),
+    ).toBe(true);
+  });
+  it('Expense updates off with Payments on: an Expense alert neither shows nor opens; a Payment alert still does', async () => {
+    const controller = setup(controls({ expenseUpdates: false, payments: true }));
+    await controller.signIn('alex');
+    expect(await controller.receiveNotification(hint())).toBe(false);
+    await controller.tapNotification(hint());
+    expect(controller.getSnapshot().screen).not.toBe('group');
+    expect(
+      await controller.receiveNotification(payment({ eventId: 'd00000000000000000000008' })),
+    ).toBe(true);
+    await controller.tapNotification(payment({ eventId: 'd00000000000000000000008' }));
+    expect(controller.getSnapshot()).toMatchObject({ screen: 'group', destination: 'activity' });
+  });
+  it('an unfinished Expense keeps its contents and a Payment tap waits for an explicit open', async () => {
+    const controller = setup();
+    await controller.signIn('alex');
+    await controller.openActivity(groupId);
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Unfinished member task', amount: '5' });
+    const draft = structuredClone(controller.getSnapshot().expense.draft);
+    expect(await controller.receiveNotification(payment())).toBe(true);
+    await controller.tapNotification(payment());
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { draft },
+      notificationOpening: { status: 'held' },
+    });
+    await controller.closeExpense();
+    await controller.openPendingNotification();
+    expect(controller.getSnapshot()).toMatchObject({
+      destination: 'activity',
+      notificationOpening: { status: 'idle' },
+    });
+  });
+  it('after removal from the Group a Payment tap shows the unavailable state, not its contents', async () => {
+    let removed = false;
+    const controller = setup((url) =>
+      removed && url.pathname === '/api/groups/' + groupId
+        ? json({ error: 'Forbidden' }, 403)
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openActivity(groupId);
+    removed = true;
+    await controller.tapNotification(payment());
+    expect(controller.getSnapshot().detail.status).toBe('denied');
+    expect(controller.getSnapshot().activity.events).toHaveLength(0);
+  });
+  it('a cold tap waits for sign-in to restore, then opens the same Group Activity', async () => {
+    const controller = setup();
+    // Before sign-in is confirmed the tap reveals nothing and is not consumed.
+    await controller.tapNotification(payment());
+    expect(controller.getSnapshot().screen).not.toBe('group');
+    await controller.signIn('alex');
+    await controller.tapNotification(payment());
+    expect(controller.getSnapshot()).toMatchObject({ screen: 'group', destination: 'activity' });
+  });
+});

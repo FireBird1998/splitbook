@@ -205,7 +205,10 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
       notification: null,
     };
     // This phone's saved records, as the no-app check reads them.
-    const access = (session: StoredSession | null): NotificationAccess => ({
+    const access = (
+      session: StoredSession | null,
+      switches: { expenseUpdates?: boolean; payments?: boolean; paymentActivation?: string } = {},
+    ): NotificationAccess => ({
       environment: 'development',
       leaving: async () => false,
       session: async () => session,
@@ -224,6 +227,7 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
           binding,
           expenseCutoff: new Date(0).toISOString(),
           paymentCutoff: new Date(0).toISOString(),
+          ...switches,
         },
       }),
     });
@@ -309,6 +313,85 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
         stop();
       },
     );
+
+    describe('Payment alerts (#842)', () => {
+      const withKind = (kind: string) => ({
+        ...payload,
+        data: { body: JSON.stringify({ ...JSON.parse(payload.data.body), kind }) },
+      });
+      const session = { cookie: 'better-auth.session_token=alex.signature', accountId: alex };
+      const check = async (kind: string, switches: Parameters<typeof access>[1]) => {
+        const controller = {
+          receiveNotification: vi.fn(async () => false),
+          tapNotification: vi.fn(async () => {}),
+          getSnapshot: () => ({ auth: { status: 'restoring' } }),
+        };
+        const stop = await attachNotificationCallbacks(controller, Promise.resolve());
+        const d = {
+          now: Date.now,
+          visible: () => false,
+          withoutApp: vi.fn((value: unknown) =>
+            checkNotificationWithoutApp(value, access(session, switches), Date.now),
+          ),
+          present: vi.fn<
+            (alert: {
+              identifier: string;
+              content: { title: string; body: string };
+            }) => Promise<void>
+          >(async () => {}),
+        };
+        const shown = await receiveNotificationTask(withKind(kind), d);
+        // How the foreground handler treats the alert the task posted, while still attached.
+        const alert = d.present.mock.calls[0]?.[0];
+        const handled =
+          alert &&
+          (await native.setNotificationHandler.mock.calls.at(-1)![0].handleNotification({
+            request: {
+              identifier: alert.identifier,
+              content: alert.content,
+              trigger: { type: 'channel', channelId: 'ledger-updates' },
+            },
+          }));
+        stop();
+        return { shown, d, handled };
+      };
+
+      it('with no signed-in app and Payments on, the no-app check passes it and the fixed Payment text shows', async () => {
+        const { shown, d, handled } = await check('settlement_recorded', {});
+        expect(shown).toBe(true);
+        const alert = d.present.mock.calls[0][0];
+        expect(alert.identifier).toBe('settlement-recorded:d00000000000000000000001');
+        expect(alert.content).toMatchObject({
+          title: 'Splitbook',
+          body: 'A payment was recorded.',
+        });
+        // The foreground handler shows this posted alert quietly, as it does an Expense one.
+        expect(handled).toMatchObject({
+          shouldShowBanner: true,
+          shouldShowList: true,
+          shouldPlaySound: false,
+        });
+      });
+
+      it('Payments off with Expense updates on: a Payment alert is dropped and an Expense one still shows', async () => {
+        const off = { expenseUpdates: true, payments: false };
+        expect((await check('settlement_recorded', off)).shown).toBe(false);
+        expect((await check('expense_added', off)).shown).toBe(true);
+      });
+
+      it('Expense updates off with Payments on: an Expense alert is dropped and a Payment one still shows', async () => {
+        const off = { expenseUpdates: false, payments: true };
+        expect((await check('expense_added', off)).shown).toBe(false);
+        expect((await check('settlement_recorded', off)).shown).toBe(true);
+      });
+
+      it('a Payments generation since replaced drops the Payment alert', async () => {
+        const replaced = { paymentActivation: '00000000-0000-4000-8000-000000000099' };
+        expect((await check('settlement_recorded', replaced)).shown).toBe(false);
+        // The Expense generation is separate: its alert still shows.
+        expect((await check('expense_added', replaced)).shown).toBe(true);
+      });
+    });
 
     it('signed out: the no-app check finds no saved session and nothing shows', async () => {
       const { shown, controller, d } = await receive('signed-out', null);

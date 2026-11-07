@@ -1,7 +1,7 @@
 import { parseNotificationEnvelope, type NotificationEnvelope } from './data/notification-alerts';
 
 /**
- * Expense messages (added, updated, deleted) are data-only (#968, #841): Android shows nothing
+ * Expense messages (added, updated, deleted) and Payment messages are data-only (#968, #841, #842): Android shows nothing
  * by itself, and Expo SDK 58 passes them to no foreground handler. The one notification task
  * (expo-task-manager, through expo-notifications `registerTaskAsync`) receives each in every app
  * state: foreground, background, and with no app running. It shows the generic alert only after
@@ -10,15 +10,17 @@ import { parseNotificationEnvelope, type NotificationEnvelope } from './data/not
 export const notificationTaskName = 'splitbook-expense-added';
 /** Shown alerts are this app's own local notifications; one per event, so a repeat replaces it. */
 export const expenseAlertPrefix = 'expense-added:';
-/** Each Expense alert kind's fixed generic text and identifier prefix (#840, #841). */
-const expenseAlertKinds = {
+/** Each alert kind's fixed generic text and identifier prefix (#840, #841, #842). */
+const alertKinds = {
   expense_added: { prefix: expenseAlertPrefix, text: 'An Expense was added.' },
   expense_updated: { prefix: 'expense-updated:', text: 'An Expense was updated.' },
   expense_deleted: { prefix: 'expense-deleted:', text: 'An Expense was deleted.' },
+  // A recorded Settlement, single, batch or Cross-currency: no names, amounts or currencies.
+  settlement_recorded: { prefix: 'settlement-recorded:', text: 'A payment was recorded.' },
 } as const satisfies Record<NotificationEnvelope['kind'], { prefix: string; text: string }>;
-/** Whether a local notification is one of this app's own Expense alerts. */
-export const isExpenseAlert = (identifier: string) =>
-  Object.values(expenseAlertKinds).some(({ prefix }) => identifier.startsWith(prefix));
+/** Whether a local notification is one of this app's own Expense or Payment alerts. */
+export const isLedgerAlert = (identifier: string) =>
+  Object.values(alertKinds).some(({ prefix }) => identifier.startsWith(prefix));
 export const expenseAlertChannel = 'ledger-updates';
 /** A check that hasn't answered by then shows nothing. */
 export const receiptBudget = 10_000;
@@ -53,10 +55,10 @@ export interface ExpenseAlert {
 }
 /** The fixed generic alert: no name, amount, description or Group. A tap carries the envelope. */
 export const expenseAlert = (event: NotificationEnvelope): ExpenseAlert => ({
-  identifier: expenseAlertKinds[event.kind].prefix + event.eventId,
+  identifier: alertKinds[event.kind].prefix + event.eventId,
   content: {
     title: 'Splitbook',
-    body: expenseAlertKinds[event.kind].text,
+    body: alertKinds[event.kind].text,
     data: { body: JSON.stringify(event) },
     sound: 'default',
   },

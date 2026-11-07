@@ -54,6 +54,25 @@ const record = {
   updatedAt: iso,
 };
 const json = (body: unknown, status = 200) => Response.json(body, { status });
+const alertBinding = '00000000-0000-4000-8000-000000000001';
+const alertActivation = '00000000-0000-4000-8000-000000000002';
+/** A Payment alert's envelope (#842) for this Group, as the notification task passes it. */
+const paymentAlert = () => {
+  const occurred = Date.now() - 1000;
+  return {
+    version: 2,
+    kind: 'settlement_recorded',
+    eventId: 'd00000000000000000000042',
+    groupId,
+    recordId: 'c00000000000000000000042',
+    accountId: actor,
+    environment: 'development',
+    binding: alertBinding,
+    activation: alertActivation,
+    occurredAt: new Date(occurred).toISOString(),
+    expiresAt: new Date(occurred + 86_400_000).toISOString(),
+  };
+};
 
 it('restores a stored Settlement without sending it (#234)', async () => {
   const f = setup();
@@ -115,6 +134,8 @@ function setup(
     init: RequestInit,
   ) => FetchResponse | Promise<FetchResponse> | undefined = () => undefined,
   withSavedQueries = false,
+  /** Opted in to notifications (#842), as notification-alerts-controller.test.ts is. */
+  withNotifications = false,
 ) {
   let cookie: string | null = null,
     account: string | null = null,
@@ -186,6 +207,21 @@ function setup(
           },
         },
         newSubmissionKey: () => `settlement-key-${++key}`,
+        ...(withNotifications
+          ? {
+              notifications: {
+                installation: async () => ({
+                  id: '00000000-0000-4000-8000-000000000842',
+                  key: 'private-installation-proof-842842842',
+                }),
+                permission: async () => 'granted' as const,
+                requestPermission: async () => 'granted' as const,
+                token: async () => 'private-token',
+                clear: async () => {},
+                openSettings: async () => {},
+              },
+            }
+          : {}),
         accountLocal: {
           financialCleanup,
           owner: {
@@ -223,6 +259,20 @@ function setup(
           if (path.endsWith('/get-session'))
             return json({ user, session: { userId: actor, expiresAt: '2030-01-01T00:00:00Z' } });
           if (path.endsWith('/sign-out')) return json({ success: true });
+          if (path === '/api/notifications/device')
+            return json({
+              data: {
+                available: true,
+                enabled: true,
+                expenseUpdates: true,
+                payments: true,
+                revision: 1,
+                activation: alertActivation,
+                binding: alertBinding,
+                expenseCutoff: new Date(0).toISOString(),
+                paymentCutoff: new Date(0).toISOString(),
+              },
+            });
           if (path === '/api/groups') return json({ status: 200, data: [group] });
           if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
           if (path.endsWith('/user/balances')) return json({ status: 200, data: { buckets: [] } });
@@ -2066,4 +2116,44 @@ it('keeps a payment attempt when its direct Group check names a different Group'
   await f.controller.back();
   expect(f.records.size).toBe(1);
   expect(f.writes).toHaveLength(1);
+});
+
+describe('Payment alerts and an unresolved payment (#842)', () => {
+  it('a Payment alert and its tap keep an unconfirmed payment, its recovery record and retry key, and never send it', async () => {
+    let gateway: 'down' | 'up' = 'down';
+    const { controller, writes, records } = setup(
+      (path, init) => {
+        if (gateway === 'down' && path.endsWith('/settlements') && init.method === 'POST')
+          return gatewayReply(502);
+      },
+      false,
+      true,
+    );
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '10', note: 'Paid already' });
+    await controller.recordSettlement();
+    const attempt = { key: 'settlement-key-1', body: writes[0].body };
+    expect(controller.getSnapshot().settlement).toMatchObject({ status: 'uncertain', attempt });
+    const stored = structuredClone([...records.values()]);
+
+    // Another member's payment lands: the alert may show, but the unresolved one stays put.
+    expect(await controller.receiveNotification(paymentAlert())).toBe(true);
+    await controller.tapNotification(paymentAlert());
+    expect(controller.getSnapshot()).toMatchObject({
+      settlement: { status: 'uncertain', attempt },
+      notificationOpening: { status: 'held' },
+    });
+    expect([...records.values()]).toEqual(stored);
+    expect(writes).toHaveLength(1);
+
+    // Retry is still the member's explicit choice, with the same key and body.
+    gateway = 'up';
+    await controller.recordSettlement();
+    expect(writes).toHaveLength(2);
+    expect(new Headers(writes[1].headers).get('Idempotency-Key')).toBe(attempt.key);
+    expect(writes[1].body).toBe(attempt.body);
+    expect(records.size).toBe(0);
+  });
 });
