@@ -1,13 +1,18 @@
 import { z } from 'zod';
 import { RequestError, Superseded, type RequestOptions } from './transport';
+import type { MobileTimer } from './types';
 export interface NotificationNative {
   installation(): Promise<{ id: string; key: string }>;
   permission(): Promise<'granted' | 'denied' | 'blocked'>;
   requestPermission(): Promise<'granted' | 'denied' | 'blocked'>;
   token(): Promise<string>;
+  /** Calls `listener` with each new Android token; returns what stops listening. */
+  onToken?(listener: (token: string) => void): () => void;
   clear(): Promise<void>;
   openSettings(): Promise<void>;
 }
+/** Registration maintenance tries at most three times, waiting this long before each retry. */
+export const maintenanceRetryDelays = [2_000, 8_000] as const;
 const preferences = z.object({
   available: z.boolean(),
   enabled: z.boolean(),
@@ -53,8 +58,41 @@ export function notificationControls(d: {
   state: () => NotificationControls;
   publish: (state: NotificationControls) => void;
   request: (path: string, owner: number, options?: RequestOptions) => Promise<unknown>;
+  timer?: MobileTimer;
 }) {
   let operation = 0;
+  const timer: MobileTimer =
+    d.timer ??
+    ((run, ms) => {
+      const timeout = setTimeout(run, ms);
+      return () => clearTimeout(timeout);
+    });
+  // Registration maintenance (#844): its own generation, so a Settings read never cancels it,
+  // while a member's change, a session change or disposal always does.
+  let maintenance = 0;
+  let wake: (() => void) | null = null;
+  // A maintenance POST in flight: a member's change waits for its answer, so both use one revision.
+  let maintenanceFlight: Promise<unknown> = Promise.resolve();
+  // Maintenance a member's change interrupted, or that found one pending: it runs after the change.
+  let maintenanceWanted = false;
+  let maintaining: number | null = null;
+  const stopMaintenance = () => {
+    maintenance++;
+    if (maintaining !== null) maintenanceWanted = true;
+    wake?.();
+  };
+  const pause = (ms: number) =>
+    new Promise<void>((resolve) => {
+      const cancel = timer(() => {
+        wake = null;
+        resolve();
+      }, ms);
+      wake = () => {
+        wake = null;
+        cancel();
+        resolve();
+      };
+    });
   // A retiring account's native cleanup must finish before another account obtains a token.
   let cleanup: Promise<void> = Promise.resolve();
   let cleanupFailed = false;
@@ -147,11 +185,13 @@ export function notificationControls(d: {
     }
     const owner = d.owner(),
       task = ++operation;
-    const prior = d.state().confirmed;
+    stopMaintenance();
     set('pending', 'Confirming notification settings…');
     try {
       await cleanup;
+      await maintenanceFlight.catch(() => undefined);
       if (!active(owner, task)) return;
+      const prior = d.state().confirmed;
       const installation = await d.native.installation();
       if (!active(owner, task)) return;
       let token: string | undefined;
@@ -199,9 +239,82 @@ export function notificationControls(d: {
             : '',
       });
       retry = null;
+      // An explicit Enable registered a fresh token itself; a category change resumes maintenance.
+      const resume = maintenanceWanted && enabled && !!category;
+      maintenanceWanted = false;
+      if (resume) void maintain();
       if (!enabled) await clearNative();
     } catch (error) {
       if (active(owner, task)) failed(error);
+    }
+  };
+  /**
+   * Keeps this phone's registration current (#844): after the same session is restored, or with
+   * a new native `token`. Only a phone whose confirmed controls are on for this session and whose
+   * Android permission is granted uploads its token, and never with a permission prompt: the
+   * server refuses it for any other binding. A network or server failure is retried at most
+   * twice; a session change, a member's change or disposal ends it, late results included.
+   */
+  const maintain = async (given?: string): Promise<void> => {
+    if (!d.native || !d.authenticated()) return;
+    const owner = d.owner(),
+      task = ++maintenance;
+    wake?.();
+    const live = () => d.current(owner) && maintenance === task && d.authenticated();
+    maintaining = task;
+    try {
+      for (let attempt = 0; attempt <= maintenanceRetryDelays.length; attempt++) {
+        if (attempt) await pause(maintenanceRetryDelays[attempt - 1]);
+        if (!live() || !d.online()) return;
+        if (d.state().status === 'pending') {
+          maintenanceWanted = true;
+          return;
+        }
+        await read();
+        if (!live()) return;
+        const { status } = d.state();
+        if (status === 'offline' || status === 'error') continue;
+        // Off, Android blocking, or a member's change since: nothing to maintain.
+        if (status !== 'ready' || !d.state().confirmed.enabled) return;
+        try {
+          const installation = await d.native.installation();
+          if (!live()) return;
+          const token = given ?? (await d.native.token());
+          if (!live()) return;
+          const { status: now, confirmed } = d.state();
+          if (now !== 'ready' || !confirmed.enabled) return;
+          const flight = d.request('/api/notifications/device', owner, {
+            method: 'POST',
+            body: {
+              installationId: installation.id,
+              installationKey: installation.key,
+              revision: confirmed.revision,
+              enabled: true,
+              token,
+              maintenance: true,
+            },
+          });
+          maintenanceFlight = flight;
+          const value = await flight;
+          // The server's answer stands for this session even if a member's change came since:
+          // that change waits for it and sends the revision it confirms.
+          if (!d.current(owner) || !d.authenticated()) return;
+          d.publish({ ...d.state(), confirmed: result(value) });
+          return;
+        } catch (error) {
+          if (!live() || error instanceof Superseded) return;
+          if (
+            error instanceof RequestError &&
+            (error.networkFailure || error.kind === 'server-error')
+          )
+            continue;
+          // Refused: the controls changed or this binding has no consent. Show what is confirmed.
+          if (error instanceof RequestError && error.status === 409) await read();
+          return;
+        }
+      }
+    } finally {
+      if (maintaining === task) maintaining = null;
     }
   };
   return {
@@ -229,8 +342,11 @@ export function notificationControls(d: {
         set('error', 'Couldn’t open Android settings. Retry.');
       }
     },
+    maintain,
     reset: () => {
       operation++;
+      stopMaintenance();
+      maintenanceWanted = false;
       retry = null;
       void clearNative().catch(() => undefined);
     },

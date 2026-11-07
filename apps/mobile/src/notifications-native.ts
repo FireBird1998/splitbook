@@ -67,6 +67,24 @@ export function createNotificationNative(environment: string): NotificationNativ
         throw new Error('Android token unavailable');
       return token.data;
     },
+    // FCM can rotate this phone's token at any time; the controller re-registers it (#844).
+    onToken: (listener) => {
+      let listening = true;
+      let subscription: { remove(): void } | null = null;
+      void native()
+        .then((n) => {
+          if (!listening) return;
+          subscription = n.addPushTokenListener((token) => {
+            if (listening && token.type === 'android' && typeof token.data === 'string')
+              listener(token.data);
+          });
+        })
+        .catch(() => undefined);
+      return () => {
+        listening = false;
+        subscription?.remove();
+      };
+    },
     clear: async () => {
       const n = await native();
       await Promise.all([

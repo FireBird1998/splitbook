@@ -1177,6 +1177,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     state: () => snapshot.notifications,
     publish: (notifications) => publish({ ...snapshot, notifications }),
     request,
+    timer: dependencies.timer,
+  });
+  // A new Android token keeps an opted-in phone registered (#844); disposal stops listening.
+  const stopTokenChanges = dependencies.notifications?.onToken?.((token) => {
+    void notifications.maintain(token);
   });
 
   /**
@@ -1835,6 +1840,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       cookieAccount = session.accountId;
       showSavedHome(owner, await deviceHome);
       await verifyAndLoad(owner);
+      // The same session, restored: its registration gets the phone's current token (#844).
+      if (current(owner)) void notifications.maintain();
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
       if (error instanceof RequestError && error.networkFailure && (await restoreOffline(owner)))
@@ -8254,6 +8261,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       };
     },
     dispose: () => {
+      stopTokenChanges?.();
       invalidate();
       disconnect();
       listeners.clear();
