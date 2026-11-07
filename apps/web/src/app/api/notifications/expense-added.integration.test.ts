@@ -401,7 +401,7 @@ describe('Expense-added alerts through authenticated HTTP and real MongoDB', () 
       .findOne({ type: 'expense_added' });
     expect(event!.notificationContext.recipientIds).toEqual([users.sam]);
   });
-  it('invalid-token disable advances the device revision and refuses a stale category update', async () => {
+  it('an invalid token stops its sends but keeps the controls, and a stale category update is still refused (#844)', async () => {
     provider.send.mockImplementationOnce(async (_message, _signal, authorize) => {
       expect(await authorize()).toBe(true);
       return 'invalid-token';
@@ -413,7 +413,7 @@ describe('Expense-added alerts through authenticated HTTP and real MongoDB', () 
       cookie: sam,
       headers: { 'X-Installation-Key': installationKey },
     });
-    expect(current.body.data).toMatchObject({ enabled: false, revision: 2 });
+    expect(current.body.data).toMatchObject({ enabled: true, expenseUpdates: true, revision: 1 });
     const stale = await callRoute(device.POST, {
       method: 'POST',
       path: '/api/notifications/device',
@@ -421,13 +421,14 @@ describe('Expense-added alerts through authenticated HTTP and real MongoDB', () 
       body: {
         installationId: phone,
         installationKey,
-        revision: 1,
+        revision: 0,
         enabled: true,
         expenseUpdates: true,
         payments: false,
       },
     });
     expect(stale.status).toBe(409);
+    await create();
     await run();
     expect(provider.send).toHaveBeenCalledTimes(1);
   });

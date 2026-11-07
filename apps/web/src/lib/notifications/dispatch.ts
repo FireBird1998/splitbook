@@ -21,6 +21,8 @@ interface Registration {
   expenseCutoff: Date;
   token: string;
   tokenHash: string;
+  /** FCM answered that the token is unregistered (#844): consent stays, sends wait for a new token. */
+  tokenInvalid?: true;
   revision: number;
 }
 interface Delivery {
@@ -185,6 +187,8 @@ async function runDispatch(
               activation: { $type: 'string' },
               expenseCutoff: { $lte: occurredAt },
               expiresAt: { $gt: new Date() },
+              token: { $type: 'string' },
+              tokenInvalid: { $ne: true },
             },
           },
           {
@@ -295,7 +299,9 @@ async function runDispatch(
           expenseUpdates: true,
           expenseCutoff: { $lte: occurredAt },
           expiresAt: { $gt: new Date() },
-          token: registration.token,
+          // The installation's current token, which may have rotated since this pass listed it (#844).
+          token: { $type: 'string' },
+          tokenInvalid: { $ne: true },
         },
         { maxTimeMS: 500 },
       );
@@ -400,6 +406,7 @@ async function runDispatch(
                 expenseCutoff: { $lte: occurredAt },
                 expiresAt: { $gt: new Date() },
                 token: live.token,
+                tokenInvalid: { $ne: true },
               },
               { projection: { _id: 1 }, maxTimeMS: 500 },
             );
@@ -455,6 +462,8 @@ async function runDispatch(
         { $set: { state: outcome } },
         { maxTimeMS: 500 },
       );
+      // The token is disabled, not the member's consent: the phone's next token, registered under
+      // the same binding and activation, receives later alerts (#844). A rotated token is untouched.
       if (outcome === 'invalid-token')
         await authDb.collection('notificationRegistrations').updateOne(
           {
@@ -463,10 +472,7 @@ async function runDispatch(
             binding: live.binding,
             token: live.token,
           },
-          {
-            $set: { enabled: false, expenseUpdates: false, payments: false },
-            $inc: { revision: 1 },
-          },
+          { $set: { tokenInvalid: true } },
           { maxTimeMS: 500 },
         );
       if (outcome === 'accepted') counts.accepted++;

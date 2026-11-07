@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { AuthDatabaseWatch, connectMongo, getAuthDb } from '@/lib/mongodb-client';
 import { readJson, serverError, validationError } from '@/lib/utils/api-response';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type ClientSession } from 'mongodb';
 
 const id = z.string().uuid();
 const proof = z.string().min(32).max(256);
@@ -18,6 +18,20 @@ const update = z
     expenseUpdates: z.boolean().optional(),
     payments: z.boolean().optional(),
     token: z.string().min(1).max(4096).optional(),
+  })
+  .strict();
+/**
+ * Registration maintenance (#844): this phone's new native token, under the consent its live
+ * binding already holds. It never enables, changes a category or moves a cutoff.
+ */
+const maintenance = z
+  .object({
+    installationId: id,
+    installationKey: proof,
+    revision: z.number().int().nonnegative(),
+    enabled: z.literal(true),
+    token: z.string().min(1).max(4096),
+    maintenance: z.literal(true),
   })
   .strict();
 const privateHeaders = {
@@ -55,6 +69,8 @@ type Registration = {
   paymentCutoff: Date | null;
   token?: string;
   tokenHash?: string;
+  /** FCM answered that this token is unregistered: nothing is sent to it until a new one comes. */
+  tokenInvalid?: true;
 };
 const off = (revision = 0) => ({
   available: available(),
@@ -134,11 +150,34 @@ export async function POST(req: Request) {
     const member = await identity();
     if (!member) return refusal('Unauthorized', 401);
 
-    const input = update.safeParse(await readJson(req));
+    const json = await readJson(req);
+    const maintaining =
+      typeof json === 'object' && json !== null && 'maintenance' in json
+        ? maintenance.safeParse(json)
+        : null;
+    if (maintaining && !maintaining.success)
+      return privateResult(validationError(maintaining.error));
+    const input = maintaining ?? update.safeParse(json);
     if (!input.success) return privateResult(validationError(input.error));
-    const body = input.data;
-    if (body.enabled && !available()) return refusal('Notifications are not available yet.', 503);
+    const body: z.infer<typeof update> = input.data;
+    if (body.enabled && !maintaining && !available())
+      return refusal('Notifications are not available yet.', 503);
     const { client, registrations, sessions } = await collections();
+    // Consent belongs to this installation's own opt-in, never to another registration holding the token.
+    const releaseToken = (row: Registration, options: { session: ClientSession }) =>
+      registrations.updateMany(
+        {
+          environment: row.environment,
+          tokenHash: row.tokenHash,
+          installationId: { $ne: row.installationId },
+          enabled: true,
+        },
+        {
+          $set: { enabled: false, expenseUpdates: false, payments: false },
+          $inc: { revision: 1 },
+        },
+        options,
+      );
     const transaction = client.startSession();
     try {
       return await transaction.withTransaction(async () => {
@@ -165,6 +204,23 @@ export async function POST(req: Request) {
         const prior = same ? previous : null;
         if (body.revision !== (previous?.revision ?? 0))
           return refusal('Notification settings changed. Retry.', 409);
+        if (maintaining) {
+          // Only this account's live session, still opted in, keeps its binding with a new token:
+          // never a phone that opted out, another account or a new session (#844).
+          if (!prior?.enabled || !body.token)
+            return refusal('Notification settings changed. Retry.', 409);
+          if (prior.tokenHash === hash(body.token)) return answer(publicState(prior));
+          const row: Registration = {
+            ...prior,
+            token: body.token,
+            tokenHash: hash(body.token),
+            revision: prior.revision + 1,
+          };
+          delete row.tokenInvalid;
+          await releaseToken(row, options);
+          await registrations.replaceOne(filter, row, options);
+          return answer(publicState(row));
+        }
         const enabling = body.enabled && !prior?.enabled;
         const expenseUpdates =
           body.enabled &&
@@ -200,22 +256,12 @@ export async function POST(req: Request) {
           paymentCutoff:
             payments && (enabling || !prior?.payments) ? now : (prior?.paymentCutoff ?? null),
           ...(token ? { token, tokenHash: hash(token) } : {}),
+          // A token FCM refused stays refused until the phone has a new one.
+          ...(token && previous?.tokenInvalid && previous.tokenHash === hash(token)
+            ? { tokenInvalid: true as const }
+            : {}),
         };
-        // Consent belongs to this explicit opt-in, never to another registration holding the token.
-        if (body.enabled)
-          await registrations.updateMany(
-            {
-              environment: row.environment,
-              tokenHash: row.tokenHash,
-              installationId: { $ne: row.installationId },
-              enabled: true,
-            },
-            {
-              $set: { enabled: false, expenseUpdates: false, payments: false },
-              $inc: { revision: 1 },
-            },
-            options,
-          );
+        if (body.enabled) await releaseToken(row, options);
         if (previous) await registrations.replaceOne(filter, row, options);
         else await registrations.insertOne(row, options);
         return answer(publicState(row));
