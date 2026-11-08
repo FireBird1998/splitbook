@@ -45,7 +45,13 @@ export function groupWidget(
     compactLabel: null as string | null,
     compactAmount: null as string | null,
     currencyOverflow: null as string | null,
-    payments: [] as { label: string; amount: string; firstName: string; incoming: boolean }[],
+    payments: [] as {
+      label: string;
+      amount: string;
+      firstName: string;
+      incoming: boolean;
+      payment: { from: string; to: string; currency: string } | null;
+    }[],
     balanceTone: 'neutral' as 'neutral' | 'positive' | 'negative',
     more: null as string | null,
     people: null as string | null,
@@ -109,6 +115,10 @@ export function groupWidget(
           .trim()
           .split(/\s+/)[0],
         incoming: payment.to === setup.accountId,
+        payment:
+          payment.from && payment.to
+            ? { from: payment.from, to: payment.to, currency: bucket.currency }
+            : null,
         person: payment.from === setup.accountId ? payment.to : payment.from,
       })),
   );
@@ -147,7 +157,12 @@ export function groupWidget(
         : `${bucket!.balanceMinor < 0 ? 'You owe' : 'You’re owed'} ${formatCurrency(toMajorAmount(Math.abs(bucket!.balanceMinor), bucket!.currency), bucket!.currency)}`,
     payments: own
       .slice(0, limit)
-      .map(({ label, amount, firstName, incoming }) => ({ label, amount, firstName, incoming })),
+      .map(({ label, amount, firstName, incoming, payment }) => ({
+        label,
+        amount,
+        firstName,
+        incoming,
+      })),
     more: limit && own.length > limit ? `+${counted(own.length - limit, 'more', 'more')}` : null,
     people: own.length
       ? `${bucket?.balanceMinor && bucket.balanceMinor < 0 ? 'to' : 'from'} ${counted(new Set(own.map((p) => p.person)).size, 'person', 'people')}`

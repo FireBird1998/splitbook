@@ -8227,8 +8227,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (target.kind === 'expense') await openExpense(target.groupId);
       else {
         await openGroup(target.groupId, false, 'balances');
-        if (target.kind === 'settle' && snapshot.detail.data?.id === target.groupId)
-          await openSettlements(target.groupId);
+        if (
+          target.kind === 'settle' &&
+          target.payment &&
+          snapshot.detail.data?.id === target.groupId &&
+          [target.payment.from, target.payment.to].includes(snapshot.auth.user!.id)
+        )
+          await openRecordPayment(target.payment.from, target.payment.to, target.payment.currency);
       }
       return;
     }

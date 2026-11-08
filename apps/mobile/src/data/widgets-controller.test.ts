@@ -17,7 +17,7 @@ function fixture() {
   let offline = false,
     expired = false,
     owed = 2400;
-  let groupBalances: unknown = {byCurrency:[]};
+  let groupBalances: unknown = { byCurrency: [] };
   let refused = 0;
   let offlineAfterSave = false;
   let identity: unknown = null;
@@ -34,7 +34,20 @@ function fixture() {
     category: 'home',
     defaultCurrency: 'INR',
     tags: [{ _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: false }],
-    members: [{ user: { ...user, _id: user.id }, role: 'admin', joinedAt: '2026-11-01T00:00:00Z' }],
+    members: [
+      { user: { ...user, _id: user.id }, role: 'admin', joinedAt: '2026-11-01T00:00:00Z' },
+      ...[
+        alex,
+        sam,
+        { id: 'a00000000000000000000003', name: 'Priya Shah', email: 'priya@example.test' },
+      ]
+        .filter((person) => person.id !== user.id)
+        .map((person) => ({
+          user: { ...person, _id: person.id },
+          role: 'member',
+          joinedAt: '2026-11-01T00:00:00Z',
+        })),
+    ],
     createdAt: '2026-11-01T00:00:00Z',
     updatedAt: '2026-11-01T00:00:00Z',
   });
@@ -61,6 +74,12 @@ function fixture() {
           redraw: async () => {
             events.push('redraw');
           },
+        },
+        settlementAttempts: {
+          load: async () => null,
+          save: async () => {},
+          remove: async () => {},
+          clear: async () => {},
         },
         newSubmissionKey: () => 'widget-expense-fictional-986',
         expenseDrafts: {
@@ -211,7 +230,9 @@ function fixture() {
   };
   return {
     make,
-    groupBalances: (value:unknown)=>{groupBalances=value;},
+    groupBalances: (value: unknown) => {
+      groupBalances = value;
+    },
     offlineAfterSave: () => {
       offlineAfterSave = true;
     },
@@ -465,12 +486,37 @@ it('restores Group widget parts and offline setup with their original saved veri
 });
 
 it('a widget payment tap opens the chosen payment without sending a Settlement request', async () => {
- const f=fixture(),c=f.make(),priya={_id:'a00000000000000000000003',name:'Priya Shah'};
- f.groupBalances({byCurrency:[{currency:'INR',balances:[{user:{_id:alex.id,name:alex.name},balance:-1060},{user:priya,balance:1060}],debts:[{from:{_id:alex.id,name:alex.name},to:priya,amount:1060}]}]});
- await c.signIn('alex');await c.openWidget({kind:'settle',groupId,payment:{from:alex.id,to:priya._id,currency:'INR'}});
- expect(c.getSnapshot().screen).toBe('settlement');
- expect(c.getSnapshot().settlement.draft).toMatchObject({paidBy:alex.id,paidTo:priya._id,currency:'INR',amount:'1060.00'});
- expect(f.requests.filter(r=>r.method==='POST' && r.path.includes('/settlements'))).toEqual([]);
+  const f = fixture(),
+    c = f.make(),
+    priya = { _id: 'a00000000000000000000003', name: 'Priya Shah' };
+  f.groupBalances({
+    byCurrency: [
+      {
+        currency: 'INR',
+        balances: [
+          { user: { _id: alex.id, name: alex.name }, balance: -1060 },
+          { user: priya, balance: 1060 },
+        ],
+        debts: [{ from: { _id: alex.id, name: alex.name }, to: priya, amount: 1060 }],
+      },
+    ],
+  });
+  await c.signIn('alex');
+  await c.openWidget({
+    kind: 'settle',
+    groupId,
+    payment: { from: alex.id, to: priya._id, currency: 'INR' },
+  });
+  expect(c.getSnapshot().screen).toBe('settlement');
+  expect(c.getSnapshot().settlement.draft).toMatchObject({
+    paidBy: alex.id,
+    paidTo: priya._id,
+    currency: 'INR',
+    amount: '1060',
+  });
+  expect(f.requests.filter((r) => r.method === 'POST' && r.path.includes('/settlements'))).toEqual(
+    [],
+  );
 });
 it('a widget Add expense tap resumes the Group’s unfinished draft', async () => {
   const f = fixture(),

@@ -29,7 +29,11 @@ export type WidgetTarget =
   | 'review'
   | 'sign-in'
   | 'create-group'
-  | { kind: 'group' | 'settle' | 'expense'; groupId: string }
+  | {
+      kind: 'group' | 'settle' | 'expense';
+      groupId: string;
+      payment?: { from: string; to: string; currency: string };
+    }
   | { kind: 'setup'; widgetId: number };
 export type WidgetSession =
   | { status: 'authenticated'; accountId: string; loading: boolean }

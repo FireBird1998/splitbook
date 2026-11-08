@@ -177,7 +177,11 @@ export function drawGroup(
             <FlexWidget
               key={index}
               clickAction="OPEN_URI"
-              clickActionData={action({ kind: 'settle', groupId: setup.groupId })}
+              clickActionData={action({
+                kind: 'settle',
+                groupId: setup.groupId,
+                ...(payment.payment ? { payment: payment.payment } : {}),
+              })}
               accessibilityLabel={payment.label + ' ' + payment.amount}
               style={{
                 flexDirection: 'row',
