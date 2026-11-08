@@ -110,3 +110,9 @@ it('treats Android’s float representation of 130% as large text', () => {
       .layout.showTitle,
   ).toBe(false);
 });
+
+it('keeps the compact Group action on one readable line at 200% without losing saved time', () => {
+ const v=groupWidget(part,setup,'2x2',auth,now,2);
+ expect(v.layout).toMatchObject({actionFontSize:10,actionPaddingHorizontal:6,showSaved:true});
+ expect(v.addExpense).toBe(true);
+});
