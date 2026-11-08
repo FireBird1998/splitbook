@@ -44,6 +44,8 @@ it('generates provider bounds that allow four columns and two rows on the device
     expect(xml).toContain('android:maxResizeHeight="220dp"');
     expect(xml).toContain('android:targetCellWidth="2" android:targetCellHeight="2"');
     expect(xml).toContain('android:updatePeriodMillis="0"');
+    expect(xml).toContain('android:widgetFeatures="reconfigurable"');
+    expect(xml).toContain('android:configure="com.splitbook.app.dev.widget.GroupConfiguration"');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
