@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { balancesWidget, type WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget, type WidgetGroupPart } from '@splitbook/shared/group-widget';
-import { widgetSetupChoices } from '@splitbook/shared/widget-setup';
+import { widgetSetupButtonLabel, widgetSetupChoices } from '@splitbook/shared/widget-setup';
 const previousZone = process.env.TZ;
 beforeAll(() => {
   process.env.TZ = 'Asia/Kolkata';
@@ -214,3 +214,8 @@ it.each([null, 'maple'])(
     });
   },
 );
+it('labels a new widget Add widget and an existing widget Save', () => {
+  expect(widgetSetupButtonLabel(null)).toBe('Add widget');
+  expect(widgetSetupButtonLabel(setup)).toBe('Save');
+  expect(widgetSetupButtonLabel({ kind: 'balances', widgetId: 3, hideAmounts: false })).toBe('Save');
+});
