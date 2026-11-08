@@ -213,3 +213,8 @@ it('states why an archived Group cannot take another Expense and confirms an all
     'You’re all square in Maple House.',
   );
 });
+it('uses two initials in payment avatars without expanding the visible first names', () => {
+  expect(groupWidget(part, setup, '4x2', session, now).payments).toMatchObject([
+    { firstName: 'Priya', initials: 'PS' }, { firstName: 'Sam', initials: 'SC' },
+  ]);
+});
