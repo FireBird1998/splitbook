@@ -1,3 +1,5 @@
+import { widgetGroupCopy } from './widget-group-copy';
+import type { WidgetGroupPart } from '@splitbook/shared/group-widget';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
 import { createSavedCopyQueue } from './home-queries';
@@ -15,18 +17,56 @@ export function createWidgetCopy(
   native: WidgetsNative | undefined,
   lease: () => AccountStorageLease | null,
   review: (snapshot: MobileSnapshot) => WidgetCopy['review'],
+  groupsTime: () => number | null = () => null,
 ) {
   const queue = createSavedCopyQueue();
   let signature = '';
+  let groups: Record<string, WidgetGroupPart> = {};
+  let savedGroups: WidgetCopy['savedGroups'];
+  const lost = new Set<string>();
   return {
     update(snapshot: MobileSnapshot) {
       if (!native || snapshot.auth.status !== 'authenticated') return;
       const held = lease();
       if (!held) return;
       const data = snapshot.home;
+      const listed = groupsTime();
+      if (snapshot.groups.loaded && listed !== null)
+        savedGroups = {
+          verifiedAt: listed,
+          rows: snapshot.groups.data.map((g) => ({
+            id: g.id,
+            name: g.name,
+            theme: g.category,
+            archived: !!g.isArchived,
+            members: g.members.length,
+            currencies: 1 + g.alternateCurrencies.length,
+          })),
+        };
+      const detail = snapshot.detail,
+        balances = snapshot.financial.balances;
+      if (
+        detail.data &&
+        detail.refreshedAt !== null &&
+        snapshot.financial.groupId === detail.data.id &&
+        balances.data &&
+        balances.refreshedAt !== null &&
+        !balances.changed &&
+        !lost.has(detail.data.id)
+      )
+        groups[detail.data.id] = widgetGroupCopy(
+          detail.data,
+          balances.data,
+          held.accountId,
+          detail.refreshedAt,
+          balances.refreshedAt,
+        );
       const copy: WidgetCopy = {
         version: 1,
         accountId: held.accountId,
+        groups: { ...groups },
+        lostGroupIds: [...lost],
+        ...(savedGroups ? { savedGroups } : {}),
         home:
           data.data !== null && data.refreshedAt !== null
             ? {
@@ -56,9 +96,21 @@ export function createWidgetCopy(
         await held.writeSavedCopy(() => native.redraw());
       });
     },
+    forgetGroup(id: string, denied = false) {
+      delete groups[id];
+      if (denied) {
+        lost.add(id);
+        if (savedGroups)
+          savedGroups = { ...savedGroups, rows: savedGroups.rows.filter((g) => g.id !== id) };
+      }
+      signature = '';
+    },
     reset() {
       queue.cancel();
       signature = '';
+      groups = {};
+      savedGroups = undefined;
+      lost.clear();
     },
     idle: () => queue.idle(),
     async clear() {

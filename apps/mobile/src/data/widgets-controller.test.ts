@@ -396,13 +396,22 @@ it('hides a 401 immediately even while a saved-copy write is still running', asy
 
 it('projects a Group and its Balances reads into the widget copy with both verification times', async () => {
   vi.spyOn(Date, 'now').mockReturnValue(verified);
-  const f = fixture(); const controller = f.make();
+  const f = fixture();
+  const controller = f.make();
   await controller.signIn('alex');
   await controller.openGroup(groupId);
   await controller.refreshBalances();
-  await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toMatchObject({
-    id: groupId, name:'Maple House', theme:'home', archived:false, mainCurrency:'INR',
-    verifiedAt:verified, balancesVerifiedAt:verified, currencies:[],
-  }));
-  expect(f.copies.at(-1)?.savedGroups?.rows.map(g => g.id)).toEqual([groupId]);
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.groups?.[groupId]).toMatchObject({
+      id: groupId,
+      name: 'Maple House',
+      theme: 'home',
+      archived: false,
+      mainCurrency: 'INR',
+      verifiedAt: verified,
+      balancesVerifiedAt: verified,
+      currencies: [],
+    }),
+  );
+  expect(f.copies.at(-1)?.savedGroups?.rows.map((g) => g.id)).toEqual([groupId]);
 });

@@ -861,14 +861,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     };
   };
 
-  const widgets = createWidgetCopy(dependencies.widgets, accountStorage, (next) => {
-    if (!persistentDrafts || !next.auth.user || next.toReview.status !== 'ready') return undefined;
-    const query = queryClient.getQueryState(
-      toReviewKey({ environment: apiBase, accountId: next.auth.user.id }),
-    );
-    if (!query?.dataUpdatedAt) return undefined;
-    return { count: mobileToReview(next, now()).counts.total, verifiedAt: query.dataUpdatedAt };
-  });
+  const widgets = createWidgetCopy(
+    dependencies.widgets,
+    accountStorage,
+    (next) => {
+      if (!persistentDrafts || !next.auth.user || next.toReview.status !== 'ready')
+        return undefined;
+      const query = queryClient.getQueryState(
+        toReviewKey({ environment: apiBase, accountId: next.auth.user.id }),
+      );
+      if (!query?.dataUpdatedAt) return undefined;
+      return { count: mobileToReview(next, now()).counts.total, verifiedAt: query.dataUpdatedAt };
+    },
+    () => {
+      const data = queryClient.getQueryData<{ refreshedAt: number }>(groupsKey(account()));
+      return data?.refreshedAt ?? null;
+    },
+  );
 
   const savedCopies = savedCopyBudget({
     rows: dependencies.savedQueries,

@@ -1,3 +1,5 @@
+import type { WidgetGroupPart } from './group-widget';
+import type { GroupCategory } from './types';
 /** Saved read available to the Android widget renderer, never a live balance. */
 export interface WidgetCopy {
   version: 1;
@@ -6,6 +8,19 @@ export interface WidgetCopy {
     verifiedAt: number;
     groupCount: number;
     currencies: { currency: string; owedMinor: number; oweMinor: number }[];
+  };
+  groups?: Record<string, WidgetGroupPart>;
+  lostGroupIds?: string[];
+  savedGroups?: {
+    verifiedAt: number;
+    rows: {
+      id: string;
+      name: string;
+      theme: GroupCategory;
+      archived: boolean;
+      members: number;
+      currencies: number;
+    }[];
   };
   review?: { count: number; verifiedAt: number };
 }
