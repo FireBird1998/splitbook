@@ -899,3 +899,25 @@ describe('recovered alerts, delivered hours after their change, at the Android c
     });
   });
 });
+
+
+describe('one held destination for notification and widget taps',()=>{
+  it.each(['widget-widget','widget-notification','notification-widget'] as const)('the newer %s tap replaces the earlier destination',async order=>{
+    const c=setup();await c.signIn('alex');await c.openExpense(groupId);
+    if(order.startsWith('notification'))await c.tapNotification(hint());else await c.openWidget('home');
+    const owner=c.getSnapshot().heldNotification!;c.consumeHeldNotificationNotice(owner);
+    if(order.endsWith('notification'))await c.tapNotification(hint());else await c.openWidget({kind:'group',groupId});
+    expect(c.getSnapshot().heldNotification).toBe(owner);expect(c.getSnapshot().heldNotificationNotice).toBeNull();
+    await c.closeExpense();await c.openPendingNotification();
+    expect(c.getSnapshot()).toMatchObject({screen:'group',destination:order.endsWith('notification')?'activity':'balances',notificationOpening:{status:'idle'}});
+  });
+  it('Not now drops a held widget destination without opening it',async()=>{
+    const c=setup();await c.signIn('alex');c.startCreate();await c.openWidget({kind:'group',groupId});c.back();const owner=c.getSnapshot().heldNotification!;
+    c.dismissPendingNotification(owner);await c.openPendingNotification();expect(c.getSnapshot()).toMatchObject({screen:'groups',heldNotification:null,notificationOpening:{status:'idle'}});
+  });
+  it('retains a failed widget destination for explicit retry',async()=>{
+    let fail=false;const c=setup(url=>fail&&url.pathname==='/api/groups/'+groupId?json({error:'Unavailable'},500):undefined);
+    await c.signIn('alex');c.startCreate();await c.openWidget({kind:'group',groupId});c.back();fail=true;await c.openPendingNotification();expect(c.getSnapshot().notificationOpening.status).toBe('error');
+    fail=false;await c.openPendingNotification();expect(c.getSnapshot()).toMatchObject({destination:'balances',notificationOpening:{status:'idle'}});
+  });
+});
