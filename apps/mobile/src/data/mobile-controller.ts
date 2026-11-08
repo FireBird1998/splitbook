@@ -43,6 +43,7 @@ import { readProvenance } from './read-provenance';
 import {
   connectedAssistantsKey,
   groupKey,
+  groupBalancesKey,
   groupsKey,
   homeBalancesKey,
   queryKeyPath,
@@ -861,14 +862,40 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     };
   };
 
-  const widgets = createWidgetCopy(dependencies.widgets, accountStorage, (next) => {
-    if (!persistentDrafts || !next.auth.user || next.toReview.status !== 'ready') return undefined;
-    const query = queryClient.getQueryState(
-      toReviewKey({ environment: apiBase, accountId: next.auth.user.id }),
-    );
-    if (!query?.dataUpdatedAt) return undefined;
-    return { count: mobileToReview(next, now()).counts.total, verifiedAt: query.dataUpdatedAt };
-  });
+  const widgets = createWidgetCopy(
+    dependencies.widgets,
+    accountStorage,
+    (next) => {
+      if (!persistentDrafts || !next.auth.user || next.toReview.status !== 'ready')
+        return undefined;
+      const query = queryClient.getQueryState(
+        toReviewKey({ environment: apiBase, accountId: next.auth.user.id }),
+      );
+      if (!query?.dataUpdatedAt) return undefined;
+      return { count: mobileToReview(next, now()).counts.total, verifiedAt: query.dataUpdatedAt };
+    },
+    () => {
+      const data = queryClient.getQueryData<{ refreshedAt: number }>(groupsKey(account()));
+      return data?.refreshedAt ?? null;
+    },
+    dependencies.savedQueries,
+    now,
+    (id) => {
+      const group = queryClient.getQueryData<Envelope>(groupKey(account(), id));
+      const balances = queryClient.getQueryData<Envelope>(groupBalancesKey(account(), id));
+      return group && balances ? { group, balances } : null;
+    },
+    (path, verifiedAt) => {
+      const id = path.split('/')[3];
+      const key =
+        path === '/api/groups'
+          ? groupsKey(account())
+          : path.endsWith('/balances')
+            ? groupBalancesKey(account(), id)
+            : groupKey(account(), id);
+      return verifiedAt > (scoped(untrusted, key) ?? -Infinity);
+    },
+  );
 
   const savedCopies = savedCopyBudget({
     rows: dependencies.savedQueries,
@@ -1585,9 +1612,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     activity: activityQueries,
     home: homeQueries,
     untrusted,
+    removed: (groupId) => widgets.forgetGroup(groupId),
   });
   const ledgerChanged = retirement.changed;
-  const removeLedgerCopies = retirement.removeLedger;
+  const removeLedgerCopies = async (groupId: string, owner: number) => {
+    widgets.forgetGroup(groupId);
+    await retirement.removeLedger(groupId, owner);
+    if (current(owner)) widgets.update(snapshot);
+  };
 
   /** An Expense read answered 404: the Group stays, but every older ledger copy goes. */
   const missingLedger = async (groupId: string, owner: number) => {
@@ -2322,6 +2354,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       'groups',
       'home',
     ];
+    widgets.forgetGroup(groupId, true);
     // Its views observe nothing more, so their removed queries are never read back (F5).
     groupQueries.lose(groupId);
     expenseQueries.lose(groupId);
@@ -8185,7 +8218,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openWidget = async (target: WidgetTarget) => {
     if (widgetRestore) await widgetRestore;
     else if (snapshot.auth.status === 'restoring') await restore();
+    if (typeof target !== 'string' && target.kind === 'setup') {
+      await dependencies.widgets?.openSetup?.(target.widgetId);
+      return;
+    }
     if (snapshot.auth.status !== 'authenticated') return;
+    if (typeof target !== 'string') {
+      if (target.kind === 'expense') await openExpense(target.groupId);
+      else {
+        await openGroup(target.groupId, false, 'balances');
+        if (
+          target.kind === 'settle' &&
+          target.payment &&
+          snapshot.detail.data?.id === target.groupId &&
+          [target.payment.from, target.payment.to].includes(snapshot.auth.user!.id)
+        )
+          await openRecordPayment(target.payment.from, target.payment.to, target.payment.currency);
+      }
+      return;
+    }
     // To review is Home's first card. Returning Home exposes it without a new screen.
     if (target === 'create-group') {
       startCreate();

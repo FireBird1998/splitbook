@@ -1,3 +1,4 @@
+import { drawGroup } from './group-widget-draw';
 // Narrow imports keep unused preview and setup UI out of the widget bundle.
 import { FlexWidget } from 'react-native-android-widget/src/widgets/FlexWidget';
 import { SvgWidget } from 'react-native-android-widget/src/widgets/SvgWidget';
@@ -240,6 +241,20 @@ function draw(view: BalancesWidgetView, t: SemanticTokens) {
 }
 async function representation(info: WidgetInfo) {
   const record = await widgetStore.read();
+  if (info.widgetName === 'Group') {
+    const setup = await widgetStore.setup(info.widgetId);
+    const selected = setup ?? {
+      kind: 'group' as const,
+      widgetId: info.widgetId,
+      groupId: '',
+      accountId: '',
+    };
+    const size = info.width < 280 ? '2x2' : info.height >= 260 ? '4x3' : '4x2';
+    return {
+      light: drawGroup(record.copy, selected, size, record.session, Date.now(), lightTokens),
+      dark: drawGroup(record.copy, selected, size, record.session, Date.now(), darkTokens),
+    };
+  }
   const size = info.height < 130 ? '2x1' : info.width >= 280 ? '4x2' : '2x2';
   const view = balancesWidget(
     record.copy,
@@ -261,11 +276,11 @@ const serializeDraw = (run: () => Promise<void>) => {
 };
 export function redrawBalances() {
   return serializeDraw(async () => {
-    const widgets = await getWidgetInfo('Balances');
+    const widgets = (await Promise.all([getWidgetInfo('Balances'), getWidgetInfo('Group')])).flat();
     await Promise.all(
       widgets.map((info) =>
         requestWidgetUpdateById({
-          widgetName: 'Balances',
+          widgetName: info.widgetName,
           widgetId: info.widgetId,
           renderWidget: representation,
         }),
@@ -275,7 +290,11 @@ export function redrawBalances() {
 }
 export function registerAndroidWidgets() {
   registerWidgetTaskHandler(async ({ widgetInfo, widgetAction, renderWidget }) => {
-    if (widgetInfo.widgetName !== 'Balances' || widgetAction === 'WIDGET_DELETED') return;
+    if (widgetAction === 'WIDGET_DELETED') {
+      await widgetStore.removeSetup(widgetInfo.widgetId);
+      return;
+    }
+    if (!['Balances', 'Group'].includes(widgetInfo.widgetName)) return;
     await serializeDraw(async () => {
       renderWidget(await representation(widgetInfo));
     });

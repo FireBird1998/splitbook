@@ -33,6 +33,57 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
         },
       ],
     });
+    app.receiver = app.receiver.filter((item) => item.$['android:name'] !== '.widget.Group');
+    app.receiver.push({
+      $: {
+        'android:name': '.widget.Group',
+        'android:label': 'Group',
+        'android:enabled': String(enabled),
+        'android:exported': 'false',
+      },
+      'intent-filter': [
+        {
+          action: [
+            { $: { 'android:name': 'android.appwidget.action.APPWIDGET_UPDATE' } },
+            { $: { 'android:name': `${config.android.package}.WIDGET_CLICK` } },
+          ],
+        },
+      ],
+      'meta-data': [
+        {
+          $: {
+            'android:name': 'android.appwidget.provider',
+            'android:resource': '@xml/widget_group',
+          },
+        },
+      ],
+    });
+    app.activity = (app.activity ?? []).filter(
+      (item) =>
+        ![
+          'com.reactnativeandroidwidget.RNWidgetConfigurationActivity',
+          '.widget.GroupConfiguration',
+        ].includes(item.$['android:name']),
+    );
+    app.activity.push({
+      $: {
+        'android:name': '.widget.GroupConfiguration',
+        'android:exported': 'true',
+        'android:theme': '@style/AppTheme',
+        'android:configChanges':
+          'keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode',
+        'android:enabled': String(enabled),
+      },
+      'intent-filter': [
+        {
+          action: [
+            { $: { 'android:name': 'android.appwidget.action.APPWIDGET_CONFIGURE' } },
+            { $: { 'android:name': `${config.android.package}.WIDGET_CONFIGURE` } },
+          ],
+          category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
+        },
+      ],
+    });
     return mod;
   });
   return withDangerousMod(config, [
@@ -71,7 +122,8 @@ public class Balances extends com.reactnativeandroidwidget.RNWidgetProvider {
           if (running && uri.getQueryParameter("__expo_url") != null)
             uri = uri.buildUpon().clearQuery().build();
           context.startActivity(new Intent(Intent.ACTION_VIEW, uri)
-              .setPackage(context.getPackageName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+              .setPackage(context.getPackageName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                  | (running ? 0 : Intent.FLAG_ACTIVITY_CLEAR_TASK)));
           // Starting calibration on a cold host races the app's bundle and session restore.
           if (running) {
             Intent measure = new Intent(intent);
@@ -84,6 +136,34 @@ public class Balances extends com.reactnativeandroidwidget.RNWidgetProvider {
       return;
     }
     super.onReceive(context, intent);
+  }
+}
+`,
+      );
+      fs.writeFileSync(
+        path.join(javaDir, 'Group.java'),
+        `package ${config.android.package}.widget;
+public class Group extends Balances {}
+`,
+      );
+      fs.writeFileSync(
+        path.join(javaDir, 'GroupConfiguration.java'),
+        `package ${config.android.package}.widget;
+import android.appwidget.AppWidgetManager;
+import android.appwidget.AppWidgetProviderInfo;
+import android.os.Bundle;
+public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetConfigurationActivity {
+  @Override protected void onCreate(Bundle savedInstanceState) {
+    Bundle extras = getIntent().getExtras();
+    Object value = extras == null ? null : extras.get(AppWidgetManager.EXTRA_APPWIDGET_ID);
+    // React Native sendIntent encodes JS numbers as Double; Android's host sends Integer.
+    int id = value instanceof Number ? ((Number)value).intValue() : AppWidgetManager.INVALID_APPWIDGET_ID;
+    AppWidgetProviderInfo info = AppWidgetManager.getInstance(this).getAppWidgetInfo(id);
+    if (info == null || !getPackageName().equals(info.provider.getPackageName())
+        || !"${config.android.package}.widget.Group".equals(info.provider.getClassName()))
+      id = AppWidgetManager.INVALID_APPWIDGET_ID;
+    getIntent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,id);
+    super.onCreate(savedInstanceState);
   }
 }
 `,
@@ -104,15 +184,31 @@ public class Balances extends com.reactnativeandroidwidget.RNWidgetProvider {
     android:updatePeriodMillis="0" android:widgetCategory="home_screen|not_keyguard" />
 `,
       );
+      fs.writeFileSync(
+        path.join(main, 'res/xml/widget_group.xml'),
+        `<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+ android:minWidth="250dp" android:minHeight="110dp" android:targetCellWidth="4" android:targetCellHeight="2"
+ android:minResizeWidth="110dp" android:minResizeHeight="110dp" android:maxResizeWidth="640dp" android:maxResizeHeight="420dp"
+ android:resizeMode="horizontal|vertical" android:description="@string/widget_group_description"
+ android:initialLayout="@layout/rn_widget" android:previewImage="@drawable/widget_group_preview"
+ android:configure="${config.android.package}.widget.GroupConfiguration" android:widgetFeatures="reconfigurable"
+ android:updatePeriodMillis="0" android:widgetCategory="home_screen|not_keyguard" />
+`,
+      );
       fs.mkdirSync(path.join(main, 'res/drawable'), { recursive: true });
       fs.copyFileSync(
         path.join(mod.modRequest.projectRoot, 'assets/widgets/balances-preview.png'),
         path.join(main, 'res/drawable/widget_balances_preview.png'),
       );
+      fs.copyFileSync(
+        path.join(mod.modRequest.projectRoot, 'assets/widgets/group-preview.png'),
+        path.join(main, 'res/drawable/widget_group_preview.png'),
+      );
       fs.mkdirSync(path.join(main, 'res/values'), { recursive: true });
       fs.writeFileSync(
         path.join(main, 'res/values/widget_balances.xml'),
-        '<resources><string name="widget_balances_description">What you owe and are owed, by currency</string></resources>\n',
+        '<resources><string name="widget_group_description">Your balance and Suggested payments in one Group</string><string name="widget_balances_description">What you owe and are owed, by currency</string></resources>\n',
       );
       return mod;
     },

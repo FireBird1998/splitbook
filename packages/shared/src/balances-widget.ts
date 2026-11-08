@@ -1,3 +1,5 @@
+import type { WidgetGroupPart } from './group-widget';
+import type { GroupCategory } from './types';
 /** Saved read available to the Android widget renderer, never a live balance. */
 export interface WidgetCopy {
   version: 1;
@@ -7,9 +9,32 @@ export interface WidgetCopy {
     groupCount: number;
     currencies: { currency: string; owedMinor: number; oweMinor: number }[];
   };
+  groups?: Record<string, WidgetGroupPart>;
+  lostGroupIds?: string[];
+  savedGroups?: {
+    verifiedAt: number;
+    rows: {
+      id: string;
+      name: string;
+      theme: GroupCategory;
+      archived: boolean;
+      members: number;
+      currencies: number;
+    }[];
+  };
   review?: { count: number; verifiedAt: number };
 }
-export type WidgetTarget = 'home' | 'review' | 'sign-in' | 'create-group';
+export type WidgetTarget =
+  | 'home'
+  | 'review'
+  | 'sign-in'
+  | 'create-group'
+  | {
+      kind: 'group' | 'settle' | 'expense';
+      groupId: string;
+      payment?: { from: string; to: string; currency: string };
+    }
+  | { kind: 'setup'; widgetId: number };
 export type WidgetSession =
   | { status: 'authenticated'; accountId: string; loading: boolean }
   | { status: 'expired' }

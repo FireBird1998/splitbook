@@ -24,3 +24,24 @@ it('accepts only this build’s fixed widget targets', () => {
     expect(widgetLinkTarget(url)).toBeNull();
   expect(widgetLinkTarget('splitbook-dev://widget/sign-in')).toBe('sign-in');
 });
+it('round trips fixed Group destinations and setup without arbitrary route inputs', () => {
+  vi.stubEnv('EXPO_PUBLIC_APP_ENV', 'development');
+  for (const target of [
+    { kind: 'group', groupId: 'b00000000000000000000001' },
+    { kind: 'settle', groupId: 'b00000000000000000000001' },
+    { kind: 'expense', groupId: 'b00000000000000000000001' },
+    { kind: 'setup', widgetId: 7 },
+  ] as const)
+    expect(widgetLinkTarget(widgetLink(target))).toEqual(target);
+  expect(widgetLinkTarget('splitbook-dev://widget/group/not-an-id/settle')).toBeNull();
+});
+
+it('round trips a payment identity without amounts or names', () => {
+  vi.stubEnv('EXPO_PUBLIC_APP_ENV', 'development');
+  const target = {
+    kind: 'settle' as const,
+    groupId: 'b00000000000000000000001',
+    payment: { from: 'a00000000000000000000001', to: 'a00000000000000000000003', currency: 'INR' },
+  };
+  expect(widgetLinkTarget(widgetLink(target))).toEqual(target);
+});

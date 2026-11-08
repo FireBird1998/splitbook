@@ -11,6 +11,7 @@ import type { untrustedCopies } from './untrusted-copies';
  * query modules still own their rows and late-read protection (ADR 0006).
  */
 export function savedCopyRetirement(options: {
+  removed?(groupId: string): void;
   lease(): AccountStorageLease | null;
   current(owner: number): boolean;
   now(): number;
@@ -31,6 +32,7 @@ export function savedCopyRetirement(options: {
   };
   /** Queued before later reads/writes of copies; a failed removal makes them untrusted. */
   const removeLedger = async (groupId: string, owner: number) => {
+    options.removed?.(groupId);
     const lease = options.lease(),
       time = options.now();
     if (!lease) return;

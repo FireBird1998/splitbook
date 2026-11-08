@@ -15,6 +15,10 @@ it('generates provider bounds that allow four columns and two rows on the device
       join(process.cwd(), 'assets/widgets/balances-preview.png'),
       join(root, 'assets/widgets/balances-preview.png'),
     );
+    copyFileSync(
+      join(process.cwd(), 'assets/widgets/group-preview.png'),
+      join(root, 'assets/widgets/group-preview.png'),
+    );
     writeFileSync(
       join(root, 'android/app/src/main/AndroidManifest.xml'),
       '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:name=".MainApplication" /></manifest>',
@@ -26,6 +30,8 @@ it('generates provider bounds that allow four columns and two rows on the device
       ),
       { projectRoot: root, platforms: ['android'] },
     );
+    const manifest = readFileSync(join(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
+    expect(manifest).toMatch(/android:configChanges="[^"]*uiMode/);
     const xml = readFileSync(
       join(root, 'android/app/src/main/res/xml/widget_balances.xml'),
       'utf8',

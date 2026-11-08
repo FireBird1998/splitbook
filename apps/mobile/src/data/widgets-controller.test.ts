@@ -17,10 +17,14 @@ function fixture() {
   let offline = false,
     expired = false,
     owed = 2400;
+  let groupBalances: unknown = { byCurrency: [] };
+  let refused = 0;
+  let offlineAfterSave = false;
   let identity: unknown = null;
   const rows = new Map<string, unknown>();
   let hold: Promise<void> | undefined;
   const drafts = new Map<string, unknown>();
+  const requests: { path: string; method: string }[] = [];
   const copies: WidgetCopy[] = [];
   const events: string[] = [];
   const group = () => ({
@@ -30,7 +34,20 @@ function fixture() {
     category: 'home',
     defaultCurrency: 'INR',
     tags: [{ _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: false }],
-    members: [{ user: { ...user, _id: user.id }, role: 'admin', joinedAt: '2026-11-01T00:00:00Z' }],
+    members: [
+      { user: { ...user, _id: user.id }, role: 'admin', joinedAt: '2026-11-01T00:00:00Z' },
+      ...[
+        alex,
+        sam,
+        { id: 'a00000000000000000000003', name: 'Priya Shah', email: 'priya@example.test' },
+      ]
+        .filter((person) => person.id !== user.id)
+        .map((person) => ({
+          user: { ...person, _id: person.id },
+          role: 'member',
+          joinedAt: '2026-11-01T00:00:00Z',
+        })),
+    ],
     createdAt: '2026-11-01T00:00:00Z',
     updatedAt: '2026-11-01T00:00:00Z',
   });
@@ -57,6 +74,12 @@ function fixture() {
           redraw: async () => {
             events.push('redraw');
           },
+        },
+        settlementAttempts: {
+          load: async () => null,
+          save: async () => {},
+          remove: async () => {},
+          clear: async () => {},
         },
         newSubmissionKey: () => 'widget-expense-fictional-986',
         expenseDrafts: {
@@ -122,6 +145,7 @@ function fixture() {
         fetch: async (url, init) => {
           if (offline) throw new Error('Offline');
           const path = new URL(url).pathname;
+          requests.push({ path, method: init.method ?? 'GET' });
           if (path.endsWith('/sign-in')) {
             user = JSON.parse(String(init.body)).personaId === 'sam' ? sam : alex;
             return Response.json(
@@ -140,10 +164,13 @@ function fixture() {
             });
           if (path.endsWith('/sign-out')) return Response.json({ success: true });
           if (expired) return Response.json({ error: 'Session expired' }, { status: 401 });
+          if (path === `/api/groups/${groupId}` && refused)
+            return Response.json({ error: 'Not a member' }, { status: refused });
           if (path === `/api/groups/${groupId}`)
             return Response.json({ status: 200, data: group() });
           if (path.endsWith('/expenses') && init.method === 'POST') {
             owed = 2500;
+            if (offlineAfterSave) offline = true;
             return Response.json({
               status: 201,
               data: {
@@ -173,7 +200,7 @@ function fixture() {
               },
             });
           if (path === `/api/groups/${groupId}/balances`)
-            return Response.json({ status: 200, data: { byCurrency: [] } });
+            return Response.json({ status: 200, data: groupBalances });
           if (path === '/api/groups') return Response.json({ status: 200, data: [group()] });
           if (path === '/api/user/balances')
             return Response.json({
@@ -203,6 +230,15 @@ function fixture() {
   };
   return {
     make,
+    groupBalances: (value: unknown) => {
+      groupBalances = value;
+    },
+    offlineAfterSave: () => {
+      offlineAfterSave = true;
+    },
+    refuse: (status: number) => {
+      refused = status;
+    },
     blockWrite: () => {
       let release!: () => void;
       hold = new Promise<void>((resolve) => {
@@ -211,6 +247,7 @@ function fixture() {
       return release;
     },
     copies,
+    requests,
     events,
     offline: () => {
       offline = true;
@@ -392,4 +429,121 @@ it('hides a 401 immediately even while a saved-copy write is still running', asy
   } finally {
     release();
   }
+});
+
+it('projects a Group and its Balances reads into the widget copy with both verification times', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  const controller = f.make();
+  await controller.signIn('alex');
+  await controller.openGroup(groupId);
+  await controller.refreshBalances();
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.groups?.[groupId]).toMatchObject({
+      id: groupId,
+      name: 'Maple House',
+      theme: 'home',
+      archived: false,
+      mainCurrency: 'INR',
+      verifiedAt: verified,
+      balancesVerifiedAt: verified,
+      currencies: [],
+    }),
+  );
+  expect(f.copies.at(-1)?.savedGroups?.rows.map((g) => g.id)).toEqual([groupId]);
+});
+
+for (const status of [403, 404])
+  it(`removes the Group widget part after a refused read (${status})`, async () => {
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await c.refreshBalances();
+    await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
+    f.refuse(status);
+    await c.openGroup(groupId, false);
+    await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
+    expect(f.copies.at(-1)?.lostGroupIds).toContain(groupId);
+  });
+it('restores Group widget parts and offline setup with their original saved verification times', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    first = f.make();
+  await first.signIn('alex');
+  await first.openGroup(groupId);
+  await first.refreshBalances();
+  await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
+  first.dispose();
+  f.offline();
+  vi.spyOn(Date, 'now').mockReturnValue(verified + 3600000);
+  const restarted = f.make();
+  await restarted.restore();
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.groups?.[groupId]?.balancesVerifiedAt).toBe(verified),
+  );
+  expect(f.copies.at(-1)?.savedGroups?.rows.map((g) => g.id)).toEqual([groupId]);
+});
+
+it('a widget payment tap opens the chosen payment without sending a Settlement request', async () => {
+  const f = fixture(),
+    c = f.make(),
+    priya = { _id: 'a00000000000000000000003', name: 'Priya Shah' };
+  f.groupBalances({
+    byCurrency: [
+      {
+        currency: 'INR',
+        balances: [
+          { user: { _id: alex.id, name: alex.name }, balance: -1060 },
+          { user: priya, balance: 1060 },
+        ],
+        debts: [{ from: { _id: alex.id, name: alex.name }, to: priya, amount: 1060 }],
+      },
+    ],
+  });
+  await c.signIn('alex');
+  await c.openWidget({
+    kind: 'settle',
+    groupId,
+    payment: { from: alex.id, to: priya._id, currency: 'INR' },
+  });
+  expect(c.getSnapshot().screen).toBe('settlement');
+  expect(c.getSnapshot().settlement.draft).toMatchObject({
+    paidBy: alex.id,
+    paidTo: priya._id,
+    currency: 'INR',
+    amount: '1060',
+  });
+  expect(f.requests.filter((r) => r.method === 'POST' && r.path.includes('/settlements'))).toEqual(
+    [],
+  );
+});
+it('a widget Add expense tap resumes the Group’s unfinished draft', async () => {
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openExpense(groupId);
+  await c.updateExpenseDraft({ description: 'Unfinished groceries', amount: '123', tagId });
+  await c.back();
+  await c.openWidget({ kind: 'expense', groupId });
+  expect(c.getSnapshot().screen).toBe('expense');
+  expect(c.getSnapshot().expense.draft).toMatchObject({
+    description: 'Unfinished groceries',
+    amount: '123',
+  });
+});
+
+it('removes a Group widget part when a save retires its saved copies, until the next successful read', async () => {
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await c.refreshBalances();
+  await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
+  await c.openExpense(groupId);
+  await c.updateExpenseDraft({ description: 'Groceries', amount: '100', tagId });
+  f.offlineAfterSave();
+  await c.saveExpense();
+  await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
+  expect(f.copies.at(-1)?.lostGroupIds).not.toContain(groupId);
 });
