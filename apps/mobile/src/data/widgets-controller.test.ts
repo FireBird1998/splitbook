@@ -17,6 +17,7 @@ function fixture() {
   let offline = false,
     expired = false,
     owed = 2400;
+  let groupBalances: unknown = {byCurrency:[]};
   let refused = 0;
   let offlineAfterSave = false;
   let identity: unknown = null;
@@ -180,7 +181,7 @@ function fixture() {
               },
             });
           if (path === `/api/groups/${groupId}/balances`)
-            return Response.json({ status: 200, data: { byCurrency: [] } });
+            return Response.json({ status: 200, data: groupBalances });
           if (path === '/api/groups') return Response.json({ status: 200, data: [group()] });
           if (path === '/api/user/balances')
             return Response.json({
@@ -210,6 +211,7 @@ function fixture() {
   };
   return {
     make,
+    groupBalances: (value:unknown)=>{groupBalances=value;},
     offlineAfterSave: () => {
       offlineAfterSave = true;
     },
@@ -462,16 +464,13 @@ it('restores Group widget parts and offline setup with their original saved veri
   expect(f.copies.at(-1)?.savedGroups?.rows.map((g) => g.id)).toEqual([groupId]);
 });
 
-it('a widget payment tap opens Settle up without sending a Settlement request', async () => {
-  const f = fixture(),
-    c = f.make();
-  await c.signIn('alex');
-  await c.openWidget({ kind: 'settle', groupId });
-  expect(c.getSnapshot().screen).toBe('settlement');
-  expect(c.getSnapshot().settlement.groupId).toBe(groupId);
-  expect(f.requests.filter((r) => r.method === 'POST' && r.path.includes('/settlements'))).toEqual(
-    [],
-  );
+it('a widget payment tap opens the chosen payment without sending a Settlement request', async () => {
+ const f=fixture(),c=f.make(),priya={_id:'a00000000000000000000003',name:'Priya Shah'};
+ f.groupBalances({byCurrency:[{currency:'INR',balances:[{user:{_id:alex.id,name:alex.name},balance:-1060},{user:priya,balance:1060}],debts:[{from:{_id:alex.id,name:alex.name},to:priya,amount:1060}]}]});
+ await c.signIn('alex');await c.openWidget({kind:'settle',groupId,payment:{from:alex.id,to:priya._id,currency:'INR'}});
+ expect(c.getSnapshot().screen).toBe('settlement');
+ expect(c.getSnapshot().settlement.draft).toMatchObject({paidBy:alex.id,paidTo:priya._id,currency:'INR',amount:'1060.00'});
+ expect(f.requests.filter(r=>r.method==='POST' && r.path.includes('/settlements'))).toEqual([]);
 });
 it('a widget Add expense tap resumes the Group’s unfinished draft', async () => {
   const f = fixture(),
