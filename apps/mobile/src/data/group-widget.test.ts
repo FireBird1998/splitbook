@@ -185,7 +185,14 @@ it('marks incoming Suggested payments and the balance as owed to you', () => {
     payments: [{ label: 'Priya pays you', firstName: 'Priya', incoming: true }],
   });
 });
-it('keeps the Main currency balance and an overflow label in the compact widget',()=>{
- const multi={...part,currencies:[{currency:'JPY',balanceMinor:3000,payments:[]},...part.currencies]};
- expect(groupWidget(multi,setup,'2x2',session,now)).toMatchObject({compactLabel:'You owe',compactAmount:'₹1,480.00',currencyOverflow:'+1\u00a0currency'});
+it('keeps the Main currency balance and an overflow label in the compact widget', () => {
+  const multi = {
+    ...part,
+    currencies: [{ currency: 'JPY', balanceMinor: 3000, payments: [] }, ...part.currencies],
+  };
+  expect(groupWidget(multi, setup, '2x2', session, now)).toMatchObject({
+    compactLabel: 'You owe',
+    compactAmount: '₹1,480.00',
+    currencyOverflow: '+1\u00a0currency',
+  });
 });

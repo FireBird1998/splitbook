@@ -142,7 +142,24 @@ export function drawGroup(
       ) : null}
       {view.name && small ? (
         <FlexWidget style={{ flexGap: 8 }}>
-          {text(view.balance, view.muted ? t.textMuted : t.text, 16, true)}
+          {view.compactAmount ? (
+            <FlexWidget style={{ flexGap: 4 }}>
+              {text(
+                view.compactLabel!,
+                view.muted
+                  ? t.textMuted
+                  : view.compactLabel === 'You owe'
+                    ? t.status.negative
+                    : t.status.positive,
+                10,
+                true,
+              )}
+              {text(view.compactAmount, view.muted ? t.textMuted : t.text, 18, true, true)}
+              {view.currencyOverflow ? text(view.currencyOverflow, t.brand.main, 10, true) : null}
+            </FlexWidget>
+          ) : (
+            text(view.balance, balanceTone, 14, true)
+          )}
           {view.people ? text(view.people, t.textSecondary, 11) : null}
         </FlexWidget>
       ) : null}
@@ -176,7 +193,7 @@ export function drawGroup(
               >
                 {text(payment.firstName[0] ?? '', t.textSecondary, 10, true)}
               </FlexWidget>
-              {text(payment.label, t.text, 12)}
+              <FlexWidget style={{ flex: 1 }}>{text(payment.label, t.text, 12)}</FlexWidget>
               {text(
                 payment.amount,
                 view.muted ? t.textMuted : payment.incoming ? t.status.positive : t.text,

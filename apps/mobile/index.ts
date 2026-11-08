@@ -22,12 +22,12 @@ if (androidWidgetsEnabled()) {
   };
   registerAndroidWidgets();
   // The configure screen reads device storage only; it never starts the app controller.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  /* eslint-disable @typescript-eslint/no-require-imports */
   const {
     registerWidgetConfigurationScreen,
   } = require('react-native-android-widget/src/api/register-widget-configuration-screen');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { WidgetSetup } = require('./src/widget-setup');
+  /* eslint-enable @typescript-eslint/no-require-imports */
   registerWidgetConfigurationScreen(WidgetSetup);
 }
 

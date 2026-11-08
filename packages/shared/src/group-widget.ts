@@ -42,6 +42,9 @@ export function groupWidget(
     name: null as string | null,
     theme: null as GroupCategory | null,
     balance: '',
+    compactLabel: null as string | null,
+    compactAmount: null as string | null,
+    currencyOverflow: null as string | null,
     payments: [] as { label: string; amount: string; firstName: string; incoming: boolean }[],
     balanceTone: 'neutral' as 'neutral' | 'positive' | 'negative',
     more: null as string | null,
@@ -119,6 +122,17 @@ export function groupWidget(
     state: part.archived ? 'archived' : allSquare ? 'all-square' : 'normal',
     name: part.name,
     theme: part.theme,
+    compactLabel:
+      bucket && !allSquare ? (bucket.balanceMinor < 0 ? 'You owe' : 'You’re owed') : null,
+    compactAmount:
+      bucket && !allSquare
+        ? formatCurrency(
+            toMajorAmount(Math.abs(bucket.balanceMinor), bucket.currency),
+            bucket.currency,
+          )
+        : null,
+    currencyOverflow:
+      currencies.length > 1 ? `+${counted(currencies.length - 1, 'currency', 'currencies')}` : null,
     balanceTone: (currencies.length > 1
       ? 'neutral'
       : bucket && bucket.balanceMinor < 0
