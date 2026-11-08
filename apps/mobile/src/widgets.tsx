@@ -326,7 +326,7 @@ export function registerAndroidWidgets() {
           widgetInfo.widgetId,
           await widgetStore.setup(widgetInfo.widgetId),
         );
-        if (legacy) await widgetStore.saveSetup(legacy);
+        if (legacy) await widgetStore.saveSetupIfAbsent(legacy);
       }
       renderWidget(await representation(widgetInfo));
     });

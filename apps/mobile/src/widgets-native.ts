@@ -40,6 +40,16 @@ export function createWidgetsStore(environment: string) {
         JSON.stringify(setup),
       );
     },
+    async saveSetupIfAbsent(setup: WidgetSetupRecord) {
+      await (
+        await database()
+      ).runAsync(
+        'INSERT OR IGNORE INTO widget_setup(environment, widget_id, setup) VALUES (?, ?, ?)',
+        environment,
+        setup.widgetId,
+        JSON.stringify(setup),
+      );
+    },
     async removeSetup(widgetId: number) {
       await (
         await database()
