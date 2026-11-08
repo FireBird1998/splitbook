@@ -3788,4 +3788,29 @@ describe('source-specific held copy', () => {
       expect(app.pressable('Not now')).toBeTruthy();
     },
   );
+
+  it('keeps widget-specific copy on a failed open and allows Retry', async () => {
+    let failing = false;
+    const app = await renderApp((path) =>
+      failing && path === `/api/groups/${groupId}`
+        ? json({ error: 'Unavailable' }, 500)
+        : undefined,
+    );
+    await app.press('Open Maple House');
+    await app.press('Add expense');
+    await settle(app.controller.openWidget({ kind: 'group', groupId }));
+    await app.press('Back to Group');
+    failing = true;
+    await app.press('Open');
+    expect(app.text()).toContain('Couldn’t open this');
+    expect(app.text()).toContain('Check your connection and try again.');
+    expect(app.pressable('Not now')).toBeTruthy();
+    failing = false;
+    await app.press('Retry');
+    expect(app.controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      notificationOpening: { status: 'idle' },
+    });
+  });
 });
