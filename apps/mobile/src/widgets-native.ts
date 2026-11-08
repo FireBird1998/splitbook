@@ -1,3 +1,4 @@
+import type { QuickWidgetSetup } from '@splitbook/shared/quick-widget';
 import { openDatabaseAsync, defaultDatabaseDirectory, type SQLiteDatabase } from 'expo-sqlite';
 import type { GroupWidgetSetup } from '@splitbook/shared/group-widget';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
@@ -20,7 +21,7 @@ export function createWidgetsStore(environment: string) {
     return db;
   };
   return {
-    async setup(widgetId: number): Promise<GroupWidgetSetup | null> {
+    async setup(widgetId: number): Promise<GroupWidgetSetup | QuickWidgetSetup | null> {
       const row = await (
         await database()
       ).getFirstAsync<{ setup: string }>(
@@ -30,7 +31,7 @@ export function createWidgetsStore(environment: string) {
       );
       return row ? JSON.parse(row.setup) : null;
     },
-    async saveSetup(setup: GroupWidgetSetup) {
+    async saveSetup(setup: GroupWidgetSetup | QuickWidgetSetup) {
       await (
         await database()
       ).runAsync(

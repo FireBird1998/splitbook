@@ -20,6 +20,7 @@ function fixture() {
   let groupBalances: unknown = { byCurrency: [] };
   let refused = 0;
   let offlineAfterSave = false;
+  let noGroups = false;
   let identity: unknown = null;
   const rows = new Map<string, unknown>();
   let hold: Promise<void> | undefined;
@@ -201,7 +202,8 @@ function fixture() {
             });
           if (path === `/api/groups/${groupId}/balances`)
             return Response.json({ status: 200, data: groupBalances });
-          if (path === '/api/groups') return Response.json({ status: 200, data: [group()] });
+          if (path === '/api/groups')
+            return Response.json({ status: 200, data: noGroups ? [] : [group()] });
           if (path === '/api/user/balances')
             return Response.json({
               status: 200,
@@ -230,6 +232,9 @@ function fixture() {
   };
   return {
     make,
+    noGroups: () => {
+      noGroups = true;
+    },
     groupBalances: (value: unknown) => {
       groupBalances = value;
     },
@@ -546,4 +551,44 @@ it('removes a Group widget part when a save retires its saved copies, until the 
   await c.saveExpense();
   await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
   expect(f.copies.at(-1)?.lostGroupIds).not.toContain(groupId);
+});
+it('Ask each time opens a Group picker after restoration, and choosing resumes the same draft', async () => {
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openExpense(groupId);
+  await c.updateExpenseDraft({ description: 'Widget unfinished', amount: '123', tagId });
+  await c.back();
+  await c.openWidget('choose-group');
+  expect(c.getSnapshot().widgetPicker).toBe(true);
+  await c.chooseWidgetGroup(groupId);
+  expect(c.getSnapshot().widgetPicker).toBe(false);
+  expect(c.getSnapshot().expense.draft).toMatchObject({
+    description: 'Widget unfinished',
+    amount: '123',
+  });
+});
+
+it('opens Ask each time from a cold start with no Groups, then hands Create a Group to the app', async () => {
+  const f = fixture();
+  f.noGroups();
+  const first = f.make();
+  await first.signIn('alex');
+  first.dispose();
+  const cold = f.make();
+  await cold.openWidget('choose-group');
+  expect(cold.getSnapshot().widgetPicker).toBe(true);
+  expect(cold.getSnapshot().groups.data).toEqual([]);
+  cold.closeWidgetPicker();
+  await cold.openWidget('create-group');
+  expect(cold.getSnapshot().screen).toBe('create');
+});
+it('closes an open widget picker when a chosen-Group widget opens its Expense', async () => {
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openWidget('choose-group');
+  await c.openWidget({ kind: 'expense', groupId });
+  expect(c.getSnapshot().widgetPicker).toBe(false);
+  expect(c.getSnapshot().screen).toBe('expense');
 });

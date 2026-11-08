@@ -34,6 +34,7 @@ const pendingChoices = new Map<number, { accountId: string; groupId: string }>()
 const store = createWidgetsStore(process.env.EXPO_PUBLIC_API_URL ?? '');
 /** Android configuration is deliberately independent of runtime.ts and its session/network reads. */
 export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreenProps) {
+  const quick = widgetInfo.widgetName === 'Quick';
   const t = getSemanticTokens(useColorScheme() === 'dark' ? 'dark' : 'light');
   const [record, setRecord] = useState<{ copy: WidgetCopy | null; session: WidgetSession } | null>(
     null,
@@ -55,7 +56,8 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
             (pendingChoices.get(widgetInfo.widgetId)?.accountId === value.copy?.accountId
               ? pendingChoices.get(widgetInfo.widgetId)?.groupId
               : undefined) ??
-              setup?.groupId ??
+              (setup?.kind === 'quick' ? (setup.groupId ?? 'ask') : setup?.groupId) ??
+              (quick ? 'ask' : undefined) ??
               value.copy?.savedGroups?.rows.find((g) => !g.archived)?.id ??
               null,
           );
@@ -76,7 +78,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
     record?.session.status === 'authenticated' &&
     record.copy?.accountId === record.session.accountId;
   const groups = signedIn ? (record.copy?.savedGroups?.rows.filter((g) => !g.archived) ?? []) : [];
-  const blocked = !signedIn || !groups.length;
+  const blocked = !signedIn || (!quick && !groups.length);
   const copy = (value: string, bold = false, size = 14, color = t.text) => (
     <Text
       style={{
@@ -95,18 +97,19 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
         latest.session.status !== 'authenticated' ||
         latest.copy?.accountId !== latest.session.accountId ||
         latest.session.accountId !== record?.copy?.accountId ||
-        !latest.copy.savedGroups?.rows.some((g) => g.id === selected && !g.archived)
+        (!(quick && selected === 'ask') &&
+          !latest.copy.savedGroups?.rows.some((g) => g.id === selected && !g.archived))
       ) {
         setRecord(latest);
         setError('Choose a saved Group for this account.');
         return;
       }
-      await store.saveSetup({
-        kind: 'group',
-        widgetId: widgetInfo.widgetId,
-        accountId: latest.session.accountId,
-        groupId: selected!,
-      });
+      const identity = { widgetId: widgetInfo.widgetId, accountId: latest.session.accountId };
+      await store.saveSetup(
+        quick
+          ? { ...identity, kind: 'quick', groupId: selected === 'ask' ? null : selected! }
+          : { ...identity, kind: 'group', groupId: selected! },
+      );
       await redrawBalances();
       pendingChoices.delete(widgetInfo.widgetId);
       setResult('ok');
@@ -125,7 +128,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
           >
             <Ionicons name="close" size={24} color={t.text} />
           </Pressable>
-          {copy('Group widget', true, 22)}
+          {copy(quick ? 'Add expense widget' : 'Group widget', true, 22)}
         </View>
         {record === null && !error ? (
           <View style={{ padding: 24 }}>{copy('Loading saved Groups…')}</View>
@@ -170,11 +173,20 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
           </View>
         ) : (
           <ScrollView contentContainerStyle={{ padding: 20, gap: 22, flexGrow: 1 }}>
-            {copy('Choose the Group this widget shows.', false, 16, t.textSecondary)}
+            {copy(
+              quick
+                ? 'Choose where this widget starts an Expense.'
+                : 'Choose the Group this widget shows.',
+              false,
+              16,
+              t.textSecondary,
+            )}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               {copy('YOUR GROUPS', true, 12, t.textSecondary)}
               {copy(
-                widgetSavedTime(record!.copy!.savedGroups!.verifiedAt, Date.now()),
+                record!.copy!.savedGroups
+                  ? widgetSavedTime(record!.copy!.savedGroups.verifiedAt, Date.now())
+                  : 'Nothing saved yet',
                 false,
                 12,
                 t.textMuted,
@@ -189,6 +201,41 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                 overflow: 'hidden',
               }}
             >
+              {quick ? (
+                <Pressable
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected === 'ask' }}
+                  accessibilityLabel="Ask each time"
+                  onPress={() => {
+                    setSelected('ask');
+                    pendingChoices.set(widgetInfo.widgetId, {
+                      groupId: 'ask',
+                      accountId: record!.copy!.accountId,
+                    });
+                  }}
+                  style={{
+                    padding: 16,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 14,
+                    borderBottomWidth: 1,
+                    borderBottomColor: t.border,
+                  }}
+                >
+                  <View style={{ padding: 12, backgroundColor: t.surfaceMuted, borderRadius: 12 }}>
+                    <Ionicons name="list-outline" size={22} color={t.textSecondary} />
+                  </View>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    {copy('Ask each time', true, 16)}
+                    {copy('Pick the Group when you tap', false, 12, t.textSecondary)}
+                  </View>
+                  <Ionicons
+                    name={selected === 'ask' ? 'radio-button-on' : 'radio-button-off'}
+                    size={24}
+                    color={t.brand.main}
+                  />
+                </Pressable>
+              ) : null}
               {groups.map((group) => (
                 <Pressable
                   key={group.id}
@@ -231,12 +278,13 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                 </Pressable>
               ))}
             </View>
-            {copy(
-              'Anyone who sees your unlocked phone can read this widget.',
-              false,
-              13,
-              t.textSecondary,
-            )}
+            {!quick &&
+              copy(
+                'Anyone who sees your unlocked phone can read this widget.',
+                false,
+                13,
+                t.textSecondary,
+              )}
           </ScrollView>
         )}
         {error ? (

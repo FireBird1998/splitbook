@@ -58,6 +58,31 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
         },
       ],
     });
+    app.receiver = app.receiver.filter((item) => item.$['android:name'] !== '.widget.Quick');
+    app.receiver.push({
+      $: {
+        'android:name': '.widget.Quick',
+        'android:label': 'Add expense',
+        'android:enabled': String(enabled),
+        'android:exported': 'false',
+      },
+      'intent-filter': [
+        {
+          action: [
+            { $: { 'android:name': 'android.appwidget.action.APPWIDGET_UPDATE' } },
+            { $: { 'android:name': `${config.android.package}.WIDGET_CLICK` } },
+          ],
+        },
+      ],
+      'meta-data': [
+        {
+          $: {
+            'android:name': 'android.appwidget.provider',
+            'android:resource': '@xml/widget_quick',
+          },
+        },
+      ],
+    });
     app.activity = (app.activity ?? []).filter(
       (item) =>
         ![
@@ -160,13 +185,17 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
     int id = value instanceof Number ? ((Number)value).intValue() : AppWidgetManager.INVALID_APPWIDGET_ID;
     AppWidgetProviderInfo info = AppWidgetManager.getInstance(this).getAppWidgetInfo(id);
     if (info == null || !getPackageName().equals(info.provider.getPackageName())
-        || !"${config.android.package}.widget.Group".equals(info.provider.getClassName()))
+        || !("${config.android.package}.widget.Group".equals(info.provider.getClassName()) || "${config.android.package}.widget.Quick".equals(info.provider.getClassName())))
       id = AppWidgetManager.INVALID_APPWIDGET_ID;
     getIntent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,id);
     super.onCreate(savedInstanceState);
   }
 }
 `,
+      );
+      fs.writeFileSync(
+        path.join(javaDir, 'Quick.java'),
+        `package ${config.android.package}.widget;\npublic class Quick extends Balances {}\n`,
       );
       fs.mkdirSync(path.join(main, 'res/xml'), { recursive: true });
       fs.writeFileSync(
@@ -196,6 +225,11 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
  android:updatePeriodMillis="0" android:widgetCategory="home_screen|not_keyguard" />
 `,
       );
+      fs.writeFileSync(
+        path.join(main, 'res/xml/widget_quick.xml'),
+        `<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android" android:minWidth="40dp" android:minHeight="40dp" android:targetCellWidth="1" android:targetCellHeight="1" android:minResizeWidth="40dp" android:minResizeHeight="40dp" android:maxResizeWidth="250dp" android:maxResizeHeight="110dp" android:resizeMode="horizontal" android:description="@string/widget_quick_description" android:initialLayout="@layout/rn_widget" android:previewImage="@drawable/widget_quick_preview" android:configure="${config.android.package}.widget.GroupConfiguration" android:widgetFeatures="reconfigurable" android:updatePeriodMillis="0" android:widgetCategory="home_screen|not_keyguard" />`,
+      );
       fs.mkdirSync(path.join(main, 'res/drawable'), { recursive: true });
       fs.copyFileSync(
         path.join(mod.modRequest.projectRoot, 'assets/widgets/balances-preview.png'),
@@ -205,10 +239,14 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
         path.join(mod.modRequest.projectRoot, 'assets/widgets/group-preview.png'),
         path.join(main, 'res/drawable/widget_group_preview.png'),
       );
+      fs.copyFileSync(
+        path.join(mod.modRequest.projectRoot, 'assets/widgets/quick-preview.png'),
+        path.join(main, 'res/drawable/widget_quick_preview.png'),
+      );
       fs.mkdirSync(path.join(main, 'res/values'), { recursive: true });
       fs.writeFileSync(
         path.join(main, 'res/values/widget_balances.xml'),
-        '<resources><string name="widget_group_description">Your balance and Suggested payments in one Group</string><string name="widget_balances_description">What you owe and are owed, by currency</string></resources>\n',
+        '<resources><string name="widget_quick_description">Start an Expense in a Group</string><string name="widget_group_description">Your balance and Suggested payments in one Group</string><string name="widget_balances_description">What you owe and are owed, by currency</string></resources>\n',
       );
       return mod;
     },

@@ -451,6 +451,7 @@ export interface HeldNotificationOwner {
 }
 
 export interface MobileSnapshot {
+  widgetPicker?: boolean;
   widgetOpen?: {
     target: import('@splitbook/shared/balances-widget').WidgetTarget;
     sequence: number;
