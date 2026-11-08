@@ -46,6 +46,27 @@ it('generates provider bounds that allow four columns and two rows on the device
     expect(xml).toContain('android:updatePeriodMillis="0"');
     expect(xml).toContain('android:widgetFeatures="reconfigurable"');
     expect(xml).toContain('android:configure="com.splitbook.app.dev.widget.GroupConfiguration"');
+    const activity = readFileSync(
+      join(root, 'android/app/src/main/java/com/splitbook/app/dev/widget/GroupConfiguration.java'),
+      'utf8',
+    );
+    for (const [kind, provider] of [
+      ['balances', 'Balances'],
+      ['group', 'Group'],
+      ['quick', 'Quick'],
+    ]) {
+      const providerXml = readFileSync(
+        join(root, `android/app/src/main/res/xml/widget_${kind}.xml`),
+        'utf8',
+      );
+      expect(providerXml).toContain(
+        'android:configure="com.splitbook.app.dev.widget.GroupConfiguration"',
+      );
+      expect(providerXml).toContain('android:widgetFeatures="reconfigurable"');
+      expect(activity).toContain(
+        `"com.splitbook.app.dev.widget.${provider}".equals(info.provider.getClassName())`,
+      );
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
