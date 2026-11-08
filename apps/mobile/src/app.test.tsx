@@ -3714,13 +3714,15 @@ describe('held widget link through the background app lifecycle', () => {
         expense: { draft },
         notificationOpening: { status: 'held' },
       });
-      expect(app.text()).toContain('Update held until you finish');
+      expect(app.text()).toContain('Widget held until you finish');
+      expect(app.text()).not.toContain('Ready to open');
       expect(app.text()).not.toContain('An update is ready');
       if (exit === 'close') await app.press('Back to Group');
       else if (exit === 'save') await app.press('Save expense');
       else await app.press('Finish later');
       expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(false);
-      expect(app.text()).toContain('An update is ready');
+      expect(app.text()).toContain('Ready to open');
+      expect(app.text()).toContain('From a widget you tapped earlier.');
       expect(app.pressable('Open')).toBeTruthy();
       expect(app.pressable('Not now')).toBeTruthy();
       native.scrollTo.mockClear();
@@ -3740,6 +3742,50 @@ describe('held widget link through the background app lifecycle', () => {
         destination: 'balances',
         notificationOpening: { status: 'idle' },
       });
+    },
+  );
+});
+
+describe('source-specific held copy', () => {
+  it.each(['widget-notification', 'notification-widget'] as const)(
+    'uses the newest source for Snackbar and Banner after %s',
+    async (order) => {
+      const app = await renderApp((path) =>
+        path.startsWith('/api/notifications/device')
+          ? json({ data: notificationPreferences })
+          : undefined,
+      );
+      await app.press('Open Maple House');
+      await app.press('Add expense');
+      const draft = structuredClone(app.controller.getSnapshot().expense.draft);
+      const widget = () => app.controller.openWidget({ kind: 'group', groupId });
+      const notification = () =>
+        app.controller.tapNotification(notificationHint(user.id, groupId, app.clock.now));
+      const firstIsWidget = order === 'widget-notification';
+      await settle(firstIsWidget ? widget() : notification());
+      expect(app.text()).toContain(
+        firstIsWidget ? 'Widget held until you finish' : 'Update held until you finish',
+      );
+      const owner = app.controller.getSnapshot().heldNotification;
+      await settle(firstIsWidget ? notification() : widget());
+      expect(app.controller.getSnapshot().heldNotification).toBe(owner);
+      expect(app.controller.getSnapshot().heldNotificationNotice).toBeNull();
+      expect(app.controller.getSnapshot().expense.draft).toEqual(draft);
+      expect(app.text()).toContain(
+        firstIsWidget ? 'Update held until you finish' : 'Widget held until you finish',
+      );
+      expect(app.text()).not.toContain(
+        firstIsWidget ? 'Widget held until you finish' : 'Update held until you finish',
+      );
+      await app.press('Back to Group');
+      expect(app.text()).toContain(firstIsWidget ? 'An update is ready' : 'Ready to open');
+      expect(app.text()).toContain(
+        firstIsWidget
+          ? 'From a notification you opened earlier.'
+          : 'From a widget you tapped earlier.',
+      );
+      expect(app.pressable('Open')).toBeTruthy();
+      expect(app.pressable('Not now')).toBeTruthy();
     },
   );
 });
