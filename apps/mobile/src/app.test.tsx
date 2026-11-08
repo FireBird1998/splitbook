@@ -3654,57 +3654,92 @@ describe('held update Banner in screen content', () => {
   });
 });
 
-
 describe('held widget link through the background app lifecycle', () => {
   afterEach(() => vi.unstubAllEnvs());
-  it.each(['close', 'save', 'finish later'] as const)('offers the widget on the Group after %s', async (exit) => {
-    vi.stubEnv('EXPO_PUBLIC_ANDROID_WIDGETS_ENABLED', 'true');
-    vi.stubEnv('EXPO_PUBLIC_APP_ENV', 'development');
-    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
-    const app = await renderApp((path, init) => {
-      if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST')
-        return json({ status: 201, data: { _id: september._id, group: groupId } }, 201);
-      if (path === `/api/groups/${groupId}/drafts` && init.method === 'POST') {
-        const values = JSON.parse(String(init.body)).drafts[0];
-        return json({ data: [{ id: 'e00000000000000000000001', groupId, revision: 0, state: 'active', preparedBy: { kind: 'member' }, changedBy: { kind: 'member' }, createdAt: iso, updatedAt: iso, missingFields: [], values }] }, 201);
-      }
-      if (path === `/api/groups/${groupId}/drafts`) return json({ data: [] });
-      return undefined;
-    });
-    await app.press('Open Maple House');
-    await settle(app.controller.openToReview(groupId));
-    await settle(Promise.resolve(app.controller.closeToReview()));
-    layNativeRow(app.pressable('September groceries,'), 0);
-    await app.layout(400, 1400);
-    await app.scrollTo(0);
-    await app.press('Add expense');
-    if (exit !== 'close') await settle(app.controller.updateExpenseDraft({ description: 'Unfinished widget groceries', amount: '10', tagId: 'c00000000000000000000001' }));
-    const draft = structuredClone(app.controller.getSnapshot().expense.draft);
-    await settle(Promise.resolve(emitAppState('background')));
-    await settle(Promise.resolve(emitURL(`splitbook-dev://widget/group/${groupId}/group`)));
-    await settle(Promise.resolve(emitAppState('active')));
-    expect(app.controller.getSnapshot()).toMatchObject({ screen: 'expense', expense: { draft }, notificationOpening: { status: 'held' } });
-    expect(app.text()).toContain('Update held until you finish');
-    expect(app.text()).not.toContain('An update is ready');
-    if (exit === 'close') await app.press('Back to Group');
-    else if (exit === 'save') await app.press('Save expense');
-    else await app.press('Finish later');
-    expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(false);
-    expect(app.text()).toContain('An update is ready');
-    expect(app.pressable('Open')).toBeTruthy();
-    expect(app.pressable('Not now')).toBeTruthy();
-    native.scrollTo.mockClear();
-    layNativeRow(app.pressable('September groceries,'), 0, 60, 200);
-    await app.layout(400, 1520);
-    await settle();
-    expect(native.scrollTo.mock.calls.at(-1)?.[0]?.y ?? 0).toBe(0);
-    native.scrollTo.mockClear();
-    await app.scrollTo(180);
-    layNativeRow(app.pressable('September groceries,'), 0, 60, 220);
-    await app.layout(400, 1540);
-    await settle();
-    expect(native.scrollTo).not.toHaveBeenCalled();
-    await app.press('Open');
-    expect(app.controller.getSnapshot()).toMatchObject({ screen: 'group', destination: 'balances', notificationOpening: { status: 'idle' } });
-  });
+  it.each(['close', 'save', 'finish later'] as const)(
+    'offers the widget on the Group after %s',
+    async (exit) => {
+      vi.stubEnv('EXPO_PUBLIC_ANDROID_WIDGETS_ENABLED', 'true');
+      vi.stubEnv('EXPO_PUBLIC_APP_ENV', 'development');
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+      const app = await renderApp((path, init) => {
+        if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST')
+          return json({ status: 201, data: { _id: september._id, group: groupId } }, 201);
+        if (path === `/api/groups/${groupId}/drafts` && init.method === 'POST') {
+          const values = JSON.parse(String(init.body)).drafts[0];
+          return json(
+            {
+              data: [
+                {
+                  id: 'e00000000000000000000001',
+                  groupId,
+                  revision: 0,
+                  state: 'active',
+                  preparedBy: { kind: 'member' },
+                  changedBy: { kind: 'member' },
+                  createdAt: iso,
+                  updatedAt: iso,
+                  missingFields: [],
+                  values,
+                },
+              ],
+            },
+            201,
+          );
+        }
+        if (path === `/api/groups/${groupId}/drafts`) return json({ data: [] });
+        return undefined;
+      });
+      await app.press('Open Maple House');
+      await settle(app.controller.openToReview(groupId));
+      await settle(Promise.resolve(app.controller.closeToReview()));
+      layNativeRow(app.pressable('September groceries,'), 0);
+      await app.layout(400, 1400);
+      await app.scrollTo(0);
+      await app.press('Add expense');
+      if (exit !== 'close')
+        await settle(
+          app.controller.updateExpenseDraft({
+            description: 'Unfinished widget groceries',
+            amount: '10',
+            tagId: 'c00000000000000000000001',
+          }),
+        );
+      const draft = structuredClone(app.controller.getSnapshot().expense.draft);
+      await settle(Promise.resolve(emitAppState('background')));
+      await settle(Promise.resolve(emitURL(`splitbook-dev://widget/group/${groupId}/group`)));
+      await settle(Promise.resolve(emitAppState('active')));
+      expect(app.controller.getSnapshot()).toMatchObject({
+        screen: 'expense',
+        expense: { draft },
+        notificationOpening: { status: 'held' },
+      });
+      expect(app.text()).toContain('Update held until you finish');
+      expect(app.text()).not.toContain('An update is ready');
+      if (exit === 'close') await app.press('Back to Group');
+      else if (exit === 'save') await app.press('Save expense');
+      else await app.press('Finish later');
+      expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(false);
+      expect(app.text()).toContain('An update is ready');
+      expect(app.pressable('Open')).toBeTruthy();
+      expect(app.pressable('Not now')).toBeTruthy();
+      native.scrollTo.mockClear();
+      layNativeRow(app.pressable('September groceries,'), 0, 60, 200);
+      await app.layout(400, 1520);
+      await settle();
+      expect(native.scrollTo.mock.calls.at(-1)?.[0]?.y ?? 0).toBe(0);
+      native.scrollTo.mockClear();
+      await app.scrollTo(180);
+      layNativeRow(app.pressable('September groceries,'), 0, 60, 220);
+      await app.layout(400, 1540);
+      await settle();
+      expect(native.scrollTo).not.toHaveBeenCalled();
+      await app.press('Open');
+      expect(app.controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        destination: 'balances',
+        notificationOpening: { status: 'idle' },
+      });
+    },
+  );
 });
