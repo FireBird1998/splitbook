@@ -29,7 +29,7 @@ export function groupLayout(size: GroupWidgetSize, scale: number) {
     showDescription: level < 2 && (!small || !level),
     showTile: level < 2,
     showPeople: level < 2,
-    showSaved: !small || level < 2,
+    showSaved: true,
     stackPayments: level === 2,
     stackHeader: level > 0,
     moneyFontSize: level === 2 ? 13 : 18,

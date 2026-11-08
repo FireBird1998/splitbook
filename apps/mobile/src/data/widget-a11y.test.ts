@@ -83,29 +83,83 @@ it('names the Group in the icon-only Add expense summary', () => {
   );
 });
 
-it.each(['2x1','2x2','4x2'] as const)('announces loading, no saved copy, all square, no Groups and stale Balances at %s',size=>{
- expect(balancesWidget(null,{kind:'balances'},size,{...auth,loading:true},now).summary).toContain('Loading');
- expect(balancesWidget(null,{kind:'balances'},size,auth,now).summary).toContain('Nothing saved yet');
- expect(balancesWidget({...copy,home:{...copy.home!,currencies:[]}},{kind:'balances'},size,auth,now).summary).toContain('all square');
- expect(balancesWidget({...copy,home:{...copy.home!,groupCount:0,currencies:[]}},{kind:'balances'},size,auth,now).summary).toContain('No Groups yet');
- expect(balancesWidget(copy,{kind:'balances'},size,auth,now+86400001).summary).toContain('Open to update');
-});
-it.each(['2x2','4x2','4x3'] as const)('announces every saved Group state without names after lost access or account change at %s',size=>{
- expect(groupWidget(undefined,setup,size,{...auth,loading:true},now).summary).toContain('Loading');
- expect(groupWidget(undefined,setup,size,auth,now).summary).toContain('Nothing saved yet');
- expect(groupWidget({...part,currencies:[]},setup,size,auth,now).summary).toContain('all square');
- expect(groupWidget({...part,archived:true},setup,size,auth,now).summary).toContain('final');
- expect(groupWidget(part,setup,size,auth,now+86400001).summary).toContain('Open to update');
- const lost=groupWidget(null,setup,size,auth,now).summary;
- expect(lost).toContain('no longer in this Group');expect(lost).not.toMatch(/Maple|Priya|₹/);
- const other=groupWidget(part,setup,size,{...auth,accountId:'sam'},now).summary;
- expect(other).toContain('Set up this widget again');expect(other).not.toMatch(/Maple|Priya|₹/);
-});
-it.each(['1x1','2x1'] as const)('announces each Add expense state at %s, without disclosing the saved Group when unavailable',size=>{
- const quick={...setup,kind:'quick' as const};
- for(const status of ['signed-out','expired'] as const){const v=quickWidget(copy,quick,size,{status});expect(v.summary).toContain('Sign in');expect(v.summary).not.toContain('Maple');}
- expect(quickWidget(copy,{...quick,groupId:null},size,auth).summary).toContain('Choose a Group');
- expect(quickWidget(copy,quick,size,{...auth,accountId:'sam'}).summary).toBe('Set up again. Another account');
- expect(quickWidget({...copy,lostGroupIds:['maple']},quick,size,auth).summary).toBe('Not in this Group. Choose a Group');
- expect(quickWidget({...copy,groups:{maple:{...part,archived:true}}},quick,size,auth).summary).toBe('Group archived. Choose another');
-});
+it.each(['2x1', '2x2', '4x2'] as const)(
+  'announces loading, no saved copy, all square, no Groups and stale Balances at %s',
+  (size) => {
+    expect(
+      balancesWidget(null, { kind: 'balances' }, size, { ...auth, loading: true }, now).summary,
+    ).toContain('Loading');
+    expect(balancesWidget(null, { kind: 'balances' }, size, auth, now).summary).toContain(
+      'Nothing saved yet',
+    );
+    expect(
+      balancesWidget(
+        { ...copy, home: { ...copy.home!, currencies: [] } },
+        { kind: 'balances' },
+        size,
+        auth,
+        now,
+      ).summary,
+    ).toContain('all square');
+    expect(
+      balancesWidget(
+        { ...copy, home: { ...copy.home!, groupCount: 0, currencies: [] } },
+        { kind: 'balances' },
+        size,
+        auth,
+        now,
+      ).summary,
+    ).toContain('No Groups yet');
+    expect(
+      balancesWidget(copy, { kind: 'balances' }, size, auth, now + 86400001).summary,
+    ).toContain('Open to update');
+  },
+);
+it.each(['2x2', '4x2', '4x3'] as const)(
+  'announces every saved Group state without names after lost access or account change at %s',
+  (size) => {
+    expect(groupWidget(undefined, setup, size, { ...auth, loading: true }, now).summary).toContain(
+      'Loading',
+    );
+    expect(groupWidget(undefined, setup, size, auth, now).summary).toContain('Nothing saved yet');
+    expect(groupWidget({ ...part, currencies: [] }, setup, size, auth, now).summary).toContain(
+      'all square',
+    );
+    expect(groupWidget({ ...part, archived: true }, setup, size, auth, now).summary).toContain(
+      'final',
+    );
+    expect(groupWidget(part, setup, size, auth, now + 86400001).summary).toContain(
+      'Open to update',
+    );
+    const lost = groupWidget(null, setup, size, auth, now).summary;
+    expect(lost).toContain('no longer in this Group');
+    expect(lost).not.toMatch(/Maple|Priya|₹/);
+    const other = groupWidget(part, setup, size, { ...auth, accountId: 'sam' }, now).summary;
+    expect(other).toContain('Set up this widget again');
+    expect(other).not.toMatch(/Maple|Priya|₹/);
+  },
+);
+it.each(['1x1', '2x1'] as const)(
+  'announces each Add expense state at %s, without disclosing the saved Group when unavailable',
+  (size) => {
+    const quick = { ...setup, kind: 'quick' as const };
+    for (const status of ['signed-out', 'expired'] as const) {
+      const v = quickWidget(copy, quick, size, { status });
+      expect(v.summary).toContain('Sign in');
+      expect(v.summary).not.toContain('Maple');
+    }
+    expect(quickWidget(copy, { ...quick, groupId: null }, size, auth).summary).toContain(
+      'Choose a Group',
+    );
+    expect(quickWidget(copy, quick, size, { ...auth, accountId: 'sam' }).summary).toBe(
+      'Set up again. Another account',
+    );
+    expect(quickWidget({ ...copy, lostGroupIds: ['maple'] }, quick, size, auth).summary).toBe(
+      'Not in this Group. Choose a Group',
+    );
+    expect(
+      quickWidget({ ...copy, groups: { maple: { ...part, archived: true } } }, quick, size, auth)
+        .summary,
+    ).toBe('Group archived. Choose another');
+  },
+);

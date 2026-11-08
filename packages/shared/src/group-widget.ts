@@ -239,6 +239,7 @@ export function groupWidget(...args: Parameters<typeof groupWidgetView>) {
     layout: groupLayout(args[2], args[5] ?? 1),
     summary: widgetSummary([
       'Group',
+      full.state === 'loading' ? 'Loading' : null,
       full.hidden ? null : full.name,
       full.title,
       full.balance,

@@ -200,6 +200,7 @@ export function balancesWidget(...args: Parameters<typeof balancesWidgetView>): 
   const full = args[5] ? balancesWidgetView(args[0], args[1], args[2], args[3], args[4]) : view;
   const summary = widgetSummary([
     'Balances',
+    full.state === 'loading' ? 'Loading' : null,
     full.title,
     full.description,
     full.owed.length ? 'You’re owed ' + full.owed.join(' and ') : null,
