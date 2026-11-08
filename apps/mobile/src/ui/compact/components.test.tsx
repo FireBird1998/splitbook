@@ -37,6 +37,7 @@ const {
   CompactAvatar,
   CompactButton,
   CompactText,
+  Divider,
   FieldMarker,
   FloatingAction,
   GroupNavBar,
@@ -99,6 +100,18 @@ const text = (node: ReactTestInstance) =>
     .findAll((n) => isHost(n, 'Text'))
     .flatMap((n) => n.children.filter((c): c is string => typeof c === 'string'))
     .join(' ');
+
+describe('Divider', () => {
+  it.each([
+    { props: {}, margins: [14, 14] },
+    { props: { inset: 66 }, margins: [66, 14] },
+    { props: { fullWidth: true, inset: 66 }, margins: [0, 0] },
+  ])('keeps the expected edge spacing for $props', ({ props, margins }) => {
+    const divider = render(<Divider {...props} />).find((n) => isHost(n, 'View'));
+    const style = flatten(divider.props.style);
+    expect([style.marginLeft, style.marginRight]).toEqual(margins);
+  });
+});
 
 describe('Group bottom navigation', () => {
   it('exposes three Group-scoped tabs with the selected one marked', () => {

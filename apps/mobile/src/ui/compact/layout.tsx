@@ -169,11 +169,22 @@ export function FadeIn({
   );
 }
 
-export function Divider({ inset = 14 }: { inset?: number }) {
+export function Divider({
+  inset = 14,
+  fullWidth = false,
+}: {
+  inset?: number;
+  fullWidth?: boolean;
+}) {
   const theme = useTheme();
   return (
     <View
-      style={{ height: 1, backgroundColor: theme.border, marginLeft: inset, marginRight: 14 }}
+      style={{
+        height: 1,
+        backgroundColor: theme.border,
+        marginLeft: fullWidth ? 0 : inset,
+        marginRight: fullWidth ? 0 : 14,
+      }}
     />
   );
 }

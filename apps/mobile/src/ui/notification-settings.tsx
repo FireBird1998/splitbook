@@ -153,7 +153,7 @@ export function NotificationSettings({
                     onChange: (value) => onCategory('payments', value),
                   }}
                 />
-                <Divider />
+                <Divider fullWidth />
                 <ListRow
                   leading={<IconTile icon="settings-outline" tone="neutral" />}
                   title="Android notification settings"
