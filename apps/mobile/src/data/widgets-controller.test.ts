@@ -583,6 +583,12 @@ it('opens Ask each time from a cold start with no Groups, then hands Create a Gr
   await cold.openWidget('create-group');
   expect(cold.getSnapshot().screen).toBe('create');
 });
-it('closes an open widget picker when a chosen-Group widget opens its Expense',async()=>{
- const f=fixture(),c=f.make();await c.signIn('alex');await c.openWidget('choose-group');await c.openWidget({kind:'expense',groupId});expect(c.getSnapshot().widgetPicker).toBe(false);expect(c.getSnapshot().screen).toBe('expense');
+it('closes an open widget picker when a chosen-Group widget opens its Expense', async () => {
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openWidget('choose-group');
+  await c.openWidget({ kind: 'expense', groupId });
+  expect(c.getSnapshot().widgetPicker).toBe(false);
+  expect(c.getSnapshot().screen).toBe('expense');
 });

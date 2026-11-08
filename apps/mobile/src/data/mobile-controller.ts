@@ -8218,6 +8218,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openWidget = async (target: WidgetTarget) => {
     if (widgetRestore) await widgetRestore;
     else if (snapshot.auth.status === 'restoring') await restore();
+    if (snapshot.widgetPicker && target !== 'choose-group')
+      publish({ ...snapshot, widgetPicker: false });
     if (typeof target !== 'string' && target.kind === 'setup') {
       await dependencies.widgets?.openSetup?.(target.widgetId);
       return;

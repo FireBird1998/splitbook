@@ -1,4 +1,5 @@
-import { View, Pressable } from 'react-native';
+import { useEffect } from 'react';
+import { AppState, View, Pressable } from 'react-native';
 import { controller } from './runtime';
 import { useMobileSnapshot, sameSelection } from './ui/use-mobile-snapshot';
 import { Copy, Button } from './ui/primitives';
@@ -10,6 +11,13 @@ export function WidgetGroupPicker() {
     (s) => ({ open: !!s.widgetPicker && s.auth.status === 'authenticated', groups: s.groups.data }),
     sameSelection,
   );
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (status) => {
+      if (status !== 'active' && controller.getSnapshot().widgetPicker)
+        controller.closeWidgetPicker();
+    });
+    return () => subscription.remove();
+  }, []);
   if (!state.open) return null;
   return (
     <BottomSheet
