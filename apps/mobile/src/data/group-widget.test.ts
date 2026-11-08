@@ -153,3 +153,15 @@ it('limits compact to the people count, wide to two payments and tall to four, k
     action: 'Open to update',
   });
 });
+it('uses the older Group/Balances verification time and keeps data hidden across accounts', () => {
+  expect(
+    groupWidget({ ...part, verifiedAt: now - 86400001 }, setup, '4x2', session, now),
+  ).toMatchObject({ muted: true, action: 'Open to update' });
+  const view = groupWidget(part, setup, '4x2', { ...session, accountId: 'sam' }, now);
+  expect(JSON.stringify(view)).not.toMatch(/Maple|Priya|Sam|1,480|1,060/);
+});
+
+it('marks incoming Suggested payments and the balance as owed to you',()=>{
+ const incoming={...part,currencies:[{currency:'INR',balanceMinor:120000,payments:[{from:'priya',to:'alex',fromName:'Priya Shah',toName:'Alex Rivera',amountMinor:120000}]}]};
+ expect(groupWidget(incoming,setup,'4x2',session,now)).toMatchObject({balanceTone:'positive',payments:[{label:'Priya pays you',firstName:'Priya',incoming:true}]});
+});
