@@ -46,7 +46,11 @@ export function createWidgetsStore(environment: string) {
       );
     },
     async clear() {
-      if (!opening && !new File(defaultDatabaseDirectory, 'splitbook-widgets.db').exists) return;
+      if (
+        !opening &&
+        !new File(`file://${defaultDatabaseDirectory}`, 'splitbook-widgets.db').exists
+      )
+        return;
       await (
         await database()
       ).runAsync('DELETE FROM widget_state WHERE environment = ?', environment);
