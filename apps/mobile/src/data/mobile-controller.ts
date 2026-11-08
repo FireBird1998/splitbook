@@ -8237,6 +8237,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       return;
     }
+    if (target === 'choose-group') {
+      await showHome();
+      if (snapshot.auth.status === 'authenticated') publish({ ...snapshot, widgetPicker: true });
+      return;
+    }
     // To review is Home's first card. Returning Home exposes it without a new screen.
     if (target === 'create-group') {
       startCreate();
@@ -8252,7 +8257,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     if (target === 'review' && persistentDrafts) await toReviewQueries.refresh();
   };
+  const closeWidgetPicker = () => publish({ ...snapshot, widgetPicker: false });
+  const chooseWidgetGroup = async (id: string) => {
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      !snapshot.widgetPicker ||
+      !snapshot.groups.data.some((g) => g.id === id && !g.isArchived)
+    )
+      return;
+    closeWidgetPicker();
+    await openExpense(id);
+  };
   return {
+    closeWidgetPicker,
+    chooseWidgetGroup,
     openWidget,
     startReviewRun,
     closeReviewRun,

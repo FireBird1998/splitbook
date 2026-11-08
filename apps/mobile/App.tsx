@@ -1,3 +1,4 @@
+import { WidgetGroupPicker } from './src/widget-picker';
 import { widgetLinkTarget } from './src/widget-links';
 import { androidWidgetsEnabled } from './src/widgets-flag';
 import { notificationTaskProtected } from './src/data/notification-alerts';
@@ -157,6 +158,7 @@ export default function App() {
       <ThemeContext.Provider value={getSemanticTokens(mode)}>
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
         <SplitBook />
+        {androidWidgetsEnabled() ? <WidgetGroupPicker /> : null}
       </ThemeContext.Provider>
     </SafeAreaProvider>
   );

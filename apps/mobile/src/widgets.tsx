@@ -1,3 +1,4 @@
+import { drawQuick } from './quick-widget-draw';
 import { drawGroup } from './group-widget-draw';
 // Narrow imports keep unused preview and setup UI out of the widget bundle.
 import { FlexWidget } from 'react-native-android-widget/src/widgets/FlexWidget';
@@ -241,9 +242,21 @@ function draw(view: BalancesWidgetView, t: SemanticTokens) {
 }
 async function representation(info: WidgetInfo) {
   const record = await widgetStore.read();
+  if (info.widgetName === 'Quick') {
+    const setup = await widgetStore.setup(info.widgetId);
+    const selected =
+      setup?.kind === 'quick'
+        ? setup
+        : { kind: 'quick' as const, widgetId: info.widgetId, groupId: null, accountId: '' };
+    const size = info.width < 160 ? '1x1' : '2x1';
+    return {
+      light: drawQuick(record.copy, selected, size, record.session, lightTokens),
+      dark: drawQuick(record.copy, selected, size, record.session, darkTokens),
+    };
+  }
   if (info.widgetName === 'Group') {
     const setup = await widgetStore.setup(info.widgetId);
-    const selected = setup ?? {
+    const selected = (setup?.kind === 'group' ? setup : null) ?? {
       kind: 'group' as const,
       widgetId: info.widgetId,
       groupId: '',
@@ -276,7 +289,9 @@ const serializeDraw = (run: () => Promise<void>) => {
 };
 export function redrawBalances() {
   return serializeDraw(async () => {
-    const widgets = (await Promise.all([getWidgetInfo('Balances'), getWidgetInfo('Group')])).flat();
+    const widgets = (
+      await Promise.all([getWidgetInfo('Balances'), getWidgetInfo('Group'), getWidgetInfo('Quick')])
+    ).flat();
     await Promise.all(
       widgets.map((info) =>
         requestWidgetUpdateById({
@@ -294,7 +309,7 @@ export function registerAndroidWidgets() {
       await widgetStore.removeSetup(widgetInfo.widgetId);
       return;
     }
-    if (!['Balances', 'Group'].includes(widgetInfo.widgetName)) return;
+    if (!['Balances', 'Group', 'Quick'].includes(widgetInfo.widgetName)) return;
     await serializeDraw(async () => {
       renderWidget(await representation(widgetInfo));
     });

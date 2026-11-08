@@ -55,6 +55,7 @@ export function widgetLinkTarget(url: string): WidgetTarget | null {
           '/review': 'review',
           '/sign-in': 'sign-in',
           '/create-group': 'create-group',
+          '/choose-group': 'choose-group',
         } as const
       )[parsed.pathname as '/home'] ?? null
     );
