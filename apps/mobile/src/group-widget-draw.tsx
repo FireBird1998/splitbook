@@ -107,7 +107,7 @@ export function drawGroup(
         padding: 14,
         backgroundColor: color(t.surface),
         borderRadius: 24,
-        justifyContent: 'space-between',
+        justifyContent: 'flex-start',
       }}
     >
       {view.name ? (
@@ -186,7 +186,7 @@ export function drawGroup(
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                justifyContent: 'space-between',
+                justifyContent: 'flex-start',
                 width: 'match_parent',
                 padding: 7,
                 flexGap: 12,
