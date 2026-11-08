@@ -2605,6 +2605,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  let nextOpenTap = 0;
+  let acceptedOpenTap = 0;
   type PendingWidget = { widget: WidgetTarget; accountId: string };
   let pendingNotification: NotificationEnvelope | PendingWidget | null = null;
   let signalledHeldNotification: MobileSnapshot['heldNotification'] = null;
@@ -2676,15 +2678,49 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         notificationOpening: { status: 'opening', message: 'Checking Group access…' },
       });
       try {
-        await navigateWidget(event.widget);
-        if (!current(owner) || pendingNotification !== event) return;
         const target = event.widget;
+        let refused = false;
+        if (typeof target !== 'string' && target.kind !== 'setup') {
+          // Like notification Open, check access before leaving the current view.
+          try {
+            await request('/api/groups/' + target.groupId, owner);
+          } catch (error) {
+            if (error instanceof RequestError && [403, 404].includes(error.status)) refused = true;
+            else throw error;
+          }
+          if (!current(owner) || pendingNotification !== event) return;
+          if (notificationProtected()) {
+            publish({
+              ...snapshot,
+              notificationOpening: { status: 'held', message: 'An update is ready.' },
+            });
+            return;
+          }
+        }
+        await navigateWidget(target);
+        if (!current(owner) || pendingNotification !== event) return;
+        const intendedTask =
+          target === 'create-group'
+            ? snapshot.screen === 'create'
+            : typeof target !== 'string' && target.kind === 'expense'
+              ? snapshot.screen === 'expense' && snapshot.expense.groupId === target.groupId
+              : typeof target !== 'string' && target.kind === 'settle'
+                ? snapshot.screen === 'settlement' && snapshot.settlement.groupId === target.groupId
+                : false;
+        if (notificationProtected() && !intendedTask) {
+          publish({
+            ...snapshot,
+            notificationOpening: { status: 'held', message: 'An update is ready.' },
+          });
+          return;
+        }
         const failed =
-          typeof target !== 'string' && target.kind !== 'setup'
+          !refused &&
+          (typeof target !== 'string' && target.kind !== 'setup'
             ? snapshot.detail.status === 'error'
             : target !== 'create-group' &&
               typeof target === 'string' &&
-              snapshot.groups.status === 'error';
+              snapshot.groups.status === 'error');
         if (failed) throw new Error('Widget destination unavailable');
         pendingNotification = null;
         publish({ ...snapshot, notificationOpening: emptyNotificationOpening() });
@@ -2796,8 +2832,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
   };
   const tapNotification = async (value: unknown) => {
+    const tap = ++nextOpenTap;
     const event = await checkedNotification(value);
-    if (!event) return;
+    if (!event || tap < acceptedOpenTap) return;
+    acceptedOpenTap = tap;
     holdPendingNotification(event);
     if (!notificationProtected()) await openPendingNotification();
   };
@@ -8307,10 +8345,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await openExpense(id);
   };
   const openWidget = async (target: WidgetTarget) => {
+    const tap = ++nextOpenTap;
     if (widgetRestore) await widgetRestore;
     else if (snapshot.auth.status === 'restoring') await restore();
-    if (snapshot.auth.status === 'authenticated' && notificationProtected()) {
+    if (tap < acceptedOpenTap) return;
+    acceptedOpenTap = tap;
+    if (
+      snapshot.auth.status === 'authenticated' &&
+      (pendingNotification || notificationProtected())
+    ) {
       holdPendingNotification({ widget: target, accountId: snapshot.auth.user!.id });
+      if (!notificationProtected()) await openPendingNotification();
       return;
     }
     await navigateWidget(target);
