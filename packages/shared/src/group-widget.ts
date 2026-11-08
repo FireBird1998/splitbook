@@ -1,3 +1,4 @@
+import { widgetSummary } from './widget-accessibility';
 import { formatCurrency, getCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
 import { counted, SEPARATOR } from './separator';
@@ -31,7 +32,7 @@ export interface WidgetGroupPart {
   }[];
 }
 export type GroupWidgetSize = '2x2' | '4x2' | '4x3';
-export function groupWidget(
+function groupWidgetView(
   part: WidgetGroupPart | null | undefined,
   setup: GroupWidgetSetup,
   size: GroupWidgetSize,
@@ -225,5 +226,23 @@ export function groupWidget(
     muted,
     final: part.archived,
     action: muted ? 'Open to update' : null,
+  };
+}
+
+export function groupWidget(...args: Parameters<typeof groupWidgetView>) {
+  const view = groupWidgetView(...args);
+  return {
+    ...view,
+    summary: widgetSummary([
+      'Group',
+      view.hidden ? null : view.name,
+      view.title,
+      view.balance,
+      ...view.payments.map((p) => p.label + ' ' + p.amount),
+      view.hidden ? null : view.description,
+      view.saved,
+      view.hidden,
+      view.target === 'setup' || view.muted ? view.action : null,
+    ]),
   };
 }

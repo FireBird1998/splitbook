@@ -1,3 +1,4 @@
+import { widgetSummary } from './widget-accessibility';
 import type { WidgetGroupPart } from './group-widget';
 import type { GroupCategory } from './types';
 /** Saved read available to the Android widget renderer, never a live balance. */
@@ -46,6 +47,7 @@ import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
 export type BalancesWidgetSize = '2x1' | '2x2' | '4x2';
 export interface BalancesWidgetView {
+  summary: string;
   state: 'normal' | 'loading' | 'no-copy' | 'signed-out' | 'expired' | 'all-square' | 'no-groups';
   size: BalancesWidgetSize;
   hidden: string | null;
@@ -78,7 +80,7 @@ export function widgetSavedTime(verifiedAt: number, now: number) {
   return `Saved ${saved.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][saved.getMonth()]}`;
 }
 
-export function balancesWidget(
+function balancesWidgetView(
   copy: WidgetCopy | null,
   setup: { kind: 'balances'; reviewEnabled?: boolean; hideAmounts?: boolean },
   size: BalancesWidgetSize,
@@ -86,6 +88,7 @@ export function balancesWidget(
   now: number,
 ): BalancesWidgetView {
   const view: BalancesWidgetView = {
+    summary: '',
     state: 'no-copy',
     hidden: null,
     size,
@@ -185,4 +188,23 @@ export function balancesWidget(
     owedOverflow: owed.overflow,
     oweOverflow: owe.overflow,
   };
+}
+
+/** One spoken description, kept independent of which lines fit visually. */
+export function balancesWidget(...args: Parameters<typeof balancesWidgetView>): BalancesWidgetView {
+  const view = balancesWidgetView(...args);
+  const summary = widgetSummary([
+    'Balances',
+    view.title,
+    view.description,
+    view.owed.length ? 'You’re owed ' + view.owed.join(' and ') : null,
+    view.owe.length ? 'You owe ' + view.owe.join(' and ') : null,
+    view.owedOverflow ? view.owedOverflow.replace('+', '') + ' more owed' : null,
+    view.oweOverflow ? view.oweOverflow.replace('+', '') + ' more owing' : null,
+    view.saved,
+    view.review?.replace(SEPARATOR, ' '),
+    view.hidden,
+    view.muted ? 'Open to update' : null,
+  ]);
+  return { ...view, summary };
 }
