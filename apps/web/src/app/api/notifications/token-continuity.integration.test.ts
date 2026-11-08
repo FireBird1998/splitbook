@@ -291,6 +291,8 @@ describe('maintenance never creates, transfers or revives consent (#844)', () =>
 describe('an invalid token is disabled without ending consent (#844)', () => {
   it('stops sends to the invalid token, keeps controls on, and the refreshed token gets later alerts', async () => {
     const enabled = await enable(phoneA, samA, 'fictional-token-a1');
+    // A cold start's maintenance with the unchanged token: this installation maintains itself.
+    expect((await maintain(phoneA, samA, 'fictional-token-a1')).status).toBe(200);
     provider.send.mockImplementationOnce(async (_message, _signal, authorize) => {
       expect(await authorize()).toBe(true);
       return 'invalid-token';
@@ -321,6 +323,141 @@ describe('an invalid token is disabled without ending consent (#844)', () => {
       'fictional-token-a2',
       'fictional-token-a2',
     ]);
+  });
+});
+
+/** An invalid-token answer from FCM for the next send only. */
+const unregisterNextSend = () =>
+  provider.send.mockImplementationOnce(async (_message, _signal, authorize) => {
+    expect(await authorize()).toBe(true);
+    return 'invalid-token';
+  });
+
+describe('an app that never maintains its registration keeps the 2a0b065b behaviour (#844)', () => {
+  it('an invalid token switches its registration off, so its Settings shows off and the member can enable again', async () => {
+    const enabled = await enable(phoneA, samA, 'fictional-token-a1');
+    unregisterNextSend();
+    expect((await create()).status).toBe(201);
+    expect((await controls(phoneA, samA)).body.data).toMatchObject({
+      enabled: false,
+      expenseUpdates: false,
+      payments: false,
+      revision: enabled.revision + 1,
+    });
+    expect(await registration(phoneA)).not.toHaveProperty('tokenInvalid');
+    expect((await create()).status).toBe(201);
+    expect(sentTokens()).toEqual(['fictional-token-a1']);
+    // That app sends a token only on an explicit Enable.
+    await enable(phoneA, samA, 'fictional-token-a2');
+    expect((await create()).status).toBe(201);
+    expect(sentTokens()).toEqual(['fictional-token-a1', 'fictional-token-a2']);
+  });
+  it('its GETs and POSTs answer exactly as 2a0b065b did', async () => {
+    const uuid = expect.stringMatching(/^[\da-f-]{36}$/);
+    const iso = expect.stringMatching(/^\d{4}-\d\d-\d\dT[\d:.]+Z$/);
+    const off = (revision: number) => ({
+      data: {
+        available: true,
+        enabled: false,
+        expenseUpdates: false,
+        payments: false,
+        revision,
+        activation: null,
+        expenseCutoff: null,
+        paymentCutoff: null,
+      },
+      status: 200,
+    });
+    const state = (data: Record<string, unknown>) => ({
+      data: {
+        available: true,
+        activation: uuid,
+        binding: uuid,
+        expenseActivation: uuid,
+        expenseCutoff: iso,
+        paymentCutoff: iso,
+        ...data,
+      },
+      status: 200,
+    });
+    expect((await controls(phoneA, samA)).body).toEqual(off(0));
+    const on = await post(phoneA, samA, {
+      revision: 0,
+      enabled: true,
+      token: 'fictional-token-a1',
+    });
+    expect(on.body).toEqual(
+      state({ enabled: true, expenseUpdates: true, payments: true, revision: 1 }),
+    );
+    const category = await post(phoneA, samA, {
+      revision: 1,
+      enabled: true,
+      expenseUpdates: true,
+      payments: false,
+    });
+    expect(category.body).toEqual(
+      state({ enabled: true, expenseUpdates: true, payments: false, revision: 2 }),
+    );
+    expect((await controls(phoneA, samA)).body).toEqual(category.body);
+    unregisterNextSend();
+    expect((await create()).status).toBe(201);
+    // As 2a0b065b: switched off, with the binding and activations it had.
+    expect((await controls(phoneA, samA)).body).toEqual(
+      state({ enabled: false, expenseUpdates: false, payments: false, revision: 3 }),
+    );
+    const again = await post(phoneA, samA, {
+      revision: 3,
+      enabled: true,
+      token: 'fictional-token-a2',
+    });
+    expect(again.body).toEqual(
+      state({ enabled: true, expenseUpdates: true, payments: true, revision: 4 }),
+    );
+    const disabled = await post(phoneA, samA, { revision: 4, enabled: false });
+    expect(disabled.body).toEqual(
+      state({ enabled: false, expenseUpdates: false, payments: false, revision: 5 }),
+    );
+    // Nothing beyond 2a0b065b's fields: the capability record never reaches a response.
+    expect((await controls(phoneA, samA)).body).toEqual(disabled.body);
+  });
+});
+
+describe('an installation that maintains its registration is recorded as such (#844)', () => {
+  it('maintenance records it; GETs, Settings changes and a new session never erase it', async () => {
+    const enabled = await enable(phoneA, samA, 'fictional-token-a1');
+    expect(await registration(phoneA)).not.toHaveProperty('maintains');
+    // The same token again changes no control and no revision, but records the capability.
+    const same = await maintain(phoneA, samA, 'fictional-token-a1');
+    expect(same.body.data.revision).toBe(enabled.revision);
+    expect(await registration(phoneA)).toMatchObject({ maintains: true });
+    await controls(phoneA, samA);
+    const category = await post(phoneA, samA, {
+      revision: enabled.revision,
+      enabled: true,
+      expenseUpdates: true,
+      payments: false,
+    });
+    expect(category.status).toBe(200);
+    const off = await post(phoneA, samA, { revision: category.body.data.revision, enabled: false });
+    expect(off.status).toBe(200);
+    expect(await registration(phoneA)).toMatchObject({ maintains: true, enabled: false });
+    await signOut(samA);
+    const samAgain = await signIn('sam');
+    await enable(phoneA, samAgain, 'fictional-token-a2');
+    expect(await registration(phoneA)).toMatchObject({ maintains: true, enabled: true });
+    unregisterNextSend();
+    expect((await create()).status).toBe(201);
+    expect(await registration(phoneA)).toMatchObject({
+      enabled: true,
+      expenseUpdates: true,
+      payments: true,
+      tokenInvalid: true,
+    });
+  });
+  it('a refused maintenance records nothing', async () => {
+    expect((await maintain(phoneA, samA, 'fictional-token-a1', 0)).status).toBe(409);
+    await enable(phoneA, samA, 'fictional-token-a1');
+    expect(await registration(phoneA)).not.toHaveProperty('maintains');
   });
 });
 

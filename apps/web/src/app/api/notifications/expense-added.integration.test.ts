@@ -401,7 +401,9 @@ describe('Expense-added alerts through authenticated HTTP and real MongoDB', () 
       .findOne({ type: 'expense_added' });
     expect(event!.notificationContext.recipientIds).toEqual([users.sam]);
   });
-  it('an invalid token stops its sends but keeps the controls, and a stale category update is still refused (#844)', async () => {
+  // This phone registered as the 2a0b065b app does (an Enable, never maintenance): on an invalid
+  // token its registration is switched off exactly as before, so that app's Settings shows off (#844).
+  it('invalid-token disable advances the device revision and refuses a stale category update', async () => {
     provider.send.mockImplementationOnce(async (_message, _signal, authorize) => {
       expect(await authorize()).toBe(true);
       return 'invalid-token';
@@ -413,7 +415,7 @@ describe('Expense-added alerts through authenticated HTTP and real MongoDB', () 
       cookie: sam,
       headers: { 'X-Installation-Key': installationKey },
     });
-    expect(current.body.data).toMatchObject({ enabled: true, expenseUpdates: true, revision: 1 });
+    expect(current.body.data).toMatchObject({ enabled: false, revision: 2 });
     const stale = await callRoute(device.POST, {
       method: 'POST',
       path: '/api/notifications/device',
@@ -421,14 +423,13 @@ describe('Expense-added alerts through authenticated HTTP and real MongoDB', () 
       body: {
         installationId: phone,
         installationKey,
-        revision: 0,
+        revision: 1,
         enabled: true,
         expenseUpdates: true,
         payments: false,
       },
     });
     expect(stale.status).toBe(409);
-    await create();
     await run();
     expect(provider.send).toHaveBeenCalledTimes(1);
   });

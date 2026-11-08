@@ -2377,7 +2377,10 @@ account, a new session of the same account) and a stale revision get 409, and no
 It is allowed while `ANDROID_NOTIFICATIONS_ENABLED` is off, since it grants nothing. It keeps
 the binding, `activation`, `expenseActivation` and both cutoffs, so it never replays older
 events or moves a cutoff. A new token replaces the stored one and advances `revision`; the same
-token again writes nothing and returns the same revision. Accepted and uncertain deliveries
+token again changes no control and returns the same revision. An accepted maintenance also
+records, on the registration and never in a response, that this installation maintains itself;
+an Enable, a Settings change, a sign-out or a new session on the installation keeps that record,
+and no other request sets it. Accepted and uncertain deliveries
 keep their identities (event, installation, binding, Expense activation), so a new token gets no
 accepted or uncertain event again, and a pending one keeps its event's original 24-hour expiry.
 
@@ -2460,9 +2463,13 @@ Immediately before FCM, the server rechecks current membership, persisted sessio
 Expense preferences, activation cutoff, kill switches and event expiry. Eligible delivery
 identity includes event, environment, installation, binding and Expense activation.
 
-A permanent FCM `UNREGISTERED` answer disables that token, not the member's consent (#844): the
-registration keeps its controls, revision, binding and activations, and nothing more is sent to
-that token. The phone's next token, registered by maintenance, receives later alerts and any
+A permanent FCM `UNREGISTERED` answer depends on whether the installation maintains its
+registration (#844). An installation whose app has never had a maintenance accepted (the
+2a0b065b Android app, which sends a token only on an explicit Enable) is switched off exactly as
+before: `enabled`, `expenseUpdates` and `payments` become false and `revision` advances, so that
+app's Settings shows off and the member can enable again. An installation that maintains itself
+has the token disabled, not the member's consent: the registration keeps its controls, revision,
+binding and activations, and nothing more is sent to that token. The phone's next token, registered by maintenance, receives later alerts and any
 eligible event not yet delivered to it within its 24 hours; the event that failed is not sent
 again, and the same refused token presented again stays disabled. Dispatch sends to the
 installation's current token at the time of the send, so a token rotated during a pass still

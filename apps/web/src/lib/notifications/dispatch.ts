@@ -462,9 +462,16 @@ async function runDispatch(
         { $set: { state: outcome } },
         { maxTimeMS: 500 },
       );
-      // The token is disabled, not the member's consent: the phone's next token, registered under
-      // the same binding and activation, receives later alerts (#844). A rotated token is untouched.
-      if (outcome === 'invalid-token')
+      // An app that maintains its registration keeps the member's consent: only the token is
+      // disabled, and the phone's next token, under the same binding and activation, receives
+      // later alerts. An app that never maintains (2a0b065b) would never send that token, so its
+      // registration is switched off as before and its Settings shows off (#844). One atomic
+      // update decides on the capability as stored; a rotated token is untouched.
+      if (outcome === 'invalid-token') {
+        const maintained = { $eq: ['$maintains', true] };
+        const unlessMaintained = (field: string, off: unknown) => ({
+          $cond: [maintained, '$' + field, off],
+        });
         await authDb.collection('notificationRegistrations').updateOne(
           {
             environment,
@@ -472,9 +479,20 @@ async function runDispatch(
             binding: live.binding,
             token: live.token,
           },
-          { $set: { tokenInvalid: true } },
+          [
+            {
+              $set: {
+                tokenInvalid: { $cond: [maintained, true, '$$REMOVE'] },
+                enabled: unlessMaintained('enabled', false),
+                expenseUpdates: unlessMaintained('expenseUpdates', false),
+                payments: unlessMaintained('payments', false),
+                revision: unlessMaintained('revision', { $add: ['$revision', 1] }),
+              },
+            },
+          ],
           { maxTimeMS: 500 },
         );
+      }
       if (outcome === 'accepted') counts.accepted++;
       else counts.failed++;
       if (outcome === 'uncertain') uncertain.count++;

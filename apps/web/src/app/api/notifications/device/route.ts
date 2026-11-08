@@ -71,6 +71,12 @@ type Registration = {
   tokenHash?: string;
   /** FCM answered that this token is unregistered: nothing is sent to it until a new one comes. */
   tokenInvalid?: true;
+  /**
+   * This installation's app keeps its own registration current (#844): the server has accepted
+   * its maintenance. Only then does an invalid token keep the controls on; an app that never
+   * maintains (2a0b065b) is switched off instead, so its Settings shows off. Never in a response.
+   */
+  maintains?: true;
 };
 const off = (revision = 0) => ({
   available: available(),
@@ -209,12 +215,18 @@ export async function POST(req: Request) {
           // never a phone that opted out, another account or a new session (#844).
           if (!prior?.enabled || !body.token)
             return refusal('Notification settings changed. Retry.', 409);
-          if (prior.tokenHash === hash(body.token)) return answer(publicState(prior));
+          if (prior.tokenHash === hash(body.token)) {
+            // No control changes, so no new revision: only the capability is recorded.
+            if (!prior.maintains)
+              await registrations.updateOne(filter, { $set: { maintains: true } }, options);
+            return answer(publicState(prior));
+          }
           const row: Registration = {
             ...prior,
             token: body.token,
             tokenHash: hash(body.token),
             revision: prior.revision + 1,
+            maintains: true,
           };
           delete row.tokenInvalid;
           await releaseToken(row, options);
@@ -260,6 +272,8 @@ export async function POST(req: Request) {
           ...(token && previous?.tokenInvalid && previous.tokenHash === hash(token)
             ? { tokenInvalid: true as const }
             : {}),
+          // The capability belongs to the installation's app, whoever signs in or whatever changes.
+          ...(previous?.maintains ? { maintains: true as const } : {}),
         };
         if (body.enabled) await releaseToken(row, options);
         if (previous) await registrations.replaceOne(filter, row, options);
