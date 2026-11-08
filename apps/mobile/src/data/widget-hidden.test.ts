@@ -232,6 +232,7 @@ it('marks an already-updating legacy Balances widget as placed without marking a
     hideAmounts: false,
   });
   expect(legacyBalancesSetup('WIDGET_ADDED', 3, null)).toBeNull();
+  expect(legacyBalancesSetup('WIDGET_UPDATE', 3, null, false)).toBeNull();
   expect(
     legacyBalancesSetup('WIDGET_UPDATE', 3, { kind: 'balances', widgetId: 3, hideAmounts: true }),
   ).toBeNull();
