@@ -42,9 +42,11 @@ function render(
         <NotificationSettings
           {...callbacks}
           state={{
-            ...{ hasConfirmed },
+            hasConfirmed,
             status,
-            confirmed: { ...confirmed, enabled, available },
+            confirmed: hasConfirmed
+              ? { ...confirmed, enabled, available }
+              : emptyNotifications().confirmed,
             message: 'Old controller copy',
           }}
         />

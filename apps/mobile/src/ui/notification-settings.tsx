@@ -32,6 +32,7 @@ export function NotificationSettings({
 }: NotificationSettingsProps) {
   const theme = useTheme();
   const confirmed = state.confirmed;
+  const unchecked = state.status === 'offline' && !state.hasConfirmed;
   const asking = state.status === 'pending' && !confirmed.enabled;
   const confirming = state.status === 'pending' && confirmed.enabled;
   const unavailable = state.status === 'ready' && !confirmed.available;
@@ -96,13 +97,15 @@ export function NotificationSettings({
               title="Notifications on this phone"
               titleLines={0}
               meta={
-                asking
-                  ? 'Asking Android…'
-                  : state.status === 'blocked'
-                    ? 'Blocked by Android'
-                    : confirmed.enabled
-                      ? 'On for all your Groups'
-                      : 'Off'
+                unchecked
+                  ? 'Not checked yet'
+                  : asking
+                    ? 'Asking Android…'
+                    : state.status === 'blocked'
+                      ? 'Blocked by Android'
+                      : confirmed.enabled
+                        ? 'On for all your Groups'
+                        : 'Off'
               }
               metaTone={state.status === 'blocked' ? 'warning' : 'secondary'}
               metaLines={0}
@@ -153,6 +156,10 @@ export function NotificationSettings({
                     onChange: (value) => onCategory('payments', value),
                   }}
                 />
+              </>
+            ) : null}
+            {confirmed.enabled || state.status === 'offline' ? (
+              <>
                 <Divider fullWidth />
                 <ListRow
                   leading={<IconTile icon="settings-outline" tone="neutral" />}

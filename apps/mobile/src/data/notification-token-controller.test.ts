@@ -277,6 +277,7 @@ describe('a token change keeps an opted-in phone registered (#844)', () => {
   it('restoring the same session registers the current token without a prompt', async () => {
     const { device } = await optedIn();
     const next = device.app({ token: vi.fn(async () => 'private-token-after-restart') });
+    expect(next.controller.getSnapshot().notifications.hasConfirmed).toBe(false);
     await next.controller.restore();
     await vi.waitFor(() => expect(device.maintenance()).toHaveLength(1));
     expect(device.maintenance()[0]).toMatchObject({ token: 'private-token-after-restart' });
@@ -284,6 +285,7 @@ describe('a token change keeps an opted-in phone registered (#844)', () => {
       expect(device.registration()?.token).toBe('private-token-after-restart'),
     );
     expect(next.notifications.requestPermission).not.toHaveBeenCalled();
+    expect(next.controller.getSnapshot().notifications.hasConfirmed).toBe(true);
     expect(next.controller.getSnapshot().notifications.confirmed.enabled).toBe(true);
     expect(JSON.stringify(next.controller.getSnapshot())).not.toContain('private-token');
   });

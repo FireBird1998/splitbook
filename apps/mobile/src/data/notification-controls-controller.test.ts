@@ -26,8 +26,8 @@ const response = (body: unknown, status = 200) =>
       'Set-Cookie': 'better-auth.session_token=fictional.signature; Path=/; HttpOnly',
     },
   });
-function device() {
-  let confirmed = { ...off };
+function device(available = true) {
+  let confirmed = { ...off, available };
   let fail = false;
   let unreachable = false;
   let hold: Promise<void> | null = null;
@@ -134,6 +134,36 @@ describe('Settings notification controls at the controller/native seam', () => {
     expect(notifications.requestPermission).not.toHaveBeenCalled();
     expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(false);
   });
+  it.each([true, false])(
+    'distinguishes cold offline from confirmed off (available=%s) and resets on sign-out',
+    async (available) => {
+      const { controller, setOffline } = device(available);
+      await controller.signIn('alex');
+      expect(controller.getSnapshot().notifications.hasConfirmed).toBe(false);
+      setOffline(true);
+      await controller.refreshNotifications();
+      expect(controller.getSnapshot().notifications).toMatchObject({
+        status: 'offline',
+        hasConfirmed: false,
+      });
+      setOffline(false);
+      await controller.refreshNotifications();
+      expect(controller.getSnapshot().notifications).toMatchObject({
+        status: 'ready',
+        hasConfirmed: true,
+        confirmed: { ...off, available },
+      });
+      setOffline(true);
+      await controller.refreshNotifications();
+      expect(controller.getSnapshot().notifications).toMatchObject({
+        status: 'offline',
+        hasConfirmed: true,
+        confirmed: { ...off, available },
+      });
+      await controller.signOut();
+      expect(controller.getSnapshot().notifications.hasConfirmed).toBe(false);
+    },
+  );
   it('explicit enable waits for backend confirmation, keeps tokens private and switches categories independently', async () => {
     const { controller, notifications, writes, hold } = device();
     await controller.signIn('alex');
@@ -149,6 +179,7 @@ describe('Settings notification controls at the controller/native seam', () => {
     expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(false);
     release();
     await enabling;
+    expect(controller.getSnapshot().notifications.hasConfirmed).toBe(true);
     expect(notifications.requestPermission).toHaveBeenCalledOnce();
     expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(true);
     expect(JSON.stringify(controller.getSnapshot())).not.toContain('private-native-token');
@@ -220,6 +251,7 @@ describe('Settings notification controls at the controller/native seam', () => {
     await controller.refreshNotifications();
     expect(controller.getSnapshot().notifications.status).toBe('blocked');
     expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(true);
+    expect(controller.getSnapshot().notifications.hasConfirmed).toBe(true);
     expect(notifications.requestPermission).toHaveBeenCalledOnce();
   });
   it('drops a native token that arrives after account invalidation without uploading it', async () => {
