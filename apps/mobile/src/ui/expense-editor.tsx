@@ -1,3 +1,4 @@
+import { HeldUpdateFooter } from './held-update-snackbar';
 import type { ViewInstance, ScrollViewInstance, TextInputInstance } from 'react-native';
 import { expenseRecoveryWords } from './expense-recovery-copy';
 import { FinishLater } from './finish-later';
@@ -644,7 +645,15 @@ function ExpenseTask({
         ) : null}
         {body}
       </ScrollView>
-      {newTask && form && footer ? <RetainHeight footer>{footer}</RetainHeight> : footer}
+      {controller && form ? (
+        <HeldUpdateFooter controller={controller}>
+          {newTask && form && footer ? <RetainHeight footer>{footer}</RetainHeight> : footer}
+        </HeldUpdateFooter>
+      ) : newTask && form && footer ? (
+        <RetainHeight footer>{footer}</RetainHeight>
+      ) : (
+        footer
+      )}
     </View>
   );
 

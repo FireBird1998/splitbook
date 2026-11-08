@@ -386,6 +386,8 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     auth,
     notifications: emptyNotifications(),
     notificationOpening: emptyNotificationOpening(),
+    heldNotification: null,
+    heldNotificationNotice: null,
     sharedDraftCollection: emptySharedDraftCollection(),
     assistants: emptyAssistants(),
     tagManager: emptyTagManager(),
@@ -681,6 +683,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     let next = activityQueries.project(
       expenseQueries.project(groupQueries.project(homeQueries.project(placed(unrouted)))),
     );
+    if (next.notificationOpening.status === 'idle' || next.auth.status !== 'authenticated')
+      next = { ...next, heldNotification: null, heldNotificationNotice: null };
     // Return feedback belongs to the Group view it was made for; leaving that view ends it.
     const showing = (groupId: string) => next.screen === 'group' && next.detail.id === groupId;
     if (
@@ -769,6 +773,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     generation += 1;
     notifications.reset();
     pendingNotification = null;
+    signalledHeldNotification = null;
     notificationSeen.clear();
     offlineSession = false;
     savedCopies.retire();
@@ -2550,6 +2555,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   let pendingNotification: NotificationEnvelope | null = null;
+  let signalledHeldNotification: MobileSnapshot['heldNotification'] = null;
   const notificationSeen = new Map<string, number>();
   const notificationProtected = () => notificationTaskProtected(snapshot);
   const matchingNotification = (event: NotificationEnvelope) =>
@@ -2667,12 +2673,38 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         });
     }
   };
+  const ownsHeldNotification = (owner: NonNullable<MobileSnapshot['heldNotification']>) =>
+    owner === snapshot.heldNotification &&
+    current(owner.generation) &&
+    snapshot.auth.status === 'authenticated' &&
+    snapshot.auth.user?.id === owner.accountId;
+  const consumeHeldNotificationNotice = (
+    owner: NonNullable<MobileSnapshot['heldNotification']>,
+  ) => {
+    if (!ownsHeldNotification(owner) || snapshot.heldNotificationNotice !== owner) return;
+    publish({ ...snapshot, heldNotificationNotice: null });
+  };
+  const dismissPendingNotification = (owner: NonNullable<MobileSnapshot['heldNotification']>) => {
+    if (
+      !ownsHeldNotification(owner) ||
+      !pendingNotification ||
+      pendingNotification.accountId !== owner.accountId
+    )
+      return;
+    pendingNotification = null;
+    publish({ ...snapshot, notificationOpening: emptyNotificationOpening() });
+  };
   const tapNotification = async (value: unknown) => {
     const event = await checkedNotification(value);
     if (!event) return;
+    const owner = snapshot.heldNotification ?? { generation, accountId: event.accountId };
+    const firstHeld = signalledHeldNotification !== owner && notificationProtected();
+    if (firstHeld) signalledHeldNotification = owner;
     pendingNotification = event;
     publish({
       ...snapshot,
+      heldNotification: owner,
+      heldNotificationNotice: firstHeld ? owner : snapshot.heldNotificationNotice,
       notificationOpening: {
         status: 'held',
         message: 'An update is ready. Open it when you’re finished.',
@@ -8191,6 +8223,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openSettings,
     receiveNotification,
     tapNotification,
+    consumeHeldNotificationNotice,
+    dismissPendingNotification,
     openPendingNotification,
     refreshNotifications: notifications.read,
     enableNotifications: notifications.enable,

@@ -445,7 +445,14 @@ export interface GroupCurrenciesState {
   restored?: boolean;
 }
 
+export interface HeldNotificationOwner {
+  generation: number;
+  accountId: string;
+}
+
 export interface MobileSnapshot {
+  heldNotification: HeldNotificationOwner | null;
+  heldNotificationNotice: HeldNotificationOwner | null;
   notifications: import('./notification-controls').NotificationControls;
   notificationOpening: import('./notification-alerts').NotificationOpening;
   /** Account → Connected assistants (#622): its list, Saved copy and Disconnect. */

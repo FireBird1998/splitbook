@@ -340,6 +340,71 @@ describe('Expense notification receipt and tap at the Android controller seam', 
       notificationOpening: { status: 'idle' },
     });
   });
+  it('signals a protected hold once, consumes feedback without dropping the update, and dismisses explicitly', async () => {
+    const controller = setup();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Still typing', amount: '12.34' });
+    const form = controller.getSnapshot().expense;
+    await controller.tapNotification(hint());
+    const owner = controller.getSnapshot().heldNotification;
+    expect(owner).toBeTruthy();
+    expect(controller.getSnapshot().heldNotificationNotice).toBe(owner);
+    controller.consumeHeldNotificationNotice(owner!);
+    expect(controller.getSnapshot().heldNotificationNotice).toBeNull();
+    await controller.tapNotification(hint({ eventId: 'd00000000000000000000002' }));
+    expect(controller.getSnapshot().heldNotificationNotice).toBeNull();
+    expect(controller.getSnapshot().expense).toBe(form);
+    controller.dismissPendingNotification(owner!);
+    expect(controller.getSnapshot().notificationOpening.status).toBe('idle');
+    expect(controller.getSnapshot().heldNotification).toBeNull();
+    await controller.closeExpense();
+    const screen = controller.getSnapshot().screen;
+    await controller.openPendingNotification();
+    expect(controller.getSnapshot().screen).toBe(screen);
+  });
+  it('acknowledges the first protected tap even when an earlier open failed', async () => {
+    let fail = true;
+    const controller = setup((url) =>
+      fail && url.pathname === '/api/groups/' + groupId
+        ? json({ error: 'Unavailable' }, 500)
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.tapNotification(hint());
+    expect(controller.getSnapshot().notificationOpening.status).toBe('error');
+    expect(controller.getSnapshot().heldNotificationNotice).toBeNull();
+    fail = false;
+    controller.startCreate();
+    await controller.tapNotification(hint());
+    expect(controller.getSnapshot().heldNotificationNotice).toBe(
+      controller.getSnapshot().heldNotification,
+    );
+    expect(controller.getSnapshot().heldNotificationNotice).not.toBeNull();
+  });
+  it('ignores a stale hold owner, including after signing into a new session', async () => {
+    const controller = setup();
+    await controller.signIn('alex');
+    controller.startCreate();
+    await controller.tapNotification(hint());
+    const old = controller.getSnapshot().heldNotification!;
+    expect(old).toBeTruthy();
+    controller.dismissPendingNotification(old);
+    await controller.tapNotification(hint());
+    const next = controller.getSnapshot().heldNotification;
+    controller.dismissPendingNotification({ ...next!, accountId: 'another-account' });
+    controller.dismissPendingNotification(old);
+    controller.consumeHeldNotificationNotice(old);
+    expect(controller.getSnapshot().heldNotificationNotice).toBe(next);
+    expect(controller.getSnapshot().notificationOpening.status).toBe('held');
+    await controller.signOut();
+    expect(controller.getSnapshot().heldNotificationNotice).toBeNull();
+    await controller.signIn('alex');
+    controller.startCreate();
+    await controller.tapNotification(hint());
+    controller.dismissPendingNotification(old);
+    expect(controller.getSnapshot().notificationOpening.status).toBe('held');
+  });
   it('preserves an unfinished Expense on receipt and holds its tap until explicit later opening', async () => {
     const writes: string[] = [];
     const controller = setup((url, init) => {
@@ -469,6 +534,10 @@ describe('Expense notification receipt and tap at the Android controller seam', 
       await controller.tapNotification(hint());
       expect(controller.getSnapshot().notificationOpening.status).toBe('held');
       expect(controller.getSnapshot().toReview.groupId).toBe(groupId);
+      const notice = controller.getSnapshot().heldNotificationNotice;
+      expect(notice).toBeTruthy();
+      controller.consumeHeldNotificationNotice(notice!);
+      expect(controller.getSnapshot().heldNotificationNotice).toBeNull();
       controller.closeToReview();
       expect(controller.getSnapshot().notificationOpening.status).toBe('held');
       await controller.openPendingNotification();
