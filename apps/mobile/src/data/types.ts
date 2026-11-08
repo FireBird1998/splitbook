@@ -451,6 +451,10 @@ export interface HeldNotificationOwner {
 }
 
 export interface MobileSnapshot {
+  widgetOpen?: {
+    target: import('@splitbook/shared/balances-widget').WidgetTarget;
+    sequence: number;
+  };
   heldNotification: HeldNotificationOwner | null;
   heldNotificationNotice: HeldNotificationOwner | null;
   notifications: import('./notification-controls').NotificationControls;
@@ -680,6 +684,7 @@ export interface NetworkState {
 }
 
 export interface MobileDependencies {
+  widgets?: import('./widget-copy').WidgetsNative;
   notifications?: import('./notification-controls').NotificationNative;
   /** Native identity acquisition only. The controller owns the app session. */
   googleSignIn?: () => Promise<GoogleIdentityResult>;
