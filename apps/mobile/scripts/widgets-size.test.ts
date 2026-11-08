@@ -30,7 +30,7 @@ it('generates provider bounds that allow four columns and two rows on the device
       join(root, 'android/app/src/main/res/xml/widget_balances.xml'),
       'utf8',
     );
-    expect(xml).toContain('android:maxResizeWidth="420dp"');
+    expect(xml).toContain('android:maxResizeWidth="640dp"');
     expect(xml).toContain('android:maxResizeHeight="220dp"');
     expect(xml).toContain('android:targetCellWidth="2" android:targetCellHeight="2"');
     expect(xml).toContain('android:updatePeriodMillis="0"');
