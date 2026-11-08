@@ -21,6 +21,7 @@ import {
   setWindow,
 } from './test-utils/native';
 import { GroupExpensesView } from './ui/group-expenses';
+import { Banner, BusyMark } from './ui/compact';
 import { GroupActivity } from './ui/group-activity';
 import { confirmSheetIn, confirmSheetOpen } from './test-utils/confirm-sheet';
 
@@ -3374,5 +3375,62 @@ describe('Account → Connected assistants (#622)', () => {
     expect(shown).toContain('Connected assistants aren’t saved on this phone.');
     expect(shown).toContain('You’re offline');
     expect(shown).not.toContain('was saved on this device');
+  });
+});
+
+
+describe('held update Banner in screen content', () => {
+  for (const mode of ['light', 'dark'] as const) {
+    for (const destination of ['Home', 'Group'] as const) {
+      it.each(['held', 'opening', 'error', 'idle'] as const)(`${mode} ${destination}: %s`, async (status) => {
+        runtime.appearance = { mode, status: 'ready', message: null };
+        const app = await renderApp();
+        if (destination === 'Group') await settle(app.controller.openGroup(groupId));
+        const owner = { generation: 1, accountId: user.id };
+        const snapshot = { ...app.controller.getSnapshot(), heldNotification: owner,
+          notificationOpening: { status, message: 'Legacy controller message' } };
+        vi.spyOn(app.controller, 'getSnapshot').mockReturnValue(snapshot);
+        const open = vi.spyOn(app.controller, 'openPendingNotification').mockResolvedValue();
+        const dismiss = vi.spyOn(app.controller, 'dismissPendingNotification').mockImplementation(() => {});
+        act(() => screen!.unmount());
+        await mount();
+        const banners = app.root().findAllByType(Banner).filter(node =>
+          ['An update is ready', 'Couldn’t open the update'].includes(node.props.title) ||
+          node.props.message === 'Checking Group access…');
+        expect(banners).toHaveLength(status === 'idle' ? 0 : 1);
+        expect(app.text()).not.toContain('Legacy controller message');
+        if (status === 'idle') return;
+        const banner = banners[0];
+        expect(banner.props.standing).toBe(true);
+        expect(banner.props.tone).toBe(status === 'error' ? 'error' : 'info');
+        let ancestor = banner.parent;
+        while (ancestor && ancestor.type !== 'ScrollView') ancestor = ancestor.parent;
+        expect(ancestor, 'Banner belongs inside the screen scroll content').not.toBeNull();
+        const colors = getSemanticTokens(mode);
+        const host = banner.findAll(node => node.type === 'View')[0];
+        expect(host.props.style.backgroundColor).toBe(status === 'error' ? colors.tint.negative : colors.tint.info);
+        if (status === 'opening') {
+          expect(banner.findAllByType(BusyMark)).toHaveLength(1);
+          expect(banner.findAll(node => node.type === 'Pressable')).toHaveLength(0);
+        } else {
+          expect(banner.props.message).toBe(status === 'held' ? 'From a notification you opened earlier.' : 'Check your connection and try again.');
+          await app.press(status === 'held' ? 'Open' : 'Retry');
+          expect(open).toHaveBeenCalledOnce();
+          await app.press('Not now');
+          expect(dismiss).toHaveBeenCalledExactlyOnceWith(owner);
+        }
+      });
+    }
+  }
+  it('hides the standing Banner while a protected sheet is open', async () => {
+    const app = await renderApp();
+    const snapshot = { ...app.controller.getSnapshot(), tagsOpenFor: groupId,
+      heldNotification: { generation: 1, accountId: user.id },
+      notificationOpening: { status: 'held' as const, message: 'Legacy controller message' } };
+    vi.spyOn(app.controller, 'getSnapshot').mockReturnValue(snapshot);
+    act(() => screen!.unmount());
+    await mount();
+    expect(app.text()).not.toContain('An update is ready');
+    expect(app.text()).not.toContain('Legacy controller message');
   });
 });
