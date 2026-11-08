@@ -1,3 +1,4 @@
+import { balancesLayout } from './widget-layout';
 import { widgetSummary } from './widget-accessibility';
 import type { WidgetGroupPart } from './group-widget';
 import type { GroupCategory } from './types';
@@ -47,6 +48,7 @@ import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
 export type BalancesWidgetSize = '2x1' | '2x2' | '4x2';
 export interface BalancesWidgetView {
+  layout: ReturnType<typeof balancesLayout>;
   summary: string;
   state: 'normal' | 'loading' | 'no-copy' | 'signed-out' | 'expired' | 'all-square' | 'no-groups';
   size: BalancesWidgetSize;
@@ -86,9 +88,11 @@ function balancesWidgetView(
   size: BalancesWidgetSize,
   session: WidgetSession,
   now: number,
+  fontScale = 1,
 ): BalancesWidgetView {
   const view: BalancesWidgetView = {
     summary: '',
+    layout: balancesLayout(size, fontScale, false),
     state: 'no-copy',
     hidden: null,
     size,
@@ -160,7 +164,7 @@ function balancesWidgetView(
       owe: summary('oweMinor'),
     };
   }
-  const limit = size === '4x2' ? 3 : size === '2x1' ? 1 : 2;
+  const limit = balancesLayout(size, fontScale, true).currencyLines;
   const lines = (field: 'oweMinor' | 'owedMinor') => {
     const rows = home.currencies.filter((row) => row[field] > 0);
     const remaining = rows.length - limit;
@@ -193,18 +197,23 @@ function balancesWidgetView(
 /** One spoken description, kept independent of which lines fit visually. */
 export function balancesWidget(...args: Parameters<typeof balancesWidgetView>): BalancesWidgetView {
   const view = balancesWidgetView(...args);
+  const full = args[5] ? balancesWidgetView(args[0], args[1], args[2], args[3], args[4]) : view;
   const summary = widgetSummary([
     'Balances',
-    view.title,
-    view.description,
-    view.owed.length ? 'You’re owed ' + view.owed.join(' and ') : null,
-    view.owe.length ? 'You owe ' + view.owe.join(' and ') : null,
-    view.owedOverflow ? view.owedOverflow.replace('+', '') + ' more owed' : null,
-    view.oweOverflow ? view.oweOverflow.replace('+', '') + ' more owing' : null,
-    view.saved,
-    view.review?.replace(SEPARATOR, ' '),
-    view.hidden,
-    view.muted ? 'Open to update' : null,
+    full.title,
+    full.description,
+    full.owed.length ? 'You’re owed ' + full.owed.join(' and ') : null,
+    full.owe.length ? 'You owe ' + full.owe.join(' and ') : null,
+    full.owedOverflow ? full.owedOverflow.replace('+', '') + ' more owed' : null,
+    full.oweOverflow ? full.oweOverflow.replace('+', '') + ' more owing' : null,
+    full.saved,
+    full.review?.replace(SEPARATOR, ' '),
+    full.hidden,
+    full.muted ? 'Open to update' : null,
   ]);
-  return { ...view, summary };
+  return {
+    ...view,
+    summary,
+    layout: balancesLayout(args[2], args[5] ?? 1, view.state === 'normal'),
+  };
 }

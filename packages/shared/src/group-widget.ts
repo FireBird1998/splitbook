@@ -1,3 +1,4 @@
+import { groupLayout } from './widget-layout';
 import { widgetSummary } from './widget-accessibility';
 import { formatCurrency, getCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
@@ -38,6 +39,7 @@ function groupWidgetView(
   size: GroupWidgetSize,
   session: WidgetSession,
   now: number,
+  fontScale = 1,
 ) {
   const empty = {
     state: 'no-copy',
@@ -158,7 +160,7 @@ function groupWidgetView(
       })),
   );
   const bucket = currencies[0],
-    limit = size === '2x2' ? 0 : size === '4x3' ? 4 : 2;
+    limit = groupLayout(size, fontScale).paymentLines;
   const allSquare = currencies.every((bucket) => bucket.balanceMinor === 0);
   const age = Math.min(part.verifiedAt, part.balancesVerifiedAt),
     muted = now - age > 86400000;
@@ -215,7 +217,7 @@ function groupWidgetView(
         payment,
       })),
     more:
-      limit && own.length > limit
+      size !== '2x2' && own.length > limit
         ? `+${counted(own.length - limit, 'more', 'more')}${SEPARATOR}${[...new Set(own.slice(limit).map((p) => getCurrency(p.currency)?.symbol ?? p.currency))].join(', ')}`
         : null,
     people: own.length
@@ -231,18 +233,20 @@ function groupWidgetView(
 
 export function groupWidget(...args: Parameters<typeof groupWidgetView>) {
   const view = groupWidgetView(...args);
+  const full = args[5] ? groupWidgetView(args[0], args[1], args[2], args[3], args[4]) : view;
   return {
     ...view,
+    layout: groupLayout(args[2], args[5] ?? 1),
     summary: widgetSummary([
       'Group',
-      view.hidden ? null : view.name,
-      view.title,
-      view.balance,
-      ...view.payments.map((p) => p.label + ' ' + p.amount),
-      view.hidden ? null : view.description,
-      view.saved,
-      view.hidden,
-      view.target === 'setup' || view.muted ? view.action : null,
+      full.hidden ? null : full.name,
+      full.title,
+      full.balance,
+      ...full.payments.map((p) => p.label + ' ' + p.amount),
+      full.hidden ? null : full.description,
+      full.saved,
+      full.hidden,
+      full.target === 'setup' || full.muted ? full.action : null,
     ]),
   };
 }
