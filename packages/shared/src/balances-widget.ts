@@ -15,6 +15,7 @@ export type WidgetSession =
   | { status: 'expired' }
   | { status: 'signed-out' };
 
+import { SEPARATOR, counted } from './separator';
 import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
 export type BalancesWidgetSize = '2x1' | '2x2' | '4x2';
@@ -88,7 +89,7 @@ export function balancesWidget(
   view.footer = view.muted
     ? 'Open to update'
     : size === '4x2'
-      ? `Across ${home.groupCount} ${home.groupCount === 1 ? 'Group' : 'Groups'}`
+      ? `Across ${counted(home.groupCount, 'Group')}`
       : null;
   view.review =
     setup.reviewEnabled !== false &&
@@ -96,7 +97,7 @@ export function balancesWidget(
     size !== '2x1' &&
     copy.review &&
     copy.review.count > 0
-      ? `To review · ${copy.review.count}`
+      ? `To review${SEPARATOR}${copy.review.count}`
       : null;
   if (!home.groupCount)
     return {
@@ -125,7 +126,7 @@ export function balancesWidget(
         remaining > 0
           ? size === '2x1'
             ? `+${remaining}`
-            : `+${remaining} ${remaining === 1 ? 'currency' : 'currencies'}`
+            : `+${counted(remaining, 'currency', 'currencies')}`
           : null,
     };
   };
