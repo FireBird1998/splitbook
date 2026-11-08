@@ -5,7 +5,9 @@ import type { WidgetCopy } from '@splitbook/shared/balances-widget';
 
 const alex = { id: 'a00000000000000000000001', name: 'Alex Rivera', email: 'alex@example.test' };
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
+const tagId = 'e00000000000000000000001';
 const groupId = 'b00000000000000000000001';
+const controllers: ReturnType<typeof createMobileController>[] = [];
 const verified = Date.parse('2026-11-08T04:11:00Z');
 function fixture() {
   let user = alex,
@@ -15,7 +17,10 @@ function fixture() {
   let offline = false,
     expired = false,
     owed = 2400;
+  let identity: unknown = null;
   const rows = new Map<string, unknown>();
+  let hold: Promise<void> | undefined;
+  const drafts = new Map<string, unknown>();
   const copies: WidgetCopy[] = [];
   const events: string[] = [];
   const group = () => ({
@@ -24,12 +29,13 @@ function fixture() {
     createdBy: user.id,
     category: 'home',
     defaultCurrency: 'INR',
+    tags: [{ _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: false }],
     members: [{ user: { ...user, _id: user.id }, role: 'admin', joinedAt: '2026-11-01T00:00:00Z' }],
     createdAt: '2026-11-01T00:00:00Z',
     updatedAt: '2026-11-01T00:00:00Z',
   });
-  const make = () =>
-    createMobileController(
+  const make = () => {
+    const controller = createMobileController(
       {
         apiBaseUrl: 'http://localhost:4986',
         authOrigin: 'http://localhost:4986',
@@ -38,6 +44,7 @@ function fixture() {
       {
         widgets: {
           write: async (copy) => {
+            await hold;
             copies.push(structuredClone(copy));
             events.push('write:' + copy.accountId);
           },
@@ -51,7 +58,30 @@ function fixture() {
             events.push('redraw');
           },
         },
+        newSubmissionKey: () => 'widget-expense-fictional-986',
+        expenseDrafts: {
+          load: async (account, id) => drafts.get(account + id) ?? null,
+          save: async (account, id, value) => {
+            drafts.set(account + id, structuredClone(value));
+          },
+          remove: async (account, id) => {
+            drafts.delete(account + id);
+          },
+          clear: async () => {
+            drafts.clear();
+          },
+          list: async () => [],
+        },
         savedQueries: savedQueriesIn(rows),
+        offlineIdentity: {
+          load: async () => identity,
+          save: async (value) => {
+            identity = structuredClone(value);
+          },
+          clear: async () => {
+            identity = null;
+          },
+        },
         credentials: {
           load: async () => cookie,
           save: async (value) => {
@@ -110,6 +140,40 @@ function fixture() {
             });
           if (path.endsWith('/sign-out')) return Response.json({ success: true });
           if (expired) return Response.json({ error: 'Session expired' }, { status: 401 });
+          if (path === `/api/groups/${groupId}`)
+            return Response.json({ status: 200, data: group() });
+          if (path.endsWith('/expenses') && init.method === 'POST') {
+            owed = 2500;
+            return Response.json({
+              status: 201,
+              data: {
+                _id: 'c00000000000000000000001',
+                group: groupId,
+                ...JSON.parse(String(init.body)),
+                revision: 1,
+                isDeleted: false,
+                createdAt: '2026-11-08T00:00:00Z',
+                updatedAt: '2026-11-08T00:00:00Z',
+              },
+            });
+          }
+          if (path.endsWith('/expenses'))
+            return Response.json({
+              status: 200,
+              data: {
+                expenses: [],
+                pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+                summary: {
+                  count: 0,
+                  totalsByCurrency: [],
+                  userOwes: 0,
+                  userGetsBack: 0,
+                  byMember: [],
+                },
+              },
+            });
+          if (path === `/api/groups/${groupId}/balances`)
+            return Response.json({ status: 200, data: { byCurrency: [] } });
           if (path === '/api/groups') return Response.json({ status: 200, data: [group()] });
           if (path === '/api/user/balances')
             return Response.json({
@@ -134,8 +198,18 @@ function fixture() {
         },
       },
     );
+    controllers.push(controller);
+    return controller;
+  };
   return {
     make,
+    blockWrite: () => {
+      let release!: () => void;
+      hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return release;
+    },
     copies,
     events,
     offline: () => {
@@ -153,6 +227,7 @@ function fixture() {
   };
 }
 afterEach(() => {
+  controllers.splice(0).forEach((controller) => controller.dispose());
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllEnvs();
@@ -216,12 +291,14 @@ it('restores the original verification time from saved Home reads', async () => 
   const c = f.make();
   await c.signIn('alex');
   await vi.waitFor(() => expect(f.copies.at(-1)?.home?.verifiedAt).toBe(verified));
+  const count = f.copies.length;
   c.dispose();
   f.offline();
   vi.spyOn(Date, 'now').mockReturnValue(verified + 60_000);
   const restart = f.make();
   await restart.restore();
-  // Online restore without a stored identity cannot authorize a saved Home.
+  await vi.waitFor(() => expect(f.copies.length).toBeGreaterThan(count));
+  expect(restart.getSnapshot().auth.status).toBe('authenticated');
   expect(f.copies.at(-1)?.home?.verifiedAt).toBe(verified);
   restart.dispose();
 });
@@ -264,4 +341,53 @@ it('clears the old account before writing the next account’s copy', async () =
   expect(f.events.indexOf('write:' + sam.id)).toBeGreaterThan(f.events.indexOf('clear'));
   expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
   c.dispose();
+});
+
+it('updates from the Home read after a member saves an Expense, never from the submitted amount', async () => {
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() => expect(f.copies.at(-1)?.home?.currencies[0]?.owedMinor).toBe(240000));
+  await c.openExpense(groupId);
+  await c.updateExpenseDraft({ description: 'Weekly groceries', amount: '100', tagId });
+  await c.saveExpense();
+  expect(c.getSnapshot().expense.status).toBe('saved');
+  await c.back();
+  await vi.waitFor(() => expect(f.copies.at(-1)?.home?.currencies[0]?.owedMinor).toBe(250000));
+});
+it('waits for an already running saved-copy write before purging and cancels the remaining writes', async () => {
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() => expect(f.copies.at(-1)?.home).toBeTruthy());
+  const release = f.blockWrite();
+  f.owe(2500);
+  await c.refreshHome();
+  f.events.length = 0;
+  const signingOut = c.signOut();
+  await Promise.resolve();
+  expect(f.events).not.toContain('clear');
+  release();
+  await signingOut;
+  const signedOut = f.events.indexOf('signed-out');
+  expect(signedOut).toBeGreaterThan(f.events.indexOf('account-purged'));
+  expect(f.events.slice(signedOut)).toEqual(['signed-out', 'redraw']);
+});
+it('hides a 401 immediately even while a saved-copy write is still running', async () => {
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() => expect(f.copies.at(-1)?.home).toBeTruthy());
+  const release = f.blockWrite();
+  f.owe(2500);
+  await c.refreshHome();
+  f.events.length = 0;
+  f.expire();
+  await c.refreshHome();
+  try {
+    await vi.waitFor(() => expect(f.events).toContain('expired'));
+    expect(f.events).not.toContain('clear');
+  } finally {
+    release();
+  }
 });
