@@ -375,6 +375,8 @@ describe('an app that never maintains its registration keeps the 2a0b065b behavi
         binding: uuid,
         expenseActivation: uuid,
         expenseCutoff: iso,
+        // Added by #842; the 2a0b065b app's parser drops fields it doesn't know.
+        paymentActivation: uuid,
         paymentCutoff: iso,
         ...data,
       },
