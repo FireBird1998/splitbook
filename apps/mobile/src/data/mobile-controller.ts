@@ -1,3 +1,6 @@
+import type { WidgetTarget } from '@splitbook/shared/balances-widget';
+import { toReviewKey } from '@splitbook/shared/query-keys';
+import { createWidgetCopy } from './widget-copy';
 import {
   parseNotificationEnvelope,
   notificationAuthorized,
@@ -725,6 +728,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       next = { ...next, currenciesOpenFor: null };
     next = projectFreshness(next);
     snapshot = next;
+    widgets.update(next);
     listeners.forEach((listener) => listener());
     homeQueries.bindLater();
     groupQueries.bindLater();
@@ -772,6 +776,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const invalidate = () => {
     generation += 1;
     notifications.reset();
+    widgets.reset();
     pendingNotification = null;
     signalledHeldNotification = null;
     notificationSeen.clear();
@@ -855,6 +860,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       writeSavedCopy: checked,
     };
   };
+
+  const widgets = createWidgetCopy(dependencies.widgets, accountStorage, (next) => {
+    if (!persistentDrafts || !next.auth.user || next.toReview.status !== 'ready') return undefined;
+    const query = queryClient.getQueryState(
+      toReviewKey({ environment: apiBase, accountId: next.auth.user.id }),
+    );
+    if (!query?.dataUpdatedAt) return undefined;
+    return { count: mobileToReview(next, now()).counts.total, verifiedAt: query.dataUpdatedAt };
+  });
 
   const savedCopies = savedCopyBudget({
     rows: dependencies.savedQueries,
@@ -971,6 +985,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       assertCurrent(owner);
       // A saved copy being written finishes first; those waiting were cancelled (M3-2).
       await Promise.all([
+        widgets.idle(),
         homeQueries.idle(),
         assistantsData.idle(),
         groupQueries.idle(),
@@ -979,11 +994,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ]);
       await savedCopies.idle();
       const cleanup = await Promise.allSettled([
+        widgets.clear(),
         Promise.resolve().then(() => dependencies.accountLocal?.owner.clear()),
         ...(dependencies.accountLocal?.stores.map((storage) =>
           Promise.resolve().then(() => storage.clear()),
         ) ?? []),
       ]);
+      if (cleanup[0]?.status === 'fulfilled') await widgets.signedOut();
       if ([...(await immediate), ...cleanup].some((result) => result.status === 'rejected')) {
         if (mode === 'account-change') {
           // The new account's session goes too: revoked first, then its saved cookie cleared.
@@ -1105,6 +1122,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       };
     }
     const next = invalidate();
+    void widgets.expired(() => current(next)).catch(() => undefined);
     const cleared = cleanSnapshot({ status, user: null, message });
     navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
     let confirmed = true;
@@ -8162,7 +8180,29 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  let widgetRestore: Promise<void> | null = null;
+  let widgetOpens = 0;
+  const openWidget = async (target: WidgetTarget) => {
+    if (widgetRestore) await widgetRestore;
+    else if (snapshot.auth.status === 'restoring') await restore();
+    if (snapshot.auth.status !== 'authenticated') return;
+    // To review is Home's first card. Returning Home exposes it without a new screen.
+    if (target === 'create-group') {
+      startCreate();
+      return;
+    }
+    await showHome();
+    publish({
+      ...snapshot,
+      widgetOpen: {
+        target: target === 'review' && !persistentDrafts ? 'home' : target,
+        sequence: ++widgetOpens,
+      },
+    });
+    if (target === 'review' && persistentDrafts) await toReviewQueries.refresh();
+  };
   return {
+    openWidget,
     startReviewRun,
     closeReviewRun,
     reviewRun: () => reviewRun,
@@ -8218,7 +8258,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     resumeExpenseDraft,
     updateExpenseDraft,
     touchExpenseField,
-    restore,
+    restore: (quiet = false) => {
+      const reading = restore(quiet);
+      widgetRestore = reading;
+      void reading.finally(() => {
+        if (widgetRestore === reading) widgetRestore = null;
+      });
+      return reading;
+    },
     signIn,
     signInWithGoogle,
     startCreate,

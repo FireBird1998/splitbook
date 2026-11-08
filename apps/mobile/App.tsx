@@ -1,3 +1,5 @@
+import { widgetLinkTarget } from './src/widget-links';
+import { androidWidgetsEnabled } from './src/widgets-flag';
 import { notificationTaskProtected } from './src/data/notification-alerts';
 import { attachNotificationCallbacks } from './src/notification-callbacks';
 import { androidNotificationsEnabled } from './src/notifications-flag';
@@ -176,7 +178,10 @@ function SplitBook() {
       start.lastLink = url;
       // Expo's own development launcher URL is not a Group invitation.
       if (url.includes('://expo-development-client/') || url.startsWith('exp+splitbook:')) return;
-      void start.restored.then(() => controller.openInvitation(url));
+      const widget = androidWidgetsEnabled() ? widgetLinkTarget(url) : null;
+      void start.restored.then(() =>
+        widget ? controller.openWidget(widget) : controller.openInvitation(url),
+      );
     };
     let stopNotifications: (() => void) | undefined;
     let disposed = false;
@@ -746,6 +751,7 @@ const HomeScreen = memo(function HomeScreen() {
       const feedback = refreshFeedback(snapshot);
       return {
         auth: snapshot.auth,
+        widgetOpen: snapshot.widgetOpen,
         groups: snapshot.groups,
         home: snapshot.home,
         creation: snapshot.creation,
@@ -773,6 +779,10 @@ const HomeScreen = memo(function HomeScreen() {
     sameSelection,
   );
   const state = selected;
+  const homeScroll = useRef<ScrollViewInstance>(null);
+  useEffect(() => {
+    if (state.widgetOpen) homeScroll.current?.scrollTo({ y: 0, animated: false });
+  }, [state.widgetOpen]);
   const [confirm, confirmation] = useConfirm();
   const toReview = useMemo(
     () =>
@@ -827,6 +837,7 @@ const HomeScreen = memo(function HomeScreen() {
         <View style={{ height: progressHeight }} />
       )}
       <ScrollView
+        ref={homeScroll}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
         refreshControl={
           <RefreshControl

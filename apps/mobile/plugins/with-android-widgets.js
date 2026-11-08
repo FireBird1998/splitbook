@@ -48,7 +48,37 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
       fs.mkdirSync(javaDir, { recursive: true });
       fs.writeFileSync(
         path.join(javaDir, 'Balances.java'),
-        `package ${config.android.package}.widget;\n\npublic class Balances extends com.reactnativeandroidwidget.RNWidgetProvider {}\n`,
+        `package ${config.android.package}.widget;
+
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Bundle;
+
+public class Balances extends com.reactnativeandroidwidget.RNWidgetProvider {
+  @Override public void onReceive(Context context, Intent intent) {
+    if ((context.getPackageName() + ".WIDGET_CLICK").equals(intent.getAction())
+        && "OPEN_URI".equals(intent.getStringExtra("clickAction"))) {
+      Bundle data = intent.getBundleExtra("clickActionData");
+      String value = data == null ? null : data.getString("uri");
+      if (value != null) {
+        Uri uri = Uri.parse(value);
+        if ("${Array.isArray(config.scheme) ? config.scheme[0] : config.scheme}".equals(uri.getScheme()) && "widget".equals(uri.getHost())) {
+          // Read-only navigation must not be consumed by the renderer's size calibration.
+          context.startActivity(new Intent(Intent.ACTION_VIEW, uri)
+              .setPackage(context.getPackageName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+          Intent measure = new Intent(intent);
+          measure.removeExtra("clickAction");
+          super.onReceive(context, measure);
+          return;
+        }
+      }
+      return;
+    }
+    super.onReceive(context, intent);
+  }
+}
+`,
       );
       fs.mkdirSync(path.join(main, 'res/xml'), { recursive: true });
       fs.writeFileSync(
@@ -58,7 +88,7 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
     android:minWidth="110dp" android:minHeight="110dp"
     android:targetCellWidth="2" android:targetCellHeight="2"
     android:minResizeWidth="110dp" android:minResizeHeight="40dp"
-    android:maxResizeWidth="250dp" android:maxResizeHeight="110dp"
+    android:maxResizeWidth="640dp" android:maxResizeHeight="220dp"
     android:resizeMode="horizontal|vertical"
     android:description="@string/widget_balances_description"
     android:initialLayout="@layout/rn_widget"

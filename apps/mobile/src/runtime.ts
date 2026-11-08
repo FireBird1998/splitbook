@@ -1,3 +1,5 @@
+import { androidWidgetsEnabled } from './widgets-flag';
+import { createWidgetsNative } from './widgets-native';
 import { createNotificationNative, readNotificationInstallation } from './notifications-native';
 import { androidNotificationsEnabled } from './notifications-flag';
 import { createSettlementAttemptStore } from './data/settlement-storage';
@@ -92,6 +94,7 @@ const notificationNative = androidNotificationsEnabled()
   : undefined;
 export const controller = createMobileController(controllerConfig, {
   notifications: notificationNative,
+  widgets: androidWidgetsEnabled() ? createWidgetsNative(controllerConfig.apiBaseUrl) : undefined,
   googleSignIn: config?.googleWebClientId
     ? createGoogleIdentityProvider(
         config.googleWebClientId,

@@ -65,18 +65,21 @@ it.each(['2x1', '2x2', '4x2'] as const)(
     }
   },
 );
-it('distinguishes loading from no saved copy and never invents all square', () => {
-  expect(view(null)).toMatchObject({ state: 'no-copy', title: 'Nothing saved yet' });
-  expect(
-    balancesWidget(null, { kind: 'balances' }, '2x2', { ...auth, loading: true }, now),
-  ).toMatchObject({ state: 'loading', owed: [], owe: [], title: null });
-  expect(view({ ...copy, accountId: 'sam' })).toMatchObject({
-    state: 'no-copy',
-    owed: [],
-    owe: [],
-    saved: null,
-  });
-});
+it.each(['2x1', '2x2', '4x2'] as const)(
+  'distinguishes loading from no saved copy at %s and never invents all square',
+  (size) => {
+    expect(view(null, size)).toMatchObject({ state: 'no-copy', title: 'Nothing saved yet' });
+    expect(
+      balancesWidget(null, { kind: 'balances' }, size, { ...auth, loading: true }, now),
+    ).toMatchObject({ state: 'loading', owed: [], owe: [], title: null });
+    expect(view({ ...copy, accountId: 'sam' })).toMatchObject({
+      state: 'no-copy',
+      owed: [],
+      owe: [],
+      saved: null,
+    });
+  },
+);
 it('shows JPY without decimals at 4×2, with up to three currencies per column', () => {
   expect(view(copy, '4x2')).toMatchObject({
     owed: ['₹2,400.00', '€40.00', '¥3,000'],
@@ -152,16 +155,32 @@ it.each([
     ).saved,
   ).toBe(expected);
 });
-it('mutes only after 24 elapsed hours, across local midnight, and offers Open to update', () => {
-  expect(view(copy, '2x2', now + 86_400_000)).toMatchObject({ muted: false });
-  expect(view(copy, '2x2', now + 86_400_001)).toMatchObject({
-    muted: true,
-    footer: 'Open to update',
-    review: null,
-  });
-});
+it.each(['2x1', '2x2', '4x2'] as const)(
+  'mutes only after 24 elapsed hours at %s and offers Open to update',
+  (size) => {
+    expect(view(copy, size, now + 86_400_000)).toMatchObject({ muted: false });
+    expect(view(copy, size, now + 86_400_001)).toMatchObject({
+      muted: true,
+      footer: 'Open to update',
+      review: null,
+    });
+  },
+);
 it('omits the review chip without a separately verified count', () => {
-  const { review: _review, ...without } = copy;
+  const without = { ...copy };
+  delete without.review;
   expect(view(without).review).toBeNull();
   expect(view({ ...copy, review: { count: 0, verifiedAt: now } }).review).toBeNull();
+});
+
+it.each(['2x1', '2x2', '4x2'] as const)('formats JPY without decimals at %s', (size) => {
+  expect(
+    view(
+      {
+        ...copy,
+        home: { ...copy.home!, currencies: [{ currency: 'JPY', owedMinor: 3000, oweMinor: 0 }] },
+      },
+      size,
+    ).owed,
+  ).toEqual(['¥3,000']);
 });

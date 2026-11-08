@@ -266,6 +266,7 @@ it('includes a separately verified To review count only while Drafts are on', as
   c.dispose();
 });
 it('opens Home and To review after the session check, including cold start', async () => {
+  vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
   const f = fixture();
   const c = f.make();
   await c.signIn('alex');
