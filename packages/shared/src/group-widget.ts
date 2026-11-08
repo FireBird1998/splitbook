@@ -5,6 +5,7 @@ import { widgetSavedTime, type WidgetSession } from './balances-widget';
 import type { GroupCategory } from './types';
 export interface GroupWidgetSetup {
   kind: 'group';
+  hideAmounts?: boolean;
   widgetId: number;
   accountId: string;
   groupId: string;
@@ -39,6 +40,7 @@ export function groupWidget(
 ) {
   const empty = {
     state: 'no-copy',
+    hidden: null as string | null,
     name: null as string | null,
     theme: null as GroupCategory | null,
     balance: '',
@@ -100,7 +102,26 @@ export function groupWidget(
   const currencies = [...part.currencies].sort(
     (a, b) => Number(b.currency === part.mainCurrency) - Number(a.currency === part.mainCurrency),
   );
-  const own = currencies.flatMap((bucket) =>
+  const ownPayments = currencies.flatMap((bucket) =>
+    bucket.payments.filter(
+      (payment) => payment.from === setup.accountId || payment.to === setup.accountId,
+    ),
+  );
+  const hiddenSummary = () => {
+    const owe = new Set(ownPayments.filter((p) => p.from === setup.accountId).map((p) => p.to))
+      .size;
+    const owed = new Set(ownPayments.filter((p) => p.to === setup.accountId).map((p) => p.from))
+      .size;
+    return (
+      [
+        owe ? `You owe ${counted(owe, 'person', 'people')}` : null,
+        owed ? `You’re owed by ${counted(owed, 'person', 'people')}` : null,
+      ]
+        .filter(Boolean)
+        .join(SEPARATOR) || 'Balances hidden'
+    );
+  };
+  const own = (setup.hideAmounts ? [] : currencies).flatMap((bucket) =>
     bucket.payments
       .filter((payment) => payment.from === setup.accountId || payment.to === setup.accountId)
       .map((payment) => ({
@@ -138,25 +159,34 @@ export function groupWidget(
     muted = now - age > 86400000;
   const balanceText = allSquare
     ? 'You’re all square'
-    : currencies.length > 1
-      ? `In ${counted(currencies.length, 'currency', 'currencies')}`
-      : `${bucket!.balanceMinor < 0 ? 'You owe' : 'You’re owed'} ${formatCurrency(toMajorAmount(Math.abs(bucket!.balanceMinor), bucket!.currency), bucket!.currency)}`;
+    : setup.hideAmounts
+      ? hiddenSummary()
+      : currencies.length > 1
+        ? `In ${counted(currencies.length, 'currency', 'currencies')}`
+        : `${bucket!.balanceMinor < 0 ? 'You owe' : 'You’re owed'} ${formatCurrency(toMajorAmount(Math.abs(bucket!.balanceMinor), bucket!.currency), bucket!.currency)}`;
   return {
     ...empty,
     state: part.archived ? 'archived' : allSquare ? 'all-square' : 'normal',
     name: part.name,
+    hidden: setup.hideAmounts ? 'Amounts and names hidden' : null,
     theme: part.theme,
     compactLabel:
-      bucket && !allSquare ? (bucket.balanceMinor < 0 ? 'You owe' : 'You’re owed') : null,
+      bucket && !allSquare && !setup.hideAmounts
+        ? bucket.balanceMinor < 0
+          ? 'You owe'
+          : 'You’re owed'
+        : null,
     compactAmount:
-      bucket && !allSquare
+      bucket && !allSquare && !setup.hideAmounts
         ? formatCurrency(
             toMajorAmount(Math.abs(bucket.balanceMinor), bucket.currency),
             bucket.currency,
           )
         : null,
     currencyOverflow:
-      currencies.length > 1 ? `+${counted(currencies.length - 1, 'currency', 'currencies')}` : null,
+      !setup.hideAmounts && currencies.length > 1
+        ? `+${counted(currencies.length - 1, 'currency', 'currencies')}`
+        : null,
     balanceTone: (currencies.length > 1
       ? 'neutral'
       : bucket && bucket.balanceMinor < 0

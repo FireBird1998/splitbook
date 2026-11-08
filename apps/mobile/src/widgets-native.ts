@@ -1,6 +1,5 @@
-import type { QuickWidgetSetup } from '@splitbook/shared/quick-widget';
 import { openDatabaseAsync, defaultDatabaseDirectory, type SQLiteDatabase } from 'expo-sqlite';
-import type { GroupWidgetSetup } from '@splitbook/shared/group-widget';
+import type { WidgetSetupRecord } from '@splitbook/shared/widget-setup';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
 import type { WidgetsNative } from './data/widget-copy';
 
@@ -21,7 +20,7 @@ export function createWidgetsStore(environment: string) {
     return db;
   };
   return {
-    async setup(widgetId: number): Promise<GroupWidgetSetup | QuickWidgetSetup | null> {
+    async setup(widgetId: number): Promise<WidgetSetupRecord | null> {
       const row = await (
         await database()
       ).getFirstAsync<{ setup: string }>(
@@ -31,11 +30,21 @@ export function createWidgetsStore(environment: string) {
       );
       return row ? JSON.parse(row.setup) : null;
     },
-    async saveSetup(setup: GroupWidgetSetup | QuickWidgetSetup) {
+    async saveSetup(setup: WidgetSetupRecord) {
       await (
         await database()
       ).runAsync(
         'INSERT OR REPLACE INTO widget_setup(environment, widget_id, setup) VALUES (?, ?, ?)',
+        environment,
+        setup.widgetId,
+        JSON.stringify(setup),
+      );
+    },
+    async saveSetupIfAbsent(setup: WidgetSetupRecord) {
+      await (
+        await database()
+      ).runAsync(
+        'INSERT OR IGNORE INTO widget_setup(environment, widget_id, setup) VALUES (?, ?, ?)',
         environment,
         setup.widgetId,
         JSON.stringify(setup),

@@ -1,3 +1,4 @@
+import { hiddenLabel } from './widget-hidden-label';
 import { FlexWidget } from 'react-native-android-widget/src/widgets/FlexWidget';
 import { TextWidget } from 'react-native-android-widget/src/widgets/TextWidget';
 import { SvgWidget } from 'react-native-android-widget/src/widgets/SvgWidget';
@@ -96,6 +97,7 @@ export function drawGroup(
         view.balance,
         ...view.payments.map((p) => p.label + ' ' + p.amount),
         view.saved,
+        view.hidden,
         view.final ? 'final' : null,
       ]
         .filter(Boolean)
@@ -197,6 +199,7 @@ export function drawGroup(
           {text(view.description, t.textSecondary, 12)}
         </FlexWidget>
       ) : null}
+      {view.hidden ? hiddenLabel(view.hidden, t) : null}
       {view.payments.length ? (
         <FlexWidget
           style={{

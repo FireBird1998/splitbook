@@ -1,0 +1,217 @@
+import { act, create, type ReactTestRenderer, type ReactTestInstance } from 'react-test-renderer';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { WidgetSetupRecord } from '@splitbook/shared/widget-setup';
+import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+
+const store = vi.hoisted(() => ({ read: vi.fn(), setup: vi.fn(), saveSetup: vi.fn() }));
+const redraw = vi.hoisted(() => vi.fn());
+const appearance = vi.hoisted(() => ({ mode: 'light' as 'light' | 'dark' }));
+vi.mock('react-native', async () => ({
+  ...(await import('./test-utils/native')).reactNative,
+  useColorScheme: () => appearance.mode,
+}));
+vi.mock('./widgets-native', () => ({ createWidgetsStore: () => store }));
+vi.mock('./widgets', () => ({ redrawBalances: redraw }));
+vi.mock('expo-font', () => ({ useFonts: () => [true] }));
+vi.mock('@expo-google-fonts/outfit/400Regular', () => ({ Outfit_400Regular: 1 }));
+vi.mock('@expo-google-fonts/outfit/700Bold', () => ({ Outfit_700Bold: 2 }));
+import { WidgetSetup } from './widget-setup';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+let screen: ReactTestRenderer | undefined;
+const copy: WidgetCopy = {
+  version: 1,
+  accountId: 'alex',
+  home: null,
+  savedGroups: {
+    verifiedAt: Date.parse('2026-11-09T04:11:00Z'),
+    rows: [
+      {
+        id: 'maple',
+        name: 'Maple House',
+        theme: 'home',
+        archived: false,
+        members: 3,
+        currencies: 1,
+      },
+    ],
+  },
+};
+const session: WidgetSession = { status: 'authenticated', accountId: 'alex', loading: false };
+const textOf = (node: ReactTestInstance) =>
+  node
+    .findAll((n) => (n.type as unknown) === 'Text')
+    .flatMap((n) => n.children.filter((child) => typeof child === 'string'))
+    .join(' ');
+const text = () => textOf(screen!.root);
+const host = (name: string) => screen!.root.findAll((n) => (n.type as unknown) === name);
+const button = () => host('Pressable').find((n) => n.props.accessibilityRole === 'button')!;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  appearance.mode = 'light';
+  store.read.mockResolvedValue({ copy, session });
+  store.setup.mockResolvedValue(null);
+  store.saveSetup.mockResolvedValue(undefined);
+  redraw.mockResolvedValue(undefined);
+});
+afterEach(() => {
+  if (screen) act(() => screen!.unmount());
+  screen = undefined;
+});
+async function render(
+  kind: 'Quick' | 'Group' | 'Balances',
+  saved: WidgetSetupRecord | null = null,
+) {
+  store.setup.mockResolvedValue(saved);
+  const setResult = vi.fn();
+  await act(async () => {
+    screen = create(
+      <WidgetSetup
+        widgetInfo={{
+          widgetId: 989,
+          widgetName: kind,
+          width: 200,
+          height: 200,
+          screenInfo: {
+            screenHeightDp: 800,
+            screenWidthDp: 360,
+            density: 3,
+            densityDpi: 480,
+            fontScale: 1,
+          },
+        }}
+        setResult={setResult}
+        renderWidget={vi.fn()}
+      />,
+    );
+  });
+  return setResult;
+}
+
+it.each([null, 'maple'])(
+  'Quick Reconfigure keeps target %s, offers Save and has no Hide amounts',
+  async (groupId) => {
+    const saved: WidgetSetupRecord = { kind: 'quick', widgetId: 989, accountId: 'alex', groupId };
+    const result = await render('Quick', saved);
+    expect(text()).toContain('Add expense widget');
+    expect(text()).toContain('Choose where this widget starts an Expense.');
+    expect(textOf(button())).toBe('Save');
+    const radios = host('Pressable').filter((n) => n.props.accessibilityRole === 'radio');
+    expect(
+      radios.find((n) => n.props.accessibilityLabel === (groupId ? 'Maple House' : 'Ask each time'))
+        ?.props.accessibilityState.checked,
+    ).toBe(true);
+    expect(radios.filter((n) => n.props.accessibilityState.checked)).toHaveLength(1);
+    expect(host('Switch')).toHaveLength(0);
+    expect(text()).not.toContain('Hide amounts');
+    expect(text()).not.toContain('ON THE WIDGET');
+    await act(async () => button().props.onPress());
+    expect(store.saveSetup).toHaveBeenCalledExactlyOnceWith(saved);
+    expect(redraw).toHaveBeenCalledOnce();
+    expect(result).toHaveBeenCalledExactlyOnceWith('ok');
+  },
+);
+
+it.each([null, 'maple'])('Quick Reconfigure changes target %s in place', async (groupId) => {
+  await render('Quick', { kind: 'quick', widgetId: 989, accountId: 'alex', groupId });
+  const label = groupId ? 'Ask each time' : 'Maple House';
+  await act(async () =>
+    host('Pressable')
+      .find((n) => n.props.accessibilityLabel === label)!
+      .props.onPress(),
+  );
+  expect(textOf(button())).toBe('Save');
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup).toHaveBeenCalledExactlyOnceWith({
+    kind: 'quick',
+    widgetId: 989,
+    accountId: 'alex',
+    groupId: groupId ? null : 'maple',
+  });
+});
+
+it.each([true, false])(
+  'a new Quick widget offers Ask each time even with saved Groups=%s',
+  async (hasGroups) => {
+    store.read.mockResolvedValue({
+      copy: { ...copy, savedGroups: hasGroups ? copy.savedGroups : undefined },
+      session,
+    });
+    const result = await render('Quick');
+    expect(textOf(button())).toBe('Add widget');
+    expect(
+      host('Pressable').find((n) => n.props.accessibilityLabel === 'Ask each time')?.props
+        .accessibilityState.checked,
+    ).toBe(true);
+    expect(host('Switch')).toHaveLength(0);
+    if (!hasGroups) expect(text()).toContain('Nothing saved yet');
+    await act(async () => button().props.onPress());
+    expect(store.saveSetup).toHaveBeenCalledExactlyOnceWith({
+      kind: 'quick',
+      widgetId: 989,
+      accountId: 'alex',
+      groupId: null,
+    });
+    expect(result).toHaveBeenCalledWith('ok');
+  },
+);
+
+it.each(['light', 'dark'] as const)(
+  'retains Hide amounts and its %s token colours for Group and Balances',
+  async (mode) => {
+    appearance.mode = mode;
+    const tokens = getSemanticTokens(mode);
+    for (const kind of ['Group', 'Balances'] as const) {
+      const saved: WidgetSetupRecord =
+        kind === 'Group'
+          ? { kind: 'group', widgetId: 989, accountId: 'alex', groupId: 'maple', hideAmounts: true }
+          : { kind: 'balances', widgetId: 989, hideAmounts: true };
+      await render(kind, saved);
+      expect(text()).toContain(
+        kind === 'Group'
+          ? 'Choose the Group this widget shows.'
+          : 'What you owe and are owed across your Groups.',
+      );
+      expect(textOf(button())).toBe('Save');
+      expect(host('Switch')[0].props).toMatchObject({
+        value: true,
+        thumbColor: tokens.brand.main,
+        trackColor: { false: tokens.borderStrong, true: `${tokens.brand.main}80` },
+      });
+      await act(async () => button().props.onPress());
+      expect(store.saveSetup).toHaveBeenLastCalledWith(saved);
+      act(() => screen!.unmount());
+      screen = undefined;
+    }
+  },
+);
+
+it('Balances setup remains available without a signed-in account or saved Groups', async () => {
+  store.read.mockResolvedValue({ copy: null, session: { status: 'signed-out' } });
+  const result = await render('Balances');
+  expect(text()).toContain('Balances widget');
+  expect(host('Switch')).toHaveLength(1);
+  expect(textOf(button())).toBe('Add widget');
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup).toHaveBeenCalledExactlyOnceWith({
+    kind: 'balances',
+    widgetId: 989,
+    hideAmounts: false,
+  });
+  expect(result).toHaveBeenCalledWith('ok');
+});
+
+it('Group setup still requires saved Groups and Quick still requires sign-in', async () => {
+  store.read.mockResolvedValue({ copy: { ...copy, savedGroups: undefined }, session });
+  await render('Group');
+  expect(text()).toContain('No Groups yet');
+  expect(textOf(button())).toBe('Create a Group');
+  act(() => screen!.unmount());
+  store.read.mockResolvedValue({ copy: null, session: { status: 'signed-out' } });
+  await render('Quick');
+  expect(text()).toContain('Sign in to Splitbook first');
+  expect(textOf(button())).toBe('Open Splitbook');
+  expect(store.saveSetup).not.toHaveBeenCalled();
+});

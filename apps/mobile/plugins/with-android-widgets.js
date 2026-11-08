@@ -185,7 +185,9 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
     int id = value instanceof Number ? ((Number)value).intValue() : AppWidgetManager.INVALID_APPWIDGET_ID;
     AppWidgetProviderInfo info = AppWidgetManager.getInstance(this).getAppWidgetInfo(id);
     if (info == null || !getPackageName().equals(info.provider.getPackageName())
-        || !("${config.android.package}.widget.Group".equals(info.provider.getClassName()) || "${config.android.package}.widget.Quick".equals(info.provider.getClassName())))
+        || !("${config.android.package}.widget.Group".equals(info.provider.getClassName())
+          || "${config.android.package}.widget.Balances".equals(info.provider.getClassName())
+          || "${config.android.package}.widget.Quick".equals(info.provider.getClassName())))
       id = AppWidgetManager.INVALID_APPWIDGET_ID;
     getIntent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,id);
     super.onCreate(savedInstanceState);
@@ -210,6 +212,7 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
     android:description="@string/widget_balances_description"
     android:initialLayout="@layout/rn_widget"
     android:previewImage="@drawable/widget_balances_preview"
+    android:configure="${config.android.package}.widget.GroupConfiguration" android:widgetFeatures="reconfigurable"
     android:updatePeriodMillis="0" android:widgetCategory="home_screen|not_keyguard" />
 `,
       );
