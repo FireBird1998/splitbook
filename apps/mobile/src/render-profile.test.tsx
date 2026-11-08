@@ -138,6 +138,7 @@ vi.mock('./ui/group-expenses', async (load) => counting.wrap(await load<Module>(
 vi.mock('./ui/group-members', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-shell', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-snackbar', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/held-update-snackbar', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-workflows', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/list-day-header', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/home', async (load) => counting.wrap(await load<Module>()));
