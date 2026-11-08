@@ -32,8 +32,9 @@ export function legacyBalancesSetup(
   action: string,
   widgetId: number,
   saved: WidgetSetupRecord | null,
+  stillPlaced = true,
 ): WidgetSetupRecord | null {
-  return action === 'WIDGET_UPDATE' && !saved
+  return stillPlaced && action === 'WIDGET_UPDATE' && !saved
     ? { kind: 'balances', widgetId, hideAmounts: false }
     : null;
 }

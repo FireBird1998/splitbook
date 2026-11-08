@@ -315,18 +315,22 @@ export function redrawBalances() {
 export function registerAndroidWidgets() {
   registerWidgetTaskHandler(async ({ widgetInfo, widgetAction, renderWidget }) => {
     if (widgetAction === 'WIDGET_DELETED') {
-      await widgetStore.removeSetup(widgetInfo.widgetId);
+      await serializeDraw(async () => {
+        await widgetStore.removeSetup(widgetInfo.widgetId);
+      });
       return;
     }
     if (!['Balances', 'Group', 'Quick'].includes(widgetInfo.widgetName)) return;
     await serializeDraw(async () => {
-      if (widgetInfo.widgetName === 'Balances') {
-        const legacy = legacyBalancesSetup(
-          widgetAction,
-          widgetInfo.widgetId,
-          await widgetStore.setup(widgetInfo.widgetId),
-        );
-        if (legacy) await widgetStore.saveSetupIfAbsent(legacy);
+      if (widgetInfo.widgetName === 'Balances' && widgetAction === 'WIDGET_UPDATE') {
+        const saved = await widgetStore.setup(widgetInfo.widgetId);
+        if (!saved) {
+          const placed = (await getWidgetInfo('Balances')).some(
+            (info) => info.widgetId === widgetInfo.widgetId,
+          );
+          const legacy = legacyBalancesSetup(widgetAction, widgetInfo.widgetId, saved, placed);
+          if (legacy) await widgetStore.saveSetupIfAbsent(legacy);
+        }
       }
       renderWidget(await representation(widgetInfo));
     });
