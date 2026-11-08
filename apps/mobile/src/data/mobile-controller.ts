@@ -773,6 +773,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     generation += 1;
     notifications.reset();
     pendingNotification = null;
+    signalledHeldNotification = null;
     notificationSeen.clear();
     offlineSession = false;
     savedCopies.retire();
@@ -2554,6 +2555,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   let pendingNotification: NotificationEnvelope | null = null;
+  let signalledHeldNotification: MobileSnapshot['heldNotification'] = null;
   const notificationSeen = new Map<string, number>();
   const notificationProtected = () => notificationTaskProtected(snapshot);
   const matchingNotification = (event: NotificationEnvelope) =>
@@ -2696,7 +2698,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const event = await checkedNotification(value);
     if (!event) return;
     const owner = snapshot.heldNotification ?? { generation, accountId: event.accountId };
-    const firstHeld = !pendingNotification && notificationProtected();
+    const firstHeld = signalledHeldNotification !== owner && notificationProtected();
+    if (firstHeld) signalledHeldNotification = owner;
     pendingNotification = event;
     publish({
       ...snapshot,
