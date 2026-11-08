@@ -142,7 +142,7 @@ db.expenses.countDocuments({
 });
 ```
 
-If either count isn't 0, open those Groups' Activity on the current build to publish them, and check again before rolling back.
+If either count isn't 0, open those Groups' Activity on the current build to publish them (with recovery on, the next trigger call also publishes them), and check again before rolling back.
 
 With both notification switches on, run one dispatch (`POST /api/notifications/dispatch`, docs/api.md) after an Expense is added. Its log line should count the alert as `accepted`.
 
@@ -191,7 +191,20 @@ Workload Identity Federation chain above; the scheduler never sees it.
    Overlapping or repeated calls are safe: claims are atomic and leased, so a slow pass and the
    next one never send the same delivery twice.
 
-3. **Turn recovery on** (staging first): `ANDROID_NOTIFICATION_RECOVERY_ENABLED=true`, then
+3. **Before turning recovery on**, count the changes still waiting to publish their Activity.
+   The first calls publish all of them, oldest first, within about 5 seconds per call; only those
+   under 24 hours old can alert. A large or stuck backlog can hold back newer ones, so if either
+   count is more than a handful, open those Groups' Activity first:
+
+   ```js
+   db.expenses.countDocuments({ 'pendingActivity.0': { $exists: true } });
+   db.settlements.countDocuments({ 'pendingActivity.0': { $exists: true } });
+   ```
+
+   Temporary send failures from the last 24 hours, recorded while recovery was off, are also
+   retried by the first calls, so a few alerts can arrive up to a day late.
+
+4. **Turn recovery on** (staging first): `ANDROID_NOTIFICATION_RECOVERY_ENABLED=true`, then
    redeploy. Each call logs one line such as
    `Notification dispatch: considered=1 accepted=1 skipped=0 uncertain=0 failed=0 recovered=1 retrying=0`.
 

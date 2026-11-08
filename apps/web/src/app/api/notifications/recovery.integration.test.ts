@@ -577,7 +577,7 @@ describe('the recovery kill switch and bounds (#843)', () => {
     expect(pending).toHaveLength(1);
   });
 
-  it('with sends paused, recovery publishes Activity but writes no delivery; resuming delivers late', async () => {
+  it('with sends paused, the trigger recovers and sends nothing; resuming delivers late', async () => {
     const upsert = losePublication();
     await createExpense();
     upsert.mockRestore();
