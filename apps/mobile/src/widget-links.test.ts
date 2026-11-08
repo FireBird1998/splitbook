@@ -1,0 +1,26 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { widgetLink, widgetLinkTarget } from './widget-links';
+afterEach(() => vi.unstubAllEnvs());
+it('builds dev-client cold links with a local Metro destination, and plain release links', () => {
+  vi.stubEnv('EXPO_PUBLIC_APP_ENV', 'development');
+  expect(widgetLink('review', '127.0.0.1:8083')).toBe(
+    'splitbook-dev://widget/review?__expo_url=http%3A%2F%2F127.0.0.1%3A8083',
+  );
+  expect(widgetLinkTarget('splitbook-dev://widget/review')).toBe('review');
+  vi.stubEnv('EXPO_PUBLIC_APP_ENV', 'production');
+  expect(widgetLink('home')).toBe('splitbook://widget/home');
+});
+it('accepts only this build’s fixed widget targets', () => {
+  vi.stubEnv('EXPO_PUBLIC_APP_ENV', 'development');
+  for (const url of [
+    'splitbook://widget/home',
+    'https://widget/home',
+    'splitbook-dev://person@widget/home',
+    'splitbook-dev://widget:99/home',
+    'splitbook-dev://widget/home?next=review',
+    'splitbook-dev://widget/expense',
+    'not a link',
+  ])
+    expect(widgetLinkTarget(url)).toBeNull();
+  expect(widgetLinkTarget('splitbook-dev://widget/sign-in')).toBe('sign-in');
+});
