@@ -7,7 +7,6 @@ import {
   type GroupWidgetSize,
 } from '@splitbook/shared/group-widget';
 import type { WidgetCopy, WidgetSession, WidgetTarget } from '@splitbook/shared/balances-widget';
-import { SEPARATOR } from '@splitbook/shared/separator';
 import type { SemanticTokens } from '@splitbook/shared/design-tokens';
 import { widgetLink } from './widget-links';
 import Constants from 'expo-constants';
@@ -116,7 +115,16 @@ export function drawGroup(
         >
           {mark}
           <FlexWidget style={{ flex: 1, flexGap: 3 }}>
-            {text(view.name, t.text, 13, true)}
+            <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
+              {text(view.name, t.text, 13, true)}
+              {view.final ? (
+                <FlexWidget
+                  style={{ backgroundColor: color(t.surfaceMuted), borderRadius: 6, padding: 4 }}
+                >
+                  {text('Archived', t.textSecondary, 9, true)}
+                </FlexWidget>
+              ) : null}
+            </FlexWidget>
             {small && view.saved
               ? text(view.saved, t.textMuted, 9)
               : text(view.balance, balanceTone, 11, true)}
@@ -124,10 +132,30 @@ export function drawGroup(
           {!small && view.saved ? text(view.saved, t.textMuted, 9) : null}
         </FlexWidget>
       ) : null}
+      {view.final ? text('Nothing more can be saved here.', t.textSecondary, 11) : null}
       {view.title ? (
-        <FlexWidget style={{ flex: 1, justifyContent: 'center', flexGap: 10 }}>
-          {text(view.title, t.text, small ? 13 : 15, true)}
-          {text(view.description, t.textSecondary, small ? 10 : 12)}
+        <FlexWidget style={{ flex: 1, flexDirection: 'row', alignItems: 'center', flexGap: 12 }}>
+          {view.state === 'lost-access' ? (
+            <FlexWidget
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 14,
+                backgroundColor: color(t.surfaceMuted),
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <SvgWidget
+                svg={`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="${t.textSecondary}" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></g></svg>`}
+                style={{ width: 24, height: 24 }}
+              />
+            </FlexWidget>
+          ) : null}
+          <FlexWidget style={{ flex: 1, flexGap: 10 }}>
+            {text(view.title, t.text, small ? 13 : 15, true)}
+            {text(view.description, t.textSecondary, small ? 10 : 12)}
+          </FlexWidget>
         </FlexWidget>
       ) : null}
       {view.state === 'loading' ? (
@@ -232,8 +260,6 @@ export function drawGroup(
           >
             {text(view.more, t.brand.main, 10, true)}
           </FlexWidget>
-        ) : view.final ? (
-          text(`Archived${SEPARATOR}final`, t.textSecondary, 11, true)
         ) : view.action === 'Open to update' ? (
           text(view.action, t.textSecondary, 11)
         ) : null}

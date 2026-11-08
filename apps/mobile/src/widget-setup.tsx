@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   View,
+  Image,
   Text,
   Pressable,
   ScrollView,
@@ -13,6 +14,8 @@ import { useFonts } from 'expo-font';
 import { Outfit_400Regular } from '@expo-google-fonts/outfit/400Regular';
 import { Outfit_700Bold } from '@expo-google-fonts/outfit/700Bold';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import lightMark from '../assets/widgets/setup-mark-light.png';
+import darkMark from '../assets/widgets/setup-mark-dark.png';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import {
   widgetSavedTime,
@@ -136,16 +139,30 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
               gap: 18,
             }}
           >
-            <Ionicons
-              name={!signedIn ? 'log-in-outline' : 'people-outline'}
-              size={48}
-              color={t.brand.main}
-            />
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 14,
+                backgroundColor: t.brand.bg,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {!signedIn ? (
+                <Image
+                  source={t.mode === 'dark' ? darkMark : lightMark}
+                  style={{ width: 32, height: 32 }}
+                />
+              ) : (
+                <Ionicons name="people-outline" size={32} color={t.brand.main} />
+              )}
+            </View>
             {copy(!signedIn ? 'Sign in to Splitbook first' : 'No Groups yet', true, 20)}
             {copy(
               !signedIn
                 ? 'Widgets show your Groups once you’re signed in on this phone.'
-                : 'Create a Group in Splitbook, then come back to add a widget.',
+                : 'Create or join a Group, then add this widget again.',
               false,
               15,
               t.textSecondary,

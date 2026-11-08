@@ -10,6 +10,10 @@ async function generate() {
     'utf8',
   );
   for (const tokens of [t, darkTokens]) {
+    await sharp(Buffer.from(master.replace('#6366F1', tokens.brand.main)))
+      .resize(96, 96)
+      .png()
+      .toFile(new URL(`setup-mark-${tokens.mode}.png`, output).pathname);
     await writeFile(
       new URL(`mark-${tokens.mode}.svg`, output),
       master.replace('#6366F1', tokens.brand.main),
