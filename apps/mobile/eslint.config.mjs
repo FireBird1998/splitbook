@@ -33,7 +33,10 @@ export default defineConfig([
   globalIgnores(['node_modules/**', '.expo/**', 'android/**', 'ios/**', 'dist/**']),
   js.configs.recommended,
   ...tseslint.configs.recommended,
-  { files: ['metro.config.js'], rules: { '@typescript-eslint/no-require-imports': 'off' } },
+  {
+    files: ['metro.config.js', 'plugins/*.js'],
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
   {
     rules: {
       'no-restricted-imports': [

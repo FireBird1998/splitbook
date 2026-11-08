@@ -45,6 +45,10 @@ export default {
   // Android Google identity uses an explicit web client ID and native autolinking.
   // The Google Expo plugin configures Firebase/iOS, neither needed for this Android beta.
   plugins: [
+    [
+      './plugins/with-android-widgets',
+      { enabled: process.env.EXPO_PUBLIC_ANDROID_WIDGETS_ENABLED === 'true' },
+    ],
     'expo-secure-store',
     ['expo-notifications', { icon: './assets/brand/notification-icon.png', color: '#3d4fcf' }],
     'expo-font',
