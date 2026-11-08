@@ -99,6 +99,11 @@ assets.set(
 // Android's essential content fits the central 66/108 diameter circle, not just a square.
 assets.set('android-foreground', svg(1024, 1024, mark(c.white, 594, 215, 215)));
 assets.set('android-monochrome', svg(1024, 1024, mark('#000000', 594, 215, 215)));
+// Notification small icons use the launcher's alpha mask in white.
+assets.set(
+  'notification-icon',
+  assets.get('android-monochrome').replace('fill="#000000"', `fill="${c.white}"`),
+);
 // Android 12+ draws the splash icon on a 288 dp canvas masked to its central 192 dp circle.
 // The canvas is 288 dp at 4x, so no density upscales it; the mark is 128 dp.
 const splashCanvas = 288 * 4;
@@ -192,6 +197,11 @@ for (const size of config.sizes.adaptive)
   for (const name of ['android-foreground', 'android-monochrome']) {
     await output(`assets/brand/png/${name}-${size}.png`, await png(assets.get(name), size));
   }
+for (const size of config.sizes.notification)
+  await output(
+    `assets/brand/png/notification-icon-${size}.png`,
+    await png(assets.get('notification-icon'), size),
+  );
 for (const name of ['splash-light', 'splash-dark'])
   await output(
     `assets/brand/png/${name}-${splashCanvas}.png`,
@@ -260,6 +270,10 @@ for (const name of ['splash-light', 'splash-dark'])
     `apps/mobile/assets/brand/${name}.png`,
     generated.get(`assets/brand/png/${name}-${splashCanvas}.png`),
   );
+await output(
+  'apps/mobile/assets/brand/notification-icon.png',
+  generated.get('assets/brand/png/notification-icon-96.png'),
+);
 for (const name of ['mark-indigo', 'mark-white'])
   await output(`apps/mobile/assets/brand/${name}.svg`, assets.get(name));
 // React Native resolves these density siblings from the base filename at 32 dp.
@@ -366,6 +380,25 @@ for (const [name, file, radius] of [
       }
   if (!nonempty) throw new Error(`${name} is blank`);
 }
+const notificationBytes = generated.get('assets/brand/png/notification-icon-96.png');
+const { data: notificationPixels, info: notificationInfo } = await sharp(notificationBytes)
+  .ensureAlpha()
+  .raw()
+  .toBuffer({ resolveWithObject: true });
+if (notificationInfo.width !== 96 || notificationInfo.height !== 96)
+  throw new Error('Notification icon must be 96 x 96 pixels.');
+let visibleNotificationPixels = 0;
+let transparentNotificationPixels = 0;
+for (let i = 0; i < notificationPixels.length; i += 4) {
+  if (notificationPixels[i + 3] === 0) transparentNotificationPixels++;
+  else {
+    visibleNotificationPixels++;
+    if (notificationPixels.subarray(i, i + 3).some((channel) => channel !== 255))
+      throw new Error('Notification icon must be white on transparent.');
+  }
+}
+if (!visibleNotificationPixels || !transparentNotificationPixels)
+  throw new Error('Notification icon must have both visible artwork and transparent padding.');
 const appBytes = generated.get('assets/brand/png/app-icon-1024.png');
 if ((await sharp(appBytes).metadata()).hasAlpha)
   throw new Error('Native app icon must have no alpha channel.');
