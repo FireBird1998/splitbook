@@ -18,6 +18,7 @@ export function drawQuick(
   t: SemanticTokens,
 ) {
   const view = quickWidget(copy, setup, size, session),
+    compactState = size === '1x1' && view.state !== 'normal',
     color = (v: string) => v as `#${string}`;
   return (
     <FlexWidget
@@ -29,13 +30,13 @@ export function drawQuick(
       style={{
         width: 'match_parent',
         height: 'match_parent',
-        padding: 12,
+        padding: compactState ? 6 : 12,
         borderRadius: 24,
         backgroundColor: color(t.surface),
-        flexDirection: 'row',
+        flexDirection: compactState ? 'column' : 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        flexGap: 10,
+        flexGap: compactState ? 4 : 10,
       }}
     >
       {view.state === 'normal' ? (
@@ -68,15 +69,24 @@ export function drawQuick(
         </FlexWidget>
       )}
       {size === '2x1' || view.state !== 'normal' ? (
-        <FlexWidget style={{ flex: 1, flexGap: 4 }}>
+        <FlexWidget style={{ flex: 1, flexGap: compactState ? 2 : 4 }}>
           <TextWidget
             text={view.title}
-            style={{ fontSize: 12, fontWeight: 'bold', color: color(t.text) }}
+            style={{
+              fontSize: compactState ? 10 : 12,
+              fontWeight: 'bold',
+              color: color(t.text),
+              ...(compactState ? { textAlign: 'center' as const } : {}),
+            }}
           />
           {view.subtitle ? (
             <TextWidget
               text={view.subtitle}
-              style={{ fontSize: 10, color: color(t.textSecondary) }}
+              style={{
+                fontSize: compactState ? 9 : 10,
+                color: color(t.textSecondary),
+                ...(compactState ? { textAlign: 'center' as const } : {}),
+              }}
             />
           ) : null}
         </FlexWidget>
