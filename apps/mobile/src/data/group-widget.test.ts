@@ -140,7 +140,7 @@ it('limits compact to the people count, wide to two payments and tall to four, k
   };
   expect(groupWidget(multi, setup, '4x2', session, now)).toMatchObject({
     balance: 'In 3\u00a0currencies',
-    more: '+5\u00a0more',
+    more: '+5\u00a0more\u00a0· ¥, €',
     payments: [{ label: 'You pay Priya' }, { label: 'You pay Sam' }],
   });
   expect(groupWidget(multi, setup, '4x3', session, now).payments).toHaveLength(4);
@@ -220,6 +220,24 @@ it('uses two initials in payment avatars without expanding the visible first nam
   ]);
 });
 it('names the currencies of payments hidden by the widget size', () => {
-  const multi = { ...part, currencies: [...part.currencies, {currency:'JPY',balanceMinor:3000,payments:[{from:'sam',to:'alex',fromName:'Sam Chen',toName:'Alex Rivera',amountMinor:3000}]}] };
-  expect(groupWidget(multi,setup,'4x2',session,now).more).toBe('+1\u00a0more\u00a0· ¥');
+  const multi = {
+    ...part,
+    currencies: [
+      ...part.currencies,
+      {
+        currency: 'JPY',
+        balanceMinor: 3000,
+        payments: [
+          {
+            from: 'sam',
+            to: 'alex',
+            fromName: 'Sam Chen',
+            toName: 'Alex Rivera',
+            amountMinor: 3000,
+          },
+        ],
+      },
+    ],
+  };
+  expect(groupWidget(multi, setup, '4x2', session, now).more).toBe('+1\u00a0more\u00a0· ¥');
 });

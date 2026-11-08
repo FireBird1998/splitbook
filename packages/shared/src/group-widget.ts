@@ -1,4 +1,4 @@
-import { formatCurrency } from './currency';
+import { formatCurrency, getCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
 import { counted, SEPARATOR } from './separator';
 import { widgetSavedTime, type WidgetSession } from './balances-widget';
@@ -122,6 +122,7 @@ export function groupWidget(
           .map((word) => word[0] ?? '')
           .join('')
           .toUpperCase(),
+        currency: bucket.currency,
         incoming: payment.to === setup.accountId,
         payment:
           payment.from && payment.to
@@ -178,7 +179,10 @@ export function groupWidget(
         incoming,
         payment,
       })),
-    more: limit && own.length > limit ? `+${counted(own.length - limit, 'more', 'more')}` : null,
+    more:
+      limit && own.length > limit
+        ? `+${counted(own.length - limit, 'more', 'more')}${SEPARATOR}${[...new Set(own.slice(limit).map((p) => getCurrency(p.currency)?.symbol ?? p.currency))].join(', ')}`
+        : null,
     people: own.length
       ? `${bucket?.balanceMinor && bucket.balanceMinor < 0 ? 'to' : 'from'} ${counted(new Set(own.map((p) => p.person)).size, 'person', 'people')}`
       : null,
