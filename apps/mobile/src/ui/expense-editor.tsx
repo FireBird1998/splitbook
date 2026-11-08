@@ -645,7 +645,7 @@ function ExpenseTask({
         ) : null}
         {body}
       </ScrollView>
-      {controller ? (
+      {controller && form ? (
         <HeldUpdateFooter controller={controller}>
           {newTask && form && footer ? <RetainHeight footer>{footer}</RetainHeight> : footer}
         </HeldUpdateFooter>
