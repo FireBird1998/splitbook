@@ -89,7 +89,6 @@ describe('per-phone Settings notification controls', () => {
     expect(text()).toContain('Expenses you’re part of');
     expect(text()).toContain('Payments to or from you');
     expect(text()).toContain(caption);
-    expect(screen.root.findAllByType(Divider).map((n) => n.props.inset ?? 0)).toEqual([66, 66, 0]);
     press('Notifications on this phone, On for all your Groups');
     press('Expense updates, Expenses you’re part of');
     press('Payments, Payments to or from you');
@@ -101,6 +100,19 @@ describe('per-phone Settings notification controls', () => {
       ['payments', true],
     ]);
     expect(calls.onAndroidSettings).toHaveBeenCalledOnce();
+  });
+  it('separates Android settings with a divider reaching both Card edges', () => {
+    render('ready');
+    const margins = screen.root.findAllByType(Divider).map((divider) => {
+      const line = divider.find((n) => (n.type as unknown) === 'View');
+      const style = flatten(line.props.style);
+      return [style.marginLeft, style.marginRight];
+    });
+    expect(margins).toEqual([
+      [66, 14],
+      [66, 14],
+      [0, 0],
+    ]);
   });
   it('replaces the off switch with a busy mark while asking Android', () => {
     render('pending', false);
