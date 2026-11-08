@@ -34,6 +34,11 @@ export function drawGroup(
   });
   const group = { kind: 'group' as const, groupId: setup.groupId },
     config = { kind: 'setup' as const, widgetId: setup.widgetId };
+  const balanceTone = view.muted
+    ? t.textMuted
+    : view.balanceTone === 'neutral'
+      ? t.textSecondary
+      : t.status[view.balanceTone];
   const target = view.target === 'setup' ? config : view.target === 'sign-in' ? 'sign-in' : group;
   const text = (value: string, tone = t.text, fontSize = 12, bold = false, mono = false) => (
     <TextWidget
@@ -114,7 +119,7 @@ export function drawGroup(
             {text(view.name, t.text, 13, true)}
             {small && view.saved
               ? text(view.saved, t.textMuted, 9)
-              : text(view.balance, view.muted ? t.textMuted : t.status.negative, 11, true)}
+              : text(view.balance, balanceTone, 11, true)}
           </FlexWidget>
           {!small && view.saved ? text(view.saved, t.textMuted, 9) : null}
         </FlexWidget>
@@ -166,8 +171,19 @@ export function drawGroup(
                 flexGap: 12,
               }}
             >
+              <FlexWidget
+                style={{ padding: 5, borderRadius: 8, backgroundColor: color(t.surface) }}
+              >
+                {text(payment.firstName[0] ?? '', t.textSecondary, 10, true)}
+              </FlexWidget>
               {text(payment.label, t.text, 12)}
-              {text(payment.amount, view.muted ? t.textMuted : t.text, 13, true, true)}
+              {text(
+                payment.amount,
+                view.muted ? t.textMuted : payment.incoming ? t.status.positive : t.text,
+                13,
+                true,
+                true,
+              )}
             </FlexWidget>
           ))}
         </FlexWidget>
@@ -181,13 +197,19 @@ export function drawGroup(
           flexGap: 8,
         }}
       >
-        {view.more
-          ? text(view.more, t.brand.main, 10, true)
-          : view.final
-            ? text(`Archived${SEPARATOR}final`, t.textSecondary, 11, true)
-            : view.action === 'Open to update'
-              ? text(view.action, t.textSecondary, 11)
-              : null}
+        {view.more ? (
+          <FlexWidget
+            clickAction="OPEN_URI"
+            clickActionData={action({ kind: 'settle', groupId: setup.groupId })}
+            accessibilityLabel={view.more}
+          >
+            {text(view.more, t.brand.main, 10, true)}
+          </FlexWidget>
+        ) : view.final ? (
+          text(`Archived${SEPARATOR}final`, t.textSecondary, 11, true)
+        ) : view.action === 'Open to update' ? (
+          text(view.action, t.textSecondary, 11)
+        ) : null}
         {view.target === 'setup'
           ? button(view.action!, config)
           : view.addExpense

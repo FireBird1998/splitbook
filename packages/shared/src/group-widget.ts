@@ -42,7 +42,8 @@ export function groupWidget(
     name: null as string | null,
     theme: null as GroupCategory | null,
     balance: '',
-    payments: [] as { label: string; amount: string }[],
+    payments: [] as { label: string; amount: string; firstName: string; incoming: boolean }[],
+    balanceTone: 'neutral' as 'neutral' | 'positive' | 'negative',
     more: null as string | null,
     people: null as string | null,
     addExpense: false,
@@ -101,6 +102,10 @@ export function groupWidget(
           toMajorAmount(payment.amountMinor, bucket.currency),
           bucket.currency,
         ),
+        firstName: (payment.from === setup.accountId ? payment.toName : payment.fromName)
+          .trim()
+          .split(/\s+/)[0],
+        incoming: payment.to === setup.accountId,
         person: payment.from === setup.accountId ? payment.to : payment.from,
       })),
   );
@@ -114,6 +119,11 @@ export function groupWidget(
     state: part.archived ? 'archived' : allSquare ? 'all-square' : 'normal',
     name: part.name,
     theme: part.theme,
+    balanceTone: (currencies.length > 1
+      ? 'neutral'
+      : bucket && bucket.balanceMinor < 0
+        ? 'negative'
+        : 'positive') as 'neutral' | 'negative' | 'positive',
     title: null,
     description: '',
     balance: allSquare
@@ -121,7 +131,9 @@ export function groupWidget(
       : currencies.length > 1
         ? `In ${counted(currencies.length, 'currency', 'currencies')}`
         : `${bucket!.balanceMinor < 0 ? 'You owe' : 'You’re owed'} ${formatCurrency(toMajorAmount(Math.abs(bucket!.balanceMinor), bucket!.currency), bucket!.currency)}`,
-    payments: own.slice(0, limit).map(({ label, amount }) => ({ label, amount })),
+    payments: own
+      .slice(0, limit)
+      .map(({ label, amount, firstName, incoming }) => ({ label, amount, firstName, incoming })),
     more: limit && own.length > limit ? `+${counted(own.length - limit, 'more', 'more')}` : null,
     people: own.length
       ? `${bucket?.balanceMinor && bucket.balanceMinor < 0 ? 'to' : 'from'} ${counted(new Set(own.map((p) => p.person)).size, 'person', 'people')}`

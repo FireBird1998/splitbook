@@ -27,6 +27,7 @@ import { groupThemeIcons } from './ui/group-icon';
 import { widgetLink } from './widget-links';
 import { redrawBalances } from './widgets';
 
+const pendingChoices = new Map<number, { accountId: string; groupId: string }>();
 const store = createWidgetsStore(process.env.EXPO_PUBLIC_API_URL ?? '');
 /** Android configuration is deliberately independent of runtime.ts and its session/network reads. */
 export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreenProps) {
@@ -36,6 +37,10 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
   );
   const [selected, setSelected] = useState<string | null>(null),
     [error, setError] = useState('');
+  const cancel = () => {
+    pendingChoices.delete(widgetInfo.widgetId);
+    setResult('cancel');
+  };
   const [fontsReady] = useFonts({ Outfit_400Regular, Outfit_700Bold });
   useEffect(() => {
     let alive = true;
@@ -44,12 +49,18 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
         if (alive) {
           setRecord(value);
           setSelected(
-            setup?.groupId ?? value.copy?.savedGroups?.rows.find((g) => !g.archived)?.id ?? null,
+            (pendingChoices.get(widgetInfo.widgetId)?.accountId === value.copy?.accountId
+              ? pendingChoices.get(widgetInfo.widgetId)?.groupId
+              : undefined) ??
+              setup?.groupId ??
+              value.copy?.savedGroups?.rows.find((g) => !g.archived)?.id ??
+              null,
           );
         }
       })
       .catch(() => setError('Could not read saved Groups. Open Splitbook and try again.'));
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      pendingChoices.delete(widgetInfo.widgetId);
       setResult('cancel');
       return true;
     });
@@ -94,6 +105,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
         groupId: selected!,
       });
       await redrawBalances();
+      pendingChoices.delete(widgetInfo.widgetId);
       setResult('ok');
     } catch {
       setError('Could not save this widget. Try again.');
@@ -105,7 +117,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
         <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, gap: 20 }}>
           <Pressable
             accessibilityLabel="Cancel widget setup"
-            onPress={() => setResult('cancel')}
+            onPress={cancel}
             style={{ padding: 8 }}
           >
             <Ionicons name="close" size={24} color={t.text} />
@@ -166,7 +178,13 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                   accessibilityRole="radio"
                   accessibilityState={{ checked: selected === group.id }}
                   accessibilityLabel={group.name}
-                  onPress={() => setSelected(group.id)}
+                  onPress={() => {
+                    setSelected(group.id);
+                    pendingChoices.set(widgetInfo.widgetId, {
+                      groupId: group.id,
+                      accountId: record!.copy!.accountId,
+                    });
+                  }}
                   style={{
                     padding: 16,
                     flexDirection: 'row',

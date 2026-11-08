@@ -161,7 +161,27 @@ it('uses the older Group/Balances verification time and keeps data hidden across
   expect(JSON.stringify(view)).not.toMatch(/Maple|Priya|Sam|1,480|1,060/);
 });
 
-it('marks incoming Suggested payments and the balance as owed to you',()=>{
- const incoming={...part,currencies:[{currency:'INR',balanceMinor:120000,payments:[{from:'priya',to:'alex',fromName:'Priya Shah',toName:'Alex Rivera',amountMinor:120000}]}]};
- expect(groupWidget(incoming,setup,'4x2',session,now)).toMatchObject({balanceTone:'positive',payments:[{label:'Priya pays you',firstName:'Priya',incoming:true}]});
+it('marks incoming Suggested payments and the balance as owed to you', () => {
+  const incoming = {
+    ...part,
+    currencies: [
+      {
+        currency: 'INR',
+        balanceMinor: 120000,
+        payments: [
+          {
+            from: 'priya',
+            to: 'alex',
+            fromName: 'Priya Shah',
+            toName: 'Alex Rivera',
+            amountMinor: 120000,
+          },
+        ],
+      },
+    ],
+  };
+  expect(groupWidget(incoming, setup, '4x2', session, now)).toMatchObject({
+    balanceTone: 'positive',
+    payments: [{ label: 'Priya pays you', firstName: 'Priya', incoming: true }],
+  });
 });
