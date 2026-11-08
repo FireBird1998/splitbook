@@ -129,6 +129,21 @@ Edits, deletion, restoration and recurring generation also need `ANDROID_NOTIFIC
 
 Payment alerts for recorded Settlements (single, batch and Cross-currency) need `ANDROID_NOTIFICATION_PAYMENTS_ENABLED=true` (#842), independently of the Expense switch above. It is off by default; leave it off in production until the owner accepts Payment alerts. Unsetting it is their rollback: it stops Payment sends without touching Expense alerts or any save.
 
+Turn either switch on only once the phones in use run a build that shows that alert. An older build drops the new kinds without showing anything, but each send still counts as `accepted`, and Android can lower the priority of an app whose high-priority messages show nothing, which can delay its Expense-added alerts.
+
+**Before rolling the code back to a build older than a switch you turned on**, unset that switch and redeploy, then check that no change is still waiting to publish its Activity with a kind the older build doesn't know. An older build can't publish those, so the Group's Activity would miss them and every Activity read would log a recovery error (money and balances are unaffected):
+
+```js
+db.settlements.countDocuments({
+  'pendingActivity.notificationContext.kind': 'settlement_recorded',
+});
+db.expenses.countDocuments({
+  'pendingActivity.notificationContext.kind': { $in: ['expense_updated', 'expense_deleted'] },
+});
+```
+
+If either count isn't 0, open those Groups' Activity on the current build to publish them, and check again before rolling back.
+
 With both notification switches on, run one dispatch (`POST /api/notifications/dispatch`, docs/api.md) after an Expense is added. Its log line should count the alert as `accepted`.
 
 - **A log line starting `Firebase sender Workload Identity settings`:** a setting is missing or malformed; the line names which.
