@@ -157,22 +157,22 @@ function draw(view: BalancesWidgetView, t: SemanticTokens) {
         <FlexWidget
           style={{
             width: 'match_parent',
-            flexGap: 6,
+            flexGap: small ? 3 : 6,
             alignItems: view.state === 'signed-out' ? 'center' : 'flex-start',
           }}
         >
           {view.state === 'signed-out' ? (
-            mark(30)
+            mark(small ? 20 : 30)
           ) : view.state === 'all-square' ? (
-            text('✓', t.status.positive, 24, true)
+            text('✓', t.status.positive, small ? 16 : 24, true)
           ) : view.state === 'expired' ? (
             <SvgWidget
               svg={`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="${t.textSecondary}" stroke-width="2"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></g></svg>`}
-              style={{ width: 24, height: 24 }}
+              style={{ width: small ? 16 : 24, height: small ? 16 : 24 }}
             />
           ) : null}
-          {view.title ? text(view.title, t.text, 14, true) : null}
-          {view.description ? text(view.description, t.textSecondary, 12) : null}
+          {view.title ? text(view.title, t.text, small ? 12 : 14, true) : null}
+          {view.description ? text(view.description, t.textSecondary, small ? 10 : 12) : null}
         </FlexWidget>
       ) : small ? (
         <FlexWidget style={{ flexGap: 2 }}>
