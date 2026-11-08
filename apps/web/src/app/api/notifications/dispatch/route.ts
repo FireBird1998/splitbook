@@ -1,6 +1,8 @@
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { dispatchExpenseAlerts } from '@/lib/notifications/dispatch';
+/** Above the pass's 20-second budget, so the host never cuts a pass short (#843). */
+export const maxDuration = 30;
 export async function POST(request: Request) {
   const configured = process.env.NOTIFICATION_DISPATCH_SECRET;
   const provided = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';

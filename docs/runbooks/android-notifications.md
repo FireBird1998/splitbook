@@ -150,3 +150,61 @@ With both notification switches on, run one dispatch (`POST /api/notifications/d
 - **`failed` with no configuration line:** the exchange was refused. Check, in order, the OIDC federation setting and its issuer mode ("Before you start"), the issuer and audience (step 3), whether the `sub` in the condition and binding matches the team slug, project name and environment exactly (steps 3 and 6), and the sender's role (step 5). Cloud Audit Logs for `sts.googleapis.com` and `iamcredentials.googleapis.com` show the refusal.
 
 Locally, leave the four settings unset: the sender uses Application Default Credentials (`gcloud auth application-default login`).
+
+## Recovery trigger (cron-job.org), #843
+
+Not connected. Whether and when to schedule it is the owner's decision (#845); nothing here has
+been provisioned. Recovery code paths need `ANDROID_NOTIFICATION_RECOVERY_ENABLED=true` (off by
+default, docs/api.md "Autonomous 24-hour alert recovery (#843)"). Until then a scheduled call only
+runs the pass an explicit dispatch already runs.
+
+**Least privilege.** The scheduler holds exactly two things: the endpoint URL and a dedicated
+dispatcher secret. That secret is not `CRON_SECRET`, an admin credential, a session or a Google
+credential, and it lets the caller do one thing: start one bounded pass that answers counts. It
+cannot choose an event, Group, account or token (a query string or body is refused with 400), read
+any ledger data, or change any financial record. The FCM sender's identity stays the Vercel OIDC →
+Workload Identity Federation chain above; the scheduler never sees it.
+
+1. **Make the secret** (64 hex characters; the endpoint refuses one shorter than 32 bytes):
+
+   ```sh
+   openssl rand -hex 32
+   ```
+
+   Set it as `NOTIFICATION_DISPATCH_SECRET` for one Vercel environment only (staging first). Use a
+   different secret per environment, and never reuse it elsewhere.
+
+2. **Create one cron-job.org job per approved environment:**
+
+   | Setting           | Value                                                              |
+   | ----------------- | ------------------------------------------------------------------ |
+   | URL               | `https://<environment-host>/api/notifications/dispatch` (no query) |
+   | Schedule          | Every 5 minutes                                                    |
+   | Request method    | `POST`                                                             |
+   | Request body      | none                                                               |
+   | Headers           | `Authorization: Bearer <secret>` only                              |
+   | Timeout           | 30 seconds (the pass stops itself after 20; `maxDuration` is 30)   |
+   | Save responses    | Off: the body has only counts, but it needs no keeping             |
+   | Notify on failure | On, to the owner: a 401 means the secret is wrong, a 503 an outage |
+   | Redirects         | Don't follow                                                       |
+
+   Overlapping or repeated calls are safe: claims are atomic and leased, so a slow pass and the
+   next one never send the same delivery twice.
+
+3. **Turn recovery on** (staging first): `ANDROID_NOTIFICATION_RECOVERY_ENABLED=true`, then
+   redeploy. Each call logs one line such as
+   `Notification dispatch: considered=1 accepted=1 skipped=0 uncertain=0 failed=0 recovered=1 retrying=0`.
+
+**Usage budget.** 288 calls a day. An idle pass is a few indexed MongoDB reads and well under a
+second of function time; an active one is bounded at 20 seconds and 100 deliveries. Check Vercel's
+function usage after the first day before enabling production.
+
+**Rollback**, fastest first:
+
+- `ANDROID_NOTIFICATION_SENDS_ENABLED` unset: every send stops, recovery included; work is kept
+  and delivered late (within its 24 hours) once it is set again.
+- `ANDROID_NOTIFICATION_RECOVERY_ENABLED` unset: the trigger goes back to the plain #840 pass.
+- Pause or delete the cron-job.org job, or rotate `NOTIFICATION_DISPATCH_SECRET` (old calls then
+  get 401).
+
+None of them changes a financial save or its answer.

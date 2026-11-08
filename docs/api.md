@@ -2456,8 +2456,9 @@ An environment cursor prevents already considered older pages from starving newe
 An indexed identity lookup excludes terminal and in-flight device deliveries before the device
 limit, so an accepted prefix cannot starve a later installation. Pending work and expired claims
 remain eligible.
-Budget exhaustion before provider I/O preserves pending work. Autonomous retries and recovery
-are deferred to the recovery ticket; accepted and uncertain outcomes are never resent here.
+Budget exhaustion before provider I/O preserves pending work. Accepted and uncertain outcomes
+are never resent. Autonomous recovery and retries of definite temporary failures run only while
+the recovery kill switch is on ("Autonomous 24-hour alert recovery (#843)" below).
 
 Immediately before FCM, the server rechecks current membership, persisted session, binding,
 Expense preferences, activation cutoff, kill switches and event expiry. Eligible delivery
@@ -2564,3 +2565,62 @@ production until the owner accepts the feature. While it is off a recording capt
 notification context (exactly as before #842), so turning it on later sends no backlog; turning
 it off again also stops sends of payments captured while it was on. Expense alerts never depend
 on it, and Settlement recording, its answers and the recorded money are the same either way.
+
+## Autonomous 24-hour alert recovery (#843)
+
+If a change's Activity publication or its post-commit dispatch is interrupted, an eligible member
+can still get its alert later, with no client open and no Group read. The protected trigger is the
+existing `POST /api/notifications/dispatch` (empty body, no query,
+`Authorization: Bearer <NOTIFICATION_DISPATCH_SECRET>`). It takes no event, Group, account or
+token from the caller: each pass works globally, in this order, within one 20-second budget.
+
+1. **Unpublished Activity.** It publishes the recoverable pending Activity intents of every Group
+   (Expenses and Settlements, oldest first, at most 100 events and 100 records), exactly as a Group
+   Activity read would. Publication copies the immutable notification context and acknowledges
+   each intent on its own, so no delivery outcome can hold a financial pending intent open or use
+   up its cap. A partial index (`pendingActivity_recovery`) keeps this lookup to records that have
+   pending intents.
+2. **Lost sends.** A delivery left `sending` past its lease may have reached Google: it becomes
+   `uncertain` and is never resent.
+3. **Due work.** Retries whose wait is over, `claimed` rows whose lease expired before any
+   provider I/O, and deferred `pending` rows, wherever the dispatch cursor is.
+4. **Just-published events,** which may sit behind the cursor; then the usual cursor pass.
+
+Every attempt is the same atomic claim with a 20-second lease on one event, installation, binding
+and activation identity, so overlapping invocations, crashes and replays cannot send one delivery
+twice or repeat an accepted send. Before each provider request it rechecks current Group
+membership, the persisted session, the token binding, the device switch for that kind, its
+activation cutoff and generation, the rollout and send switches, and expiry.
+
+| Provider outcome                                          | State           | Retried?                                                                                                                                                   |
+| --------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2xx                                                       | `accepted`      | Never. Acceptance by Google only: not a display.                                                                                                           |
+| 429 or 5xx                                                | `temporary`     | Yes, up to 5 attempts: from 1 minute, doubling, capped at 30 minutes, with jitter over the upper half, never sooner than `Retry-After` (seconds or a date) |
+| 404/400 `UNREGISTERED`                                    | `invalid-token` | Never; the binding is disabled.                                                                                                                            |
+| Other 4xx, credential or configuration errors             | `operational`   | Never; an operational failure for the owner to look at.                                                                                                    |
+| Timeout or connection loss after dispatch; lost `sending` | `uncertain`     | Never: Google may have accepted it.                                                                                                                        |
+
+An event expires 24 hours after its recorded change. A retry is scheduled only if it falls inside
+that window; queries enforce expiry before the TTL index removes rows (seven days after expiry),
+and the FCM TTL of every attempt is what remains of the 24 hours. Android also drops an expired
+envelope. FCM may deliver a message twice; the app's bounded per-event deduplication suppresses a
+repeat, but there is no exactly-once display promise.
+
+Bounds per invocation: 20 seconds (the route's `maxDuration` is 30), at most 100 published
+events and 100 deliveries considered, sequential provider requests (fewer than the four allowed),
+each capped at 15 seconds and the remaining budget, none started with under ten seconds left, and
+500 ms per MongoDB operation.
+
+The response holds only counts: `considered`, `accepted`, `skipped`, `failed`, `recovered`
+(intents published) and `retrying` (temporary failures scheduled again). The log line stays one
+counts-only line; while recovery is on it ends with ` recovered=<n> retrying=<n>`.
+
+**Kill switch.** All of this needs `ANDROID_NOTIFICATION_RECOVERY_ENABLED=true`, besides
+`ANDROID_NOTIFICATIONS_ENABLED` and `ANDROID_NOTIFICATION_SENDS_ENABLED`. It is **off by default**
+and stays off in production until the owner decides (#845). While it is off, the trigger runs
+exactly the pass described in "First Expense-added Android alert": no global publication, no
+retries, the same response counts (`recovered` and `retrying` are 0) and the same log line. A
+temporary failure still records its next attempt time, so turning recovery on within the 24 hours
+retries it. Unsetting `ANDROID_NOTIFICATION_SENDS_ENABLED` pauses every send, recovery included,
+and keeps the work for later; neither switch changes any financial save. Scheduling is external
+(`docs/runbooks/android-notifications.md`, "Recovery trigger").

@@ -180,9 +180,50 @@ export class ActivityService {
     groupId: string,
     budget: ActivityRecoveryBudget = {},
   ): Promise<ActivityPublicationResult> {
+    const { published, failed, remaining } = await this.recoverPending(
+      { group: new Types.ObjectId(groupId) },
+      budget,
+      `group ${groupId}`,
+    );
+    return { published, failed, remaining };
+  }
+
+  /**
+   * Global bounded recovery for the protected notification trigger (#843): publishes unpublished
+   * intents of every Group, without waiting for anyone to read a Group's Activity. Answers the
+   * published events that carry notification context, so the same pass can dispatch them.
+   * Publication still acknowledges each intent independently of any delivery.
+   */
+  async recoverAllActivity(
+    budget: ActivityRecoveryBudget = {},
+  ): Promise<ActivityPublicationResult & { eventIds: string[] }> {
+    try {
+      await connectDB();
+      const db = mongoose.connection.db;
+      // Only documents with unpublished intents are indexed, so the global lookup stays small.
+      for (const source of ['expenses', 'settlements'] as const)
+        await db?.collection(source).createIndex(
+          { _id: 1, group: 1 },
+          {
+            name: 'pendingActivity_recovery',
+            partialFilterExpression: { 'pendingActivity.0': { $exists: true } },
+            maxTimeMS: 500,
+          },
+        );
+    } catch (err) {
+      console.error('Activity recovery index could not be ensured', err);
+    }
+    return this.recoverPending({}, budget, 'all Groups');
+  }
+
+  private async recoverPending(
+    scope: { group?: Types.ObjectId },
+    budget: ActivityRecoveryBudget,
+    label: string,
+  ): Promise<ActivityPublicationResult & { eventIds: string[] }> {
     const limits = recoveryBudget(budget);
     const deadline = Date.now() + limits.maxDurationMs;
-    const result = { published: 0, failed: 0, remaining: 0 };
+    const result = { published: 0, failed: 0, remaining: 0, eventIds: [] as string[] };
     let documents = 0;
     let attempted = 0;
 
@@ -206,7 +247,7 @@ export class ActivityService {
             : limits.maxDocuments - documents;
         const pending = await db
           .collection<PendingActivitySource>(source)
-          .find({ group: new Types.ObjectId(groupId), 'pendingActivity.0': { $exists: true } })
+          .find({ ...scope, 'pendingActivity.0': { $exists: true } })
           .project<PendingActivitySource>({
             _id: 1,
             group: 1,
@@ -228,6 +269,7 @@ export class ActivityService {
               await this.publishOne(source, record._id, event, deadline);
               result.published += 1;
               result.remaining -= 1;
+              if (event.notificationContext) result.eventIds.push(String(event._id));
             } catch (err) {
               result.failed += 1;
               console.error(
@@ -241,7 +283,7 @@ export class ActivityService {
       }
     } catch (err) {
       result.failed += 1;
-      console.error(`Activity recovery could not complete for group ${groupId}`, err);
+      console.error(`Activity recovery could not complete for ${label}`, err);
     }
     return result;
   }
