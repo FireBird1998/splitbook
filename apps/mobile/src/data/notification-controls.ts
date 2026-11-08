@@ -34,10 +34,13 @@ export const parseNotificationPreferences = (value: unknown): NotificationPrefer
 export interface NotificationControls {
   status: 'off' | 'loading' | 'pending' | 'ready' | 'offline' | 'denied' | 'blocked' | 'error';
   confirmed: NotificationPreferences;
+  /** Whether this session has received confirmed controls, including an unavailable/off answer. */
+  hasConfirmed?: boolean;
   message: string;
 }
 export const emptyNotifications = (): NotificationControls => ({
   status: 'off',
+  hasConfirmed: false,
   confirmed: {
     available: false,
     enabled: false,
@@ -172,6 +175,7 @@ export function notificationControls(d: {
       if (!active(owner, task)) return;
       d.publish({
         confirmed,
+        hasConfirmed: true,
         status: confirmed.enabled && permission !== 'granted' ? 'blocked' : 'ready',
         message:
           confirmed.enabled && permission !== 'granted'
@@ -255,6 +259,7 @@ export function notificationControls(d: {
       if (!active(owner, task)) return;
       d.publish({
         confirmed,
+        hasConfirmed: true,
         status: enabled && permission !== 'granted' ? 'blocked' : 'ready',
         message:
           enabled && permission !== 'granted'
@@ -319,6 +324,7 @@ export function notificationControls(d: {
             if (d.state().status !== 'loading') set('loading');
             d.publish({
               confirmed,
+              hasConfirmed: true,
               status: confirmed.enabled && !allowed ? 'blocked' : 'ready',
               message:
                 confirmed.enabled && !allowed
@@ -346,7 +352,7 @@ export function notificationControls(d: {
           // The server's answer stands for this session even if a member's change came since:
           // that change waits for it and sends the revision it confirms.
           if (!d.current(owner) || !d.authenticated()) return;
-          d.publish({ ...d.state(), confirmed: result(value) });
+          d.publish({ ...d.state(), confirmed: result(value), hasConfirmed: true });
           return;
         } catch (error) {
           if (!live() || error instanceof Superseded) return;
