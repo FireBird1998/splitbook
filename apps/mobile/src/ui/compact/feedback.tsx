@@ -5,11 +5,11 @@ import { Icon, type IconName } from '../primitives';
 import { lineBox, radius, touch } from './scale';
 import { CompactText } from './text';
 import { BusyMark } from './controls';
+import { BannerActionColor } from './banner-action-color';
+
+export { BannerActionColor } from './banner-action-color';
 
 export type BannerTone = 'info' | 'warning' | 'error' | 'offline';
-
-import { BannerActionColor } from './banner-action-color';
-export { BannerActionColor } from './banner-action-color';
 
 const bannerIcons: Record<BannerTone, IconName> = {
   info: 'information-circle-outline',
