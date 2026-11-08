@@ -46,7 +46,7 @@ export function groupLayout(size: GroupWidgetSize, scale: number) {
     moneyFontSize: level === 2 ? 13 : 18,
   };
 }
-export function quickLayout(size: '1x1' | '2x1', scale: number, normal: boolean, hidden = false) {
+export function quickLayout(size: '1x1' | '2x1', scale: number, normal: boolean) {
   const level = widgetTextLevel(scale),
     small = size === '1x1';
   return {
