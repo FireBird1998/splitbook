@@ -29,6 +29,7 @@ export type WidgetTarget =
   | 'review'
   | 'sign-in'
   | 'create-group'
+  | 'choose-group'
   | {
       kind: 'group' | 'settle' | 'expense';
       groupId: string;
