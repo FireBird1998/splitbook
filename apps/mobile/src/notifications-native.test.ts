@@ -314,6 +314,78 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
       },
     );
 
+    describe('recovered alerts, delivered hours after their change (#843)', () => {
+      const session = { cookie: 'better-auth.session_token=alex.signature', accountId: alex };
+      const late = (kind: string, hoursAgo: number, extra: Record<string, unknown> = {}) => {
+        const at = Date.now() - hoursAgo * 3_600_000;
+        return {
+          ...payload,
+          data: {
+            body: JSON.stringify({
+              ...JSON.parse(payload.data.body),
+              kind,
+              occurredAt: new Date(at).toISOString(),
+              expiresAt: new Date(at + 86_400_000).toISOString(),
+              ...extra,
+            }),
+          },
+        };
+      };
+      const deliver = async (value: ReturnType<typeof late>, switches = {}) => {
+        const controller = {
+          receiveNotification: vi.fn(async () => false),
+          tapNotification: vi.fn(async () => {}),
+          getSnapshot: () => ({ auth: { status: 'restoring' } }),
+        };
+        const stop = await attachNotificationCallbacks(controller, Promise.resolve());
+        const d = {
+          now: Date.now,
+          visible: () => false,
+          withoutApp: vi.fn((v: unknown) =>
+            checkNotificationWithoutApp(v, access(session, switches), Date.now),
+          ),
+          present: vi.fn<
+            (alert: {
+              identifier: string;
+              content: { title: string; body: string };
+            }) => Promise<void>
+          >(async () => {}),
+        };
+        const shown = await receiveNotificationTask(value, d);
+        stop();
+        return { shown, d };
+      };
+      it.each([
+        ['expense_added', 'An Expense was added.'],
+        ['expense_updated', 'An Expense was updated.'],
+        ['expense_deleted', 'An Expense was deleted.'],
+        ['settlement_recorded', 'A payment was recorded.'],
+      ])(
+        '%s 23 hours late with no app running: the no-app check passes it and its fixed text shows',
+        async (kind, text) => {
+          const { shown, d } = await deliver(late(kind, 23));
+          expect(shown).toBe(true);
+          expect(d.present).toHaveBeenCalledOnce();
+          expect(d.present.mock.calls[0][0].content).toMatchObject({
+            title: 'Splitbook',
+            body: text,
+          });
+        },
+      );
+      it('past its 24 hours with no app running, nothing shows', async () => {
+        const { shown, d } = await deliver(late('expense_added', 24.001));
+        expect(shown).toBe(false);
+        expect(d.present).not.toHaveBeenCalled();
+      });
+      it('an activation since replaced (turned off and on again) drops a late alert: no catch-up', async () => {
+        const { shown, d } = await deliver(late('expense_added', 3), {
+          activation: '00000000-0000-4000-8000-000000000003',
+        });
+        expect(shown).toBe(false);
+        expect(d.present).not.toHaveBeenCalled();
+      });
+    });
+
     describe('Payment alerts (#842)', () => {
       const withKind = (kind: string) => ({
         ...payload,

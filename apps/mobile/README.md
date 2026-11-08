@@ -397,3 +397,12 @@ form, an unresolved payment and its stored retry key stay exactly as they were, 
 held until the member opens it. The server sends these only while
 `ANDROID_NOTIFICATION_PAYMENTS_ENABLED=true` (docs/api.md), off by default; app builds from
 before #842 drop them unshown.
+
+### Recovered alerts (#843)
+
+While the server's recovery switch is on (`ANDROID_NOTIFICATION_RECOVERY_ENABLED`, docs/api.md,
+off by default), an alert whose first send was interrupted can arrive hours after its change.
+The app needs no change for it: the envelope keeps the change's own `occurredAt` and `expiresAt`,
+so every kind passes the same checks and shows the same fixed text, a tap opens Group Activity the
+same way, and one past its 24 hours, or for an activation since replaced, is dropped. A repeated
+delivery of the same event is suppressed by the existing per-event deduplication.
