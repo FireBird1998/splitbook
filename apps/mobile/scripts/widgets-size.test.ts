@@ -30,6 +30,8 @@ it('generates provider bounds that allow four columns and two rows on the device
       ),
       { projectRoot: root, platforms: ['android'] },
     );
+    const manifest = readFileSync(join(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
+    expect(manifest).toMatch(/android:configChanges="[^"]*uiMode/);
     const xml = readFileSync(
       join(root, 'android/app/src/main/res/xml/widget_balances.xml'),
       'utf8',
