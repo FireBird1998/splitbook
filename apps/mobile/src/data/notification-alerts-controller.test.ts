@@ -1045,3 +1045,76 @@ it('keeps a widget destination held if a new form opens while its access is chec
     notificationOpening: { status: 'idle' },
   });
 });
+
+it('a payment widget keeps a sheet opened while its Group destination loads', async () => {
+  let entered!: () => void, release!: () => void;
+  const arrived = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const other = 'a00000000000000000000002';
+  const c = setup(async (url) => {
+    if (url.pathname === `/api/groups/${groupId}/expenses`) {
+      entered();
+      await waiting;
+    }
+    return undefined;
+  });
+  await c.signIn('alex');
+  c.startCreate();
+  await c.openWidget({
+    kind: 'settle',
+    groupId,
+    payment: { from: actor, to: other, currency: 'INR' },
+  });
+  c.back();
+  const opening = c.openPendingNotification();
+  await arrived;
+  c.openTags(groupId);
+  const form = c.getSnapshot().tagManager;
+  release();
+  await opening;
+  expect(c.getSnapshot()).toMatchObject({
+    screen: 'group',
+    tagsOpenFor: groupId,
+    notificationOpening: { status: 'held' },
+  });
+  expect(c.getSnapshot().tagManager).toBe(form);
+});
+
+it('a newer Group widget replaces a payment still loading its Group destination', async () => {
+  let entered!: () => void, release!: () => void;
+  const arrived = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const c = setup(async (url) => {
+    if (url.pathname === `/api/groups/${groupId}/expenses`) {
+      entered();
+      await waiting;
+    }
+    return undefined;
+  });
+  await c.signIn('alex');
+  c.startCreate();
+  await c.openWidget({
+    kind: 'settle',
+    groupId,
+    payment: { from: actor, to: 'a00000000000000000000002', currency: 'INR' },
+  });
+  c.back();
+  const opening = c.openPendingNotification();
+  await arrived;
+  const newer = c.openWidget({ kind: 'group', groupId });
+  release();
+  await Promise.all([opening, newer]);
+  expect(c.getSnapshot()).toMatchObject({
+    screen: 'group',
+    destination: 'balances',
+    notificationOpening: { status: 'idle' },
+  });
+});
