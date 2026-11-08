@@ -1,6 +1,7 @@
 import { registerRootComponent } from 'expo';
 
 import App from './App';
+import { androidWidgetsEnabled } from './src/widgets-flag';
 import { androidNotificationsEnabled } from './src/notifications-flag';
 
 // Data-only Expense-added messages reach this task in every app state, including with no app
@@ -12,6 +13,14 @@ if (androidNotificationsEnabled()) {
     defineNotificationTask: () => void;
   };
   defineNotificationTask();
+}
+
+if (androidWidgetsEnabled()) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { registerAndroidWidgets } = require('./src/widgets') as {
+    registerAndroidWidgets: () => void;
+  };
+  registerAndroidWidgets();
 }
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
