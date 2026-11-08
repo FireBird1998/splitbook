@@ -108,8 +108,8 @@
     },
     {
       "file": "assets/brand/svg/notification-icon.svg",
-      "bytes": 915,
-      "sha256": "5793d34979d16dd2bf620b3b89bbf2605eff6f434b1aa4a034c42246c0d5efc1"
+      "bytes": 944,
+      "sha256": "87f3b7c33403399f20663d3da6cdff4400ba22c4d5dda1a427bda8e983efc85d"
     },
     {
       "file": "assets/brand/svg/splash-light.svg",
@@ -888,8 +888,8 @@
     },
     {
       "file": "assets/brand/png/notification-icon-96.png",
-      "bytes": 1190,
-      "sha256": "7f374994b23ee69f2af9526304523ff003168784b628e0bee63fb51ffced947a",
+      "bytes": 1674,
+      "sha256": "3f5866125f01f8679777555368b95ba11fa38308834c2856e2d0f88b6a74767d",
       "width": 96,
       "height": 96,
       "alpha": true
@@ -1096,8 +1096,8 @@
     },
     {
       "file": "apps/mobile/assets/brand/notification-icon.png",
-      "bytes": 1190,
-      "sha256": "7f374994b23ee69f2af9526304523ff003168784b628e0bee63fb51ffced947a",
+      "bytes": 1674,
+      "sha256": "3f5866125f01f8679777555368b95ba11fa38308834c2856e2d0f88b6a74767d",
       "width": 96,
       "height": 96,
       "alpha": true

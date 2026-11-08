@@ -99,10 +99,13 @@ assets.set(
 // Android's essential content fits the central 66/108 diameter circle, not just a square.
 assets.set('android-foreground', svg(1024, 1024, mark(c.white, 594, 215, 215)));
 assets.set('android-monochrome', svg(1024, 1024, mark('#000000', 594, 215, 215)));
-// Notification small icons use the launcher's alpha mask in white.
+// The 466-unit artwork height fills 80 of 96 pixels (20 dp on a 24 dp canvas).
+// Keep the same paths and central gap, with notification-specific padding.
+const notificationMarkSize = (80 * 512) / 466;
+const notificationMarkOffset = (96 - notificationMarkSize) / 2;
 assets.set(
   'notification-icon',
-  assets.get('android-monochrome').replace('fill="#000000"', `fill="${c.white}"`),
+  svg(96, 96, mark(c.white, notificationMarkSize, notificationMarkOffset, notificationMarkOffset)),
 );
 // Android 12+ draws the splash icon on a 288 dp canvas masked to its central 192 dp circle.
 // The canvas is 288 dp at 4x, so no density upscales it; the mark is 128 dp.
@@ -411,7 +414,9 @@ const notificationSpan = Math.max(
   notificationBounds.bottom - notificationBounds.top + 1,
 );
 if (notificationSpan < 76)
-  throw new Error(`Notification icon artwork must span at least 76 pixels; got ${notificationSpan}.`);
+  throw new Error(
+    `Notification icon artwork must span at least 76 pixels; got ${notificationSpan}.`,
+  );
 if (
   notificationBounds.left < 2 ||
   notificationBounds.top < 2 ||

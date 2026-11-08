@@ -25,7 +25,7 @@ All paths below are relative to the repository root. Generated files come from t
 | Native app / iOS base / store artwork       | `apps/mobile/assets/brand/app-icon.png`                                                   | 1024 × 1024, RGB, fully opaque            |
 | Android adaptive foreground                 | `apps/mobile/assets/brand/android-foreground.png`                                         | 1024 × 1024 with transparent padding      |
 | Android themed icon                         | `apps/mobile/assets/brand/android-monochrome.png`                                         | Same geometry, black alpha mask           |
-| Android notification small icon             | `apps/mobile/assets/brand/notification-icon.png`                                          | 96 × 96, white on transparent             |
+| Android notification small icon             | `apps/mobile/assets/brand/notification-icon.png`                                          | 96 × 96, white on transparent; 80 px tall |
 | Native splash, light and dark               | `apps/mobile/assets/brand/splash-light.png`, `splash-dark.png`                            | 1152 × 1152 = the 288 dp splash icon @4x  |
 | Android in-app logo, light and dark         | `apps/mobile/assets/brand/logo-light.png`, `logo-dark.png` and their `@2x`/`@3x` siblings | 32 dp high at every system text size      |
 
