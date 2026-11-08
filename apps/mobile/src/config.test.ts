@@ -111,6 +111,10 @@ describe('native app configuration per environment', () => {
           ['expo-build-properties', { android: { usesCleartextTraffic: mode === 'development' } }],
         ]),
       );
+      expect(config.plugins).toContainEqual([
+        'expo-notifications',
+        { icon: './assets/brand/notification-icon.png', color: '#3d4fcf' },
+      ]);
       expect(config.icon).toBe('./assets/brand/app-icon.png');
       expect(config.android.adaptiveIcon).toEqual({
         foregroundImage: './assets/brand/android-foreground.png',
@@ -128,6 +132,11 @@ describe('native app configuration per environment', () => {
       ]);
     },
   );
+  it('ships a 96 px notification PNG with transparency', () => {
+    const png = readFileSync(resolve(appRoot, './assets/brand/notification-icon.png'));
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([96, 96]);
+    expect(png[25]).toBe(6); // PNG truecolour with alpha.
+  });
   it('names brand files that exist, with each splash image covering the whole splash icon', async () => {
     const config = await loadAppConfig('production', 'https://splitbook.test');
     const splash = config.plugins.find(

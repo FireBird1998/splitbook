@@ -46,7 +46,7 @@ export default {
   // The Google Expo plugin configures Firebase/iOS, neither needed for this Android beta.
   plugins: [
     'expo-secure-store',
-    'expo-notifications',
+    ['expo-notifications', { icon: './assets/brand/notification-icon.png', color: '#3d4fcf' }],
     'expo-font',
     'expo-sqlite',
     'expo-status-bar',
