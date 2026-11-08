@@ -458,6 +458,8 @@ export interface MobileSnapshot {
   };
   heldNotification: HeldNotificationOwner | null;
   heldNotificationNotice: HeldNotificationOwner | null;
+  /** Source of the latest held destination, used for its feedback copy. */
+  heldNotificationSource: 'widget' | 'notification' | null;
   notifications: import('./notification-controls').NotificationControls;
   notificationOpening: import('./notification-alerts').NotificationOpening;
   /** Account → Connected assistants (#622): its list, Saved copy and Disconnect. */

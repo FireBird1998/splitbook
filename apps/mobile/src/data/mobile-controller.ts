@@ -392,6 +392,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     notificationOpening: emptyNotificationOpening(),
     heldNotification: null,
     heldNotificationNotice: null,
+    heldNotificationSource: null,
     sharedDraftCollection: emptySharedDraftCollection(),
     assistants: emptyAssistants(),
     tagManager: emptyTagManager(),
@@ -688,7 +689,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       expenseQueries.project(groupQueries.project(homeQueries.project(placed(unrouted)))),
     );
     if (next.notificationOpening.status === 'idle' || next.auth.status !== 'authenticated')
-      next = { ...next, heldNotification: null, heldNotificationNotice: null };
+      next = {
+        ...next,
+        heldNotification: null,
+        heldNotificationNotice: null,
+        heldNotificationSource: null,
+      };
     // Return feedback belongs to the Group view it was made for; leaving that view ends it.
     const showing = (groupId: string) => next.screen === 'group' && next.detail.id === groupId;
     if (
@@ -2828,6 +2834,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...snapshot,
       heldNotification: owner,
       heldNotificationNotice: firstHeld ? owner : snapshot.heldNotificationNotice,
+      heldNotificationSource: 'widget' in event ? 'widget' : 'notification',
       notificationOpening: { status: 'held', message: 'An update is ready.' },
     });
   };
