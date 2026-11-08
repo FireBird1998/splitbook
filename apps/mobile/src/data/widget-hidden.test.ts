@@ -172,7 +172,7 @@ it('counts distinct people separately in each direction across currencies withou
     ...part.currencies,
   ];
   const v = groupWidget({ ...part, currencies }, setup, '4x2', session, now);
-  expect(v.balance).toBe('You owe 2\u00a0people · You’re owed by 1\u00a0person');
+  expect(v.balance).toBe('You owe 2\u00a0people\u00a0· You’re owed by 1\u00a0person');
   privateOutput(v);
 });
 it('defaults to visible amounts and restores the current per-widget hide and Group choices', () => {

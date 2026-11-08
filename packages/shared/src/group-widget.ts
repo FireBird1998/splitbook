@@ -118,7 +118,7 @@ export function groupWidget(
         owed ? `You’re owed by ${counted(owed, 'person', 'people')}` : null,
       ]
         .filter(Boolean)
-        .join(' · ') || 'Balances hidden'
+        .join(SEPARATOR) || 'Balances hidden'
     );
   };
   const own = (setup.hideAmounts ? [] : currencies).flatMap((bucket) =>
