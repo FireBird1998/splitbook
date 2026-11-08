@@ -1,3 +1,4 @@
+import { notificationTaskProtected } from './data/notification-alerts';
 import {
   notificationDevice,
   notificationHint,
@@ -3436,7 +3437,9 @@ describe('held update Banner in screen content', () => {
       await app.press('Open Maple House');
       // A member has previously checked To review in this Group.
       await settle(app.controller.openToReview(groupId));
+      expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(true);
       await settle(Promise.resolve(app.controller.closeToReview()));
+      expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(false);
       await app.press('Add expense');
       if (exit !== 'close')
         await settle(
@@ -3463,6 +3466,8 @@ describe('held update Banner in screen content', () => {
         toReview: { groupId: null, run: null },
         sharedDraftCollection: { groupId, busy: false },
       });
+      expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(false);
+      if (exit === 'finish later') expect(app.controller.getSnapshot().expense.status).toBe('idle');
       expect(app.text()).toContain('An update is ready');
       expect(app.pressable('Open')).toBeTruthy();
       expect(app.pressable('Not now')).toBeTruthy();

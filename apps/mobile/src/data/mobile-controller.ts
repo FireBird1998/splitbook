@@ -8118,6 +8118,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }
       } else await client.create(draftValues(entries), JSON.stringify(d));
       if (!current(uploadOwner) || route !== view) return;
+      // The confirmed upload completed this editor; it must not remain a saving task on Group.
+      publish({ ...snapshot, expense: emptyExpenseEditor() });
       await openGroup(editor.groupId);
       if (
         !current(uploadOwner) ||
