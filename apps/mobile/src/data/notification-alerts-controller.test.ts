@@ -961,3 +961,34 @@ describe('one held destination for notification and widget taps', () => {
     });
   });
 });
+
+it('a newer widget tap after the task closes replaces and clears the old held notification', async () => {
+  const c=setup();await c.signIn('alex');c.startCreate();await c.tapNotification(hint());c.back();
+  await c.openWidget('home');
+  expect(c.getSnapshot()).toMatchObject({screen:'groups',heldNotification:null,notificationOpening:{status:'idle'}});
+});
+it('a newer widget tap wins over an older notification still checking its binding', async () => {
+  let block=false, entered!:()=>void, release!:()=>void;
+  const arrived=new Promise<void>(r=>{entered=r}), waiting=new Promise<void>(r=>{release=r});
+  const c=setup(async url=>{
+    if(block && url.pathname==='/api/notifications/device'){entered();await waiting;}
+    return undefined;
+  });
+  await c.signIn('alex');await c.openExpense(groupId);block=true;
+  const older=c.tapNotification(hint());await arrived;
+  await c.openWidget({kind:'group',groupId});release();await older;
+  await c.closeExpense();await c.openPendingNotification();
+  expect(c.getSnapshot().destination).toBe('balances');
+});
+it('keeps a widget destination held if a new form opens while its access is checked', async () => {
+  let block=false, entered!:()=>void, release!:()=>void;
+  const arrived=new Promise<void>(r=>{entered=r}), waiting=new Promise<void>(r=>{release=r});
+  const c=setup(async url=>{
+    if(block && url.pathname==='/api/groups/'+groupId){entered();await waiting;}
+    return undefined;
+  });
+  await c.signIn('alex');c.startCreate();await c.openWidget({kind:'group',groupId});c.back();block=true;
+  const opening=c.openPendingNotification();await arrived;c.startCreate();c.updateCreation({name:'Unfinished while checking'});const form=c.getSnapshot().creation;release();await opening;
+  expect(c.getSnapshot()).toMatchObject({screen:'create',notificationOpening:{status:'held'}});expect(c.getSnapshot().creation).toBe(form);
+  c.back();await c.openPendingNotification();expect(c.getSnapshot()).toMatchObject({destination:'balances',notificationOpening:{status:'idle'}});
+});
