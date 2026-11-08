@@ -363,6 +363,25 @@ describe('Expense notification receipt and tap at the Android controller seam', 
     await controller.openPendingNotification();
     expect(controller.getSnapshot().screen).toBe(screen);
   });
+  it('acknowledges the first protected tap even when an earlier open failed', async () => {
+    let fail = true;
+    const controller = setup((url) =>
+      fail && url.pathname === '/api/groups/' + groupId
+        ? json({ error: 'Unavailable' }, 500)
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.tapNotification(hint());
+    expect(controller.getSnapshot().notificationOpening.status).toBe('error');
+    expect(controller.getSnapshot().heldNotificationNotice).toBeNull();
+    fail = false;
+    controller.startCreate();
+    await controller.tapNotification(hint());
+    expect(controller.getSnapshot().heldNotificationNotice).toBe(
+      controller.getSnapshot().heldNotification,
+    );
+    expect(controller.getSnapshot().heldNotificationNotice).not.toBeNull();
+  });
   it('ignores a stale hold owner, including after signing into a new session', async () => {
     const controller = setup();
     await controller.signIn('alex');
