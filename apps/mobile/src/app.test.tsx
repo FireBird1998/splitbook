@@ -3791,9 +3791,12 @@ describe('source-specific held copy', () => {
 
   it('keeps widget-specific copy on a failed open and allows Retry', async () => {
     let failing = false;
+    let finishCheck: (() => void) | undefined;
     const app = await renderApp((path) =>
       failing && path === `/api/groups/${groupId}`
-        ? json({ error: 'Unavailable' }, 500)
+        ? new Promise((resolve) => {
+            finishCheck = () => resolve(json({ error: 'Unavailable' }, 500));
+          })
         : undefined,
     );
     await app.press('Open Maple House');
@@ -3802,6 +3805,10 @@ describe('source-specific held copy', () => {
     await app.press('Back to Group');
     failing = true;
     await app.press('Open');
+    expect(app.text()).toContain('Checking Group access…');
+    expect(app.text()).not.toContain('Ready to open');
+    expect(finishCheck).toBeTypeOf('function');
+    await settle(Promise.resolve(finishCheck!()));
     expect(app.text()).toContain('Couldn’t open this');
     expect(app.text()).toContain('Check your connection and try again.');
     expect(app.pressable('Not now')).toBeTruthy();
