@@ -163,3 +163,10 @@ it.each(['1x1', '2x1'] as const)(
     ).toBe('Group archived. Choose another');
   },
 );
+
+it('speaks the compact Group’s Main currency amount and wide payment overflow', () => {
+ const multi={...part,currencies:[...part.currencies,{currency:'EUR',balanceMinor:4000,payments:[{from:'sam',to:'alex',fromName:'Sam Chen',toName:'Alex Rivera',amountMinor:4000}]},{currency:'JPY',balanceMinor:3000,payments:[{from:'sam',to:'alex',fromName:'Sam Chen',toName:'Alex Rivera',amountMinor:3000}]}]};
+ expect(groupWidget(multi,setup,'2x2',auth,now).summary).toContain('You owe ₹1,480.00');
+ expect(groupWidget(multi,setup,'2x2',auth,now).summary).toContain('In 3\u00a0currencies');
+ expect(groupWidget(multi,setup,'4x2',auth,now).summary).toContain('+1\u00a0more');
+});
