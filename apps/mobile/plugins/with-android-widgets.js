@@ -64,12 +64,20 @@ public class Balances extends com.reactnativeandroidwidget.RNWidgetProvider {
       if (value != null) {
         Uri uri = Uri.parse(value);
         if ("${Array.isArray(config.scheme) ? config.scheme[0] : config.scheme}".equals(uri.getScheme()) && "widget".equals(uri.getHost())) {
-          // Read-only navigation must not be consumed by the renderer's size calibration.
+          com.facebook.react.ReactHost host =
+              ((com.facebook.react.ReactApplication) context.getApplicationContext()).getReactHost();
+          boolean running = host != null && host.getCurrentReactContext() != null;
+          // A warm tap stays in the existing project; a cold dev-client tap boots its bundle.
+          if (running && uri.getQueryParameter("__expo_url") != null)
+            uri = uri.buildUpon().clearQuery().build();
           context.startActivity(new Intent(Intent.ACTION_VIEW, uri)
               .setPackage(context.getPackageName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-          Intent measure = new Intent(intent);
-          measure.removeExtra("clickAction");
-          super.onReceive(context, measure);
+          // Starting calibration on a cold host races the app's bundle and session restore.
+          if (running) {
+            Intent measure = new Intent(intent);
+            measure.removeExtra("clickAction");
+            super.onReceive(context, measure);
+          }
           return;
         }
       }
