@@ -1616,7 +1616,7 @@ describe('ListRow trailing switch (#976)', () => {
   });
 
   it.each([undefined, 'A note below the row'])(
-    'keeps the switch beside the first title line at 200%%, with note %s',
+    'keeps the switch beside the first title line at largest text, with note %s',
     (note) => {
       setWindow({ width: 360, height: 640, fontScale: 2 });
       const root = render(
@@ -1637,7 +1637,12 @@ describe('ListRow trailing switch (#976)', () => {
       const control = one(root.findAll((node) => isHost(node, 'Switch')));
       const box = control.parent!;
       const line = box.parent!;
-      expect(flatten(box.props.style)).toMatchObject({ flexShrink: 0, alignSelf: 'flex-start' });
+      expect(flatten(box.props.style)).toMatchObject({
+        flexShrink: 0,
+        alignSelf: 'flex-start',
+        height: 34,
+        justifyContent: 'center',
+      });
       expect(flatten(line.props.style).flexWrap).not.toBe('wrap');
       const titleComponent = root
         .findAllByType(CompactText)
