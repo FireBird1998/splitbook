@@ -201,7 +201,7 @@ export function drawGroup(
               <FlexWidget
                 style={{ padding: 5, borderRadius: 8, backgroundColor: color(t.surface) }}
               >
-                {text(payment.firstName[0] ?? '', t.textSecondary, 10, true)}
+                {text(payment.initials, t.textSecondary, 10, true)}
               </FlexWidget>
               <FlexWidget style={{ flex: 1 }}>{text(payment.label, t.text, 12)}</FlexWidget>
               {text(

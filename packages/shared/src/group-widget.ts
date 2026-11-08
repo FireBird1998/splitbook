@@ -49,6 +49,7 @@ export function groupWidget(
       label: string;
       amount: string;
       firstName: string;
+      initials: string;
       incoming: boolean;
       payment: { from: string; to: string; currency: string } | null;
     }[],
@@ -114,6 +115,13 @@ export function groupWidget(
         firstName: (payment.from === setup.accountId ? payment.toName : payment.fromName)
           .trim()
           .split(/\s+/)[0],
+        initials: (payment.from === setup.accountId ? payment.toName : payment.fromName)
+          .trim()
+          .split(/\s+/)
+          .slice(0, 2)
+          .map((word) => word[0] ?? '')
+          .join('')
+          .toUpperCase(),
         incoming: payment.to === setup.accountId,
         payment:
           payment.from && payment.to
@@ -160,13 +168,16 @@ export function groupWidget(
         ? 'Nothing more can be saved here.'
         : '',
     balance: balanceText + (part.archived ? `${SEPARATOR}final` : ''),
-    payments: own.slice(0, limit).map(({ label, amount, firstName, incoming, payment }) => ({
-      label,
-      amount,
-      firstName,
-      incoming,
-      payment,
-    })),
+    payments: own
+      .slice(0, limit)
+      .map(({ label, amount, firstName, initials, incoming, payment }) => ({
+        label,
+        amount,
+        firstName,
+        initials,
+        incoming,
+        payment,
+      })),
     more: limit && own.length > limit ? `+${counted(own.length - limit, 'more', 'more')}` : null,
     people: own.length
       ? `${bucket?.balanceMinor && bucket.balanceMinor < 0 ? 'to' : 'from'} ${counted(new Set(own.map((p) => p.person)).size, 'person', 'people')}`
