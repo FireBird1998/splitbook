@@ -39,8 +39,8 @@ describe('Balances widget view', () => {
       muted: false,
       owed: ['₹2,400.00', '€40.00'],
       owe: ['₹1,480.00', '€12.50'],
-      owedOverflow: '+1 currency',
-      review: 'To review · 3',
+      owedOverflow: '+1 currency',
+      review: 'To review · 3',
       target: 'home',
     });
   });
@@ -85,8 +85,8 @@ it('shows JPY without decimals at 4×2, with up to three currencies per column',
     owed: ['₹2,400.00', '€40.00', '¥3,000'],
     owe: ['₹1,480.00', '€12.50'],
     owedOverflow: null,
-    footer: 'Across 4 Groups',
-    review: 'To review · 3',
+    footer: 'Across 4 Groups',
+    review: 'To review · 3',
   });
 });
 it('at 2×1 keeps the first currency of each side, the saved time and no review chip', () => {
@@ -135,9 +135,9 @@ it('counts every currency that does not fit, without converting or netting', () 
       ],
     },
   };
-  expect(view(multi)).toMatchObject({ owedOverflow: '+3 currencies' });
+  expect(view(multi)).toMatchObject({ owedOverflow: '+3 currencies' });
   expect(view(multi, '4x2')).toMatchObject({
-    owedOverflow: '+2 currencies',
+    owedOverflow: '+2 currencies',
     owed: ['₹2,400.00', '€40.00', '¥3,000'],
   });
 });
