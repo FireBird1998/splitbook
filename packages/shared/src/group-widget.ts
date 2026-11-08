@@ -243,7 +243,12 @@ export function groupWidget(...args: Parameters<typeof groupWidgetView>) {
       full.hidden ? null : full.name,
       full.title,
       full.balance,
+      args[2] === '2x2' && full.currencyOverflow
+        ? `${full.compactLabel} ${full.compactAmount}`
+        : null,
+      args[2] === '2x2' ? full.people : null,
       ...full.payments.map((p) => p.label + ' ' + p.amount),
+      full.more,
       full.hidden ? null : full.description,
       full.saved,
       full.hidden,
