@@ -60,13 +60,14 @@ it('summarizes a Group with first names only', () => {
     'Group. Maple House. You owe ₹1,480.00. You pay Priya ₹1,480.00. Saved 9:41.',
   );
 });
-it('never speaks amounts or names when hidden, even the visible Group name', () => {
+it('speaks the visible Group name but not amounts or member names when hidden', () => {
   const b = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x2', auth, now).summary;
   const g = groupWidget(part, { ...setup, hideAmounts: true }, '4x2', auth, now).summary;
   expect(b).toContain('Amounts hidden');
   expect(g).toContain('You owe 1\u00a0person');
   expect(g).toContain('Amounts and names hidden');
-  expect(b + g).not.toMatch(/₹|€|1,480|2,400|40\.00|Maple|Priya|Shah|Alex/);
+  expect(g).toContain('Maple House');
+  expect(b + g).not.toMatch(/₹|€|1,480|2,400|40\.00|Priya|Shah|Alex/);
 });
 it.each(['signed-out', 'expired'] as const)(
   'speaks the %s explanation without saved private data',
@@ -200,4 +201,10 @@ it('speaks the compact Group’s Main currency amount and wide payment overflow'
   expect(groupWidget(multi, setup, '2x2', auth, now).summary).toContain('You owe ₹1,480.00');
   expect(groupWidget(multi, setup, '2x2', auth, now).summary).toContain('In 3\u00a0currencies');
   expect(groupWidget(multi, setup, '4x2', auth, now).summary).toContain('+1\u00a0more');
+});
+
+it('names the extra currency when compact Balances omits it', () => {
+  expect(balancesWidget(copy, { kind: 'balances' }, '2x1', auth, now).summary).toContain(
+    '1 more currency owed',
+  );
 });

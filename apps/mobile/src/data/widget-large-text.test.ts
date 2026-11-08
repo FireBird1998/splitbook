@@ -123,7 +123,7 @@ it('keeps the compact Group action on one readable line at 200% without losing s
 
 it('drops optional privacy captions in tight large-text layouts but keeps them in speech', () => {
   const b = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
-  expect(b.layout).toMatchObject({ showHeader: false, showPrivacyLabel: false, hiddenFontSize: 8 });
+  expect(b.layout).toMatchObject({ showHeader: false, showPrivacyLabel: true, hiddenFontSize: 8 });
   expect(b.summary).toContain('Amounts hidden');
   const g = groupWidget(part, { ...setup, hideAmounts: true }, '2x2', auth, now, 2);
   expect(g.layout.showPrivacyLabel).toBe(false);
@@ -133,4 +133,36 @@ it('drops optional privacy captions in tight large-text layouts but keeps them i
 it('gives both hidden Balances columns equal room in the compact widget at 200%', () => {
   const v = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
   expect(v.layout.equalColumns).toBe(true);
+});
+
+it.each([1.3, 2])(
+  'shows both compact balance sides at %s without a header or overflow',
+  (scale) => {
+    const v = balancesWidget(copy, { kind: 'balances' }, '2x1', auth, now, scale);
+    expect(v.layout.showHeader).toBe(false);
+    expect(v.layout.showOverflow).toBe(false);
+    expect(v.compactLines).toEqual(['Owed ₹2,400.00', 'Owe ₹1,480.00']);
+  },
+);
+it('replaces both compact amounts with an open prompt if either amount is too wide', () => {
+  const large = {
+    ...copy,
+    home: {
+      ...copy.home!,
+      currencies: [{ currency: 'INR', owedMinor: 123456789012345, oweMinor: 148000 }],
+    },
+  };
+  const v = balancesWidget(large, { kind: 'balances' }, '2x1', auth, now, 2);
+  expect(v.compactLines).toEqual([]);
+  expect(v.compactFallback).toBe('Open to see balances');
+});
+it.each([1.3, 2])('uses whole, single-line labels in compact hidden Balances at %s', (scale) => {
+  const v = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, scale);
+  expect(v.compactLines).toEqual(['You’re owed', 'You owe']);
+  expect(v.layout.showPrivacyLabel).toBe(true);
+  expect(
+    v.compactLines.every(
+      (line) => !line.includes('currency') && !line.includes('currencies') && !line.includes('\n'),
+    ),
+  ).toBe(true);
 });
