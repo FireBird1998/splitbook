@@ -14,6 +14,9 @@ async function generate() {
       .resize(96, 96)
       .png()
       .toFile(new URL(`setup-mark-${tokens.mode}.png`, output).pathname);
+    const mark = master.match(/<g .*<\/g>/)?.[0].replace('#6366F1', tokens.brand.main);
+    const tile = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" rx="16" fill="${tokens.brand.bg}"/><g transform="translate(6 6) scale(.065)">${mark}</g><circle cx="38" cy="38" r="9" fill="${tokens.brand.main}" stroke="${tokens.surface}" stroke-width="2"/><path d="M34 38h8m-4-4v8" stroke="${t.brand.contrastText}" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+    await writeFile(new URL(`quick-tile-${tokens.mode}.svg`, output), tile);
     await writeFile(
       new URL(`mark-${tokens.mode}.svg`, output),
       master.replace('#6366F1', tokens.brand.main),

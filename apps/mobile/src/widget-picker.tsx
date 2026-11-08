@@ -1,9 +1,13 @@
 import { useEffect } from 'react';
-import { AppState, View, Pressable } from 'react-native';
+import { AppState, View } from 'react-native';
 import { controller } from './runtime';
 import { useMobileSnapshot, sameSelection } from './ui/use-mobile-snapshot';
 import { Copy, Button } from './ui/primitives';
 import { BottomSheet } from './ui/compact/sheet';
+import { Card, IconTile, ListRow } from './ui/compact';
+import { groupThemeIcons } from './ui/group-icon';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { counted, SEPARATOR } from '@splitbook/shared/separator';
 
 export function WidgetGroupPicker() {
   const state = useMobileSnapshot(
@@ -27,22 +31,25 @@ export function WidgetGroupPicker() {
       doneLabel="Cancel"
     >
       <View style={{ gap: 12 }}>
-        {state.groups
-          .filter((g) => !g.isArchived)
-          .map((group) => (
-            <Pressable
-              key={group.id}
-              accessibilityRole="button"
-              accessibilityLabel={group.name}
-              onPress={() => void controller.chooseWidgetGroup(group.id)}
-              style={{ paddingVertical: 18 }}
-            >
-              <Copy>{group.name}</Copy>
-            </Pressable>
-          ))}
+        {state.groups.some((g) => !g.isArchived) ? (
+          <Card>
+            {state.groups
+              .filter((g) => !g.isArchived)
+              .map((group) => (
+                <ListRow
+                  key={group.id}
+                  leading={<IconTile icon={groupThemeIcons[group.category]} />}
+                  title={group.name}
+                  meta={`${getGroupTheme(group.category).label}${SEPARATOR}${counted(group.members.length, 'member')}`}
+                  accessibilityLabel={group.name}
+                  onPress={() => void controller.chooseWidgetGroup(group.id)}
+                />
+              ))}
+          </Card>
+        ) : null}
         {!state.groups.some((g) => !g.isArchived) ? (
           <>
-            <Copy>No Groups yet</Copy>
+            <Copy>Create or join a Group to add an expense.</Copy>
             <Button
               label="Create a Group"
               onPress={() => {

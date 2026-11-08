@@ -28,11 +28,11 @@ export function quickWidget(
     return blocked(
       session.status,
       session.status === 'expired' ? 'Sign in again' : 'Sign in',
-      null,
+      'to add expenses',
       'sign-in',
     );
   if (session.accountId !== setup.accountId || (copy && copy.accountId !== setup.accountId))
-    return blocked('other-account', 'Set up again', null, {
+    return blocked('other-account', 'Set up again', 'Another account', {
       kind: 'setup',
       widgetId: setup.widgetId,
     });

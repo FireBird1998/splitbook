@@ -222,7 +222,9 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                     borderBottomColor: t.border,
                   }}
                 >
-                  <Ionicons name="list-outline" size={24} color={t.textSecondary} />
+                  <View style={{ padding: 12, backgroundColor: t.surfaceMuted, borderRadius: 12 }}>
+                    <Ionicons name="list-outline" size={22} color={t.textSecondary} />
+                  </View>
                   <View style={{ flex: 1, gap: 4 }}>
                     {copy('Ask each time', true, 16)}
                     {copy('Pick the Group when you tap', false, 12, t.textSecondary)}
