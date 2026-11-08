@@ -117,7 +117,8 @@ public class Balances extends com.reactnativeandroidwidget.RNWidgetProvider {
           if (running && uri.getQueryParameter("__expo_url") != null)
             uri = uri.buildUpon().clearQuery().build();
           context.startActivity(new Intent(Intent.ACTION_VIEW, uri)
-              .setPackage(context.getPackageName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+              .setPackage(context.getPackageName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                  | (running ? 0 : Intent.FLAG_ACTIVITY_CLEAR_TASK)));
           // Starting calibration on a cold host races the app's bundle and session restore.
           if (running) {
             Intent measure = new Intent(intent);
