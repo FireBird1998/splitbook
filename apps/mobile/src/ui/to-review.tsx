@@ -1,3 +1,4 @@
+import { HeldUpdateFooter } from './held-update-snackbar';
 import { ReviewRunOverlay } from './review-run';
 import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
@@ -1184,6 +1185,7 @@ export function ToReviewList({
             />
           )
         ) : null}
+        <HeldUpdateFooter controller={controller} />
         {collection.notice && (
           <PayerNotice
             notice={collection.notice}

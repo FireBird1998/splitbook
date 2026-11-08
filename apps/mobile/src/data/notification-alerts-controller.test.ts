@@ -373,6 +373,7 @@ describe('Expense notification receipt and tap at the Android controller seam', 
     controller.dismissPendingNotification(old);
     await controller.tapNotification(hint());
     const next = controller.getSnapshot().heldNotification;
+    controller.dismissPendingNotification({ ...next!, accountId: 'another-account' });
     controller.dismissPendingNotification(old);
     controller.consumeHeldNotificationNotice(old);
     expect(controller.getSnapshot().heldNotificationNotice).toBe(next);
@@ -514,6 +515,10 @@ describe('Expense notification receipt and tap at the Android controller seam', 
       await controller.tapNotification(hint());
       expect(controller.getSnapshot().notificationOpening.status).toBe('held');
       expect(controller.getSnapshot().toReview.groupId).toBe(groupId);
+      const notice = controller.getSnapshot().heldNotificationNotice;
+      expect(notice).toBeTruthy();
+      controller.consumeHeldNotificationNotice(notice!);
+      expect(controller.getSnapshot().heldNotificationNotice).toBeNull();
       controller.closeToReview();
       expect(controller.getSnapshot().notificationOpening.status).toBe('held');
       await controller.openPendingNotification();

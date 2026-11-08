@@ -1,3 +1,9 @@
+import {
+  notificationDevice,
+  notificationHint,
+  notificationPreferences,
+} from '../test-utils/notification';
+import { Snackbar } from './compact/feedback';
 import { useSyncExternalStore, type ReactElement } from 'react';
 import {
   act,
@@ -128,6 +134,7 @@ function backend({
   };
   const fetch: MobileFetch = async (url, init) => {
     const path = new URL(url).pathname;
+    if (path === '/api/notifications/device') return json({ data: notificationPreferences });
     // Ledger writes only; signing in is not part of the journeys under test.
     if (init.method && init.method !== 'GET' && path.startsWith('/api/groups'))
       writes.push(`${init.method} ${path}`);
@@ -187,6 +194,7 @@ function backend({
     },
     {
       fetch,
+      notifications: notificationDevice,
       credentials: {
         load: async () => cookie,
         save: async (value) => {
@@ -2658,4 +2666,32 @@ describe('the currency beside the amount (#720)', () => {
     // Saving still needs a connection.
     expect(ui.writes).toEqual([]);
   });
+});
+
+it('shows held-update feedback over Add expense without replacing its form or scroll view', async () => {
+  const f = await render(async (controller) => {
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Unfinished dinner', amount: '12.34' });
+  });
+  const before = screen!.root.findAll((node) => String(node.type) === 'ScrollView');
+  const inputs = screen!.root.findAll((node) => String(node.type) === 'TextInput');
+  expect(before.length).toBeGreaterThan(0);
+  expect(inputs.length).toBeGreaterThan(0);
+  await act(async () => {
+    await f.controller.tapNotification(notificationHint(memberId, groupId, localNoon));
+  });
+  expect(screen!.root.findByType(Snackbar).props.message).toBe('Update held until you finish');
+  expect(screen!.root.findByType(Snackbar).props.action).toBeUndefined();
+  expect(f.controller.getSnapshot().heldNotificationNotice).toBeNull();
+  expect(f.controller.getSnapshot().expense.draft).toMatchObject({
+    description: 'Unfinished dinner',
+    amount: '12.34',
+  });
+  expect(screen!.root.findAll((node) => String(node.type) === 'ScrollView')).toEqual(before);
+  expect(screen!.root.findAll((node) => String(node.type) === 'TextInput')).toEqual(inputs);
+  await act(async () => {
+    await f.controller.tapNotification(notificationHint(memberId, groupId, localNoon));
+  });
+  expect(screen!.root.findAllByType(Snackbar)).toHaveLength(1);
+  expect(f.controller.getSnapshot().heldNotificationNotice).toBeNull();
 });

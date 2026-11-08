@@ -1,3 +1,4 @@
+import { HeldUpdateFooter } from './held-update-snackbar';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
@@ -134,11 +135,13 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
 
 /** The run's screen: its top bar, then what scrolls, then the bar pinned at the foot. */
 function RunScreen({
+  controller,
   bar,
   progress,
   children,
   ...top
 }: {
+  controller: MobileController;
   title: string;
   subtitle: string;
   close(): void;
@@ -174,7 +177,9 @@ function RunScreen({
       >
         {children}
       </ScrollView>
-      <ActionBar>{bar}</ActionBar>
+      <HeldUpdateFooter controller={controller}>
+        <ActionBar>{bar}</ActionBar>
+      </HeldUpdateFooter>
     </>
   );
 }
@@ -318,6 +323,7 @@ function ReviewRunContent({
     const summary = summarizeReviewRun(state.outcomes);
     return (
       <RunScreen
+        controller={controller}
         title="To review"
         subtitle="Finished"
         close={close}
@@ -450,6 +456,7 @@ function ReviewRunContent({
   return (
     <>
       <RunScreen
+        controller={controller}
         title={groupName}
         subtitle={`Review${SEPARATOR}${state.index + 1} of ${state.items.length}${groups > 1 ? `${SEPARATOR}across ${groups}${NO_BREAK_SPACE}Groups` : ''}`}
         close={close}

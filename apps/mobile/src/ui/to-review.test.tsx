@@ -1,3 +1,9 @@
+import {
+  notificationDevice,
+  notificationHint,
+  notificationPreferences,
+} from '../test-utils/notification';
+import { Snackbar } from './compact/feedback';
 import type { ReactElement } from 'react';
 import {
   act,
@@ -259,6 +265,7 @@ function fixture(
     deletes: string[] = [];
   const fetch: MobileFetch = async (url, init) => {
     const path = new URL(url).pathname;
+    if (path === '/api/notifications/device') return json({ data: notificationPreferences });
     calls.push(`${init.method ?? 'GET'} ${path}`);
     if (offline) throw new Error('Offline');
     if (path.endsWith('/demo-persona/sign-in'))
@@ -410,6 +417,7 @@ function fixture(
       },
       {
         fetch,
+        notifications: notificationDevice,
         now: () => Date.parse(iso),
         newSubmissionKey: () => 'fictional-review-request',
         credentials: {
@@ -1972,5 +1980,36 @@ describe.each(['light', 'dark'] as const)(
       expect(flatten(row.props.style).flexWrap).toBeUndefined();
       expect(flatten(continueBox.props.style)).toEqual({ alignItems: 'flex-end', gap: 1 });
     });
+  },
+);
+
+it.each(['list', 'run'])(
+  'shows held-update feedback inside To review %s while preserving its contents',
+  async (destination) => {
+    const f = fixture();
+    await signIn(f);
+    await act(async () => {
+      await f.controller.openToReview(groupId);
+      if (destination === 'run') await f.controller.startReviewRun(groupId);
+    });
+    const overlay = await render(<ToReviewOverlay controller={f.controller} />, 'light');
+    const before = overlay.root.findAll((node) => String(node.type) === 'ScrollView');
+    expect(before.length).toBeGreaterThan(0);
+    const run = f.controller.getSnapshot().toReview.run;
+    const collection = f.controller.getSnapshot().sharedDraftCollection;
+    await act(async () => {
+      await f.controller.tapNotification(notificationHint(user.id, groupId, Date.parse(iso)));
+    });
+    expect(overlay.root.findByType(Snackbar).props.message).toBe('Update held until you finish');
+    expect(overlay.root.findByType(Snackbar).props.action).toBeUndefined();
+    expect(f.controller.getSnapshot().heldNotificationNotice).toBeNull();
+    expect(f.controller.getSnapshot().sharedDraftCollection).toBe(collection);
+    expect(f.controller.getSnapshot().toReview.run).toBe(run);
+    expect(overlay.root.findAll((node) => String(node.type) === 'ScrollView')).toEqual(before);
+    await act(async () => {
+      await f.controller.tapNotification(notificationHint(user.id, groupId, Date.parse(iso)));
+    });
+    expect(overlay.root.findAllByType(Snackbar)).toHaveLength(1);
+    expect(f.controller.getSnapshot().heldNotificationNotice).toBeNull();
   },
 );
