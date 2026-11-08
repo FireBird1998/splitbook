@@ -1,4 +1,6 @@
 import { drawQuick } from './quick-widget-draw';
+import { hiddenLabel } from './widget-hidden-label';
+import { legacyBalancesSetup } from '@splitbook/shared/widget-setup';
 import { drawGroup } from './group-widget-draw';
 // Narrow imports keep unused preview and setup UI out of the widget bundle.
 import { FlexWidget } from 'react-native-android-widget/src/widgets/FlexWidget';
@@ -215,7 +217,7 @@ function draw(view: BalancesWidgetView, t: SemanticTokens) {
           {column('You owe', view.owe, view.oweOverflow, t.status.negative)}
         </FlexWidget>
       )}
-      {view.hidden ? text(view.hidden, t.textMuted, 10) : null}
+      {view.hidden ? hiddenLabel(view.hidden, t) : null}
       {!small ? (
         <FlexWidget
           style={{
@@ -318,6 +320,14 @@ export function registerAndroidWidgets() {
     }
     if (!['Balances', 'Group', 'Quick'].includes(widgetInfo.widgetName)) return;
     await serializeDraw(async () => {
+      if (widgetInfo.widgetName === 'Balances') {
+        const legacy = legacyBalancesSetup(
+          widgetAction,
+          widgetInfo.widgetId,
+          await widgetStore.setup(widgetInfo.widgetId),
+        );
+        if (legacy) await widgetStore.saveSetup(legacy);
+      }
       renderWidget(await representation(widgetInfo));
     });
   });

@@ -1,3 +1,4 @@
+import { hiddenLabel } from './widget-hidden-label';
 import { FlexWidget } from 'react-native-android-widget/src/widgets/FlexWidget';
 import { TextWidget } from 'react-native-android-widget/src/widgets/TextWidget';
 import { SvgWidget } from 'react-native-android-widget/src/widgets/SvgWidget';
@@ -198,7 +199,7 @@ export function drawGroup(
           {text(view.description, t.textSecondary, 12)}
         </FlexWidget>
       ) : null}
-      {view.hidden ? text(view.hidden, t.textMuted, 10) : null}
+      {view.hidden ? hiddenLabel(view.hidden, t) : null}
       {view.payments.length ? (
         <FlexWidget
           style={{

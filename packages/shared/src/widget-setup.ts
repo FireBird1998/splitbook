@@ -23,3 +23,17 @@ export function widgetSetupChoices(
     hideAmounts: current && 'hideAmounts' in current ? current.hideAmounts === true : false,
   };
 }
+/** A saved setup belongs to an already placed widget, including one from another account. */
+export function widgetSetupButtonLabel(saved: WidgetSetupRecord | null) {
+  return saved ? 'Save' : 'Add widget';
+}
+/** An update of a pre-setup Balances widget creates its default device preference. */
+export function legacyBalancesSetup(
+  action: string,
+  widgetId: number,
+  saved: WidgetSetupRecord | null,
+): WidgetSetupRecord | null {
+  return action === 'WIDGET_UPDATE' && !saved
+    ? { kind: 'balances', widgetId, hideAmounts: false }
+    : null;
+}

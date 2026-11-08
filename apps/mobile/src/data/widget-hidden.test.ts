@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { balancesWidget, type WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget, type WidgetGroupPart } from '@splitbook/shared/group-widget';
-import { legacyBalancesSetup, widgetSetupButtonLabel, widgetSetupChoices } from '@splitbook/shared/widget-setup';
+import {
+  legacyBalancesSetup,
+  widgetSetupButtonLabel,
+  widgetSetupChoices,
+} from '@splitbook/shared/widget-setup';
 const previousZone = process.env.TZ;
 beforeAll(() => {
   process.env.TZ = 'Asia/Kolkata';
@@ -217,10 +221,18 @@ it.each([null, 'maple'])(
 it('labels a new widget Add widget and an existing widget Save', () => {
   expect(widgetSetupButtonLabel(null)).toBe('Add widget');
   expect(widgetSetupButtonLabel(setup)).toBe('Save');
-  expect(widgetSetupButtonLabel({ kind: 'balances', widgetId: 3, hideAmounts: false })).toBe('Save');
+  expect(widgetSetupButtonLabel({ kind: 'balances', widgetId: 3, hideAmounts: false })).toBe(
+    'Save',
+  );
 });
 it('marks an already-updating legacy Balances widget as placed without marking a new widget', () => {
-  expect(legacyBalancesSetup('WIDGET_UPDATE', 3, null)).toEqual({kind:'balances', widgetId:3, hideAmounts:false});
+  expect(legacyBalancesSetup('WIDGET_UPDATE', 3, null)).toEqual({
+    kind: 'balances',
+    widgetId: 3,
+    hideAmounts: false,
+  });
   expect(legacyBalancesSetup('WIDGET_ADDED', 3, null)).toBeNull();
-  expect(legacyBalancesSetup('WIDGET_UPDATE', 3, {kind:'balances',widgetId:3,hideAmounts:true})).toBeNull();
+  expect(
+    legacyBalancesSetup('WIDGET_UPDATE', 3, { kind: 'balances', widgetId: 3, hideAmounts: true }),
+  ).toBeNull();
 });
