@@ -2697,7 +2697,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             return;
           }
         }
-        await navigateWidget(target);
+        await navigateWidget(target, () => current(owner) && pendingNotification === event);
         if (!current(owner) || pendingNotification !== event) return;
         const intendedTask =
           target === 'create-group'
@@ -8291,7 +8291,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   let widgetRestore: Promise<void> | null = null;
   let widgetOpens = 0;
-  const navigateWidget = async (target: WidgetTarget) => {
+  const navigateWidget = async (target: WidgetTarget, owns: () => boolean) => {
     if (snapshot.widgetPicker && target !== 'choose-group')
       publish({ ...snapshot, widgetPicker: false });
     if (typeof target !== 'string' && target.kind === 'setup') {
@@ -8303,6 +8303,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (target.kind === 'expense') await openExpense(target.groupId);
       else {
         await openGroup(target.groupId, false, 'balances');
+        if (!owns() || notificationProtected()) return;
         if (
           target.kind === 'settle' &&
           target.payment &&
@@ -8324,6 +8325,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     }
     await showHome();
+    if (!owns() || notificationProtected()) return;
     publish({
       ...snapshot,
       widgetOpen: {
@@ -8358,7 +8360,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!notificationProtected()) await openPendingNotification();
       return;
     }
-    await navigateWidget(target);
+    const owner = generation;
+    await navigateWidget(target, () => current(owner) && tap === acceptedOpenTap);
   };
   return {
     closeWidgetPicker,
