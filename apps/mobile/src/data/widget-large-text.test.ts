@@ -101,7 +101,12 @@ it('keeps compact expired Balances to two text lines without a stacked lock tile
 
 it('treats Android’s float representation of 130% as large text', () => {
   const androidScale = 1.2999999523162842;
-  expect(balancesWidget(copy, {kind:'balances'}, '2x2', auth, now, androidScale).owed).toHaveLength(1);
-  expect(groupWidget(part,setup,'4x2',auth,now,androidScale).payments).toHaveLength(1);
-  expect(quickWidget(copy,{...setup,kind:'quick'},'1x1',{status:'expired'},androidScale).layout.showTitle).toBe(false);
+  expect(
+    balancesWidget(copy, { kind: 'balances' }, '2x2', auth, now, androidScale).owed,
+  ).toHaveLength(1);
+  expect(groupWidget(part, setup, '4x2', auth, now, androidScale).payments).toHaveLength(1);
+  expect(
+    quickWidget(copy, { ...setup, kind: 'quick' }, '1x1', { status: 'expired' }, androidScale)
+      .layout.showTitle,
+  ).toBe(false);
 });

@@ -2,7 +2,8 @@ import type { BalancesWidgetSize } from './balances-widget';
 import type { GroupWidgetSize } from './group-widget';
 /** A widget gives up optional lines before it gives up readable type. */
 export function widgetTextLevel(scale: number) {
-  return scale >= 2 ? 2 : scale >= 1.3 ? 1 : 0;
+  const percent = Math.round(scale * 100);
+  return percent >= 200 ? 2 : percent >= 130 ? 1 : 0;
 }
 export function balancesLayout(size: BalancesWidgetSize, scale: number, normal: boolean) {
   const level = widgetTextLevel(scale),
