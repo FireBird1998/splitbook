@@ -70,6 +70,8 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
         'android:name': '.widget.GroupConfiguration',
         'android:exported': 'true',
         'android:theme': '@style/AppTheme',
+        'android:configChanges':
+          'keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode',
         'android:enabled': String(enabled),
       },
       'intent-filter': [
