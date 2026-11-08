@@ -155,14 +155,13 @@ export function groupWidget(
       : currencies.length > 1
         ? `In ${counted(currencies.length, 'currency', 'currencies')}`
         : `${bucket!.balanceMinor < 0 ? 'You owe' : 'You’re owed'} ${formatCurrency(toMajorAmount(Math.abs(bucket!.balanceMinor), bucket!.currency), bucket!.currency)}`,
-    payments: own
-      .slice(0, limit)
-      .map(({ label, amount, firstName, incoming, payment }) => ({
-        label,
-        amount,
-        firstName,
-        incoming,
-      })),
+    payments: own.slice(0, limit).map(({ label, amount, firstName, incoming, payment }) => ({
+      label,
+      amount,
+      firstName,
+      incoming,
+      payment,
+    })),
     more: limit && own.length > limit ? `+${counted(own.length - limit, 'more', 'more')}` : null,
     people: own.length
       ? `${bucket?.balanceMinor && bucket.balanceMinor < 0 ? 'to' : 'from'} ${counted(new Set(own.map((p) => p.person)).size, 'person', 'people')}`
