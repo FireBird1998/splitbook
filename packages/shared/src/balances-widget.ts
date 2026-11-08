@@ -24,7 +24,13 @@ export interface WidgetCopy {
   };
   review?: { count: number; verifiedAt: number };
 }
-export type WidgetTarget = 'home' | 'review' | 'sign-in' | 'create-group';
+export type WidgetTarget =
+  | 'home'
+  | 'review'
+  | 'sign-in'
+  | 'create-group'
+  | { kind: 'group' | 'settle' | 'expense'; groupId: string }
+  | { kind: 'setup'; widgetId: number };
 export type WidgetSession =
   | { status: 'authenticated'; accountId: string; loading: boolean }
   | { status: 'expired' }

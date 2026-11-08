@@ -6,7 +6,13 @@ export const widgetScheme = () =>
       ? 'splitbook-staging'
       : 'splitbook';
 export function widgetLink(target: WidgetTarget, developmentServer?: string) {
-  const url = new URL(`${widgetScheme()}://widget/${target}`);
+  const path =
+    typeof target === 'string'
+      ? target
+      : target.kind === 'setup'
+        ? `setup/${target.widgetId}`
+        : `group/${target.groupId}/${target.kind}`;
+  const url = new URL(`${widgetScheme()}://widget/${path}`);
   if (process.env.EXPO_PUBLIC_APP_ENV === 'development' && developmentServer)
     url.searchParams.set(
       '__expo_url',
@@ -27,6 +33,11 @@ export function widgetLinkTarget(url: string): WidgetTarget | null {
       parsed.hash
     )
       return null;
+    const group = /^\/group\/([a-f0-9]{24})\/(group|settle|expense)$/.exec(parsed.pathname);
+    if (group) return { kind: group[2] as 'group' | 'settle' | 'expense', groupId: group[1] };
+    const setup = /^\/setup\/([1-9][0-9]*)$/.exec(parsed.pathname);
+    if (setup && Number.isSafeInteger(Number(setup[1])))
+      return { kind: 'setup', widgetId: Number(setup[1]) };
     return (
       (
         {

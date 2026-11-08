@@ -210,7 +210,9 @@ function fixture() {
   };
   return {
     make,
-    offlineAfterSave: () => { offlineAfterSave = true; },
+    offlineAfterSave: () => {
+      offlineAfterSave = true;
+    },
     refuse: (status: number) => {
       refused = status;
     },
@@ -487,10 +489,16 @@ it('a widget Add expense tap resumes the Group’s unfinished draft', async () =
 });
 
 it('removes a Group widget part when a save retires its saved copies, until the next successful read', async () => {
- const f=fixture(),c=f.make(); await c.signIn('alex'); await c.openGroup(groupId); await c.refreshBalances();
- await vi.waitFor(()=>expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
- await c.openExpense(groupId);await c.updateExpenseDraft({description:'Groceries',amount:'100',tagId});
- f.offlineAfterSave();await c.saveExpense();
- await vi.waitFor(()=>expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
- expect(f.copies.at(-1)?.lostGroupIds).not.toContain(groupId);
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await c.refreshBalances();
+  await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
+  await c.openExpense(groupId);
+  await c.updateExpenseDraft({ description: 'Groceries', amount: '100', tagId });
+  f.offlineAfterSave();
+  await c.saveExpense();
+  await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
+  expect(f.copies.at(-1)?.lostGroupIds).not.toContain(groupId);
 });

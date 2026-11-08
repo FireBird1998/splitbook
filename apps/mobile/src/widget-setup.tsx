@@ -1,0 +1,245 @@
+import { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  useColorScheme,
+  Linking,
+  BackHandler,
+} from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { useFonts } from 'expo-font';
+import { Outfit_400Regular } from '@expo-google-fonts/outfit/400Regular';
+import { Outfit_700Bold } from '@expo-google-fonts/outfit/700Bold';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import {
+  widgetSavedTime,
+  type WidgetCopy,
+  type WidgetSession,
+} from '@splitbook/shared/balances-widget';
+import { counted, SEPARATOR } from '@splitbook/shared/separator';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import type { WidgetConfigurationScreenProps } from 'react-native-android-widget/src/api/register-widget-configuration-screen';
+import { createWidgetsStore } from './widgets-native';
+import { groupThemeIcons } from './ui/group-icon';
+import { widgetLink } from './widget-links';
+import { redrawBalances } from './widgets';
+
+const store = createWidgetsStore(process.env.EXPO_PUBLIC_API_URL ?? '');
+/** Android configuration is deliberately independent of runtime.ts and its session/network reads. */
+export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreenProps) {
+  const t = getSemanticTokens(useColorScheme() === 'dark' ? 'dark' : 'light');
+  const [record, setRecord] = useState<{ copy: WidgetCopy | null; session: WidgetSession } | null>(
+    null,
+  );
+  const [selected, setSelected] = useState<string | null>(null),
+    [error, setError] = useState('');
+  const [fontsReady] = useFonts({ Outfit_400Regular, Outfit_700Bold });
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([store.read(), store.setup(widgetInfo.widgetId)])
+      .then(([value, setup]) => {
+        if (alive) {
+          setRecord(value);
+          setSelected(
+            setup?.groupId ?? value.copy?.savedGroups?.rows.find((g) => !g.archived)?.id ?? null,
+          );
+        }
+      })
+      .catch(() => setError('Could not read saved Groups. Open Splitbook and try again.'));
+    const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      setResult('cancel');
+      return true;
+    });
+    return () => {
+      alive = false;
+      back.remove();
+    };
+  }, [widgetInfo.widgetId, setResult]);
+  const signedIn =
+    record?.session.status === 'authenticated' &&
+    record.copy?.accountId === record.session.accountId;
+  const groups = signedIn ? (record.copy?.savedGroups?.rows.filter((g) => !g.archived) ?? []) : [];
+  const blocked = !signedIn || !groups.length;
+  const copy = (value: string, bold = false, size = 14, color = t.text) => (
+    <Text
+      style={{
+        fontFamily: fontsReady ? (bold ? 'Outfit_700Bold' : 'Outfit_400Regular') : undefined,
+        fontSize: size,
+        color,
+      }}
+    >
+      {value}
+    </Text>
+  );
+  const confirm = async () => {
+    try {
+      const latest = await store.read();
+      if (
+        latest.session.status !== 'authenticated' ||
+        latest.copy?.accountId !== latest.session.accountId ||
+        latest.session.accountId !== record?.copy?.accountId ||
+        !latest.copy.savedGroups?.rows.some((g) => g.id === selected && !g.archived)
+      ) {
+        setRecord(latest);
+        setError('Choose a saved Group for this account.');
+        return;
+      }
+      await store.saveSetup({
+        kind: 'group',
+        widgetId: widgetInfo.widgetId,
+        accountId: latest.session.accountId,
+        groupId: selected!,
+      });
+      await redrawBalances();
+      setResult('ok');
+    } catch {
+      setError('Could not save this widget. Try again.');
+    }
+  };
+  return (
+    <SafeAreaProvider>
+      <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, gap: 20 }}>
+          <Pressable
+            accessibilityLabel="Cancel widget setup"
+            onPress={() => setResult('cancel')}
+            style={{ padding: 8 }}
+          >
+            <Ionicons name="close" size={24} color={t.text} />
+          </Pressable>
+          {copy('Group widget', true, 22)}
+        </View>
+        {record === null && !error ? (
+          <View style={{ padding: 24 }}>{copy('Loading saved Groups…')}</View>
+        ) : blocked ? (
+          <View
+            style={{
+              flex: 1,
+              padding: 28,
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 18,
+            }}
+          >
+            <Ionicons
+              name={!signedIn ? 'log-in-outline' : 'people-outline'}
+              size={48}
+              color={t.brand.main}
+            />
+            {copy(!signedIn ? 'Sign in to Splitbook first' : 'No Groups yet', true, 20)}
+            {copy(
+              !signedIn
+                ? 'Widgets show your Groups once you’re signed in on this phone.'
+                : 'Create a Group in Splitbook, then come back to add a widget.',
+              false,
+              15,
+              t.textSecondary,
+            )}
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={{ padding: 20, gap: 22, flexGrow: 1 }}>
+            {copy('Choose the Group this widget shows.', false, 16, t.textSecondary)}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              {copy('YOUR GROUPS', true, 12, t.textSecondary)}
+              {copy(
+                widgetSavedTime(record!.copy!.savedGroups!.verifiedAt, Date.now()),
+                false,
+                12,
+                t.textMuted,
+              )}
+            </View>
+            <View
+              style={{
+                backgroundColor: t.surface,
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: t.border,
+                overflow: 'hidden',
+              }}
+            >
+              {groups.map((group) => (
+                <Pressable
+                  key={group.id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected === group.id }}
+                  accessibilityLabel={group.name}
+                  onPress={() => setSelected(group.id)}
+                  style={{
+                    padding: 16,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 14,
+                    borderBottomWidth: 1,
+                    borderBottomColor: t.border,
+                  }}
+                >
+                  <View style={{ padding: 12, backgroundColor: t.brand.bg, borderRadius: 12 }}>
+                    <Ionicons name={groupThemeIcons[group.theme]} size={22} color={t.brand.main} />
+                  </View>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    {copy(group.name, true, 16)}
+                    {copy(
+                      `${getGroupTheme(group.theme).label}${SEPARATOR}${counted(group.members, 'member')}${group.currencies > 1 ? SEPARATOR + counted(group.currencies, 'currency', 'currencies') : ''}`,
+                      false,
+                      12,
+                      t.textSecondary,
+                    )}
+                  </View>
+                  <Ionicons
+                    name={selected === group.id ? 'radio-button-on' : 'radio-button-off'}
+                    size={24}
+                    color={selected === group.id ? t.brand.main : t.textSecondary}
+                  />
+                </Pressable>
+              ))}
+            </View>
+            {copy(
+              'Anyone who sees your unlocked phone can read this widget.',
+              false,
+              13,
+              t.textSecondary,
+            )}
+          </ScrollView>
+        )}
+        {error ? (
+          <View style={{ padding: 20 }}>{copy(error, false, 14, t.status.negative)}</View>
+        ) : null}
+        <View
+          style={{
+            padding: 20,
+            borderTopWidth: 1,
+            borderTopColor: t.border,
+            backgroundColor: t.surface,
+          }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            disabled={!record && !error}
+            onPress={() => {
+              if (blocked) {
+                setResult('cancel');
+                void Linking.openURL(widgetLink(!signedIn ? 'sign-in' : 'create-group'));
+              } else void confirm();
+            }}
+            style={{
+              backgroundColor: t.brand.main,
+              padding: 18,
+              borderRadius: 14,
+              alignItems: 'center',
+            }}
+          >
+            {copy(
+              blocked ? (!signedIn ? 'Open Splitbook' : 'Create a Group') : 'Add widget',
+              true,
+              16,
+              t.brand.contrastText,
+            )}
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </SafeAreaProvider>
+  );
+}

@@ -30,5 +30,7 @@ async function generate() {
 <text x="46" y="382" font-size="22" fill="${t.brand.main}" font-weight="bold">To review · 3</text>
 </g></svg>`;
   await sharp(Buffer.from(svg)).png().toFile(new URL('balances-preview.png', output).pathname);
+  const group = `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="400"><rect width="720" height="400" rx="48" fill="${t.surface}"/><g font-family="sans-serif" fill="${t.text}"><text x="28" y="52" font-size="28" font-weight="bold">⌂  Maple House</text><text x="510" y="52" font-size="20" fill="${t.textMuted}">Saved 9:41</text><text x="28" y="92" font-size="24" fill="${t.status.negative}">You owe ₹1,480.00</text><rect x="28" y="120" width="664" height="142" rx="24" fill="${t.surfaceMuted}"/><text x="50" y="173" font-size="24">You pay Priya</text><text x="490" y="173" font-size="24">₹1,060.00</text><text x="50" y="230" font-size="24">You pay Sam</text><text x="510" y="230" font-size="24">₹420.00</text><rect x="430" y="300" width="262" height="64" rx="24" fill="${t.brand.bg}"/><text x="466" y="342" font-size="24" fill="${t.brand.main}">＋ Add expense</text></g></svg>`;
+  await sharp(Buffer.from(group)).png().toFile(new URL('group-preview.png', output).pathname);
 }
 void generate();

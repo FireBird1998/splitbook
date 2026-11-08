@@ -27,6 +27,8 @@ The Android controller (`createMobileController`) has become a hand-written quer
 
 - The widget copy is a saved copy in app-private SQLite that the headless widget renderer can read. It uses the account lease and saved-copy queue, keeps each read’s verification time, and is deleted by the same account purge before widgets redraw signed out. A 401 hides it without deleting it.
 
+- Widget setup records contain only the widget kind, Group ID and setup account ID. They are device preferences, survive account purges and a 401, and are removed when Android deletes the widget. A different account must set the widget up again.
+
 - A custom persister stores one row per query, in the wire format, in the existing expo-sqlite cache database. Every write goes through the account lease and checks the session at write time, so nothing lands after sign-out.
 - A restored copy keeps its original verification time, is marked as restored, and is never fresh. It reaches queries through an envelope whose stale time is 0, so a fallback to a saved copy is never treated as fresh for the normal 30 seconds.
 - Drafts, stored save attempts and their clean-up are written through a strict queue, in order, and nothing on it is ever dropped; that is what keeps a retry key. Saved copies use a separate queue, where the latest write per query wins. Sign-out and account change wait for the first queue, cancel the second, then purge everything account-local, including the query cache.

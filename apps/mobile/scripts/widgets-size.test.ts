@@ -15,6 +15,10 @@ it('generates provider bounds that allow four columns and two rows on the device
       join(process.cwd(), 'assets/widgets/balances-preview.png'),
       join(root, 'assets/widgets/balances-preview.png'),
     );
+    copyFileSync(
+      join(process.cwd(), 'assets/widgets/group-preview.png'),
+      join(root, 'assets/widgets/group-preview.png'),
+    );
     writeFileSync(
       join(root, 'android/app/src/main/AndroidManifest.xml'),
       '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:name=".MainApplication" /></manifest>',
