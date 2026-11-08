@@ -1,5 +1,8 @@
-import { expect, it } from 'vitest';
+import { beforeAll, afterAll, expect, it } from 'vitest';
 import { groupWidget, type WidgetGroupPart } from '@splitbook/shared/group-widget';
+const previousZone = process.env.TZ;
+beforeAll(() => { process.env.TZ = 'Asia/Kolkata'; });
+afterAll(() => { process.env.TZ = previousZone; });
 const now = Date.parse('2026-11-08T04:11:00Z');
 export const part: WidgetGroupPart = {
   id: 'maple', name: 'Maple House', theme: 'home', archived: false, mainCurrency: 'INR',
