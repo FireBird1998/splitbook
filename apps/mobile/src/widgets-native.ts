@@ -1,4 +1,5 @@
-import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
+import { openDatabaseAsync, defaultDatabaseDirectory, type SQLiteDatabase } from 'expo-sqlite';
+import { File } from 'expo-file-system';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
 import type { WidgetsNative } from './data/widget-copy';
 
@@ -45,9 +46,10 @@ export function createWidgetsStore(environment: string) {
       );
     },
     async clear() {
+      if (!opening && !new File(defaultDatabaseDirectory, 'splitbook-widgets.db').exists) return;
       await (
-        await ensure()
-      ).runAsync('UPDATE widget_state SET copy = NULL WHERE environment = ?', environment);
+        await database()
+      ).runAsync('DELETE FROM widget_state WHERE environment = ?', environment);
     },
     async setSession(session: WidgetSession) {
       await (

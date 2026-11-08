@@ -1,5 +1,5 @@
 import { androidWidgetsEnabled } from './widgets-flag';
-import { createWidgetsNative } from './widgets-native';
+import { createWidgetsNative, createWidgetsStore } from './widgets-native';
 import { createNotificationNative, readNotificationInstallation } from './notifications-native';
 import { androidNotificationsEnabled } from './notifications-flag';
 import { createSettlementAttemptStore } from './data/settlement-storage';
@@ -146,6 +146,10 @@ export const controller = createMobileController(controllerConfig, {
       untrustedCopies,
       financialCleanup,
       offlineIdentity,
+      // A build with widgets off must still purge copies kept by an earlier enabled build.
+      ...(!androidWidgetsEnabled()
+        ? [{ clear: () => createWidgetsStore(controllerConfig.apiBaseUrl).clear() }]
+        : []),
       ...(googleSignInEnabled
         ? [
             {

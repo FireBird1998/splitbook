@@ -241,7 +241,16 @@ function draw(view: BalancesWidgetView, t: SemanticTokens) {
 async function representation(info: WidgetInfo) {
   const record = await widgetStore.read();
   const size = info.height < 130 ? '2x1' : info.width >= 280 ? '4x2' : '2x2';
-  const view = balancesWidget(record.copy, { kind: 'balances' }, size, record.session, Date.now());
+  const view = balancesWidget(
+    record.copy,
+    {
+      kind: 'balances',
+      reviewEnabled: process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true',
+    },
+    size,
+    record.session,
+    Date.now(),
+  );
   return { light: draw(view, lightTokens), dark: draw(view, darkTokens) };
 }
 let drawing: Promise<void> = Promise.resolve();

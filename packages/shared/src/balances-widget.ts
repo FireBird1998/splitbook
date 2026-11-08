@@ -52,7 +52,7 @@ export function widgetSavedTime(verifiedAt: number, now: number) {
 
 export function balancesWidget(
   copy: WidgetCopy | null,
-  _setup: { kind: 'balances' },
+  setup: { kind: 'balances'; reviewEnabled?: boolean },
   size: BalancesWidgetSize,
   session: WidgetSession,
   now: number,
@@ -91,7 +91,11 @@ export function balancesWidget(
       ? `Across ${home.groupCount} ${home.groupCount === 1 ? 'Group' : 'Groups'}`
       : null;
   view.review =
-    !view.muted && size !== '2x1' && copy.review && copy.review.count > 0
+    setup.reviewEnabled !== false &&
+    !view.muted &&
+    size !== '2x1' &&
+    copy.review &&
+    copy.review.count > 0
       ? `To review · ${copy.review.count}`
       : null;
   if (!home.groupCount)
