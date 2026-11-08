@@ -547,3 +547,8 @@ it('removes a Group widget part when a save retires its saved copies, until the 
   await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
   expect(f.copies.at(-1)?.lostGroupIds).not.toContain(groupId);
 });
+it('Ask each time opens a Group picker after restoration, and choosing resumes the same draft',async()=>{
+ const f=fixture(),c=f.make();await c.signIn('alex');await c.openExpense(groupId);await c.updateExpenseDraft({description:'Widget unfinished',amount:'123',tagId});await c.back();
+ await c.openWidget('choose-group');expect(c.getSnapshot().widgetPicker).toBe(true);
+ await c.chooseWidgetGroup(groupId);expect(c.getSnapshot().widgetPicker).toBe(false);expect(c.getSnapshot().expense.draft).toMatchObject({description:'Widget unfinished',amount:'123'});
+});
