@@ -33,6 +33,7 @@ function render(
   enabled = true,
   mode: 'light' | 'dark' = 'light',
   available = true,
+  hasConfirmed = true,
 ) {
   const callbacks = actions();
   act(() => {
@@ -41,6 +42,7 @@ function render(
         <NotificationSettings
           {...callbacks}
           state={{
+            ...{ hasConfirmed },
             status,
             confirmed: { ...confirmed, enabled, available },
             message: 'Old controller copy',
@@ -197,6 +199,44 @@ describe('per-phone Settings notification controls', () => {
     expect(switches().map((n) => n.props.accessibilityState)).toEqual([
       { checked: false, disabled: true },
     ]);
+  });
+  it('keeps cold offline notification state unknown and Android settings usable', () => {
+    const calls = render('offline', false, 'light', false, false);
+    expect(text()).toContain('Not checked yet');
+    expect(text()).not.toContain('Off');
+    expect(text()).not.toContain('Expense updates');
+    expect(text()).not.toContain('Payments to or from you');
+    expect(switches().map((n) => n.props.accessibilityState)).toEqual([
+      { checked: false, disabled: true },
+    ]);
+    press('Notifications on this phone, Not checked yet');
+    expect(calls.onEnable).not.toHaveBeenCalled();
+    const android = screen.root.find(
+      (n) =>
+        (n.type as unknown) === 'Pressable' &&
+        n.props.accessibilityLabel === 'Android notification settings',
+    );
+    expect(android.props.accessibilityState?.disabled).not.toBe(true);
+    expect(flatten(android.props.style({ pressed: false })).opacity ?? 1).toBe(1);
+    press('Android notification settings');
+    expect(calls.onAndroidSettings).toHaveBeenCalledOnce();
+    const divider = screen.root.findByType(Divider);
+    const style = flatten(divider.find((n) => (n.type as unknown) === 'View').props.style);
+    expect([style.marginLeft, style.marginRight]).toEqual([0, 0]);
+    expect(screen.root.findByType(Banner).props.message).toBe(
+      'Connect to change notification settings. Android settings still work offline.',
+    );
+  });
+  it.each([true, false])('preserves the confirmed offline copy when enabled=%s', (enabled) => {
+    const calls = render('offline', enabled, 'light', enabled);
+    expect(text()).not.toContain('Not checked yet');
+    expect(text()).toContain(enabled ? 'On for all your Groups' : 'Off');
+    expect(switches().map((n) => n.props.accessibilityState)).toEqual(
+      (enabled ? [true, true, false] : [false]).map((checked) => ({ checked, disabled: true })),
+    );
+    press('Android notification settings');
+    expect(calls.onAndroidSettings).toHaveBeenCalledOnce();
+    expect(screen.root.findAllByType(Divider).at(-1)?.props.fullWidth).toBe(true);
   });
   it('shows one accessible skeleton row while loading, never stale controls', () => {
     render('loading');
