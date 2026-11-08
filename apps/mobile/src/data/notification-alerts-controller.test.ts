@@ -743,3 +743,90 @@ describe('Payment alerts at the Android controller seam (#842)', () => {
     expect(controller.getSnapshot()).toMatchObject({ screen: 'group', destination: 'activity' });
   });
 });
+
+describe('recovered alerts, delivered hours after their change, at the Android controller seam (#843)', () => {
+  const hour = 3_600_000;
+  /** The envelope recovery sends: its own recorded time, so its 24 hours started then. */
+  const recovered = (hoursAgo: number, extra: Record<string, unknown> = {}) => {
+    const occurred = Date.now() - hoursAgo * hour;
+    return hint({
+      occurredAt: new Date(occurred).toISOString(),
+      expiresAt: new Date(occurred + 24 * hour).toISOString(),
+      ...extra,
+    });
+  };
+  const kinds = [
+    ['expense_added', expenseId],
+    ['expense_updated', expenseId],
+    ['expense_deleted', expenseId],
+    ['settlement_recorded', 'c00000000000000000000009'],
+  ] as const;
+  it.each(kinds)(
+    '%s 23 hours late: elsewhere it may show, and a warm tap opens Group Activity without writing',
+    async (kind, recordId) => {
+      const requests: string[] = [];
+      const writes: string[] = [];
+      const controller = setup((url, init) => {
+        requests.push(url.pathname);
+        if (init.method && init.method !== 'GET' && !url.pathname.includes('auth'))
+          writes.push(url.pathname);
+      });
+      await controller.signIn('alex');
+      const late = recovered(23, { kind, recordId });
+      expect(await controller.receiveNotification(late)).toBe(true);
+      await controller.tapNotification(late);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        destination: 'activity',
+        activity: { status: 'ready' },
+        notificationOpening: { status: 'idle' },
+      });
+      expect(requests.some((path) => path.includes(recordId))).toBe(false);
+      expect(writes).toEqual([]);
+    },
+  );
+  it('a late alert for the open Group refreshes it quietly, and a redelivered one is suppressed', async () => {
+    const controller = setup();
+    await controller.signIn('alex');
+    await controller.openActivity(groupId);
+    const before = controller.getSnapshot().activity;
+    const late = recovered(20);
+    expect(await controller.receiveNotification(late)).toBe(false);
+    expect(controller.getSnapshot().activity).not.toBe(before);
+    // FCM may deliver an uncertain send's message again: no second alert.
+    expect(await controller.receiveNotification(late, { visible: false })).toBe(false);
+  });
+  it('a cold tap on a late alert waits for sign-in, then opens the same Group Activity', async () => {
+    const controller = setup();
+    const late = recovered(22, { kind: 'settlement_recorded' });
+    await controller.tapNotification(late);
+    expect(controller.getSnapshot().screen).not.toBe('group');
+    await controller.signIn('alex');
+    await controller.tapNotification(late);
+    expect(controller.getSnapshot()).toMatchObject({ screen: 'group', destination: 'activity' });
+  });
+  it('one past its 24 hours neither shows nor opens anything', async () => {
+    const controller = setup();
+    await controller.signIn('alex');
+    const expired = recovered(24.001);
+    expect(await controller.receiveNotification(expired)).toBe(false);
+    await controller.tapNotification(expired);
+    expect(controller.getSnapshot().screen).not.toBe('group');
+  });
+  it('a late alert while an Expense is unfinished keeps the form and holds the tap', async () => {
+    const controller = setup();
+    await controller.signIn('alex');
+    await controller.openActivity(groupId);
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Unfinished member task', amount: '5' });
+    const draft = structuredClone(controller.getSnapshot().expense.draft);
+    const late = recovered(23, { kind: 'expense_updated' });
+    expect(await controller.receiveNotification(late)).toBe(true);
+    await controller.tapNotification(late);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { draft },
+      notificationOpening: { status: 'held' },
+    });
+  });
+});

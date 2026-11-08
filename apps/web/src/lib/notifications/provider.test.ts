@@ -142,6 +142,48 @@ describe('the FCM message (#968)', () => {
   });
 });
 
+describe('definite temporary provider answers (#843)', () => {
+  const send = async (response: Response) => {
+    vi.stubEnv('FCM_PROJECT_ID', 'fictional-project');
+    credentials.client.mockResolvedValue({
+      getAccessToken: async () => ({ token: 'fictional-auth-token' }),
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response),
+    );
+    const body = JSON.stringify({ expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    return sendFcm({ ...message, data: { body } }, AbortSignal.timeout(1_000));
+  };
+  it('a 429 with Retry-After seconds carries the wait for the retry', async () => {
+    expect(
+      await send(new Response('{}', { status: 429, headers: { 'Retry-After': '120' } })),
+    ).toEqual({ outcome: 'temporary', retryAfterMs: 120_000 });
+  });
+  it('a 503 with a Retry-After date carries the wait until then', async () => {
+    const when = new Date(Date.now() + 300_000);
+    const outcome = await send(
+      new Response('{}', { status: 503, headers: { 'Retry-After': when.toUTCString() } }),
+    );
+    expect(outcome).toMatchObject({ outcome: 'temporary' });
+    const wait = (outcome as { retryAfterMs: number }).retryAfterMs;
+    expect(wait).toBeGreaterThan(298_000);
+    expect(wait).toBeLessThanOrEqual(300_000);
+  });
+  it('a 500 without Retry-After, or with a malformed one, is plainly temporary', async () => {
+    expect(await send(new Response('{}', { status: 500 }))).toBe('temporary');
+    expect(
+      await send(new Response('{}', { status: 502, headers: { 'Retry-After': 'soon' } })),
+    ).toBe('temporary');
+  });
+  it('a credential or payload refusal is operational, never temporary', async () => {
+    expect(await send(new Response('{}', { status: 401 }))).toBe('operational');
+    expect(
+      await send(Response.json({ error: { status: 'INVALID_ARGUMENT' } }, { status: 400 })),
+    ).toBe('operational');
+  });
+});
+
 describe('a federated credential lookup abandoned at the deadline', () => {
   it('does not hold up the next send, which starts a fresh lookup', async () => {
     vi.stubEnv('FCM_PROJECT_ID', 'fictional-project');

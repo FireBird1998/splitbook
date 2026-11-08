@@ -17,6 +17,20 @@ export type SendOutcome =
   | 'operational'
   | 'uncertain'
   | 'ineligible';
+/** A definite temporary answer that named how long to wait (`Retry-After`, #843). */
+export interface TemporaryWithWait {
+  outcome: 'temporary';
+  retryAfterMs: number;
+}
+export type SendResult = SendOutcome | TemporaryWithWait;
+/** `Retry-After` as seconds or an HTTP date; null when absent or malformed. */
+function retryAfterMs(header: string | null): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+  const at = Date.parse(trimmed);
+  return Number.isFinite(at) && /[a-z]/i.test(trimmed) ? Math.max(0, at - Date.now()) : null;
+}
 /**
  * Only external boundary replaced by HTTP acceptance tests. Credentials come from
  * ./google-credentials: Vercel OIDC through Workload Identity Federation in production,
@@ -37,7 +51,7 @@ export async function sendFcm(
   message: FcmRequest,
   signal: AbortSignal,
   authorize: () => Promise<boolean> = async () => true,
-): Promise<SendOutcome> {
+): Promise<SendResult> {
   if (signal.aborted) return 'operational';
   const project = process.env.FCM_PROJECT_ID;
   if (!project || !/^[a-z][a-z0-9-]{4,62}$/.test(project)) return 'operational';
@@ -88,7 +102,10 @@ export async function sendFcm(
       },
     );
     if (response.ok) return 'accepted';
-    if (response.status === 429 || response.status >= 500) return 'temporary';
+    if (response.status === 429 || response.status >= 500) {
+      const wait = retryAfterMs(response.headers.get('retry-after'));
+      return wait === null ? 'temporary' : { outcome: 'temporary', retryAfterMs: wait };
+    }
     // Consume only bounded known fields; never log or persist Google's body.
     if (response.status === 404 || response.status === 400) {
       const body: unknown = await response.json().catch(() => null);
