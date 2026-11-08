@@ -72,7 +72,11 @@ export function groupWidget(
       ...empty,
       state: session.status,
       title: session.status === 'expired' ? 'Sign in again' : 'Sign in to Splitbook',
-      description: 'to see your balances here',
+      description:
+        session.status === 'expired'
+          ? 'to see this Group. It comes back once you do.'
+          : 'to see your Group here',
+      action: 'Sign in',
       target: 'sign-in' as const,
     };
   if (session.accountId !== setup.accountId)
