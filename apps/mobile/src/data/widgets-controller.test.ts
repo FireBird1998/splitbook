@@ -278,6 +278,7 @@ it('opens Home and To review after the session check, including cold start', asy
   expect(restart.getSnapshot()).toMatchObject({
     auth: { status: 'authenticated' },
     screen: 'groups',
+    widgetOpen: { target: 'review' },
   });
   await restart.openWidget('home');
   await restart.signOut();
