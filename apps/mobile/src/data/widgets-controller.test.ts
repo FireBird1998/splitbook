@@ -17,6 +17,7 @@ function fixture() {
   let offline = false,
     expired = false,
     owed = 2400;
+  let refused = 0;
   let identity: unknown = null;
   const rows = new Map<string, unknown>();
   let hold: Promise<void> | undefined;
@@ -140,6 +141,7 @@ function fixture() {
             });
           if (path.endsWith('/sign-out')) return Response.json({ success: true });
           if (expired) return Response.json({ error: 'Session expired' }, { status: 401 });
+          if (path === `/api/groups/${groupId}` && refused) return Response.json({ error:"Not a member" }, {status:refused});
           if (path === `/api/groups/${groupId}`)
             return Response.json({ status: 200, data: group() });
           if (path.endsWith('/expenses') && init.method === 'POST') {
@@ -203,6 +205,7 @@ function fixture() {
   };
   return {
     make,
+    refuse: (status: number) => { refused = status; },
     blockWrite: () => {
       let release!: () => void;
       hold = new Promise<void>((resolve) => {
@@ -414,4 +417,21 @@ it('projects a Group and its Balances reads into the widget copy with both verif
     }),
   );
   expect(f.copies.at(-1)?.savedGroups?.rows.map((g) => g.id)).toEqual([groupId]);
+});
+
+for (const status of [403,404]) it(`removes the Group widget part after a refused read (${status})`, async () => {
+ const f=fixture(), c=f.make(); await c.signIn('alex'); await c.openGroup(groupId); await c.refreshBalances();
+ await vi.waitFor(()=>expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
+ f.refuse(status); await c.openGroup(groupId,true);
+ await vi.waitFor(()=>expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
+ expect(f.copies.at(-1)?.lostGroupIds).toContain(groupId);
+});
+it('restores Group widget parts and offline setup with their original saved verification times', async () => {
+ vi.spyOn(Date,'now').mockReturnValue(verified);
+ const f=fixture(), first=f.make(); await first.signIn('alex'); await first.openGroup(groupId); await first.refreshBalances();
+ await vi.waitFor(()=>expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());first.dispose();
+ f.offline(); vi.spyOn(Date,'now').mockReturnValue(verified+3600000);
+ const restarted=f.make(); await restarted.restore();
+ await vi.waitFor(()=>expect(f.copies.at(-1)?.groups?.[groupId]?.balancesVerifiedAt).toBe(verified));
+ expect(f.copies.at(-1)?.savedGroups?.rows.map(g=>g.id)).toEqual([groupId]);
 });
