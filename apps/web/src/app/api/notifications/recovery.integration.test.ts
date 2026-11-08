@@ -555,7 +555,7 @@ describe('the recovery kill switch and bounds (#843)', () => {
     provider.send.mockImplementationOnce(async (_message, _signal, authorize) =>
       (await authorize()) ? 'temporary' : 'ineligible',
     );
-    await trigger();
+    expect((await trigger()).status).toBe(200);
     expect(provider.send).toHaveBeenCalledTimes(1);
     time.at(hour);
     const log = vi.spyOn(console, 'info').mockImplementation(() => {});
