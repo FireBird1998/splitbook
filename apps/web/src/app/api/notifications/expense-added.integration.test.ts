@@ -401,6 +401,8 @@ describe('Expense-added alerts through authenticated HTTP and real MongoDB', () 
       .findOne({ type: 'expense_added' });
     expect(event!.notificationContext.recipientIds).toEqual([users.sam]);
   });
+  // This phone registered as the 2a0b065b app does (an Enable, never maintenance): on an invalid
+  // token its registration is switched off exactly as before, so that app's Settings shows off (#844).
   it('invalid-token disable advances the device revision and refuses a stale category update', async () => {
     provider.send.mockImplementationOnce(async (_message, _signal, authorize) => {
       expect(await authorize()).toBe(true);

@@ -22,6 +22,10 @@ const native = vi.hoisted(() => ({
   getLastNotificationResponseAsync: vi.fn(async (): Promise<unknown> => null),
   clearLastNotificationResponseAsync: vi.fn(async () => {}),
   registerTaskAsync: vi.fn(async () => null),
+  addPushTokenListener: vi.fn((listener: (token: { type: string; data: unknown }) => void) => {
+    void listener;
+    return { remove: vi.fn() };
+  }),
 }));
 const storage = vi.hoisted(() => new Map<string, string>());
 vi.mock('expo-notifications', () => native);
@@ -61,6 +65,27 @@ describe('Expo Android notification boundary', () => {
     expect(native.dismissAllNotificationsAsync).toHaveBeenCalledOnce();
     expect(native.cancelAllScheduledNotificationsAsync).toHaveBeenCalledOnce();
     expect(await first.installation()).toEqual(original);
+  });
+  it('forwards each new Android token to the listener only until it stops listening (#844)', async () => {
+    const tokens: string[] = [];
+    const stop = createNotificationNative('https://staging.example.test').onToken!((token) =>
+      tokens.push(token),
+    );
+    await vi.waitFor(() => expect(native.addPushTokenListener).toHaveBeenCalledOnce());
+    const listener = native.addPushTokenListener.mock.calls[0][0];
+    listener({ type: 'android', data: 'private-fcm-token-2' });
+    listener({ type: 'ios', data: 'not-for-android' });
+    listener({ type: 'android', data: 42 });
+    expect(tokens).toEqual(['private-fcm-token-2']);
+    expect(native.requestPermissionsAsync).not.toHaveBeenCalled();
+    stop();
+    expect(native.addPushTokenListener.mock.results[0].value.remove).toHaveBeenCalledOnce();
+    expect(JSON.stringify([...storage.values()])).not.toContain('private-fcm-token');
+  });
+  it('stopping before the native module loads never starts listening (#844)', async () => {
+    createNotificationNative('https://staging.example.test').onToken!(() => {})();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(native.addPushTokenListener).not.toHaveBeenCalled();
   });
   it('reports Android OS blocking separately from a permission denial', async () => {
     native.getPermissionsAsync.mockResolvedValueOnce({ granted: false, canAskAgain: false });

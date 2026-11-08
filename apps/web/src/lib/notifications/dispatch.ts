@@ -21,6 +21,8 @@ interface Registration {
   expenseCutoff: Date;
   token: string;
   tokenHash: string;
+  /** FCM answered that the token is unregistered (#844): consent stays, sends wait for a new token. */
+  tokenInvalid?: true;
   revision: number;
 }
 interface Delivery {
@@ -185,6 +187,8 @@ async function runDispatch(
               activation: { $type: 'string' },
               expenseCutoff: { $lte: occurredAt },
               expiresAt: { $gt: new Date() },
+              token: { $type: 'string' },
+              tokenInvalid: { $ne: true },
             },
           },
           {
@@ -295,7 +299,9 @@ async function runDispatch(
           expenseUpdates: true,
           expenseCutoff: { $lte: occurredAt },
           expiresAt: { $gt: new Date() },
-          token: registration.token,
+          // The installation's current token, which may have rotated since this pass listed it (#844).
+          token: { $type: 'string' },
+          tokenInvalid: { $ne: true },
         },
         { maxTimeMS: 500 },
       );
@@ -400,6 +406,7 @@ async function runDispatch(
                 expenseCutoff: { $lte: occurredAt },
                 expiresAt: { $gt: new Date() },
                 token: live.token,
+                tokenInvalid: { $ne: true },
               },
               { projection: { _id: 1 }, maxTimeMS: 500 },
             );
@@ -455,7 +462,16 @@ async function runDispatch(
         { $set: { state: outcome } },
         { maxTimeMS: 500 },
       );
-      if (outcome === 'invalid-token')
+      // An app that maintains its registration keeps the member's consent: only the token is
+      // disabled, and the phone's next token, under the same binding and activation, receives
+      // later alerts. An app that never maintains (2a0b065b) would never send that token, so its
+      // registration is switched off as before and its Settings shows off (#844). One atomic
+      // update decides on the capability as stored; a rotated token is untouched.
+      if (outcome === 'invalid-token') {
+        const maintained = { $eq: ['$maintains', true] };
+        const unlessMaintained = (field: string, off: unknown) => ({
+          $cond: [maintained, '$' + field, off],
+        });
         await authDb.collection('notificationRegistrations').updateOne(
           {
             environment,
@@ -463,12 +479,20 @@ async function runDispatch(
             binding: live.binding,
             token: live.token,
           },
-          {
-            $set: { enabled: false, expenseUpdates: false, payments: false },
-            $inc: { revision: 1 },
-          },
+          [
+            {
+              $set: {
+                tokenInvalid: { $cond: [maintained, true, '$$REMOVE'] },
+                enabled: unlessMaintained('enabled', false),
+                expenseUpdates: unlessMaintained('expenseUpdates', false),
+                payments: unlessMaintained('payments', false),
+                revision: unlessMaintained('revision', { $add: ['$revision', 1] }),
+              },
+            },
+          ],
           { maxTimeMS: 500 },
         );
+      }
       if (outcome === 'accepted') counts.accepted++;
       else counts.failed++;
       if (outcome === 'uncertain') uncertain.count++;
