@@ -48,6 +48,7 @@ export type BalancesWidgetSize = '2x1' | '2x2' | '4x2';
 export interface BalancesWidgetView {
   state: 'normal' | 'loading' | 'no-copy' | 'signed-out' | 'expired' | 'all-square' | 'no-groups';
   size: BalancesWidgetSize;
+  hidden: string | null;
   saved: string | null;
   muted: boolean;
   owed: string[];
@@ -79,13 +80,14 @@ export function widgetSavedTime(verifiedAt: number, now: number) {
 
 export function balancesWidget(
   copy: WidgetCopy | null,
-  setup: { kind: 'balances'; reviewEnabled?: boolean },
+  setup: { kind: 'balances'; reviewEnabled?: boolean; hideAmounts?: boolean },
   size: BalancesWidgetSize,
   session: WidgetSession,
   now: number,
 ): BalancesWidgetView {
   const view: BalancesWidgetView = {
     state: 'no-copy',
+    hidden: null,
     size,
     saved: null,
     muted: false,
@@ -140,6 +142,21 @@ export function balancesWidget(
       title: 'You’re all square',
       description: 'Nobody owes anybody, in any currency.',
     };
+  if (setup.hideAmounts) {
+    const summary = (field: 'oweMinor' | 'owedMinor') => {
+      const count = home.currencies.filter((row) => row[field] > 0).length;
+      return count ? [`in ${counted(count, 'currency', 'currencies')}`] : [];
+    };
+    return {
+      ...view,
+      state: 'normal',
+      title: null,
+      description: null,
+      hidden: 'Amounts hidden',
+      owed: summary('owedMinor'),
+      owe: summary('oweMinor'),
+    };
+  }
   const limit = size === '4x2' ? 3 : size === '2x1' ? 1 : 2;
   const lines = (field: 'oweMinor' | 'owedMinor') => {
     const rows = home.currencies.filter((row) => row[field] > 0);

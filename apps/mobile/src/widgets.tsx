@@ -30,7 +30,7 @@ const widgetStore = createWidgetsStore(widgetEnvironment());
 function draw(view: BalancesWidgetView, t: SemanticTokens) {
   const small = view.size === '2x1',
     wide = view.size === '4x2';
-  const compactMoney = small && view.state === 'normal';
+  const compactMoney = small && view.state === 'normal' && !view.hidden;
   const text = (value: string, tone = t.text, fontSize = 12, bold = false, mono = false) => (
     <TextWidget
       text={value}
@@ -71,9 +71,9 @@ function draw(view: BalancesWidgetView, t: SemanticTokens) {
               text={line}
               style={{
                 color: color(view.muted ? t.textMuted : t.text),
-                fontSize: small ? 19 : 16,
-                fontWeight: 'bold',
-                fontFamily: 'monospace',
+                fontSize: view.hidden ? 11 : small ? 19 : 16,
+                fontWeight: view.hidden ? 'normal' : 'bold',
+                ...(view.hidden ? {} : { fontFamily: 'monospace' }),
               }}
             />
           ))
@@ -103,6 +103,7 @@ function draw(view: BalancesWidgetView, t: SemanticTokens) {
     ...view.owe.map((v) => `You owe ${v}`),
     view.saved,
     view.description,
+    view.hidden,
   ]
     .filter(Boolean)
     .join('. ');
@@ -176,7 +177,7 @@ function draw(view: BalancesWidgetView, t: SemanticTokens) {
           {view.title ? text(view.title, t.text, small ? 12 : 14, true) : null}
           {view.description ? text(view.description, t.textSecondary, small ? 10 : 12) : null}
         </FlexWidget>
-      ) : small ? (
+      ) : compactMoney ? (
         <FlexWidget style={{ flexGap: 2 }}>
           <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 4 }}>
             {text(
@@ -206,7 +207,7 @@ function draw(view: BalancesWidgetView, t: SemanticTokens) {
         <FlexWidget
           style={{
             width: 'match_parent',
-            flexDirection: wide ? 'row' : 'column',
+            flexDirection: wide || small ? 'row' : 'column',
             flexGap: wide ? 8 : 10,
           }}
         >
@@ -214,6 +215,7 @@ function draw(view: BalancesWidgetView, t: SemanticTokens) {
           {column('You owe', view.owe, view.oweOverflow, t.status.negative)}
         </FlexWidget>
       )}
+      {view.hidden ? text(view.hidden, t.textMuted, 10) : null}
       {!small ? (
         <FlexWidget
           style={{
@@ -256,23 +258,28 @@ async function representation(info: WidgetInfo) {
   }
   if (info.widgetName === 'Group') {
     const setup = await widgetStore.setup(info.widgetId);
-    const selected = (setup?.kind === 'group' ? setup : null) ?? {
-      kind: 'group' as const,
-      widgetId: info.widgetId,
-      groupId: '',
-      accountId: '',
-    };
+    const selected =
+      setup?.kind === 'group'
+        ? setup
+        : {
+            kind: 'group' as const,
+            widgetId: info.widgetId,
+            groupId: '',
+            accountId: '',
+          };
     const size = info.width < 280 ? '2x2' : info.height >= 260 ? '4x3' : '4x2';
     return {
       light: drawGroup(record.copy, selected, size, record.session, Date.now(), lightTokens),
       dark: drawGroup(record.copy, selected, size, record.session, Date.now(), darkTokens),
     };
   }
+  const setup = await widgetStore.setup(info.widgetId);
   const size = info.height < 130 ? '2x1' : info.width >= 280 ? '4x2' : '2x2';
   const view = balancesWidget(
     record.copy,
     {
       kind: 'balances',
+      hideAmounts: setup?.kind === 'balances' && setup.hideAmounts === true,
       reviewEnabled: process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true',
     },
     size,
