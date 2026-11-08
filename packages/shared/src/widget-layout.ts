@@ -5,13 +5,20 @@ export function widgetTextLevel(scale: number) {
   const percent = Math.round(scale * 100);
   return percent >= 200 ? 2 : percent >= 130 ? 1 : 0;
 }
-export function balancesLayout(size: BalancesWidgetSize, scale: number, normal: boolean) {
+export function balancesLayout(
+  size: BalancesWidgetSize,
+  scale: number,
+  normal: boolean,
+  hidden = false,
+) {
   const level = widgetTextLevel(scale),
     small = size === '2x1';
   return {
     currencyLines: size === '4x2' ? [3, 2, 1][level]! : size === '2x2' && !level ? 2 : 1,
     showReview: !level && !small,
-    showHeader: !small || normal,
+    showHeader: (!small || normal) && !(small && hidden && level === 2),
+    showPrivacyLabel: size === '4x2' || (level < 2 && (!small || !level)),
+    hiddenFontSize: small && level === 2 ? 8 : 11,
     showTile: !small && level < 2,
     showDescription: small || level < 2,
     showSavedInHeader: !level,
@@ -26,17 +33,20 @@ export function groupLayout(size: GroupWidgetSize, scale: number) {
   const level = widgetTextLevel(scale),
     small = size === '2x2';
   return {
+    actionFontSize: small && level === 2 ? 10 : 12,
+    actionPaddingHorizontal: small && level === 2 ? 6 : 12,
     paymentLines: small ? 0 : size === '4x3' ? [4, 2, 1][level]! : [2, 1, 0][level]!,
     showDescription: level < 2 && (!small || !level),
     showTile: level < 2,
     showPeople: level < 2,
     showSaved: true,
+    showPrivacyLabel: !small || level < 2,
     stackPayments: level === 2,
     stackHeader: level > 0,
     moneyFontSize: level === 2 ? 13 : 18,
   };
 }
-export function quickLayout(size: '1x1' | '2x1', scale: number, normal: boolean) {
+export function quickLayout(size: '1x1' | '2x1', scale: number, normal: boolean, hidden = false) {
   const level = widgetTextLevel(scale),
     small = size === '1x1';
   return {

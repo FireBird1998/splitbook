@@ -16,8 +16,9 @@ export function drawQuick(
   size: '1x1' | '2x1',
   session: WidgetSession,
   t: SemanticTokens,
+  fontScale = 1,
 ) {
-  const view = quickWidget(copy, setup, size, session),
+  const view = quickWidget(copy, setup, size, session, fontScale),
     compactState = size === '1x1' && view.state !== 'normal',
     color = (v: string) => v as `#${string}`;
   return (
@@ -30,7 +31,7 @@ export function drawQuick(
       style={{
         width: 'match_parent',
         height: 'match_parent',
-        padding: compactState ? 6 : 12,
+        padding: compactState ? 6 : 10,
         borderRadius: 24,
         backgroundColor: color(t.surface),
         flexDirection: compactState ? 'column' : 'row',
@@ -39,51 +40,58 @@ export function drawQuick(
         flexGap: compactState ? 4 : 10,
       }}
     >
-      {view.state === 'normal' ? (
-        <SvgWidget
-          svg={t.mode === 'dark' ? quickDark : quickLight}
-          style={{ width: 48, height: 48 }}
-        />
-      ) : (
-        <FlexWidget
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: 16,
-            backgroundColor: color(view.state === 'signed-out' ? t.brand.bg : t.surfaceMuted),
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {view.state === 'signed-out' ? (
-            <SvgWidget
-              svg={t.mode === 'dark' ? darkMark : lightMark}
-              style={{ width: 30, height: 30 }}
-            />
-          ) : (
-            <SvgWidget
-              svg={`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="${t.textSecondary}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${view.state === 'expired' ? '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>' : view.state === 'archived' ? '<path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6"/>' : view.state === 'other-account' ? '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>' : '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/>'}</g></svg>`}
-              style={{ width: 24, height: 24 }}
-            />
-          )}
-        </FlexWidget>
-      )}
-      {size === '2x1' || view.state !== 'normal' ? (
-        <FlexWidget style={{ flex: 1, flexGap: compactState ? 2 : 4 }}>
-          <TextWidget
-            text={view.title}
-            style={{
-              fontSize: compactState ? 10 : 12,
-              fontWeight: 'bold',
-              color: color(t.text),
-              ...(compactState ? { textAlign: 'center' as const } : {}),
-            }}
+      {view.layout.showTile ? (
+        view.state === 'normal' ? (
+          <SvgWidget
+            svg={t.mode === 'dark' ? quickDark : quickLight}
+            style={{ width: 48, height: 48 }}
           />
-          {view.subtitle ? (
+        ) : (
+          <FlexWidget
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 16,
+              backgroundColor: color(view.state === 'signed-out' ? t.brand.bg : t.surfaceMuted),
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {view.state === 'signed-out' ? (
+              <SvgWidget
+                svg={t.mode === 'dark' ? darkMark : lightMark}
+                style={{ width: 30, height: 30 }}
+              />
+            ) : (
+              <SvgWidget
+                svg={`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="${t.textSecondary}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${view.state === 'expired' ? '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>' : view.state === 'archived' ? '<path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6"/>' : view.state === 'other-account' ? '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>' : '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/>'}</g></svg>`}
+                style={{ width: 24, height: 24 }}
+              />
+            )}
+          </FlexWidget>
+        )
+      ) : null}
+      {view.layout.showTitle || view.layout.showSubtitle ? (
+        <FlexWidget style={{ flex: 1, flexGap: compactState ? 2 : 4 }}>
+          {view.layout.showTitle ? (
+            <TextWidget
+              text={view.title}
+              style={{
+                fontSize: compactState ? 10 : 12,
+                fontWeight: 'bold',
+                color: color(t.text),
+                ...(compactState ? { textAlign: 'center' as const } : {}),
+              }}
+            />
+          ) : null}
+          {view.subtitle && view.layout.showSubtitle ? (
             <TextWidget
               text={view.subtitle}
+              maxLines={view.layout.subtitleMaxLines}
+              truncate="END"
               style={{
                 fontSize: compactState ? 9 : 10,
+                width: 'match_parent',
                 color: color(t.textSecondary),
                 ...(compactState ? { textAlign: 'center' as const } : {}),
               }}

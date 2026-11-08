@@ -122,10 +122,10 @@ it('keeps the compact Group action on one readable line at 200% without losing s
 });
 
 it('drops optional privacy captions in tight large-text layouts but keeps them in speech', () => {
- const b=balancesWidget(copy,{kind:'balances',hideAmounts:true},'2x1',auth,now,2);
- expect(b.layout).toMatchObject({showHeader:false,showPrivacyLabel:false,hiddenFontSize:8});
- expect(b.summary).toContain('Amounts hidden');
- const g=groupWidget(part,{...setup,hideAmounts:true},'2x2',auth,now,2);
- expect(g.layout.showPrivacyLabel).toBe(false);
- expect(g.summary).toContain('Amounts and names hidden');
+  const b = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
+  expect(b.layout).toMatchObject({ showHeader: false, showPrivacyLabel: false, hiddenFontSize: 8 });
+  expect(b.summary).toContain('Amounts hidden');
+  const g = groupWidget(part, { ...setup, hideAmounts: true }, '2x2', auth, now, 2);
+  expect(g.layout.showPrivacyLabel).toBe(false);
+  expect(g.summary).toContain('Amounts and names hidden');
 });

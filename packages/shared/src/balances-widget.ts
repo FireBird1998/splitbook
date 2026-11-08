@@ -215,6 +215,6 @@ export function balancesWidget(...args: Parameters<typeof balancesWidgetView>): 
   return {
     ...view,
     summary,
-    layout: balancesLayout(args[2], args[5] ?? 1, view.state === 'normal'),
+    layout: balancesLayout(args[2], args[5] ?? 1, view.state === 'normal', Boolean(view.hidden)),
   };
 }

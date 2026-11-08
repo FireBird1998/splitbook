@@ -46,7 +46,12 @@ const textOf = (node: ReactTestInstance) =>
     .join(' ');
 const text = () => textOf(screen!.root);
 const host = (name: string) => screen!.root.findAll((n) => (n.type as unknown) === name);
-const button = () => host('Pressable').find((n) => n.props.accessibilityRole === 'button')!;
+const button = () =>
+  host('Pressable').find(
+    (n) =>
+      n.props.accessibilityRole === 'button' &&
+      n.props.accessibilityLabel !== 'Cancel widget setup',
+  )!;
 
 beforeEach(() => {
   vi.clearAllMocks();

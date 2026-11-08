@@ -15,3 +15,6 @@ ignoredBuiltDependencies:
   - esbuild
   - sharp
   - unrs-resolver
+
+patchedDependencies:
+  react-native-android-widget@0.26.0: patches/react-native-android-widget@0.26.0.patch

@@ -1,3 +1,6 @@
+import lightMark from '../assets/widgets/mark-light.svg';
+import darkMark from '../assets/widgets/mark-dark.svg';
+import { SEPARATOR } from '@splitbook/shared/separator';
 import { hiddenLabel } from './widget-hidden-label';
 import { FlexWidget } from 'react-native-android-widget/src/widgets/FlexWidget';
 import { TextWidget } from 'react-native-android-widget/src/widgets/TextWidget';
@@ -19,6 +22,7 @@ export function drawGroup(
   session: WidgetSession,
   now: number,
   t: SemanticTokens,
+  fontScale = 1,
 ) {
   const part =
     copy?.accountId === setup.accountId
@@ -26,8 +30,9 @@ export function drawGroup(
         ? null
         : copy.groups?.[setup.groupId]
       : undefined;
-  const view = groupWidget(part, setup, size, session, now),
-    small = size === '2x2';
+  const view = groupWidget(part, setup, size, session, now, fontScale),
+    small = size === '2x2',
+    l = view.layout;
   const color = (value: string) => value as `#${string}`;
   const action = (target: WidgetTarget) => ({
     uri: widgetLink(target, __DEV__ ? Constants.expoConfig?.hostUri : undefined),
@@ -55,18 +60,17 @@ export function drawGroup(
     <FlexWidget
       clickAction="OPEN_URI"
       clickActionData={action(target)}
-      accessibilityLabel={label}
       style={{
         backgroundColor: color(t.brand.bg),
-        paddingHorizontal: 12,
+        paddingHorizontal: l.actionPaddingHorizontal,
         paddingVertical: 9,
         borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
-        ...(small ? { width: 'match_parent' as const } : {}),
+        ...(small || l.stackPayments ? { width: 'match_parent' as const } : {}),
       }}
     >
-      {text(label, t.brand.main, 12, true)}
+      {text(label, t.brand.main, l.actionFontSize, true)}
     </FlexWidget>
   );
   const themePath =
@@ -91,165 +95,221 @@ export function drawGroup(
     <FlexWidget
       clickAction="OPEN_URI"
       clickActionData={action(target)}
-      accessibilityLabel={[
-        view.name,
-        view.title,
-        view.balance,
-        ...view.payments.map((p) => p.label + ' ' + p.amount),
-        view.saved,
-        view.hidden,
-        view.final ? 'final' : null,
-      ]
-        .filter(Boolean)
-        .join('. ')}
+      accessibilityLabel={view.summary}
       style={{
         width: 'match_parent',
         height: 'match_parent',
-        padding: 14,
+        padding: l.stackPayments ? 10 : 14,
         backgroundColor: color(t.surface),
         borderRadius: 24,
-        justifyContent: 'space-between',
       }}
     >
-      {view.name ? (
-        <FlexWidget
-          style={{ flexDirection: 'row', width: 'match_parent', alignItems: 'center', flexGap: 8 }}
-        >
-          {mark}
-          <FlexWidget style={{ flex: 1, flexGap: 3 }}>
-            <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
-              {text(view.name, t.text, 13, true)}
-              {view.final ? (
-                <FlexWidget
-                  style={{ backgroundColor: color(t.surfaceMuted), borderRadius: 6, padding: 4 }}
-                >
-                  {text('Archived', t.textSecondary, 9, true)}
-                </FlexWidget>
-              ) : null}
-            </FlexWidget>
-            {small && view.saved
-              ? text(view.saved, t.textMuted, 9)
-              : text(view.balance, balanceTone, 11, true)}
-          </FlexWidget>
-          {!small && view.saved ? text(view.saved, t.textMuted, 9) : null}
-        </FlexWidget>
-      ) : null}
-      {view.final ? text('Nothing more can be saved here.', t.textSecondary, 11) : null}
-      {view.title ? (
-        <FlexWidget style={{ flex: 1, flexDirection: 'row', alignItems: 'center', flexGap: 12 }}>
-          {view.state === 'lost-access' ? (
-            <FlexWidget
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 14,
-                backgroundColor: color(t.surfaceMuted),
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <SvgWidget
-                svg={`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="${t.textSecondary}" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></g></svg>`}
-                style={{ width: 24, height: 24 }}
-              />
-            </FlexWidget>
-          ) : null}
-          <FlexWidget style={{ flex: 1, flexGap: 10 }}>
-            {text(view.title, t.text, small ? 13 : 15, true)}
-            {text(view.description, t.textSecondary, small ? 10 : 12)}
-          </FlexWidget>
-        </FlexWidget>
-      ) : null}
-      {view.state === 'loading' ? (
-        <FlexWidget style={{ flexGap: 12 }}>
-          {[120, 180, 160].map((width, index) => (
-            <FlexWidget
-              key={index}
-              style={{ width, height: 14, borderRadius: 6, backgroundColor: color(t.surfaceMuted) }}
-            />
-          ))}
-        </FlexWidget>
-      ) : null}
-      {view.name && small ? (
-        <FlexWidget style={{ flexGap: 8 }}>
-          {view.compactAmount ? (
-            <FlexWidget style={{ flexGap: 4 }}>
-              {text(
-                view.compactLabel!,
-                view.muted
-                  ? t.textMuted
-                  : view.compactLabel === 'You owe'
-                    ? t.status.negative
-                    : t.status.positive,
-                10,
-                true,
-              )}
-              {text(view.compactAmount, view.muted ? t.textMuted : t.text, 18, true, true)}
-              {view.currencyOverflow ? text(view.currencyOverflow, t.brand.main, 10, true) : null}
-            </FlexWidget>
-          ) : (
-            text(view.balance, balanceTone, 14, true)
-          )}
-          {view.people ? text(view.people, t.textSecondary, 11) : null}
-        </FlexWidget>
-      ) : null}
-      {view.state === 'all-square' && !small ? (
-        <FlexWidget style={{ flex: 1, flexDirection: 'row', alignItems: 'center', flexGap: 8 }}>
-          {text('✓', t.status.positive, 20, true)}
-          {text(view.description, t.textSecondary, 12)}
-        </FlexWidget>
-      ) : null}
-      {view.hidden ? hiddenLabel(view.hidden, t) : null}
-      {view.payments.length ? (
-        <FlexWidget
-          style={{
-            width: 'match_parent',
-            borderRadius: 14,
-            backgroundColor: color(t.surfaceMuted),
-            padding: 6,
-            flexGap: 2,
-          }}
-        >
-          {view.payments.map((payment, index) => (
-            <FlexWidget
-              key={index}
-              clickAction="OPEN_URI"
-              clickActionData={action({
-                kind: 'settle',
-                groupId: setup.groupId,
-                ...(payment.payment ? { payment: payment.payment } : {}),
-              })}
-              accessibilityLabel={payment.label + ' ' + payment.amount}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'flex-start',
-                width: 'match_parent',
-                padding: 7,
-                flexGap: 12,
-              }}
-            >
+      <FlexWidget style={{ width: 'match_parent', flexGap: 8 }}>
+        {view.name ? (
+          <FlexWidget
+            style={{
+              flexDirection: 'row',
+              width: 'match_parent',
+              alignItems: 'center',
+              flexGap: 8,
+            }}
+          >
+            {l.showTile ? mark : null}
+            <FlexWidget style={{ flex: 1, flexGap: 3 }}>
               <FlexWidget
-                style={{ padding: 5, borderRadius: 8, backgroundColor: color(t.surface) }}
+                style={{
+                  flexDirection: l.stackHeader ? 'column' : 'row',
+                  alignItems: l.stackHeader ? 'flex-start' : 'center',
+                  flexGap: 6,
+                }}
               >
-                {text(payment.initials, t.textSecondary, 10, true)}
+                {text(view.name, t.text, 13, true)}
+                {view.final ? (
+                  <FlexWidget
+                    style={{ backgroundColor: color(t.surfaceMuted), borderRadius: 6, padding: 4 }}
+                  >
+                    {text('Archived', t.textSecondary, 9, true)}
+                  </FlexWidget>
+                ) : null}
               </FlexWidget>
-              <FlexWidget style={{ flex: 1 }}>{text(payment.label, t.text, 12)}</FlexWidget>
-              {text(
-                payment.amount,
-                view.muted ? t.textMuted : payment.incoming ? t.status.positive : t.text,
-                13,
-                true,
-                true,
-              )}
+              {small && l.showSaved && view.saved
+                ? text(view.saved, t.textMuted, 9)
+                : text(view.balance, balanceTone, 11, true)}
+              {!small && l.stackHeader && l.showSaved && view.saved
+                ? text(view.saved, t.textMuted, 9)
+                : null}
             </FlexWidget>
-          ))}
-        </FlexWidget>
-      ) : null}
+            {!small && !l.stackHeader && l.showSaved && view.saved
+              ? text(view.saved, t.textMuted, 9)
+              : null}
+          </FlexWidget>
+        ) : null}
+        {view.final && l.showDescription
+          ? text('Nothing more can be saved here.', t.textSecondary, 11)
+          : null}
+        {view.title ? (
+          <FlexWidget
+            style={{
+              width: 'match_parent',
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              flexGap: 12,
+            }}
+          >
+            {l.showTile && ['lost-access', 'expired', 'signed-out'].includes(view.state) ? (
+              <FlexWidget
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 14,
+                  backgroundColor: color(t.surfaceMuted),
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {view.state === 'signed-out' ? (
+                  <SvgWidget
+                    svg={t.mode === 'dark' ? darkMark : lightMark}
+                    style={{ width: 30, height: 30 }}
+                  />
+                ) : (
+                  <SvgWidget
+                    svg={`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="${t.textSecondary}" stroke-width="1.8">${view.state === 'expired' ? '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>' : '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/>'}</g></svg>`}
+                    style={{ width: 24, height: 24 }}
+                  />
+                )}
+              </FlexWidget>
+            ) : null}
+            <FlexWidget style={{ flex: 1, flexGap: 10 }}>
+              {text(view.title, t.text, small ? 13 : 15, true)}
+              {l.showDescription ? text(view.description, t.textSecondary, small ? 10 : 12) : null}
+            </FlexWidget>
+          </FlexWidget>
+        ) : null}
+        {view.state === 'loading' ? (
+          <FlexWidget style={{ flexGap: 12 }}>
+            {[120, 180, 160].map((width, index) => (
+              <FlexWidget
+                key={index}
+                style={{
+                  width,
+                  height: 14,
+                  borderRadius: 6,
+                  backgroundColor: color(t.surfaceMuted),
+                }}
+              />
+            ))}
+          </FlexWidget>
+        ) : null}
+        {view.name && small ? (
+          <FlexWidget style={{ flexGap: 8 }}>
+            {view.compactAmount ? (
+              <FlexWidget style={{ flexGap: 4 }}>
+                {text(
+                  view.compactLabel! + (view.final ? SEPARATOR + 'final' : ''),
+                  view.muted
+                    ? t.textMuted
+                    : view.compactLabel === 'You owe'
+                      ? t.status.negative
+                      : t.status.positive,
+                  10,
+                  true,
+                )}
+                {text(
+                  view.compactAmount,
+                  view.muted ? t.textMuted : t.text,
+                  l.moneyFontSize,
+                  true,
+                  true,
+                )}
+                {view.currencyOverflow && !l.stackPayments
+                  ? text(view.currencyOverflow, t.brand.main, 10, true)
+                  : null}
+              </FlexWidget>
+            ) : (
+              text(view.balance, balanceTone, 14, true)
+            )}
+            {view.people && l.showPeople ? text(view.people, t.textSecondary, 11) : null}
+          </FlexWidget>
+        ) : null}
+        {view.state === 'all-square' && !small && l.showDescription ? (
+          <FlexWidget
+            style={{
+              width: 'match_parent',
+              flexDirection: 'row',
+              alignItems: 'center',
+              flexGap: 8,
+            }}
+          >
+            {text('✓', t.status.positive, 20, true)}
+            {text(view.description, t.textSecondary, 12)}
+          </FlexWidget>
+        ) : null}
+        {view.hidden && l.showPrivacyLabel ? hiddenLabel(view.hidden, t) : null}
+        {view.payments.length ? (
+          <FlexWidget
+            style={{
+              width: 'match_parent',
+              borderRadius: 14,
+              backgroundColor: color(t.surfaceMuted),
+              padding: 6,
+              flexGap: 2,
+            }}
+          >
+            {view.payments.map((payment, index) => (
+              <FlexWidget
+                key={index}
+                clickAction="OPEN_URI"
+                clickActionData={action({
+                  kind: 'settle',
+                  groupId: setup.groupId,
+                  ...(payment.payment ? { payment: payment.payment } : {}),
+                })}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  width: 'match_parent',
+                  padding: 7,
+                  flexGap: 12,
+                }}
+              >
+                <FlexWidget
+                  style={{ padding: 5, borderRadius: 8, backgroundColor: color(t.surface) }}
+                >
+                  {text(payment.initials, t.textSecondary, 10, true)}
+                </FlexWidget>
+                <FlexWidget style={{ flex: 1, flexGap: 2 }}>
+                  {text(payment.label, t.text, 12)}
+                  {l.stackPayments
+                    ? text(
+                        payment.amount,
+                        view.muted ? t.textMuted : payment.incoming ? t.status.positive : t.text,
+                        13,
+                        true,
+                        true,
+                      )
+                    : null}
+                </FlexWidget>
+                {!l.stackPayments
+                  ? text(
+                      payment.amount,
+                      view.muted ? t.textMuted : payment.incoming ? t.status.positive : t.text,
+                      13,
+                      true,
+                      true,
+                    )
+                  : null}
+              </FlexWidget>
+            ))}
+          </FlexWidget>
+        ) : null}
+      </FlexWidget>
+      <FlexWidget style={{ flex: 1 }} />
       <FlexWidget
         style={{
           width: 'match_parent',
-          flexDirection: small ? 'column' : 'row',
+          flexDirection: small || l.stackPayments ? 'column' : 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexGap: 8,
@@ -259,7 +319,6 @@ export function drawGroup(
           <FlexWidget
             clickAction="OPEN_URI"
             clickActionData={action({ kind: 'settle', groupId: setup.groupId })}
-            accessibilityLabel={view.more}
           >
             {text(view.more, t.brand.main, 10, true)}
           </FlexWidget>
@@ -268,9 +327,11 @@ export function drawGroup(
         ) : null}
         {view.target === 'setup'
           ? button(view.action!, config)
-          : view.addExpense
-            ? button('＋ Add expense', { kind: 'expense', groupId: setup.groupId })
-            : null}
+          : view.target === 'sign-in'
+            ? button('Sign in', 'sign-in')
+            : view.addExpense
+              ? button('＋ Add expense', { kind: 'expense', groupId: setup.groupId })
+              : null}
       </FlexWidget>
     </FlexWidget>
   );
