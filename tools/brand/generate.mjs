@@ -389,16 +389,36 @@ if (notificationInfo.width !== 96 || notificationInfo.height !== 96)
   throw new Error('Notification icon must be 96 x 96 pixels.');
 let visibleNotificationPixels = 0;
 let transparentNotificationPixels = 0;
+const notificationBounds = { left: 96, top: 96, right: -1, bottom: -1 };
 for (let i = 0; i < notificationPixels.length; i += 4) {
   if (notificationPixels[i + 3] === 0) transparentNotificationPixels++;
   else {
     visibleNotificationPixels++;
+    const x = (i / 4) % notificationInfo.width;
+    const y = Math.floor(i / 4 / notificationInfo.width);
+    notificationBounds.left = Math.min(notificationBounds.left, x);
+    notificationBounds.top = Math.min(notificationBounds.top, y);
+    notificationBounds.right = Math.max(notificationBounds.right, x);
+    notificationBounds.bottom = Math.max(notificationBounds.bottom, y);
     if (notificationPixels.subarray(i, i + 3).some((channel) => channel !== 255))
       throw new Error('Notification icon must be white on transparent.');
   }
 }
 if (!visibleNotificationPixels || !transparentNotificationPixels)
   throw new Error('Notification icon must have both visible artwork and transparent padding.');
+const notificationSpan = Math.max(
+  notificationBounds.right - notificationBounds.left + 1,
+  notificationBounds.bottom - notificationBounds.top + 1,
+);
+if (notificationSpan < 76)
+  throw new Error(`Notification icon artwork must span at least 76 pixels; got ${notificationSpan}.`);
+if (
+  notificationBounds.left < 2 ||
+  notificationBounds.top < 2 ||
+  notificationBounds.right > 93 ||
+  notificationBounds.bottom > 93
+)
+  throw new Error('Notification icon must leave at least 2 transparent pixels on every edge.');
 const appBytes = generated.get('assets/brand/png/app-icon-1024.png');
 if ((await sharp(appBytes).metadata()).hasAlpha)
   throw new Error('Native app icon must have no alpha channel.');
