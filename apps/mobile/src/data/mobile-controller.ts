@@ -2631,7 +2631,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ...snapshot,
           notificationOpening: {
             status: 'held',
-            message: 'An update is ready. Open it when you’re finished.',
+            message: 'An update is ready.',
           },
         });
         return;
@@ -2654,7 +2654,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ...snapshot,
           notificationOpening: {
             status: 'held',
-            message: 'An update is ready. Open it when you’re finished.',
+            message: 'An update is ready.',
           },
         });
         return;
@@ -2707,7 +2707,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       heldNotificationNotice: firstHeld ? owner : snapshot.heldNotificationNotice,
       notificationOpening: {
         status: 'held',
-        message: 'An update is ready. Open it when you’re finished.',
+        message: 'An update is ready.',
       },
     });
     if (!notificationProtected()) await openPendingNotification();
@@ -8118,6 +8118,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }
       } else await client.create(draftValues(entries), JSON.stringify(d));
       if (!current(uploadOwner) || route !== view) return;
+      // The confirmed upload completed this editor; it must not remain a saving task on Group.
+      publish({ ...snapshot, expense: emptyExpenseEditor() });
       await openGroup(editor.groupId);
       if (
         !current(uploadOwner) ||

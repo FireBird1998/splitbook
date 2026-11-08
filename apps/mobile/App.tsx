@@ -53,6 +53,8 @@ import { ThemeContext, useTheme } from './src/ui/theme';
 import { Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
 import {
   Badge,
+  Banner,
+  CompactButton,
   CompactText,
   FloatingAction,
   IconButton,
@@ -153,7 +155,6 @@ export default function App() {
       <ThemeContext.Provider value={getSemanticTokens(mode)}>
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
         <SplitBook />
-        <NotificationOpening />
       </ThemeContext.Provider>
     </SafeAreaProvider>
   );
@@ -738,6 +739,7 @@ function TaskScreen() {
  * start it is the saved Home, read-only until the session is confirmed.
  */
 const HomeScreen = memo(function HomeScreen() {
+  const heldUpdate = useHeldUpdateBanner();
   const selected = useMobileSnapshot(
     controller,
     (snapshot) => {
@@ -836,6 +838,7 @@ const HomeScreen = memo(function HomeScreen() {
           />
         }
       >
+        {heldUpdate}
         {/* Offline, the banner says so; that what's shown was saved on this device, only
             while some of it is (#332). */}
         <OfflineNotice
@@ -956,6 +959,7 @@ const unlistedGroup = (id: string): MobileGroup => ({
 
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen() {
+  const heldUpdate = useHeldUpdateBanner();
   const state = useMobileSnapshot(
     controller,
     (snapshot) => ({
@@ -1071,6 +1075,15 @@ function GroupScreen() {
       shown.restoreScroll?.request !== restore.request ||
       shown.restoreScroll.groupId !== restore.groupId
     ) {
+      pendingScroll.current = null;
+      return;
+    }
+    // Returning from a protected task reveals the held update above the list. Restoring its
+    // row anchor would scroll past that newly inserted Banner, even when the old offset was zero.
+    // Consume this return once; later layouts and the member's own scrolling remain untouched.
+    if (shown.notificationOpening.status !== 'idle' && !notificationTaskProtected(shown)) {
+      scroll.current?.scrollTo({ y: 0, animated: false });
+      scrollY.current = 0;
       pendingScroll.current = null;
       return;
     }
@@ -1264,6 +1277,7 @@ function GroupScreen() {
       cover={
         eventOpen && showsContent && shown ? (
           <>
+            {heldUpdate}
             {notice}
             {groupNotice(shown)}
             {activity(shown, state.activity)}
@@ -1347,6 +1361,7 @@ function GroupScreen() {
         </>
       }
     >
+      {!(eventOpen && showsContent && shown) && heldUpdate}
       {group && state.tagsOpenFor === group.id && (
         <TagManager
           key={userId + group.id}
@@ -1671,23 +1686,51 @@ const ExpenseScreen = memo(function ExpenseScreen() {
   );
 });
 
-function NotificationOpening() {
+function useHeldUpdateBanner() {
   const state = useMobileSnapshot(
     controller,
     (snapshot) => ({
       opening: snapshot.notificationOpening,
+      owner: snapshot.heldNotification,
       protected: notificationTaskProtected(snapshot),
     }),
     sameSelection,
   );
-  if (!['held', 'error'].includes(state.opening.status) || state.protected) return null;
+  if (state.opening.status === 'idle' || state.protected) return null;
+  const opening = state.opening.status === 'opening';
+  const error = state.opening.status === 'error';
   return (
-    <View style={{ padding: 12 }}>
-      <Copy>{state.opening.message}</Copy>
-      <Button
-        label={state.opening.status === 'error' ? 'Retry opening update' : 'Open update'}
-        onPress={() => void controller.openPendingNotification()}
-      />
-    </View>
+    <Banner
+      standing
+      tone={error ? 'error' : 'info'}
+      busy={opening}
+      title={opening ? undefined : error ? 'Couldn’t open the update' : 'An update is ready'}
+      message={
+        opening
+          ? 'Checking Group access…'
+          : error
+            ? 'Check your connection and try again.'
+            : 'From a notification you opened earlier.'
+      }
+    >
+      {!opening && (
+        <>
+          <CompactButton
+            variant="text"
+            dense
+            label={error ? 'Retry' : 'Open'}
+            onPress={() => void controller.openPendingNotification()}
+          />
+          <CompactButton
+            variant="text"
+            dense
+            label="Not now"
+            onPress={() => {
+              if (state.owner) controller.dismissPendingNotification(state.owner);
+            }}
+          />
+        </>
+      )}
+    </Banner>
   );
 }

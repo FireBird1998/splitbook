@@ -1,18 +1,15 @@
-import { Fragment, createContext, type ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
 import { lineBox, radius, touch } from './scale';
 import { CompactText } from './text';
+import { BusyMark } from './controls';
+import { BannerActionColor } from './banner-action-color';
+
+export { BannerActionColor } from './banner-action-color';
 
 export type BannerTone = 'info' | 'warning' | 'error' | 'offline';
-
-/**
- * The colour a text action inside a Banner takes: its tone's status colour, as on the web (#782,
- * #807). Null outside a Banner, and in an offline one, whose neutral tone has none: there its
- * actions keep the brand.
- */
-export const BannerActionColor = createContext<string | null>(null);
 
 const bannerIcons: Record<BannerTone, IconName> = {
   info: 'information-circle-outline',
@@ -114,6 +111,7 @@ export function Banner({
   message,
   links,
   standing = false,
+  busy = false,
   heading = false,
   trailing,
   children,
@@ -128,6 +126,8 @@ export function Banner({
   links?: SentenceLink[];
   /** A notice that stays on the screen, e.g. an unconfirmed payment: announced politely. */
   standing?: boolean;
+  /** A check in progress replaces the tone icon with the standard busy mark. */
+  busy?: boolean;
   /** Beside the title, such as a draft's amount. */
   trailing?: ReactNode;
   children?: ReactNode;
@@ -144,6 +144,7 @@ export function Banner({
     <View
       accessibilityRole={urgent ? 'alert' : 'summary'}
       accessibilityLiveRegion={urgent ? 'assertive' : 'polite'}
+      accessibilityState={{ busy }}
       style={{
         flexDirection: 'row',
         alignItems: 'flex-start',
@@ -154,7 +155,11 @@ export function Banner({
         backgroundColor: colors[0],
       }}
     >
-      <Icon name={bannerIcons[tone]} size={20} color={colors[1]} />
+      {busy ? (
+        <BusyMark color={colors[1]} />
+      ) : (
+        <Icon name={bannerIcons[tone]} size={20} color={colors[1]} />
+      )}
       <View style={{ flex: 1, gap: 2 }}>
         {title ? (
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>

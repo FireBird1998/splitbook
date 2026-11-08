@@ -1,3 +1,9 @@
+import { notificationTaskProtected } from './data/notification-alerts';
+import {
+  notificationDevice,
+  notificationHint,
+  notificationPreferences,
+} from './test-utils/notification';
 import {
   act,
   create,
@@ -21,6 +27,7 @@ import {
   setWindow,
 } from './test-utils/native';
 import { GroupExpensesView } from './ui/group-expenses';
+import { Banner, BusyMark } from './ui/compact';
 import { GroupActivity } from './ui/group-activity';
 import { confirmSheetIn, confirmSheetOpen } from './test-utils/confirm-sheet';
 
@@ -67,6 +74,19 @@ const callbacks = vi.hoisted(() => ({
 vi.mock('./notification-callbacks', () => ({
   attachNotificationCallbacks: callbacks.attach,
 }));
+
+const notificationCallbacksNative = vi.hoisted(() => ({
+  DEFAULT_ACTION_IDENTIFIER: 'default',
+  setNotificationHandler: vi.fn(),
+  registerTaskAsync: vi.fn(async () => undefined),
+  getLastNotificationResponseAsync: vi.fn(async () => null),
+  clearLastNotificationResponseAsync: vi.fn(async () => undefined),
+  addNotificationResponseReceivedListener: vi.fn((listener: (response: unknown) => void) => {
+    void listener;
+    return { remove: vi.fn() };
+  }),
+}));
+vi.mock('expo-notifications', () => notificationCallbacksNative);
 
 const { default: App } = await import('../App');
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -153,6 +173,19 @@ function backend() {
     failDraftRemoval: false,
     submissionKey: 'native-app-test-0001',
   };
+  const draftRequestRecords = new Map<string, unknown>();
+  const draftRequests = {
+    load: async (accountId: string, id: string) => draftRequestRecords.get(accountId + id) ?? null,
+    save: async (accountId: string, id: string, value: unknown) => {
+      draftRequestRecords.set(accountId + id, structuredClone(value));
+    },
+    remove: async (accountId: string, id: string) => {
+      draftRequestRecords.delete(accountId + id);
+    },
+    clear: async () => {
+      draftRequestRecords.clear();
+    },
+  };
   const tagRecords = new Map<string, unknown>();
   const tagRequests = {
     load: async (accountId: string, id: string) =>
@@ -206,6 +239,8 @@ function backend() {
       },
       {
         now: () => clock.now,
+        notifications: notificationDevice,
+        draftRequests,
         settlementAttempts,
         tagRequests,
         expenseDrafts: {
@@ -238,7 +273,7 @@ function backend() {
             },
           },
           cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [groupCreations, settlementAttempts, tagRequests],
+          stores: [groupCreations, settlementAttempts, tagRequests, draftRequests],
         },
         groupCreations,
         newSubmissionKey: () => device.submissionKey,
@@ -1802,7 +1837,7 @@ describe('App return from an Expense', () => {
 });
 
 /** Native parent-relative coordinates through either of Card's body shapes. */
-function layNativeRow(pressed: ReactTestInstance, rowY: number, height = 60) {
+function layNativeRow(pressed: ReactTestInstance, rowY: number, height = 60, originY = 80) {
   let node: ReactTestInstance | null = pressed;
   const places: ReactTestInstance[] = [];
   while (node && places.length < 4) {
@@ -1830,7 +1865,7 @@ function layNativeRow(pressed: ReactTestInstance, rowY: number, height = 60) {
   act(() =>
     places.forEach((place, index) =>
       place.props.onLayout({
-        nativeEvent: { layout: { y: [rowY, dayY, 200, 80][index], height } },
+        nativeEvent: { layout: { y: [rowY, dayY, 200, originY][index], height } },
       }),
     ),
   );
@@ -3374,5 +3409,246 @@ describe('Account → Connected assistants (#622)', () => {
     expect(shown).toContain('Connected assistants aren’t saved on this phone.');
     expect(shown).toContain('You’re offline');
     expect(shown).not.toContain('was saved on this device');
+  });
+});
+
+describe('held update Banner in screen content', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it.each(['close', 'save', 'finish later'] as const)(
+    'shows the held Banner after a background receipt, foreground callback tap and %s',
+    async (exit) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+      vi.stubEnv('EXPO_PUBLIC_ANDROID_NOTIFICATIONS_ENABLED', 'true');
+      const realCallbacks = await vi.importActual<typeof import('./notification-callbacks')>(
+        './notification-callbacks',
+      );
+      callbacks.attach.mockImplementationOnce((...args) =>
+        realCallbacks.attachNotificationCallbacks(
+          ...(args as Parameters<typeof realCallbacks.attachNotificationCallbacks>),
+        ),
+      );
+      const app = await renderApp((path, init) => {
+        if (path.startsWith('/api/notifications/device'))
+          return json({ data: notificationPreferences });
+        if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST')
+          return json({ status: 201, data: { _id: september._id, group: groupId } }, 201);
+        if (path === `/api/groups/${groupId}/drafts` && init.method === 'POST') {
+          const values = JSON.parse(String(init.body)).drafts[0];
+          return json(
+            {
+              data: [
+                {
+                  id: 'e00000000000000000000001',
+                  groupId,
+                  revision: 0,
+                  state: 'active',
+                  preparedBy: { kind: 'member' },
+                  changedBy: { kind: 'member' },
+                  createdAt: iso,
+                  updatedAt: iso,
+                  missingFields: [],
+                  values,
+                },
+              ],
+            },
+            201,
+          );
+        }
+        if (path === `/api/groups/${groupId}/drafts`) return json({ data: [] });
+        return undefined;
+      });
+      await app.press('Open Maple House');
+      // A member has previously checked To review in this Group.
+      await settle(app.controller.openToReview(groupId));
+      expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(true);
+      await settle(Promise.resolve(app.controller.closeToReview()));
+      expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(false);
+      layNativeRow(app.pressable('September groceries,'), 0);
+      await app.layout(400, 1400);
+      await app.scrollTo(0);
+      await app.press('Add expense');
+      expect(app.controller.getSnapshot().expense.returnTo).toMatchObject({
+        scrollY: 0,
+        anchor: { key: september._id },
+      });
+      if (exit !== 'close')
+        await settle(
+          app.controller.updateExpenseDraft({
+            description: 'Dinner',
+            amount: '10',
+            tagId: 'c00000000000000000000001',
+          }),
+        );
+      const envelope = {
+        ...notificationHint(user.id, groupId, app.clock.now),
+        kind: 'expense_updated',
+      };
+      await settle(Promise.resolve(emitAppState('background')));
+      await settle(
+        app.controller.receiveNotification(envelope, { visible: false }).then((show) => {
+          expect(show).toBe(true);
+        }),
+      );
+      await settle(Promise.resolve(emitAppState('active')));
+      expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(true);
+      const response = {
+        actionIdentifier: 'default',
+        notification: {
+          request: {
+            identifier: `expense-updated:${envelope.eventId}`,
+            content: { data: envelope },
+          },
+        },
+      };
+      const clearCount =
+        notificationCallbacksNative.clearLastNotificationResponseAsync.mock.calls.length;
+      await settle(
+        Promise.resolve(
+          notificationCallbacksNative.addNotificationResponseReceivedListener.mock.calls.at(-1)![0](
+            response,
+          ),
+        ),
+      );
+      expect(notificationCallbacksNative.clearLastNotificationResponseAsync).toHaveBeenCalledTimes(
+        clearCount + 1,
+      );
+      expect(app.controller.getSnapshot().notificationOpening.status).toBe('held');
+      expect(app.text()).not.toContain('An update is ready');
+      expect(app.text()).toContain('Update held until you finish');
+      if (exit === 'close') await app.press('Back to Group');
+      else if (exit === 'save') await app.press('Save expense');
+      else await app.press('Finish later');
+      expect(app.controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        destination: 'expenses',
+      });
+      expect(app.controller.getSnapshot()).toMatchObject({
+        notificationOpening: { status: 'held' },
+        toReview: { groupId: null, run: null },
+        sharedDraftCollection: { groupId, busy: false },
+        settlement: { status: 'idle' },
+        creation: { status: 'editing' },
+        tagsOpenFor: null,
+        currenciesOpenFor: null,
+        tagManager: { edit: null, recovery: null, busy: false },
+        leave: { status: 'closed' },
+      });
+      expect(app.controller.getSnapshot().expense.status).toBe(
+        exit === 'close' ? 'editing' : exit === 'save' ? 'saved' : 'idle',
+      );
+      expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(false);
+      expect(app.text()).toContain('An update is ready');
+      expect(app.pressable('Open')).toBeTruthy();
+      expect(app.pressable('Not now')).toBeTruthy();
+      native.scrollTo.mockClear();
+      // Native layout reports the new Banner and its gap above the same Expense row.
+      // Keeping the old row at its old viewport position would scroll the Banner out of view.
+      layNativeRow(app.pressable('September groceries,'), 0, 60, 200);
+      await app.layout(400, 1520);
+      await settle();
+      // Finish later opens a fresh Group at zero; Close and Save restore the previous view.
+      expect(native.scrollTo.mock.calls.at(-1)?.[0]?.y ?? 0).toBe(0);
+      native.scrollTo.mockClear();
+      await app.scrollTo(180);
+      layNativeRow(app.pressable('September groceries,'), 0, 60, 220);
+      await app.layout(400, 1540);
+      await settle();
+      expect(native.scrollTo).not.toHaveBeenCalled();
+    },
+  );
+  for (const mode of ['light', 'dark'] as const) {
+    for (const destination of ['Home', 'Group', 'Group event'] as const) {
+      it.each(['held', 'opening', 'error', 'idle'] as const)(
+        `${mode} ${destination}: %s`,
+        async (status) => {
+          runtime.appearance = { mode, status: 'ready', message: null };
+          const app = await renderApp();
+          if (destination !== 'Home') await settle(app.controller.openGroup(groupId));
+          if (destination === 'Group event') {
+            await settle(app.controller.selectDestination('activity'));
+            await settle(
+              app.controller.openActivityEvent('d00000000000000000000001', { scrollY: 0 }),
+            );
+          }
+          const owner = { generation: 1, accountId: user.id };
+          const snapshot = {
+            ...app.controller.getSnapshot(),
+            heldNotification: owner,
+            notificationOpening: { status, message: 'Legacy controller message' },
+          };
+          vi.spyOn(app.controller, 'getSnapshot').mockReturnValue(snapshot);
+          const open = vi.spyOn(app.controller, 'openPendingNotification').mockResolvedValue();
+          const dismiss = vi
+            .spyOn(app.controller, 'dismissPendingNotification')
+            .mockImplementation(() => {});
+          act(() => screen!.unmount());
+          await mount();
+          const banners = app
+            .root()
+            .findAllByType(Banner)
+            .filter(
+              (node) =>
+                ['An update is ready', 'Couldn’t open the update'].includes(node.props.title) ||
+                node.props.message === 'Checking Group access…',
+            );
+          expect(banners).toHaveLength(status === 'idle' ? 0 : 1);
+          expect(app.text()).not.toContain('Legacy controller message');
+          if (status === 'idle') return;
+          const banner = banners[0];
+          expect(banner.props.standing).toBe(true);
+          expect(banner.props.tone).toBe(status === 'error' ? 'error' : 'info');
+          let ancestor = banner.parent;
+          while (ancestor && (ancestor.type as unknown) !== 'ScrollView')
+            ancestor = ancestor.parent;
+          expect(ancestor, 'Banner belongs inside the screen scroll content').not.toBeNull();
+          const colors = getSemanticTokens(mode);
+          const host = banner.findAll((node) => (node.type as unknown) === 'View')[0];
+          expect(host.props.style.backgroundColor).toBe(
+            status === 'error' ? colors.negative.bg : colors.info.bg,
+          );
+          expect(host.props.accessibilityState.busy).toBe(status === 'opening');
+          if (status === 'opening') {
+            expect(banner.findAllByType(BusyMark)).toHaveLength(1);
+            expect(banner.findAll((node) => (node.type as unknown) === 'Pressable')).toHaveLength(
+              0,
+            );
+          } else {
+            expect(banner.props.message).toBe(
+              status === 'held'
+                ? 'From a notification you opened earlier.'
+                : 'Check your connection and try again.',
+            );
+            await settle(
+              Promise.resolve(
+                banner
+                  .find(
+                    (node) =>
+                      (node.type as unknown) === 'Pressable' &&
+                      node.props.accessibilityLabel === (status === 'held' ? 'Open' : 'Retry'),
+                  )
+                  .props.onPress(),
+              ),
+            );
+            expect(open).toHaveBeenCalledOnce();
+            await app.press('Not now');
+            expect(dismiss).toHaveBeenCalledExactlyOnceWith(owner);
+          }
+        },
+      );
+    }
+  }
+  it('hides the standing Banner while a protected sheet is open', async () => {
+    const app = await renderApp();
+    const snapshot = {
+      ...app.controller.getSnapshot(),
+      tagsOpenFor: groupId,
+      heldNotification: { generation: 1, accountId: user.id },
+      notificationOpening: { status: 'held' as const, message: 'Legacy controller message' },
+    };
+    vi.spyOn(app.controller, 'getSnapshot').mockReturnValue(snapshot);
+    act(() => screen!.unmount());
+    await mount();
+    expect(app.text()).not.toContain('An update is ready');
+    expect(app.text()).not.toContain('Legacy controller message');
   });
 });

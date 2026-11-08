@@ -5,7 +5,7 @@ import { Icon, type IconName } from '../primitives';
 import { useReducedMotion } from './motion';
 import { denseHitSlop, radius, touch } from './scale';
 import { useTap, type Tap } from './tap';
-import { BannerActionColor } from './feedback';
+import { BannerActionColor } from './banner-action-color';
 import { CompactText, FieldMarker, Money, fieldMarker } from './text';
 
 /** Spinning while busy; with reduce motion on, a still hourglass instead. */

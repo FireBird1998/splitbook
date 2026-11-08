@@ -88,7 +88,8 @@ export function notificationTaskProtected(snapshot: MobileSnapshot): boolean {
     ['uncertain', 'saving'].includes(snapshot.creation.status) ||
     snapshot.toReview.groupId !== null ||
     snapshot.toReview.run !== null ||
-    snapshot.sharedDraftCollection.groupId !== null ||
+    // The collection keeps its Group and results after its sheet closes. The open sheet/run
+    // above owns task protection; a retained display collection is not an active task.
     snapshot.sharedDraftCollection.busy ||
     snapshot.tagsOpenFor !== null ||
     snapshot.currenciesOpenFor !== null ||
