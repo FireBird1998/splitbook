@@ -5,6 +5,7 @@ import {
   assertCreateReplay,
   createRequestMetadata,
   makePendingActivity,
+  paymentAlertAudience,
 } from '@/lib/financial-write';
 import Group from '@/lib/models/Group';
 import Settlement from '@/lib/models/Settlement';
@@ -98,7 +99,7 @@ export async function createSettlementBatch(
     groupId,
     async (session) => {
       if (!session) throw new Error('SETTLEMENT_TRANSACTIONS_REQUIRED');
-      await authorize();
+      const committedGroup = await authorize();
       // A competing request may have committed while this one waited on the Group fence.
       const concurrent = await replay();
       if (concurrent) return concurrent;
@@ -130,6 +131,14 @@ export async function createSettlementBatch(
           ...snapshot,
           paidByName: names.find((person) => String(person._id) === paidBy)?.name,
           paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
+        });
+        // One Payment alert identity per committed Settlement (#842); the batch has none of its own.
+        await paymentAlertAudience(event, {
+          groupId,
+          recordId: String(ids[index]),
+          paidBy,
+          paidTo: data.paidTo,
+          members: async () => committedGroup.members,
         });
         result.push(
           await Settlement.create({

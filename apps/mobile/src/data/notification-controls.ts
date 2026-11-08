@@ -22,6 +22,8 @@ const preferences = z.object({
   activation: z.string().nullable(),
   binding: z.string().nullable().optional(),
   expenseActivation: z.string().nullable().optional(),
+  /** The Payments delivery generation (#842); an older server answers without it. */
+  paymentActivation: z.string().nullable().optional(),
   expenseCutoff: z.string().nullable(),
   paymentCutoff: z.string().nullable(),
 });

@@ -19,6 +19,7 @@ import {
   assertCreateReplay,
   createRequestMetadata,
   makePendingActivity,
+  paymentAlertAudience,
 } from '@/lib/financial-write';
 import User from '@/lib/models/User';
 import { Types } from 'mongoose';
@@ -109,6 +110,15 @@ export class SettlementService {
             ...(data.paidCurrency ? { amountMinor, ...crossCurrency, ...debtSnapshot } : {}),
             paidByName: names.find((person) => String(person._id) === paidBy)?.name,
             paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
+          });
+          // Payment alert audience (#842), from the Group's members in this same commit.
+          await paymentAlertAudience(event, {
+            groupId,
+            recordId: String(settlementId),
+            paidBy,
+            paidTo: data.paidTo,
+            members: async () =>
+              (await Group.findById(groupId).select('members').lean())?.members ?? [],
           });
           return Settlement.create({
             _id: settlementId,

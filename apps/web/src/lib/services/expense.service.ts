@@ -41,7 +41,7 @@ import {
   assertPendingActivityCapacity,
   createRequestMetadata,
   expenseChangeAlertsEnabled,
-  expenseNotificationContext,
+  ledgerNotificationContext,
   involvedMembers,
   makePendingActivity,
   requestTagForReplay,
@@ -125,7 +125,7 @@ export class ExpenseService {
    */
   private async captureAlertAudience(
     expense: { _id: unknown; pendingActivity: Array<{ notificationContext?: unknown }> },
-    event: Parameters<typeof expenseNotificationContext>[0] | undefined,
+    event: Parameters<typeof ledgerNotificationContext>[0] | undefined,
     kind: ExpenseNotificationKind,
     groupId: string,
     involved: Iterable<string>,
@@ -139,7 +139,7 @@ export class ExpenseService {
       (pending) => String((pending as { _id?: unknown })._id) === String(event._id),
     );
     if (!intent) return;
-    intent.notificationContext = expenseNotificationContext(
+    intent.notificationContext = ledgerNotificationContext(
       event,
       kind,
       { groupId, recordId: String(expense._id) },

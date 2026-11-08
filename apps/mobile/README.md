@@ -381,3 +381,19 @@ flight, so the two never send conflicting revisions; a category change interrupt
 runs maintenance again afterwards. Tokens stay in memory for the one request: never in a
 snapshot, a saved copy, device storage or a log. `pnpm mobile verify:notifications` covers
 rotation and same-session restoration against a real backend.
+
+## Payment alerts (#842)
+
+The same data-only path carries `settlement_recorded` envelopes, one per Settlement another
+member records with this member as payer or recipient: single, batch (one alert per Settlement,
+none for the batch itself) and Cross-currency. They pass the same checks (account, environment,
+binding, expiry), but under the **Payments** switch and its own `paymentActivation`, so Payments
+and Expense updates turn on and off independently on each phone. The alert text is fixed:
+"Splitbook" / "A payment was recorded." (identifier `settlement-recorded:` and the event id), with
+no names, amounts, rates or currencies. A visible app on the affected Group refreshes quietly
+instead. A tap, warm or cold, opens the current authorized Group Activity after a fresh Group
+read; it never opens the Record payment sheet, reads the Settlement or records a payment. An open
+form, an unresolved payment and its stored retry key stay exactly as they were, and the tap is
+held until the member opens it. The server sends these only while
+`ANDROID_NOTIFICATION_PAYMENTS_ENABLED=true` (docs/api.md), off by default; app builds from
+before #842 drop them unshown.

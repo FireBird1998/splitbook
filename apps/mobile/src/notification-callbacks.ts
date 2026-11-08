@@ -1,4 +1,4 @@
-import { attachLiveReceiver, isExpenseAlert, notificationTaskName } from './notification-task';
+import { attachLiveReceiver, isLedgerAlert, notificationTaskName } from './notification-task';
 
 /**
  * Receipt/tap callbacks are the only native navigation seam; no permissions are requested here.
@@ -21,7 +21,7 @@ export async function attachNotificationCallbacks(
     handleNotification: async (notification) => {
       const { trigger, identifier } = notification.request;
       const pushed = !!trigger && 'type' in trigger && trigger.type === 'push';
-      const show = active && !pushed && isExpenseAlert(identifier);
+      const show = active && !pushed && isLedgerAlert(identifier);
       return {
         shouldShowBanner: show,
         shouldShowList: show,

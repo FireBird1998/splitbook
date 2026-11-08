@@ -65,6 +65,8 @@ type Registration = {
   revision: number;
   activation: string | null;
   expenseActivation?: string | null;
+  /** The Payments generation (#842): renewed only when Payments turns on, as Expense's is. */
+  paymentActivation?: string | null;
   expenseCutoff: Date | null;
   paymentCutoff: Date | null;
   token?: string;
@@ -97,6 +99,7 @@ const publicState = (r: Registration) => ({
   activation: r.activation,
   binding: r.binding,
   expenseActivation: r.expenseActivation ?? r.activation,
+  paymentActivation: r.paymentActivation ?? r.activation,
   expenseCutoff: r.expenseCutoff?.toISOString() ?? null,
   paymentCutoff: r.paymentCutoff?.toISOString() ?? null,
 });
@@ -260,6 +263,10 @@ export async function POST(req: Request) {
             expenseUpdates && (enabling || !prior?.expenseUpdates)
               ? randomUUID()
               : (prior?.expenseActivation ?? prior?.activation ?? null),
+          paymentActivation:
+            payments && (enabling || !prior?.payments)
+              ? randomUUID()
+              : (prior?.paymentActivation ?? prior?.activation ?? null),
           activation: activate ? randomUUID() : (prior?.activation ?? null),
           expenseCutoff:
             expenseUpdates && (enabling || !prior?.expenseUpdates)

@@ -2349,7 +2349,7 @@ New installations and new account/session bindings start off. Explicit opt-in de
 categories on. Each enabling or category off-to-on transition confirms a new activation
 generation and server cutoff; preferences are independent per installation across Groups.
 Responses contain `available`, `enabled`, `expenseUpdates`, `payments`, `revision`,
-`binding`, `activation`, `expenseActivation`, `expenseCutoff` and `paymentCutoff`. They never contain tokens or ownership
+`binding`, `activation`, `expenseActivation`, `paymentActivation` (#842), `expenseCutoff` and `paymentCutoff`. They never contain tokens or ownership
 proofs. A previous account's binding is returned as off to another account on the same
 installation. Installation ownership proof is still required; revisions remain monotonic
 across binding changes so older updates cannot overwrite newer bindings.
@@ -2528,3 +2528,39 @@ default** and stays off in production until the owner accepts the feature. While
 these events capture no notification context (exactly as before #841), so turning it on later
 sends no backlog; turning it off again also stops sends of events captured while it was on.
 Manual and reviewed-Draft Expense-added alerts never depend on it.
+
+## Payment Android alerts (#842)
+
+Recording a Settlement through any existing path captures the same private, immutable
+notification context as Expense alerts, inside that Settlement's own financial commit:
+
+| Path                                                                 | Kind                  | Audience captured at the commit                           |
+| -------------------------------------------------------------------- | --------------------- | --------------------------------------------------------- |
+| Single (`POST /api/groups/:id/settlements`), Cross-currency included | `settlement_recorded` | The payer and the recipient, without the member recording |
+| Batch (`POST /api/groups/:id/settlements/batch`)                     | `settlement_recorded` | The same, once per committed Settlement of the batch      |
+
+The audience is intersected with the Group's members at the commit; dispatch rechecks current
+membership, session, binding, the device's **Payments** switch, `paymentCutoff`, the Payments
+generation and the 24-hour expiry before every provider request. A batch keeps one event and one
+delivery identity per committed Settlement; there is no batch-level event or alert. An idempotent
+retry (single or batch, same key and body) returns the committed Settlement(s) and adds no record,
+event or delivery. A refused or uncommitted recording (including a batch refused part-way, which
+records none of its rows), reading Suggested payments, and any Draft step record nothing and send
+nothing. There is no Settlement-deletion operation and no deletion alert. The envelope is the same
+data-only version-2 envelope, with no names, amounts, rates, currencies or notes. The app shows
+"Splitbook" / "A payment was recorded."; a tap opens the current authorized Group Activity and
+never records a payment.
+
+The Payments switch is independent of Expense updates on each device. Its delivery generation
+`paymentActivation` (in the device response, next to `expenseActivation`) changes only when
+Payments is enabled or re-enabled, so turning Expense updates off and on cannot resend an accepted
+Payment alert. A registration from before #842 keeps its shared `activation` as its Payments
+generation until its next settings change pins it.
+
+**Rollout switch.** Payment alerts need `ANDROID_NOTIFICATION_PAYMENTS_ENABLED=true`, besides
+`ANDROID_NOTIFICATIONS_ENABLED` and `ANDROID_NOTIFICATION_SENDS_ENABLED`, and independently of
+`ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED`. It is **off by default** and stays off in
+production until the owner accepts the feature. While it is off a recording captures no
+notification context (exactly as before #842), so turning it on later sends no backlog; turning
+it off again also stops sends of payments captured while it was on. Expense alerts never depend
+on it, and Settlement recording, its answers and the recorded money are the same either way.
