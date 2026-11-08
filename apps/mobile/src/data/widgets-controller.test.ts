@@ -592,3 +592,23 @@ it('closes an open widget picker when a chosen-Group widget opens its Expense', 
   expect(c.getSnapshot().widgetPicker).toBe(false);
   expect(c.getSnapshot().screen).toBe('expense');
 });
+
+it('holds a widget tap during Add expense and offers it after close without changing the draft', async () => {
+  const f = fixture(), c = f.make();
+  await c.signIn('alex');
+  await c.openExpense(groupId);
+  await c.updateExpenseDraft({description:'Still entering groceries',amount:'123',tagId});
+  const form=c.getSnapshot().expense;
+  const before=f.requests.length;
+  await c.openWidget('home');
+  expect(c.getSnapshot()).toMatchObject({screen:'expense',notificationOpening:{status:'held'}});
+  expect(c.getSnapshot().expense).toBe(form);
+  expect(f.requests.slice(before)).toEqual([]);
+  const owner=c.getSnapshot().heldNotification;
+  expect(c.getSnapshot().heldNotificationNotice).toBe(owner);
+  expect(owner).not.toBeNull();
+  await c.closeExpense();
+  expect(c.getSnapshot().notificationOpening.status).toBe('held');
+  await c.openPendingNotification();
+  expect(c.getSnapshot()).toMatchObject({screen:'groups',notificationOpening:{status:'idle'},heldNotification:null});
+});
