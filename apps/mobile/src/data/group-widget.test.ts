@@ -203,3 +203,7 @@ it('keeps the Main currency balance and an overflow label in the compact widget'
     currencyOverflow: '+1\u00a0currency',
   });
 });
+it('states why an archived Group cannot take another Expense and confirms an all-square Group',()=>{
+ expect(groupWidget({...part,archived:true},setup,'4x2',session,now)).toMatchObject({balance:'You owe ₹1,480.00\u00a0· final',description:'Nothing more can be saved here.',addExpense:false});
+ expect(groupWidget({...part,currencies:[]},setup,'4x2',session,now).description).toBe('You’re all square in Maple House.');
+});
