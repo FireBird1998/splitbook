@@ -1547,3 +1547,108 @@ describe('a Banner’s text actions (#807)', () => {
     },
   );
 });
+
+describe('ListRow trailing switch (#976)', () => {
+  it.each([false, true])('announces %s and changes only when its row is pressed', (value) => {
+    const onChange = vi.fn();
+    const root = render(
+      <ListRow
+        title="Payments"
+        meta="Payments to or from you"
+        trailingSwitch={{ value, onChange }}
+      />,
+    );
+    const row = one(byRole(root, 'switch', 'Payments, Payments to or from you'));
+    expect(row.props.accessibilityState).toEqual({ checked: value, disabled: false });
+    const control = one(root.findAll((node) => isHost(node, 'Switch')));
+    expect(control.props.value).toBe(value);
+    expect(control.props.accessible).toBe(false);
+    expect(control.props.focusable).toBe(false);
+    expect(control.props.importantForAccessibility).toBe('no-hide-descendants');
+    expect(control.props.pointerEvents).toBe('none');
+    expect(onChange).not.toHaveBeenCalled();
+    press(row);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(!value);
+    expect(control.props.value).toBe(value);
+  });
+
+  it('dims and disables the whole row while retaining the confirmed value', () => {
+    const onChange = vi.fn();
+    const root = render(
+      <ListRow title="Payments" trailingSwitch={{ value: true, onChange, disabled: true }} />,
+    );
+    const row = one(byRole(root, 'switch'));
+    expect(row.props.disabled).toBe(true);
+    expect(row.props.accessibilityState).toEqual({ checked: true, disabled: true });
+    expect(flatten(row.props.style({ pressed: false })).opacity).toBeLessThan(1);
+    press(row);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it.each(['light', 'dark'] as const)('uses %s tokens for both switch states', (mode) => {
+    const tokens = getSemanticTokens(mode);
+    const root = render(
+      <ThemeContext.Provider value={tokens}>
+        {[false, true].map((value) => (
+          <ListRow
+            key={String(value)}
+            title="Payments"
+            trailingSwitch={{ value, onChange: vi.fn() }}
+          />
+        ))}
+      </ThemeContext.Provider>,
+    );
+    const controls = root.findAll((node) => isHost(node, 'Switch'));
+    expect(controls).toHaveLength(2);
+    for (const control of controls) {
+      expect(control.props.trackColor).toEqual({
+        false: tokens.borderStrong,
+        true: `${tokens.brand.main}80`,
+      });
+      expect(control.props.thumbColor).toBe(
+        control.props.value
+          ? tokens.brand.main
+          : mode === 'light'
+            ? tokens.surface
+            : tokens.textSecondary,
+      );
+    }
+  });
+
+  it.each([undefined, 'A note below the row'])(
+    'keeps the switch beside the first title line at largest text, with note %s',
+    (note) => {
+      setWindow({ width: 360, height: 640, fontScale: 2 });
+      const root = render(
+        <ListRow
+          leading={<IconTile icon="notifications-outline" />}
+          title="Notifications on this phone"
+          meta="On for all your Groups"
+          note={note}
+          trailingSwitch={{ value: true, onChange: vi.fn() }}
+        />,
+      );
+      const row = one(byRole(root, 'switch'));
+      expect(flatten(row.props.style({ pressed: false }))).toMatchObject({
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+      });
+      expect(flatten(row.props.style({ pressed: false })).flexWrap).not.toBe('wrap');
+      const control = one(root.findAll((node) => isHost(node, 'Switch')));
+      const box = control.parent!;
+      const line = box.parent!;
+      expect(flatten(box.props.style)).toMatchObject({
+        flexShrink: 0,
+        alignSelf: 'flex-start',
+        height: 34,
+        justifyContent: 'center',
+      });
+      expect(flatten(line.props.style).flexWrap).not.toBe('wrap');
+      const titleComponent = root
+        .findAllByType(CompactText)
+        .find((node) => node.props.children === 'Notifications on this phone')!;
+      expect(titleComponent.props.numberOfLines).toBe(0);
+      expect(flatten(titleComponent.parent!.props.style).minWidth).toBe(0);
+    },
+  );
+});

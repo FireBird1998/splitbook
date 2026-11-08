@@ -3,6 +3,7 @@ import { Children, memo, useLayoutEffect, useRef, useState, type ReactNode, type
 import {
   Animated,
   Pressable,
+  Switch,
   View,
   useWindowDimensions,
   type DimensionValue,
@@ -359,7 +360,8 @@ function TrailingSkeleton() {
  * At large text (from 130%) the trailing value goes onto a line of its own, at the row's end,
  * where it would leave the text less than `largeTextColumn` beside it, and from 150% the title
  * and meta take as many lines as they need: at 200% on a 360dp phone, "Kochi to Alleppey" read
- * "Kochi.." beside its balance (#639).
+ * "Kochi.." beside its balance (#639). A trailing switch instead stays beside the first title
+ * line at every text size; the title and meta wrap in the space beside it.
  *
  * While `trailingLoading` is set, an amount's skeleton holds the trailing value's place, so the
  * title is laid out as it will be; when it clears, the value fades in where the skeleton was.
@@ -374,6 +376,7 @@ export const ListRow = memo(function ListRow({
   metaLines = 1,
   note,
   trailing,
+  trailingSwitch,
   trailingLoading = false,
   trailingWidth,
   onPress,
@@ -400,6 +403,8 @@ export const ListRow = memo(function ListRow({
    */
   note?: string;
   trailing?: ReactNode;
+  /** A controlled switch; its whole row is the only press target. */
+  trailingSwitch?: { value: boolean; onChange: (value: boolean) => void; disabled?: boolean };
   trailingLoading?: boolean;
   trailingWidth?: number;
   onPress?: () => void;
@@ -416,10 +421,18 @@ export const ListRow = memo(function ListRow({
   const column = useTextColumn();
   const whole = useLargestText();
   const tap = useTap();
+  const firstLine = useLineBox('body');
+  const rowDisabled = disabled || trailingSwitch?.disabled === true;
+  const rowPress = trailingSwitch
+    ? () => {
+        if (!rowDisabled) trailingSwitch.onChange(!trailingSwitch.value);
+      }
+    : onPress;
+  const wraps = column && !trailingSwitch;
   const after = trailingLoading ? <TrailingSkeleton /> : trailing;
   const main = (
     <>
-      <View style={{ flex: 1, minWidth: column ?? 0, gap: 1 }}>
+      <View style={{ flex: 1, minWidth: trailingSwitch ? 0 : (column ?? 0), gap: 1 }}>
         <CompactText weight="semibold" tone={titleTone} numberOfLines={whole ? 0 : titleLines}>
           {title}
         </CompactText>
@@ -429,7 +442,33 @@ export const ListRow = memo(function ListRow({
           </CompactText>
         ) : null}
       </View>
-      {after ? (
+      {trailingSwitch ? (
+        <View
+          style={{
+            flexShrink: 0,
+            alignSelf: 'flex-start',
+            height: firstLine.height,
+            justifyContent: 'center',
+          }}
+        >
+          <Switch
+            value={trailingSwitch.value}
+            disabled={rowDisabled}
+            accessible={false}
+            focusable={false}
+            {...hiddenFromReaders}
+            pointerEvents="none"
+            thumbColor={
+              trailingSwitch.value
+                ? theme.brand.main
+                : theme.mode === 'light'
+                  ? theme.surface
+                  : theme.textSecondary
+            }
+            trackColor={{ false: theme.borderStrong, true: `${theme.brand.main}80` }}
+          />
+        </View>
+      ) : after ? (
         <FadeIn
           reveal={reveal}
           style={[
@@ -450,7 +489,7 @@ export const ListRow = memo(function ListRow({
     <>
       {leading}
       <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <View style={{ ...noteRow, ...(column ? largeRow : undefined) }}>{main}</View>
+        <View style={{ ...noteRow, ...(wraps ? largeRow : undefined) }}>{main}</View>
         <CompactText
           variant="caption"
           tone="secondary"
@@ -469,13 +508,14 @@ export const ListRow = memo(function ListRow({
   );
   const style = {
     ...listRow,
-    ...(column ? largeRow : undefined),
+    ...(wraps ? largeRow : undefined),
+    ...(trailingSwitch ? { alignItems: 'flex-start' as const } : undefined),
     // At large text a row with a note grows many lines tall: its leading icon keeps to the
     // title, at the top, rather than the middle, beside the note (#770).
     ...(column && note ? { alignItems: 'flex-start' as const } : undefined),
     backgroundColor: highlighted ? theme.brand.bg : undefined,
   };
-  if (!onPress)
+  if (!rowPress)
     return (
       <View
         ref={rowRef}
@@ -489,15 +529,21 @@ export const ListRow = memo(function ListRow({
   return (
     <Pressable
       ref={rowRef}
-      accessibilityRole="button"
+      accessibilityRole={trailingSwitch ? 'switch' : 'button'}
       accessibilityLabel={accessibilityLabel ?? [title, meta, note].filter(Boolean).join(', ')}
-      accessibilityState={disabled ? { disabled } : undefined}
-      disabled={disabled}
-      {...tap.on(onPress)}
+      accessibilityState={
+        trailingSwitch
+          ? { checked: trailingSwitch.value, disabled: rowDisabled }
+          : rowDisabled
+            ? { disabled: true }
+            : undefined
+      }
+      disabled={rowDisabled}
+      {...tap.on(rowPress)}
       style={({ pressed }) => [
         style,
         pressed && !tap.dragged && { backgroundColor: theme.surfaceMuted },
-        disabled && { opacity: 0.45 },
+        rowDisabled && { opacity: 0.45 },
       ]}
     >
       {content}
