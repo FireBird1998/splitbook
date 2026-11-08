@@ -107,7 +107,7 @@ export function SettingsScreen({
   return (
     <View style={{ gap: 12 }}>
       <CompactText tone="secondary">
-        Choose how {PRODUCT_NAME} looks and manage your session.
+        Choose how {PRODUCT_NAME} looks, which alerts this phone gets, and manage your session.
       </CompactText>
 
       {notifications ? <NotificationSettings {...notifications} /> : null}

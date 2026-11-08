@@ -52,6 +52,16 @@ function render({
 }
 
 describe('Appearance', () => {
+  it('introduces appearance, phone alerts and the session', () => {
+    render();
+    const text = screen!.root
+      .findAll((n) => (n.type as unknown) === 'Text')
+      .flatMap((n) => n.children.filter((child) => typeof child === 'string'))
+      .join('');
+    expect(text).toContain(
+      'Choose how Splitbook looks, which alerts this phone gets, and manage your session.',
+    );
+  });
   it('changes on a tap or a screen reader’s activate, never on a drag that starts on a choice (#665)', () => {
     // Settings is short: the screen can't scroll, so nothing takes a drag.
     const { radio, onAppearanceChange } = render();

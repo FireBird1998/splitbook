@@ -4,8 +4,8 @@ import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { NotificationSettings } from './notification-settings';
 import { emptyNotifications, type NotificationControls } from '../data/notification-controls';
 import { activateWithScreenReader, setWindow } from '../test-utils/native';
-import { unreadText } from '../test-utils/layout';
-import { Banner, Card, Divider, ListRow, SectionHeader, Skeleton } from './compact';
+import { flatten, unreadText } from '../test-utils/layout';
+import { Banner, Card, Divider, SectionHeader, Skeleton } from './compact';
 import { ThemeContext } from './theme';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const caption =
@@ -74,7 +74,9 @@ describe('per-phone Settings notification controls', () => {
     const calls = render('off', false);
     expect(screen.root.findByType(SectionHeader).props.title).toBe('Notifications');
     expect(screen.root.findAllByType(Card)).toHaveLength(1);
-    expect(screen.root.findAllByType(ListRow)).toHaveLength(1);
+    expect(
+      screen.root.findAll((n) => n.props.title !== undefined && n.props.meta !== undefined),
+    ).toHaveLength(1);
     expect(switches()[0].props.accessibilityState).toEqual({ checked: false, disabled: false });
     expect(text()).toContain(caption);
     press('Notifications on this phone, Off');
@@ -160,7 +162,10 @@ describe('per-phone Settings notification controls', () => {
       ).toHaveLength(1);
       if (status === 'blocked') {
         expect(banner.props.title).toBe('Android is blocking notifications');
-        expect(screen.root.findAllByType(ListRow)[0].props.metaTone).toBe('warning');
+        expect(
+          screen.root.findAll((n) => n.props.title !== undefined && n.props.meta !== undefined)[0]
+            .props.metaTone,
+        ).toBe('warning');
         expect(text()).toContain('Blocked by Android');
         press('Open Android settings');
         expect(calls.onAndroidSettings).toHaveBeenCalledOnce();
@@ -171,6 +176,7 @@ describe('per-phone Settings notification controls', () => {
         expect(calls.onAndroidSettings).toHaveBeenCalledOnce();
       } else {
         expect(switches().map((n) => n.props.accessibilityState.checked)).toEqual([false]);
+        expect(banner.props.children).toBeNull();
       }
     },
   );
@@ -200,7 +206,9 @@ describe('per-phone Settings notification controls', () => {
       expect(text()).toContain('Not available yet');
       expect(switches()).toHaveLength(0);
       expect(text()).not.toContain(caption);
-      expect(screen.root.findAllByType(ListRow)).toHaveLength(1);
+      expect(
+        screen.root.findAll((n) => n.props.title !== undefined && n.props.meta !== undefined),
+      ).toHaveLength(1);
     },
   );
   it.each(['light', 'dark'] as const)(
@@ -208,13 +216,41 @@ describe('per-phone Settings notification controls', () => {
     (mode) => {
       setWindow({ width: 360, fontScale: 2 });
       render('ready', true, mode);
-      expect(unreadText(screen.toJSON(), 2, 328)).toEqual([]);
+      const tree = screen.toJSON();
+      if (Array.isArray(tree)) throw new Error('Expected one notification section');
+      expect(unreadText(tree, 2, 328)).toEqual([]);
       const theme = getSemanticTokens(mode);
       const native = screen.root.findAll((n) => (n.type as unknown) === 'Switch');
       expect(native[0].props.thumbColor).toBe(theme.brand.main);
       expect(native[0].props.trackColor.true).toBe(`${theme.brand.main}80`);
       expect(native[2].props.trackColor.false).toBe(theme.borderStrong);
       expect(native.every((n) => n.parent?.props.style.alignSelf === 'flex-start')).toBe(true);
+    },
+  );
+  it('uses dark warning tokens for the blocked meta, Banner and action', () => {
+    render('blocked', true, 'dark');
+    const theme = getSemanticTokens('dark');
+    for (const words of [
+      'Blocked by Android',
+      'Android is blocking notifications',
+      'Open Android settings',
+    ]) {
+      const label = screen.root.find(
+        (n) =>
+          (n.type as unknown) === 'Text' &&
+          n.children.some((child) => typeof child === 'string' && child.startsWith(words)),
+      );
+      expect(flatten(label.props.style).color).toBe(theme.status.warning);
+    }
+  });
+  it.each(['pending', 'blocked', 'denied', 'offline', 'error'] as const)(
+    'keeps %s copy readable at 200% on 360dp',
+    (status) => {
+      setWindow({ width: 360, fontScale: 2 });
+      render(status, status !== 'denied');
+      const tree = screen.toJSON();
+      if (Array.isArray(tree)) throw new Error('Expected one notification section');
+      expect(unreadText(tree, 2, 328)).toEqual([]);
     },
   );
 });
