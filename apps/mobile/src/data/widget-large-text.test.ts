@@ -131,6 +131,6 @@ it('drops optional privacy captions in tight large-text layouts but keeps them i
 });
 
 it('gives both hidden Balances columns equal room in the compact widget at 200%', () => {
- const v=balancesWidget(copy,{kind:'balances',hideAmounts:true},'2x1',auth,now,2);
- expect(v.layout.equalColumns).toBe(true);
+  const v = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
+  expect(v.layout.equalColumns).toBe(true);
 });

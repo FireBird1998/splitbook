@@ -39,9 +39,8 @@ export function drawBalances(view: BalancesWidgetView, t: SemanticTokens) {
     <FlexWidget
       style={{
         flexGap: 2,
-        ...(wide
-          ? { flex: 1, padding: 10, backgroundColor: color(t.surfaceMuted), borderRadius: 16 }
-          : {}),
+        ...(l.equalColumns ? { flex: 1 } : {}),
+        ...(wide ? { padding: 10, backgroundColor: color(t.surfaceMuted), borderRadius: 16 } : {}),
       }}
     >
       {text(title, tone, view.hidden ? l.hiddenFontSize : 11, true)}

@@ -14,6 +14,7 @@ export function balancesLayout(
   const level = widgetTextLevel(scale),
     small = size === '2x1';
   return {
+    equalColumns: small || size === '4x2',
     currencyLines: size === '4x2' ? [3, 2, 1][level]! : size === '2x2' && !level ? 2 : 1,
     showReview: !level && !small,
     showHeader: (!small || normal) && !(small && hidden && level === 2),
