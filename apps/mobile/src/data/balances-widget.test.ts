@@ -184,3 +184,8 @@ it.each(['2x1', '2x2', '4x2'] as const)('formats JPY without decimals at %s', (s
     ).owed,
   ).toEqual(['¥3,000']);
 });
+it('hides a persisted To review count when this build has Drafts off', () => {
+  expect(
+    balancesWidget(copy, { kind: 'balances', reviewEnabled: false }, '2x2', auth, now).review,
+  ).toBeNull();
+});
