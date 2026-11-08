@@ -10,6 +10,7 @@ vi.mock('expo-sqlite', () => ({
     runAsync: async (sql: string, environment: string, id?: number | string, value?: string) => {
       if (sql.startsWith('INSERT OR REPLACE INTO widget_setup'))
         rows.setups.set(`${environment}/${id}`, value!);
+      if (sql.startsWith('INSERT OR IGNORE INTO widget_setup') && !rows.setups.has(`${environment}/${id}`)) rows.setups.set(`${environment}/${id}`, value!);
       if (sql.startsWith('DELETE FROM widget_setup')) rows.setups.delete(`${environment}/${id}`);
       if (sql.startsWith('UPDATE widget_state SET session'))
         rows.sessions.set(String(id), environment);
@@ -44,4 +45,10 @@ it('keeps per-widget preferences through a restart, expiry and account purge, un
   await restarted.removeSetup(7);
   expect(await restarted.setup(7)).toBeNull();
   expect(await restarted.setup(3)).not.toBeNull();
+});
+it('does not overwrite a preference saved while a legacy update was starting', async () => {
+  const store = createWidgetsStore('race');
+  await store.saveSetup({kind:'balances',widgetId:3,hideAmounts:true});
+  await store.saveSetupIfAbsent({kind:'balances',widgetId:3,hideAmounts:false});
+  expect(await store.setup(3)).toMatchObject({hideAmounts:true});
 });
