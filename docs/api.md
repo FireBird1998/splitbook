@@ -2468,3 +2468,34 @@ Delivery caveat: Android delivers a high-priority data message to a stopped app,
 in Doze, an app in the restricted App Standby bucket, or a manufacturer's battery optimisation
 can delay or drop it, and Android may lower the priority of an app whose high-priority messages
 seldom show a notification. A force-stopped app receives nothing until it is opened again.
+
+## Expense updated, deleted and recurring Android alerts (#841)
+
+Edits, restoration, soft deletion and recurring Expense generation capture the same private,
+immutable notification context as Expense-added alerts, inside their own financial commit:
+
+| Event                | Kind              | Audience captured at the commit                                                        |
+| -------------------- | ----------------- | -------------------------------------------------------------------------------------- |
+| Edit, restoration    | `expense_updated` | Payers and split participants before **and** after, without the editor                 |
+| Soft deletion        | `expense_deleted` | The deleted Expense's recorded payers and split participants, without the deleter      |
+| Recurring generation | `expense_added`   | The template's payers and split participants, without its creator (the Activity actor) |
+
+Each audience is intersected with the Group's members at the commit, so a member removed from an
+Expense who is still in the Group hears about the edit, and a member who joins later is never a
+recipient of an earlier event. A later edit records its own event and cannot change an earlier
+one's audience. Dispatch rechecks current membership, session, binding, the Expense updates
+switch, its cutoff and the 24-hour expiry before every provider request, as for Expense-added
+alerts. Restoration is the existing `expense_updated` event (`metadata.action: "restored"`), not
+a new financial operation. A refused save (stale revision, invalid participants), a repeated
+deletion, Draft preparation/edit/discard and suggested payments record no event and send
+nothing. All three kinds use the device's Expense updates switch, the same versioned envelope,
+delivery identities and deduplication. The app shows "An Expense was added.", "An Expense was
+updated." or "An Expense was deleted."; a tap opens the current authorized Group Activity, also
+for a deleted Expense, and never writes.
+
+**Rollout switch.** These four paths need `ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED=true`,
+besides `ANDROID_NOTIFICATIONS_ENABLED` and `ANDROID_NOTIFICATION_SENDS_ENABLED`. It is **off by
+default** and stays off in production until the owner accepts the feature. While it is off,
+these events capture no notification context (exactly as before #841), so turning it on later
+sends no backlog; turning it off again also stops sends of events captured while it was on.
+Manual and reviewed-Draft Expense-added alerts never depend on it.

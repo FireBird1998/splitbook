@@ -26,7 +26,12 @@ import type {
 } from '@splitbook/shared/validators/recurring-expense';
 import type { IGroupDocument } from '@/lib/models/Group';
 import { displayTagReference, resolveTagReference } from '@splitbook/shared/tag-identity';
-import { makePendingActivity } from '@/lib/financial-write';
+import {
+  expenseChangeAlertsEnabled,
+  expenseNotificationContext,
+  involvedMembers,
+  makePendingActivity,
+} from '@/lib/financial-write';
 import { assertExpectedRevision } from '@/lib/ledger-revision';
 import { lockLedgerCurrency } from '@/lib/ledger-currency';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
@@ -499,8 +504,20 @@ export class RecurringExpenseService {
                 period,
               },
             );
-            const expense = await withGroupMutation(groupId, async () =>
-              Expense.create({
+            const expense = await withGroupMutation(groupId, async () => {
+              // The template's creator stays the actor (#841): they get no alert; the
+              // members it involves get "An Expense was added.", from this commit's members.
+              if (expenseChangeAlertsEnabled()) {
+                const committedGroup = await Group.findById(groupId).select('members').lean();
+                event.notificationContext = expenseNotificationContext(
+                  event,
+                  'expense_added',
+                  { groupId, recordId: expenseId.toString() },
+                  involvedMembers(money),
+                  new Set((committedGroup?.members ?? []).map((member) => String(member.user))),
+                );
+              }
+              return Expense.create({
                 _id: expenseId,
                 group: new mongoose.Types.ObjectId(groupId),
                 description: template.description,
@@ -513,8 +530,8 @@ export class RecurringExpenseService {
                 period,
                 createdBy: template.createdBy,
                 pendingActivity: [event],
-              }),
-            );
+              });
+            });
             generated += 1;
             materializedThrough = period;
 

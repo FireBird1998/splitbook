@@ -497,3 +497,112 @@ describe('Expense notification receipt and tap at the Android controller seam', 
     expect(controller.getSnapshot().notificationOpening.status).toBe('idle');
   });
 });
+
+describe('Expense updated and deleted alerts at the Android controller seam (#841)', () => {
+  const kinds = ['expense_updated', 'expense_deleted'] as const;
+  it.each(kinds)(
+    '%s: quietly refreshes the open Group, suppresses a replay and never writes',
+    async (kind) => {
+      const writes: string[] = [];
+      const controller = setup((url, init) => {
+        if (init.method && init.method !== 'GET' && !url.pathname.includes('auth'))
+          writes.push(url.pathname);
+      });
+      await controller.signIn('alex');
+      await controller.openActivity(groupId);
+      const before = controller.getSnapshot().activity;
+      expect(await controller.receiveNotification(hint({ kind }))).toBe(false);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        destination: 'activity',
+        activity: { status: 'ready' },
+      });
+      expect(controller.getSnapshot().activity).not.toBe(before);
+      // FCM can redeliver: the same event is handled once.
+      expect(await controller.receiveNotification(hint({ kind }), { visible: false })).toBe(false);
+      expect(writes).toEqual([]);
+    },
+  );
+  it.each(kinds)('%s: elsewhere or in the background, the alert may show', async (kind) => {
+    const controller = setup();
+    await controller.signIn('alex');
+    expect(await controller.receiveNotification(hint({ kind }))).toBe(true);
+    await controller.openActivity(groupId);
+    expect(
+      await controller.receiveNotification(hint({ kind, eventId: 'd00000000000000000000002' }), {
+        visible: false,
+      }),
+    ).toBe(true);
+  });
+  it('a deleted Expense alert opens the current authorized Group history, never the missing record, and writes nothing', async () => {
+    const requests: string[] = [];
+    const writes: string[] = [];
+    const deleted = {
+      ...event,
+      _id: 'd00000000000000000000003',
+      type: 'expense_deleted',
+      metadata: { expenseId, description: 'Dinner' },
+    };
+    const controller = setup((url, init) => {
+      requests.push(url.pathname);
+      if (init.method && init.method !== 'GET' && !url.pathname.includes('auth'))
+        writes.push(url.pathname);
+      if (url.pathname.includes('/expenses/' + expenseId)) return json({ error: 'Gone' }, 404);
+      if (url.pathname.endsWith('/activity')) return json(page([deleted, event]));
+    });
+    await controller.signIn('alex');
+    await controller.tapNotification(hint({ kind: 'expense_deleted' }));
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'activity',
+      activity: { status: 'ready' },
+      notificationOpening: { status: 'idle' },
+    });
+    expect(controller.getSnapshot().activity.events.map((row) => row._id)).toContain(deleted._id);
+    expect(requests).toContain('/api/groups/' + groupId);
+    expect(requests.some((path) => path.includes('/expenses/' + expenseId))).toBe(false);
+    expect(controller.getSnapshot().expense.status).not.toBe('editing');
+    expect(writes).toEqual([]);
+  });
+  it.each(kinds)(
+    '%s: an unfinished Expense keeps its contents and the tap waits for an explicit open',
+    async (kind) => {
+      const controller = setup();
+      await controller.signIn('alex');
+      await controller.openActivity(groupId);
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Unfinished member task', amount: '5' });
+      const draft = structuredClone(controller.getSnapshot().expense.draft);
+      expect(await controller.receiveNotification(hint({ kind }))).toBe(true);
+      await controller.tapNotification(hint({ kind }));
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'expense',
+        expense: { draft },
+        notificationOpening: { status: 'held' },
+      });
+      await controller.closeExpense();
+      await controller.openPendingNotification();
+      expect(controller.getSnapshot()).toMatchObject({
+        destination: 'activity',
+        notificationOpening: { status: 'idle' },
+      });
+    },
+  );
+  it.each(kinds)(
+    '%s: after removal from the Group a tap shows the unavailable state, not its contents',
+    async (kind) => {
+      let removed = false;
+      const controller = setup((url) =>
+        removed && url.pathname === '/api/groups/' + groupId
+          ? json({ error: 'Forbidden' }, 403)
+          : undefined,
+      );
+      await controller.signIn('alex');
+      await controller.openActivity(groupId);
+      removed = true;
+      await controller.tapNotification(hint({ kind }));
+      expect(controller.getSnapshot().detail.status).toBe('denied');
+      expect(controller.getSnapshot().activity.events).toHaveLength(0);
+    },
+  );
+});

@@ -237,6 +237,54 @@ describe('Expo notification receipt and warm/cold response boundary', () => {
       expect(d.present).toHaveBeenCalledOnce();
     });
 
+    it.each([
+      ['expense_updated', 'An Expense was updated.'],
+      ['expense_deleted', 'An Expense was deleted.'],
+    ])(
+      '%s with no signed-in app: the no-app check passes it and its generic alert shows (#841)',
+      async (kind, text) => {
+        const controller = {
+          receiveNotification: vi.fn(async () => false),
+          tapNotification: vi.fn(async () => {}),
+          getSnapshot: () => ({ auth: { status: 'restoring' } }),
+        };
+        const stop = await attachNotificationCallbacks(controller, Promise.resolve());
+        const changed = {
+          ...payload,
+          data: { body: JSON.stringify({ ...JSON.parse(payload.data.body), kind }) },
+        };
+        const d = {
+          now: Date.now,
+          visible: () => false,
+          withoutApp: vi.fn((value: unknown) =>
+            checkNotificationWithoutApp(
+              value,
+              access({ cookie: 'better-auth.session_token=alex.signature', accountId: alex }),
+              Date.now,
+            ),
+          ),
+          present: vi.fn<
+            (alert: { identifier: string; content: { body: string } }) => Promise<void>
+          >(async () => {}),
+        };
+        expect(await receiveNotificationTask(changed, d)).toBe(true);
+        const alert = d.present.mock.calls[0][0];
+        expect(alert.content.body).toBe(text);
+        // The foreground handler shows this posted alert quietly, as it does an added one.
+        const handler = native.setNotificationHandler.mock.calls[0][0];
+        expect(
+          await handler.handleNotification({
+            request: {
+              identifier: alert.identifier,
+              content: alert.content,
+              trigger: { type: 'channel', channelId: 'ledger-updates' },
+            },
+          }),
+        ).toMatchObject({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false });
+        stop();
+      },
+    );
+
     it('signed out: the no-app check finds no saved session and nothing shows', async () => {
       const { shown, controller, d } = await receive('signed-out', null);
       expect(shown).toBe(false);
