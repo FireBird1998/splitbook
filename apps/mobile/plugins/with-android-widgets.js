@@ -60,11 +60,14 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
     });
     app.activity = (app.activity ?? []).filter(
       (item) =>
-        item.$['android:name'] !== 'com.reactnativeandroidwidget.RNWidgetConfigurationActivity',
+        ![
+          'com.reactnativeandroidwidget.RNWidgetConfigurationActivity',
+          '.widget.GroupConfiguration',
+        ].includes(item.$['android:name']),
     );
     app.activity.push({
       $: {
-        'android:name': 'com.reactnativeandroidwidget.RNWidgetConfigurationActivity',
+        'android:name': '.widget.GroupConfiguration',
         'android:exported': 'true',
         'android:theme': '@style/AppTheme',
         'android:enabled': String(enabled),
@@ -141,6 +144,28 @@ public class Balances extends com.reactnativeandroidwidget.RNWidgetProvider {
 public class Group extends Balances {}
 `,
       );
+      fs.writeFileSync(
+        path.join(javaDir, 'GroupConfiguration.java'),
+        `package ${config.android.package}.widget;
+import android.appwidget.AppWidgetManager;
+import android.appwidget.AppWidgetProviderInfo;
+import android.os.Bundle;
+public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetConfigurationActivity {
+  @Override protected void onCreate(Bundle savedInstanceState) {
+    Bundle extras = getIntent().getExtras();
+    Object value = extras == null ? null : extras.get(AppWidgetManager.EXTRA_APPWIDGET_ID);
+    // React Native sendIntent encodes JS numbers as Double; Android's host sends Integer.
+    int id = value instanceof Number ? ((Number)value).intValue() : AppWidgetManager.INVALID_APPWIDGET_ID;
+    AppWidgetProviderInfo info = AppWidgetManager.getInstance(this).getAppWidgetInfo(id);
+    if (info == null || !getPackageName().equals(info.provider.getPackageName())
+        || !"${config.android.package}.widget.Group".equals(info.provider.getClassName()))
+      id = AppWidgetManager.INVALID_APPWIDGET_ID;
+    getIntent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,id);
+    super.onCreate(savedInstanceState);
+  }
+}
+`,
+      );
       fs.mkdirSync(path.join(main, 'res/xml'), { recursive: true });
       fs.writeFileSync(
         path.join(main, 'res/xml/widget_balances.xml'),
@@ -165,7 +190,7 @@ public class Group extends Balances {}
  android:minResizeWidth="110dp" android:minResizeHeight="110dp" android:maxResizeWidth="640dp" android:maxResizeHeight="420dp"
  android:resizeMode="horizontal|vertical" android:description="@string/widget_group_description"
  android:initialLayout="@layout/rn_widget" android:previewImage="@drawable/widget_group_preview"
- android:configure="com.reactnativeandroidwidget.RNWidgetConfigurationActivity" android:widgetFeatures="reconfigurable"
+ android:configure="${config.android.package}.widget.GroupConfiguration" android:widgetFeatures="reconfigurable"
  android:updatePeriodMillis="0" android:widgetCategory="home_screen|not_keyguard" />
 `,
       );
