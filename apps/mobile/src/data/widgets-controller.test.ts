@@ -128,7 +128,7 @@ function fixture() {
                 ],
               },
             });
-          if (path === '/api/to-review')
+          if (path === '/api/user/to-review')
             return Response.json({ status: 200, data: { total: 0, groups: [] } });
           throw new Error(`Unexpected ${path}`);
         },
@@ -153,6 +153,7 @@ function fixture() {
   };
 }
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllEnvs();
 });
@@ -177,4 +178,90 @@ describe('Balances widget at the controller seam', () => {
     );
     expect(f.copies.at(-1)).not.toHaveProperty('review');
   });
+});
+
+it('includes a separately verified To review count only while Drafts are on', async () => {
+  vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.review).toMatchObject({ count: 0, verifiedAt: expect.any(Number) }),
+  );
+  c.dispose();
+});
+it('opens Home and To review after the session check, including cold start', async () => {
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  c.dispose();
+  const restart = f.make();
+  const checking = restart.restore();
+  const opening = restart.openWidget('review');
+  await checking;
+  await opening;
+  expect(restart.getSnapshot()).toMatchObject({
+    auth: { status: 'authenticated' },
+    screen: 'groups',
+  });
+  await restart.openWidget('home');
+  await restart.signOut();
+  await restart.openWidget('sign-in');
+  expect(restart.getSnapshot()).toMatchObject({ auth: { status: 'signed-out' }, screen: 'groups' });
+  restart.dispose();
+});
+it('restores the original verification time from saved Home reads', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() => expect(f.copies.at(-1)?.home?.verifiedAt).toBe(verified));
+  c.dispose();
+  f.offline();
+  vi.spyOn(Date, 'now').mockReturnValue(verified + 60_000);
+  const restart = f.make();
+  await restart.restore();
+  // Online restore without a stored identity cannot authorize a saved Home.
+  expect(f.copies.at(-1)?.home?.verifiedAt).toBe(verified);
+  restart.dispose();
+});
+it('purges before the signed-out redraw and never redraws an older queued copy afterwards', async () => {
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() => expect(f.copies.at(-1)?.home).toBeTruthy());
+  f.events.length = 0;
+  await c.signOut();
+  expect(f.events.indexOf('clear')).toBeGreaterThanOrEqual(0);
+  expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+  expect(f.events.at(-1)).toBe('redraw');
+  c.dispose();
+});
+it('keeps the copy on a 401 and refills it for the same account', async () => {
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() => expect(f.copies.at(-1)?.home).toBeTruthy());
+  f.events.length = 0;
+  f.expire();
+  await c.refreshHome();
+  await vi.waitFor(() => expect(f.events).toContain('expired'));
+  expect(f.events).not.toContain('clear');
+  f.recover();
+  f.owe(2500);
+  await c.signIn('alex');
+  await vi.waitFor(() => expect(f.copies.at(-1)?.home?.currencies[0]?.owedMinor).toBe(250000));
+  c.dispose();
+});
+it('clears the old account before writing the next account’s copy', async () => {
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() => expect(f.copies.at(-1)?.home).toBeTruthy());
+  f.events.length = 0;
+  await c.signIn('sam');
+  await vi.waitFor(() => expect(f.copies.at(-1)?.accountId).toBe(sam.id));
+  expect(f.events.indexOf('write:' + sam.id)).toBeGreaterThan(f.events.indexOf('clear'));
+  expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+  c.dispose();
 });
