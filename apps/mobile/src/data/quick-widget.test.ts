@@ -41,19 +41,19 @@ for (const size of ['1x1', '2x1'] as const)
     expect(quickWidget(copy, chosen, size, { status: 'signed-out' })).toMatchObject({
       state: 'signed-out',
       title: 'Sign in',
-      subtitle: null,
+      subtitle: 'to add expenses',
       target: 'sign-in',
     });
     expect(quickWidget(copy, chosen, size, { status: 'expired' })).toMatchObject({
       state: 'expired',
       title: 'Sign in again',
-      subtitle: null,
+      subtitle: 'to add expenses',
       target: 'sign-in',
     });
     expect(quickWidget(copy, chosen, size, { ...session, accountId: 'sam' })).toMatchObject({
       state: 'other-account',
       title: 'Set up again',
-      subtitle: null,
+      subtitle: 'Another account',
       target: { kind: 'setup', widgetId: 8 },
     });
     expect(quickWidget({ ...copy, lostGroupIds: ['maple'] }, chosen, size, session)).toMatchObject({
